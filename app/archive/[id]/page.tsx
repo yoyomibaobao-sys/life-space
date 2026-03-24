@@ -33,7 +33,7 @@ async function Content({ id }: { id: string }) {
     .order("photo_time", { ascending: false });
 
   // ✅ 修复点2：明确类型
-  const records: any[] = data;
+  const records = (data ?? []) as any[];
 
   return (
     <main style={{ padding: "12px" }}>
