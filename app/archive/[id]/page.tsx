@@ -1,5 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import { use } from "react";
 import AddRecord from "./AddRecord";
 import DeleteRecordButton from "./DeleteRecordButton";
 import ImageViewer from "@/components/ImageViewer";
@@ -26,15 +25,18 @@ async function Content({ id }: { id: string }) {
     return <div style={{ padding: "40px" }}>档案不存在</div>;
   }
 
-  const { data: records } = await supabase
+  // ✅ 关键修复：保证 records 一定是数组
+  const { data } = await supabase
     .from("records")
     .select("*, media(*)")
     .eq("archive_id", archive.id)
     .order("photo_time", { ascending: false });
 
+  const records = data || [];
+
   return (
     <main style={{ padding: "12px" }}>
-      <h1>{archive?.title}</h1>
+      <h1>{archive.title}</h1>
 
       <AddRecord archiveId={archive.id} />
 
@@ -42,7 +44,7 @@ async function Content({ id }: { id: string }) {
 
       {groupRecords(records).map((group: any) => (
         <div key={group.title} style={{ marginBottom: "30px" }}>
-          {/* ✅ 时间标题优化 */}
+          {/* 时间标题 */}
           <h3
             style={{
               marginBottom: "10px",
@@ -61,7 +63,7 @@ async function Content({ id }: { id: string }) {
               style={{
                 borderLeft: "3px solid #4CAF50",
                 padding: "10px 20px",
-                marginBottom: "15px", // ✅ 间距优化
+                marginBottom: "15px",
               }}
             >
               {/* 图片 */}
@@ -75,7 +77,6 @@ async function Content({ id }: { id: string }) {
 
               {/* 文字 */}
               <EditRecord id={item.id} initialText={item.note} />
-              ：、、、、、、、、
 
               {/* 删除 */}
               <div style={{ marginTop: "10px" }}>
@@ -92,9 +93,7 @@ async function Content({ id }: { id: string }) {
 //
 // 时间分组
 //
-function groupRecords(records: any[]) {
-  if (!records) return [];
-
+function groupRecords(records: any[] = []): any[] {
   const groups: any = {};
 
   records.forEach((item) => {
@@ -114,7 +113,7 @@ function groupRecords(records: any[]) {
 }
 
 //
-// ✅ 时间格式优化（核心）
+// 时间格式
 //
 function formatDate(dateString: string) {
   const date = new Date(dateString);
@@ -130,7 +129,6 @@ function formatDate(dateString: string) {
     (d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)
   );
 
-  // 👉 只保留时分
   const timeStr = date.toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
