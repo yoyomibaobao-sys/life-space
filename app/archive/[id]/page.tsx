@@ -1,20 +1,20 @@
-import { supabase } from "@/lib/supabase";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import AddRecord from "./AddRecord";
 import DeleteRecordButton from "./DeleteRecordButton";
 import ImageViewer from "@/components/ImageViewer";
 import EditRecord from "@/components/EditRecord";
 
-export default function ArchiveDetail({
+export default async function ArchiveDetail({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const id = params.id;
+  const { id } = await params;
 
   return <Content id={id} />;
 }
-
 async function Content({ id }: { id: string }) {
+  const supabase = await getSupabaseServer();
   const { data: archive } = await supabase
     .from("archives")
     .select("*")

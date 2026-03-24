@@ -68,7 +68,7 @@ export default function EditRecord({
         rows={3}
         style={{
           width: "100%",
-          fontSize: "16px",
+          fontSize: "18px",
           lineHeight: "1.6",
           padding: "10px",
           borderRadius: "8px",

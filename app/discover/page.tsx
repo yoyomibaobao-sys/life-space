@@ -13,7 +13,7 @@ export default function DiscoverPage() {
         .from("records")
         .select("*, media(*), archives(*)")
         .eq("visibility", "community")
-        .order("created_at", { ascending: false });
+        .order("photo_time", { ascending: false });
 
       if (!data) return;
 
@@ -34,7 +34,7 @@ export default function DiscoverPage() {
       const result = Object.keys(map).map((uid) => ({
         user_id: uid,
         items: map[uid].slice(0, 5),
-        latest: map[uid][0].created_at,
+        latest: map[uid][0].photo_time || map[uid][0].created_at,
       }));
 
       // ✅ 按最新时间排序（用户排序）
@@ -73,7 +73,7 @@ export default function DiscoverPage() {
             {group.items.map((item: any) => (
               <Link
                 key={item.id}
-                href={`/archive/${item.archives?.slug}`}
+                href={`/archive/${item.archive_id}`}
               >
                 <div
                   style={{
