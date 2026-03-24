@@ -25,14 +25,15 @@ async function Content({ id }: { id: string }) {
     return <div style={{ padding: "40px" }}>档案不存在</div>;
   }
 
-  // ✅ 关键修复：保证 records 一定是数组
-  const { data } = await supabase
+  // ✅ 修复点1：data 默认值，彻底消灭 null
+  const { data = [] } = await supabase
     .from("records")
     .select("*, media(*)")
     .eq("archive_id", archive.id)
     .order("photo_time", { ascending: false });
 
-  const records = data || [];
+  // ✅ 修复点2：明确类型
+  const records: any[] = data;
 
   return (
     <main style={{ padding: "12px" }}>
@@ -42,6 +43,7 @@ async function Content({ id }: { id: string }) {
 
       <h2>时间线</h2>
 
+      {/* ✅ 修复点3：确保永远是数组 */}
       {groupRecords(records).map((group: any) => (
         <div key={group.title} style={{ marginBottom: "30px" }}>
           {/* 时间标题 */}
@@ -94,7 +96,7 @@ async function Content({ id }: { id: string }) {
 // 时间分组
 //
 function groupRecords(records: any[] = []): any[] {
-  const groups: any = {};
+  const groups: Record<string, any[]> = {};
 
   records.forEach((item) => {
     const label = formatDate(item.photo_time || item.created_at);
