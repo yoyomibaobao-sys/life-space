@@ -240,10 +240,12 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
             input.capture = "environment";
 
             input.onchange = (e: any) => {
-              if (e.target.files && e.target.files.length > 0) {
-                setFiles((prev) => [...prev, ...Array.from(e.target.files)]);
-              }
-            };
+  const newFiles = Array.from(e.target.files || []) as File[];
+
+  if (newFiles.length > 0) {
+    setFiles((prev: File[]) => [...prev, ...newFiles]);
+  }
+};
 
             input.click();
           }}
