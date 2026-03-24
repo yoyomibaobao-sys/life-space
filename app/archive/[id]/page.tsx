@@ -5,9 +5,12 @@ import DeleteRecordButton from "./DeleteRecordButton";
 import ImageViewer from "@/components/ImageViewer";
 import EditRecord from "@/components/EditRecord";
 
-export default function ArchiveDetail({ params }: any) {
-  const resolvedParams = use(params);
-  const id = resolvedParams.id;
+export default function ArchiveDetail({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const id = params.id;
 
   return <Content id={id} />;
 }
