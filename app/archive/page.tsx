@@ -1,6 +1,5 @@
 "use client";
 
-import UserBar from "@/components/UserBar";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -21,8 +20,10 @@ export default function ArchivePage() {
 
   async function loadData() {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const user = session?.user;
 
     if (!user) {
       router.push("/login");
@@ -44,14 +45,9 @@ export default function ArchivePage() {
 
   return (
     <main style={{ padding: "20px" }}>
-      <UserBar />
-<div style={{ marginBottom: "20px" }}>
-  <a href="/profile">👉 我的信息</a>
-</div>
       <h1>我的养成档案</h1>
-      
 
-      {/* ✅ 分类卡片 */}
+      {/* 分类 */}
       <div
         style={{
           display: "flex",
@@ -71,7 +67,6 @@ export default function ArchivePage() {
                 activeCategory === c.key ? "#4CAF50" : "#eee",
               color: activeCategory === c.key ? "#fff" : "#333",
               cursor: "pointer",
-              whiteSpace: "nowrap",
             }}
           >
             {c.label}
@@ -102,14 +97,11 @@ export default function ArchivePage() {
               <h3 style={{ cursor: "pointer" }}>{item.title}</h3>
             </Link>
 
-            {/* 分类显示 */}
             <p style={{ color: "#888", fontSize: "14px" }}>
               {formatCategory(item.category)}
             </p>
 
-            {/* 操作区 */}
             <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
-              {/* ✏️ 修改名称 */}
               <button
                 onClick={async () => {
                   const newName = prompt("修改名称", item.title);
@@ -126,7 +118,6 @@ export default function ArchivePage() {
                 ✏️
               </button>
 
-              {/* 📁 下拉分类 */}
               <select
                 value={item.category || "other"}
                 onChange={async (e) => {
@@ -145,7 +136,6 @@ export default function ArchivePage() {
                 ))}
               </select>
 
-              {/* 🗑️ 删除 */}
               <button
                 onClick={async () => {
                   if (!confirm("确定删除？")) return;

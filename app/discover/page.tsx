@@ -6,40 +6,67 @@ import Link from "next/link";
 
 export default function DiscoverPage() {
   const [groups, setGroups] = useState<any[]>([]);
+  const [expanded, setExpanded] = useState<any>({});
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
+      const { data: records } = await supabase
         .from("records")
-        .select("*, media(*), archives(*)")
-        .eq("visibility", "community")
-        .order("photo_time", { ascending: false });
+        .select("*")
+        .order("created_at", { ascending: false });
 
-      if (!data) return;
+      if (!records) return;
 
-      // ✅ 按 user 分组
+      const { data: medias } = await supabase
+        .from("media")
+        .select("*");
+
+      const { data: archives } = await supabase
+        .from("archives")
+        .select("*");
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("*");
+
       const map: any = {};
 
-      data.forEach((item) => {
+      records.forEach((item: any) => {
         const uid = item.user_id;
 
         if (!map[uid]) {
-          map[uid] = [];
+          const profile = profiles?.find((p: any) => p.id === uid);
+
+          map[uid] = {
+            user_id: uid,
+            username: profile?.username || "用户",
+            items: [],
+          };
         }
 
-        map[uid].push(item);
+        const itemMedias = medias?.filter(
+          (m: any) => m.record_id === item.id
+        );
+
+        const archive = archives?.find(
+          (a: any) => a.id === item.archive_id
+        );
+
+        map[uid].items.push({
+          ...item,
+          media: itemMedias,
+          archiveTitle: archive?.title || "未命名",
+        });
       });
 
-      // ✅ 转成数组 + 每人取前5条
-      const result = Object.keys(map).map((uid) => ({
-        user_id: uid,
-        items: map[uid].slice(0, 5),
-        latest: map[uid][0].photo_time || map[uid][0].created_at,
+      const result = Object.values(map).map((group: any) => ({
+        ...group,
+        items: group.items.slice(0, 5),
+        latest: group.items[0]?.created_at,
       }));
 
-      // ✅ 按最新时间排序（用户排序）
       result.sort(
-        (a, b) =>
+        (a: any, b: any) =>
           new Date(b.latest).getTime() -
           new Date(a.latest).getTime()
       );
@@ -51,83 +78,137 @@ export default function DiscoverPage() {
   }, []);
 
   return (
-    <main style={{ padding: "20px" }}>
-      <h1>发现</h1>
+    <main style={{ padding: "16px", maxWidth: "520px", margin: "0 auto" }}>
+      <h1 style={{ marginBottom: "20px" }}>发现</h1>
 
-      {groups.map((group) => (
-        <div
-          key={group.user_id}
-          style={{
-            marginBottom: "30px",
-            borderBottom: "1px solid #eee",
-            paddingBottom: "20px",
-          }}
-        >
-          {/* 用户块 */}
-          <div style={{ marginBottom: "10px", color: "#666" }}>
-            用户：{group.user_id.slice(0, 6)}
-          </div>
+      {groups.map((group: any) => {
+        const isOpen = expanded[group.user_id];
+        const visibleItems = isOpen
+          ? group.items
+          : group.items.slice(0, 3);
 
-          {/* 最近3~5条记录 */}
-          <div style={{ display: "flex", gap: "10px" }}>
-            {group.items.map((item: any) => (
-              <Link
-                key={item.id}
-                href={`/archive/${item.archive_id}`}
-              >
-                <div
-                  style={{
-                    width: "120px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {/* 图片优先 */}
-                  {item.media?.[0]?.url ? (
-                    <img
-                      src={item.media[0].url}
-                      style={{
-                        width: "120px",
-                        height: "120px",
-                        objectFit: "cover",
-                        borderRadius: "6px",
-                      }}
-                    />
-                  ) : (
+        return (
+          <div
+            key={group.user_id}
+            style={{
+              marginBottom: "28px",
+              paddingBottom: "18px",
+            }}
+          >
+            {/* 用户名 */}
+            <div
+              style={{
+                marginBottom: "12px",
+                fontWeight: "600",
+                fontSize: "16px",
+              }}
+            >
+              🙂 {group.username}
+            </div>
+
+            {/* 列表 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {visibleItems.map((item: any) => {
+                const hasImage = item.media?.[0]?.url;
+
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/archive/${item.archive_id}`}
+                    style={{ textDecoration: "none", color: "inherit" }}
+                  >
                     <div
                       style={{
-                        width: "120px",
-                        height: "120px",
-                        background: "#f5f5f5",
-                        borderRadius: "6px",
                         display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "12px",
-                        color: "#999",
+                        gap: "10px",
+                        alignItems: "flex-start",
+                        padding: "10px",
+                        borderRadius: "10px",
+                        background: "#fff",
+                        border: "1px solid #f5f5f5",
+                        transition: "all 0.15s ease",
+                      }}
+                      onMouseDown={(e) => {
+                        e.currentTarget.style.transform = "scale(0.98)";
+                      }}
+                      onMouseUp={(e) => {
+                        e.currentTarget.style.transform = "scale(1)";
                       }}
                     >
-                      无图片
-                    </div>
-                  )}
+                      {/* 图片（有才显示） */}
+                      {hasImage && (
+                        <img
+                          src={item.media[0].url}
+                          style={{
+                            width: "40px",
+                            height: "40px",
+                            objectFit: "cover",
+                            borderRadius: "4px",
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
 
-                  {/* 简短文字 */}
-                  <p
-                    style={{
-                      fontSize: "12px",
-                      marginTop: "5px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.note}
-                  </p>
-                </div>
-              </Link>
-            ))}
+                      {/* 内容 */}
+                      <div style={{ flex: 1 }}>
+                        {/* 档案名 + 记录 */}
+                        <div
+                          style={{
+                            fontSize: "15px",
+                            lineHeight: "1.5",
+                            color: "#222",
+                          }}
+                        >
+                          <span style={{ fontWeight: "500" }}>
+                            {item.archiveTitle}
+                          </span>
+
+                          {item.note?.trim() && (
+                            <span style={{ color: "#666" }}>
+                              {" · "}{item.note}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 时间 */}
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            color: "#999",
+                            marginTop: "4px",
+                          }}
+                        >
+                          {new Date(item.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* 展开 */}
+            {group.items.length > 3 && (
+              <div
+                style={{
+                  marginTop: "8px",
+                  fontSize: "12px",
+                  color: "#888",
+                  cursor: "pointer",
+                }}
+                onClick={() =>
+                  setExpanded((prev: any) => ({
+                    ...prev,
+                    [group.user_id]: !prev[group.user_id],
+                  }))
+                }
+              >
+                {isOpen ? "收起" : "展开更多"}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </main>
   );
 }

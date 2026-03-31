@@ -2,6 +2,7 @@ import Navbar from "../components/navbar";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import UserBar from "@/components/UserBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,18 +35,23 @@ export default function RootLayout({
       </head>
 
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{
-          margin: 0,
-          padding: 0,
-          background: "#f5f5f5",
-        }}
-      >
-        <Navbar />
-        <div style={{ width: "100%" }}>
-          {children}
-        </div>
-      </body>
+  className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+  style={{
+    margin: 0,
+    padding: 0,
+    background: "#f5f5f5",
+  }}
+>
+  <Navbar />
+
+  {/* ✅ 用户栏（放这里） */}
+  <UserBar />
+
+  {/* ✅ 页面内容 */}
+  <div style={{ width: "100%" }}>
+    {children}
+  </div>
+</body>
     </html>
   );
 }
