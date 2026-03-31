@@ -45,8 +45,11 @@ export default function ArchivePage() {
   return (
     <main style={{ padding: "20px" }}>
       <UserBar />
-
+<div style={{ marginBottom: "20px" }}>
+  <a href="/profile">👉 我的信息</a>
+</div>
       <h1>我的养成档案</h1>
+      
 
       {/* ✅ 分类卡片 */}
       <div

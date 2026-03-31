@@ -10,30 +10,64 @@ export default async function ArchiveDetail({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-
   return <Content id={id} />;
 }
+
 async function Content({ id }: { id: string }) {
   const supabase = await getSupabaseServer();
+
+  // ✅ 1. 查档案（改成 maybeSingle，避免误判）
   const { data: archive } = await supabase
     .from("archives")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (!archive) {
-    return <div style={{ padding: "40px" }}>档案不存在</div>;
+    return (
+      <div style={{ padding: "40px" }}>
+        档案不存在
+        <br />
+        id: {id}
+      </div>
+    );
   }
+// ✅ 2. 查 records（修复类型问题）
+const { data } = await supabase
+  .from("records")
+  .select("*")
+  .eq("archive_id", archive.id)
+  .order("photo_time", { ascending: false });
 
-  // ✅ 修复点1：data 默认值，彻底消灭 null
-  const { data = [] } = await supabase
-    .from("records")
-    .select("*, media(*)")
-    .eq("archive_id", archive.id)
-    .order("photo_time", { ascending: false });
+const recordsData = (data ?? []) as any[];
 
-  // ✅ 修复点2：明确类型
-  const records = (data ?? []) as any[];
+// ✅ 3. 查 media
+const recordIds = recordsData.map((r) => r.id);
+
+let mediaMap: Record<string, any[]> = {};
+
+if (recordIds.length > 0) {
+  const { data: mediaRaw } = await supabase
+    .from("media")
+    .select("*")
+    .in("record_id", recordIds);
+
+  const mediaData = (mediaRaw ?? []) as any[];
+
+  // 分组
+  mediaData.forEach((m) => {
+    if (!mediaMap[m.record_id]) {
+      mediaMap[m.record_id] = [];
+    }
+    mediaMap[m.record_id].push(m);
+  });
+}
+
+// ✅ 4. 合并
+const records = recordsData.map((r) => ({
+  ...r,
+  media: mediaMap[r.id] || [],
+}));
 
   return (
     <main style={{ padding: "12px" }}>
@@ -43,10 +77,8 @@ async function Content({ id }: { id: string }) {
 
       <h2>时间线</h2>
 
-      {/* ✅ 修复点3：确保永远是数组 */}
       {groupRecords(records).map((group: any) => (
         <div key={group.title} style={{ marginBottom: "30px" }}>
-          {/* 时间标题 */}
           <h3
             style={{
               marginBottom: "10px",
@@ -68,8 +100,7 @@ async function Content({ id }: { id: string }) {
                 marginBottom: "15px",
               }}
             >
-              {/* 图片 */}
-              {item.media && item.media.length > 0 && (
+              {item.media?.length > 0 && (
                 <div style={{ marginBottom: "10px" }}>
                   <ImageViewer
                     images={item.media.map((m: any) => m.url)}
@@ -77,10 +108,8 @@ async function Content({ id }: { id: string }) {
                 </div>
               )}
 
-              {/* 文字 */}
               <EditRecord id={item.id} initialText={item.note} />
 
-              {/* 删除 */}
               <div style={{ marginTop: "10px" }}>
                 <DeleteRecordButton id={item.id} />
               </div>
@@ -92,9 +121,6 @@ async function Content({ id }: { id: string }) {
   );
 }
 
-//
-// 时间分组
-//
 function groupRecords(records: any[] = []): any[] {
   const groups: Record<string, any[]> = {};
 
@@ -114,9 +140,6 @@ function groupRecords(records: any[] = []): any[] {
   }));
 }
 
-//
-// 时间格式
-//
 function formatDate(dateString: string) {
   const date = new Date(dateString);
 
