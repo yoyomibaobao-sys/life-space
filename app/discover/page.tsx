@@ -103,7 +103,9 @@ export default function DiscoverPage() {
                 fontSize: "16px",
               }}
             >
-              🙂 {group.username}
+              <Link href={`/user/${group.user_id}`}>
+  🙂 {group.username}
+</Link>
             </div>
 
             {/* 列表 */}
@@ -163,11 +165,7 @@ export default function DiscoverPage() {
                             {item.archiveTitle}
                           </span>
 
-                          {item.note?.trim() && (
-                            <span style={{ color: "#666" }}>
-                              {" · "}{item.note}
-                            </span>
-                          )}
+                          
                         </div>
 
                         {/* 时间 */}

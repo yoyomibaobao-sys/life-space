@@ -170,7 +170,20 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
           }
         }
       }
+ else {
+  // ⭐ 纯文字逻辑（加这里）
+  const photoTimeISO = new Date().toISOString();
 
+  await supabase.from("records").insert([
+    {
+      archive_id: archiveId,
+      note: text.trim(),
+      user_id: user.id,
+      visibility: "community",
+      photo_time: photoTimeISO,
+    },
+  ]);
+}
       // 清空
       setText("");
       setFiles([]);

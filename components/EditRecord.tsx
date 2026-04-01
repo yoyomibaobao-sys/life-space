@@ -1,110 +1,142 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function EditRecord({
   id,
   initialText,
+  readOnly = false,
 }: {
   id: string;
   initialText: string;
+  readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(initialText);
+  const [loading, setLoading] = useState(false);
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const router = useRouter();
 
-  async function handleSave() {
-    const { error } = await supabase
+  // 自动聚焦 + 自动高度
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      autoResize();
+    }
+  }, [editing]);
+
+  function autoResize() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+
+  async function save() {
+    if (loading) return;
+
+    // 没变化不提交
+    if (text === initialText) {
+      setEditing(false);
+      return;
+    }
+
+    setLoading(true);
+
+    await supabase
       .from("records")
       .update({ note: text })
       .eq("id", id);
 
-    if (!error) {
-      setEditing(false);
-      router.refresh();
-    } else {
-      alert("更新失败");
-    }
+    setLoading(false);
+    setEditing(false);
+
+    router.refresh();
   }
 
-  // 👉 展示模式（手机优化）
+  function cancel() {
+    setText(initialText);
+    setEditing(false);
+  }
+
+  // 👀 只读模式
+  if (readOnly) {
+    return <div>{text}</div>;
+  }
+
+  // 👤 阅读态
   if (!editing) {
     return (
-      <div>
-        <p
-          style={{
-            fontSize: "16px",
-            lineHeight: "1.7",
-            marginBottom: "8px",
-          }}
-        >
-          {text || "（无内容）"}
-        </p>
-
-        <button
-          onClick={() => setEditing(true)}
-          style={{
-            fontSize: "14px",
-            padding: "6px 10px",
-            borderRadius: "6px",
-            border: "none",
-            background: "#eee",
-          }}
-        >
-          编辑
-        </button>
+      <div
+        onClick={() => setEditing(true)}
+        style={{
+          cursor: "text",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {text || (
+          <span style={{ color: "#999" }}>
+            点击添加内容
+          </span>
+        )}
       </div>
     );
   }
 
-  // 👉 编辑模式（手机体验优化）
+  // ✏️ 编辑态（Notion风格）
   return (
-    <div>
+    <div style={{ position: "relative" }}>
       <textarea
+        ref={textareaRef}
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={3}
+        onChange={(e) => {
+          setText(e.target.value);
+          autoResize();
+        }}
+        onBlur={save}
+        autoFocus
+        placeholder="输入内容..."
         style={{
           width: "100%",
-          fontSize: "18px",
+          border: "none",
+          outline: "none",
+          resize: "none",
+          fontSize: "14px",
           lineHeight: "1.6",
-          padding: "10px",
-          borderRadius: "8px",
-          border: "1px solid #ddd",
-          boxSizing: "border-box",
+          background: "transparent",
+        }}
+        onKeyDown={(e) => {
+          // Enter 保存
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            save();
+          }
+
+          // ESC 取消
+          if (e.key === "Escape") {
+            e.preventDefault();
+            cancel();
+          }
         }}
       />
 
-      <div style={{ marginTop: "8px", display: "flex", gap: "10px" }}>
-        <button
-          onClick={handleSave}
+      {/* 状态提示 */}
+      {loading && (
+        <div
           style={{
-            flex: 1,
-            padding: "10px",
-            background: "#4CAF50",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
+            position: "absolute",
+            right: 0,
+            bottom: "-18px",
+            fontSize: "12px",
+            color: "#999",
           }}
         >
-          保存
-        </button>
-
-        <button
-          onClick={() => setEditing(false)}
-          style={{
-            flex: 1,
-            padding: "10px",
-            background: "#ccc",
-            border: "none",
-            borderRadius: "8px",
-          }}
-        >
-          取消
-        </button>
-      </div>
+          保存中...
+        </div>
+      )}
     </div>
   );
 }
