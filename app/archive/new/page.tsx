@@ -3,16 +3,25 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// ✅ 分类统一配置（后面所有页面都可以复用）
+const categories = [
+  { value: "植物", label: "🌱 植物" },
+  { value: "宠物", label: "🐾 宠物" },
+  { value: "日常", label: "📓 日常" },
+  { value: "技能", label: "🎯 技能" },
+  { value: "其他", label: "📦 其他" },
+];
+
 export default function NewArchive() {
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("plant"); // ✅ 默认值更安全
+  const [category, setCategory] = useState("植物"); // ✅ 默认分类
 
   function generateSlug(text: string) {
     return text
       .toLowerCase()
       .trim()
       .replace(/\s+/g, "-")
-      .replace(/[^\w\-]+/g, ""); // ✅ 防止特殊字符
+      .replace(/[^\w\-]+/g, "");
   }
 
   async function handleCreate(e: any) {
@@ -37,7 +46,7 @@ export default function NewArchive() {
     const { error } = await supabase.from("archives").insert([
       {
         title: title.trim(),
-        category,
+        category, // ✅ 直接存中文（统一）
         slug,
         user_id: user.id,
       },
@@ -50,6 +59,8 @@ export default function NewArchive() {
     }
 
     alert("创建成功");
+
+    // ✅ 跳转更优（比 window.location 更干净）
     window.location.href = "/archive";
   }
 
@@ -69,22 +80,23 @@ export default function NewArchive() {
 
         <br /><br />
 
-        {/* ✅ 类别下拉 */}
+        {/* 分类 */}
         <p>类别</p>
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           style={{ padding: "8px", width: "200px" }}
         >
-          <option value="plant">🌱 植物</option>
-          <option value="pet">🐾 宠物</option>
-          <option value="daily">📓 日常</option>
-          <option value="skill">🎯 技能</option>
-          <option value="other">📦 其他</option>
+          {categories.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
         </select>
 
         <br /><br />
 
+        {/* 提交 */}
         <button
           type="submit"
           style={{

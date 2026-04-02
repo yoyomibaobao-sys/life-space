@@ -1,12 +1,13 @@
 "use client";
 
 import { use } from "react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AddRecord from "./AddRecord";
 import DeleteRecordButton from "./DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function ArchiveDetail({
   params,
@@ -21,8 +22,9 @@ export default function ArchiveDetail({
 function Content({ id }: { id: string }) {
   const [archive, setArchive] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
-  const [viewer, setViewer] = useState<any>(null);
   const [me, setMe] = useState<string | null>(null);
+
+  const router = useRouter();
 
   // 👤 当前用户
   useEffect(() => {
@@ -83,18 +85,50 @@ function Content({ id }: { id: string }) {
     load();
   }, [id]);
 
-  // ✅ 权限判断（关键）
-  const isOwner = me === archive?.user_id;
+ // ⭐ 等数据加载完再渲染（必须加）
+if (!archive || me === null) {
+  return <div style={{ padding: 20 }}>加载中...</div>;
+}
+  // ✅ 权限判断
+  const isOwner = me === archive.user_id;
+
+  // ✅ 分类格式化
+  function formatCategory(category: string) {
+    switch (category) {
+      case "植物":
+        return "🌱 植物";
+      case "宠物":
+        return "🐾 宠物";
+      case "日常":
+        return "📓 日常";
+      case "技能":
+        return "🎯 技能";
+      default:
+        return "📦 其他";
+    }
+  }
 
   return (
     <main style={{ padding: "16px", maxWidth: "560px", margin: "0 auto" }}>
       <Link href="/archive">← 返回</Link>
 
-      <h1>{archive?.title}</h1>
+      {/* 👤 页面身份 */}
+      <div style={{ fontSize: 12, color: "#999", marginTop: 10 }}>
+        {isOwner ? "我的养成" : "TA的养成"}
+      </div>
 
-      {/* ✅ 只有自己能添加 */}
+      {/* 🌱 分类 */}
+      <div style={{ color: "#666", marginTop: 6 }}>
+        {archive?.category && formatCategory(archive.category)}
+      </div>
+
+      {/* 标题 */}
+      <h1 style={{ marginTop: 4 }}>{archive?.title}</h1>
+
+      {/* 添加记录 */}
       {isOwner && <AddRecord archiveId={archive.id} />}
 
+      {/* 记录列表 */}
       {records.map((item: any) => (
         <div key={item.id} style={{ marginBottom: 24 }}>
           {/* 时间 */}
@@ -112,7 +146,7 @@ function Content({ id }: { id: string }) {
                     style={{ width: "100%", borderRadius: 10 }}
                   />
 
-                  {/* ✅ 只有自己能删图 */}
+                  {/* 删除图片 */}
                   {isOwner && (
                     <button
                       onClick={async (e) => {
@@ -121,7 +155,8 @@ function Content({ id }: { id: string }) {
                           .from("media")
                           .delete()
                           .eq("id", m.id);
-                        window.location.reload();
+
+                        router.refresh(); // ✅ 替代 reload
                       }}
                       style={{
                         position: "absolute",
@@ -138,19 +173,16 @@ function Content({ id }: { id: string }) {
           )}
 
           {/* 文本 */}
-
-       {/* 文本由 EditRecord 负责 */}
           <div style={{ marginTop: 6 }}>
- <EditRecord
-  key={`${item.id}-${isOwner}`}
-  id={item.id}
-  initialText={item.note}
-  readOnly={!isOwner}
-/>
-  {isOwner && (
-    <DeleteRecordButton id={item.id} />
-  )}
-</div>
+            <EditRecord
+              key={`${item.id}-${isOwner}`}
+              id={item.id}
+              initialText={item.note}
+              readOnly={!isOwner}
+            />
+
+            {isOwner && <DeleteRecordButton id={item.id} />}
+          </div>
         </div>
       ))}
     </main>

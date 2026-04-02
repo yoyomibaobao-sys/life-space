@@ -2,7 +2,6 @@ import Navbar from "../components/navbar";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import UserBar from "@/components/UserBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,8 +43,7 @@ export default function RootLayout({
 >
   <Navbar />
 
-  {/* ✅ 用户栏（放这里） */}
-  <UserBar />
+ 
 
   {/* ✅ 页面内容 */}
   <div style={{ width: "100%" }}>

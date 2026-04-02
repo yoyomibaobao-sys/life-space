@@ -7,6 +7,8 @@ import Link from "next/link";
 import EditRecord from "@/components/EditRecord";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 
+const categories = ["全部", "植物", "宠物", "日常", "技能", "其他"];
+
 export default function UserPage({
   params,
 }: {
@@ -18,33 +20,23 @@ export default function UserPage({
 
 function Content({ userId }: { userId: string }) {
   const [user, setUser] = useState<any>(null);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [stats, setStats] = useState({
-    archives: 0,
-    records: 0,
-  });
-
+  const [records, setRecords] = useState<any[]>([]);
+  const [archiveMap, setArchiveMap] = useState<any>({});
   const [me, setMe] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState("全部");
 
-  // ✅ 当前登录用户
+  // 当前用户
   useEffect(() => {
-    async function getMe() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      setMe(session?.user?.id || null);
-    }
-
-    getMe();
+    supabase.auth.getSession().then(({ data }) => {
+      setMe(data.session?.user?.id || null);
+    });
   }, []);
 
   const isOwner = me === userId;
 
-  // ✅ 数据加载
+  // 数据加载
   useEffect(() => {
     async function load() {
-      // 用户
       const { data: profile } = await supabase
         .from("profiles")
         .select("*")
@@ -53,199 +45,179 @@ function Content({ userId }: { userId: string }) {
 
       setUser(profile);
 
-      // 档案
       const { data: archives } = await supabase
         .from("archives")
-        .select("*")
-        .eq("user_id", userId);
+        .select("*");
 
-      // 记录
-      const { data: records } = await supabase
+      const map = Object.fromEntries(
+        (archives || []).map((a: any) => [a.id, a])
+      );
+      setArchiveMap(map);
+
+      const { data: recs } = await supabase
         .from("records")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
-      if (!records) return;
-
-      // 统计
-      setStats({
-        archives: archives?.length || 0,
-        records: records.length,
-      });
+      if (!recs) return;
 
       // media
-      const recordIds = records.map((r) => r.id);
-      let mediaMap: any = {};
+      const ids = recs.map((r) => r.id);
+      const { data: media } = await supabase
+        .from("media")
+        .select("*")
+        .in("record_id", ids);
 
-      if (recordIds.length > 0) {
-        const { data: media } = await supabase
-          .from("media")
-          .select("*")
-          .in("record_id", recordIds);
-
-        media?.forEach((m) => {
-          if (!mediaMap[m.record_id]) mediaMap[m.record_id] = [];
-          mediaMap[m.record_id].push(m);
-        });
-      }
-
-      // 分组
-      const map: any = {};
-
-      records.forEach((item) => {
-        const aid = item.archive_id;
-
-        if (!map[aid]) {
-          const archive = archives?.find((a) => a.id === aid);
-
-          map[aid] = {
-            archive_id: aid,
-            title: archive?.title || "未命名",
-            items: [],
-          };
-        }
-
-        map[aid].items.push({
-          ...item,
-          media: mediaMap[item.id] || [],
-        });
+      const mediaMap: any = {};
+      media?.forEach((m) => {
+        if (!mediaMap[m.record_id]) mediaMap[m.record_id] = [];
+        mediaMap[m.record_id].push(m);
       });
 
-      const result = Object.values(map).map((g: any) => ({
-        ...g,
-        items: g.items.slice(0, 3),
+      const final = recs.map((r) => ({
+        ...r,
+        media: mediaMap[r.id] || [],
       }));
 
-      setGroups(result);
+      setRecords(final);
     }
 
     load();
   }, [userId]);
 
+  // ⭐ 分类筛选
+  const filtered = records.filter((item) => {
+    if (activeCategory === "全部") return true;
+    const archive = archiveMap[item.archive_id];
+    return archive?.category === activeCategory;
+  });
+
   return (
-    <main style={{ padding: "16px", maxWidth: "520px", margin: "0 auto" }}>
-      {/* 返回 */}
-      <Link href="/discover" style={{ fontSize: 13, color: "#888" }}>
-        ← 返回
-      </Link>
+    <main style={{ padding: 16, maxWidth: 520, margin: "0 auto" }}>
+      <Link href="/discover">← 返回</Link>
 
       {/* 用户信息 */}
-      <div style={{ marginTop: 20, marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* 头像 */}
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: "50%",
-              background: "#eee",
-              overflow: "hidden",
-            }}
-          >
-            {user?.avatar_url && (
-              <img
-                src={user.avatar_url}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            )}
-          </div>
-
-          {/* 名字 + 统计 */}
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>
-              🙂 {user?.username || "用户"}
-            </div>
-
-            <div style={{ fontSize: 12, color: "#999" }}>
-              {stats.archives} 个档案 · {stats.records} 条记录
-            </div>
-          </div>
+      <div style={{ marginTop: 20, marginBottom: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 18 }}>
+          🙂 {user?.username || "用户"}
         </div>
-
-        {/* 简介 */}
-        {user?.bio && (
-          <div style={{ marginTop: 10, fontSize: 14, color: "#555" }}>
-            {user.bio}
-          </div>
-        )}
       </div>
 
-      {/* 内容 */}
-      <div>
-        {groups.map((group: any) => (
-          <div key={group.archive_id} style={{ marginBottom: 24 }}>
-            {/* 档案名 */}
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>
-              {group.title}
-            </div>
-
-            {/* 记录 */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {group.items.map((item: any) => (
-                <div key={item.id}>
-                  <Link
-                    href={`/archive/${item.archive_id}`}
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        padding: 10,
-                        borderRadius: 10,
-                        border: "1px solid #f5f5f5",
-                      }}
-                    >
-                      {/* 图片 */}
-                      {item.media?.[0]?.url && (
-                        <img
-                          src={item.media[0].url}
-                          style={{
-                            width: 50,
-                            height: 50,
-                            borderRadius: 6,
-                            objectFit: "cover",
-                          }}
-                        />
-                      )}
-
-                      {/* 内容 */}
-                      <div>
-                        <div>
-  <EditRecord
-    id={item.id}
-    initialText={item.note}
-    readOnly={!isOwner}
-  />
-
-
-</div>
-                        <div style={{ fontSize: 12, color: "#999" }}>
-                          {new Date(item.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-
-                  {/* ✅ 只有自己能操作 */}
-                  <div
-  style={{
-    marginTop: 6,
-    display: "flex",
-    gap: 10,
-    fontSize: 12,
-    color: "#bbb",
-  }}
->
-  {isOwner && <DeleteRecordButton id={item.id} />}
-</div>
-                </div>
-              ))}
-            </div>
+      {/* ⭐ 分类标签（你要的效果） */}
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          overflowX: "auto",
+          marginBottom: 20,
+        }}
+      >
+        {categories.map((c) => (
+          <div
+            key={c}
+            onClick={() => setActiveCategory(c)}
+            style={{
+              padding: "8px 18px",
+              borderRadius: 999,
+              background: activeCategory === c ? "#4CAF50" : "#f5f5f5",
+              color: activeCategory === c ? "#fff" : "#555",
+              cursor: "pointer",
+              fontSize: 14,
+              whiteSpace: "nowrap",
+              transition: "all 0.2s ease",
+            }}
+          >
+            {c}
           </div>
         ))}
       </div>
+
+      {/* 内容流（统一成发现页风格） */}
+      <div>
+        {filtered.map((item: any) => {
+          const archive = archiveMap[item.archive_id];
+          const hasImage = item.media?.[0]?.url;
+
+          return (
+            <Link
+              key={item.id}
+              href={`/archive/${item.archive_id}`}
+              style={{ textDecoration: "none", color: "inherit" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #f5f5f5",
+                  marginBottom: 12,
+                }}
+              >
+                {/* 图片 */}
+                {hasImage && (
+                  <img
+                    src={item.media[0].url}
+                    style={{
+                      width: 60,
+                      height: 60,
+                      borderRadius: 6,
+                      objectFit: "cover",
+                    }}
+                  />
+                )}
+
+                {/* 内容 */}
+                <div style={{ flex: 1 }}>
+                  {/* 档案名 */}
+                  <div style={{ fontWeight: 500 }}>
+                    {archive?.title}
+                  </div>
+
+                  {/* 分类 */}
+                  <div style={{ fontSize: 12, color: "#666" }}>
+                    {formatCategory(archive?.category)}
+                  </div>
+
+                  {/* 文本 */}
+                  <EditRecord
+                    id={item.id}
+                    initialText={item.note}
+                    readOnly={!isOwner}
+                  />
+
+                  {/* 时间 */}
+                  <div style={{ fontSize: 12, color: "#999" }}>
+                    {new Date(item.created_at).toLocaleString()}
+                  </div>
+
+                  {/* 删除 */}
+                  {isOwner && (
+                    <DeleteRecordButton id={item.id} />
+                  )}
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
     </main>
   );
+}
+
+// 分类格式
+function formatCategory(category: string) {
+  switch (category) {
+    case "植物":
+      return "🌱 植物";
+    case "宠物":
+      return "🐾 宠物";
+    case "日常":
+      return "📓 日常";
+    case "技能":
+      return "🎯 技能";
+    default:
+      return "📦 其他";
+  }
 }

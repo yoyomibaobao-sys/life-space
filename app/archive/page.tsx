@@ -5,17 +5,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+// ✅ 分类统一（中文）
 const categories = [
-  { key: "plant", label: "🌱 植物" },
-  { key: "pet", label: "🐾 宠物" },
-  { key: "daily", label: "📓 日常" },
-  { key: "skill", label: "🎯 技能" },
-  { key: "other", label: "📦 其他" },
+  { key: "植物", label: "🌱 植物" },
+  { key: "宠物", label: "🐾 宠物" },
+  { key: "日常", label: "📓 日常" },
+  { key: "技能", label: "🎯 技能" },
+  { key: "其他", label: "📦 其他" },
 ];
 
 export default function ArchivePage() {
   const [archives, setArchives] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState("plant");
+  const [activeCategory, setActiveCategory] = useState("植物"); // ✅ 默认分类
   const router = useRouter();
 
   async function loadData() {
@@ -81,7 +82,7 @@ export default function ArchivePage() {
 
       {/* 列表 */}
       {archives
-        .filter((item) => (item.category || "other") === activeCategory)
+        .filter((item) => (item.category || "其他") === activeCategory)
         .map((item) => (
           <div
             key={item.id}
@@ -98,10 +99,11 @@ export default function ArchivePage() {
             </Link>
 
             <p style={{ color: "#888", fontSize: "14px" }}>
-              {formatCategory(item.category)}
+              {item.category || "📦 其他"}
             </p>
 
             <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
+              {/* 改名称 */}
               <button
                 onClick={async () => {
                   const newName = prompt("修改名称", item.title);
@@ -118,8 +120,9 @@ export default function ArchivePage() {
                 ✏️
               </button>
 
+              {/* 改分类 */}
               <select
-                value={item.category || "other"}
+                value={item.category || "其他"}
                 onChange={async (e) => {
                   await supabase
                     .from("archives")
@@ -136,6 +139,7 @@ export default function ArchivePage() {
                 ))}
               </select>
 
+              {/* 删除 */}
               <button
                 onClick={async () => {
                   if (!confirm("确定删除？")) return;
@@ -155,19 +159,4 @@ export default function ArchivePage() {
         ))}
     </main>
   );
-}
-
-function formatCategory(category: string) {
-  switch (category) {
-    case "plant":
-      return "🌱 植物";
-    case "pet":
-      return "🐾 宠物";
-    case "daily":
-      return "📓 日常";
-    case "skill":
-      return "🎯 技能";
-    default:
-      return "📦 其他";
-  }
 }
