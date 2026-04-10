@@ -3,9 +3,9 @@ import Link from "next/link";
 export default function Home() {
   return (
     <main style={{ padding: "40px", fontFamily: "sans-serif" }}>
-      <h1>有间生活空间</h1>
+      <h1>有时·耕作</h1>
 
-      <p>记录一个被持续照顾的对象。</p>
+      <p>记录一株植物的生长过程。</p>
 
       <h2>进入系统</h2>
 
@@ -15,11 +15,11 @@ export default function Home() {
         </li>
 
         <li>
-          <Link href="/archive">我的养成</Link>
+          <Link href="/archive">我的记录</Link>
         </li>
 
         <li>
-          <Link href="/exchange">交换</Link>
+          <Link href="/exchange">集市</Link>
         </li>
       </ul>
     </main>

@@ -1,4 +1,4 @@
-import Navbar from "../components/navbar";
+import Navbar from "@/components/navbar";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -26,7 +26,6 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <head>
-        {/* ⭐ 关键：强制手机正确渲染 */}
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1"
@@ -34,22 +33,19 @@ export default function RootLayout({
       </head>
 
       <body
-  className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-  style={{
-    margin: 0,
-    padding: 0,
-    background: "#f5f5f5",
-  }}
->
-  <Navbar />
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        style={{
+          margin: 0,
+          padding: 0,
+          background: "#f5f5f5",
+        }}
+      >
+        {/* ✅ 顶部导航（包含用户信息） */}
+        <Navbar />
 
- 
-
-  {/* ✅ 页面内容 */}
-  <div style={{ width: "100%" }}>
-    {children}
-  </div>
-</body>
+        {/* ✅ 页面内容 */}
+        <div style={{ width: "100%" }}>{children}</div>
+      </body>
     </html>
   );
 }

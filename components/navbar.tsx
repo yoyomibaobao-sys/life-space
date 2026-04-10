@@ -7,13 +7,29 @@ import { usePathname } from "next/navigation";
 
 export default function Navbar() {
   const [user, setUser] = useState<any>(null);
+  const [username, setUsername] = useState("");
   const pathname = usePathname();
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      setUser(user);
+
+      // ✅ 从 profiles 读取用户名
+      const { data } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      setUsername(data?.username || "");
     }
+
     load();
   }, []);
 
@@ -43,55 +59,56 @@ export default function Navbar() {
       {/* 左侧导航 */}
       <div style={{ display: "flex", gap: 24 }}>
         <NavItem href="/discover" active={isActive("/discover")}>
-          发现
+          社区发现
         </NavItem>
 
         <NavItem href="/archive" active={isActive("/archive")}>
-          养成
+          植物
         </NavItem>
 
         <NavItem href="/exchange" active={isActive("/exchange")}>
-          交换
+          集市
         </NavItem>
       </div>
 
       {/* 右侧用户 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          fontSize: 13,
-        }}
-      >
-        {/* 用户名 */}
-        <Link
-          href={`/user/${user?.id}`}
-          style={{
-            textDecoration: "none",
-            color: "#000",
-            fontWeight: 500,
-          }}
-        >
-          {user?.email?.split("@")[0] || "用户"}
-        </Link>
-
-        {/* 邮箱 */}
-        <div style={{ color: "#888" }}>
-          {user?.email}
-        </div>
-
-        {/* 退出 */}
+      {user && (
         <div
-          onClick={handleLogout}
           style={{
-            cursor: "pointer",
-            color: "#f44336",
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            fontSize: 13,
           }}
         >
-          退出
+          {/* 用户名（点击进入 profile） */}
+          <Link
+            href="/profile"
+            style={{
+              textDecoration: "none",
+              color: "#000",
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+             {username || "未设置用户名"}
+          </Link>
+
+          {/* 邮箱 */}
+          <div style={{ color: "#888" }}>{user.email}</div>
+
+          {/* 退出 */}
+          <div
+            onClick={handleLogout}
+            style={{
+              cursor: "pointer",
+              color: "#f44336",
+            }}
+          >
+            退出
+          </div>
         </div>
-      </div>
+      )}
     </nav>
   );
 }

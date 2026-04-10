@@ -5,15 +5,41 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import exifr from "exifr";
 
-export default function AddRecord({ archiveId }: { archiveId: string }) {
+// ⭐新增 Props 类型
+type Props = {
+  archiveId: string;
+  placeholder?: string;
+};
+
+export default function AddRecord({ archiveId, placeholder }: Props) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [timeMode, setTimeMode] = useState("exif");
   const [customTime, setCustomTime] = useState("");
-  const [mergeMode, setMergeMode] = useState(true); // ⭐ 新增
+  const [mergeMode, setMergeMode] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const router = useRouter();
+
+  function resolveTime({
+    timeMode,
+    customTime,
+    exifTime,
+  }: {
+    timeMode: string;
+    customTime: string;
+    exifTime?: Date | null;
+  }) {
+    if (timeMode === "exif" && exifTime) {
+      return new Date(exifTime).toISOString();
+    }
+
+    if (timeMode === "custom") {
+      return new Date(customTime).toISOString();
+    }
+
+    return new Date().toISOString();
+  }
 
   async function handleAdd() {
     if (loading) return;
@@ -33,38 +59,24 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
       }
 
       if (files.length > 0) {
-
-        // 🟢 ===== 模式B：多图合并 =====
         if (mergeMode) {
+          let exifTime = null;
 
-          let photoTimeISO = null;
-
-          // 用第一张图时间
           if (timeMode === "exif") {
             try {
               const exifData = await exifr.parse(files[0]);
               if (exifData?.DateTimeOriginal) {
-                photoTimeISO = new Date(
-                  exifData.DateTimeOriginal
-                ).toISOString();
+                exifTime = exifData.DateTimeOriginal;
               }
             } catch {}
           }
 
-          if (timeMode === "custom") {
-            if (!customTime) {
-              alert("请选择自定义时间");
-              setLoading(false);
-              return;
-            }
-            photoTimeISO = new Date(customTime).toISOString();
-          }
+          const recordTimeISO = resolveTime({
+            timeMode,
+            customTime,
+            exifTime,
+          });
 
-          if (!photoTimeISO) {
-            photoTimeISO = new Date().toISOString();
-          }
-
-          // 创建一条记录
           const { data: record } = await supabase
             .from("records")
             .insert([
@@ -73,7 +85,9 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
                 note: text.trim(),
                 user_id: user.id,
                 visibility: "community",
-                photo_time: photoTimeISO,
+                photo_time: recordTimeISO,
+                record_time: recordTimeISO,
+                upload_time: new Date().toISOString(),
               },
             ])
             .select()
@@ -84,7 +98,6 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
             return;
           }
 
-          // 所有图片绑定
           for (const file of files) {
             const fileName = `${Date.now()}-${file.name}`;
 
@@ -103,37 +116,24 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
               },
             ]);
           }
-
         } else {
-
-          // 🔵 ===== 模式A：一图一记录 =====
           for (const file of files) {
-
-            let photoTimeISO = null;
+            let exifTime = null;
 
             if (timeMode === "exif") {
               try {
                 const exifData = await exifr.parse(file);
                 if (exifData?.DateTimeOriginal) {
-                  photoTimeISO = new Date(
-                    exifData.DateTimeOriginal
-                  ).toISOString();
+                  exifTime = exifData.DateTimeOriginal;
                 }
               } catch {}
             }
 
-            if (timeMode === "custom") {
-              if (!customTime) {
-                alert("请选择自定义时间");
-                setLoading(false);
-                return;
-              }
-              photoTimeISO = new Date(customTime).toISOString();
-            }
-
-            if (!photoTimeISO) {
-              photoTimeISO = new Date().toISOString();
-            }
+            const recordTimeISO = resolveTime({
+              timeMode,
+              customTime,
+              exifTime,
+            });
 
             const { data: record } = await supabase
               .from("records")
@@ -143,7 +143,9 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
                   note: text.trim(),
                   user_id: user.id,
                   visibility: "community",
-                  photo_time: photoTimeISO,
+                  photo_time: recordTimeISO,
+                  record_time: recordTimeISO,
+                  upload_time: new Date().toISOString(),
                 },
               ])
               .select()
@@ -169,22 +171,25 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
             ]);
           }
         }
-      }
- else {
-  // ⭐ 纯文字逻辑（加这里）
-  const photoTimeISO = new Date().toISOString();
+      } else {
+        const recordTimeISO = resolveTime({
+          timeMode,
+          customTime,
+        });
 
-  await supabase.from("records").insert([
-    {
-      archive_id: archiveId,
-      note: text.trim(),
-      user_id: user.id,
-      visibility: "community",
-      photo_time: photoTimeISO,
-    },
-  ]);
-}
-      // 清空
+        await supabase.from("records").insert([
+          {
+            archive_id: archiveId,
+            note: text.trim(),
+            user_id: user.id,
+            visibility: "community",
+            photo_time: recordTimeISO,
+            record_time: recordTimeISO,
+            upload_time: new Date().toISOString(),
+          },
+        ]);
+      }
+
       setText("");
       setFiles([]);
       setCustomTime("");
@@ -204,7 +209,7 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="记录今天发生的变化"
+        placeholder={placeholder || "记录今天发生的变化"} // ⭐关键修复
         style={{
           padding: "10px",
           width: "100%",
@@ -212,7 +217,7 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
         }}
       />
 
-      {/* 时间 */}
+      {/* 时间选择 */}
       <select
         value={timeMode}
         onChange={(e) => setTimeMode(e.target.value)}
@@ -232,19 +237,18 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
         />
       )}
 
-      {/* ⭐ 合并模式开关 */}
-    <label style={{ display: "block", marginTop: "10px" }}>
-     <input
-      type="checkbox"
-      checked={!mergeMode}
-      onChange={(e) => setMergeMode(!e.target.checked)}
-      />
-      每张图一条记录
-    </label>
+      {/* 合并开关 */}
+      <label style={{ display: "block", marginTop: "10px" }}>
+        <input
+          type="checkbox"
+          checked={!mergeMode}
+          onChange={(e) => setMergeMode(!e.target.checked)}
+        />
+        每张图一条记录
+      </label>
 
-      {/* 按钮 */}
+      {/* 上传按钮 */}
       <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-        {/* 拍照 */}
         <button
           onClick={() => {
             const input = document.createElement("input");
@@ -253,28 +257,16 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
             input.capture = "environment";
 
             input.onchange = (e: any) => {
-  const newFiles = Array.from(e.target.files || []) as File[];
-
-  if (newFiles.length > 0) {
-    setFiles((prev: File[]) => [...prev, ...newFiles]);
-  }
-};
+              const newFiles = Array.from(e.target.files || []) as File[];
+              setFiles((prev) => [...prev, ...newFiles]);
+            };
 
             input.click();
-          }}
-          style={{
-            flex: 1,
-            padding: "12px",
-            background: "#4CAF50",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
           }}
         >
           📷 拍照
         </button>
 
-        {/* 相册 */}
         <button
           onClick={() => {
             const input = document.createElement("input");
@@ -282,20 +274,12 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
             input.accept = "image/*";
 
             input.onchange = (e: any) => {
-              if (e.target.files && e.target.files.length > 0) {
+              if (e.target.files?.length > 0) {
                 setFiles((prev) => [...prev, e.target.files[0]]);
               }
             };
 
             input.click();
-          }}
-          style={{
-            flex: 1,
-            padding: "12px",
-            background: "#888",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
           }}
         >
           🖼️ 相册
@@ -304,41 +288,32 @@ export default function AddRecord({ archiveId }: { archiveId: string }) {
 
       {/* 预览 */}
       {files.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            gap: "8px",
-            marginTop: "10px",
-            overflowX: "auto",
-          }}
-        >
-          {files.map((file, index) => (
-            <div key={index} style={{ position: "relative" }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          {files.map((file, i) => (
+            <div key={i} style={{ position: "relative" }}>
               <img
                 src={URL.createObjectURL(file)}
                 style={{
-                  width: "80px",
-                  height: "80px",
+                  width: 80,
+                  height: 80,
                   objectFit: "cover",
-                  borderRadius: "6px",
+                  borderRadius: 6,
                 }}
               />
               <div
-                onClick={() => {
-                  const newFiles = [...files];
-                  newFiles.splice(index, 1);
-                  setFiles(newFiles);
-                }}
+                onClick={() =>
+                  setFiles((prev) => prev.filter((_, idx) => idx !== i))
+                }
                 style={{
                   position: "absolute",
-                  top: "-6px",
-                  right: "-6px",
+                  top: -6,
+                  right: -6,
                   background: "#f44336",
                   color: "#fff",
                   borderRadius: "50%",
-                  width: "18px",
-                  height: "18px",
-                  fontSize: "12px",
+                  width: 18,
+                  height: 18,
+                  fontSize: 12,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
