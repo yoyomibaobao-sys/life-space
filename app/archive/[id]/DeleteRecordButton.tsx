@@ -24,7 +24,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
 
       if (mediaError) {
         console.log("删除图片失败:", mediaError);
-        showToast(t.delete_failed);
+        showToast("删除失败");
         return;
       }
 
@@ -41,14 +41,14 @@ export default function DeleteRecordButton({ id }: { id: string }) {
       }
 
       // 3️⃣ 刷新页面
-     showToast(t.delete_success);
+     showToast("删除成功");
 
 setTimeout(() => {
   router.refresh();
 }, 800);
     } catch (err) {
       console.log("删除异常:", err);
-      showToast(t.error);
+      showToast("操作失败");
     }
   }
 
