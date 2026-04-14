@@ -2,6 +2,8 @@
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { t } from "@/lib/i18n";
+import { showToast } from "@/components/Toast";
 
 export default function DeleteRecordButton({ id }: { id: string }) {
   const router = useRouter();
@@ -10,7 +12,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
     // 防止被父层点击影响
     e.stopPropagation();
 
-    const confirmDelete = confirm("确定删除这条记录吗？");
+    const confirmDelete = confirm(t.confirm_delete);
     if (!confirmDelete) return;
 
     try {
@@ -22,7 +24,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
 
       if (mediaError) {
         console.log("删除图片失败:", mediaError);
-        alert("删除图片失败");
+        showToast(t.delete_failed);
         return;
       }
 
@@ -34,15 +36,19 @@ export default function DeleteRecordButton({ id }: { id: string }) {
 
       if (recordError) {
         console.log("删除记录失败:", recordError);
-        alert("删除记录失败");
+       showToast(t.delete_failed);
         return;
       }
 
       // 3️⃣ 刷新页面
-      router.refresh();
+     showToast(t.delete_success);
+
+setTimeout(() => {
+  router.refresh();
+}, 800);
     } catch (err) {
       console.log("删除异常:", err);
-      alert("删除出错");
+      showToast(t.error);
     }
   }
 
@@ -60,7 +66,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
         zIndex: 10,
       }}
     >
-      删除
+      {t.delete}
     </button>
   );
 }

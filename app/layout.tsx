@@ -1,8 +1,10 @@
 import Navbar from "@/components/navbar";
+import Toast from "@/components/Toast";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+// ✅ 字体
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -13,11 +15,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// ✅ SEO（后面多语言会扩展这里）
 export const metadata: Metadata = {
   title: "Life Space",
   description: "你的养成记录空间",
 };
 
+// ✅ 根布局
 export default function RootLayout({
   children,
 }: {
@@ -40,11 +44,14 @@ export default function RootLayout({
           background: "#f5f5f5",
         }}
       >
-        {/* ✅ 顶部导航（包含用户信息） */}
+        {/* ⭐ 顶部导航 */}
         <Navbar />
 
-        {/* ✅ 页面内容 */}
-        <div style={{ width: "100%" }}>{children}</div>
+        {/* ⭐ 页面内容 */}
+        <main style={{ width: "100%" }}>{children}</main>
+
+        {/* ⭐ 全局提示（必须放最外层） */}
+        <Toast />
       </body>
     </html>
   );

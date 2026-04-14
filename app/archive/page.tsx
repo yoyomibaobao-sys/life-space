@@ -1,78 +1,103 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// ✅ 新分类
-const categories = [
-  { key: "花", label: "🌸 花" },
-  { key: "蔬菜", label: "🥬 蔬菜" },
-  { key: "果树", label: "🍊 果树" },
-  { key: "多肉", label: "🌵 多肉" },
-  { key: "香草", label: "🌿 香草" },
-  { key: "观叶", label: "🪴 观叶" },
-  { key: "其他", label: "📦 其他" },
-  { key: "技能", label: "🎯 技能" },
-];
-
 export default function ArchivePage() {
-  const [archives, setArchives] = useState<any[]>([]);
-  const [groupTags, setGroupTags] = useState<any[]>([]);
-  const [records, setRecords] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState("花");
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+const [archives, setArchives] = useState<any[]>([]);
+const [groupTags, setGroupTags] = useState<any[]>([]);
+const [subTags, setSubTags] = useState<any[]>([]); // ⭐加在这里
+const [records, setRecords] = useState<any[]>([]);
+
+  const [activeCategory, setActiveCategory] = useState("全部");
+  const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
+  const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
 
   const router = useRouter();
+// ===== tag 类型判断 =====
+function isSubTag(tag: any) {
+  return !tag.sub_tag_id;
+}
 
-  async function loadData() {
+function isGroupTag(tag: any) {
+  return !!tag.sub_tag_id;
+}
+const loadingRef = useRef(false);
+ async function loadData() {
+  if (loadingRef.current) return;
+loadingRef.current = true;
+
+  try {
     const {
       data: { session },
     } = await supabase.auth.getSession();
 
     const user = session?.user;
-
     if (!user) {
       router.push("/login");
       return;
     }
 
-    // 档案
-    const { data } = await supabase
-      .from("archives")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+  const [
+  { data: archivesData },
+  { data: groupTagsData },
+  { data: subTagsData },
+  { data: recs },
+] = await Promise.all([
+  supabase
+    .from("archives")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false }),
 
-    setArchives(data || []);
+  supabase
+    .from("group_tags")
+    .select("*")
+    .eq("user_id", user.id),
 
-    // ⭐ 标签
-    const { data: tags } = await supabase
-      .from("group_tags")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("category", activeCategory);
+  supabase
+    .from("sub_tags") // ⭐新增
+    .select("*")
+    .eq("user_id", user.id),
 
-    setGroupTags(tags || []);
+  supabase
+    .from("records")
+    .select("*, media(*)")
+    .eq("user_id", user.id)
+    .order("record_time", { ascending: false }),
+]);
 
-    // ⭐ 记录（关键）
-    const { data: recs } = await supabase
-      .from("records")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("record_time", { ascending: false });
-
-    setRecords(recs || []);
+setArchives(archivesData || []);
+setGroupTags(groupTagsData || []);
+setSubTags(subTagsData || []); // ⭐就在这里加
+setRecords(recs || []);
+  } finally {
+    loadingRef.current = false;
   }
+}
 
   useEffect(() => {
-    loadData();
-  }, [activeCategory]);
+  let isMounted = true;
 
-  // ⭐ 统计
+  async function safeLoad() {
+    try {
+      if (!isMounted) return;
+      await loadData();
+    } catch (err) {
+      console.error("loadData error:", err);
+    }
+  }
+
+  safeLoad();
+
+  return () => {
+    isMounted = false;
+  };
+}, []);
+  // ===== 统计 =====
   const statsMap: any = {};
-
   records.forEach((r: any) => {
     if (!statsMap[r.archive_id]) {
       statsMap[r.archive_id] = {
@@ -91,270 +116,763 @@ export default function ArchivePage() {
     }
   });
 
+  // ===== 封面 =====
+  const coverMap: any = {};
+  records.forEach((r: any) => {
+    if (!coverMap[r.archive_id] && r.media?.length > 0) {
+      const m = r.media[0];
+      coverMap[r.archive_id] =
+        m.file_url || m.url || m.path || "";
+    }
+  });
+
   return (
-    <main style={{ padding: "20px" }}>
-      <h1>我的植物</h1>
+    <main style={{ padding: 20 }}>
+      <h2 style={{ marginBottom: 20 }}>我 · 空间</h2>
 
-      {/* 分类 */}
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          overflowX: "auto",
-          marginBottom: "12px",
-        }}
-      >
-        {categories.map((c) => (
+{/* ===== 分类 + 子分类（同一行） ===== */}
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+    marginBottom: 12,
+  }}
+>
+  {/* ===== 全部 ===== */}
+  <div
+    onClick={() => {
+      setActiveCategory("全部");
+      setActiveSubTag(null);
+      setActiveGroupTag(null);
+    }}
+    style={{
+      cursor: "pointer",
+      fontWeight: activeCategory === "全部" ? 600 : 400,
+    }}
+  >
+    全部
+  </div>
+
+  {/* ===== 植物 ===== */}
+  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+    <div
+      onClick={() => {
+        setActiveCategory("植物");
+        setActiveSubTag(null);
+        setActiveGroupTag(null);
+      }}
+      style={{
+        cursor: "pointer",
+        fontWeight: activeCategory === "植物" ? 600 : 400,
+      }}
+    >
+      🌿 植物：
+    </div>
+
+    {subTags
+  .filter((t) => t.category === "植物")
+  .map((t) => (
+        <div
+          key={t.id}
+          style={{ display: "flex", alignItems: "center", gap: 2 }}
+        >
+          {/* 子分类 */}
           <div
-            key={c.key}
             onClick={() => {
-              setActiveCategory(c.key);
-              setActiveTag(null);
+              setActiveCategory("植物");
+              setActiveSubTag(t.id);
+              setActiveGroupTag(null);
+            }}
+            onDoubleClick={async () => {
+              const name = prompt("修改名称", t.name);
+              if (!name) return;
+
+           await supabase
+  .from("sub_tags")
+  .update({ name })
+  .eq("id", t.id);
+
+              setSubTags((prev) =>
+  prev.map((x) =>
+    x.id === t.id ? { ...x, name } : x
+  )
+);
             }}
             style={{
-              padding: "10px 16px",
-              borderRadius: "20px",
+              padding: "2px 8px",
+              borderRadius: 12,
               background:
-                activeCategory === c.key ? "#4CAF50" : "#eee",
-              color: activeCategory === c.key ? "#fff" : "#333",
+                activeSubTag === t.id ? "#333" : "#eee",
+              color:
+                activeSubTag === t.id ? "#fff" : "#333",
+              cursor: "pointer",
+              fontSize: 11, // ⭐ 子分类更小
+            }}
+          >
+            {t.name}
+          </div>
+
+          {/* 删除 */}
+          <span
+            onClick={async () => {
+              if (!confirm("删除后归入植物，确认？")) return;
+
+              await supabase
+                .from("archives")
+                .update({ sub_tag_id: null })
+                .eq("sub_tag_id", t.id);
+
+              await supabase
+                .from("sub_tags")
+                .delete()
+                .eq("id", t.id);
+
+              setSubTags((prev) =>
+  prev.filter((x) => x.id !== t.id)
+);
+            }}
+            style={{
+              fontSize: 10,
+              color: "#bbb",
               cursor: "pointer",
             }}
           >
-            {c.label}
-          </div>
-        ))}
-      </div>
+            ×
+          </span>
+        </div>
+      ))}
 
-      {/* 分组标签 */}
+    {/* 新增 */}
+    <div
+      onClick={async () => {
+        const name = prompt("新增植物子分类");
+        if (!name) return;
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const user = session?.user;
+
+        const { data } = await supabase
+          .from("sub_tags")  
+          .insert([
+            {
+              user_id: user.id,
+              name,
+              category: "植物",
+            },
+          ])
+          .select()
+          .single();
+
+        if (data) {
+          setSubTags((prev) => [...prev, data]);
+        }
+      }}
+      style={{
+        color: "#4CAF50",
+        cursor: "pointer",
+        fontSize: 14,
+      }}
+    >
+      ＋
+    </div>
+  </div>
+
+  {/* ===== 设施 ===== */}
+  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+    <div
+      onClick={() => {
+        setActiveCategory("设施");
+        setActiveSubTag(null);
+        setActiveGroupTag(null);
+      }}
+      style={{
+        cursor: "pointer",
+        fontWeight: activeCategory === "设施" ? 600 : 400,
+      }}
+    >
+      🛠 设施：
+    </div>
+
+    {subTags
+  .filter((t) => t.category === "设施")
+  .map((t) => (
+    <div
+      key={t.id}
+      style={{ display: "flex", alignItems: "center", gap: 2 }}
+    >
       <div
+        onClick={() => {
+          setActiveCategory("设施");
+          setActiveSubTag(t.id);
+          setActiveGroupTag(null);
+        }}
+        onDoubleClick={async () => {
+          const name = prompt("修改名称", t.name);
+          if (!name) return;
+
+         await supabase
+  .from("sub_tags")
+  .update({ name })
+  .eq("id", t.id);
+
+         setSubTags((prev) =>
+  prev.map((x) =>
+    x.id === t.id ? { ...x, name } : x
+  )
+);
+        }}
         style={{
-          display: "flex",
-          gap: 8,
-          overflowX: "auto",
-          marginBottom: 16,
+          padding: "2px 8px",
+          borderRadius: 12,
+          background:
+            activeSubTag === t.id ? "#333" : "#eee",
+          color:
+            activeSubTag === t.id ? "#fff" : "#333",
+          cursor: "pointer",
+          fontSize: 11,
         }}
       >
-        <div
-          onClick={() => setActiveTag(null)}
+        {t.name}
+      </div>
+
+      {/* 删除 */}
+      <span
+        onClick={async () => {
+          if (!confirm("删除后归入设施，确认？")) return;
+
+          await supabase
+            .from("archives")
+            .update({ sub_tag_id: null })
+            .eq("sub_tag_id", t.id);
+
+          await supabase
+            .from("sub_tags")
+            .delete()
+            .eq("id", t.id);
+
+          setSubTags((prev) =>
+  prev.filter((x) => x.id !== t.id)
+);
+        }}
+        style={{
+          fontSize: 10,
+          color: "#bbb",
+          cursor: "pointer",
+        }}
+      >
+        ×
+      </span>
+    </div>
+  ))}
+
+    <div
+      onClick={async () => {
+        const name = prompt("新增设施子分类");
+        if (!name) return;
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const user = session?.user;
+
+        const { data } = await supabase
+          .from("sub_tags")
+          .insert([
+            {
+              user_id: user.id,
+              name,
+              category: "设施",
+            },
+          ])
+          .select()
+          .single();
+
+        if (data) {
+          setSubTags((prev) => [...prev, data]);
+        }
+      }}
+      style={{
+        color: "#4CAF50",
+        cursor: "pointer",
+        fontSize: 14,
+      }}
+    >
+      ＋
+    </div>
+  </div>
+</div>
+
+     {/* ===== 分组（完整版） ===== */}
+<div style={{ marginBottom: 16 }}>
+  <span style={{ fontSize: 12, color: "#666", marginRight: 6 }}>
+    分组：
+  </span>
+
+  {/* 分组列表 */}
+  {activeSubTag &&
+    groupTags
+      .filter((t) => t.sub_tag_id === activeSubTag && t.sub_tag_id)
+      .map((t) => (
+        <span
+          key={t.id}
           style={{
-            padding: "6px 12px",
-            borderRadius: 16,
-            background: activeTag === null ? "#333" : "#eee",
-            color: activeTag === null ? "#fff" : "#333",
-            cursor: "pointer",
-            fontSize: 12,
+            display: "inline-flex",
+            alignItems: "center",
+            marginRight: 6,
           }}
         >
-          全部
-        </div>
+          {/* 分组名 */}
+          <span
+            onClick={() => {
+              if (activeGroupTag === t.id) {
+                setActiveGroupTag(null);
+              } else {
+                setActiveGroupTag(t.id);
+              }
+            }}
+            onDoubleClick={async () => {
+              const name = prompt("修改分组名称", t.name);
+              if (!name) return;
 
-        {groupTags.map((tag) => (
-          <div
-            key={tag.id}
-            onClick={() => setActiveTag(tag.id)}
+              await supabase
+                .from("group_tags")
+                .update({ name })
+                .eq("id", t.id);
+
+              setGroupTags((prev) =>
+                prev.map((x) =>
+                  x.id === t.id ? { ...x, name } : x
+                )
+              );
+            }}
             style={{
-              padding: "6px 12px",
-              borderRadius: 16,
+              padding: "2px 8px",
+              borderRadius: 12,
               background:
-                activeTag === tag.id ? "#333" : "#eee",
+                activeGroupTag === t.id ? "#333" : "#eee",
               color:
-                activeTag === tag.id ? "#fff" : "#333",
+                activeGroupTag === t.id ? "#fff" : "#333",
               cursor: "pointer",
-              fontSize: 12,
+              fontSize: 11,
             }}
           >
-            {tag.name}
-          </div>
-        ))}
+            {t.name}
+          </span>
 
-        {/* 新建标签 */}
-        <div
-          onClick={async () => {
-            const name = prompt("标签名称");
-            if (!name) return;
+          {/* 删除 */}
+          <span
+            onClick={async () => {
+              if (!confirm("删除该分组？")) return;
 
-            const {
-              data: { session },
-            } = await supabase.auth.getSession();
+              // ① 清空档案分组
+              await supabase
+                .from("archives")
+                .update({ group_tag_id: null })
+                .eq("group_tag_id", t.id);
 
-            const user = session?.user;
-            if (!user) return;
+              // ② 删除分组
+              await supabase
+                .from("group_tags")
+                .delete()
+                .eq("id", t.id);
 
-            const { data } = await supabase
-              .from("group_tags")
-              .insert([
-                {
-                  user_id: user.id,
-                  name,
-                  category: activeCategory,
-                },
-              ])
-              .select()
-              .single();
+              // ③ 更新UI
+              setGroupTags((prev) =>
+                prev.filter((x) => x.id !== t.id)
+              );
+            }}
+            style={{
+              fontSize: 10,
+              color: "#bbb",
+              cursor: "pointer",
+              marginLeft: 2,
+            }}
+          >
+            ×
+          </span>
+        </span>
+      ))}
 
-            if (data) {
-              setGroupTags((prev) => [...prev, data]);
-            }
-          }}
-          style={{
-            padding: "6px 12px",
-            borderRadius: 16,
-            background: "#ddd",
-            cursor: "pointer",
-          }}
-        >
-          ＋
-        </div>
-      </div>
+  {/* 新增分组 */}
+  {activeSubTag && (
+    <span
+      onClick={async () => {
+        const name = prompt("新增分组");
+        if (!name) return;
 
-      {/* 新建 */}
-      <div style={{ marginBottom: "20px" }}>
-        <Link href="/archive/new">+ 新建档案</Link>
-      </div>
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      {/* 列表 */}
-      {archives
-        .filter((item) => {
-          const tagOk =
-            !activeTag || item.group_tag_id === activeTag;
-          return tagOk;
-        })
-        .map((item) => {
-          const stat = statsMap[item.id];
-          const latest = stat?.latest;
+        const user = session?.user;
 
-          return (
-            <div
-              key={item.id}
+        const { data } = await supabase
+          .from("group_tags")
+          .insert([
+            {
+              user_id: user.id,
+              name,
+              sub_tag_id: activeSubTag, // ⭐关键
+            },
+          ])
+          .select()
+          .single();
+
+        if (data) {
+          setGroupTags((prev) => [...prev, data]);
+        }
+      }}
+      style={{
+        color: "#4CAF50",
+        cursor: "pointer",
+        fontSize: 14,
+      }}
+    >
+      ＋
+    </span>
+  )}
+</div>
+<div style={{ marginBottom: 20 }}>
+  <button
+    onClick={() => router.push("/archive/new")}
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border: "1px dashed #4CAF50",
+      background: "#f9fff9",
+      color: "#4CAF50",
+      cursor: "pointer",
+      fontSize: 14,
+    }}
+  >
+    ＋ 新建项目
+  </button>
+</div>
+{/* ===== 卡片 ===== */}
+{archives
+  .filter((item) => {
+   const tag = groupTags.find(t => t.id === item.group_tag_id);
+
+// ===== 分类过滤（改成基于 archive.category）=====
+if (activeCategory !== "全部") {
+  if (item.category !== activeCategory) return false;
+}
+
+// ✅ 先 group（优先级最高）
+if (activeGroupTag) {
+  if (item.group_tag_id !== activeGroupTag) return false;
+}
+
+// ✅ 再 subTag
+if (activeSubTag) {
+  if (item.sub_tag_id !== activeSubTag) return false;
+}
+
+return true;
+  })
+  .map((item) => {
+    const stat = statsMap[item.id];
+    const latest = stat?.latest;
+    const cover = coverMap[item.id];
+
+    const days = Math.floor(
+      (Date.now() - new Date(item.created_at).getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+
+    return (
+      <div
+        key={item.id}
+        onClick={() => router.push(`/archive/${item.id}`)}
+        style={{
+          display: "flex",
+          cursor: "pointer",
+          gap: 12,
+          border: "1px solid #ddd",
+          borderRadius: 12,
+          padding: 12,
+          marginBottom: 12,
+          background: "#fff",
+        }}
+      >
+        {/* ===== 图片 ===== */}
+        <div style={{ width: 100, height: 100 }}>
+          {cover ? (
+            <img
+              src={cover}
               style={{
-                border: "1px solid #ddd",
-                borderRadius: "12px",
-                padding: "18px",
-                marginBottom: "12px",
-                background: "#fff",
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                borderRadius: 8,
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                background: "#eee",
+                borderRadius: 8,
+              }}
+            />
+          )}
+        </div>
+
+        {/* ===== 右侧 ===== */}
+        <div style={{ flex: 1 }}>
+          {/* ===== 标题 ===== */}
+          <div style={{ fontWeight: 600 }}>
+            <span
+              onClick={async (e) => {
+                e.stopPropagation();
+                const name = prompt("修改名称", item.title);
+                if (!name) return;
+
+                await supabase
+                  .from("archives")
+                  .update({ title: name })
+                  .eq("id", item.id);
+
+                loadData();
+              }}
+              style={{ cursor: "pointer" }}
+            >
+              {item.title}
+            </span>
+
+            {" · "}
+
+            <span
+              onClick={async (e) => {
+                e.stopPropagation();
+                const name = prompt("修改系统名", item.system_name || "");
+                if (name === null) return;
+
+                await supabase
+                  .from("archives")
+                  .update({ system_name: name })
+                  .eq("id", item.id);
+
+                loadData();
+              }}
+              style={{ cursor: "pointer", color: "#666" }}
+            >
+              {item.system_name || "未填写"}
+            </span>
+          </div>
+
+          {/* ===== 时间 + 状态 ===== */}
+          {latest && (
+            <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+              {new Date(
+                latest.record_time
+              ).toLocaleDateString("zh-CN")}{" "}
+              {latest.status === "help" && "❗"}
+              {latest.status === "ok" && "✅"}
+              {latest.status === "problem" && "⚠️"}
+              {" "}
+              {latest.note}
+            </div>
+          )}
+
+          {/* ===== 操作行 ===== */}
+          <div
+            onClick={(e) => e.stopPropagation()} 
+            style={{
+              marginTop: 6,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              fontSize: 12,
+              alignItems: "center",
+            }}
+          >
+            {/* 👁 可见性 */}
+            <span
+              title={item.is_public ? "公开" : "私密"}
+              onClick={async (e) => {
+                e.stopPropagation();
+                const newValue = !item.is_public;
+
+                await supabase
+                  .from("archives")
+                  .update({ is_public: newValue })
+                  .eq("id", item.id);
+
+                setArchives((prev) =>
+                  prev.map((a) =>
+                    a.id === item.id
+                      ? { ...a, is_public: newValue }
+                      : a
+                  )
+                );
+              }}
+              style={{
+                cursor: "pointer",
+                opacity: item.is_public ? 1 : 0.3,
               }}
             >
-              <Link href={`/archive/${item.id}`}>
-                <h3 style={{ cursor: "pointer" }}>
-                  {item.title}
-                </h3>
-              </Link>
+              👁
+            </span>
 
-              {/* 分类 */}
-              <p style={{ color: "#888", fontSize: "14px" }}>
-                {item.category || "其他"}
-              </p>
+            {/* 种类 */}
+            <select
+              onClick={(e) => e.stopPropagation()}
+            value={item.sub_tag_id || item.category || ""}
+             onChange={async (e) => {
+  e.stopPropagation();
 
-              {/* ⭐ 新增信息 */}
-              {stat && (
-                <>
-                  <div style={{ fontSize: 12, color: "#999" }}>
-                    共{stat.count}条记录
-                  </div>
+  const value = e.target.value;
 
-                  <div style={{ fontSize: 13, color: "#666" }}>
-                    {new Date(
-                      latest.record_time
-                    ).toLocaleDateString()}{" "}
-                    {latest.note}
-                  </div>
-                </>
-              )}
+  // 选一级分类
+  if (value === "植物" || value === "设施") {
+    await supabase
+      .from("archives")
+      .update({
+        category: value,
+        group_tag_id: null,
+      })
+      .eq("id", item.id);
 
-              {/* 操作区 */}
-              <div
-                style={{
-                  marginTop: "10px",
-                  display: "flex",
-                  gap: "10px",
-                  alignItems: "center",
-                }}
-              >
-                {/* 改名称 */}
-                <button
-                  onClick={async () => {
-                    const newName = prompt(
-                      "修改名称",
-                      item.title
-                    );
-                    if (!newName) return;
+    setArchives((prev) =>
+      prev.map((a) =>
+        a.id === item.id
+          ? { ...a, category: value, group_tag_id: null }
+          : a
+      )
+    );
 
-                    await supabase
-                      .from("archives")
-                      .update({ title: newName })
-                      .eq("id", item.id);
+    return;
+  }
 
-                    loadData();
-                  }}
-                >
-                  ✏️
-                </button>
+  // 选子分类 / 分组
+ const sub = subTags.find((t) => String(t.id) === value);
+if (!sub) return;
 
-                {/* 分类 */}
-                <select
-                  value={item.category || ""}
-                  onChange={async (e) => {
-                    await supabase
-                      .from("archives")
-                      .update({
-                        category: e.target.value,
-                      })
-                      .eq("id", item.id);
+await supabase
+  .from("archives")
+  .update({
+    category: sub.category,
+    sub_tag_id: sub.id,
+    group_tag_id: null,
+  })
+    .eq("id", item.id);
 
-                    loadData();
-                  }}
-                >
-                  <option value="">未分类</option>
-                  {categories.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
+setArchives((prev) =>
+  prev.map((a) =>
+    a.id === item.id
+      ? {
+          ...a,
+          category: sub.category,
+          sub_tag_id: sub.id,
+          group_tag_id: null,
+        }
+      : a
+    )
+  );
+}}
+            >
+             <option value="植物">🌿 植物</option>
 
-                {/* 分组标签 */}
-                <select
-                  value={item.group_tag_id || ""}
-                  onChange={async (e) => {
-                    await supabase
-                      .from("archives")
-                      .update({
-                        group_tag_id:
-                          e.target.value || null,
-                      })
-                      .eq("id", item.id);
+{subTags
+  .filter((t) => t.category === "植物")
+  .map((t) => (
+    <option key={t.id} value={t.id}>
+      └ {t.name}
+    </option>
+  ))}
 
-                    loadData();
-                  }}
-                >
-                  <option value="">分组</option>
+<option value="设施">🛠 设施</option>
 
-                  {groupTags.map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </option>
-                  ))}
-                </select>
+{subTags
+  .filter((t) => t.category === "设施")
+  .map((t) => (
+    <option key={t.id} value={t.id}>
+      └ {t.name}
+    </option>
+  ))}
+            </select>
 
-                {/* 删除 */}
-                <button
-                  onClick={async () => {
-                    if (!confirm("确定删除？")) return;
+            {/* 分组 */}
+           <select
+  onClick={(e) => e.stopPropagation()}
+  value={item.group_tag_id || ""}
+  onChange={async (e) => {
+    e.stopPropagation();
+    const value = e.target.value;
 
-                    await supabase
-                      .from("archives")
-                      .delete()
-                      .eq("id", item.id);
+    await supabase
+      .from("archives")
+      .update({
+        group_tag_id: value || null,
+      })
+      .eq("id", item.id);
 
-                    loadData();
-                  }}
-                >
-                  🗑️
-                </button>
-              </div>
-            </div>
-          );
-        })}
+    setArchives((prev) =>
+      prev.map((a) =>
+        a.id === item.id
+          ? { ...a, group_tag_id: value || null }
+          : a
+      )
+    );
+  }}
+>
+  <option value="">未分组</option>
+
+  {groupTags
+    .filter((g) => g.sub_tag_id === item.sub_tag_id) // ⭐核心
+    .map((g) => (
+      <option key={g.id} value={g.id}>
+        {g.name}
+      </option>
+    ))}
+</select>
+          </div>
+
+          {/* ===== 统计 ===== */}
+          <div
+            style={{
+              fontSize: 12,
+              color: "#999",
+              marginTop: 6,
+            }}
+          >
+            已创建 {days} 天 · 共{stat?.count || 0}条记录 · 浏览0 · 关注0
+          </div>
+
+          {/* 删除 */}
+          <div
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!confirm("确定删除？")) return;
+
+              await supabase
+                .from("archives")
+                .delete()
+                .eq("id", item.id);
+
+              loadData();
+            }}
+            style={{
+              fontSize: 12,
+              color: "red",
+              marginTop: 4,
+              cursor: "pointer",
+            }}
+          >
+            删除
+          </div>
+        </div>
+      </div>
+    );
+  })}
     </main>
   );
 }

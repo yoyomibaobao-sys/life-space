@@ -73,9 +73,13 @@ export default function EditRecord({
       <div
         onClick={() => setEditing(true)}
         style={{
-          cursor: "text",
-          whiteSpace: "pre-wrap",
-        }}
+  cursor: "text",
+  whiteSpace: "pre-wrap",
+  fontSize: 16,
+  lineHeight: 1.6,
+  fontWeight: 500,
+  marginBottom: 6,
+}}
       >
         {text || (
           <span style={{ color: "#999" }}>

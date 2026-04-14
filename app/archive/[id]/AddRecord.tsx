@@ -4,6 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import exifr from "exifr";
+import { t } from "@/lib/i18n";
 
 // ⭐新增 Props 类型
 type Props = {
@@ -206,10 +207,11 @@ export default function AddRecord({ archiveId, placeholder }: Props) {
   return (
     <div style={{ marginBottom: "20px" }}>
       {/* 文本 */}
+      
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={placeholder || "记录今天发生的变化"} // ⭐关键修复
+        placeholder={placeholder || t.add_record_placeholder} // ⭐关键修复
         style={{
           padding: "10px",
           width: "100%",
@@ -341,7 +343,7 @@ export default function AddRecord({ archiveId, placeholder }: Props) {
           borderRadius: "8px",
         }}
       >
-        {loading ? "提交中..." : "添加"}
+        {loading ? t.saving : t.add}
       </button>
     </div>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { usePathname } from "next/navigation";
+import { t } from "@/lib/i18n";
 
 export default function Navbar() {
   const [user, setUser] = useState<any>(null);
@@ -37,10 +38,15 @@ export default function Navbar() {
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
+function changeLang(lang: "zh" | "en") {
+  localStorage.setItem("lang", lang);
+  window.location.reload(); // 直接刷新
+}
 
   function isActive(path: string) {
     return pathname.startsWith(path);
   }
+
 
   return (
     <nav
@@ -63,7 +69,7 @@ export default function Navbar() {
         </NavItem>
 
         <NavItem href="/archive" active={isActive("/archive")}>
-          植物
+          空间
         </NavItem>
 
         <NavItem href="/exchange" active={isActive("/exchange")}>
@@ -93,7 +99,11 @@ export default function Navbar() {
           >
              {username || "未设置用户名"}
           </Link>
-
+  {/* ⭐语言切换 */}
+  <div style={{ display: "flex", gap: 6 }}>
+    <button onClick={() => changeLang("zh")}>中</button>
+    <button onClick={() => changeLang("en")}>EN</button>
+  </div>
           {/* 邮箱 */}
           <div style={{ color: "#888" }}>{user.email}</div>
 

@@ -9,15 +9,20 @@ import EditRecord from "@/components/EditRecord";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+
 export default function ArchiveDetail({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+
+  if (id === "new") {
+    return null;
+  }
+
   return <Content id={id} />;
 }
-
 function Content({ id }: { id: string }) {
   const [archive, setArchive] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
@@ -28,6 +33,19 @@ function Content({ id }: { id: string }) {
   const searchParams = useSearchParams();
 
   const modeParam = searchParams.get("mode");
+  // ⭐ 计算起始时间（最早记录）
+const startTime =
+  records.length > 0
+    ? records[records.length - 1].record_time
+    : archive?.created_at;
+    function getDayNumber(start: string, current: string) {
+    const startDate = new Date(start).getTime();
+    const currentDate = new Date(current).getTime();
+
+    const diff = currentDate - startDate;
+
+    return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
+  }
 
   useEffect(() => {
     async function getMe() {
@@ -135,7 +153,7 @@ function Content({ id }: { id: string }) {
           borderRadius: "12px",
         }}
       >
-        去TA的档案 →
+        TA的空间 →
       </Link>
     )}
   </div>
@@ -143,11 +161,11 @@ function Content({ id }: { id: string }) {
   {/* 右侧：返回 */}
   {mode === "owner" ? (
     <Link href="/archive" style={{ fontSize: 14, color: "#666" }}>
-      ← 返回我的档案
+      ← 我的空间主页
     </Link>
   ) : (
     <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
-      去发现页 →
+      发现页 →
     </Link>
   )}
 </div>
@@ -194,10 +212,13 @@ function Content({ id }: { id: string }) {
               }}
             />
 
-            {/* 时间 */}
-            <div style={{ fontSize: 12, color: "#999", marginBottom: 4 }}>
-              {new Date(item.record_time).toLocaleDateString("zh-CN")}
-            </div>
+           {/* 时间 + 第X天 */}
+{archive && records.length > 0 && (
+  <div style={{ fontSize: 12, color: "#999", marginBottom: 4 }}>
+    第 {getDayNumber(startTime, item.record_time)} 天 ·{" "}
+    {new Date(item.record_time).toLocaleDateString("zh-CN")}
+  </div>
+)}
 
             {/* 内容块 */}
             <div
@@ -244,12 +265,22 @@ function Content({ id }: { id: string }) {
 
               {/* 文本 */}
               <div style={{ marginTop: 6 }}>
-                <EditRecord
-                  key={`${item.id}-${mode}`}
-                  id={item.id}
-                  initialText={item.note}
-                  readOnly={mode !== "owner"}
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+  {/* 状态 */}
+  <span>
+    {item.status === "help" && "❗"}
+    {item.status === "ok" && "✅"}
+    {item.status === "problem" && "⚠️"}
+  </span>
+
+  {/* 文本 */}
+  <EditRecord
+    key={`${item.id}-${mode}`}
+    id={item.id}
+    initialText={item.note}
+    readOnly={mode !== "owner"}
+  />
+</div>
 
                 {mode === "owner" && (
                   <DeleteRecordButton id={item.id} />

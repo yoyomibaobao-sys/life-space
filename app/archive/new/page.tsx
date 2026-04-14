@@ -4,28 +4,17 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-const categories = [
-  { value: "植物", label: "🌱 植物" },
-  { value: "宠物", label: "🐾 宠物" },
-  { value: "日常", label: "📓 日常" },
-  { value: "技能", label: "🎯 技能" },
-  { value: "其他", label: "📦 其他" },
-];
-
 export default function NewArchive() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("植物");
+
+  const [systemName, setSystemName] = useState("");
+  const [source, setSource] = useState("");
+  const [note, setNote] = useState("");
+
   const [loading, setLoading] = useState(false);
 
   const router = useRouter();
-
-  function generateSlug(text: string) {
-    return text
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^\w\u4e00-\u9fa5\-]+/g, ""); // ✅ 支持中文
-  }
 
   async function handleCreate(e: any) {
     e.preventDefault();
@@ -49,16 +38,20 @@ export default function NewArchive() {
       return;
     }
 
-    const slug = generateSlug(title);
-
-    const { error } = await supabase.from("archives").insert([
-      {
-        title: title.trim(),
-        category,
-        slug,
-        user_id: user.id,
-      },
-    ]);
+    const { data, error } = await supabase
+      .from("archives")
+      .insert([
+        {
+          title: title.trim(),
+          category,
+          system_name: systemName || null,
+          source: source || null,
+          note: note || null,
+          user_id: user.id,
+        },
+      ])
+      .select()
+      .single();
 
     setLoading(false);
 
@@ -67,9 +60,8 @@ export default function NewArchive() {
       return;
     }
 
-    // ✅ 更顺滑跳转（不会整页刷新）
+    // ✅ 创建后加档案页
     router.push("/archive");
-    router.refresh();
   }
 
   return (
@@ -80,12 +72,14 @@ export default function NewArchive() {
         margin: "0 auto",
       }}
     >
-      <h2 style={{ marginBottom: 20 }}>创建档案</h2>
+      <h2 style={{ marginBottom: 20 }}>新建项目</h2>
 
       <form onSubmit={handleCreate}>
-        {/* 名称 */}
+        {/* ===== 名称 ===== */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>名称</div>
+          <div style={{ fontSize: 14, marginBottom: 6 }}>
+            名称 *
+          </div>
 
           <input
             placeholder="例如：阳台迷迭香"
@@ -101,9 +95,11 @@ export default function NewArchive() {
           />
         </div>
 
-        {/* 分类 */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>类别</div>
+        {/* ===== 种类 ===== */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 14, marginBottom: 6 }}>
+            种类 *
+          </div>
 
           <select
             value={category}
@@ -117,15 +113,73 @@ export default function NewArchive() {
               background: "#fff",
             }}
           >
-            {categories.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
+            <option value="植物">🌿 植物</option>
+            <option value="设施">🛠 设施</option>
           </select>
         </div>
 
-        {/* 提交 */}
+        {/* ===== 系统名 ===== */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, marginBottom: 4 }}>
+            系统名（选填）
+          </div>
+
+          <input
+            placeholder="例如：迷迭香"
+            value={systemName}
+            onChange={(e) => setSystemName(e.target.value)}
+            style={{
+              padding: "8px",
+              width: "100%",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: 13,
+            }}
+          />
+        </div>
+
+        {/* ===== 来源 ===== */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, marginBottom: 4 }}>
+            来源（选填）
+          </div>
+
+          <input
+            placeholder="例如：市场购买 / 朋友分享"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            style={{
+              padding: "8px",
+              width: "100%",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: 13,
+            }}
+          />
+        </div>
+
+        {/* ===== 备注 ===== */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, marginBottom: 4 }}>
+            备注（选填）
+          </div>
+
+          <textarea
+            placeholder="简单记录一下背景..."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            style={{
+              padding: "8px",
+              width: "100%",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: 13,
+              minHeight: 60,
+            }}
+          />
+        </div>
+
+        {/* ===== 提交 ===== */}
         <button
           type="submit"
           disabled={loading}
