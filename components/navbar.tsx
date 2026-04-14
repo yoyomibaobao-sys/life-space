@@ -3,50 +3,63 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { usePathname } from "next/navigation";
-import { t } from "@/lib/i18n";
+import { usePathname, useRouter } from "next/navigation";
 
 export default function Navbar() {
   const [user, setUser] = useState<any>(null);
   const [username, setUsername] = useState("");
   const pathname = usePathname();
+  const router = useRouter();
 
+  // ===== 加载用户信息 =====
   useEffect(() => {
-    async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    // 初始化
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        setUser(data.user);
+        loadProfile(data.user.id);
+      }
+    });
 
-      if (!user) return;
+    // 监听登录状态变化（关键）
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const user = session?.user;
 
-      setUser(user);
+      setUser(user || null);
 
-      // ✅ 从 profiles 读取用户名
-      const { data } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .maybeSingle();
+      if (user) {
+        loadProfile(user.id);
+      } else {
+        setUsername("");
+      }
+    });
 
-      setUsername(data?.username || "");
-    }
-
-    load();
+    return () => subscription.unsubscribe();
   }, []);
 
+  // ===== 获取用户名 =====
+  async function loadProfile(userId: string) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", userId)
+      .maybeSingle();
+
+    setUsername(data?.username || "");
+  }
+
+  // ===== 退出 =====
   async function handleLogout() {
     await supabase.auth.signOut();
-    window.location.href = "/login";
+    router.push("/login");
   }
-function changeLang(lang: "zh" | "en") {
-  localStorage.setItem("lang", lang);
-  window.location.reload(); // 直接刷新
-}
 
+  // ===== 当前高亮 =====
   function isActive(path: string) {
     return pathname.startsWith(path);
   }
-
 
   return (
     <nav
@@ -62,7 +75,7 @@ function changeLang(lang: "zh" | "en") {
         zIndex: 100,
       }}
     >
-      {/* 左侧导航 */}
+      {/* ===== 左侧导航 ===== */}
       <div style={{ display: "flex", gap: 24 }}>
         <NavItem href="/discover" active={isActive("/discover")}>
           社区发现
@@ -77,7 +90,7 @@ function changeLang(lang: "zh" | "en") {
         </NavItem>
       </div>
 
-      {/* 右侧用户 */}
+      {/* ===== 右侧用户 ===== */}
       {user && (
         <div
           style={{
@@ -87,23 +100,18 @@ function changeLang(lang: "zh" | "en") {
             fontSize: 13,
           }}
         >
-          {/* 用户名（点击进入 profile） */}
+          {/* 用户名 → 进入空间 */}
           <Link
-            href="/profile"
+            href={`/user/${user.id}`}
             style={{
               textDecoration: "none",
               color: "#000",
               fontWeight: 500,
-              cursor: "pointer",
             }}
           >
-             {username || "未设置用户名"}
+            {username || "未设置用户名"}
           </Link>
-  {/* ⭐语言切换 */}
-  <div style={{ display: "flex", gap: 6 }}>
-    <button onClick={() => changeLang("zh")}>中</button>
-    <button onClick={() => changeLang("en")}>EN</button>
-  </div>
+
           {/* 邮箱 */}
           <div style={{ color: "#888" }}>{user.email}</div>
 
@@ -123,7 +131,7 @@ function changeLang(lang: "zh" | "en") {
   );
 }
 
-// 导航项组件（高亮）
+// ===== 导航项 =====
 function NavItem({
   href,
   active,

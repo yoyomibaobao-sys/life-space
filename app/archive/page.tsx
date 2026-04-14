@@ -127,8 +127,8 @@ setRecords(recs || []);
   });
 
   return (
-    <main style={{ padding: 20 }}>
-      <h2 style={{ marginBottom: 20 }}>我 · 空间</h2>
+    <main style={{ padding: 14 }}>
+      <h2 style={{ marginBottom: 14 }}>我 · 空间</h2>
 
 {/* ===== 分类 + 子分类（同一行） ===== */}
 <div
@@ -557,25 +557,23 @@ if (!user) return;
 {/* ===== 卡片 ===== */}
 {archives
   .filter((item) => {
-   const tag = groupTags.find(t => t.id === item.group_tag_id);
+  // ===== 1️⃣ group（最高优先级）=====
+  if (activeGroupTag) {
+    return item.group_tag_id === activeGroupTag;
+  }
 
-// ===== 分类过滤（改成基于 archive.category）=====
-if (activeCategory !== "全部") {
-  if (item.category !== activeCategory) return false;
-}
+  // ===== 2️⃣ subTag =====
+  if (activeSubTag) {
+    return item.sub_tag_id === activeSubTag;
+  }
 
-// ✅ 先 group（优先级最高）
-if (activeGroupTag) {
-  if (item.group_tag_id !== activeGroupTag) return false;
-}
+  // ===== 3️⃣ category =====
+  if (activeCategory !== "全部") {
+    return item.category === activeCategory;
+  }
 
-// ✅ 再 subTag
-if (activeSubTag) {
-  if (item.sub_tag_id !== activeSubTag) return false;
-}
-
-return true;
-  })
+  return true;
+})
   .map((item) => {
     const stat = statsMap[item.id];
     const latest = stat?.latest;
