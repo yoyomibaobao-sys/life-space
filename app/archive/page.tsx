@@ -255,7 +255,7 @@ setRecords(recs || []);
         } = await supabase.auth.getSession();
 
         const user = session?.user;
-
+if (!user) return;
         const { data } = await supabase
           .from("sub_tags")  
           .insert([
@@ -380,7 +380,7 @@ setRecords(recs || []);
         } = await supabase.auth.getSession();
 
         const user = session?.user;
-
+if (!user) return;
         const { data } = await supabase
           .from("sub_tags")
           .insert([
@@ -511,7 +511,7 @@ setRecords(recs || []);
         } = await supabase.auth.getSession();
 
         const user = session?.user;
-
+if (!user) return;
         const { data } = await supabase
           .from("group_tags")
           .insert([
