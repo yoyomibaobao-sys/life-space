@@ -36,7 +36,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
 
       if (recordError) {
         console.log("删除记录失败:", recordError);
-       showToast(t.delete_failed);
+       showToast("删除失败");
         return;
       }
 
