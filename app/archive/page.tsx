@@ -6,6 +6,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function ArchivePage() {
+ const router = useRouter();
+ const [showCard, setShowCard] = useState(false);
+const [cardProfile, setCardProfile] = useState<any>(null);
+const [ready, setReady] = useState(false); 
 const [archives, setArchives] = useState<any[]>([]);
 const [groupTags, setGroupTags] = useState<any[]>([]);
 const [subTags, setSubTags] = useState<any[]>([]); // ⭐加在这里
@@ -15,7 +19,6 @@ const [records, setRecords] = useState<any[]>([]);
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
 
-  const router = useRouter();
 // ===== tag 类型判断 =====
 function isSubTag(tag: any) {
   return !tag.sub_tag_id;
@@ -77,14 +80,47 @@ setRecords(recs || []);
     loadingRef.current = false;
   }
 }
+async function openCard() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
+  if (!user) return;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id) // ⭐改这里
+    .single();
+
+  setCardProfile(data);
+  setShowCard(true);
+}
   useEffect(() => {
   let isMounted = true;
 
   async function safeLoad() {
     try {
+      // ✅ 第一步：检查用户
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      if (!user.email_confirmed_at) {
+        router.push("/check-email");
+        return;
+      }
+
+      // ✅ 第二步：加载数据
       if (!isMounted) return;
       await loadData();
+
+      // ✅ 第三步：允许渲染
+      setReady(true);
     } catch (err) {
       console.error("loadData error:", err);
     }
@@ -125,7 +161,7 @@ setRecords(recs || []);
         m.file_url || m.url || m.path || "";
     }
   });
-
+if (!ready) return null;
   return (
     <main style={{ padding: 14 }}>
       <h2 style={{ marginBottom: 14 }}>我 · 空间</h2>

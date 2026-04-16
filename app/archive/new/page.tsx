@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
@@ -8,13 +8,29 @@ export default function NewArchive() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("植物");
 
-  const [systemName, setSystemName] = useState("");
+  const [speciesList, setSpeciesList] = useState<any[]>([]);
+  const [speciesId, setSpeciesId] = useState<string | null>(null);
+
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
 
   const [loading, setLoading] = useState(false);
 
   const router = useRouter();
+
+  // 加载植物百科
+  useEffect(() => {
+    async function loadSpecies() {
+      const { data } = await supabase
+        .from("plant_species")
+        .select("id, common_name, scientific_name")
+        .order("common_name", { ascending: true });
+
+      setSpeciesList(data || []);
+    }
+
+    loadSpecies();
+  }, []);
 
   async function handleCreate(e: any) {
     e.preventDefault();
@@ -25,7 +41,11 @@ export default function NewArchive() {
       alert("请输入名称");
       return;
     }
-
+if (category === "植物" && !speciesId) {
+  alert("请选择植物");
+  setLoading(false);
+  return;
+}
     setLoading(true);
 
     const {
@@ -38,20 +58,18 @@ export default function NewArchive() {
       return;
     }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("archives")
       .insert([
         {
           title: title.trim(),
           category,
-          system_name: systemName || null,
+          species_id: category === "植物" ? speciesId : null,
           source: source || null,
           note: note || null,
           user_id: user.id,
         },
-      ])
-      .select()
-      .single();
+      ]);
 
     setLoading(false);
 
@@ -60,10 +78,51 @@ export default function NewArchive() {
       return;
     }
 
-    // ✅ 创建后加档案页
     router.push("/archive");
   }
+async function handleAddSpecies() {
+  let name = prompt("输入植物名称");
+  if (!name) return;
 
+  name = name.trim();
+
+  if (!name) return;
+
+  // ⭐ 简单查重（可选但推荐）
+  const exists = speciesList.find(
+    (s) => s.common_name === name
+  );
+
+  if (exists) {
+    setSpeciesId(exists.id);
+    return;
+  }
+
+  // ⭐ 判断是否英文（可选优化）
+  const isEnglish = /^[a-zA-Z\s]+$/.test(name);
+
+  const { data, error } = await supabase
+    .from("plant_species")
+    .insert([
+      {
+        common_name: name,
+        scientific_name: isEnglish ? name : null,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    alert("添加失败");
+    return;
+  }
+
+  // ⭐ 更新列表
+  setSpeciesList((prev) => [...prev, data]);
+
+  // ⭐ 自动选中
+  setSpeciesId(data.id);
+}
   return (
     <main
       style={{
@@ -75,10 +134,10 @@ export default function NewArchive() {
       <h2 style={{ marginBottom: 20 }}>新建项目</h2>
 
       <form onSubmit={handleCreate}>
-        {/* ===== 名称 ===== */}
+        {/* 名称 */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 14, marginBottom: 6 }}>
-            名称 *
+            项目名称 *
           </div>
 
           <input
@@ -95,7 +154,7 @@ export default function NewArchive() {
           />
         </div>
 
-        {/* ===== 种类 ===== */}
+        {/* 种类 */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 14, marginBottom: 6 }}>
             种类 *
@@ -118,27 +177,48 @@ export default function NewArchive() {
           </select>
         </div>
 
-        {/* ===== 系统名 ===== */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, marginBottom: 4 }}>
-            系统名（选填）
+        {/* 系统名称（植物百科） */}
+        {category === "植物" && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, marginBottom: 4 }}>
+              系统名称（选择植物）
+            </div>
+
+            <select
+              value={speciesId || ""}
+              onChange={(e) => {
+  const value = e.target.value;
+
+  if (value === "__new__") {
+    handleAddSpecies();
+  } else {
+    setSpeciesId(value || null);
+  }
+}}
+
+              style={{
+                padding: "8px",
+                width: "100%",
+                border: "1px solid #ddd",
+                borderRadius: "6px",
+                fontSize: 13,
+                background: "#fff",
+              }}
+            >
+              <option value="">请选择植物 *</option>
+
+              {speciesList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.common_name || s.scientific_name}
+                </option>
+              ))}
+              {/* ⭐ 新增这一行 */}
+<option value="__new__">+ 新增植物</option>
+            </select>
           </div>
+        )}
 
-          <input
-            placeholder="例如：迷迭香"
-            value={systemName}
-            onChange={(e) => setSystemName(e.target.value)}
-            style={{
-              padding: "8px",
-              width: "100%",
-              border: "1px solid #ddd",
-              borderRadius: "6px",
-              fontSize: 13,
-            }}
-          />
-        </div>
-
-        {/* ===== 来源 ===== */}
+        {/* 来源 */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, marginBottom: 4 }}>
             来源（选填）
@@ -158,7 +238,7 @@ export default function NewArchive() {
           />
         </div>
 
-        {/* ===== 备注 ===== */}
+        {/* 备注 */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 13, marginBottom: 4 }}>
             备注（选填）
@@ -179,7 +259,7 @@ export default function NewArchive() {
           />
         </div>
 
-        {/* ===== 提交 ===== */}
+        {/* 提交 */}
         <button
           type="submit"
           disabled={loading}

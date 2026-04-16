@@ -102,15 +102,19 @@ export default function Navbar() {
         >
           {/* 用户名 → 进入空间 */}
           <Link
-            href={`/user/${user.id}`}
-            style={{
-              textDecoration: "none",
-              color: "#000",
-              fontWeight: 500,
-            }}
-          >
-            {username || "未设置用户名"}
-          </Link>
+  href={
+    pathname === `/user/${user.id}`
+      ? "/profile"   // ⭐如果是自己 → 去资料页
+      : `/user/${user.id}` // ⭐别人 → 用户主页
+  }
+  style={{
+    textDecoration: "none",
+    color: "#000",
+    fontWeight: 500,
+  }}
+>
+  {username || "未设置用户名"} ▾
+</Link>
 
           {/* 邮箱 */}
           <div style={{ color: "#888" }}>{user.email}</div>

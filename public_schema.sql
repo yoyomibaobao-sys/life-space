@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict i2txhR6VBTCdhH1aIZgcayBPL1mHRAgXrOXYrsoxbJss6YcPILwtPBGLaIuNdZi
+\restrict vAC9sk7fWv5xFeQACFaEXXuF6XK2LBxwyk5kKQ1S0o1KviYiBuk07xwcUkK1uLP
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.3
@@ -35,6 +35,27 @@ ALTER SCHEMA public OWNER TO pg_database_owner;
 COMMENT ON SCHEMA public IS 'standard public schema';
 
 
+--
+-- Name: handle_new_user(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.handle_new_user() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+begin
+  insert into public.profiles (id, email, username)
+  values (
+    new.id,
+    new.email,
+    split_part(new.email, '@', 1) -- 默认用户名
+  );
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -55,7 +76,10 @@ CREATE TABLE public.archives (
     slug text,
     group_tag_id uuid,
     is_public boolean DEFAULT true,
-    sub_tag_id uuid
+    sub_tag_id uuid,
+    note text,
+    system_name text,
+    source text
 );
 
 
@@ -104,7 +128,15 @@ CREATE TABLE public.profiles (
     id uuid NOT NULL,
     email text,
     username text,
-    updated_at timestamp without time zone DEFAULT now()
+    updated_at timestamp without time zone DEFAULT now(),
+    location text,
+    level integer DEFAULT 1,
+    flower_count integer DEFAULT 0,
+    view_count integer DEFAULT 0,
+    created_at timestamp without time zone DEFAULT now(),
+    avatar_url text,
+    storage_used bigint DEFAULT 0,
+    storage_limit bigint DEFAULT 500000000
 );
 
 
@@ -164,6 +196,20 @@ CREATE VIEW public.discovery_view AS
 
 
 ALTER VIEW public.discovery_view OWNER TO postgres;
+
+--
+-- Name: follows; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.follows (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    follower_id uuid,
+    following_id uuid,
+    created_at timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.follows OWNER TO postgres;
 
 --
 -- Name: group_tags; Type: TABLE; Schema: public; Owner: postgres
@@ -282,6 +328,20 @@ CREATE TABLE public.plant_temperature_ranges (
 ALTER TABLE public.plant_temperature_ranges OWNER TO postgres;
 
 --
+-- Name: record_tags; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.record_tags (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    record_id uuid,
+    tag text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.record_tags OWNER TO postgres;
+
+--
 -- Name: sub_tags; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -345,6 +405,14 @@ ALTER TABLE ONLY public.archives
 
 ALTER TABLE ONLY public.comments
     ADD CONSTRAINT comments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: follows follows_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.follows
+    ADD CONSTRAINT follows_pkey PRIMARY KEY (id);
 
 
 --
@@ -417,6 +485,14 @@ ALTER TABLE ONLY public.plant_temperature_ranges
 
 ALTER TABLE ONLY public.profiles
     ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: record_tags record_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.record_tags
+    ADD CONSTRAINT record_tags_pkey PRIMARY KEY (id);
 
 
 --
@@ -508,11 +584,40 @@ ALTER TABLE ONLY public.plant_temperature_ranges
 
 
 --
+-- Name: record_tags record_tags_record_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.record_tags
+    ADD CONSTRAINT record_tags_record_id_fkey FOREIGN KEY (record_id) REFERENCES public.records(id) ON DELETE CASCADE;
+
+
+--
 -- Name: records records_archive_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.records
     ADD CONSTRAINT records_archive_id_fkey FOREIGN KEY (archive_id) REFERENCES public.archives(id);
+
+
+--
+-- Name: follows allow delete own follow; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "allow delete own follow" ON public.follows FOR DELETE USING ((auth.uid() = follower_id));
+
+
+--
+-- Name: follows allow insert own follow; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "allow insert own follow" ON public.follows FOR INSERT WITH CHECK ((auth.uid() = follower_id));
+
+
+--
+-- Name: follows allow read; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "allow read" ON public.follows FOR SELECT USING (true);
 
 
 --
@@ -562,6 +667,12 @@ CREATE POLICY "archives allow_insert_own" ON public.archives FOR INSERT WITH CHE
 
 CREATE POLICY "archives allow_read" ON public.archives FOR SELECT USING (true);
 
+
+--
+-- Name: follows; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.follows ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: profiles insert own profile; Type: POLICY; Schema: public; Owner: postgres
@@ -669,6 +780,15 @@ GRANT USAGE ON SCHEMA public TO service_role;
 
 
 --
+-- Name: FUNCTION handle_new_user(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.handle_new_user() TO anon;
+GRANT ALL ON FUNCTION public.handle_new_user() TO authenticated;
+GRANT ALL ON FUNCTION public.handle_new_user() TO service_role;
+
+
+--
 -- Name: TABLE archives; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -720,6 +840,15 @@ GRANT ALL ON TABLE public.records TO service_role;
 GRANT ALL ON TABLE public.discovery_view TO anon;
 GRANT ALL ON TABLE public.discovery_view TO authenticated;
 GRANT ALL ON TABLE public.discovery_view TO service_role;
+
+
+--
+-- Name: TABLE follows; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.follows TO anon;
+GRANT ALL ON TABLE public.follows TO authenticated;
+GRANT ALL ON TABLE public.follows TO service_role;
 
 
 --
@@ -783,6 +912,15 @@ GRANT ALL ON TABLE public.plant_species TO service_role;
 GRANT ALL ON TABLE public.plant_temperature_ranges TO anon;
 GRANT ALL ON TABLE public.plant_temperature_ranges TO authenticated;
 GRANT ALL ON TABLE public.plant_temperature_ranges TO service_role;
+
+
+--
+-- Name: TABLE record_tags; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.record_tags TO anon;
+GRANT ALL ON TABLE public.record_tags TO authenticated;
+GRANT ALL ON TABLE public.record_tags TO service_role;
 
 
 --
@@ -876,5 +1014,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict i2txhR6VBTCdhH1aIZgcayBPL1mHRAgXrOXYrsoxbJss6YcPILwtPBGLaIuNdZi
+\unrestrict vAC9sk7fWv5xFeQACFaEXXuF6XK2LBxwyk5kKQ1S0o1KviYiBuk07xwcUkK1uLP
 

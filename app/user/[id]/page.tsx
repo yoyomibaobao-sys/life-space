@@ -3,8 +3,12 @@
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
 
 export default function ArchivePage() {
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [showCard, setShowCard] = useState(false);
+const [cardProfile, setCardProfile] = useState<any>(null);
   const [username, setUsername] = useState("");
   const params = useParams();
   const userId = params.id as string;
@@ -19,7 +23,51 @@ export default function ArchivePage() {
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
 
   const router = useRouter();
-// ===== tag 类型判断 =====
+  async function openCard() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  // 用户信息
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+    // ⭐关注数（我关注了多少人）
+const { count: followingCount } = await supabase
+  .from("follows")
+  .select("*", { count: "exact", head: true })
+  .eq("follower_id", userId);
+
+// ⭐粉丝数（多少人关注我）
+const { count: followerCount } = await supabase
+  .from("follows")
+  .select("*", { count: "exact", head: true })
+  .eq("following_id", userId);
+
+setCardProfile({
+  ...data,
+  followingCount,
+  followerCount,
+});
+
+  // ⭐判断是否已关注
+  const { data: follow } = await supabase
+    .from("follows")
+    .select("*")
+    .eq("follower_id", user.id)
+    .eq("following_id", userId)
+    .maybeSingle();
+
+  setIsFollowing(!!follow);
+
+  setShowCard(true);
+}
+
+ // ===== tag 类型判断 =====
 function isSubTag(tag: any) {
   return !tag.sub_tag_id;
 }
@@ -42,16 +90,7 @@ loadingRef.current = true;
 if (profile) {
   setUsername(profile.username);
 }
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    const user = session?.user;
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-
+    
  // 1️⃣ 先拿 archives
 const { data: archivesData } = await supabase
   .from("archives")
@@ -157,9 +196,38 @@ setSubTags(subTagsData || []); // ⭐就在这里加
     marginBottom: 20,
   }}
 >
-  <div style={{ fontSize: 18, fontWeight: 600, minHeight: 24 }}>
-    {username ? `${username}的空间` : ""}
+ <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    fontSize: 18,
+    fontWeight: 600,
+    minHeight: 24,
+  }}
+>
+  {/* 标题 */}
+  <div>
+    {username ? `${username} · 空间` : ""}
   </div>
+<span
+  onClick={(e) => {
+    e.stopPropagation();
+    openCard();
+  }}
+  style={{
+    fontSize: 12,
+    padding: "2px 8px",
+    borderRadius: 12,
+    background: "#e0f2f1",
+    color: "#4CAF50",
+    cursor: "pointer",
+  }}
+>
+  名片
+</span>
+  
+</div>
 
   <div
     onClick={() => router.push("/discover")}
@@ -712,6 +780,127 @@ return true;
       </div>
     );
   })}
+    {showCard && cardProfile && (
+  <div
+    onClick={() => setShowCard(false)}
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      background: "rgba(0,0,0,0.4)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 9999,
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: 260,
+        background: "#fff",
+        borderRadius: 12,
+        padding: 20,
+        textAlign: "center",
+      }}
+    >
+      {/* 头像 */}
+      {cardProfile.avatar_url ? (
+        <img
+          src={cardProfile.avatar_url}
+          style={{
+            width: 60,
+            height: 60,
+            borderRadius: "50%",
+            objectFit: "cover",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: 60,
+            height: 60,
+            borderRadius: "50%",
+            background: "#eee",
+            margin: "0 auto",
+          }}
+        />
+      )}
+
+      {/* 用户名 */}
+      <div style={{ marginTop: 10, fontWeight: 600 }}>
+        {cardProfile.username || "未设置用户名"}
+      </div>
+
+      {/* 等级 */}
+      <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+        Lv.{cardProfile.level || 1}
+      </div>
+
+      {/* 花朵 */}
+      <div style={{ marginTop: 6 }}>
+        🌸 {cardProfile.flower_count || 0}
+        <div style={{ marginTop: 6, fontSize: 12 }}>
+  关注 {cardProfile.followingCount || 0} · 粉丝 {cardProfile.followerCount || 0}
+</div>
+        <div
+  onClick={async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    if (isFollowing) {
+      await supabase
+        .from("follows")
+        .delete()
+        .eq("follower_id", user.id)
+        .eq("following_id", userId);
+
+      setIsFollowing(false);
+    } else {
+      await supabase.from("follows").insert([
+        {
+          follower_id: user.id,
+          following_id: userId,
+        },
+      ]);
+
+      setIsFollowing(true);
+    }
+  }}
+  style={{
+    marginTop: 12,
+    padding: "6px 12px",
+    background: isFollowing ? "#eee" : "#4CAF50",
+    color: isFollowing ? "#333" : "#fff",
+    borderRadius: 6,
+    cursor: "pointer",
+    fontSize: 12,
+  }}
+>
+  {isFollowing ? "已关注" : "关注"}
+</div>
+      </div>
+
+      {/* 关闭 */}
+      <div
+        onClick={() => setShowCard(false)}
+        style={{
+          marginTop: 12,
+          fontSize: 12,
+          color: "#999",
+          cursor: "pointer",
+        }}
+      >
+        关闭
+      </div>
+    </div>
+  </div>
+)}
     </main>
   );
 }

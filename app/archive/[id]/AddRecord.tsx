@@ -1,10 +1,12 @@
 "use client";
 
+import { parseTags } from "@/lib/tag-parser";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import exifr from "exifr";
 import { t } from "@/lib/i18n";
+import { showToast } from "@/components/Toast";
 
 // ⭐新增 Props 类型
 type Props = {
@@ -54,7 +56,7 @@ export default function AddRecord({ archiveId, placeholder }: Props) {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        alert("请先登录");
+        showToast(t.please_login);
         setLoading(false);
         return;
       }
@@ -78,45 +80,51 @@ export default function AddRecord({ archiveId, placeholder }: Props) {
             exifTime,
           });
 
-          const { data: record } = await supabase
-            .from("records")
-            .insert([
-              {
-                archive_id: archiveId,
-                note: text.trim(),
-                user_id: user.id,
-                visibility: "community",
-                photo_time: recordTimeISO,
-                record_time: recordTimeISO,
-                upload_time: new Date().toISOString(),
-              },
-            ])
-            .select()
-            .single();
+// ✅ 先创建 record
+const { data: record } = await supabase
+  .from("records")
+  .insert([
+    {
+      archive_id: archiveId,
+      note: text.trim(),
+      user_id: user.id,
+      visibility: "community",
+      photo_time: recordTimeISO,
+      record_time: recordTimeISO,
+      upload_time: new Date().toISOString(),
+    },
+  ])
+  .select()
+  .single();
 
-          if (!record) {
-            setLoading(false);
-            return;
-          }
+// ❗先判断 record
+if (!record) {
+  console.error("record 创建失败");
+  setLoading(false);
+  return;
+}
 
-          for (const file of files) {
-            const fileName = `${Date.now()}-${file.name}`;
+// ✅ 再解析标签
+const tags = parseTags(text.trim());
+console.log("标签解析结果：", tags);
 
-            await supabase.storage.from("media").upload(fileName, file);
+// ✅ 再写入标签
+if (tags.length > 0) {
+  const tagRows = tags.map((tag) => ({
+    record_id: record.id,
+    tag,
+  }));
 
-            const { data: urlData } = supabase.storage
-              .from("media")
-              .getPublicUrl(fileName);
+  const { error: tagError } = await supabase
+    .from("record_tags")
+    .insert(tagRows);
 
-            await supabase.from("media").insert([
-              {
-                record_id: record.id,
-                type: "image",
-                url: urlData.publicUrl,
-                user_id: user.id,
-              },
-            ]);
-          }
+  if (tagError) {
+    console.error("标签写入失败", tagError);
+  } else {
+    console.log("标签写入成功");
+  }
+}
         } else {
           for (const file of files) {
             let exifTime = null;
@@ -152,6 +160,18 @@ export default function AddRecord({ archiveId, placeholder }: Props) {
               .select()
               .single();
 
+// ⭐新增：写入标签
+const tags = parseTags(text.trim());
+
+if (tags.length > 0) {
+  const tagRows = tags.map((tag) => ({
+    record_id: record.id,
+    tag,
+  }));
+
+  await supabase.from("record_tags").insert(tagRows);
+}
+
             if (!record) continue;
 
             const fileName = `${Date.now()}-${file.name}`;
@@ -178,17 +198,33 @@ export default function AddRecord({ archiveId, placeholder }: Props) {
           customTime,
         });
 
-        await supabase.from("records").insert([
-          {
-            archive_id: archiveId,
-            note: text.trim(),
-            user_id: user.id,
-            visibility: "community",
-            photo_time: recordTimeISO,
-            record_time: recordTimeISO,
-            upload_time: new Date().toISOString(),
-          },
-        ]);
+        const { data: record } = await supabase
+  .from("records")
+  .insert([
+    {
+      archive_id: archiveId,
+      note: text.trim(),
+      user_id: user.id,
+      visibility: "community",
+      photo_time: recordTimeISO,
+      record_time: recordTimeISO,
+      upload_time: new Date().toISOString(),
+    },
+  ])
+  .select()
+  .single();
+
+// ⭐新增：写入标签
+const tags = parseTags(text.trim());
+
+if (tags.length > 0) {
+  const tagRows = tags.map((tag) => ({
+    record_id: record.id,
+    tag,
+  }));
+
+  await supabase.from("record_tags").insert(tagRows);
+}
       }
 
       setText("");
@@ -198,7 +234,7 @@ export default function AddRecord({ archiveId, placeholder }: Props) {
       router.refresh();
     } catch (err) {
       console.log(err);
-      alert("发生异常");
+      alert(t.error);
     }
 
     setLoading(false);

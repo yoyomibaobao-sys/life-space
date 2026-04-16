@@ -3,18 +3,18 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-
+const [lastSentTime, setLastSentTime] = useState(0);
   // ===== ⭐ 自动填充邮箱 =====
   useEffect(() => {
     const savedEmail = localStorage.getItem("remember_email");
@@ -61,51 +61,15 @@ export default function LoginPage() {
     router.push("/archive");
   }
 
-  // ===== 注册（升级版）=====
-  async function handleRegister() {
-    if (!email || !password) {
-      setMessage("请输入邮箱和密码");
-      return;
-    }
-
-    setLoading(true);
-    setMessage("");
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/archive`,
-      },
-    });
-
-    setLoading(false);
-
-    // ❗优先判断错误
-    if (error) {
-      if (
-        error.message.includes("already registered") ||
-        error.message.includes("User already registered")
-      ) {
-        setMessage("该邮箱已注册，请直接登录或找回密码");
-        return;
-      }
-
-      setMessage("注册失败：" + error.message);
-      return;
-    }
-
-    // ❗fallback判断（防Supabase不报错）
-    if (data?.user && data.user.email_confirmed_at) {
-      setMessage("该邮箱已注册，请直接登录");
-      return;
-    }
-
-    setMessage("注册成功，请前往邮箱验证后再登录");
-  }
-
   // ===== 找回密码 =====
   async function handleResetPassword() {
+     const now = Date.now();
+
+  if (now - lastSentTime < 30000) {
+    setMessage("请稍后再试（30秒内只能发送一次）");
+    return;
+  }
+    
     if (!email) {
       setMessage("请输入邮箱");
       return;
@@ -124,7 +88,7 @@ export default function LoginPage() {
       setMessage("发送失败：" + error.message);
       return;
     }
-
+setLastSentTime(now);
     setMessage("已发送重置密码邮件，请前往邮箱查看");
   }
 
@@ -137,7 +101,7 @@ export default function LoginPage() {
       }}
     >
       <div style={{ width: 320 }}>
-        <h1 style={{ marginBottom: 20 }}>登录 / 注册</h1>
+        <h1 style={{ marginBottom: 20 }}>登录</h1>
 
         <form onSubmit={handleLogin}>
           {/* 邮箱 */}
@@ -158,36 +122,10 @@ export default function LoginPage() {
           {/* 密码 */}
           <p style={{ marginTop: 16 }}>密码</p>
 
-          <div style={{ position: "relative" }}>
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码"
-              style={{
-                padding: "10px 36px 10px 10px",
-                width: "100%",
-                borderRadius: "6px",
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-              }}
-            />
-
-            <span
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                cursor: "pointer",
-                fontSize: 16,
-                color: "#666",
-              }}
-            >
-              {showPassword ? "🙈" : "👁"}
-            </span>
-          </div>
+          <PasswordInput
+            value={password}
+            onChange={setPassword}
+          />
 
           {/* ⭐ 记住账号 */}
           <div style={{ marginTop: 10, fontSize: 12 }}>
@@ -224,7 +162,7 @@ export default function LoginPage() {
           {/* 注册 */}
           <button
             type="button"
-            onClick={handleRegister}
+            onClick={() => router.push("/register")}
             disabled={loading}
             style={{
               width: "100%",

@@ -5,47 +5,44 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function ProfilePage() {
-  const [username, setUsername] = useState("");
-  const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [initLoading, setInitLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-
   const router = useRouter();
 
-  // ✅ 初始化：获取用户 + 用户资料
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+
+  const [username, setUsername] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [initLoading, setInitLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // ✅ 初始化
   useEffect(() => {
     async function init() {
       setInitLoading(true);
 
-      // 获取当前用户（稳定方式）
       const {
         data: { user },
-        error: userError,
+        error,
       } = await supabase.auth.getUser();
 
-      // 未登录处理
-      if (userError || !user) {
-        setInitLoading(false);
+      if (error || !user) {
         router.push("/login");
         return;
       }
 
-      setUserId(user.id);
+      setUser(user);
 
-      // 获取用户名
-      const {
-        data,
-        error: profileError,
-      } = await supabase
+      const { data, error: profileError } = await supabase
         .from("profiles")
-        .select("username")
+        .select("*")
         .eq("id", user.id)
-        .maybeSingle();
+        .single();
 
       if (profileError) {
         setErrorMsg("读取用户信息失败");
       } else {
+        setProfile(data);
         setUsername(data?.username || "");
       }
 
@@ -57,9 +54,8 @@ export default function ProfilePage() {
 
   // ✅ 保存用户名
   async function handleSave() {
-    if (!userId) return;
+    if (!user) return;
 
-    // 基础校验
     if (!username || username.trim().length < 2) {
       setErrorMsg("用户名至少2个字符");
       return;
@@ -70,30 +66,57 @@ export default function ProfilePage() {
 
     const { error } = await supabase
       .from("profiles")
-      .upsert(
-        {
-          id: userId,
-          username: username.trim(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "id",
-        }
-      );
+      .update({
+        username: username.trim(),
+      })
+      .eq("id", user.id);
 
     setLoading(false);
 
     if (error) {
       setErrorMsg(error.message);
     } else {
-      // ✅ 成功后跳转 + 强制刷新（让 UserBar 同步）
-      router.push("/");
-      window.location.reload();
+      setProfile({ ...profile, username });
     }
   }
 
-  // ✅ 加载状态
-  if (initLoading) {
+  // ✅ 上传头像
+  async function handleUpload(e: any) {
+    const file = e.target.files[0];
+    if (!file || !user) return;
+
+    setUploading(true);
+
+    const filePath = `${user.id}/${Date.now()}`;
+
+    const { error } = await supabase.storage
+      .from("avatars")
+      .upload(filePath, file);
+
+    if (error) {
+      setErrorMsg("上传失败");
+      setUploading(false);
+      return;
+    }
+
+    const { data } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(filePath);
+
+    const url = data.publicUrl;
+
+    await supabase
+      .from("profiles")
+      .update({ avatar_url: url })
+      .eq("id", user.id);
+
+    setProfile({ ...profile, avatar_url: url });
+
+    setUploading(false);
+  }
+
+  // ✅ 加载保护
+  if (initLoading || !user || !profile) {
     return <div style={{ padding: 40 }}>加载中...</div>;
   }
 
@@ -116,31 +139,78 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div style={{ marginBottom: "20px" }}>
-        <label>用户名</label>
+      {/* ===== 头像 ===== */}
+      <div style={{ marginTop: 20 }}>
+        <div style={{ marginBottom: 10 }}>
+          {profile.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: "50%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: "50%",
+                background: "#eee",
+              }}
+            />
+          )}
+        </div>
 
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="请输入用户名"
-          maxLength={20}
-          style={{
-            width: "100%",
-            padding: "10px",
-            marginTop: "8px",
-            border: "1px solid #ddd",
-            borderRadius: "6px",
-            outline: "none",
-          }}
-        />
+        <input type="file" onChange={handleUpload} />
+        {uploading && <div>上传中...</div>}
       </div>
 
+      {/* ===== 用户信息 ===== */}
+      <div style={{ marginTop: 20 }}>
+        <div>
+          <strong>邮箱：</strong> {user.email}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <strong>用户名：</strong>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            style={{
+              marginLeft: 10,
+              padding: "4px 8px",
+            }}
+          />
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <strong>地区：</strong> {profile.location || "未设置"}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <strong>等级：</strong> Lv.{profile.level || 1}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <strong>花朵：</strong> 🌸 {profile.flower_count || 0}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <strong>浏览：</strong> 👁 {profile.view_count || 0}
+        </div>
+      </div>
+
+      {/* 保存按钮 */}
       <button
         onClick={handleSave}
         disabled={loading}
         style={{
           width: "100%",
           padding: "12px",
+          marginTop: 20,
           background: loading ? "#999" : "#111",
           color: "#fff",
           border: "none",
