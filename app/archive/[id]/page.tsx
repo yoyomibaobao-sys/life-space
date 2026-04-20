@@ -193,12 +193,16 @@ function Content({ id }: { id: string }) {
   useEffect(() => {
     async function loadSameTagCounts() {
       const visibleTags = Array.from(
-        new Set(
-          records.flatMap((record: any) =>
-            Array.isArray(record.display_tags) ? record.display_tags : []
+  new Set<string>(
+    records.flatMap((record: any): string[] =>
+      Array.isArray(record.display_tags)
+        ? record.display_tags.filter(
+            (tag: unknown): tag is string => typeof tag === "string"
           )
-        )
-      );
+        : []
+    )
+  )
+);
 
       if (visibleTags.length === 0) {
         setSameTagCounts({});
@@ -246,28 +250,31 @@ function Content({ id }: { id: string }) {
         return;
       }
 
-      const wantedTags = new Set(visibleTags);
-      const nextCounts: Record<string, number> = Object.fromEntries(
-        visibleTags.map((tag) => [tag, 0])
-      );
+      const wantedTags = new Set<string>(visibleTags);
+const nextCounts: Record<string, number> = Object.fromEntries(
+  visibleTags.map((tag: string) => [tag, 0])
+);
 
       (data || []).forEach((record: any) => {
-        const recordTags = Array.from(
-          new Set(
-            (record.record_tags || [])
-              .filter(
-                (tagRow: any) =>
-                  tagRow.tag_type === "behavior" &&
-                  tagRow.is_active !== false &&
-                  wantedTags.has(tagRow.tag)
-              )
-              .map((tagRow: any) => tagRow.tag)
-          )
-        );
+       const recordTags = Array.from(
+  new Set<string>(
+    (record.record_tags || [])
+      .filter(
+        (tagRow: any) =>
+          tagRow.tag_type === "behavior" &&
+          tagRow.is_active !== false
+      )
+      .map((tagRow: any) => tagRow.tag)
+      .filter(
+        (tag: unknown): tag is string =>
+          typeof tag === "string" && wantedTags.has(tag)
+      )
+  )
+);
 
-        recordTags.forEach((tag) => {
-          nextCounts[tag] = (nextCounts[tag] || 0) + 1;
-        });
+recordTags.forEach((tag: string) => {
+  nextCounts[tag] = (nextCounts[tag] || 0) + 1;
+});
       });
 
       setSameTagCounts(nextCounts);
