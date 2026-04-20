@@ -4,12 +4,17 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
+type ArchiveCategory = "plant" | "system";
+
 export default function NewArchive() {
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("植物");
+  const [category, setCategory] = useState<ArchiveCategory>("plant");
 
   const [speciesList, setSpeciesList] = useState<any[]>([]);
   const [speciesId, setSpeciesId] = useState<string | null>(null);
+  const [pendingSpeciesName, setPendingSpeciesName] = useState<string | null>(
+    null
+  );
 
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
@@ -18,7 +23,6 @@ export default function NewArchive() {
 
   const router = useRouter();
 
-  // 加载植物百科
   useEffect(() => {
     async function loadSpecies() {
       const { data } = await supabase
@@ -32,7 +36,7 @@ export default function NewArchive() {
     loadSpecies();
   }, []);
 
-  async function handleCreate(e: any) {
+  async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (loading) return;
@@ -41,11 +45,12 @@ export default function NewArchive() {
       alert("请输入名称");
       return;
     }
-if (category === "植物" && !speciesId) {
-  alert("请选择植物");
-  setLoading(false);
-  return;
-}
+
+    if (category === "plant" && !speciesId && !pendingSpeciesName) {
+      alert("请选择植物，或新增一个候选植物");
+      return;
+    }
+
     setLoading(true);
 
     const {
@@ -58,18 +63,27 @@ if (category === "植物" && !speciesId) {
       return;
     }
 
-    const { error } = await supabase
-      .from("archives")
-      .insert([
-        {
-          title: title.trim(),
-          category,
-          species_id: category === "植物" ? speciesId : null,
-          source: source || null,
-          note: note || null,
-          user_id: user.id,
-        },
-      ]);
+    const selectedSpecies = speciesList.find((s) => s.id === speciesId);
+    const speciesNameSnapshot =
+      category === "plant"
+        ? pendingSpeciesName ||
+          selectedSpecies?.common_name ||
+          selectedSpecies?.scientific_name ||
+          null
+        : null;
+
+    const { error } = await supabase.from("archives").insert([
+      {
+        title: title.trim(),
+        category,
+        species_id: category === "plant" ? speciesId : null,
+        species_name_snapshot: speciesNameSnapshot,
+        source: source.trim() || null,
+        note: note.trim() || null,
+        user_id: user.id,
+        is_public: true,
+      },
+    ]);
 
     setLoading(false);
 
@@ -80,49 +94,49 @@ if (category === "植物" && !speciesId) {
 
     router.push("/archive");
   }
-async function handleAddSpecies() {
-  let name = prompt("输入植物名称");
-  if (!name) return;
 
-  name = name.trim();
+  async function handleAddSpecies() {
+    let name = prompt("输入植物名称");
+    if (!name) return;
 
-  if (!name) return;
+    name = name.trim();
 
-  // ⭐ 简单查重（可选但推荐）
-  const exists = speciesList.find(
-    (s) => s.common_name === name
-  );
+    if (!name) return;
 
-  if (exists) {
-    setSpeciesId(exists.id);
-    return;
-  }
+    const exists = speciesList.find(
+      (s) => s.common_name === name || s.scientific_name === name
+    );
 
-  // ⭐ 判断是否英文（可选优化）
-  const isEnglish = /^[a-zA-Z\s]+$/.test(name);
+    if (exists) {
+      setSpeciesId(exists.id);
+      setPendingSpeciesName(null);
+      return;
+    }
 
-  const { data, error } = await supabase
-    .from("plant_species")
-    .insert([
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from("plant_species_pending").insert([
       {
-        common_name: name,
-        scientific_name: isEnglish ? name : null,
+        user_id: user?.id || null,
+        submitted_name: name,
+        language_code: "zh",
+        status: "pending",
       },
-    ])
-    .select()
-    .single();
+    ]);
 
-  if (error) {
-    alert("添加失败");
-    return;
+    if (error) {
+      alert("提交候选植物失败：" + error.message);
+      return;
+    }
+
+    setSpeciesId(null);
+    setPendingSpeciesName(name);
+
+    alert(`已加入候选植物：${name}\n当前可继续创建档案。`);
   }
 
-  // ⭐ 更新列表
-  setSpeciesList((prev) => [...prev, data]);
-
-  // ⭐ 自动选中
-  setSpeciesId(data.id);
-}
   return (
     <main
       style={{
@@ -134,11 +148,8 @@ async function handleAddSpecies() {
       <h2 style={{ marginBottom: 20 }}>新建项目</h2>
 
       <form onSubmit={handleCreate}>
-        {/* 名称 */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>
-            项目名称 *
-          </div>
+          <div style={{ fontSize: 14, marginBottom: 6 }}>项目名称 *</div>
 
           <input
             placeholder="例如：阳台迷迭香"
@@ -154,15 +165,20 @@ async function handleAddSpecies() {
           />
         </div>
 
-        {/* 种类 */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>
-            种类 *
-          </div>
+          <div style={{ fontSize: 14, marginBottom: 6 }}>种类 *</div>
 
           <select
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value as ArchiveCategory;
+              setCategory(next);
+
+              if (next !== "plant") {
+                setSpeciesId(null);
+                setPendingSpeciesName(null);
+              }
+            }}
             style={{
               padding: "10px",
               width: "100%",
@@ -172,13 +188,12 @@ async function handleAddSpecies() {
               background: "#fff",
             }}
           >
-            <option value="植物">🌿 植物</option>
-            <option value="设施">🛠 设施</option>
+            <option value="plant">🌿 植物</option>
+            <option value="system">🛠 设施</option>
           </select>
         </div>
 
-        {/* 系统名称（植物百科） */}
-        {category === "植物" && (
+        {category === "plant" && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 13, marginBottom: 4 }}>
               系统名称（选择植物）
@@ -187,15 +202,16 @@ async function handleAddSpecies() {
             <select
               value={speciesId || ""}
               onChange={(e) => {
-  const value = e.target.value;
+                const value = e.target.value;
 
-  if (value === "__new__") {
-    handleAddSpecies();
-  } else {
-    setSpeciesId(value || null);
-  }
-}}
+                if (value === "__new__") {
+                  handleAddSpecies();
+                  return;
+                }
 
+                setSpeciesId(value || null);
+                setPendingSpeciesName(null);
+              }}
               style={{
                 padding: "8px",
                 width: "100%",
@@ -212,17 +228,28 @@ async function handleAddSpecies() {
                   {s.common_name || s.scientific_name}
                 </option>
               ))}
-              {/* ⭐ 新增这一行 */}
-<option value="__new__">+ 新增植物</option>
+
+              <option value="__new__">+ 新增植物</option>
             </select>
+
+            {pendingSpeciesName && (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: "#666",
+                  lineHeight: 1.6,
+                }}
+              >
+                当前使用候选植物：
+                <strong>{pendingSpeciesName}</strong>
+              </div>
+            )}
           </div>
         )}
 
-        {/* 来源 */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, marginBottom: 4 }}>
-            来源（选填）
-          </div>
+          <div style={{ fontSize: 13, marginBottom: 4 }}>来源（选填）</div>
 
           <input
             placeholder="例如：市场购买 / 朋友分享"
@@ -238,11 +265,8 @@ async function handleAddSpecies() {
           />
         </div>
 
-        {/* 备注 */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, marginBottom: 4 }}>
-            备注（选填）
-          </div>
+          <div style={{ fontSize: 13, marginBottom: 4 }}>备注（选填）</div>
 
           <textarea
             placeholder="简单记录一下背景..."
@@ -259,7 +283,6 @@ async function handleAddSpecies() {
           />
         </div>
 
-        {/* 提交 */}
         <button
           type="submit"
           disabled={loading}

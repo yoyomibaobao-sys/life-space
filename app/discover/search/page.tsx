@@ -1,127 +1,261 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { getBehaviorTagLabel } from "@/lib/tag-labels";
+import TagList from "@/components/TagList";
+
+type RawRecordTag = {
+  tag: string;
+  tag_type: string;
+  source: string;
+  is_active: boolean;
+};
+
+type SearchItem = {
+  id: string;
+  archive_id: string;
+  user_id: string;
+  note: string | null;
+  record_time: string;
+  status_tag: string | null;
+  parsed_actions: string[] | null;
+  primary_image_url: string | null;
+  record_tags?: RawRecordTag[];
+  archives?: {
+    id: string;
+    title: string;
+    species_id: string | null;
+    species_name_snapshot?: string | null;
+    user_id: string;
+    is_public: boolean;
+  } | null;
+  profiles?: {
+    username: string | null;
+  } | null;
+  display_tags?: string[];
+};
 
 export default function DiscoverSearchPage() {
   const searchParams = useSearchParams();
 
   const tag = searchParams.get("tag");
   const species = searchParams.get("species");
+  const name = searchParams.get("name");
 
-  const [records, setRecords] = useState<any[]>([]);
-  const [onlyHelp, setOnlyHelp] = useState(false); // ⭐ 新增
+  const [items, setItems] = useState<SearchItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+
       let query = supabase
         .from("records")
         .select(`
-          *,
-          record_tags ( tag ),
-          archives ( species_id, title ),
-          profiles ( username )
+          id,
+          archive_id,
+          user_id,
+          note,
+          record_time,
+          status_tag,
+          parsed_actions,
+          primary_image_url,
+          visibility,
+          record_tags (
+            tag,
+            tag_type,
+            source,
+            is_active
+          ),
+          archives!inner (
+            id,
+            title,
+            species_id,
+            species_name_snapshot,
+            user_id,
+            is_public
+          )
         `)
+        .eq("visibility", "public")
+        .eq("archives.is_public", true)
         .order("record_time", { ascending: false });
 
-      // ⭐ 物种筛选
       if (species) {
         query = query.eq("archives.species_id", species);
+      } else if (name) {
+        query = query.eq("archives.species_name_snapshot", name);
       }
 
-      const { data } = await query;
+      const { data, error } = await query;
 
-      let filtered = data || [];
+      if (error) {
+        console.error("discover search load error:", error);
+        setItems([]);
+        setLoading(false);
+        return;
+      }
 
-      // ⭐ 标签筛选
+      const rawRecords: SearchItem[] = Array.isArray(data)
+        ? (data as unknown as SearchItem[])
+        : [];
+
+      let records = rawRecords.map((item) => {
+        const behaviorTags =
+          item.record_tags
+            ?.filter(
+              (t) => t.tag_type === "behavior" && t.is_active !== false
+            )
+            .map((t) => t.tag) || [];
+
+        const displayTags = Array.from(new Set(behaviorTags));
+
+        return {
+          ...item,
+          display_tags: displayTags,
+        };
+      });
+
       if (tag) {
-        filtered = filtered.filter((r: any) =>
-          r.record_tags?.some((t: any) => t.tag === tag)
-        );
+        records = records.filter((item) => {
+          const tags = Array.isArray(item.display_tags)
+            ? item.display_tags
+            : [];
+          return tags.includes(tag);
+        });
       }
 
-      // ⭐ 求助筛选（核心新增）
-      if (onlyHelp) {
-        filtered = filtered.filter((r: any) => r.status === "help");
+      const userIds = Array.from(
+        new Set(records.map((item) => item.user_id).filter(Boolean))
+      );
+
+      const profileMap = new Map<string, { username: string | null }>();
+
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, username")
+          .in("id", userIds);
+
+        (profilesData || []).forEach((p: any) => {
+          profileMap.set(p.id, { username: p.username });
+        });
       }
 
-      setRecords(filtered);
+      const finalList = records.map((item) => ({
+        ...item,
+        profiles: profileMap.get(item.user_id) || { username: "用户" },
+      }));
+
+      setItems(finalList);
+      setLoading(false);
     }
 
     load();
-  }, [tag, species, onlyHelp]); // ⭐ 加 onlyHelp
+  }, [tag, species, name]);
 
   return (
-    <main style={{ padding: 16 }}>
-      {/* ⭐ 搜索条件 */}
-      <div style={{ marginBottom: 8, fontSize: 14 }}>
-        🔍 {tag && `标签：${tag}`} {species && `· 同物种`}
+    <main style={{ padding: 14, maxWidth: 640, margin: "0 auto" }}>
+      <div style={{ marginBottom: 16 }}>
+        <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
+          ← 返回发现页
+        </Link>
       </div>
 
-      {/* ⭐ 求助筛选 */}
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 13, color: "#555" }}>
-          <input
-            type="checkbox"
-            checked={onlyHelp}
-            onChange={(e) => setOnlyHelp(e.target.checked)}
-            style={{ marginRight: 6 }}
-          />
-          仅看求助
-        </label>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>
+          相关记录
+        </div>
+
+        <div style={{ fontSize: 13, color: "#666" }}>
+          {tag ? <>标签：{getBehaviorTagLabel(tag)}</> : <>全部标签</>}
+          {species ? <> · 已限定同植物</> : null}
+          {!species && name ? <> · 已按植物名称筛选：{name}</> : null}
+        </div>
       </div>
 
-      {/* ⭐ 列表 */}
-      {records.length === 0 ? (
-        <div style={{ color: "#999" }}>暂无记录</div>
+      {loading ? (
+        <div style={{ padding: "24px 0", color: "#888" }}>加载中...</div>
+      ) : items.length === 0 ? (
+        <div style={{ padding: "24px 0", color: "#888" }}>暂无相关记录</div>
       ) : (
-        records.map((item: any) => (
-          <a
+        items.map((item) => (
+          <Link
             key={item.id}
-            href={`/archive/${item.archive_id}?record=${item.id}`}
+            href={`/archive/${item.archive_id}`}
             style={{
-              display: "block",
-              padding: 12,
-              marginBottom: 10,
+              display: "flex",
+              gap: 10,
+              padding: 10,
+              marginBottom: 12,
               border: "1px solid #eee",
-              borderRadius: 8,
-              textDecoration: "none",
-              color: "#000",
+              borderRadius: 10,
               background: "#fff",
+              color: "#000",
+              textDecoration: "none",
             }}
           >
-            {/* ⭐ 状态 + 内容 */}
-            <div style={{ fontSize: 15 }}>
-              <span style={{ marginRight: 4 }}>
-                {item.status === "help" && "❗"}
-                {item.status === "ok" && "✅"}
-                {item.status === "problem" && "⚠️"}
-              </span>
-              {item.note}
-            </div>
+            {item.primary_image_url ? (
+              <img
+                src={item.primary_image_url}
+                alt="record cover"
+                style={{
+                  width: 64,
+                  height: 64,
+                  objectFit: "cover",
+                  borderRadius: 8,
+                  flexShrink: 0,
+                }}
+              />
+            ) : null}
 
-            {/* ⭐ 标签 */}
-            <div style={{ marginTop: 6, fontSize: 12 }}>
-              {item.record_tags?.map((t: any, i: number) => (
-                <span
-                  key={i}
-                  style={{
-                    marginRight: 6,
-                    color: "#4CAF50",
-                  }}
-                >
-                  #{t.tag}
-                </span>
-              ))}
-            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  marginBottom: 4,
+                  wordBreak: "break-word",
+                }}
+              >
+                {item.archives?.title || "未命名档案"}
 
-            {/* ⭐ 信息 */}
-            <div style={{ fontSize: 12, color: "#999", marginTop: 6 }}>
-              {item.archives?.title || "植物"} ·{" "}
-              {new Date(item.record_time).toLocaleDateString()}
+                {(item.archives?.species_name_snapshot ||
+                  item.archives?.species_id) && (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: 12,
+                      color: "#4CAF50",
+                      fontWeight: 400,
+                    }}
+                  >
+                    · 🌿 {item.archives?.species_name_snapshot || "未知植物"}
+                  </span>
+                )}
+              </div>
+
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#333",
+                  wordBreak: "break-word",
+                }}
+              >
+                {item.note || "（无文字内容）"}
+              </div>
+
+              <TagList tags={item.display_tags} />
+
+              <div style={{ fontSize: 12, color: "#888", marginTop: 6 }}>
+                {item.profiles?.username || "用户"} ·{" "}
+                {new Date(item.record_time).toLocaleDateString("zh-CN")}
+                {item.status_tag === "help" ? " · 求助" : ""}
+              </div>
             </div>
-          </a>
+          </Link>
         ))
       )}
     </main>

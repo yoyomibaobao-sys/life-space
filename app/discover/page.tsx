@@ -1,15 +1,42 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { getBehaviorTagLabel } from "@/lib/tag-labels";
 
 const PAGE_SIZE = 20;
 
+type FeedItem = {
+  record_id: string;
+  archive_id: string;
+  user_id: string;
+  note: string | null;
+  record_time: string;
+  visibility?: string | null;
+  status_tag: string | null;
+  primary_image_url: string | null;
+  comment_count: number;
+  media_count: number;
+  archive_title: string;
+  archive_category: string | null;
+  species_id: string | null;
+  species_name_snapshot?: string | null;
+  archive_is_public?: boolean | null;
+  username: string | null;
+  avatar_url: string | null;
+  user_location?: string | null;
+  profile_is_public?: boolean | null;
+  display_tags?: string[];
+};
+
+type FilterMode = "all" | "help";
+
 export default function DiscoverPage() {
-  const [groups, setGroups] = useState<any[]>([]);
+  const [items, setItems] = useState<FeedItem[]>([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState<any>({});
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [hasMore, setHasMore] = useState(true);
 
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
@@ -26,140 +53,107 @@ export default function DiscoverPage() {
     }
   }
 
-  async function load(pageIndex = 0) {
+  async function load(pageIndex = 0, mode: FilterMode = filterMode) {
     if (loadingRef.current) return;
+    if (!hasMore && pageIndex !== 0) return;
+
     loadingRef.current = true;
     setLoading(true);
 
     const from = pageIndex * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    const { data: records } = await supabase
-      .from("records")
+    let query = supabase
+      .from("discovery_feed_view")
       .select("*")
       .order("record_time", { ascending: false })
       .range(from, to);
 
-    const { data: medias } = await supabase.from("media").select("*");
-    const { data: archives } = await supabase.from("archives").select("*");
-    const { data: profiles } = await supabase.from("profiles").select("*");
+    if (mode === "help") {
+      query = query.eq("status_tag", "help");
+    }
 
-    // ⭐核心修复：全部转成 map（避免错配）
-    const archiveMap: any = {};
-    archives?.forEach((a) => {
-      archiveMap[a.id] = a;
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("discover load error:", error);
+      setLoading(false);
+      loadingRef.current = false;
+      return;
+    }
+
+    const nextItems = (data || []) as FeedItem[];
+
+const recordIds = nextItems.map((item) => item.record_id);
+
+const tagMap = new Map<string, string[]>();
+
+if (recordIds.length > 0) {
+  const { data: tagRows } = await supabase
+    .from("record_tags")
+    .select("record_id, tag, tag_type, is_active")
+    .in("record_id", recordIds)
+    .eq("tag_type", "behavior")
+    .neq("is_active", false);
+
+  (tagRows || []).forEach((row: any) => {
+    const prev = tagMap.get(row.record_id) || [];
+    if (!prev.includes(row.tag)) {
+      prev.push(row.tag);
+    }
+    tagMap.set(row.record_id, prev);
+  });
+}
+
+const enrichedItems = nextItems.map((item) => ({
+  ...item,
+  display_tags: tagMap.get(item.record_id) || [],
+}));
+
+if (pageIndex === 0) {
+  setItems(enrichedItems);
+} else {
+  setItems((prev) => {
+    const merged = [...prev, ...enrichedItems];
+    const map = new Map<string, FeedItem>();
+
+    merged.forEach((item) => {
+      map.set(item.record_id, item);
     });
 
-    const profileMap: any = {};
-    profiles?.forEach((p) => {
-      profileMap[p.id] = p;
-    });
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        new Date(b.record_time).getTime() - new Date(a.record_time).getTime()
+    );
+  });
+}
 
-    const mediaMap: any = {};
-    medias?.forEach((m) => {
-      if (!mediaMap[m.record_id]) mediaMap[m.record_id] = [];
-      mediaMap[m.record_id].push(m);
-    });
-
-    const getTime = (r: any) =>
-      new Date(r.record_time || r.created_at).getTime();
-
-    const userMap: any = {};
-
-    records?.forEach((r: any) => {
-      const archive = archiveMap[r.archive_id];
-      if (!archive) return;
-
-      const uid = archive.user_id;
-
-      if (!userMap[uid]) {
-        userMap[uid] = {
-          user_id: uid,
-          username: profileMap[uid]?.username || "用户",
-          archivesMap: {},
-          countMap: {},
-        };
-      }
-
-      const group = userMap[uid];
-
-      // ⭐统计记录数
-      if (!group.countMap[r.archive_id]) {
-        group.countMap[r.archive_id] = 0;
-      }
-      group.countMap[r.archive_id]++;
-
-      const current = group.archivesMap[r.archive_id];
-
-      // ⭐每个档案只保留最新记录
-      if (!current || getTime(r) > getTime(current)) {
-        group.archivesMap[r.archive_id] = r;
-      }
-    });
-
-    const newGroups = Object.values(userMap).map((g: any) => {
-      let items = Object.values(g.archivesMap);
-
-      items.sort((a: any, b: any) => getTime(b) - getTime(a));
-
-      items = items.slice(0, 4);
-
-      items = items.map((item: any) => {
-        const archive = archiveMap[item.archive_id];
-
-        return {
-          ...item,
-          media: mediaMap[item.id] || [],
-          archiveTitle: archive?.title,
-          count: g.countMap[item.archive_id],
-        };
-      });
-
-      return {
-        ...g,
-        items,
-        latestTime: getTime(items[0]),
-      };
-    });
-
-    setGroups((prev) => {
-      const map: any = {};
-
-      [...prev, ...newGroups].forEach((g: any) => {
-        if (!map[g.user_id]) {
-          map[g.user_id] = g;
-        } else {
-          const merged = [...map[g.user_id].items, ...g.items];
-
-          const unique: any = {};
-          merged.forEach((item) => {
-            if (
-              !unique[item.archive_id] ||
-              getTime(item) >
-                getTime(unique[item.archive_id])
-            ) {
-              unique[item.archive_id] = item;
-            }
-          });
-
-          map[g.user_id].items = Object.values(unique);
-        }
-      });
-
-      const arr = Object.values(map);
-      arr.sort((a: any, b: any) => b.latestTime - a.latestTime);
-
-      return arr;
-    });
+    if (nextItems.length < PAGE_SIZE) {
+      setHasMore(false);
+    } else {
+      setHasMore(true);
+    }
 
     setLoading(false);
     loadingRef.current = false;
   }
 
-  useEffect(() => {
-    setGroups([]);
+  function changeFilter(mode: FilterMode) {
+    if (mode === filterMode) return;
+
+    setFilterMode(mode);
+    setItems([]);
     setPage(0);
-    load(0);
+    setHasMore(true);
+    load(0, mode);
+  }
+
+  useEffect(() => {
+    setItems([]);
+    setPage(0);
+    setHasMore(true);
+    load(0, filterMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -167,10 +161,15 @@ export default function DiscoverPage() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loadingRef.current) {
+        if (
+          entries[0].isIntersecting &&
+          !loadingRef.current &&
+          hasMore &&
+          items.length > 0
+        ) {
           const nextPage = page + 1;
           setPage(nextPage);
-          load(nextPage);
+          load(nextPage, filterMode);
         }
       },
       { threshold: 0.5 }
@@ -179,106 +178,228 @@ export default function DiscoverPage() {
     observer.observe(loaderRef.current);
 
     return () => observer.disconnect();
-  }, [page]);
+  }, [page, hasMore, items.length, filterMode]);
 
   return (
     <main style={{ padding: 14 }}>
-      {groups.map((group: any) => {
-        const isOpen = expanded[group.user_id];
+      <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  }}
+>
+  <div style={{ fontSize: 18, fontWeight: 600 }}>
+    耕作星球
+  </div>
 
-        const displayItems = isOpen
-          ? group.items
-          : group.items.slice(0, 2);
+  <a
+    href="/discover/search"
+    style={{
+      fontSize: 13,
+      color: "#4CAF50",
+      textDecoration: "none",
+      border: "1px solid #4CAF50",
+      padding: "4px 10px",
+      borderRadius: 999,
+    }}
+  >
+    🔍 搜索记录
+  </a>
+</div>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        <button
+          onClick={() => changeFilter("all")}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 999,
+            border: "1px solid #ddd",
+            background: filterMode === "all" ? "#f3f3f3" : "#fff",
+            cursor: "pointer",
+          }}
+        >
+          全部
+        </button>
 
-        return (
-          <div key={group.user_id} style={{ marginBottom: 18 }}>
-            {/* 用户名 */}
-            <div style={{ marginBottom: 6, fontWeight: 600 }}>
+        <button
+          onClick={() => changeFilter("help")}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 999,
+            border: "1px solid #ddd",
+            background: filterMode === "help" ? "#f3f3f3" : "#fff",
+            cursor: "pointer",
+          }}
+        >
+          仅求助
+        </button>
+      </div>
+
+      {items.map((item) => (
+        <div
+          key={item.record_id}
+          style={{
+            marginBottom: 12,
+            background: "#fff",
+            borderRadius: 10,
+            border: item.status_tag === "help" ? "1px solid #e6c9c9" : "1px solid #eee",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "10px 10px 0 10px" }}>
+            <div
+              style={{
+                marginBottom: 6,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
               <span
-                onClick={() => goUser(group.user_id)}
+                onClick={() => goUser(item.user_id)}
                 style={{ cursor: "pointer" }}
               >
-                {group.username}
+                {item.username || "用户"}
               </span>
+
+              {item.status_tag === "help" && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1,
+                    padding: "4px 6px",
+                    borderRadius: 999,
+                    border: "1px solid #e6c9c9",
+                    background: "#fff7f7",
+                  }}
+                >
+                  求助
+                </span>
+              )}
             </div>
-
-            {/* 卡片 */}
-            {displayItems.map((item: any) => (
-              <a
-                key={item.id}
-                href={`/archive/${item.archive_id}?record=${item.id}`}
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  padding: 10,
-                  marginBottom: 8,
-                  background: "#fff",
-                  borderRadius: 10,
-                  border: "1px solid #eee",
-                  textDecoration: "none",
-                  color: "#000",
-                }}
-              >
-                {/* 图片 */}
-                {item.media?.[0]?.url ? (
-                  <img
-                    src={item.media[0].url}
-                    style={{
-                      width: 56,
-                      height: 56,
-                      objectFit: "cover",
-                      borderRadius: 6,
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 56,
-                      height: 56,
-                      background: "#eee",
-                      borderRadius: 6,
-                    }}
-                  />
-                )}
-
-                {/* 文本 */}
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15 }}>
-                    {item.archiveTitle}：{item.note}
-                  </div>
-
-                  <div style={{ fontSize: 11, color: "#999" }}>
-                    {new Date(item.record_time).toLocaleDateString()} · 共
-                    {item.count}条记录
-                  </div>
-                </div>
-              </a>
-            ))}
-
-            {/* 展开 */}
-            {group.items.length > 2 && (
-              <div
-                onClick={() =>
-                  setExpanded({
-                    ...expanded,
-                    [group.user_id]: !isOpen,
-                  })
-                }
-                style={{
-                  fontSize: 12,
-                  color: "#666",
-                  cursor: "pointer",
-                }}
-              >
-                {isOpen ? "收起" : "展开"}
-              </div>
-            )}
           </div>
-        );
-      })}
+
+          <a
+            href={`/archive/${item.archive_id}?record=${item.record_id}`}
+            style={{
+              display: "flex",
+              gap: 8,
+              padding: 10,
+              textDecoration: "none",
+              color: "#000",
+            }}
+          >
+            {item.primary_image_url ? (
+              <img
+                src={item.primary_image_url}
+                alt={item.archive_title || "record image"}
+                style={{
+                  width: 56,
+                  height: 56,
+                  objectFit: "cover",
+                  borderRadius: 6,
+                  flexShrink: 0,
+                }}
+              />
+            ) : null}
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, lineHeight: 1.4, wordBreak: "break-word" }}>
+  {item.archive_title}
+  {item.species_name_snapshot ? (
+    <span
+      style={{
+        marginLeft: 6,
+        fontSize: 12,
+        color: "#4CAF50",
+      }}
+    >
+      · 🌿 {item.species_name_snapshot}
+    </span>
+  ) : null}
+  {item.note ? `：${item.note}` : ""}
+</div>
+
+              <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+                {new Date(item.record_time).toLocaleDateString()}
+                {typeof item.comment_count === "number"
+                  ? ` · ${item.comment_count}评论`
+                  : ""}
+                {typeof item.media_count === "number"
+                  ? ` · ${item.media_count}图`
+                  : ""}
+              </div>
+              {Array.isArray(item.display_tags) && item.display_tags.length > 0 && (
+  <div
+    style={{
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap",
+      marginTop: 6,
+    }}
+  >
+    {item.display_tags.map((tag) => (
+      <span
+        key={tag}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          if (item.species_id) {
+            window.location.href = `/discover/search?tag=${encodeURIComponent(
+              tag
+            )}&species=${item.species_id}`;
+            return;
+          }
+
+          window.location.href = `/discover/search?tag=${encodeURIComponent(
+            tag
+          )}`;
+        }}
+        style={{
+          fontSize: 12,
+          padding: "2px 6px",
+          borderRadius: 999,
+          border: "1px solid #ddd",
+          background: "#fafafa",
+          color: "#4CAF50",
+          cursor: "pointer",
+        }}
+      >
+        {getBehaviorTagLabel(tag)}
+      </span>
+    ))}
+  </div>
+)}
+            </div>
+          </a>
+        </div>
+      ))}
+
+      {!loading && items.length === 0 && (
+        <div
+          style={{
+            padding: "24px 12px",
+            textAlign: "center",
+            color: "#888",
+            fontSize: 14,
+          }}
+        >
+          {filterMode === "help" ? "还没有求助记录" : "还没有公开记录"}
+        </div>
+      )}
 
       <div ref={loaderRef} style={{ height: 40, textAlign: "center" }}>
-        {loading ? "加载中..." : ""}
+        {loading ? "加载中..." : hasMore ? "" : "没有更多了"}
       </div>
     </main>
   );

@@ -8,8 +8,9 @@ import DeleteRecordButton from "./DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-
-
+import { getStatusTagLabel, getBehaviorTagLabel } from "@/lib/tag-labels";
+import TagList from "@/components/TagList";
+import { showToast } from "@/components/Toast";
 export default function ArchiveDetail({
   params,
 }: {
@@ -23,31 +24,29 @@ export default function ArchiveDetail({
 
   return <Content id={id} />;
 }
+
 function Content({ id }: { id: string }) {
   const [archive, setArchive] = useState<any>(null);
   const [species, setSpecies] = useState<any>(null);
-const [tempRange, setTempRange] = useState<any>(null);
+  const [tempRange, setTempRange] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
-  const [relatedOpen, setRelatedOpen] = useState(false);
-const [relatedTag, setRelatedTag] = useState<string | null>(null);
-const [relatedList, setRelatedList] = useState<any[]>([]);
-  const [me, setMe] = useState<string | null>(null);
+  const [me, setMe] = useState<string | null | undefined>(undefined);
   const [username, setUsername] = useState("用户");
+  const [sameTagCounts, setSameTagCounts] = useState<Record<string, number>>({});
 
   const router = useRouter();
   const searchParams = useSearchParams();
   const modeParam = searchParams.get("mode");
-  // ⭐ 计算起始时间（最早记录）
-const startTime =
-  records.length > 0
-    ? records[records.length - 1].record_time
-    : archive?.created_at;
-    function getDayNumber(start: string, current: string) {
+
+  const startTime =
+    records.length > 0
+      ? records[records.length - 1].record_time
+      : archive?.created_at;
+
+  function getDayNumber(start: string, current: string) {
     const startDate = new Date(start).getTime();
     const currentDate = new Date(current).getTime();
-
     const diff = currentDate - startDate;
-
     return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
   }
 
@@ -57,62 +56,90 @@ const startTime =
         data: { session },
       } = await supabase.auth.getSession();
 
-      setMe(session?.user?.id || null);
+      setMe(session?.user?.id ?? null);
     }
+
     getMe();
   }, []);
 
   useEffect(() => {
     async function load() {
-      const { data: archive } = await supabase
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const currentUserId = session?.user?.id ?? null;
+      setMe(currentUserId);
+
+      const { data: archiveData } = await supabase
         .from("archives")
         .select("*")
         .eq("id", id)
         .maybeSingle();
 
-      if (!archive) return;
-      setArchive(archive);
-// ⭐ 查询植物百科
-if (archive.species_id) {
-  const { data: speciesData } = await supabase
-    .from("plant_species")
-    .select("*")
-    .eq("id", archive.species_id)
-    .maybeSingle();
+      if (!archiveData) return;
 
-  setSpecies(speciesData);
+      const isOwnerView = currentUserId === archiveData.user_id;
 
-  // ⭐ 查询温度范围
-  const { data: tempData } = await supabase
-    .from("plant_temperature_ranges")
-    .select("*")
-    .eq("species_id", archive.species_id)
-    .maybeSingle();
+      setArchive(archiveData);
 
-  setTempRange(tempData);
-}
+      if (!archiveData.is_public && !isOwnerView) {
+        setRecords([]);
+        return;
+      }
+
+      if (archiveData.species_id) {
+        const { data: speciesData } = await supabase
+          .from("plant_species")
+          .select("*")
+          .eq("id", archiveData.species_id)
+          .maybeSingle();
+
+        setSpecies(speciesData);
+
+        const { data: tempData } = await supabase
+          .from("plant_temperature_ranges")
+          .select("*")
+          .eq("species_id", archiveData.species_id)
+          .maybeSingle();
+
+        setTempRange(tempData);
+      } else {
+        setSpecies(null);
+        setTempRange(null);
+      }
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("username")
-        .eq("id", archive.user_id)
+        .eq("id", archiveData.user_id)
         .maybeSingle();
 
       setUsername(profile?.username || "用户");
 
-const { data: recordsData } = await supabase
-  .from("records")
-  .select(`
-    *,
-  archives ( species_id ),
-  record_tags ( tag )
-`)
-  .eq("archive_id", archive.id)
-  .order("record_time", { ascending: false });
+      let recordsQuery = supabase
+        .from("records")
+        .select(`
+          *,
+          record_tags (
+            tag,
+            tag_type,
+            source,
+            is_active
+          )
+        `)
+        .eq("archive_id", archiveData.id)
+        .order("record_time", { ascending: false });
+
+      if (!isOwnerView) {
+        recordsQuery = recordsQuery.eq("visibility", "public");
+      }
+
+      const { data: recordsData } = await recordsQuery;
 
       const recs = recordsData ?? [];
-
       const recordIds = recs.map((r: any) => r.id);
-      let mediaMap: any = {};
+      const mediaMap: Record<string, any[]> = {};
 
       if (recordIds.length > 0) {
         const { data: mediaRaw } = await supabase
@@ -126,11 +153,36 @@ const { data: recordsData } = await supabase
         });
       }
 
-const final = recs.map((r: any) => ({
-  ...r,
-  media: mediaMap[r.id] || [],
-  tags: r.record_tags?.map((t: any) => t.tag) || [],
-}));
+  const final = recs.map((r: any) => {
+  const behaviorTags =
+    r.record_tags
+      ?.filter(
+        (t: any) =>
+          t.tag_type === "behavior" &&
+          t.is_active !== false
+      )
+      .map((t: any) => t.tag) || [];
+
+  const displayTags = Array.from(new Set(behaviorTags));
+
+  const userBehaviorTags =
+    r.record_tags
+      ?.filter(
+        (t: any) =>
+          t.tag_type === "behavior" &&
+          t.source === "user" &&
+          t.is_active !== false
+      )
+      .map((t: any) => t.tag) || [];
+
+  return {
+    ...r,
+    media: mediaMap[r.id] || [],
+    parsed_actions: displayTags,
+    user_behavior_tags: userBehaviorTags,
+    display_tags: displayTags,
+  };
+});
 
       setRecords(final);
     }
@@ -138,146 +190,288 @@ const final = recs.map((r: any) => ({
     load();
   }, [id]);
 
-useEffect(() => {
-  if (!relatedOpen || !relatedTag || !species?.id) return;
+  useEffect(() => {
+    async function loadSameTagCounts() {
+      const visibleTags = Array.from(
+        new Set(
+          records.flatMap((record: any) =>
+            Array.isArray(record.display_tags) ? record.display_tags : []
+          )
+        )
+      );
 
-  async function loadRelated() {
-    const threeDaysAgo = new Date(
-      Date.now() - 3 * 24 * 60 * 60 * 1000
-    ).toISOString();
+      if (visibleTags.length === 0) {
+        setSameTagCounts({});
+        return;
+      }
 
-    const { data } = await supabase
-      .from("records")
-      .select(`
-         *,
-  archives ( species_id ),
-  record_tags ( tag )
-`)
-      .eq("record_tags.tag", relatedTag)
-      .eq("archives.species_id", species.id)
-      .gte("record_time", threeDaysAgo)
-      .limit(5);
+      if (!archive?.species_id && !archive?.species_name_snapshot) {
+        setSameTagCounts({});
+        return;
+      }
 
-    setRelatedList(data || []);
-  }
+      let relatedQuery = supabase
+        .from("records")
+        .select(`
+          id,
+          record_tags (
+            tag,
+            tag_type,
+            is_active
+          ),
+          archives!inner (
+            id,
+            species_id,
+            species_name_snapshot,
+            is_public
+          )
+        `)
+        .eq("visibility", "public")
+        .eq("archives.is_public", true);
 
-  loadRelated();
-}, [relatedOpen, relatedTag, species]);
+      if (archive.species_id) {
+        relatedQuery = relatedQuery.eq("archives.species_id", archive.species_id);
+      } else if (archive.species_name_snapshot) {
+        relatedQuery = relatedQuery.eq(
+          "archives.species_name_snapshot",
+          archive.species_name_snapshot
+        );
+      }
 
-  if (!archive || me === null) {
+      const { data, error } = await relatedQuery;
+
+      if (error) {
+        console.error("same tag counts load error:", error);
+        setSameTagCounts({});
+        return;
+      }
+
+      const wantedTags = new Set(visibleTags);
+      const nextCounts: Record<string, number> = Object.fromEntries(
+        visibleTags.map((tag) => [tag, 0])
+      );
+
+      (data || []).forEach((record: any) => {
+        const recordTags = Array.from(
+          new Set(
+            (record.record_tags || [])
+              .filter(
+                (tagRow: any) =>
+                  tagRow.tag_type === "behavior" &&
+                  tagRow.is_active !== false &&
+                  wantedTags.has(tagRow.tag)
+              )
+              .map((tagRow: any) => tagRow.tag)
+          )
+        );
+
+        recordTags.forEach((tag) => {
+          nextCounts[tag] = (nextCounts[tag] || 0) + 1;
+        });
+      });
+
+      setSameTagCounts(nextCounts);
+    }
+
+    loadSameTagCounts();
+  }, [records, archive?.species_id, archive?.species_name_snapshot]);
+
+
+  if (!archive || me === undefined) {
     return <div style={{ padding: 20 }}>加载中...</div>;
   }
 
   const isOwner = me === archive.user_id;
-  const mode = modeParam || (isOwner ? "owner" : "viewer");
+  const mode = isOwner ? modeParam || "owner" : "viewer";
+  const archiveDisplayName =
+  archive?.species_name_snapshot ||
+  species?.common_name ||
+  species?.scientific_name ||
+  "未命名";
 
+  if (!isOwner && !archive.is_public) {
+    return (
+      <main style={{ padding: "16px", maxWidth: "560px", margin: "0 auto" }}>
+        <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
+          ← 返回发现页
+        </Link>
+
+        <div
+          style={{
+            marginTop: 24,
+            padding: 20,
+            border: "1px solid #eee",
+            borderRadius: 12,
+            background: "#fff",
+            color: "#666",
+          }}
+        >
+          该档案为私密，仅档案主人可见。
+        </div>
+      </main>
+    );
+  }
+
+function getSameTagCount(tag: string) {
+  return sameTagCounts[tag] ?? 0;
+}
+
+function updateRecordTagState(
+  recordId: string,
+  tag: string,
+  action: "add" | "remove"
+) {
+  setRecords((prev) =>
+    prev.map((r: any) => {
+      if (r.id !== recordId) return r;
+
+      const displayTags = Array.isArray(r.display_tags) ? r.display_tags : [];
+      const userTags = Array.isArray(r.user_behavior_tags)
+        ? r.user_behavior_tags
+        : [];
+
+      if (action === "add") {
+        return {
+          ...r,
+          display_tags: Array.from(new Set([...displayTags, tag])),
+          parsed_actions: Array.from(new Set([...displayTags, tag])),
+          user_behavior_tags: Array.from(new Set([...userTags, tag])),
+        };
+      }
+
+      return {
+        ...r,
+        display_tags: displayTags.filter((t: string) => t !== tag),
+        parsed_actions: displayTags.filter((t: string) => t !== tag),
+        user_behavior_tags: userTags.filter((t: string) => t !== tag),
+      };
+    })
+  );
+}
+
+async function toggleHelpStatus(recordId: string, currentStatus: string | null) {
+  const nextStatus = currentStatus === "help" ? null : "help";
+
+  const { error } = await supabase
+    .from("records")
+    .update({ status_tag: nextStatus })
+    .eq("id", recordId);
+
+  if (error) {
+    showToast("更新求助状态失败");
+    return;
+  }
+
+  setRecords((prev) =>
+    prev.map((r: any) =>
+      r.id === recordId ? { ...r, status_tag: nextStatus } : r
+    )
+  );
+
+  showToast(nextStatus === "help" ? "已标记为求助" : "已取消求助");
+}
   return (
     <main style={{ padding: "16px", maxWidth: "560px", margin: "0 auto" }}>
-      
-      {/* 顶部 */}
       <div
-  style={{
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  }}
->
-  
-  {/* 左侧：标题 + 去档案 */}
-  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-    
-    {/* 标题 */}
-    <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-  
-  {/* 前半段 */}
-  <span>
-    {mode === "owner" ? "我的「" : `${username}的「`}
-  </span>
-
-  {/* ⭐ 项目名（可点） */}
-  <span
-    onClick={() => router.push(`/archive/${archive.id}`)}
-    style={{
-      cursor: "pointer",
-      textDecoration: "underline",
-    }}
-  >
-    {archive.title}
-  </span>
-
-  {/* 后半段 */}
-  <span>」的生长记录</span>
-
-  {/* ⭐ 系统名（可点） */}
-  {species && (
-    <span
-      onClick={() => router.push(`/plant/${species.id}`)}
-      style={{
-        marginLeft: 8,
-        fontSize: 13,
-        color: "#4CAF50",
-        cursor: "pointer",
-      }}
-    >
-      🌿 {species.common_name || species.scientific_name}
-    </span>
-  )}
-</div>
-{/* ⭐ 系统信息 */}
-{species && (
-  <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
-    🌿 {species.common_name || species.scientific_name}
-  </div>
-)}
-
-{tempRange && (
-  <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
-    🌡 适宜温度：
-    {tempRange.optimal_growth_temp
-      ? `${tempRange.optimal_growth_temp}℃`
-      : "暂无数据"}
-  </div>
-)}
-    {/* 👉 新增按钮（只在浏览他人时出现） */}
-    {mode === "viewer" && (
-      <Link
-        href={`/user/${archive.user_id}`}
         style={{
-          fontSize: 12,
-          color: "#4CAF50",
-          textDecoration: "none",
-          border: "1px solid #4CAF50",
-          padding: "2px 8px",
-          borderRadius: "12px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
         }}
       >
-        TA的空间 →
-      </Link>
-    )}
-  </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>{mode === "owner" ? "我的「" : `${username}的「`}</span>
 
-  {/* 右侧：返回 */}
-  {mode === "owner" ? (
-    <Link href="/archive" style={{ fontSize: 14, color: "#666" }}>
-      ← 我的空间主页
-    </Link>
-  ) : (
-    <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
-      发现页 →
-    </Link>
-  )}
-</div>
+            <span
+              onClick={() => router.push(`/archive/${archive.id}`)}
+              style={{
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              {archive.title}
+            </span>
 
-      {/* 添加记录（仅自己） */}
-      {mode === "owner" && (
-        <AddRecord archiveId={archive.id} placeholder="增加记录" />
+            <span>」的生长记录</span>
+
+          {species?.id ? (
+            <Link
+              href={`/plant/${species.id}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                marginLeft: 8,
+                fontSize: 13,
+                color: "#4CAF50",
+                textDecoration: "underline",
+              }}
+            >
+              🌿 {archiveDisplayName}
+            </Link>
+          ) : (
+            <span
+              style={{
+                marginLeft: 8,
+                fontSize: 13,
+                color: "#4CAF50",
+              }}
+            >
+              🌿 {archiveDisplayName}
+            </span>
+          )}
+          </div>
+
+          {mode === "viewer" && (
+            <Link
+              href={`/user/${archive.user_id}`}
+              style={{
+                fontSize: 12,
+                color: "#4CAF50",
+                textDecoration: "none",
+                border: "1px solid #4CAF50",
+                padding: "2px 8px",
+                borderRadius: "12px",
+              }}
+            >
+              TA的空间 →
+            </Link>
+          )}
+        </div>
+
+        {mode === "owner" ? (
+          <Link href="/archive" style={{ fontSize: 14, color: "#666" }}>
+            ← 我的空间主页
+          </Link>
+        ) : (
+          <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
+            发现页 →
+          </Link>
+        )}
+      </div>
+
+         {tempRange && (
+        <div style={{ fontSize: 12, color: "#888", marginBottom: 12 }}>
+          🌡 适宜温度：
+          {tempRange.optimal_growth_temp
+            ? `${tempRange.optimal_growth_temp}℃`
+            : "暂无数据"}
+        </div>
       )}
 
-      {/* 时间轴 */}
+      {mode === "owner" && (
+        <AddRecord archiveId={archive.id} archiveIsPublic={archive.is_public} placeholder="增加记录" />
+      )}
+
       <div style={{ position: "relative", paddingLeft: 20 }}>
-        
-        {/* 竖线 */}
         <div
           style={{
             position: "absolute",
@@ -298,7 +492,6 @@ useEffect(() => {
               paddingLeft: 10,
             }}
           >
-            {/* 圆点 */}
             <div
               style={{
                 position: "absolute",
@@ -311,15 +504,13 @@ useEffect(() => {
               }}
             />
 
-           {/* 时间 + 第X天 */}
-{archive && records.length > 0 && (
-  <div style={{ fontSize: 12, color: "#999", marginBottom: 4 }}>
-    第 {getDayNumber(startTime, item.record_time)} 天 ·{" "}
-    {new Date(item.record_time).toLocaleDateString("zh-CN")}
-  </div>
-)}
+            {archive && records.length > 0 && startTime && (
+              <div style={{ fontSize: 12, color: "#999", marginBottom: 4 }}>
+                第 {getDayNumber(startTime, item.record_time)} 天 ·{" "}
+                {new Date(item.record_time).toLocaleDateString("zh-CN")}
+              </div>
+            )}
 
-            {/* 内容块 */}
             <div
               style={{
                 background: "#fff",
@@ -328,7 +519,6 @@ useEffect(() => {
                 border: "1px solid #eee",
               }}
             >
-              {/* 图片 */}
               {item.media?.length > 0 && (
                 <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
                   {item.media.map((m: any, i: number) => (
@@ -342,10 +532,7 @@ useEffect(() => {
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await supabase
-                              .from("media")
-                              .delete()
-                              .eq("id", m.id);
+                            await supabase.from("media").delete().eq("id", m.id);
                             router.refresh();
                           }}
                           style={{
@@ -362,212 +549,193 @@ useEffect(() => {
                 </div>
               )}
 
-              {/* 文本 */}
               <div style={{ marginTop: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-  {/* 状态 */}
-  <span>
-    {item.status === "help" && "❗"}
-    {item.status === "ok" && "✅"}
-    {item.status === "problem" && "⚠️"}
-  </span>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {item.status_tag && getStatusTagLabel(item.status_tag) && (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        lineHeight: 1,
+                        padding: "4px 6px",
+                        borderRadius: 999,
+                        border: "1px solid #e6c9c9",
+                        background: "#fff7f7",
+                        display: "inline-block",
+                      }}
+                    >
+                      {getStatusTagLabel(item.status_tag)}
+                    </span>
+                  )}
 
-  {/* 文本 */}
-  <EditRecord
-    key={`${item.id}-${mode}`}
-    id={item.id}
-    initialText={item.note}
-    readOnly={mode !== "owner"}
-  />
-</div>
+                  <EditRecord
+                    key={`${item.id}-${mode}`}
+                    id={item.id}
+                    initialText={item.note}
+                    readOnly={mode !== "owner"}
+                  />
+                </div>
 
-{/* 标签（放在记录后） */}
-{item.tags && item.tags.length > 0 && (
-  <div
-    style={{
-      marginTop: 6,
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap",
-    }}
-  >
-    {item.tags.map((tag: string, i: number) => (
-  <span
-    key={i}
-    style={{
-      fontSize: 12,
-      padding: "2px 6px",
-      background: "#f6fff6",
-      border: "1px solid #4CAF50",
-      borderRadius: 6,
-      color: "#2e7d32",
-      display: "flex",
-      alignItems: "center",
-      gap: 4,
-    }}
-  >
-    {tag}
-
-    {mode === "owner" && (
-      <span
-        onClick={async () => {
-          // 删除标签
-          await supabase
-            .from("record_tags")
-            .delete()
-            .eq("record_id", item.id)
-            .eq("tag", tag);
-
-          router.refresh();
-        }}
-        style={{
-          cursor: "pointer",
-          fontSize: 12,
-          color: "#999",
-        }}
-      >
-        ×
-      </span>
-    )}
-  </span>
-))}
-  </div>
-)}
-{/* ⭐ 添加标签（只给自己） */}
-{mode === "owner" && (
-  <div style={{ marginTop: 6 }}>
-    <select
-      onChange={async (e) => {
-        const newTag = e.target.value;
-        if (!newTag) return;
-
-        // ❗防重复
-        if (item.tags.includes(newTag)) return;
-
-        await supabase.from("record_tags").insert([
-          {
-            record_id: item.id,
-            tag: newTag,
-          },
-        ]);
-
-        router.refresh();
-      }}
-      defaultValue=""
-      style={{ fontSize: 12 }}
-    >
-      <option value="">+ 添加标签</option>
-      {[
-        "扦插",
-        "播种",
-        "发芽",
-        "生长",
-        "开花",
-        "结果",
-        "修剪",
-        "施肥",
-        "浇水",
-        "换盆",
-        "病害",
-      ].map((tag) => (
-        <option key={tag} value={tag}>
-          {tag}
-        </option>
-      ))}
-    </select>
-  </div>
-)}
-
-{/* ⭐ 每个标签一个“查看相同记录” */}
-<div style={{ marginTop: 6 }}>
-  <span style={{ fontSize: 12, color: "#999", marginRight: 6 }}>
-    相关记录：
-  </span>
-
-  {item.tags.map((tag: string) => (
-    <span
-      key={tag}
-      onClick={() => {
-  window.location.href = `/discover/search?tag=${tag}&species=${species?.id}`;
-}}
-      style={{
-        fontSize: 12,
-        color: "#4CAF50",
-        cursor: "pointer",
-        marginRight: 10,
-      }}
-    >
-      {tag} →
-    </span>
-  ))}
-</div>
                 {mode === "owner" && (
-                  <DeleteRecordButton id={item.id} />
+                  <div style={{ marginTop: 6 }}>
+                    {archive.is_public ? (
+                      <select
+                        value={item.visibility || "public"}
+                        onChange={async (e) => {
+                          await supabase
+                            .from("records")
+                            .update({ visibility: e.target.value })
+                            .eq("id", item.id);
+
+                          setRecords((prev) =>
+                            prev.map((r) =>
+                              r.id === item.id
+                                ? { ...r, visibility: e.target.value }
+                                : r
+                            )
+                          );
+                        }}
+                        style={{ fontSize: 12 }}
+                      >
+                        <option value="public">公开记录</option>
+                        <option value="private">仅自己可见</option>
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "#888" }}>
+                        档案私密，记录仅自己可见
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => toggleHelpStatus(item.id, item.status_tag)}
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 12,
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        border: "1px solid #ddd",
+                        background: item.status_tag === "help" ? "#fff7f7" : "#fff",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {item.status_tag === "help" ? "取消求助" : "标记为求助"}
+                    </button>
+                  </div>
                 )}
+
+                <TagList
+                  tags={item.display_tags}
+                  editable={mode === "owner"}
+                  recordId={item.id}
+                  userTags={item.user_behavior_tags}
+                  onChange={(tag) => updateRecordTagState(item.id, tag, "remove")}
+                />
+
+                {mode === "owner" && (
+                  <div style={{ marginTop: 6 }}>
+                    <select
+                      onChange={async (e) => {
+                        const newTag = e.target.value;
+                        e.target.value = "";
+                        if (!newTag) return;
+
+                        const existingTags = Array.isArray(item.display_tags)
+                          ? item.display_tags
+                          : [];
+
+                        if (existingTags.includes(newTag)) return;
+
+                        const { error } = await supabase.from("record_tags").insert([
+                          {
+                            record_id: item.id,
+                            tag: newTag,
+                            tag_type: "behavior",
+                            source: "user",
+                            is_active: true,
+                          },
+                        ]);
+
+                        if (error) {
+                          showToast("添加标签失败");
+                          return;
+                        }
+
+                        updateRecordTagState(item.id, newTag, "add");
+                        showToast("已添加标签");
+                      }}
+                      defaultValue=""
+                      style={{ fontSize: 12 }}
+                    >
+                      <option value="">+ 添加标签</option>
+<option value="扦插">扦插</option>
+<option value="播种">播种</option>
+<option value="发芽">发芽</option>
+<option value="修剪">修剪</option>
+<option value="施肥">施肥</option>
+<option value="浇水">浇水</option>
+<option value="换盆">换盆</option>
+<option value="开花">开花</option>
+<option value="病害">病害</option>
+                    </select>
+                  </div>
+                )}
+
+             {Array.isArray(item.display_tags) && item.display_tags.length > 0 && (
+  <div style={{ marginTop: 6 }}>
+    <span style={{ fontSize: 12, color: "#999", marginRight: 6 }}>
+      同类记录：
+    </span>
+
+    {item.display_tags.map((tag: string) => {
+      const sameCount = getSameTagCount(tag);
+
+      return (
+        <span
+          key={tag}
+          onClick={() => {
+            const encodedTag = encodeURIComponent(tag);
+
+            if (species?.id) {
+              window.location.href = `/discover/search?tag=${encodedTag}&species=${species.id}`;
+              return;
+            }
+
+            if (archive?.species_name_snapshot) {
+              window.location.href = `/discover/search?tag=${encodedTag}&name=${encodeURIComponent(
+                archive.species_name_snapshot
+              )}`;
+              return;
+            }
+
+            alert("无法定位该植物");
+          }}
+          style={{
+            fontSize: 12,
+            color: "#4CAF50",
+            cursor: "pointer",
+            marginRight: 10,
+          }}
+        >
+          {getBehaviorTagLabel(tag)}（{sameCount}） →
+        </span>
+      );
+    })}
+  </div>
+)}
+
+                {mode === "owner" && <DeleteRecordButton id={item.id} />}
               </div>
             </div>
           </div>
         ))}
       </div>
-      {relatedOpen && (
-  <div
-    onClick={() => setRelatedOpen(false)}
-    style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: "rgba(0,0,0,0.4)",
-      display: "flex",
-      alignItems: "flex-end",
-      zIndex: 1000,
-    }}
-  >
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        width: "100%",
-        background: "#fff",
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
-        padding: 16,
-        maxHeight: "60%",
-        overflowY: "auto",
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 10 }}>
-        相同「{relatedTag}」记录
-      </div>
-
-      {relatedList.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#999" }}>
-          暂无相关记录
-        </div>
-      ) : (
-        relatedList.map((r: any) => (
-          <div
-            key={r.id}
-            onClick={() => {
-              window.location.href = `/archive/${r.archive_id}`;
-            }}
-            style={{
-              padding: "10px 0",
-              borderBottom: "1px solid #eee",
-              cursor: "pointer",
-            }}
-          >
-            <div style={{ fontSize: 14 }}>{r.note}</div>
-
-            <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>
-              {new Date(r.record_time).toLocaleDateString("zh-CN")}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  </div>
-)}
     </main>
   );
 }

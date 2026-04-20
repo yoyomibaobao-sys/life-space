@@ -85,6 +85,10 @@ export default function Navbar() {
           空间
         </NavItem>
 
+        <NavItem href="/plant" active={isActive("/plant")}>
+          百科
+        </NavItem>
+
         <NavItem href="/exchange" active={isActive("/exchange")}>
           集市
         </NavItem>

@@ -18,7 +18,7 @@ const [cardProfile, setCardProfile] = useState<any>(null);
   const [subTags, setSubTags] = useState<any[]>([]);
   const [records, setRecords] = useState<any[]>([]);
 
-  const [activeCategory, setActiveCategory] = useState("全部");
+  const [activeCategory, setActiveCategory] = useState<"all" | "plant" | "system">("all");
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
 
@@ -124,6 +124,7 @@ if (archiveIds.length > 0) {
     .from("records")
     .select("*, media(*)")
     .in("archive_id", archiveIds)
+    .eq("visibility", "public")
     .order("record_time", { ascending: false });
 
   setRecords(recs || []);
@@ -179,10 +180,16 @@ setSubTags(subTagsData || []); // ⭐就在这里加
   // ===== 封面 =====
   const coverMap: any = {};
   records.forEach((r: any) => {
-    if (!coverMap[r.archive_id] && r.media?.length > 0) {
+    if (coverMap[r.archive_id]) return;
+
+    if (r.primary_image_url) {
+      coverMap[r.archive_id] = r.primary_image_url;
+      return;
+    }
+
+    if (r.media?.length > 0) {
       const m = r.media[0];
-      coverMap[r.archive_id] =
-        m.file_url || m.url || m.path || "";
+      coverMap[r.archive_id] = m.file_url || m.url || m.path || "";
     }
   });
 
@@ -254,13 +261,13 @@ setSubTags(subTagsData || []); // ⭐就在这里加
   {/* ===== 全部 ===== */}
   <div
     onClick={() => {
-      setActiveCategory("全部");
+      setActiveCategory("all");
       setActiveSubTag(null);
       setActiveGroupTag(null);
     }}
     style={{
       cursor: "pointer",
-      fontWeight: activeCategory === "全部" ? 600 : 400,
+      fontWeight: activeCategory === "all" ? 600 : 400,
     }}
   >
     全部
@@ -270,20 +277,20 @@ setSubTags(subTagsData || []); // ⭐就在这里加
   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
     <div
       onClick={() => {
-        setActiveCategory("植物");
+        setActiveCategory("plant");
         setActiveSubTag(null);
         setActiveGroupTag(null);
       }}
       style={{
         cursor: "pointer",
-        fontWeight: activeCategory === "植物" ? 600 : 400,
+        fontWeight: activeCategory === "plant" ? 600 : 400,
       }}
     >
       🌿 植物：
     </div>
 
     {subTags
-  .filter((t) => t.category === "植物")
+  .filter((t) => t.category === "plant")
   .map((t) => (
         <div
           key={t.id}
@@ -292,7 +299,7 @@ setSubTags(subTagsData || []); // ⭐就在这里加
           {/* 子分类 */}
           <div
             onClick={() => {
-              setActiveCategory("植物");
+              setActiveCategory("plant");
               setActiveSubTag(t.id);
               setActiveGroupTag(null);
             }}
@@ -373,7 +380,7 @@ if (!user) return;
             {
               user_id: user.id,
               name,
-              category: "植物",
+              category: "plant",
             },
           ])
           .select()
@@ -397,20 +404,20 @@ if (!user) return;
   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
     <div
       onClick={() => {
-        setActiveCategory("设施");
+        setActiveCategory("system");
         setActiveSubTag(null);
         setActiveGroupTag(null);
       }}
       style={{
         cursor: "pointer",
-        fontWeight: activeCategory === "设施" ? 600 : 400,
+        fontWeight: activeCategory === "system" ? 600 : 400,
       }}
     >
       🛠 设施：
     </div>
 
     {subTags
-  .filter((t) => t.category === "设施")
+  .filter((t) => t.category === "system")
   .map((t) => (
     <div
       key={t.id}
@@ -418,7 +425,7 @@ if (!user) return;
     >
       <div
         onClick={() => {
-          setActiveCategory("设施");
+          setActiveCategory("system");
           setActiveSubTag(t.id);
           setActiveGroupTag(null);
         }}
@@ -498,7 +505,7 @@ if (!user) return;
             {
               user_id: user.id,
               name,
-              category: "设施",
+              category: "system",
             },
           ])
           .select()
@@ -654,10 +661,8 @@ if (!user) return;
 {/* ===== 卡片 ===== */}
 {archives
   .filter((item) => {
-   const tag = groupTags.find(t => t.id === item.group_tag_id);
-
 // ===== 分类过滤（改成基于 archive.category）=====
-if (activeCategory !== "全部") {
+if (activeCategory !== "all") {
   if (item.category !== activeCategory) return false;
 }
 
@@ -715,10 +720,17 @@ return true;
               style={{
                 width: "100%",
                 height: "100%",
-                background: "#eee",
+                background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
                 borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#9aaa9a",
+                fontSize: 24,
               }}
-            />
+            >
+              {item.category === "system" ? "🛠" : "🌿"}
+            </div>
           )}
         </div>
 

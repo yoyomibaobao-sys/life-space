@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vAC9sk7fWv5xFeQACFaEXXuF6XK2LBxwyk5kKQ1S0o1KviYiBuk07xwcUkK1uLP
+\restrict vjc23vw7mdFj4EkncvK8QnzQOXMu7KLWrT9JfhoaNumO4tC7mlFNiGRdRCIaIBU
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.3
@@ -36,6 +36,52 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 
 
 --
+-- Name: handle_comment_change(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.handle_comment_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  target_record_id uuid;
+begin
+  target_record_id := coalesce(new.record_id, old.record_id);
+
+  if target_record_id is not null then
+    perform public.sync_record_comment_count(target_record_id);
+  end if;
+
+  return coalesce(new, old);
+end;
+$$;
+
+
+ALTER FUNCTION public.handle_comment_change() OWNER TO postgres;
+
+--
+-- Name: handle_media_change(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.handle_media_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  target_record_id uuid;
+begin
+  target_record_id := coalesce(new.record_id, old.record_id);
+
+  if target_record_id is not null then
+    perform public.sync_record_media_stats(target_record_id);
+  end if;
+
+  return coalesce(new, old);
+end;
+$$;
+
+
+ALTER FUNCTION public.handle_media_change() OWNER TO postgres;
+
+--
 -- Name: handle_new_user(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -55,6 +101,240 @@ $$;
 
 
 ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
+
+--
+-- Name: handle_record_insert(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.handle_record_insert() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  first_image text;
+  media_cnt int;
+begin
+
+  -- 获取该记录的首图（如果有）
+  select url into first_image
+  from public.media
+  where record_id = new.id
+  order by sort_order asc
+  limit 1;
+
+  -- 统计媒体数量
+  select count(*) into media_cnt
+  from public.media
+  where record_id = new.id;
+
+  -- 更新 records 自身字段
+  update public.records
+  set
+    primary_image_url = first_image,
+    media_count = media_cnt
+  where id = new.id;
+
+  -- 更新 archives
+  update public.archives
+  set
+    record_count = coalesce(record_count, 0) + 1,
+    last_record_time = new.record_time,
+    cover_image_url = coalesce(first_image, cover_image_url)
+  where id = new.archive_id;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION public.handle_record_insert() OWNER TO postgres;
+
+--
+-- Name: sync_record_comment_count(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.sync_record_comment_count(p_record_id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+declare
+  comment_cnt int;
+begin
+  select count(*)
+  into comment_cnt
+  from public.comments
+  where record_id = p_record_id;
+
+  update public.records
+  set comment_count = comment_cnt
+  where id = p_record_id;
+end;
+$$;
+
+
+ALTER FUNCTION public.sync_record_comment_count(p_record_id uuid) OWNER TO postgres;
+
+--
+-- Name: sync_record_media_stats(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.sync_record_media_stats(p_record_id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+declare
+  first_image text;
+  media_cnt int;
+begin
+  select url
+  into first_image
+  from public.media
+  where record_id = p_record_id
+  order by sort_order asc, created_at asc
+  limit 1;
+
+  select count(*)
+  into media_cnt
+  from public.media
+  where record_id = p_record_id;
+
+  update public.records
+  set
+    primary_image_url = first_image,
+    media_count = media_cnt
+  where id = p_record_id;
+
+  update public.archives a
+  set cover_image_url = (
+    select r.primary_image_url
+    from public.records r
+    where r.archive_id = a.id
+      and r.primary_image_url is not null
+    order by r.record_time desc, r.created_at desc
+    limit 1
+  )
+  where a.id = (
+    select archive_id
+    from public.records
+    where id = p_record_id
+    limit 1
+  );
+end;
+$$;
+
+
+ALTER FUNCTION public.sync_record_media_stats(p_record_id uuid) OWNER TO postgres;
+
+--
+-- Name: sync_record_tags_from_record(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.sync_record_tags_from_record() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_text text;
+  v_actions text[] := ARRAY[]::text[];
+  v_action text;
+BEGIN
+  v_text := coalesce(NEW.note, '');
+
+  -- 1) 根据 note 解析行为标签
+  IF v_text ~* '扦插' THEN
+    v_actions := array_append(v_actions, '扦插');
+  END IF;
+
+  IF v_text ~* '播种' THEN
+    v_actions := array_append(v_actions, '播种');
+  END IF;
+
+  IF v_text ~* '发芽' THEN
+    v_actions := array_append(v_actions, '发芽');
+  END IF;
+
+  IF v_text ~* '移植' THEN
+    v_actions := array_append(v_actions, '移植');
+  END IF;
+
+  IF v_text ~* '施肥' THEN
+    v_actions := array_append(v_actions, '施肥');
+  END IF;
+
+  IF v_text ~* '修剪' THEN
+    v_actions := array_append(v_actions, '修剪');
+  END IF;
+
+  IF v_text ~* '开花' THEN
+    v_actions := array_append(v_actions, '开花');
+  END IF;
+
+  IF v_text ~* '结果' THEN
+    v_actions := array_append(v_actions, '结果');
+  END IF;
+
+  IF v_text ~* '(病害|生病|虫害|除虫|杀菌)' THEN
+    v_actions := array_append(v_actions, '病害');
+  END IF;
+
+  -- 去重后写回 records.parsed_actions
+  SELECT coalesce(array_agg(DISTINCT x), ARRAY[]::text[])
+  INTO v_actions
+  FROM unnest(v_actions) AS x;
+
+  NEW.parsed_actions := v_actions;
+
+  -- 2) 先把当前 record 的 system 行为标签清掉，再重建
+  DELETE FROM public.record_tags
+  WHERE record_id = NEW.id
+    AND tag_type = 'behavior'
+    AND source = 'system';
+
+  IF array_length(v_actions, 1) IS NOT NULL THEN
+    FOREACH v_action IN ARRAY v_actions
+    LOOP
+      INSERT INTO public.record_tags (
+        record_id,
+        tag,
+        tag_type,
+        source,
+        is_active
+      )
+      VALUES (
+        NEW.id,
+        v_action,
+        'behavior',
+        'system',
+        true
+      );
+    END LOOP;
+  END IF;
+
+  -- 3) 同步 status_tag = help 到 record_tags
+  DELETE FROM public.record_tags
+  WHERE record_id = NEW.id
+    AND tag_type = 'status'
+    AND source = 'user';
+
+  IF NEW.status_tag = 'help' THEN
+    INSERT INTO public.record_tags (
+      record_id,
+      tag,
+      tag_type,
+      source,
+      is_active
+    )
+    VALUES (
+      NEW.id,
+      '求助',
+      'status',
+      'user',
+      true
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.sync_record_tags_from_record() OWNER TO postgres;
 
 SET default_tablespace = '';
 
@@ -79,7 +359,9 @@ CREATE TABLE public.archives (
     sub_tag_id uuid,
     note text,
     system_name text,
-    source text
+    source text,
+    species_name_snapshot text,
+    CONSTRAINT archives_category_check CHECK ((category = ANY (ARRAY['plant'::text, 'system'::text])))
 );
 
 
@@ -100,25 +382,6 @@ CREATE TABLE public.comments (
 
 
 ALTER TABLE public.comments OWNER TO postgres;
-
---
--- Name: media; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.media (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    record_id uuid,
-    user_id uuid,
-    type text,
-    url text,
-    size_mb numeric,
-    duration_sec numeric,
-    storage_class text DEFAULT 'hot'::text,
-    created_at timestamp with time zone DEFAULT now()
-);
-
-
-ALTER TABLE public.media OWNER TO postgres;
 
 --
 -- Name: profiles; Type: TABLE; Schema: public; Owner: postgres
@@ -155,11 +418,67 @@ CREATE TABLE public.records (
     upload_time timestamp with time zone DEFAULT now(),
     created_at timestamp with time zone DEFAULT now(),
     visibility text DEFAULT 'private'::text,
-    record_time timestamp with time zone DEFAULT now()
+    record_time timestamp with time zone DEFAULT now(),
+    status text DEFAULT 'ok'::text,
+    status_tag text,
+    parsed_actions text[] DEFAULT '{}'::text[] NOT NULL,
+    primary_image_url text,
+    comment_count integer DEFAULT 0 NOT NULL,
+    media_count integer DEFAULT 0 NOT NULL,
+    CONSTRAINT records_status_tag_check CHECK (((status_tag IS NULL) OR (status_tag = 'help'::text)))
 );
 
 
 ALTER TABLE public.records OWNER TO postgres;
+
+--
+-- Name: discovery_feed_view; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.discovery_feed_view AS
+ SELECT r.id AS record_id,
+    r.archive_id,
+    r.user_id,
+    r.note,
+    r.record_time,
+    r.status_tag,
+    r.primary_image_url,
+    r.comment_count,
+    r.media_count,
+    a.title AS archive_title,
+    a.category AS archive_category,
+    a.species_id,
+    a.species_name_snapshot,
+    p.username,
+    p.avatar_url
+   FROM ((public.records r
+     JOIN public.archives a ON ((a.id = r.archive_id)))
+     LEFT JOIN public.profiles p ON ((p.id = r.user_id)))
+  WHERE ((COALESCE(r.visibility, 'public'::text) = 'public'::text) AND (COALESCE(a.is_public, true) = true))
+  ORDER BY r.record_time DESC;
+
+
+ALTER VIEW public.discovery_feed_view OWNER TO postgres;
+
+--
+-- Name: media; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.media (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    record_id uuid,
+    user_id uuid,
+    type text,
+    url text,
+    size_mb numeric,
+    duration_sec numeric,
+    storage_class text DEFAULT 'hot'::text,
+    created_at timestamp with time zone DEFAULT now(),
+    sort_order integer DEFAULT 0
+);
+
+
+ALTER TABLE public.media OWNER TO postgres;
 
 --
 -- Name: discovery_view; Type: VIEW; Schema: public; Owner: postgres
@@ -311,6 +630,41 @@ CREATE TABLE public.plant_species (
 ALTER TABLE public.plant_species OWNER TO postgres;
 
 --
+-- Name: plant_species_i18n; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.plant_species_i18n (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    plant_id uuid NOT NULL,
+    language_code text NOT NULL,
+    common_name text,
+    family text,
+    description text,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT plant_species_i18n_language_code_check CHECK ((language_code = ANY (ARRAY['zh'::text, 'en'::text, 'ja'::text])))
+);
+
+
+ALTER TABLE public.plant_species_i18n OWNER TO postgres;
+
+--
+-- Name: plant_species_pending; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.plant_species_pending (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    submitted_name text NOT NULL,
+    language_code text DEFAULT 'zh'::text,
+    status text DEFAULT 'pending'::text,
+    created_at timestamp with time zone DEFAULT now(),
+    note text
+);
+
+
+ALTER TABLE public.plant_species_pending OWNER TO postgres;
+
+--
 -- Name: plant_temperature_ranges; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -335,7 +689,12 @@ CREATE TABLE public.record_tags (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     record_id uuid,
     tag text,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    tag_type text NOT NULL,
+    source text DEFAULT 'system'::text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    CONSTRAINT record_tags_source_check CHECK ((source = ANY (ARRAY['system'::text, 'user'::text]))),
+    CONSTRAINT record_tags_tag_type_check CHECK ((tag_type = ANY (ARRAY['behavior'::text, 'status'::text])))
 );
 
 
@@ -464,6 +823,30 @@ ALTER TABLE ONLY public.plant_parameters
 
 
 --
+-- Name: plant_species_i18n plant_species_i18n_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_species_i18n
+    ADD CONSTRAINT plant_species_i18n_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plant_species_i18n plant_species_i18n_plant_id_language_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_species_i18n
+    ADD CONSTRAINT plant_species_i18n_plant_id_language_code_key UNIQUE (plant_id, language_code);
+
+
+--
+-- Name: plant_species_pending plant_species_pending_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_species_pending
+    ADD CONSTRAINT plant_species_pending_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: plant_species plant_species_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -520,6 +903,104 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_archives_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_archives_id ON public.archives USING btree (id);
+
+
+--
+-- Name: idx_profiles_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_profiles_id ON public.profiles USING btree (id);
+
+
+--
+-- Name: idx_records_feed_time; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_records_feed_time ON public.records USING btree (record_time DESC);
+
+
+--
+-- Name: idx_records_visibility; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_records_visibility ON public.records USING btree (visibility);
+
+
+--
+-- Name: record_tags_one_status_per_record; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX record_tags_one_status_per_record ON public.record_tags USING btree (record_id, tag_type) WHERE ((tag_type = 'status'::text) AND (is_active = true));
+
+
+--
+-- Name: record_tags_unique_v2; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX record_tags_unique_v2 ON public.record_tags USING btree (record_id, tag, tag_type);
+
+
+--
+-- Name: comments trg_comment_delete; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_comment_delete AFTER DELETE ON public.comments FOR EACH ROW EXECUTE FUNCTION public.handle_comment_change();
+
+
+--
+-- Name: comments trg_comment_insert; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_comment_insert AFTER INSERT ON public.comments FOR EACH ROW EXECUTE FUNCTION public.handle_comment_change();
+
+
+--
+-- Name: comments trg_comment_update; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_comment_update AFTER UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION public.handle_comment_change();
+
+
+--
+-- Name: media trg_media_delete; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_media_delete AFTER DELETE ON public.media FOR EACH ROW EXECUTE FUNCTION public.handle_media_change();
+
+
+--
+-- Name: media trg_media_insert; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_media_insert AFTER INSERT ON public.media FOR EACH ROW EXECUTE FUNCTION public.handle_media_change();
+
+
+--
+-- Name: media trg_media_update; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_media_update AFTER UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION public.handle_media_change();
+
+
+--
+-- Name: records trg_record_insert; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_record_insert AFTER INSERT ON public.records FOR EACH ROW EXECUTE FUNCTION public.handle_record_insert();
+
+
+--
+-- Name: records trg_sync_record_tags_from_record; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_sync_record_tags_from_record BEFORE INSERT OR UPDATE OF note, status_tag ON public.records FOR EACH ROW EXECUTE FUNCTION public.sync_record_tags_from_record();
+
+
+--
 -- Name: comments comments_record_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -573,6 +1054,22 @@ ALTER TABLE ONLY public.plant_light_cycle
 
 ALTER TABLE ONLY public.plant_parameters
     ADD CONSTRAINT plant_parameters_species_id_fkey FOREIGN KEY (species_id) REFERENCES public.plant_species(id);
+
+
+--
+-- Name: plant_species_i18n plant_species_i18n_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_species_i18n
+    ADD CONSTRAINT plant_species_i18n_plant_id_fkey FOREIGN KEY (plant_id) REFERENCES public.plant_species(id) ON DELETE CASCADE;
+
+
+--
+-- Name: plant_species_pending plant_species_pending_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_species_pending
+    ADD CONSTRAINT plant_species_pending_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -780,12 +1277,66 @@ GRANT USAGE ON SCHEMA public TO service_role;
 
 
 --
+-- Name: FUNCTION handle_comment_change(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.handle_comment_change() TO anon;
+GRANT ALL ON FUNCTION public.handle_comment_change() TO authenticated;
+GRANT ALL ON FUNCTION public.handle_comment_change() TO service_role;
+
+
+--
+-- Name: FUNCTION handle_media_change(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.handle_media_change() TO anon;
+GRANT ALL ON FUNCTION public.handle_media_change() TO authenticated;
+GRANT ALL ON FUNCTION public.handle_media_change() TO service_role;
+
+
+--
 -- Name: FUNCTION handle_new_user(); Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT ALL ON FUNCTION public.handle_new_user() TO anon;
 GRANT ALL ON FUNCTION public.handle_new_user() TO authenticated;
 GRANT ALL ON FUNCTION public.handle_new_user() TO service_role;
+
+
+--
+-- Name: FUNCTION handle_record_insert(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.handle_record_insert() TO anon;
+GRANT ALL ON FUNCTION public.handle_record_insert() TO authenticated;
+GRANT ALL ON FUNCTION public.handle_record_insert() TO service_role;
+
+
+--
+-- Name: FUNCTION sync_record_comment_count(p_record_id uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.sync_record_comment_count(p_record_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.sync_record_comment_count(p_record_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.sync_record_comment_count(p_record_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION sync_record_media_stats(p_record_id uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.sync_record_media_stats(p_record_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.sync_record_media_stats(p_record_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.sync_record_media_stats(p_record_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION sync_record_tags_from_record(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.sync_record_tags_from_record() TO anon;
+GRANT ALL ON FUNCTION public.sync_record_tags_from_record() TO authenticated;
+GRANT ALL ON FUNCTION public.sync_record_tags_from_record() TO service_role;
 
 
 --
@@ -807,15 +1358,6 @@ GRANT ALL ON TABLE public.comments TO service_role;
 
 
 --
--- Name: TABLE media; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.media TO anon;
-GRANT ALL ON TABLE public.media TO authenticated;
-GRANT ALL ON TABLE public.media TO service_role;
-
-
---
 -- Name: TABLE profiles; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -831,6 +1373,24 @@ GRANT ALL ON TABLE public.profiles TO service_role;
 GRANT ALL ON TABLE public.records TO anon;
 GRANT ALL ON TABLE public.records TO authenticated;
 GRANT ALL ON TABLE public.records TO service_role;
+
+
+--
+-- Name: TABLE discovery_feed_view; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.discovery_feed_view TO anon;
+GRANT ALL ON TABLE public.discovery_feed_view TO authenticated;
+GRANT ALL ON TABLE public.discovery_feed_view TO service_role;
+
+
+--
+-- Name: TABLE media; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.media TO anon;
+GRANT ALL ON TABLE public.media TO authenticated;
+GRANT ALL ON TABLE public.media TO service_role;
 
 
 --
@@ -903,6 +1463,24 @@ GRANT ALL ON TABLE public.plant_parameters TO service_role;
 GRANT ALL ON TABLE public.plant_species TO anon;
 GRANT ALL ON TABLE public.plant_species TO authenticated;
 GRANT ALL ON TABLE public.plant_species TO service_role;
+
+
+--
+-- Name: TABLE plant_species_i18n; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.plant_species_i18n TO anon;
+GRANT ALL ON TABLE public.plant_species_i18n TO authenticated;
+GRANT ALL ON TABLE public.plant_species_i18n TO service_role;
+
+
+--
+-- Name: TABLE plant_species_pending; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.plant_species_pending TO anon;
+GRANT ALL ON TABLE public.plant_species_pending TO authenticated;
+GRANT ALL ON TABLE public.plant_species_pending TO service_role;
 
 
 --
@@ -1014,5 +1592,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vAC9sk7fWv5xFeQACFaEXXuF6XK2LBxwyk5kKQ1S0o1KviYiBuk07xwcUkK1uLP
+\unrestrict vjc23vw7mdFj4EkncvK8QnzQOXMu7KLWrT9JfhoaNumO4tC7mlFNiGRdRCIaIBU
 

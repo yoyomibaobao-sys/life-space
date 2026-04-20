@@ -45,11 +45,14 @@ export default function EditRecord({
     }
 
     setLoading(true);
+const nextText = text.trim();
 
-    await supabase
-      .from("records")
-      .update({ note: text })
-      .eq("id", id);
+await supabase
+  .from("records")
+  .update({
+    note: nextText,
+  })
+  .eq("id", id);
 
     setLoading(false);
     setEditing(false);
