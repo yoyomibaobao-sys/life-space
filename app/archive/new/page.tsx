@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type ArchiveCategory = "plant" | "system";
 
@@ -22,6 +22,9 @@ export default function NewArchive() {
   const [loading, setLoading] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedSpeciesId = searchParams.get("species");
+  const selectedPlanId = searchParams.get("plan");
 
   useEffect(() => {
     async function loadSpecies() {
@@ -30,11 +33,25 @@ export default function NewArchive() {
         .select("id, common_name, scientific_name")
         .order("common_name", { ascending: true });
 
-      setSpeciesList(data || []);
+      const list = data || [];
+      setSpeciesList(list);
+
+      if (preselectedSpeciesId) {
+        const selected = list.find((s) => s.id === preselectedSpeciesId);
+
+        if (selected) {
+          const selectedName = selected.common_name || selected.scientific_name || "";
+
+          setCategory("plant");
+          setSpeciesId(selected.id);
+          setPendingSpeciesName(null);
+          setTitle((current) => current || (selectedName ? `我的${selectedName}` : ""));
+        }
+      }
     }
 
     loadSpecies();
-  }, []);
+  }, [preselectedSpeciesId]);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,27 +89,56 @@ export default function NewArchive() {
           null
         : null;
 
-    const { error } = await supabase.from("archives").insert([
-      {
-        title: title.trim(),
-        category,
-        species_id: category === "plant" ? speciesId : null,
-        species_name_snapshot: speciesNameSnapshot,
-        source: source.trim() || null,
-        note: note.trim() || null,
-        user_id: user.id,
-        is_public: true,
-      },
-    ]);
-
-    setLoading(false);
+    const { data: createdArchive, error } = await supabase
+      .from("archives")
+      .insert([
+        {
+          title: title.trim(),
+          category,
+          species_id: category === "plant" ? speciesId : null,
+          species_name_snapshot: speciesNameSnapshot,
+          source: source.trim() || null,
+          note: note.trim() || null,
+          user_id: user.id,
+          is_public: false,
+        },
+      ])
+      .select("id")
+      .single();
 
     if (error) {
+      setLoading(false);
       alert("创建失败：" + error.message);
       return;
     }
 
-    router.push("/archive");
+    if (selectedPlanId && createdArchive?.id) {
+      const { error: planError } = await supabase
+        .from("user_plant_plans")
+        .update({
+          status: "started",
+          created_archive_id: createdArchive.id,
+        })
+        .eq("id", selectedPlanId)
+        .eq("user_id", user.id);
+
+      if (planError) {
+        setLoading(false);
+        alert(
+          "项目已创建，但种植计划状态没有自动更新：" + planError.message
+        );
+        router.push(`/archive/${createdArchive.id}`);
+        return;
+      }
+    }
+
+    setLoading(false);
+
+    if (createdArchive?.id) {
+      router.push(`/archive/${createdArchive.id}`);
+    } else {
+      router.push("/archive");
+    }
   }
 
   async function handleAddSpecies() {
@@ -134,7 +180,7 @@ export default function NewArchive() {
     setSpeciesId(null);
     setPendingSpeciesName(name);
 
-    alert(`已加入候选植物：${name}\n当前可继续创建档案。`);
+    alert(`已加入候选植物：${name}\n当前可继续新建项目。`);
   }
 
   return (
@@ -189,7 +235,7 @@ export default function NewArchive() {
             }}
           >
             <option value="plant">🌿 植物</option>
-            <option value="system">🛠 设施</option>
+            <option value="system">🛠 配套设施</option>
           </select>
         </div>
 
@@ -281,6 +327,21 @@ export default function NewArchive() {
               minHeight: 60,
             }}
           />
+        </div>
+
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: "#f7f7f7",
+            border: "1px solid #eee",
+            fontSize: 12,
+            color: "#666",
+            lineHeight: 1.6,
+          }}
+        >
+          新建项目默认仅自己可见，之后可以在项目详情页选择公开到发现。
         </div>
 
         <button

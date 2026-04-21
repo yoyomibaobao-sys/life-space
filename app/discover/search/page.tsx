@@ -234,7 +234,7 @@ function DiscoverSearchContent() {
                   wordBreak: "break-word",
                 }}
               >
-                {item.archives?.title || "未命名档案"}
+                {item.archives?.title || "未命名项目"}
 
                 {(item.archives?.species_name_snapshot ||
                   item.archives?.species_id) && (

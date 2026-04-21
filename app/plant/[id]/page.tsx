@@ -261,6 +261,15 @@ export default function PlantDetailPage() {
   const [parameters, setParameters] = useState<any>(null);
   const [careGuide, setCareGuide] = useState<any>(null);
   const [relatedRecords, setRelatedRecords] = useState<any[]>([]);
+  const [interestAdded, setInterestAdded] = useState(false);
+  const [planAdded, setPlanAdded] = useState(false);
+  const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+    href?: string;
+    hrefText?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -268,6 +277,7 @@ export default function PlantDetailPage() {
       if (!id) return;
 
       setLoading(true);
+      setActionMessage(null);
 
       const [
         { data: plantData },
@@ -308,6 +318,34 @@ export default function PlantDetailPage() {
       setParameters(parameterData);
       setCareGuide(careGuideData);
       setRelatedRecords(relatedData || []);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const [{ data: interestData }, { data: planData }] = await Promise.all([
+          supabase
+            .from("user_plant_interests")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("species_id", id)
+            .maybeSingle(),
+          supabase
+            .from("user_plant_plans")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("species_id", id)
+            .maybeSingle(),
+        ]);
+
+        setInterestAdded(Boolean(interestData));
+        setPlanAdded(Boolean(planData));
+      } else {
+        setInterestAdded(false);
+        setPlanAdded(false);
+      }
+
       setLoading(false);
     }
 
@@ -458,6 +496,101 @@ export default function PlantDetailPage() {
   const hasPhotoperiodSection =
     photoperiodCards.length > 0 || hasText(parameters?.photoperiod_note);
 
+  async function handleAddInterest() {
+    if (!plant || actionLoading) return;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setActionMessage({
+        type: "error",
+        text: "请先登录，再加入感兴趣的植物。",
+        href: "/login",
+        hrefText: "去登录",
+      });
+      return;
+    }
+
+    setActionLoading("interest");
+    setActionMessage(null);
+
+    const { error } = await supabase.from("user_plant_interests").upsert(
+      {
+        user_id: user.id,
+        species_id: plant.id,
+      },
+      { onConflict: "user_id,species_id" }
+    );
+
+    setActionLoading(null);
+
+    if (error) {
+      setActionMessage({
+        type: "error",
+        text: "加入失败：" + error.message,
+      });
+      return;
+    }
+
+    setInterestAdded(true);
+    setActionMessage({
+      type: "success",
+      text: "已加入我感兴趣的植物。",
+      href: "/archive/interests",
+      hrefText: "查看列表",
+    });
+  }
+
+  async function handleAddPlan() {
+    if (!plant || actionLoading) return;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setActionMessage({
+        type: "error",
+        text: "请先登录，再加入种植计划。",
+        href: "/login",
+        hrefText: "去登录",
+      });
+      return;
+    }
+
+    setActionLoading("plan");
+    setActionMessage(null);
+
+    const { error } = await supabase.from("user_plant_plans").upsert(
+      {
+        user_id: user.id,
+        species_id: plant.id,
+        status: "want",
+      },
+      { onConflict: "user_id,species_id" }
+    );
+
+    setActionLoading(null);
+
+    if (error) {
+      setActionMessage({
+        type: "error",
+        text: "加入失败：" + error.message,
+      });
+      return;
+    }
+
+    setPlanAdded(true);
+    setActionMessage({
+      type: "success",
+      text: "已加入我的种植计划。",
+      href: "/archive/plans",
+      hrefText: "查看计划",
+    });
+  }
+
   if (loading) {
     return <main style={{ padding: 20 }}>加载中...</main>;
   }
@@ -546,6 +679,109 @@ export default function PlantDetailPage() {
         >
           不同地区季节不同，请优先参考温度、霜期、光照和植物阶段；月份只作为当地经验参考。
         </div>
+
+        <div
+          style={{
+            marginTop: 18,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <Link
+            href={`/archive/new?species=${plant.id}`}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 999,
+              background: "#4CAF50",
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 650,
+              textDecoration: "none",
+            }}
+          >
+            创建植物项目
+          </Link>
+
+          <button
+            type="button"
+            onClick={handleAddPlan}
+            disabled={planAdded || actionLoading !== null}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 999,
+              border: "1px solid #d6ead6",
+              background: planAdded ? "#f1f7f1" : "#fff",
+              color: planAdded ? "#6a8f6a" : "#4CAF50",
+              fontSize: 14,
+              fontWeight: 650,
+              cursor: planAdded || actionLoading !== null ? "default" : "pointer",
+            }}
+          >
+            {planAdded
+              ? "已在种植计划"
+              : actionLoading === "plan"
+                ? "加入中..."
+                : "加入种植计划"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleAddInterest}
+            disabled={interestAdded || actionLoading !== null}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 999,
+              border: "1px solid #eee",
+              background: interestAdded ? "#f7f7f7" : "#fff",
+              color: interestAdded ? "#888" : "#555",
+              fontSize: 14,
+              fontWeight: 650,
+              cursor: interestAdded || actionLoading !== null ? "default" : "pointer",
+            }}
+          >
+            {interestAdded
+              ? "已加入感兴趣"
+              : actionLoading === "interest"
+                ? "加入中..."
+                : "加入感兴趣"}
+          </button>
+        </div>
+
+        {actionMessage && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "9px 12px",
+              borderRadius: 12,
+              border:
+                actionMessage.type === "success"
+                  ? "1px solid #d6ead6"
+                  : "1px solid #ffe0e0",
+              background:
+                actionMessage.type === "success" ? "#f8fff8" : "#fff7f7",
+              color: actionMessage.type === "success" ? "#4b6b4b" : "#c44",
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          >
+            {actionMessage.text}
+            {actionMessage.href && (
+              <Link
+                href={actionMessage.href}
+                style={{
+                  marginLeft: 8,
+                  color: actionMessage.type === "success" ? "#4CAF50" : "#c44",
+                  fontWeight: 650,
+                  textDecoration: "none",
+                }}
+              >
+                {actionMessage.hrefText || "查看"}
+              </Link>
+            )}
+          </div>
+        )}
 
         {aliasNames.length > 0 && (
           <div style={{ marginTop: 16 }}>

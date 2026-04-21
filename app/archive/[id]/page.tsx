@@ -313,7 +313,7 @@ recordTags.forEach((tag: string) => {
             color: "#666",
           }}
         >
-          该档案为私密，仅档案主人可见。
+          该项目为私密，仅项目主人可见。
         </div>
       </main>
     );
@@ -376,6 +376,41 @@ async function toggleHelpStatus(recordId: string, currentStatus: string | null) 
   );
 
   showToast(nextStatus === "help" ? "已标记为求助" : "已取消求助");
+}
+async function toggleArchiveVisibility() {
+  if (!archive || !isOwner) return;
+
+  const nextValue = !archive.is_public;
+
+  const { error } = await supabase
+    .from("archives")
+    .update({ is_public: nextValue })
+    .eq("id", archive.id);
+
+  if (error) {
+    showToast("更新可见状态失败");
+    return;
+  }
+
+  if (!nextValue) {
+    await supabase
+      .from("records")
+      .update({ visibility: "private" })
+      .eq("archive_id", archive.id);
+
+    setRecords((prev) =>
+      prev.map((record: any) => ({
+        ...record,
+        visibility: "private",
+      }))
+    );
+  }
+
+  setArchive((prev: any) =>
+    prev ? { ...prev, is_public: nextValue } : prev
+  );
+
+  showToast(nextValue ? "已公开到发现" : "已设为仅自己可见");
 }
   return (
     <main style={{ padding: "16px", maxWidth: "560px", margin: "0 auto" }}>
@@ -452,6 +487,42 @@ async function toggleHelpStatus(recordId: string, currentStatus: string | null) 
               TA的空间 →
             </Link>
           )}
+
+          {mode === "owner" ? (
+            <button
+              type="button"
+              onClick={toggleArchiveVisibility}
+              title={archive.is_public ? "点击设为私密" : "点击公开到发现"}
+              style={{
+                fontSize: 12,
+                padding: "3px 9px",
+                borderRadius: 999,
+                border: archive.is_public
+                  ? "1px solid #b7dfbb"
+                  : "1px solid #ddd",
+                background: archive.is_public ? "#f1fff3" : "#f7f7f7",
+                color: archive.is_public ? "#2f6f3a" : "#666",
+                cursor: "pointer",
+                lineHeight: 1.4,
+              }}
+            >
+              {archive.is_public ? "已公开到发现" : "仅自己可见"}
+            </button>
+          ) : archive.is_public ? (
+            <span
+              style={{
+                fontSize: 12,
+                padding: "3px 9px",
+                borderRadius: 999,
+                border: "1px solid #b7dfbb",
+                background: "#f1fff3",
+                color: "#2f6f3a",
+                lineHeight: 1.4,
+              }}
+            >
+              已公开
+            </span>
+          ) : null}
         </div>
 
         {mode === "owner" ? (
@@ -615,7 +686,7 @@ async function toggleHelpStatus(recordId: string, currentStatus: string | null) 
                       </select>
                     ) : (
                       <span style={{ fontSize: 12, color: "#888" }}>
-                        档案私密，记录仅自己可见
+                        项目私密，记录仅自己可见
                       </span>
                     )}
 

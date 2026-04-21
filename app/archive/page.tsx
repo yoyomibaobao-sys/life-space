@@ -13,6 +13,8 @@ export default function ArchivePage() {
   const [groupTags, setGroupTags] = useState<any[]>([]);
   const [subTags, setSubTags] = useState<any[]>([]);
   const [speciesList, setSpeciesList] = useState<any[]>([]);
+  const [plantPlans, setPlantPlans] = useState<any[]>([]);
+  const [plantInterests, setPlantInterests] = useState<any[]>([]);
   const [editingPlantArchiveId, setEditingPlantArchiveId] =
     useState<string | null>(null);
   const [editingSpeciesId, setEditingSpeciesId] = useState("");
@@ -57,6 +59,8 @@ export default function ArchivePage() {
         { data: subTagsData },
         { data: speciesData },
         { data: aliasData },
+        { data: plansData },
+        { data: interestsData },
       ] = await Promise.all([
         supabase
           .from("archives")
@@ -77,6 +81,16 @@ export default function ArchivePage() {
         supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name, normalized_name"),
+
+        supabase
+          .from("user_plant_plans")
+          .select("id, status, created_archive_id")
+          .eq("user_id", user.id),
+
+        supabase
+          .from("user_plant_interests")
+          .select("id")
+          .eq("user_id", user.id),
       ]);
 
       const aliasRows = aliasData || [];
@@ -134,6 +148,8 @@ export default function ArchivePage() {
       setGroupTags(groupTagsData || []);
       setSubTags(subTagsData || []);
       setSpeciesList(speciesRows);
+      setPlantPlans(plansData || []);
+      setPlantInterests(interestsData || []);
     } finally {
       loadingRef.current = false;
     }
@@ -323,9 +339,314 @@ export default function ArchivePage() {
 
   if (!ready) return null;
 
+  const archiveCount = archives.length;
+  const plantArchiveCount = archives.filter((item) => item.category === "plant").length;
+  const systemArchiveCount = archives.filter((item) => item.category === "system").length;
+  const publicArchiveCount = archives.filter((item) => item.is_public).length;
+  const privateArchiveCount = archiveCount - publicArchiveCount;
+  const activePlanCount = plantPlans.filter((item) => item.status !== "abandoned").length;
+  const startedPlanCount = plantPlans.filter(
+    (item) => item.status === "started" || item.created_archive_id
+  ).length;
+  const recentCreatedArchives = archives.slice(0, 3);
+  const continueArchives = [...archives]
+    .sort((a, b) => {
+      const bTime = new Date(b.last_record_time || b.created_at || 0).getTime();
+      const aTime = new Date(a.last_record_time || a.created_at || 0).getTime();
+      return bTime - aTime;
+    })
+    .slice(0, 3);
+
   return (
     <main style={{ padding: 14 }}>
       <h2 style={{ marginBottom: 14 }}>我 · 空间</h2>
+
+      {/* ===== 空间概览 ===== */}
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 10,
+          marginBottom: 14,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setActiveCategory("all");
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          }}
+          style={{
+            textAlign: "left",
+            padding: 14,
+            borderRadius: 16,
+            border: "1px solid #e5eadf",
+            background: "#fff",
+            color: "#1f2d1f",
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#789178", marginBottom: 6 }}>
+            我的项目
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{archiveCount}</div>
+          <div style={{ fontSize: 12, color: "#8a8a8a", marginTop: 4 }}>
+            植物 {plantArchiveCount} · 配套设施 {systemArchiveCount}
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push("/archive/plans")}
+          style={{
+            textAlign: "left",
+            padding: 14,
+            borderRadius: 16,
+            border: "1px solid #dcefdc",
+            background: "#f8fff8",
+            color: "#1f2d1f",
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#5f7f5f", marginBottom: 6 }}>
+            种植计划
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{plantPlans.length}</div>
+          <div style={{ fontSize: 12, color: "#6f8f6f", marginTop: 4 }}>
+            进行中 {activePlanCount} · 已开始 {startedPlanCount}
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push("/archive/interests")}
+          style={{
+            textAlign: "left",
+            padding: 14,
+            borderRadius: 16,
+            border: "1px solid #eee",
+            background: "#fff",
+            color: "#1f2d1f",
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#777", marginBottom: 6 }}>
+            感兴趣的植物
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{plantInterests.length}</div>
+          <div style={{ fontSize: 12, color: "#8a8a8a", marginTop: 4 }}>
+            先保存，之后再决定是否种植
+          </div>
+        </button>
+
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 16,
+            border: "1px solid #eee",
+            background: "#fafafa",
+            color: "#1f2d1f",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#777", marginBottom: 6 }}>
+            可见状态
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>
+            私密 {privateArchiveCount}
+          </div>
+          <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>
+            公开到发现 {publicArchiveCount}
+          </div>
+        </div>
+      </section>
+
+      {(recentCreatedArchives.length > 0 || continueArchives.length > 0) && (
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 12,
+            marginBottom: 18,
+          }}
+        >
+          {continueArchives.length > 0 && (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 16,
+                border: "1px solid #e5eadf",
+                background: "#fff",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
+                <strong style={{ color: "#1f2d1f" }}>继续观察</strong>
+                <span style={{ fontSize: 12, color: "#999" }}>最近有变化的项目</span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {continueArchives.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => router.push(`/archive/${item.id}`)}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      border: "1px solid #f0f0f0",
+                      background: "#fafafa",
+                      color: "#1f2d1f",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.title}
+                    </span>
+                    <span style={{ color: "#999", fontSize: 12, flexShrink: 0 }}>
+                      {item.record_count || 0} 条
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recentCreatedArchives.length > 0 && (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 16,
+                border: "1px solid #e5eadf",
+                background: "#fff",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
+                <strong style={{ color: "#1f2d1f" }}>最近创建</strong>
+                <button
+                  type="button"
+                  onClick={() => router.push("/archive/new")}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "#4CAF50",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  新建项目
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {recentCreatedArchives.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => router.push(`/archive/${item.id}`)}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      border: "1px solid #f0f0f0",
+                      background: "#fafafa",
+                      color: "#1f2d1f",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.title}
+                    </span>
+                    <span style={{ color: item.is_public ? "#2f6f3a" : "#999", fontSize: 12 }}>
+                      {item.is_public ? "公开" : "私密"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ===== 个人种植路径入口 ===== */}
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => router.push("/archive/plans")}
+          style={{
+            textAlign: "left",
+            padding: 16,
+            borderRadius: 16,
+            border: "1px solid #dcefdc",
+            background: "#f8fff8",
+            cursor: "pointer",
+            color: "#1f2d1f",
+          }}
+        >
+          <div style={{ fontSize: 20, marginBottom: 8, color: "#1f2d1f" }}>🗓️ 我的种植计划</div>
+          <div style={{ fontSize: 13, color: "#5f7f5f", lineHeight: 1.6 }}>
+            准备种、等待季节、正在筹备的植物，开始后可转成正式项目。
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push("/archive/interests")}
+          style={{
+            textAlign: "left",
+            padding: 16,
+            borderRadius: 16,
+            border: "1px solid #eee",
+            background: "#fff",
+            cursor: "pointer",
+            color: "#1f2d1f",
+          }}
+        >
+          <div style={{ fontSize: 20, marginBottom: 8, color: "#1f2d1f" }}>🌱 我感兴趣的植物</div>
+          <div style={{ fontSize: 13, color: "#777", lineHeight: 1.6 }}>
+            先轻量保存喜欢或想了解的植物，以后再加入计划或创建项目。
+          </div>
+        </button>
+      </section>
 
       {/* ===== 分类 + 子分类 ===== */}
       <div
@@ -465,7 +786,7 @@ export default function ArchivePage() {
           </div>
         </div>
 
-        {/* 设施 */}
+        {/* 配套设施 */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div
             onClick={() => {
@@ -478,7 +799,7 @@ export default function ArchivePage() {
               fontWeight: activeCategory === "system" ? 600 : 400,
             }}
           >
-            🛠 设施：
+            🛠 配套设施：
           </div>
 
           {subTags
@@ -518,7 +839,7 @@ export default function ArchivePage() {
 
                 <span
                   onClick={async () => {
-                    if (!confirm("删除后归入设施，确认？")) return;
+                    if (!confirm("删除后归入配套设施，确认？")) return;
 
                     await supabase
                       .from("archives")
@@ -542,7 +863,7 @@ export default function ArchivePage() {
 
           <div
             onClick={async () => {
-              const name = prompt("新增设施子分类");
+              const name = prompt("新增配套设施子分类");
               if (!name) return;
 
               const {
@@ -733,7 +1054,7 @@ export default function ArchivePage() {
           const itemDisplayName =
             item.category === "plant"
               ? item.species_display_name || "未选择植物"
-              : item.system_name || "未填写设施";
+              : item.system_name || "未填写配套设施";
 
           return (
             <div
@@ -972,7 +1293,7 @@ export default function ArchivePage() {
                         }
 
                         const name = prompt(
-                          "修改设施名称",
+                          "修改配套设施名称",
                           item.system_name || ""
                         );
                         if (name === null) return;
@@ -997,7 +1318,7 @@ export default function ArchivePage() {
                       title={
                         item.category === "plant"
                           ? "点击修改植物"
-                          : "点击修改设施名称"
+                          : "点击修改配套设施名称"
                       }
                       style={{ cursor: "pointer", color: "#666" }}
                     >
@@ -1024,16 +1345,22 @@ export default function ArchivePage() {
                     alignItems: "center",
                   }}
                 >
-                  <span
-                    title={item.is_public ? "公开" : "私密"}
+                  <button
+                    type="button"
+                    title={item.is_public ? "点击设为私密" : "点击公开到发现"}
                     onClick={async (e) => {
                       e.stopPropagation();
                       const newValue = !item.is_public;
 
-                      await supabase
+                      const { error } = await supabase
                         .from("archives")
                         .update({ is_public: newValue })
                         .eq("id", item.id);
+
+                      if (error) {
+                        showToast("更新可见状态失败");
+                        return;
+                      }
 
                       if (!newValue) {
                         await supabase
@@ -1047,14 +1374,24 @@ export default function ArchivePage() {
                           a.id === item.id ? { ...a, is_public: newValue } : a
                         )
                       );
+
+                      showToast(newValue ? "已公开到发现" : "已设为仅自己可见");
                     }}
                     style={{
+                      fontSize: 12,
+                      padding: "3px 8px",
+                      borderRadius: 999,
+                      border: item.is_public
+                        ? "1px solid #b7dfbb"
+                        : "1px solid #ddd",
+                      background: item.is_public ? "#f1fff3" : "#f7f7f7",
+                      color: item.is_public ? "#2f6f3a" : "#666",
                       cursor: "pointer",
-                      opacity: item.is_public ? 1 : 0.3,
+                      lineHeight: 1.4,
                     }}
                   >
-                    👁
-                  </span>
+                    {item.is_public ? "公开" : "私密"}
+                  </button>
 
                   <select
                     onClick={(e) => e.stopPropagation()}
@@ -1125,7 +1462,7 @@ export default function ArchivePage() {
                         </option>
                       ))}
 
-                    <option value="system">🛠 设施</option>
+                    <option value="system">🛠 配套设施</option>
                     {subTags
                       .filter((t) => t.category === "system")
                       .map((t) => (

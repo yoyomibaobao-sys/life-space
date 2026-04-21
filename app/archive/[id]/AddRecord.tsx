@@ -276,7 +276,7 @@ export default function AddRecord({
         </select>
       ) : (
         <span style={{ marginLeft: 8, fontSize: 12, color: "#888" }}>
-          档案私密，记录仅自己可见
+          项目私密，记录仅自己可见
         </span>
       )}
 

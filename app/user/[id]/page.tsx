@@ -400,7 +400,7 @@ if (!user) return;
     </div>
   </div>
 
-  {/* ===== 设施 ===== */}
+  {/* ===== 配套设施 ===== */}
   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
     <div
       onClick={() => {
@@ -413,7 +413,7 @@ if (!user) return;
         fontWeight: activeCategory === "system" ? 600 : 400,
       }}
     >
-      🛠 设施：
+      🛠 配套设施：
     </div>
 
     {subTags
@@ -461,7 +461,7 @@ if (!user) return;
       {/* 删除 */}
       <span
         onClick={async () => {
-          if (!confirm("删除后归入设施，确认？")) return;
+          if (!confirm("删除后归入配套设施，确认？")) return;
 
           await supabase
             .from("archives")
@@ -490,7 +490,7 @@ if (!user) return;
 
     <div
       onClick={async () => {
-        const name = prompt("新增设施子分类");
+        const name = prompt("新增配套设施子分类");
         if (!name) return;
 
         const {
@@ -588,7 +588,7 @@ if (!user) return;
             onClick={async () => {
               if (!confirm("删除该分组？")) return;
 
-              // ① 清空档案分组
+              // ① 清空项目分组
               await supabase
                 .from("archives")
                 .update({ group_tag_id: null })

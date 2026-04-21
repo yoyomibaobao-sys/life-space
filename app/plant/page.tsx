@@ -330,7 +330,7 @@ export default function PlantIndexPage() {
               color: "#888",
             }}
           >
-            没有找到匹配植物。可以先在创建档案时提交候选植物。
+            没有找到匹配植物。可以先在创建项目时提交候选植物。
           </div>
         ) : (
           <div
