@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -39,6 +39,20 @@ type SearchItem = {
 };
 
 export default function DiscoverSearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ padding: 14, maxWidth: 640, margin: "0 auto" }}>
+          加载中...
+        </main>
+      }
+    >
+      <DiscoverSearchContent />
+    </Suspense>
+  );
+}
+
+function DiscoverSearchContent() {
   const searchParams = useSearchParams();
 
   const tag = searchParams.get("tag");

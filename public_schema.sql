@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vjc23vw7mdFj4EkncvK8QnzQOXMu7KLWrT9JfhoaNumO4tC7mlFNiGRdRCIaIBU
+\restrict FUMgXX1iNBRw8W7CdgxkreNce9SsTWySnqDoz8udfPbEAzwr4UHjmKp2on3znta
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.3
@@ -65,17 +65,17 @@ ALTER FUNCTION public.handle_comment_change() OWNER TO postgres;
 CREATE FUNCTION public.handle_media_change() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-declare
-  target_record_id uuid;
-begin
-  target_record_id := coalesce(new.record_id, old.record_id);
+DECLARE
+  v_record_id uuid;
+BEGIN
+  v_record_id := coalesce(NEW.record_id, OLD.record_id);
 
-  if target_record_id is not null then
-    perform public.sync_record_media_stats(target_record_id);
-  end if;
+  IF v_record_id IS NOT NULL THEN
+    PERFORM public.sync_record_media_stats(v_record_id);
+  END IF;
 
-  return coalesce(new, old);
-end;
+  RETURN coalesce(NEW, OLD);
+END;
 $$;
 
 
@@ -109,40 +109,31 @@ ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
 CREATE FUNCTION public.handle_record_insert() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-declare
-  first_image text;
-  media_cnt int;
-begin
+BEGIN
+  UPDATE public.archives AS a
+  SET
+    record_count = (
+      SELECT count(*)::integer
+      FROM public.records AS r
+      WHERE r.archive_id = a.id
+    ),
+    last_record_time = (
+      SELECT max(r.record_time)
+      FROM public.records AS r
+      WHERE r.archive_id = a.id
+    ),
+    cover_image_url = (
+      SELECT r.primary_image_url
+      FROM public.records AS r
+      WHERE r.archive_id = a.id
+        AND r.primary_image_url IS NOT NULL
+      ORDER BY r.record_time DESC, r.created_at DESC
+      LIMIT 1
+    )
+  WHERE a.id = NEW.archive_id;
 
-  -- 获取该记录的首图（如果有）
-  select url into first_image
-  from public.media
-  where record_id = new.id
-  order by sort_order asc
-  limit 1;
-
-  -- 统计媒体数量
-  select count(*) into media_cnt
-  from public.media
-  where record_id = new.id;
-
-  -- 更新 records 自身字段
-  update public.records
-  set
-    primary_image_url = first_image,
-    media_count = media_cnt
-  where id = new.id;
-
-  -- 更新 archives
-  update public.archives
-  set
-    record_count = coalesce(record_count, 0) + 1,
-    last_record_time = new.record_time,
-    cover_image_url = coalesce(first_image, cover_image_url)
-  where id = new.archive_id;
-
-  return new;
-end;
+  RETURN NEW;
+END;
 $$;
 
 
@@ -179,134 +170,72 @@ ALTER FUNCTION public.sync_record_comment_count(p_record_id uuid) OWNER TO postg
 CREATE FUNCTION public.sync_record_media_stats(p_record_id uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
-declare
-  first_image text;
-  media_cnt int;
-begin
-  select url
-  into first_image
-  from public.media
-  where record_id = p_record_id
-  order by sort_order asc, created_at asc
-  limit 1;
+DECLARE
+  v_primary_image_url text;
+  v_media_count integer;
+  v_archive_id uuid;
+BEGIN
+  SELECT m.url
+  INTO v_primary_image_url
+  FROM public.media AS m
+  WHERE m.record_id = p_record_id
+  ORDER BY m.sort_order ASC, m.created_at ASC
+  LIMIT 1;
 
-  select count(*)
-  into media_cnt
-  from public.media
-  where record_id = p_record_id;
+  SELECT count(*)::integer
+  INTO v_media_count
+  FROM public.media AS m
+  WHERE m.record_id = p_record_id;
 
-  update public.records
-  set
-    primary_image_url = first_image,
-    media_count = media_cnt
-  where id = p_record_id;
+  UPDATE public.records AS r
+  SET
+    primary_image_url = v_primary_image_url,
+    media_count = v_media_count
+  WHERE r.id = p_record_id;
 
-  update public.archives a
-  set cover_image_url = (
-    select r.primary_image_url
-    from public.records r
-    where r.archive_id = a.id
-      and r.primary_image_url is not null
-    order by r.record_time desc, r.created_at desc
-    limit 1
-  )
-  where a.id = (
-    select archive_id
-    from public.records
-    where id = p_record_id
-    limit 1
-  );
-end;
+  SELECT r.archive_id
+  INTO v_archive_id
+  FROM public.records AS r
+  WHERE r.id = p_record_id
+  LIMIT 1;
+
+  IF v_archive_id IS NOT NULL THEN
+    UPDATE public.archives AS a
+    SET
+      cover_image_url = (
+        SELECT r2.primary_image_url
+        FROM public.records AS r2
+        WHERE r2.archive_id = a.id
+          AND r2.primary_image_url IS NOT NULL
+        ORDER BY r2.record_time DESC, r2.created_at DESC
+        LIMIT 1
+      ),
+      record_count = (
+        SELECT count(*)::integer
+        FROM public.records AS r3
+        WHERE r3.archive_id = a.id
+      ),
+      last_record_time = (
+        SELECT max(r4.record_time)
+        FROM public.records AS r4
+        WHERE r4.archive_id = a.id
+      )
+    WHERE a.id = v_archive_id;
+  END IF;
+END;
 $$;
 
 
 ALTER FUNCTION public.sync_record_media_stats(p_record_id uuid) OWNER TO postgres;
 
 --
--- Name: sync_record_tags_from_record(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: sync_record_status_tag_to_record_tags(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.sync_record_tags_from_record() RETURNS trigger
+CREATE FUNCTION public.sync_record_status_tag_to_record_tags() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-DECLARE
-  v_text text;
-  v_actions text[] := ARRAY[]::text[];
-  v_action text;
 BEGIN
-  v_text := coalesce(NEW.note, '');
-
-  -- 1) 根据 note 解析行为标签
-  IF v_text ~* '扦插' THEN
-    v_actions := array_append(v_actions, '扦插');
-  END IF;
-
-  IF v_text ~* '播种' THEN
-    v_actions := array_append(v_actions, '播种');
-  END IF;
-
-  IF v_text ~* '发芽' THEN
-    v_actions := array_append(v_actions, '发芽');
-  END IF;
-
-  IF v_text ~* '移植' THEN
-    v_actions := array_append(v_actions, '移植');
-  END IF;
-
-  IF v_text ~* '施肥' THEN
-    v_actions := array_append(v_actions, '施肥');
-  END IF;
-
-  IF v_text ~* '修剪' THEN
-    v_actions := array_append(v_actions, '修剪');
-  END IF;
-
-  IF v_text ~* '开花' THEN
-    v_actions := array_append(v_actions, '开花');
-  END IF;
-
-  IF v_text ~* '结果' THEN
-    v_actions := array_append(v_actions, '结果');
-  END IF;
-
-  IF v_text ~* '(病害|生病|虫害|除虫|杀菌)' THEN
-    v_actions := array_append(v_actions, '病害');
-  END IF;
-
-  -- 去重后写回 records.parsed_actions
-  SELECT coalesce(array_agg(DISTINCT x), ARRAY[]::text[])
-  INTO v_actions
-  FROM unnest(v_actions) AS x;
-
-  NEW.parsed_actions := v_actions;
-
-  -- 2) 先把当前 record 的 system 行为标签清掉，再重建
-  DELETE FROM public.record_tags
-  WHERE record_id = NEW.id
-    AND tag_type = 'behavior'
-    AND source = 'system';
-
-  IF array_length(v_actions, 1) IS NOT NULL THEN
-    FOREACH v_action IN ARRAY v_actions
-    LOOP
-      INSERT INTO public.record_tags (
-        record_id,
-        tag,
-        tag_type,
-        source,
-        is_active
-      )
-      VALUES (
-        NEW.id,
-        v_action,
-        'behavior',
-        'system',
-        true
-      );
-    END LOOP;
-  END IF;
-
-  -- 3) 同步 status_tag = help 到 record_tags
   DELETE FROM public.record_tags
   WHERE record_id = NEW.id
     AND tag_type = 'status'
@@ -326,9 +255,31 @@ BEGIN
       'status',
       'user',
       true
-    );
+    )
+    ON CONFLICT (record_id, tag, tag_type)
+    DO UPDATE SET
+      source = EXCLUDED.source,
+      is_active = true;
   END IF;
 
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.sync_record_status_tag_to_record_tags() OWNER TO postgres;
+
+--
+-- Name: sync_record_tags_from_record(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.sync_record_tags_from_record() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Do not parse NEW.note anymore.
+  -- Behavior tags are now user-controlled only.
+  NEW.parsed_actions := ARRAY[]::text[];
   RETURN NEW;
 END;
 $$;
@@ -361,6 +312,9 @@ CREATE TABLE public.archives (
     system_name text,
     source text,
     species_name_snapshot text,
+    cover_image_url text,
+    record_count integer DEFAULT 0 NOT NULL,
+    last_record_time timestamp with time zone,
     CONSTRAINT archives_category_check CHECK ((category = ANY (ARRAY['plant'::text, 'system'::text])))
 );
 
@@ -417,7 +371,7 @@ CREATE TABLE public.records (
     photo_time timestamp with time zone,
     upload_time timestamp with time zone DEFAULT now(),
     created_at timestamp with time zone DEFAULT now(),
-    visibility text DEFAULT 'private'::text,
+    visibility text DEFAULT 'public'::text,
     record_time timestamp with time zone DEFAULT now(),
     status text DEFAULT 'ok'::text,
     status_tag text,
@@ -425,7 +379,8 @@ CREATE TABLE public.records (
     primary_image_url text,
     comment_count integer DEFAULT 0 NOT NULL,
     media_count integer DEFAULT 0 NOT NULL,
-    CONSTRAINT records_status_tag_check CHECK (((status_tag IS NULL) OR (status_tag = 'help'::text)))
+    CONSTRAINT records_status_tag_check CHECK (((status_tag IS NULL) OR (status_tag = 'help'::text))),
+    CONSTRAINT records_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'private'::text])))
 );
 
 
@@ -454,31 +409,11 @@ CREATE VIEW public.discovery_feed_view AS
    FROM ((public.records r
      JOIN public.archives a ON ((a.id = r.archive_id)))
      LEFT JOIN public.profiles p ON ((p.id = r.user_id)))
-  WHERE ((COALESCE(r.visibility, 'public'::text) = 'public'::text) AND (COALESCE(a.is_public, true) = true))
+  WHERE ((r.visibility = 'public'::text) AND (a.is_public = true))
   ORDER BY r.record_time DESC;
 
 
 ALTER VIEW public.discovery_feed_view OWNER TO postgres;
-
---
--- Name: media; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.media (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    record_id uuid,
-    user_id uuid,
-    type text,
-    url text,
-    size_mb numeric,
-    duration_sec numeric,
-    storage_class text DEFAULT 'hot'::text,
-    created_at timestamp with time zone DEFAULT now(),
-    sort_order integer DEFAULT 0
-);
-
-
-ALTER TABLE public.media OWNER TO postgres;
 
 --
 -- Name: discovery_view; Type: VIEW; Schema: public; Owner: postgres
@@ -502,15 +437,13 @@ CREATE VIEW public.discovery_view AS
             r.user_id,
             a.title AS archive_title,
             p.username,
-            ( SELECT m.url
-                   FROM public.media m
-                  WHERE (m.record_id = r.id)
-                 LIMIT 1) AS image_url,
+            r.primary_image_url AS image_url,
             row_number() OVER (PARTITION BY r.archive_id ORDER BY r.record_time DESC) AS rn_archive,
             row_number() OVER (PARTITION BY r.user_id ORDER BY r.record_time DESC) AS rn_user
            FROM ((public.records r
              JOIN public.archives a ON ((r.archive_id = a.id)))
-             LEFT JOIN public.profiles p ON ((r.user_id = p.id)))) t
+             LEFT JOIN public.profiles p ON ((r.user_id = p.id)))
+          WHERE ((r.visibility = 'public'::text) AND (a.is_public = true))) t
   WHERE ((rn_archive = 1) AND (rn_user <= 4));
 
 
@@ -562,6 +495,48 @@ CREATE TABLE public.locations (
 ALTER TABLE public.locations OWNER TO postgres;
 
 --
+-- Name: media; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.media (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    record_id uuid,
+    user_id uuid,
+    type text,
+    url text,
+    size_mb numeric,
+    duration_sec numeric,
+    storage_class text DEFAULT 'hot'::text,
+    created_at timestamp with time zone DEFAULT now(),
+    sort_order integer DEFAULT 0
+);
+
+
+ALTER TABLE public.media OWNER TO postgres;
+
+--
+-- Name: plant_care_guides; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.plant_care_guides (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    plant_id uuid NOT NULL,
+    language_code text DEFAULT 'zh'::text NOT NULL,
+    summary text,
+    climate_timing_note text,
+    planting_guide text,
+    care_guide text,
+    harvest_guide text,
+    common_problem_guide text,
+    rotation_intercrop_guide text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.plant_care_guides OWNER TO postgres;
+
+--
 -- Name: plant_growth_cycle; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -592,6 +567,24 @@ CREATE TABLE public.plant_light_cycle (
 ALTER TABLE public.plant_light_cycle OWNER TO postgres;
 
 --
+-- Name: plant_parameter_score_guides; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.plant_parameter_score_guides (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    parameter_key text NOT NULL,
+    score_min smallint NOT NULL,
+    score_max smallint NOT NULL,
+    label text NOT NULL,
+    description text,
+    sort_order integer DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.plant_parameter_score_guides OWNER TO postgres;
+
+--
 -- Name: plant_parameters; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -607,7 +600,45 @@ CREATE TABLE public.plant_parameters (
     drought_score smallint,
     growth_speed_score smallint,
     disease_risk_score smallint,
-    management_difficulty_score smallint
+    management_difficulty_score smallint,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    edible_part text[],
+    lifecycle text,
+    growth_form text,
+    season_type text[],
+    nitrogen_fixing boolean,
+    need_trellis boolean,
+    ph_min numeric,
+    ph_max numeric,
+    best_germ_temp_min numeric,
+    best_germ_temp_max numeric,
+    optimal_growth_temp_min numeric,
+    optimal_growth_temp_max numeric,
+    vigorous_growth_temp numeric,
+    growth_slow_temp numeric,
+    frost_damage_temp numeric,
+    lethal_low_temp numeric,
+    stop_low_temp numeric,
+    stop_high_temp numeric,
+    heat_scorch_temp numeric,
+    lethal_high_temp numeric,
+    special_temperature_points jsonb DEFAULT '[]'::jsonb,
+    temperature_note text,
+    photoperiod_type text,
+    photoperiod_trigger_stage text[],
+    critical_day_length_hours numeric,
+    photoperiod_sensitivity_score smallint,
+    photoperiod_note text,
+    shade_tolerance text,
+    drought_tolerance text,
+    container_friendly_score smallint,
+    indoor_friendly_score smallint,
+    balcony_friendly_score smallint,
+    record_focus text[],
+    good_companions text[],
+    avoid_rotation_with text[],
+    care_note text
 );
 
 
@@ -623,11 +654,35 @@ CREATE TABLE public.plant_species (
     common_name text,
     family text,
     description text,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    slug text,
+    category text,
+    sub_category text,
+    growth_type text,
+    entry_type text DEFAULT 'species'::text,
+    is_active boolean DEFAULT true NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL
 );
 
 
 ALTER TABLE public.plant_species OWNER TO postgres;
+
+--
+-- Name: plant_species_aliases; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.plant_species_aliases (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    species_id uuid NOT NULL,
+    language_code text DEFAULT 'zh'::text NOT NULL,
+    alias_name text NOT NULL,
+    normalized_name text NOT NULL,
+    alias_type text DEFAULT 'alias'::text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.plant_species_aliases OWNER TO postgres;
 
 --
 -- Name: plant_species_i18n; Type: TABLE; Schema: public; Owner: postgres
@@ -799,6 +854,22 @@ ALTER TABLE ONLY public.media
 
 
 --
+-- Name: plant_care_guides plant_care_guides_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_care_guides
+    ADD CONSTRAINT plant_care_guides_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plant_care_guides plant_care_guides_plant_id_language_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_care_guides
+    ADD CONSTRAINT plant_care_guides_plant_id_language_code_key UNIQUE (plant_id, language_code);
+
+
+--
 -- Name: plant_growth_cycle plant_growth_cycle_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -815,11 +886,35 @@ ALTER TABLE ONLY public.plant_light_cycle
 
 
 --
+-- Name: plant_parameter_score_guides plant_parameter_score_guides_parameter_key_score_min_score__key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_parameter_score_guides
+    ADD CONSTRAINT plant_parameter_score_guides_parameter_key_score_min_score__key UNIQUE (parameter_key, score_min, score_max);
+
+
+--
+-- Name: plant_parameter_score_guides plant_parameter_score_guides_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_parameter_score_guides
+    ADD CONSTRAINT plant_parameter_score_guides_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: plant_parameters plant_parameters_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.plant_parameters
     ADD CONSTRAINT plant_parameters_pkey PRIMARY KEY (species_id);
+
+
+--
+-- Name: plant_species_aliases plant_species_aliases_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_species_aliases
+    ADD CONSTRAINT plant_species_aliases_pkey PRIMARY KEY (id);
 
 
 --
@@ -931,6 +1026,41 @@ CREATE INDEX idx_records_visibility ON public.records USING btree (visibility);
 
 
 --
+-- Name: plant_species_active_sort_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX plant_species_active_sort_idx ON public.plant_species USING btree (is_active, sort_order);
+
+
+--
+-- Name: plant_species_aliases_language_normalized_uidx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX plant_species_aliases_language_normalized_uidx ON public.plant_species_aliases USING btree (language_code, normalized_name);
+
+
+--
+-- Name: plant_species_aliases_species_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX plant_species_aliases_species_id_idx ON public.plant_species_aliases USING btree (species_id);
+
+
+--
+-- Name: plant_species_category_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX plant_species_category_idx ON public.plant_species USING btree (category, sub_category);
+
+
+--
+-- Name: plant_species_slug_uidx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX plant_species_slug_uidx ON public.plant_species USING btree (slug);
+
+
+--
 -- Name: record_tags_one_status_per_record; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -994,10 +1124,17 @@ CREATE TRIGGER trg_record_insert AFTER INSERT ON public.records FOR EACH ROW EXE
 
 
 --
+-- Name: records trg_sync_record_status_tag_to_record_tags; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_sync_record_status_tag_to_record_tags AFTER INSERT OR UPDATE OF status_tag ON public.records FOR EACH ROW EXECUTE FUNCTION public.sync_record_status_tag_to_record_tags();
+
+
+--
 -- Name: records trg_sync_record_tags_from_record; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
-CREATE TRIGGER trg_sync_record_tags_from_record BEFORE INSERT OR UPDATE OF note, status_tag ON public.records FOR EACH ROW EXECUTE FUNCTION public.sync_record_tags_from_record();
+CREATE TRIGGER trg_sync_record_tags_from_record BEFORE INSERT OR UPDATE OF note ON public.records FOR EACH ROW EXECUTE FUNCTION public.sync_record_tags_from_record();
 
 
 --
@@ -1033,6 +1170,14 @@ ALTER TABLE ONLY public.media
 
 
 --
+-- Name: plant_care_guides plant_care_guides_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_care_guides
+    ADD CONSTRAINT plant_care_guides_plant_id_fkey FOREIGN KEY (plant_id) REFERENCES public.plant_species(id) ON DELETE CASCADE;
+
+
+--
 -- Name: plant_growth_cycle plant_growth_cycle_species_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1054,6 +1199,14 @@ ALTER TABLE ONLY public.plant_light_cycle
 
 ALTER TABLE ONLY public.plant_parameters
     ADD CONSTRAINT plant_parameters_species_id_fkey FOREIGN KEY (species_id) REFERENCES public.plant_species(id);
+
+
+--
+-- Name: plant_species_aliases plant_species_aliases_species_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.plant_species_aliases
+    ADD CONSTRAINT plant_species_aliases_species_id_fkey FOREIGN KEY (species_id) REFERENCES public.plant_species(id) ON DELETE CASCADE;
 
 
 --
@@ -1213,6 +1366,45 @@ CREATE POLICY "media allow_update_own" ON public.media FOR UPDATE USING ((auth.u
 
 
 --
+-- Name: plant_care_guides; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.plant_care_guides ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: plant_care_guides plant_care_guides_select_all; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY plant_care_guides_select_all ON public.plant_care_guides FOR SELECT USING (true);
+
+
+--
+-- Name: plant_parameter_score_guides; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.plant_parameter_score_guides ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: plant_parameter_score_guides plant_parameter_score_guides_select_all; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY plant_parameter_score_guides_select_all ON public.plant_parameter_score_guides FOR SELECT USING (true);
+
+
+--
+-- Name: plant_species_aliases; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.plant_species_aliases ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: plant_species_aliases plant_species_aliases_public_read; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY plant_species_aliases_public_read ON public.plant_species_aliases FOR SELECT USING (true);
+
+
+--
 -- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -1331,6 +1523,15 @@ GRANT ALL ON FUNCTION public.sync_record_media_stats(p_record_id uuid) TO servic
 
 
 --
+-- Name: FUNCTION sync_record_status_tag_to_record_tags(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.sync_record_status_tag_to_record_tags() TO anon;
+GRANT ALL ON FUNCTION public.sync_record_status_tag_to_record_tags() TO authenticated;
+GRANT ALL ON FUNCTION public.sync_record_status_tag_to_record_tags() TO service_role;
+
+
+--
 -- Name: FUNCTION sync_record_tags_from_record(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1385,15 +1586,6 @@ GRANT ALL ON TABLE public.discovery_feed_view TO service_role;
 
 
 --
--- Name: TABLE media; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.media TO anon;
-GRANT ALL ON TABLE public.media TO authenticated;
-GRANT ALL ON TABLE public.media TO service_role;
-
-
---
 -- Name: TABLE discovery_view; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1430,6 +1622,24 @@ GRANT ALL ON TABLE public.locations TO service_role;
 
 
 --
+-- Name: TABLE media; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.media TO anon;
+GRANT ALL ON TABLE public.media TO authenticated;
+GRANT ALL ON TABLE public.media TO service_role;
+
+
+--
+-- Name: TABLE plant_care_guides; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.plant_care_guides TO anon;
+GRANT ALL ON TABLE public.plant_care_guides TO authenticated;
+GRANT ALL ON TABLE public.plant_care_guides TO service_role;
+
+
+--
 -- Name: TABLE plant_growth_cycle; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1448,6 +1658,15 @@ GRANT ALL ON TABLE public.plant_light_cycle TO service_role;
 
 
 --
+-- Name: TABLE plant_parameter_score_guides; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.plant_parameter_score_guides TO anon;
+GRANT ALL ON TABLE public.plant_parameter_score_guides TO authenticated;
+GRANT ALL ON TABLE public.plant_parameter_score_guides TO service_role;
+
+
+--
 -- Name: TABLE plant_parameters; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1463,6 +1682,15 @@ GRANT ALL ON TABLE public.plant_parameters TO service_role;
 GRANT ALL ON TABLE public.plant_species TO anon;
 GRANT ALL ON TABLE public.plant_species TO authenticated;
 GRANT ALL ON TABLE public.plant_species TO service_role;
+
+
+--
+-- Name: TABLE plant_species_aliases; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.plant_species_aliases TO anon;
+GRANT ALL ON TABLE public.plant_species_aliases TO authenticated;
+GRANT ALL ON TABLE public.plant_species_aliases TO service_role;
 
 
 --
@@ -1592,5 +1820,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vjc23vw7mdFj4EkncvK8QnzQOXMu7KLWrT9JfhoaNumO4tC7mlFNiGRdRCIaIBU
+\unrestrict FUMgXX1iNBRw8W7CdgxkreNce9SsTWySnqDoz8udfPbEAzwr4UHjmKp2on3znta
 
