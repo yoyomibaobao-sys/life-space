@@ -1,12 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type ArchiveCategory = "plant" | "system";
 
-export default function NewArchive() {
+export default function NewArchivePage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          style={{
+            padding: "30px 20px",
+            maxWidth: 420,
+            margin: "0 auto",
+          }}
+        >
+          加载中...
+        </main>
+      }
+    >
+      <NewArchiveContent />
+    </Suspense>
+  );
+}
+
+function NewArchiveContent() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory>("plant");
 
