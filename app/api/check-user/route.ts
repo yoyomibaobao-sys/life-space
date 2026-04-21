@@ -3,17 +3,25 @@ export const runtime = "nodejs";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function POST(req: Request) {
   try {
+    const supabaseUrl =
+      process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: "Supabase server env is missing" },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
     const body = await req.json();
     const email = body?.email;
 
-    // ❗参数校验
     if (!email) {
       return NextResponse.json(
         { error: "缺少邮箱" },
@@ -21,7 +29,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ❗获取用户列表
     const { data, error } = await supabase.auth.admin.listUsers();
 
     if (error) {
@@ -31,7 +38,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ❗判定是否存在
     const exists = data.users.some((u) => u.email === email);
 
     return NextResponse.json({ exists });
