@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { usePathname, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function Navbar() {
   const [user, setUser] = useState<any>(null);
@@ -13,7 +13,6 @@ export default function Navbar() {
 
   // ===== 加载用户信息 =====
   useEffect(() => {
-    // 初始化
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
         setUser(data.user);
@@ -21,16 +20,15 @@ export default function Navbar() {
       }
     });
 
-    // 监听登录状态变化（关键）
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      const user = session?.user;
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user;
 
-      setUser(user || null);
+      setUser(currentUser || null);
 
-      if (user) {
-        loadProfile(user.id);
+      if (currentUser) {
+        loadProfile(currentUser.id);
       } else {
         setUsername("");
       }
@@ -67,72 +65,136 @@ export default function Navbar() {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
+        gap: 20,
         padding: "16px 20px",
         borderBottom: "1px solid #eee",
         background: "#fff",
         position: "sticky",
         top: 0,
         zIndex: 100,
+        flexWrap: "wrap",
       }}
     >
-      {/* ===== 左侧导航 ===== */}
-      <div style={{ display: "flex", gap: 24 }}>
-        <NavItem href="/discover" active={isActive("/discover")}>
-          社区发现
-        </NavItem>
+      {/* ===== 左侧：品牌 + 主导航 ===== */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 28,
+          flexWrap: "wrap",
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            textDecoration: "none",
+            color: "#1f2a1f",
+            fontWeight: 700,
+            letterSpacing: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          有时·耕作
+        </Link>
 
-        <NavItem href="/archive" active={isActive("/archive")}>
-          空间
-        </NavItem>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 22,
+            flexWrap: "wrap",
+          }}
+        >
+          <NavItem href="/archive" active={isActive("/archive")}>
+            空间
+          </NavItem>
 
-        <NavItem href="/plant" active={isActive("/plant")}>
-          百科
-        </NavItem>
+          <NavItem href="/discover" active={isActive("/discover")}>
+            发现
+          </NavItem>
 
-        <NavItem href="/exchange" active={isActive("/exchange")}>
-          集市
-        </NavItem>
+          <NavItem href="/plant" active={isActive("/plant")}>
+            百科
+          </NavItem>
+        </div>
       </div>
 
-      {/* ===== 右侧用户 ===== */}
-      {user && (
+      {/* ===== 右侧：用户状态 ===== */}
+      {user ? (
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 16,
             fontSize: 13,
+            flexWrap: "wrap",
           }}
         >
-          {/* 用户名 → 进入空间 */}
           <Link
-  href={
-    pathname === `/user/${user.id}`
-      ? "/profile"   // ⭐如果是自己 → 去资料页
-      : `/user/${user.id}` // ⭐别人 → 用户主页
-  }
-  style={{
-    textDecoration: "none",
-    color: "#000",
-    fontWeight: 500,
-  }}
->
-  {username || "未设置用户名"} ▾
-</Link>
+            href={
+              pathname === `/user/${user.id}`
+                ? "/profile"
+                : `/user/${user.id}`
+            }
+            style={{
+              textDecoration: "none",
+              color: "#000",
+              fontWeight: 500,
+            }}
+          >
+            {username || "未设置用户名"} ▾
+          </Link>
 
-          {/* 邮箱 */}
           <div style={{ color: "#888" }}>{user.email}</div>
 
-          {/* 退出 */}
-          <div
+          <button
+            type="button"
             onClick={handleLogout}
             style={{
+              border: "none",
+              background: "transparent",
+              padding: 0,
               cursor: "pointer",
               color: "#f44336",
+              fontSize: 13,
             }}
           >
             退出
-          </div>
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontSize: 14,
+          }}
+        >
+          <Link
+            href="/login"
+            style={{
+              textDecoration: "none",
+              color: "#496b3f",
+              fontWeight: 500,
+            }}
+          >
+            登录
+          </Link>
+
+          <Link
+            href="/register"
+            style={{
+              textDecoration: "none",
+              color: "#fff",
+              background: "#3f7d3d",
+              padding: "8px 14px",
+              borderRadius: 999,
+              fontWeight: 500,
+            }}
+          >
+            注册
+          </Link>
         </div>
       )}
     </nav>
@@ -154,10 +216,11 @@ function NavItem({
       href={href}
       style={{
         textDecoration: "none",
-        color: active ? "#4CAF50" : "#333",
+        color: active ? "#3f7d3d" : "#333",
         fontWeight: active ? 600 : 400,
-        borderBottom: active ? "2px solid #4CAF50" : "none",
+        borderBottom: active ? "2px solid #3f7d3d" : "2px solid transparent",
         paddingBottom: 4,
+        whiteSpace: "nowrap",
       }}
     >
       {children}

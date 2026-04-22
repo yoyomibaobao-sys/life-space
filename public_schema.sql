@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 8y04fgTiBxEqZdtsG6ElnDCxpZHBDaKhzW6uj9KXdcc9ltKYcBsKjNbuRIlaO5z
+\restrict PJAN2wHbYNa6tucakUHLjqbaFbDYSjtzsj9YHerBUeKgluqJJ9zWM9mOjrF9SGj
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.3
@@ -34,6 +34,45 @@ ALTER SCHEMA public OWNER TO pg_database_owner;
 
 COMMENT ON SCHEMA public IS 'standard public schema';
 
+
+--
+-- Name: enforce_record_privacy_by_archive(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.enforce_record_privacy_by_archive() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  target_archive record;
+BEGIN
+  SELECT id, user_id, is_public
+  INTO target_archive
+  FROM public.archives
+  WHERE id = NEW.archive_id;
+
+  IF target_archive.id IS NULL THEN
+    RAISE EXCEPTION 'Archive does not exist';
+  END IF;
+
+  IF NEW.user_id IS DISTINCT FROM target_archive.user_id THEN
+    RAISE EXCEPTION 'Record user_id must match archive owner';
+  END IF;
+
+  IF NEW.visibility IS NULL OR NEW.visibility NOT IN ('public', 'private') THEN
+    NEW.visibility := 'private';
+  END IF;
+
+  IF target_archive.is_public IS NOT TRUE THEN
+    NEW.visibility := 'private';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.enforce_record_privacy_by_archive() OWNER TO postgres;
 
 --
 -- Name: handle_comment_change(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -87,16 +126,46 @@ ALTER FUNCTION public.handle_media_change() OWNER TO postgres;
 
 CREATE FUNCTION public.handle_new_user() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
     AS $$
-begin
-  insert into public.profiles (id, email, username)
-  values (
-    new.id,
-    new.email,
-    split_part(new.email, '@', 1) -- 默认用户名
-  );
-  return new;
-end;
+BEGIN
+  INSERT INTO public.profiles (
+    id,
+    email,
+    username
+  )
+  VALUES (
+    NEW.id,
+    NEW.email,
+    split_part(COALESCE(NEW.email, ''), '@', 1)
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    email = EXCLUDED.email,
+    username = COALESCE(public.profiles.username, EXCLUDED.username);
+
+  INSERT INTO public.users (
+    id,
+    username,
+    created_at,
+    last_login_at,
+    cloud_enabled,
+    role,
+    status
+  )
+  VALUES (
+    NEW.id,
+    split_part(COALESCE(NEW.email, ''), '@', 1),
+    now(),
+    now(),
+    false,
+    'user',
+    'active'
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  RETURN NEW;
+END;
 $$;
 
 
@@ -138,6 +207,45 @@ $$;
 
 
 ALTER FUNCTION public.handle_record_insert() OWNER TO postgres;
+
+--
+-- Name: private_archive_forces_private_records(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.private_archive_forces_private_records() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  IF NEW.is_public IS NOT TRUE THEN
+    UPDATE public.records
+    SET visibility = 'private'
+    WHERE archive_id = NEW.id
+      AND visibility <> 'private';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.private_archive_forces_private_records() OWNER TO postgres;
+
+--
+-- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.set_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.set_updated_at() OWNER TO postgres;
 
 --
 -- Name: sync_record_comment_count(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -306,7 +414,7 @@ CREATE TABLE public.archives (
     status text DEFAULT 'active'::text,
     slug text,
     group_tag_id uuid,
-    is_public boolean DEFAULT true,
+    is_public boolean DEFAULT false,
     sub_tag_id uuid,
     note text,
     system_name text,
@@ -371,7 +479,7 @@ CREATE TABLE public.records (
     photo_time timestamp with time zone,
     upload_time timestamp with time zone DEFAULT now(),
     created_at timestamp with time zone DEFAULT now(),
-    visibility text DEFAULT 'public'::text,
+    visibility text DEFAULT 'private'::text,
     record_time timestamp with time zone DEFAULT now(),
     status text DEFAULT 'ok'::text,
     status_tag text,
@@ -789,6 +897,85 @@ CREATE VIEW public.timeline_view AS
 ALTER VIEW public.timeline_view OWNER TO postgres;
 
 --
+-- Name: user_plant_interests; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_plant_interests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    species_id uuid NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.user_plant_interests OWNER TO postgres;
+
+--
+-- Name: TABLE user_plant_interests; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.user_plant_interests IS '用户感兴趣的植物列表：从植物百科进入个人空间的轻量关系。';
+
+
+--
+-- Name: COLUMN user_plant_interests.note; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.user_plant_interests.note IS '用户自己的兴趣备注，可为空。';
+
+
+--
+-- Name: user_plant_plans; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_plant_plans (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    species_id uuid NOT NULL,
+    status text DEFAULT 'want'::text NOT NULL,
+    planned_start_date date,
+    location_type text,
+    note text,
+    created_archive_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_plant_plans_location_type_check CHECK (((location_type IS NULL) OR (location_type = ANY (ARRAY['indoor'::text, 'balcony'::text, 'garden'::text, 'terrace'::text, 'greenhouse'::text, 'field'::text, 'other'::text])))),
+    CONSTRAINT user_plant_plans_status_check CHECK ((status = ANY (ARRAY['want'::text, 'preparing'::text, 'started'::text, 'abandoned'::text])))
+);
+
+
+ALTER TABLE public.user_plant_plans OWNER TO postgres;
+
+--
+-- Name: TABLE user_plant_plans; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.user_plant_plans IS '用户种植计划：准备种植阶段，正式开始后可关联 archives。';
+
+
+--
+-- Name: COLUMN user_plant_plans.status; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.user_plant_plans.status IS '计划状态 code：want=想种，preparing=准备中，started=已开始，abandoned=已放弃。';
+
+
+--
+-- Name: COLUMN user_plant_plans.location_type; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.user_plant_plans.location_type IS '计划种植位置 code：indoor/balcony/garden/terrace/greenhouse/field/other。';
+
+
+--
+-- Name: COLUMN user_plant_plans.created_archive_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.user_plant_plans.created_archive_id IS '该计划转成正式种植档案后，关联 archives.id。';
+
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -990,6 +1177,38 @@ ALTER TABLE ONLY public.sub_tags
 
 
 --
+-- Name: user_plant_interests user_plant_interests_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_interests
+    ADD CONSTRAINT user_plant_interests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_plant_interests user_plant_interests_user_id_species_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_interests
+    ADD CONSTRAINT user_plant_interests_user_id_species_id_key UNIQUE (user_id, species_id);
+
+
+--
+-- Name: user_plant_plans user_plant_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_plans
+    ADD CONSTRAINT user_plant_plans_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_plant_plans user_plant_plans_user_id_species_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_plans
+    ADD CONSTRAINT user_plant_plans_user_id_species_id_key UNIQUE (user_id, species_id);
+
+
+--
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1075,6 +1294,41 @@ CREATE UNIQUE INDEX record_tags_unique_v2 ON public.record_tags USING btree (rec
 
 
 --
+-- Name: user_plant_interests_species_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_plant_interests_species_idx ON public.user_plant_interests USING btree (species_id);
+
+
+--
+-- Name: user_plant_interests_user_created_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_plant_interests_user_created_idx ON public.user_plant_interests USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: user_plant_plans_created_archive_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_plant_plans_created_archive_idx ON public.user_plant_plans USING btree (created_archive_id);
+
+
+--
+-- Name: user_plant_plans_species_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_plant_plans_species_idx ON public.user_plant_plans USING btree (species_id);
+
+
+--
+-- Name: user_plant_plans_user_status_updated_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_plant_plans_user_status_updated_idx ON public.user_plant_plans USING btree (user_id, status, updated_at DESC);
+
+
+--
 -- Name: comments trg_comment_delete; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -1093,6 +1347,13 @@ CREATE TRIGGER trg_comment_insert AFTER INSERT ON public.comments FOR EACH ROW E
 --
 
 CREATE TRIGGER trg_comment_update AFTER UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION public.handle_comment_change();
+
+
+--
+-- Name: records trg_enforce_record_privacy_by_archive; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_enforce_record_privacy_by_archive BEFORE INSERT OR UPDATE OF archive_id, user_id, visibility ON public.records FOR EACH ROW EXECUTE FUNCTION public.enforce_record_privacy_by_archive();
 
 
 --
@@ -1117,6 +1378,13 @@ CREATE TRIGGER trg_media_update AFTER UPDATE ON public.media FOR EACH ROW EXECUT
 
 
 --
+-- Name: archives trg_private_archive_forces_private_records; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_private_archive_forces_private_records AFTER UPDATE OF is_public ON public.archives FOR EACH ROW WHEN ((old.is_public IS DISTINCT FROM new.is_public)) EXECUTE FUNCTION public.private_archive_forces_private_records();
+
+
+--
 -- Name: records trg_record_insert; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -1135,6 +1403,13 @@ CREATE TRIGGER trg_sync_record_status_tag_to_record_tags AFTER INSERT OR UPDATE 
 --
 
 CREATE TRIGGER trg_sync_record_tags_from_record BEFORE INSERT OR UPDATE OF note ON public.records FOR EACH ROW EXECUTE FUNCTION public.sync_record_tags_from_record();
+
+
+--
+-- Name: user_plant_plans trg_user_plant_plans_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_user_plant_plans_set_updated_at BEFORE UPDATE ON public.user_plant_plans FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -1250,6 +1525,46 @@ ALTER TABLE ONLY public.records
 
 
 --
+-- Name: user_plant_interests user_plant_interests_species_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_interests
+    ADD CONSTRAINT user_plant_interests_species_id_fkey FOREIGN KEY (species_id) REFERENCES public.plant_species(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_plant_interests user_plant_interests_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_interests
+    ADD CONSTRAINT user_plant_interests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_plant_plans user_plant_plans_created_archive_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_plans
+    ADD CONSTRAINT user_plant_plans_created_archive_id_fkey FOREIGN KEY (created_archive_id) REFERENCES public.archives(id) ON DELETE SET NULL;
+
+
+--
+-- Name: user_plant_plans user_plant_plans_species_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_plans
+    ADD CONSTRAINT user_plant_plans_species_id_fkey FOREIGN KEY (species_id) REFERENCES public.plant_species(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_plant_plans user_plant_plans_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_plant_plans
+    ADD CONSTRAINT user_plant_plans_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: follows allow delete own follow; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -1271,51 +1586,37 @@ CREATE POLICY "allow read" ON public.follows FOR SELECT USING (true);
 
 
 --
--- Name: records allow_delete_own; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY allow_delete_own ON public.records FOR DELETE USING ((auth.uid() = user_id));
-
-
---
--- Name: records allow_insert_own; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY allow_insert_own ON public.records FOR INSERT WITH CHECK ((auth.uid() = user_id));
-
-
---
--- Name: records allow_read; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY allow_read ON public.records FOR SELECT USING (true);
-
-
---
--- Name: records allow_update_own; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY allow_update_own ON public.records FOR UPDATE USING ((auth.uid() = user_id));
-
-
---
 -- Name: archives; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.archives ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: archives archives allow_insert_own; Type: POLICY; Schema: public; Owner: postgres
+-- Name: archives archives_delete_own; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "archives allow_insert_own" ON public.archives FOR INSERT WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY archives_delete_own ON public.archives FOR DELETE USING ((auth.uid() = user_id));
 
 
 --
--- Name: archives archives allow_read; Type: POLICY; Schema: public; Owner: postgres
+-- Name: archives archives_insert_own; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "archives allow_read" ON public.archives FOR SELECT USING (true);
+CREATE POLICY archives_insert_own ON public.archives FOR INSERT WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: archives archives_select_own_or_public; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY archives_select_own_or_public ON public.archives FOR SELECT USING (((is_public = true) OR (auth.uid() = user_id)));
+
+
+--
+-- Name: archives archives_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY archives_update_own ON public.archives FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
 
 
 --
@@ -1325,10 +1626,71 @@ CREATE POLICY "archives allow_read" ON public.archives FOR SELECT USING (true);
 ALTER TABLE public.follows ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: profiles insert own profile; Type: POLICY; Schema: public; Owner: postgres
+-- Name: group_tags; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "insert own profile" ON public.profiles FOR INSERT WITH CHECK ((auth.uid() = id));
+ALTER TABLE public.group_tags ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: group_tags group_tags_delete_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY group_tags_delete_own ON public.group_tags FOR DELETE USING ((auth.uid() = user_id));
+
+
+--
+-- Name: group_tags group_tags_insert_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY group_tags_insert_own ON public.group_tags FOR INSERT WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: group_tags group_tags_select_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY group_tags_select_own ON public.group_tags FOR SELECT USING ((auth.uid() = user_id));
+
+
+--
+-- Name: group_tags group_tags_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY group_tags_update_own ON public.group_tags FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: locations; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: locations locations_delete_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY locations_delete_own ON public.locations FOR DELETE USING ((auth.uid() = user_id));
+
+
+--
+-- Name: locations locations_insert_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY locations_insert_own ON public.locations FOR INSERT WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: locations locations_select_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY locations_select_own ON public.locations FOR SELECT USING ((auth.uid() = user_id));
+
+
+--
+-- Name: locations locations_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY locations_update_own ON public.locations FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
 
 
 --
@@ -1338,31 +1700,36 @@ CREATE POLICY "insert own profile" ON public.profiles FOR INSERT WITH CHECK ((au
 ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: media media allow_delete_own; Type: POLICY; Schema: public; Owner: postgres
+-- Name: media media_delete_own; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "media allow_delete_own" ON public.media FOR DELETE USING ((auth.uid() = user_id));
-
-
---
--- Name: media media allow_insert_own; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "media allow_insert_own" ON public.media FOR INSERT WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY media_delete_own ON public.media FOR DELETE USING ((auth.uid() = user_id));
 
 
 --
--- Name: media media allow_read; Type: POLICY; Schema: public; Owner: postgres
+-- Name: media media_insert_own_record; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "media allow_read" ON public.media FOR SELECT USING (true);
+CREATE POLICY media_insert_own_record ON public.media FOR INSERT WITH CHECK (((auth.uid() = user_id) AND (EXISTS ( SELECT 1
+   FROM public.records r
+  WHERE ((r.id = media.record_id) AND (r.user_id = auth.uid()))))));
 
 
 --
--- Name: media media allow_update_own; Type: POLICY; Schema: public; Owner: postgres
+-- Name: media media_select_own_or_public_record; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "media allow_update_own" ON public.media FOR UPDATE USING ((auth.uid() = user_id));
+CREATE POLICY media_select_own_or_public_record ON public.media FOR SELECT USING (((auth.uid() = user_id) OR (EXISTS ( SELECT 1
+   FROM (public.records r
+     JOIN public.archives a ON ((a.id = r.archive_id)))
+  WHERE ((r.id = media.record_id) AND (r.visibility = 'public'::text) AND (a.is_public = true))))));
+
+
+--
+-- Name: media media_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY media_update_own ON public.media FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
 
 
 --
@@ -1411,24 +1778,69 @@ CREATE POLICY plant_species_aliases_public_read ON public.plant_species_aliases 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: archives public read archives; Type: POLICY; Schema: public; Owner: postgres
+-- Name: profiles profiles_insert_own; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "public read archives" ON public.archives FOR SELECT USING (true);
-
-
---
--- Name: profiles public read profiles; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "public read profiles" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY profiles_insert_own ON public.profiles FOR INSERT WITH CHECK ((auth.uid() = id));
 
 
 --
--- Name: profiles read own profile; Type: POLICY; Schema: public; Owner: postgres
+-- Name: profiles profiles_public_read; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "read own profile" ON public.profiles FOR SELECT USING ((auth.uid() = id));
+CREATE POLICY profiles_public_read ON public.profiles FOR SELECT USING (true);
+
+
+--
+-- Name: profiles profiles_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY profiles_update_own ON public.profiles FOR UPDATE USING ((auth.uid() = id)) WITH CHECK ((auth.uid() = id));
+
+
+--
+-- Name: record_tags; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.record_tags ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: record_tags record_tags_delete_own_record; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY record_tags_delete_own_record ON public.record_tags FOR DELETE USING ((EXISTS ( SELECT 1
+   FROM public.records r
+  WHERE ((r.id = record_tags.record_id) AND (r.user_id = auth.uid())))));
+
+
+--
+-- Name: record_tags record_tags_insert_own_record; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY record_tags_insert_own_record ON public.record_tags FOR INSERT WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.records r
+  WHERE ((r.id = record_tags.record_id) AND (r.user_id = auth.uid())))));
+
+
+--
+-- Name: record_tags record_tags_select_own_or_public_record; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY record_tags_select_own_or_public_record ON public.record_tags FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM (public.records r
+     JOIN public.archives a ON ((a.id = r.archive_id)))
+  WHERE ((r.id = record_tags.record_id) AND ((r.user_id = auth.uid()) OR ((r.visibility = 'public'::text) AND (a.is_public = true)))))));
+
+
+--
+-- Name: record_tags record_tags_update_own_record; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY record_tags_update_own_record ON public.record_tags FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM public.records r
+  WHERE ((r.id = record_tags.record_id) AND (r.user_id = auth.uid()))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.records r
+  WHERE ((r.id = record_tags.record_id) AND (r.user_id = auth.uid())))));
 
 
 --
@@ -1438,24 +1850,159 @@ CREATE POLICY "read own profile" ON public.profiles FOR SELECT USING ((auth.uid(
 ALTER TABLE public.records ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: archives records allow_delete_own; Type: POLICY; Schema: public; Owner: postgres
+-- Name: records records_delete_own; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "records allow_delete_own" ON public.archives FOR DELETE USING ((auth.uid() = user_id));
-
-
---
--- Name: archives records allow_update_own; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY "records allow_update_own" ON public.archives FOR UPDATE USING ((auth.uid() = user_id));
+CREATE POLICY records_delete_own ON public.records FOR DELETE USING ((auth.uid() = user_id));
 
 
 --
--- Name: profiles update own profile; Type: POLICY; Schema: public; Owner: postgres
+-- Name: records records_insert_own_archive; Type: POLICY; Schema: public; Owner: postgres
 --
 
-CREATE POLICY "update own profile" ON public.profiles FOR UPDATE USING ((auth.uid() = id));
+CREATE POLICY records_insert_own_archive ON public.records FOR INSERT WITH CHECK (((auth.uid() = user_id) AND (EXISTS ( SELECT 1
+   FROM public.archives a
+  WHERE ((a.id = records.archive_id) AND (a.user_id = auth.uid()))))));
+
+
+--
+-- Name: records records_select_own_or_public; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY records_select_own_or_public ON public.records FOR SELECT USING (((auth.uid() = user_id) OR ((visibility = 'public'::text) AND (EXISTS ( SELECT 1
+   FROM public.archives a
+  WHERE ((a.id = records.archive_id) AND (a.is_public = true)))))));
+
+
+--
+-- Name: records records_update_own_archive; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY records_update_own_archive ON public.records FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK (((auth.uid() = user_id) AND (EXISTS ( SELECT 1
+   FROM public.archives a
+  WHERE ((a.id = records.archive_id) AND (a.user_id = auth.uid()))))));
+
+
+--
+-- Name: sub_tags; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.sub_tags ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sub_tags sub_tags_delete_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY sub_tags_delete_own ON public.sub_tags FOR DELETE USING ((auth.uid() = user_id));
+
+
+--
+-- Name: sub_tags sub_tags_insert_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY sub_tags_insert_own ON public.sub_tags FOR INSERT WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: sub_tags sub_tags_select_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY sub_tags_select_own ON public.sub_tags FOR SELECT USING ((auth.uid() = user_id));
+
+
+--
+-- Name: sub_tags sub_tags_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY sub_tags_update_own ON public.sub_tags FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_interests; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.user_plant_interests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_plant_interests user_plant_interests_delete_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_interests_delete_own ON public.user_plant_interests FOR DELETE USING ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_interests user_plant_interests_insert_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_interests_insert_own ON public.user_plant_interests FOR INSERT WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_interests user_plant_interests_select_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_interests_select_own ON public.user_plant_interests FOR SELECT USING ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_interests user_plant_interests_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_interests_update_own ON public.user_plant_interests FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_plans; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.user_plant_plans ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_plant_plans user_plant_plans_delete_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_plans_delete_own ON public.user_plant_plans FOR DELETE USING ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_plans user_plant_plans_insert_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_plans_insert_own ON public.user_plant_plans FOR INSERT WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_plans user_plant_plans_select_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_plans_select_own ON public.user_plant_plans FOR SELECT USING ((auth.uid() = user_id));
+
+
+--
+-- Name: user_plant_plans user_plant_plans_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY user_plant_plans_update_own ON public.user_plant_plans FOR UPDATE USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users users_select_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY users_select_own ON public.users FOR SELECT USING ((auth.uid() = id));
+
+
+--
+-- Name: users users_update_own; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY users_update_own ON public.users FOR UPDATE USING ((auth.uid() = id)) WITH CHECK ((auth.uid() = id));
 
 
 --
@@ -1466,6 +2013,15 @@ GRANT USAGE ON SCHEMA public TO postgres;
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
+
+
+--
+-- Name: FUNCTION enforce_record_privacy_by_archive(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.enforce_record_privacy_by_archive() TO anon;
+GRANT ALL ON FUNCTION public.enforce_record_privacy_by_archive() TO authenticated;
+GRANT ALL ON FUNCTION public.enforce_record_privacy_by_archive() TO service_role;
 
 
 --
@@ -1502,6 +2058,24 @@ GRANT ALL ON FUNCTION public.handle_new_user() TO service_role;
 GRANT ALL ON FUNCTION public.handle_record_insert() TO anon;
 GRANT ALL ON FUNCTION public.handle_record_insert() TO authenticated;
 GRANT ALL ON FUNCTION public.handle_record_insert() TO service_role;
+
+
+--
+-- Name: FUNCTION private_archive_forces_private_records(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.private_archive_forces_private_records() TO anon;
+GRANT ALL ON FUNCTION public.private_archive_forces_private_records() TO authenticated;
+GRANT ALL ON FUNCTION public.private_archive_forces_private_records() TO service_role;
+
+
+--
+-- Name: FUNCTION set_updated_at(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.set_updated_at() TO anon;
+GRANT ALL ON FUNCTION public.set_updated_at() TO authenticated;
+GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 
 
 --
@@ -1544,7 +2118,7 @@ GRANT ALL ON FUNCTION public.sync_record_tags_from_record() TO service_role;
 -- Name: TABLE archives; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.archives TO anon;
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.archives TO anon;
 GRANT ALL ON TABLE public.archives TO authenticated;
 GRANT ALL ON TABLE public.archives TO service_role;
 
@@ -1562,7 +2136,7 @@ GRANT ALL ON TABLE public.comments TO service_role;
 -- Name: TABLE profiles; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.profiles TO anon;
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.profiles TO anon;
 GRANT ALL ON TABLE public.profiles TO authenticated;
 GRANT ALL ON TABLE public.profiles TO service_role;
 
@@ -1571,7 +2145,7 @@ GRANT ALL ON TABLE public.profiles TO service_role;
 -- Name: TABLE records; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.records TO anon;
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.records TO anon;
 GRANT ALL ON TABLE public.records TO authenticated;
 GRANT ALL ON TABLE public.records TO service_role;
 
@@ -1607,7 +2181,6 @@ GRANT ALL ON TABLE public.follows TO service_role;
 -- Name: TABLE group_tags; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.group_tags TO anon;
 GRANT ALL ON TABLE public.group_tags TO authenticated;
 GRANT ALL ON TABLE public.group_tags TO service_role;
 
@@ -1616,7 +2189,6 @@ GRANT ALL ON TABLE public.group_tags TO service_role;
 -- Name: TABLE locations; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.locations TO anon;
 GRANT ALL ON TABLE public.locations TO authenticated;
 GRANT ALL ON TABLE public.locations TO service_role;
 
@@ -1625,7 +2197,7 @@ GRANT ALL ON TABLE public.locations TO service_role;
 -- Name: TABLE media; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.media TO anon;
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.media TO anon;
 GRANT ALL ON TABLE public.media TO authenticated;
 GRANT ALL ON TABLE public.media TO service_role;
 
@@ -1724,7 +2296,7 @@ GRANT ALL ON TABLE public.plant_temperature_ranges TO service_role;
 -- Name: TABLE record_tags; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.record_tags TO anon;
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.record_tags TO anon;
 GRANT ALL ON TABLE public.record_tags TO authenticated;
 GRANT ALL ON TABLE public.record_tags TO service_role;
 
@@ -1733,7 +2305,6 @@ GRANT ALL ON TABLE public.record_tags TO service_role;
 -- Name: TABLE sub_tags; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.sub_tags TO anon;
 GRANT ALL ON TABLE public.sub_tags TO authenticated;
 GRANT ALL ON TABLE public.sub_tags TO service_role;
 
@@ -1748,10 +2319,25 @@ GRANT ALL ON TABLE public.timeline_view TO service_role;
 
 
 --
+-- Name: TABLE user_plant_interests; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.user_plant_interests TO authenticated;
+GRANT ALL ON TABLE public.user_plant_interests TO service_role;
+
+
+--
+-- Name: TABLE user_plant_plans; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.user_plant_plans TO authenticated;
+GRANT ALL ON TABLE public.user_plant_plans TO service_role;
+
+
+--
 -- Name: TABLE users; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.users TO anon;
 GRANT ALL ON TABLE public.users TO authenticated;
 GRANT ALL ON TABLE public.users TO service_role;
 
@@ -1820,5 +2406,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 8y04fgTiBxEqZdtsG6ElnDCxpZHBDaKhzW6uj9KXdcc9ltKYcBsKjNbuRIlaO5z
+\unrestrict PJAN2wHbYNa6tucakUHLjqbaFbDYSjtzsj9YHerBUeKgluqJJ9zWM9mOjrF9SGj
 

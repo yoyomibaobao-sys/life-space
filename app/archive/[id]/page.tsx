@@ -88,6 +88,32 @@ function Content({ id }: { id: string }) {
         return;
       }
 
+      // 公开项目被非作者访问时，计入浏览量。
+      // 同一个浏览器会话里同一个项目只计一次，避免刷新页面反复增加。
+      if (archiveData.is_public && !isOwnerView) {
+        const viewSessionKey = `archive_viewed_${archiveData.id}`;
+
+        if (!window.sessionStorage.getItem(viewSessionKey)) {
+          const { data: nextViewCount, error: viewError } = await supabase.rpc(
+            "increment_archive_view_count",
+            {
+              p_archive_id: archiveData.id,
+            }
+          );
+
+          if (!viewError) {
+            window.sessionStorage.setItem(viewSessionKey, "1");
+
+            if (typeof nextViewCount === "number") {
+              setArchive({
+                ...archiveData,
+                view_count: nextViewCount,
+              });
+            }
+          }
+        }
+      }
+
       if (archiveData.species_id) {
         const { data: speciesData } = await supabase
           .from("plant_species")

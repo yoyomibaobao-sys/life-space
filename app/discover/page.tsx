@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 
 const RECORD_BATCH_SIZE = 80;
-const SEARCH_BATCH_SIZE = 120;
 
 type FeedItem = {
   record_id: string;
@@ -28,11 +28,16 @@ type FeedItem = {
   user_location?: string | null;
   profile_is_public?: boolean | null;
   display_tags?: string[];
+  system_name?: string | null;
+  record_count?: number | null;
+  archive_record_count?: number | null;
+  view_count?: number | null;
+  archive_view_count?: number | null;
+  archive_status?: string | null;
+  archive_ended_at?: string | null;
 };
 
 type FilterMode = "all" | "plant" | "system" | "help";
-type SearchCategory = "all" | "plant" | "system";
-
 type UserSection = {
   user_id: string;
   username: string;
@@ -40,35 +45,19 @@ type UserSection = {
   user_location: string | null;
   latest_time: string;
   records: FeedItem[];
+  total_project_count: number;
 };
 
 const filterOptions: { value: FilterMode; label: string }[] = [
   { value: "all", label: "全部" },
-  { value: "plant", label: "植物" },
+  { value: "plant", label: "种植" },
   { value: "system", label: "配套设施" },
-  { value: "help", label: "仅求助" },
+  { value: "help", label: "只看求助" },
 ];
 
-const commonSearchTags = [
-  "发芽",
-  "开花",
-  "结果",
-  "叶片",
-  "病害",
-  "浇水",
-  "施肥",
-  "换盆",
-  "修剪",
-  "播种",
-  "扦插",
-  "移植",
-  "堆肥",
-  "育苗",
-  "补光",
-];
 
 function categoryLabel(value?: string | null) {
-  if (value === "plant") return "植物";
+  if (value === "plant") return "种植";
   if (value === "system") return "配套设施";
   return "项目";
 }
@@ -91,85 +80,464 @@ function shortText(value?: string | null, maxLength = 42) {
   return `${text.slice(0, maxLength)}…`;
 }
 
-function sanitizeOrSearchText(value: string) {
-  return value.replace(/[(),]/g, " ").trim();
+function getArchiveUserTitle(record: FeedItem) {
+  return record.archive_title || "未命名项目";
 }
 
-async function findSpeciesIdsByNameTerm(nameTerm: string) {
-  const term = sanitizeOrSearchText(nameTerm);
-  if (!term) return [];
+function getArchiveSystemName(record: FeedItem) {
+  const systemName =
+    record.archive_category === "system"
+      ? record.system_name || record.species_name_snapshot
+      : record.species_name_snapshot || record.system_name;
 
-  const ids = new Set<string>();
+  if (systemName) return systemName;
 
-  const [speciesResult, i18nResult, aliasResult] = await Promise.all([
-    supabase
-      .from("plant_species")
-      .select("id")
-      .or(`common_name.ilike.%${term}%,scientific_name.ilike.%${term}%`)
-      .limit(80),
-    supabase
-      .from("plant_species_i18n")
-      .select("plant_id")
-      .ilike("common_name", `%${term}%`)
-      .limit(80),
-    supabase
-      .from("plant_species_aliases")
-      .select("species_id")
-      .or(`alias_name.ilike.%${term}%,normalized_name.ilike.%${term}%`)
-      .limit(120),
-  ]);
-
-  if (speciesResult.error) {
-    console.error("discover search species error:", speciesResult.error);
-  }
-
-  if (i18nResult.error) {
-    console.error("discover search species i18n error:", i18nResult.error);
-  }
-
-  if (aliasResult.error) {
-    console.error("discover search species aliases error:", aliasResult.error);
-  }
-
-  (speciesResult.data || []).forEach((row: any) => {
-    if (row.id) ids.add(row.id);
-  });
-
-  (i18nResult.data || []).forEach((row: any) => {
-    if (row.plant_id) ids.add(row.plant_id);
-  });
-
-  (aliasResult.data || []).forEach((row: any) => {
-    if (row.species_id) ids.add(row.species_id);
-  });
-
-  return Array.from(ids);
+  return record.archive_category === "system" ? "配套设施" : "种植";
 }
 
-async function findRecordIdsByTagTerm(tagTerm: string) {
-  const term = sanitizeOrSearchText(tagTerm);
-  if (!term) return [];
+function getArchiveRecordCount(record: FeedItem) {
+  const value = record.archive_record_count ?? record.record_count;
 
-  const { data, error } = await supabase
-    .from("record_tags")
-    .select("record_id")
-    .ilike("tag", `%${term}%`)
-    .neq("is_active", false)
-    .limit(300);
-
-  if (error) {
-    console.error("discover search record tags error:", error);
-    return [];
+  if (typeof value === "number" && value >= 0) {
+    return value;
   }
 
-  const ids = new Set<string>();
-
-  (data || []).forEach((row: any) => {
-    if (row.record_id) ids.add(row.record_id);
-  });
-
-  return Array.from(ids);
+  return null;
 }
+
+function getArchiveViewCount(record: FeedItem) {
+  const value = record.archive_view_count ?? record.view_count;
+
+  if (typeof value === "number" && value >= 0) {
+    return value;
+  }
+
+  return null;
+}
+
+function getArchiveLifecycleStatus(record: FeedItem) {
+  return record.archive_status === "ended" ? "ended" : "active";
+}
+
+function DefaultUserAvatar({ size = 30 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, #edf7e8 0%, #dfeedd 100%)",
+        color: "#3f7d3d",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: Math.max(15, Math.round(size * 0.55)),
+        flexShrink: 0,
+        border: "1px solid #dbe8d5",
+      }}
+    >
+      🌱
+    </span>
+  );
+}
+
+function HelpBadge() {
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        color: "#a65f45",
+        background: "#fff5ee",
+        border: "1px solid #efd8cc",
+        borderRadius: 999,
+        padding: "1px 7px",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        fontWeight: 600,
+        letterSpacing: 0.5,
+      }}
+    >
+      求助
+    </span>
+  );
+}
+
+function EndedBadge() {
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        color: "#7f7668",
+        background: "#f6f2ec",
+        border: "1px solid #e4d8ca",
+        borderRadius: 999,
+        padding: "1px 7px",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        fontWeight: 500,
+        lineHeight: 1.35,
+      }}
+    >
+      已结束
+    </span>
+  );
+}
+
+function ProjectNameLine({
+  record,
+  fontSize = 15,
+  marginBottom = 6,
+}: {
+  record: FeedItem;
+  fontSize?: number;
+  marginBottom?: number;
+}) {
+  const archiveUserTitle = getArchiveUserTitle(record);
+  const archiveSystemName = getArchiveSystemName(record);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        minWidth: 0,
+        marginBottom,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span
+        style={{
+          fontSize,
+          fontWeight: 700,
+          color: "#1f2d1f",
+          lineHeight: 1.35,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+          flex: "1 1 auto",
+        }}
+        title={archiveUserTitle}
+      >
+        {archiveUserTitle}
+      </span>
+
+      <span
+        aria-hidden="true"
+        style={{
+          color: "#c7d0c3",
+          flexShrink: 0,
+          fontSize: Math.max(12, fontSize - 2),
+        }}
+      >
+        ·
+      </span>
+
+      <span
+        style={{
+          color: record.archive_category === "system" ? "#8a742d" : "#5f7f58",
+          background: record.archive_category === "system" ? "#fffaf0" : "#f5f9f2",
+          border:
+            record.archive_category === "system"
+              ? "1px solid #eadfba"
+              : "1px solid #e3eadf",
+          borderRadius: 999,
+          padding: "1px 7px",
+          fontSize: Math.max(11, fontSize - 3),
+          lineHeight: 1.5,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+          maxWidth: "42%",
+          flex: "0 1 auto",
+        }}
+        title={archiveSystemName}
+      >
+        {archiveSystemName}
+      </span>
+    </div>
+  );
+}
+
+
+function CategoryBadge({ category }: { category?: string | null }) {
+  const isSystem = category === "system";
+
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        color: isSystem ? "#7a6a2a" : "#2e7d32",
+        background: isSystem ? "#fff9e8" : "#f0fff4",
+        border: isSystem ? "1px solid #eadca8" : "1px solid #cae9ca",
+        borderRadius: 999,
+        padding: "1px 6px",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        lineHeight: 1.35,
+      }}
+    >
+      {categoryLabel(category)}
+    </span>
+  );
+}
+
+function RecordTagPill({
+  record,
+  tag,
+  enableLink = false,
+}: {
+  record: FeedItem;
+  tag: string;
+  enableLink?: boolean;
+}) {
+  return (
+    <span
+      onClick={
+        enableLink
+          ? (e: MouseEvent<HTMLSpanElement>) => {
+              e.preventDefault();
+              e.stopPropagation();
+
+              if (record.species_id) {
+                window.location.href = `/discover/search?tag=${encodeURIComponent(
+                  tag
+                )}&species=${record.species_id}`;
+                return;
+              }
+
+              window.location.href = `/discover/search?tag=${encodeURIComponent(
+                tag
+              )}`;
+            }
+          : undefined
+      }
+      style={{
+        padding: "1px 6px",
+        borderRadius: 999,
+        border: "1px solid #e2e8df",
+        background: "#fafafa",
+        color: "#4CAF50",
+        cursor: enableLink ? "pointer" : "default",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        fontSize: 11,
+        lineHeight: 1.35,
+      }}
+    >
+      {getBehaviorTagLabel(tag)}
+    </span>
+  );
+}
+
+function ProjectCardRows({
+  record,
+  imageHeight,
+  titleFontSize,
+  noteMaxLength,
+  enableTagLinks = false,
+  showUsername = false,
+}: {
+  record: FeedItem;
+  imageHeight: number;
+  titleFontSize: number;
+  noteMaxLength: number;
+  enableTagLinks?: boolean;
+  showUsername?: boolean;
+}) {
+  const isHelp = record.status_tag === "help";
+  const lifecycleStatus = getArchiveLifecycleStatus(record);
+  const archiveUserTitle = getArchiveUserTitle(record);
+  const archiveSystemName = getArchiveSystemName(record);
+  const archiveRecordCount = getArchiveRecordCount(record);
+  const archiveViewCount = getArchiveViewCount(record);
+  const commentCount =
+    typeof record.comment_count === "number" ? record.comment_count : 0;
+  const tags = Array.isArray(record.display_tags)
+    ? record.display_tags.slice(0, 2)
+    : [];
+  const updateText = formatDate(record.record_time);
+  const displayUsername = record.username || "用户";
+  const statParts = [
+    showUsername ? displayUsername : null,
+    archiveRecordCount !== null ? `共 ${archiveRecordCount} 条记录` : null,
+    archiveViewCount !== null ? `浏览 ${archiveViewCount} 次` : null,
+    `${commentCount} 评论`,
+  ].filter((item): item is string => Boolean(item));
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        minWidth: 0,
+        height: imageHeight,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          minWidth: 0,
+          whiteSpace: "nowrap",
+          lineHeight: 1.35,
+        }}
+      >
+        <CategoryBadge category={record.archive_category} />
+
+        {isHelp && <HelpBadge />}
+
+        {lifecycleStatus === "ended" && <EndedBadge />}
+
+        <span
+          style={{
+            fontSize: titleFontSize,
+            fontWeight: 700,
+            color: "#1f2d1f",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+            flex: "0 1 auto",
+            maxWidth: "44%",
+          }}
+          title={archiveUserTitle}
+        >
+          {archiveUserTitle}
+        </span>
+
+        <span
+          aria-hidden="true"
+          style={{
+            color: "#c7d0c3",
+            flexShrink: 0,
+            fontSize: Math.max(12, titleFontSize - 2),
+          }}
+        >
+          ·
+        </span>
+
+        <span
+          style={{
+            color: record.archive_category === "system" ? "#8a742d" : "#5f7f58",
+            fontSize: Math.max(12, titleFontSize - 2),
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+            flex: "0 1 auto",
+            maxWidth: "30%",
+          }}
+          title={archiveSystemName}
+        >
+          {archiveSystemName}
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          minWidth: 0,
+          color: "#3f4f3f",
+          fontSize: 13,
+          lineHeight: 1.35,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {tags.map((tag) => (
+          <RecordTagPill
+            key={tag}
+            record={record}
+            tag={tag}
+            enableLink={enableTagLinks}
+          />
+        ))}
+
+        <span
+          style={{
+            color: record.note ? "#3f4f3f" : "#9aa59a",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+            flex: 1,
+          }}
+        >
+          {record.note
+            ? shortText(record.note, noteMaxLength)
+            : "这条记录没有文字内容"}
+          {updateText ? (
+            <span style={{ color: "#9aa59a" }}>　更新 {updateText}</span>
+          ) : null}
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+          minWidth: 0,
+          fontSize: 11,
+          color: "#8a998a",
+          lineHeight: 1.35,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {statParts.map((part, index) => (
+          <span
+            key={`${part}-${index}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              minWidth: 0,
+              flexShrink: index === 0 && showUsername ? 1 : 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={part}
+          >
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {part}
+            </span>
+            {index < statParts.length - 1 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  color: "#cbd4c8",
+                  margin: "0 1px 0 5px",
+                  flexShrink: 0,
+                }}
+              >
+                ·
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 
 function buildUserSections(items: FeedItem[]): UserSection[] {
   const userMap = new Map<
@@ -259,6 +627,7 @@ function buildUserSections(items: FeedItem[]): UserSection[] {
         user_location: user.user_location,
         latest_time: user.latest_time,
         records: orderedRecords.slice(0, 4),
+        total_project_count: orderedRecords.length,
       };
     })
     .filter((section) => section.records.length > 0)
@@ -319,20 +688,19 @@ export default function DiscoverPage() {
   const [hasMore, setHasMore] = useState(true);
   const [expandedUserIds, setExpandedUserIds] = useState<string[]>([]);
 
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchRegion, setSearchRegion] = useState("");
-  const [searchCategory, setSearchCategory] = useState<SearchCategory>("all");
-  const [searchName, setSearchName] = useState("");
-  const [searchContent, setSearchContent] = useState("");
-  const [searchHelpOnly, setSearchHelpOnly] = useState(false);
-  const [searchResults, setSearchResults] = useState<FeedItem[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchHasRun, setSearchHasRun] = useState(false);
-
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
 
   const sections = useMemo(() => buildUserSections(items), [items]);
+  const helpStreamItems = useMemo(
+    () =>
+      [...items].sort(
+        (a, b) =>
+          new Date(b.record_time).getTime() -
+          new Date(a.record_time).getTime()
+      ),
+    [items]
+  );
 
   async function goUser(userId: string) {
     const {
@@ -430,122 +798,6 @@ export default function DiscoverPage() {
     load(0, mode);
   }
 
-  async function runSearch(event?: { preventDefault: () => void }) {
-    event?.preventDefault();
-
-    setSearchLoading(true);
-    setSearchHasRun(true);
-
-    const regionTerm = searchRegion.trim();
-    const nameTerm = sanitizeOrSearchText(searchName);
-    const contentTerm = sanitizeOrSearchText(searchContent);
-    const [matchedSpeciesIds, matchedTagRecordIds] = await Promise.all([
-      nameTerm
-        ? findSpeciesIdsByNameTerm(nameTerm)
-        : Promise.resolve<string[]>([]),
-      contentTerm
-        ? findRecordIdsByTagTerm(contentTerm)
-        : Promise.resolve<string[]>([]),
-    ]);
-
-    let userFilterIds: string[] | null = null;
-
-    if (regionTerm) {
-      const { data: profileRows, error: profileError } = await supabase
-        .from("profiles")
-        .select("id")
-        .ilike("location", `%${regionTerm}%`)
-        .limit(200);
-
-      if (profileError) {
-        console.error("discover search profile error:", profileError);
-      }
-
-      userFilterIds = (profileRows || []).map((row: any) => row.id);
-
-      if (userFilterIds.length === 0) {
-        setSearchResults([]);
-        setSearchLoading(false);
-        return;
-      }
-    }
-
-    let query = supabase
-      .from("discovery_feed_view")
-      .select("*")
-      .order("record_time", { ascending: false })
-      .limit(SEARCH_BATCH_SIZE);
-
-    if (searchCategory === "plant") {
-      query = query.eq("archive_category", "plant");
-    }
-
-    if (searchCategory === "system") {
-      query = query.eq("archive_category", "system");
-    }
-
-    if (searchHelpOnly) {
-      query = query.eq("status_tag", "help");
-    }
-
-    if (userFilterIds && userFilterIds.length > 0) {
-      query = query.in("user_id", userFilterIds);
-    }
-
-    if (nameTerm) {
-      const nameFilters = [
-        `archive_title.ilike.%${nameTerm}%`,
-        `species_name_snapshot.ilike.%${nameTerm}%`,
-      ];
-
-      if (matchedSpeciesIds.length > 0) {
-        nameFilters.push(`species_id.in.(${matchedSpeciesIds.join(",")})`);
-      }
-
-      query = query.or(nameFilters.join(","));
-    }
-
-    if (contentTerm) {
-      const contentFilters = [`note.ilike.%${contentTerm}%`];
-
-      if (matchedTagRecordIds.length > 0) {
-        contentFilters.push(`record_id.in.(${matchedTagRecordIds.join(",")})`);
-      }
-
-      query = query.or(contentFilters.join(","));
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("discover search error:", error);
-      setSearchResults([]);
-      setSearchLoading(false);
-      return;
-    }
-
-    const enrichedItems = await enrichFeedItems((data || []) as FeedItem[]);
-    setSearchResults(enrichedItems);
-    setSearchLoading(false);
-  }
-
-  function openSearchWindow() {
-    setSearchOpen(true);
-
-    if (!searchHasRun) {
-      runSearch();
-    }
-  }
-
-  function resetSearchFilters() {
-    setSearchRegion("");
-    setSearchCategory("all");
-    setSearchName("");
-    setSearchContent("");
-    setSearchHelpOnly(false);
-    setSearchResults([]);
-    setSearchHasRun(false);
-  }
 
   useEffect(() => {
     setItems([]);
@@ -602,17 +854,16 @@ export default function DiscoverPage() {
         >
           <div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>
-              耕作星球
+              发现大家的种植故事
             </div>
             <div style={{ fontSize: 13, color: "#6f7f6f", marginTop: 4 }}>
-              看看大家都在种什么
+              看看不同环境下，植物如何被照顾、等待，也慢慢生长。
             </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={openSearchWindow}
+        <a
+          href="/discover/search"
           style={{
             width: "100%",
             display: "block",
@@ -625,10 +876,12 @@ export default function DiscoverPage() {
             fontSize: 14,
             boxShadow: "0 1px 8px rgba(0,0,0,0.03)",
             cursor: "pointer",
+            textDecoration: "none",
+            boxSizing: "border-box",
           }}
         >
           🔍 搜索地区、种类、名称、内容、标签或求助记录
-        </button>
+        </a>
       </header>
 
       <div
@@ -665,12 +918,91 @@ export default function DiscoverPage() {
         })}
       </div>
 
+      {filterMode === "help" ? (
+        <div>
+          {helpStreamItems.map((record) => {
+            const isHelp = record.status_tag === "help";
+
+            return (
+              <a
+                key={record.record_id}
+                href={`/archive/${record.archive_id}?record=${record.record_id}`}
+                style={{
+                  display: "block",
+                  textDecoration: "none",
+                  color: "#1f2d1f",
+                  background: isHelp ? "#fffaf6" : "#fff",
+                  border: isHelp
+                    ? "1px solid #f0ddd4"
+                    : "1px solid #e8eee5",
+                  boxShadow: isHelp
+                    ? "inset 0 0 0 1px rgba(166, 95, 69, 0.04)"
+                    : "none",
+                  borderRadius: 13,
+                  padding: 9,
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 8,
+                  }}
+                >
+                  {record.primary_image_url ? (
+                    <img
+                      src={record.primary_image_url}
+                      alt={record.archive_title || "record image"}
+                      style={{
+                        width: 58,
+                        height: 58,
+                        objectFit: "cover",
+                        borderRadius: 9,
+                        flexShrink: 0,
+                        background: "#f5f8f4",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 58,
+                        height: 58,
+                        borderRadius: 9,
+                        flexShrink: 0,
+                        background: "#f5f8f4",
+                        color: "#9aaa9a",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 18,
+                      }}
+                    >
+                      {record.archive_category === "system" ? "🛠" : "🌿"}
+                    </div>
+                  )}
+
+                  <ProjectCardRows
+                    record={record}
+                    imageHeight={58}
+                    titleFontSize={14}
+                    noteMaxLength={96}
+                    showUsername
+                  />
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      ) : (
+        <>
       {sections.map((section) => {
         const isSectionExpanded = expandedUserIds.includes(section.user_id);
         const visibleRecords = isSectionExpanded
           ? section.records
           : section.records.slice(0, 2);
         const hiddenCount = Math.max(section.records.length - 2, 0);
+        const hasMoreProjectsInSpace = section.total_project_count > 4;
 
         return (
           <section
@@ -715,23 +1047,7 @@ export default function DiscoverPage() {
                   }}
                 />
               ) : (
-                <span
-                  style={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: "50%",
-                    background: "#f0f6ee",
-                    color: "#4c6f4c",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}
-                >
-                  {(section.username || "用").slice(0, 1)}
-                </span>
+                <DefaultUserAvatar />
               )}
 
               <span
@@ -782,13 +1098,20 @@ export default function DiscoverPage() {
                       textDecoration: "none",
                       color: "#1f2d1f",
                       borderTop: index === 0 ? "none" : "1px solid #f0f2ef",
-                      padding: "8px 0",
+                      padding: isHelp ? "10px 8px" : "10px 0",
+                      background: isHelp
+                        ? "linear-gradient(90deg, #fffaf6 0%, rgba(255,250,246,0.25) 100%)"
+                        : "transparent",
+                      borderRadius: isHelp ? 10 : 0,
+                      boxShadow: isHelp
+                        ? "inset 0 0 0 1px #f0ddd4"
+                        : "none",
                     }}
                   >
                     <div
                       style={{
                         display: "flex",
-                        gap: 8,
+                        gap: 10,
                         alignItems: "flex-start",
                       }}
                     >
@@ -797,191 +1120,95 @@ export default function DiscoverPage() {
                           src={record.primary_image_url}
                           alt={record.archive_title || "record image"}
                           style={{
-                            width: 54,
-                            height: 54,
+                            width: 62,
+                            height: 62,
                             objectFit: "cover",
-                            borderRadius: 9,
+                            borderRadius: 11,
                             flexShrink: 0,
+                            background: "#f5f8f4",
                           }}
                         />
                       ) : (
                         <div
                           style={{
-                            width: 54,
-                            height: 54,
-                            borderRadius: 9,
+                            width: 62,
+                            height: 62,
+                            borderRadius: 11,
                             flexShrink: 0,
-                            background: "#f5f8f4",
-                            color: "#9aaa9a",
+                            background:
+                              record.archive_category === "system"
+                                ? "#fff9e8"
+                                : "#f4f9f1",
+                            color:
+                              record.archive_category === "system"
+                                ? "#9a7d2f"
+                                : "#5f8f55",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            fontSize: 18,
+                            fontSize: 22,
+                            border:
+                              record.archive_category === "system"
+                                ? "1px solid #efe1af"
+                                : "1px solid #dfeadb",
                           }}
                         >
                           {record.archive_category === "system" ? "🛠" : "🌿"}
                         </div>
                       )}
 
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 5,
-                            minWidth: 0,
-                            marginBottom: 3,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color:
-                                record.archive_category === "system"
-                                  ? "#7a6a2a"
-                                  : "#2e7d32",
-                              background:
-                                record.archive_category === "system"
-                                  ? "#fff9e8"
-                                  : "#f0fff4",
-                              border:
-                                record.archive_category === "system"
-                                  ? "1px solid #eadca8"
-                                  : "1px solid #cae9ca",
-                              borderRadius: 999,
-                              padding: "1px 6px",
-                              whiteSpace: "nowrap",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {categoryLabel(record.archive_category)}
-                          </span>
-
-                          {isHelp && (
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color: "#8a4a4a",
-                                background: "#fff7f7",
-                                border: "1px solid #e6c9c9",
-                                borderRadius: 999,
-                                padding: "1px 6px",
-                                whiteSpace: "nowrap",
-                                flexShrink: 0,
-                              }}
-                            >
-                              求助
-                            </span>
-                          )}
-
-                          <span
-                            style={{
-                              fontSize: 14,
-                              fontWeight: 700,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              minWidth: 0,
-                            }}
-                          >
-                            {record.archive_title}
-                          </span>
-
-                          <span
-                            style={{
-                              marginLeft: "auto",
-                              fontSize: 11,
-                              color: "#9aa59a",
-                              whiteSpace: "nowrap",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {formatDate(record.record_time)}
-                          </span>
-                        </div>
-
-                        {record.note ? (
-                          <div
-                            style={{
-                              fontSize: 13,
-                              lineHeight: 1.45,
-                              color: "#3f4f3f",
-                              wordBreak: "break-word",
-                            }}
-                          >
-                            {shortText(record.note, 66)}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 12, color: "#9aa59a" }}>
-                            这条记录没有文字内容
-                          </div>
-                        )}
-
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            flexWrap: "wrap",
-                            marginTop: 4,
-                            fontSize: 11,
-                            color: "#9aa59a",
-                          }}
-                        >
-                          {record.species_name_snapshot ? (
-                            <span style={{ color: "#4CAF50" }}>
-                              {record.species_name_snapshot}
-                            </span>
-                          ) : null}
-
-                          {Array.isArray(record.display_tags) &&
-                            record.display_tags.slice(0, 2).map((tag) => (
-                              <span
-                                key={tag}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-
-                                  if (record.species_id) {
-                                    window.location.href = `/discover/search?tag=${encodeURIComponent(
-                                      tag
-                                    )}&species=${record.species_id}`;
-                                    return;
-                                  }
-
-                                  window.location.href = `/discover/search?tag=${encodeURIComponent(
-                                    tag
-                                  )}`;
-                                }}
-                                style={{
-                                  padding: "1px 5px",
-                                  borderRadius: 999,
-                                  border: "1px solid #e2e8df",
-                                  background: "#fafafa",
-                                  color: "#4CAF50",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                {getBehaviorTagLabel(tag)}
-                              </span>
-                            ))}
-
-                          <span style={{ marginLeft: "auto" }}>
-                            {typeof record.media_count === "number" &&
-                            record.media_count > 0
-                              ? `${record.media_count} 图`
-                              : ""}
-                            {typeof record.comment_count === "number" &&
-                            record.comment_count > 0
-                              ? `${record.media_count > 0 ? " · " : ""}${record.comment_count} 评论`
-                              : ""}
-                          </span>
-                        </div>
-                      </div>
+                      <ProjectCardRows
+                        record={record}
+                        imageHeight={62}
+                        titleFontSize={15}
+                        noteMaxLength={88}
+                        enableTagLinks
+                      />
                     </div>
                   </a>
                 );
               })}
+
+              {isSectionExpanded && hasMoreProjectsInSpace && (
+                <div
+                  style={{
+                    borderTop: "1px solid #f0f2ef",
+                    padding: "10px 0 8px 0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#8a998a",
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    这里只展示最近 4 个种植项目，更多内容可以进入他的空间慢慢看。
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => goUser(section.user_id)}
+                    style={{
+                      border: "1px solid #d9e6d0",
+                      background: "#eef5e8",
+                      color: "#496b3f",
+                      borderRadius: 999,
+                      padding: "5px 10px",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    进入他的空间
+                  </button>
+                </div>
+              )}
 
               {hiddenCount > 0 && (
                 <button
@@ -990,7 +1217,10 @@ export default function DiscoverPage() {
                   style={{
                     width: "100%",
                     border: "none",
-                    borderTop: "1px solid #f0f2ef",
+                    borderTop:
+                      isSectionExpanded && hasMoreProjectsInSpace
+                        ? "none"
+                        : "1px solid #f0f2ef",
                     background: "transparent",
                     color: "#4CAF50",
                     cursor: "pointer",
@@ -1000,8 +1230,8 @@ export default function DiscoverPage() {
                   }}
                 >
                   {isSectionExpanded
-                    ? "收起"
-                    : `还有 ${hiddenCount} 条记录，展开`}
+                    ? "收起 ▲"
+                    : `展开更多 ${hiddenCount} 个项目 ▼`}
                 </button>
               )}
             </div>
@@ -1009,538 +1239,43 @@ export default function DiscoverPage() {
         );
       })}
 
-      {!loading && sections.length === 0 && (
-        <div
-          style={{
-            padding: "34px 16px",
-            textAlign: "center",
-            color: "#768476",
-            fontSize: 14,
-            background: "#fff",
-            border: "1px solid #edf2ea",
-            borderRadius: 16,
-          }}
-        >
-          {filterMode === "help"
-            ? "暂时没有公开的求助记录"
-            : `还没有${activeFilterLabel === "全部" ? "" : activeFilterLabel}公开项目记录`}
-          <div style={{ marginTop: 8, fontSize: 12, color: "#9aa59a" }}>
-            当用户主动公开项目和记录后，会出现在这里。
-          </div>
-        </div>
+        </>
       )}
-
-      {searchOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 50,
-            background: "rgba(31,45,31,0.28)",
-            padding: 12,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            overflowY: "auto",
-          }}
-          onClick={() => setSearchOpen(false)}
-        >
-          <section
+      {!loading &&
+        (filterMode === "help"
+          ? helpStreamItems.length === 0
+          : sections.length === 0) && (
+          <div
             style={{
-              width: "100%",
-              maxWidth: 760,
-              marginTop: 18,
-              marginBottom: 32,
-              background: "#f8fbf6",
-              borderRadius: 18,
-              border: "1px solid #dfe8dc",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.16)",
-              overflow: "hidden",
+              padding: "34px 16px",
+              textAlign: "center",
+              color: "#768476",
+              fontSize: 14,
+              background: "#fff",
+              border: "1px solid #edf2ea",
+              borderRadius: 16,
             }}
-            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              style={{
-                padding: "13px 14px",
-                borderBottom: "1px solid #e5ece2",
-                background: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: "#1f2d1f" }}>
-                  搜索公开记录
-                </div>
-                <div style={{ fontSize: 12, color: "#7f8f7f", marginTop: 2 }}>
-                  按记录展开，不按用户合并
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSearchOpen(false)}
-                style={{
-                  border: "1px solid #e2e8df",
-                  background: "#fff",
-                  color: "#4a5a4a",
-                  borderRadius: 999,
-                  padding: "6px 10px",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  flexShrink: 0,
-                }}
-              >
-                关闭
-              </button>
+            {filterMode === "help"
+              ? "暂时没有公开的求助记录"
+              : `还没有${activeFilterLabel === "全部" ? "" : activeFilterLabel}公开项目记录`}
+            <div style={{ marginTop: 8, fontSize: 12, color: "#9aa59a" }}>
+              当用户主动公开项目和记录后，会出现在这里。
             </div>
-
-            <form
-              onSubmit={runSearch}
-              style={{
-                padding: 12,
-                borderBottom: "1px solid #e5ece2",
-                background: "#fbfdf9",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))",
-                  gap: 8,
-                }}
-              >
-                <label style={{ fontSize: 12, color: "#6f7f6f" }}>
-                  地区
-                  <input
-                    value={searchRegion}
-                    onChange={(e) => setSearchRegion(e.target.value)}
-                    placeholder="国家 / 城市 / 地区"
-                    style={{
-                      width: "100%",
-                      marginTop: 4,
-                      padding: "9px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #dfe8dc",
-                      background: "#fff",
-                      color: "#1f2d1f",
-                      boxSizing: "border-box",
-                      fontSize: 13,
-                    }}
-                  />
-                </label>
-
-                <label style={{ fontSize: 12, color: "#6f7f6f" }}>
-                  种类
-                  <select
-                    value={searchCategory}
-                    onChange={(e) =>
-                      setSearchCategory(e.target.value as SearchCategory)
-                    }
-                    style={{
-                      width: "100%",
-                      marginTop: 4,
-                      padding: "9px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #dfe8dc",
-                      background: "#fff",
-                      color: "#1f2d1f",
-                      boxSizing: "border-box",
-                      fontSize: 13,
-                    }}
-                  >
-                    <option value="all">全部</option>
-                    <option value="plant">植物</option>
-                    <option value="system">配套设施</option>
-                  </select>
-                </label>
-
-                <label style={{ fontSize: 12, color: "#6f7f6f" }}>
-                  名称
-                  <input
-                    value={searchName}
-                    onChange={(e) => setSearchName(e.target.value)}
-                    placeholder="项目名 / 植物名 / 别名"
-                    style={{
-                      width: "100%",
-                      marginTop: 4,
-                      padding: "9px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #dfe8dc",
-                      background: "#fff",
-                      color: "#1f2d1f",
-                      boxSizing: "border-box",
-                      fontSize: 13,
-                    }}
-                  />
-                </label>
-
-                <label style={{ fontSize: 12, color: "#6f7f6f" }}>
-                  内容 / 标签
-                  <input
-                    value={searchContent}
-                    onChange={(e) => setSearchContent(e.target.value)}
-                    placeholder="记录内容或标签"
-                    style={{
-                      width: "100%",
-                      marginTop: 4,
-                      padding: "9px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #dfe8dc",
-                      background: "#fff",
-                      color: "#1f2d1f",
-                      boxSizing: "border-box",
-                      fontSize: 13,
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  flexWrap: "wrap",
-                  marginTop: 10,
-                  fontSize: 12,
-                  color: "#7a8a7a",
-                }}
-              >
-                <span style={{ flexShrink: 0 }}>常用：</span>
-                {commonSearchTags.map((tag) => {
-                  const active = searchContent.trim() === tag;
-
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => setSearchContent(tag)}
-                      style={{
-                        border: active
-                          ? "1px solid #8bc58b"
-                          : "1px solid #e1e8dd",
-                        background: active ? "#f0fff4" : "#fff",
-                        color: active ? "#2e7d32" : "#4d5d4d",
-                        borderRadius: 999,
-                        padding: "4px 8px",
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  marginTop: 10,
-                }}
-              >
-                <label
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    fontSize: 13,
-                    color: "#374737",
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={searchHelpOnly}
-                    onChange={(e) => setSearchHelpOnly(e.target.checked)}
-                  />
-                  ! 求助
-                </label>
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={resetSearchFilters}
-                    style={{
-                      border: "1px solid #e1e8dd",
-                      background: "#fff",
-                      color: "#4d5d4d",
-                      borderRadius: 999,
-                      padding: "8px 13px",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    重置
-                  </button>
-                  <button
-                    type="submit"
-                    style={{
-                      border: "1px solid #7eb87e",
-                      background: "#4CAF50",
-                      color: "#fff",
-                      borderRadius: 999,
-                      padding: "8px 15px",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    搜索
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            <div style={{ padding: 12 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  marginBottom: 9,
-                  color: "#6f7f6f",
-                  fontSize: 12,
-                }}
-              >
-                <span>全量公开记录流</span>
-                {searchHasRun && !searchLoading ? (
-                  <span>{searchResults.length} 条</span>
-                ) : null}
-              </div>
-
-              {searchLoading ? (
-                <div
-                  style={{
-                    padding: "22px 12px",
-                    textAlign: "center",
-                    color: "#8a998a",
-                    fontSize: 13,
-                  }}
-                >
-                  搜索中...
-                </div>
-              ) : searchHasRun && searchResults.length === 0 ? (
-                <div
-                  style={{
-                    padding: "28px 12px",
-                    textAlign: "center",
-                    color: "#8a998a",
-                    fontSize: 13,
-                    background: "#fff",
-                    borderRadius: 14,
-                    border: "1px solid #edf2ea",
-                  }}
-                >
-                  没有找到符合条件的公开记录
-                </div>
-              ) : (
-                searchResults.map((record) => {
-                  const isHelp = record.status_tag === "help";
-
-                  return (
-                    <a
-                      key={record.record_id}
-                      href={`/archive/${record.archive_id}?record=${record.record_id}`}
-                      style={{
-                        display: "block",
-                        textDecoration: "none",
-                        color: "#1f2d1f",
-                        background: "#fff",
-                        border: "1px solid #e8eee5",
-                        borderRadius: 13,
-                        padding: 9,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: 8,
-                        }}
-                      >
-                        {record.primary_image_url ? (
-                          <img
-                            src={record.primary_image_url}
-                            alt={record.archive_title || "record image"}
-                            style={{
-                              width: 58,
-                              height: 58,
-                              objectFit: "cover",
-                              borderRadius: 9,
-                              flexShrink: 0,
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 58,
-                              height: 58,
-                              borderRadius: 9,
-                              flexShrink: 0,
-                              background: "#f5f8f4",
-                              color: "#9aaa9a",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 18,
-                            }}
-                          >
-                            {record.archive_category === "system" ? "🛠" : "🌿"}
-                          </div>
-                        )}
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 5,
-                              marginBottom: 4,
-                              minWidth: 0,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color:
-                                  record.archive_category === "system"
-                                    ? "#7a6a2a"
-                                    : "#2e7d32",
-                                background:
-                                  record.archive_category === "system"
-                                    ? "#fff9e8"
-                                    : "#f0fff4",
-                                border:
-                                  record.archive_category === "system"
-                                    ? "1px solid #eadca8"
-                                    : "1px solid #cae9ca",
-                                borderRadius: 999,
-                                padding: "1px 6px",
-                                whiteSpace: "nowrap",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {categoryLabel(record.archive_category)}
-                            </span>
-
-                            {isHelp && (
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  color: "#8a4a4a",
-                                  background: "#fff7f7",
-                                  border: "1px solid #e6c9c9",
-                                  borderRadius: 999,
-                                  padding: "1px 6px",
-                                  whiteSpace: "nowrap",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                求助
-                              </span>
-                            )}
-
-                            <span
-                              style={{
-                                fontSize: 14,
-                                fontWeight: 700,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                minWidth: 0,
-                              }}
-                            >
-                              {record.archive_title}
-                            </span>
-
-                            <span
-                              style={{
-                                marginLeft: "auto",
-                                fontSize: 11,
-                                color: "#9aa59a",
-                                whiteSpace: "nowrap",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {formatDate(record.record_time)}
-                            </span>
-                          </div>
-
-                          <div
-                            style={{
-                              fontSize: 13,
-                              color: "#3f4f3f",
-                              lineHeight: 1.45,
-                              wordBreak: "break-word",
-                            }}
-                          >
-                            {record.note
-                              ? shortText(record.note, 96)
-                              : "这条记录没有文字内容"}
-                          </div>
-
-                          <div
-                            style={{
-                              marginTop: 5,
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                              flexWrap: "wrap",
-                              fontSize: 11,
-                              color: "#9aa59a",
-                            }}
-                          >
-                            <span>{record.username || "用户"}</span>
-                            {record.user_location ? (
-                              <span>· {record.user_location}</span>
-                            ) : null}
-                            {record.species_name_snapshot ? (
-                              <span style={{ color: "#4CAF50" }}>
-                                · {record.species_name_snapshot}
-                              </span>
-                            ) : null}
-
-                            {Array.isArray(record.display_tags) &&
-                              record.display_tags.slice(0, 2).map((tag) => (
-                                <span
-                                  key={tag}
-                                  style={{
-                                    padding: "1px 5px",
-                                    borderRadius: 999,
-                                    border: "1px solid #e2e8df",
-                                    background: "#fafafa",
-                                    color: "#4CAF50",
-                                  }}
-                                >
-                                  {getBehaviorTagLabel(tag)}
-                                </span>
-                              ))}
-                          </div>
-                        </div>
-                      </div>
-                    </a>
-                  );
-                })
-              )}
-            </div>
-          </section>
-        </div>
-      )}
+          </div>
+        )}
 
       <div ref={loaderRef} style={{ height: 44, textAlign: "center" }}>
         {loading ? (
           <span style={{ color: "#8a998a", fontSize: 13 }}>加载中...</span>
         ) : hasMore ? (
           ""
+        ) : filterMode === "help" ? (
+          helpStreamItems.length > 0 ? (
+            <span style={{ color: "#aaa", fontSize: 12 }}>没有更多了</span>
+          ) : (
+            ""
+          )
         ) : sections.length > 0 ? (
           <span style={{ color: "#aaa", fontSize: 12 }}>没有更多了</span>
         ) : (

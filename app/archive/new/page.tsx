@@ -1,10 +1,28 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type ArchiveCategory = "plant" | "system";
+
+const DEFAULT_SYSTEM_NAMES = [
+  "补光灯",
+  "花盆",
+  "育苗盘",
+  "支架",
+  "爬藤架",
+  "灌溉系统",
+  "滴灌",
+  "喷雾器",
+  "温湿度计",
+  "遮阳网",
+  "防虫网",
+  "土壤",
+  "肥料",
+  "营养液",
+  "基质",
+];
 
 export default function NewArchivePage() {
   return (
@@ -13,7 +31,7 @@ export default function NewArchivePage() {
         <main
           style={{
             padding: "30px 20px",
-            maxWidth: 420,
+            maxWidth: 480,
             margin: "0 auto",
           }}
         >
@@ -35,6 +53,12 @@ function NewArchiveContent() {
   const [pendingSpeciesName, setPendingSpeciesName] = useState<string | null>(
     null
   );
+  const [speciesSearch, setSpeciesSearch] = useState("");
+
+  const [systemSearch, setSystemSearch] = useState("");
+  const [systemName, setSystemName] = useState("");
+  const [plantSuggestionsOpen, setPlantSuggestionsOpen] = useState(false);
+  const [systemSuggestionsOpen, setSystemSuggestionsOpen] = useState(false);
 
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
@@ -48,24 +72,70 @@ function NewArchiveContent() {
 
   useEffect(() => {
     async function loadSpecies() {
-      const { data } = await supabase
-        .from("plant_species")
-        .select("id, common_name, scientific_name")
-        .order("common_name", { ascending: true });
+      const [{ data: speciesData }, { data: aliasData }] = await Promise.all([
+        supabase
+          .from("plant_species")
+          .select("id, common_name, scientific_name, slug, is_active")
+          .eq("is_active", true)
+          .order("common_name", { ascending: true }),
 
-      const list = data || [];
+        supabase
+          .from("plant_species_aliases")
+          .select("species_id, alias_name, normalized_name"),
+      ]);
+
+      const aliasesBySpecies = new Map<string, string[]>();
+
+      (aliasData || []).forEach((alias: any) => {
+        const list = aliasesBySpecies.get(alias.species_id) || [];
+        if (alias.alias_name) list.push(alias.alias_name);
+        if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {
+          list.push(alias.normalized_name);
+        }
+        aliasesBySpecies.set(alias.species_id, list);
+      });
+
+      const list = (speciesData || []).map((species: any) => {
+        const aliases = Array.from(new Set(aliasesBySpecies.get(species.id) || []));
+        const displayName =
+          species.common_name || species.scientific_name || "未命名植物";
+
+        return {
+          ...species,
+          aliases,
+          display_name: displayName,
+          search_text: [
+            displayName,
+            species.common_name,
+            species.scientific_name,
+            species.slug,
+            ...aliases,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase(),
+        };
+      });
+
       setSpeciesList(list);
 
       if (preselectedSpeciesId) {
-        const selected = list.find((s) => s.id === preselectedSpeciesId);
+        const selected = list.find((s: any) => s.id === preselectedSpeciesId);
 
         if (selected) {
-          const selectedName = selected.common_name || selected.scientific_name || "";
+          const selectedName =
+            selected.display_name ||
+            selected.common_name ||
+            selected.scientific_name ||
+            "";
 
           setCategory("plant");
           setSpeciesId(selected.id);
           setPendingSpeciesName(null);
-          setTitle((current) => current || (selectedName ? `我的${selectedName}` : ""));
+          setSpeciesSearch(selectedName);
+          setTitle((current) =>
+            current || (selectedName ? `我的${selectedName}` : "")
+          );
         }
       }
     }
@@ -73,18 +143,85 @@ function NewArchiveContent() {
     loadSpecies();
   }, [preselectedSpeciesId]);
 
+  function getPlantSearchResults() {
+    const keyword = speciesSearch.trim().toLowerCase();
+
+    if (!keyword) {
+      return speciesList.slice(0, 10);
+    }
+
+    return speciesList
+      .filter((species: any) => species.search_text?.includes(keyword))
+      .slice(0, 10);
+  }
+
+  function hasExactPlantMatch() {
+    const keyword = speciesSearch.trim().toLowerCase();
+    if (!keyword) return false;
+
+    return speciesList.some((species: any) => {
+      const names = [
+        species.display_name,
+        species.common_name,
+        species.scientific_name,
+        species.slug,
+        ...(Array.isArray(species.aliases) ? species.aliases : []),
+      ];
+
+      return names
+        .filter(Boolean)
+        .some((name) => String(name).trim().toLowerCase() === keyword);
+    });
+  }
+
+  function submitPendingSpeciesName() {
+    const name = speciesSearch.trim();
+
+    if (!name) {
+      alert("请输入候选植物名称");
+      return;
+    }
+
+    setSpeciesId(null);
+    setPendingSpeciesName(name);
+    setSpeciesSearch(name);
+    setPlantSuggestionsOpen(false);
+  }
+
+  function getSystemNameOptions(keyword = systemSearch) {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+
+    return DEFAULT_SYSTEM_NAMES.filter((name) =>
+      normalizedKeyword ? name.toLowerCase().includes(normalizedKeyword) : true
+    ).slice(0, 10);
+  }
+
+  function hasExactSystemNameMatch() {
+    const keyword = systemSearch.trim().toLowerCase();
+    if (!keyword) return false;
+
+    return DEFAULT_SYSTEM_NAMES.some(
+      (name) => name.trim().toLowerCase() === keyword
+    );
+  }
+
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (loading) return;
 
     if (!title.trim()) {
-      alert("请输入名称");
+      alert("请输入项目名称");
       return;
     }
 
     if (category === "plant" && !speciesId && !pendingSpeciesName) {
-      alert("请选择植物，或新增一个候选植物");
+      alert("请选择系统名，或新增一个候选植物");
+      return;
+    }
+
+    if (category === "system" && !systemName.trim()) {
+      alert("请选择或添加配套设施系统名");
       return;
     }
 
@@ -100,10 +237,22 @@ function NewArchiveContent() {
       return;
     }
 
+    if (category === "plant" && pendingSpeciesName) {
+      await supabase.from("plant_species_pending").insert([
+        {
+          user_id: user.id,
+          submitted_name: pendingSpeciesName,
+          language_code: "zh",
+          status: "pending",
+        },
+      ]);
+    }
+
     const selectedSpecies = speciesList.find((s) => s.id === speciesId);
     const speciesNameSnapshot =
       category === "plant"
         ? pendingSpeciesName ||
+          selectedSpecies?.display_name ||
           selectedSpecies?.common_name ||
           selectedSpecies?.scientific_name ||
           null
@@ -117,6 +266,7 @@ function NewArchiveContent() {
           category,
           species_id: category === "plant" ? speciesId : null,
           species_name_snapshot: speciesNameSnapshot,
+          system_name: category === "system" ? systemName.trim() : null,
           source: source.trim() || null,
           note: note.trim() || null,
           user_id: user.id,
@@ -161,57 +311,16 @@ function NewArchiveContent() {
     }
   }
 
-  async function handleAddSpecies() {
-    let name = prompt("输入植物名称");
-    if (!name) return;
-
-    name = name.trim();
-
-    if (!name) return;
-
-    const exists = speciesList.find(
-      (s) => s.common_name === name || s.scientific_name === name
-    );
-
-    if (exists) {
-      setSpeciesId(exists.id);
-      setPendingSpeciesName(null);
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { error } = await supabase.from("plant_species_pending").insert([
-      {
-        user_id: user?.id || null,
-        submitted_name: name,
-        language_code: "zh",
-        status: "pending",
-      },
-    ]);
-
-    if (error) {
-      alert("提交候选植物失败：" + error.message);
-      return;
-    }
-
-    setSpeciesId(null);
-    setPendingSpeciesName(name);
-
-    alert(`已加入候选植物：${name}\n当前可继续新建项目。`);
-  }
-
   return (
     <main
       style={{
-        padding: "30px 20px",
-        maxWidth: 420,
+        padding: "26px 20px",
+        maxWidth: 480,
         margin: "0 auto",
+        color: "#263326",
       }}
     >
-      <h2 style={{ marginBottom: 20 }}>新建项目</h2>
+      <h2 style={{ margin: "0 0 20px", color: "#1f2d1f" }}>新建项目</h2>
 
       <form onSubmit={handleCreate}>
         <div style={{ marginBottom: 20 }}>
@@ -225,8 +334,9 @@ function NewArchiveContent() {
               padding: "10px",
               width: "100%",
               border: "1px solid #ddd",
-              borderRadius: "6px",
+              borderRadius: "8px",
               fontSize: 14,
+              boxSizing: "border-box",
             }}
           />
         </div>
@@ -234,69 +344,171 @@ function NewArchiveContent() {
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 14, marginBottom: 6 }}>种类 *</div>
 
-          <select
-            value={category}
-            onChange={(e) => {
-              const next = e.target.value as ArchiveCategory;
-              setCategory(next);
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setCategory("plant");
+                setSystemSearch("");
+                setSystemName("");
+              }}
+              style={{
+                flex: 1,
+                padding: "10px",
+                borderRadius: 999,
+                border:
+                  category === "plant" ? "1px solid #3f7d3d" : "1px solid #ddd",
+                background: category === "plant" ? "#3f7d3d" : "#fff",
+                color: category === "plant" ? "#fff" : "#333",
+                cursor: "pointer",
+              }}
+            >
+              种植
+            </button>
 
-              if (next !== "plant") {
+            <button
+              type="button"
+              onClick={() => {
+                setCategory("system");
                 setSpeciesId(null);
                 setPendingSpeciesName(null);
-              }
-            }}
-            style={{
-              padding: "10px",
-              width: "100%",
-              border: "1px solid #ddd",
-              borderRadius: "6px",
-              fontSize: 14,
-              background: "#fff",
-            }}
-          >
-            <option value="plant">🌿 植物</option>
-            <option value="system">🛠 配套设施</option>
-          </select>
+                setSpeciesSearch("");
+              }}
+              style={{
+                flex: 1,
+                padding: "10px",
+                borderRadius: 999,
+                border:
+                  category === "system"
+                    ? "1px solid #3f7d3d"
+                    : "1px solid #ddd",
+                background: category === "system" ? "#3f7d3d" : "#fff",
+                color: category === "system" ? "#fff" : "#333",
+                cursor: "pointer",
+              }}
+            >
+              配套设施
+            </button>
+          </div>
         </div>
 
         {category === "plant" && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, marginBottom: 4 }}>
-              系统名称（选择植物）
+            <div style={{ fontSize: 14, marginBottom: 6 }}>系统名 *</div>
+
+            <div style={{ position: "relative" }}>
+              <input
+                placeholder="输入植物名 / 学名 / 别名后点选"
+                value={speciesSearch}
+                onChange={(e) => {
+                  setSpeciesSearch(e.target.value);
+                  setSpeciesId(null);
+                  setPendingSpeciesName(null);
+                  setPlantSuggestionsOpen(true);
+                }}
+                style={{
+                  padding: "10px",
+                  width: "100%",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  fontSize: 14,
+                  color: "#263326",
+                  background: "#fff",
+                  boxSizing: "border-box",
+                }}
+              />
+
+              {plantSuggestionsOpen && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    border: "1px solid #eee",
+                    borderRadius: 12,
+                    background: "#fff",
+                    maxHeight: 250,
+                  overflow: "auto",
+                  padding: 8,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {getPlantSearchResults().map((species: any) => (
+                  <button
+                    key={species.id}
+                    type="button"
+                    onClick={() => {
+                      const name =
+                        species.display_name ||
+                        species.common_name ||
+                        species.scientific_name ||
+                        "未命名植物";
+
+                      setSpeciesId(species.id);
+                      setPendingSpeciesName(null);
+                      setSpeciesSearch(name);
+                      setPlantSuggestionsOpen(false);
+                    }}
+                    style={{
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border:
+                        speciesId === species.id
+                          ? "1px solid #4CAF50"
+                          : "1px solid transparent",
+                      background: speciesId === species.id ? "#f0fff4" : "#fafafa",
+                      color: "#263326",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    <strong style={{ color: "#263326" }}>
+                      {species.display_name ||
+                        species.common_name ||
+                        species.scientific_name ||
+                        "未命名植物"}
+                    </strong>
+                    {species.scientific_name && (
+                      <span style={{ color: "#888", marginLeft: 6 }}>
+                        {species.scientific_name}
+                      </span>
+                    )}
+                    {Array.isArray(species.aliases) && species.aliases.length > 0 && (
+                      <div style={{ color: "#999", marginTop: 2 }}>
+                        别名：{species.aliases.slice(0, 4).join("、")}
+                      </div>
+                    )}
+                  </button>
+                ))}
+
+                {getPlantSearchResults().length === 0 && (
+                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
+                    没有找到匹配植物
+                  </div>
+                )}
+
+                {speciesSearch.trim() && !hasExactPlantMatch() && (
+                  <button
+                    type="button"
+                    onClick={submitPendingSpeciesName}
+                    style={{
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1px dashed #4CAF50",
+                      background: "#fff",
+                      color: "#4CAF50",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    + 新增候选植物：{speciesSearch.trim()}
+                  </button>
+                )}
+              </div>
+              )}
             </div>
-
-            <select
-              value={speciesId || ""}
-              onChange={(e) => {
-                const value = e.target.value;
-
-                if (value === "__new__") {
-                  handleAddSpecies();
-                  return;
-                }
-
-                setSpeciesId(value || null);
-                setPendingSpeciesName(null);
-              }}
-              style={{
-                padding: "8px",
-                width: "100%",
-                border: "1px solid #ddd",
-                borderRadius: "6px",
-                fontSize: 13,
-                background: "#fff",
-              }}
-            >
-              <option value="">请选择植物 *</option>
-
-              {speciesList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.common_name || s.scientific_name}
-                </option>
-              ))}
-
-              <option value="__new__">+ 新增植物</option>
-            </select>
 
             {pendingSpeciesName && (
               <div
@@ -314,6 +526,106 @@ function NewArchiveContent() {
           </div>
         )}
 
+        {category === "system" && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 14, marginBottom: 6 }}>
+              系统名 *
+            </div>
+
+            <input
+              placeholder="输入后点选，例如：补光灯"
+              value={systemSearch}
+              onChange={(e) => {
+                setSystemSearch(e.target.value);
+                setSystemName("");
+                setSystemSuggestionsOpen(true);
+              }}
+              style={{
+                padding: "10px",
+                width: "100%",
+                border: "1px solid #ddd",
+                borderRadius: "8px",
+                fontSize: 14,
+                boxSizing: "border-box",
+              }}
+            />
+
+            {systemSuggestionsOpen && (
+              <div
+                style={{
+                  marginTop: 8,
+                  border: "1px solid #eee",
+                  borderRadius: 12,
+                  background: "#fff",
+                  maxHeight: 220,
+                overflow: "auto",
+                padding: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              {getSystemNameOptions().map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => {
+                    setSystemName(name);
+                    setSystemSearch(name);
+                    setSystemSuggestionsOpen(false);
+                  }}
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border:
+                      systemName === name
+                        ? "1px solid #4CAF50"
+                        : "1px solid transparent",
+                    background: systemName === name ? "#f0fff4" : "#fafafa",
+                    color: "#263326",
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+
+              {getSystemNameOptions().length === 0 && (
+                <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
+                  没有找到匹配系统名
+                </div>
+              )}
+
+              {systemSearch.trim() && !hasExactSystemNameMatch() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const name = systemSearch.trim();
+                    setSystemName(name);
+                    setSystemSearch(name);
+                    setSystemSuggestionsOpen(false);
+                  }}
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px dashed #4CAF50",
+                    background: "#fff",
+                    color: "#4CAF50",
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  + 作为备选系统名：{systemSearch.trim()}
+                </button>
+              )}
+            </div>
+            )}
+          </div>
+        )}
+
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, marginBottom: 4 }}>来源（选填）</div>
 
@@ -325,8 +637,11 @@ function NewArchiveContent() {
               padding: "8px",
               width: "100%",
               border: "1px solid #ddd",
-              borderRadius: "6px",
+              borderRadius: "8px",
               fontSize: 13,
+              color: "#263326",
+              background: "#fff",
+              boxSizing: "border-box",
             }}
           />
         </div>
@@ -342,9 +657,12 @@ function NewArchiveContent() {
               padding: "8px",
               width: "100%",
               border: "1px solid #ddd",
-              borderRadius: "6px",
+              borderRadius: "8px",
               fontSize: 13,
+              color: "#263326",
+              background: "#fff",
               minHeight: 60,
+              boxSizing: "border-box",
             }}
           />
         </div>
@@ -375,7 +693,7 @@ function NewArchiveContent() {
             border: "none",
             borderRadius: "8px",
             fontSize: 14,
-            cursor: "pointer",
+            cursor: loading ? "not-allowed" : "pointer",
           }}
         >
           {loading ? "创建中..." : "创建"}
