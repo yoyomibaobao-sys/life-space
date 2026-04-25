@@ -1,17 +1,21 @@
 "use client";
 import { supabase } from "@/lib/supabase";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { showToast } from "@/components/Toast";
 
 export default function ImageViewer({ images }: { images: string[] }) {
   const [index, setIndex] = useState<number | null>(null);
+  const [pendingDeleteUrl, setPendingDeleteUrl] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  function next(e: any) {
+  function next(e: MouseEvent<HTMLDivElement>) {
     e.stopPropagation();
     if (index === null) return;
     setIndex((index + 1) % images.length);
   }
 
-  function prev(e: any) {
+  function prev(e: MouseEvent<HTMLDivElement>) {
     e.stopPropagation();
     if (index === null) return;
     setIndex((index - 1 + images.length) % images.length);
@@ -44,23 +48,9 @@ export default function ImageViewer({ images }: { images: string[] }) {
 
     {/* 删除按钮 */}
     <div
-      onClick={async (e) => {
+      onClick={(e) => {
         e.stopPropagation();
-
-        const confirmDelete = confirm("删除这张图片？");
-        if (!confirmDelete) return;
-
-        const { error } = await supabase
-          .from("media")
-          .delete()
-          .eq("url", url);
-
-        if (error) {
-          alert("删除失败");
-          return;
-        }
-
-        location.reload();
+        setPendingDeleteUrl(url);
       }}
       style={{
         fontSize: "12px",
@@ -75,6 +65,28 @@ export default function ImageViewer({ images }: { images: string[] }) {
   </div>
 ))}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteUrl)}
+        title="删除图片"
+        message="确定删除这张图片吗？删除后无法恢复。"
+        confirmText={isDeleting ? "删除中..." : "删除"}
+        cancelText="取消"
+        onClose={() => { if (!isDeleting) setPendingDeleteUrl(null); }}
+        onConfirm={async () => {
+          if (!pendingDeleteUrl || isDeleting) return;
+          setIsDeleting(true);
+          const { error } = await supabase.from("media").delete().eq("url", pendingDeleteUrl);
+          if (error) {
+            showToast("删除图片失败");
+            setIsDeleting(false);
+            return;
+          }
+          showToast("图片已删除");
+          location.reload();
+        }}
+        danger
+      />
 
       {/* 全屏查看 */}
       {index !== null && (

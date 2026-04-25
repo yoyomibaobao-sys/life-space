@@ -4,17 +4,31 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { showToast } from "@/components/Toast";
+import {
+  type ArchiveCategory,
+  getArchiveCategoryIcon,
+  getArchiveCategoryLabel,
+} from "@/lib/archive-categories";
 
-type Category = "all" | "plant" | "system";
+type Category = "all" | ArchiveCategory;
 
 function formatDate(value?: string | null) {
   if (!value) return "";
-  return new Date(value).toLocaleDateString("zh-CN");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function categoryLabel(category?: string | null) {
-  if (category === "system") return "配套设施";
-  return "种植";
+  return getArchiveCategoryLabel(category);
 }
 
 function getMediaUrl(media: any) {
@@ -37,8 +51,11 @@ export default function UserSpacePage() {
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
 
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followedArchiveIds, setFollowedArchiveIds] = useState<string[]>([]);
   const [showCard, setShowCard] = useState(false);
   const [cardProfile, setCardProfile] = useState<any>(null);
+  const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
+  const [followSubmitting, setFollowSubmitting] = useState(false);
 
   const loadingRef = useRef(false);
 
@@ -65,35 +82,45 @@ export default function UserSpacePage() {
       const safeArchives = archivesData || [];
       setArchives(safeArchives);
 
-      const [{ data: subTagsData }, { data: groupTagsData }] = await Promise.all([
-        supabase
-          .from("sub_tags")
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: true }),
-        supabase.rpc("get_public_user_space_group_tags", {
-          p_user_id: userId,
-        }),
-      ]);
-
-      setSubTags(subTagsData || []);
-      setGroupTags(groupTagsData || []);
-
       const archiveIds = safeArchives.map((a) => a.id);
 
-      if (archiveIds.length === 0) {
-        setRecords([]);
-        return;
-      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      const { data: recs } = await supabase
-        .from("records")
-        .select("*, media(*)")
-        .in("archive_id", archiveIds)
-        .eq("visibility", "public")
-        .order("record_time", { ascending: false });
+      const [subTagResult, groupTagResult, recordsResult, followsResult] =
+        await Promise.all([
+          supabase
+            .from("sub_tags")
+            .select("*")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: true }),
+          supabase.rpc("get_public_user_space_group_tags", {
+            p_user_id: userId,
+          }),
+          archiveIds.length === 0
+            ? Promise.resolve({ data: [] as any[] })
+            : supabase
+                .from("records")
+                .select("*, media(*)")
+                .in("archive_id", archiveIds)
+                .eq("visibility", "public")
+                .order("record_time", { ascending: false }),
+          user?.id && archiveIds.length > 0
+            ? supabase
+                .from("archive_follows")
+                .select("archive_id")
+                .eq("user_id", user.id)
+                .in("archive_id", archiveIds)
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
 
-      setRecords(recs || []);
+      setSubTags(subTagResult.data || []);
+      setGroupTags(groupTagResult.data || []);
+      setRecords(recordsResult.data || []);
+      setFollowedArchiveIds(
+        (followsResult.data || []).map((row: any) => row.archive_id)
+      );
     } finally {
       loadingRef.current = false;
     }
@@ -247,7 +274,7 @@ export default function UserSpacePage() {
   }
 
   function selectSubTag(tag: any) {
-    setActiveCategory(tag.category === "system" ? "system" : "plant");
+    setActiveCategory((tag.category || "plant") as ArchiveCategory);
     setActiveSubTag(tag.id);
     setActiveGroupTag(null);
   }
@@ -341,51 +368,37 @@ export default function UserSpacePage() {
             全部
           </button>
 
-          <div style={categoryGroupStyle}>
-            <button
-              type="button"
-              onClick={() => selectCategory("plant")}
-              style={mainFilterStyle(activeCategory === "plant" && !activeSubTag)}
-            >
-              种植：
-            </button>
+          {[
+            "plant",
+            "system",
+            "insect_fish",
+            "other",
+          ].map((category) => (
+            <div key={category} style={categoryGroupStyle}>
+              <button
+                type="button"
+                onClick={() => selectCategory(category as ArchiveCategory)}
+                style={mainFilterStyle(
+                  activeCategory === category && !activeSubTag
+                )}
+              >
+                {categoryLabel(category)}：
+              </button>
 
-            {visibleSubTags
-              .filter((tag) => tag.category === "plant")
-              .map((tag) => (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => selectSubTag(tag)}
-                  style={subFilterStyle(activeSubTag === tag.id)}
-                >
-                  {tag.name}
-                </button>
-              ))}
-          </div>
-
-          <div style={categoryGroupStyle}>
-            <button
-              type="button"
-              onClick={() => selectCategory("system")}
-              style={mainFilterStyle(activeCategory === "system" && !activeSubTag)}
-            >
-              配套设施：
-            </button>
-
-            {visibleSubTags
-              .filter((tag) => tag.category === "system")
-              .map((tag) => (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => selectSubTag(tag)}
-                  style={subFilterStyle(activeSubTag === tag.id)}
-                >
-                  {tag.name}
-                </button>
-              ))}
-          </div>
+              {visibleSubTags
+                .filter((tag) => tag.category === category)
+                .map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => selectSubTag(tag)}
+                    style={subFilterStyle(activeSubTag === tag.id)}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+            </div>
+          ))}
         </div>
 
         {activeSubTag && visibleGroupTags.length > 0 && (
@@ -504,10 +517,8 @@ export default function UserSpacePage() {
                         objectFit: "cover",
                       }}
                     />
-                  ) : archive.category === "system" ? (
-                    "🛠"
                   ) : (
-                    "🌱"
+                    getArchiveCategoryIcon(archive.category)
                   )}
                 </div>
 
@@ -534,6 +545,10 @@ export default function UserSpacePage() {
                     {hasHelp && <span style={helpBadgeStyle}>求助</span>}
 
                     {isEnded && <span style={endedBadgeStyle}>已结束</span>}
+
+                    {followedArchiveIds.includes(archive.id) && (
+                      <span style={followedBadgeStyle}>已关注</span>
+                    )}
 
                     <span
                       style={{
@@ -655,50 +670,71 @@ export default function UserSpacePage() {
               {cardProfile.followerCount || 0}
             </div>
 
-            <button
-              type="button"
-              onClick={async () => {
-                const {
-                  data: { user },
-                } = await supabase.auth.getUser();
+            <div style={{ marginTop: 16, display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (followSubmitting) return;
+                  const {
+                    data: { user },
+                  } = await supabase.auth.getUser();
 
-                if (!user) {
-                  router.push("/login");
-                  return;
-                }
+                  if (!user) {
+                    router.push("/login");
+                    return;
+                  }
 
-                if (isFollowing) {
-                  await supabase
-                    .from("follows")
-                    .delete()
-                    .eq("follower_id", user.id)
-                    .eq("following_id", userId);
+                  if (isFollowing) {
+                    setShowUnfollowConfirm(true);
+                    return;
+                  }
 
-                  setIsFollowing(false);
-                } else {
-                  await supabase.from("follows").insert([
+                  setFollowSubmitting(true);
+                  const { error } = await supabase.from("follows").insert([
                     {
                       follower_id: user.id,
                       following_id: userId,
                     },
                   ]);
+                  setFollowSubmitting(false);
+
+                  if (error) {
+                    showToast("关注失败");
+                    return;
+                  }
 
                   setIsFollowing(true);
-                }
-              }}
-              style={{
-                marginTop: 16,
-                padding: "8px 16px",
-                background: isFollowing ? "#f2f2f2" : "#4f7b45",
-                color: isFollowing ? "#333" : "#fff",
-                borderRadius: 999,
-                cursor: "pointer",
-                border: "none",
-                fontSize: 14,
-              }}
-            >
-              {isFollowing ? "已关注" : "关注"}
-            </button>
+                  showToast("已关注该用户");
+                }}
+                style={{
+                  padding: "8px 16px",
+                  background: isFollowing ? "#f2f2f2" : "#4f7b45",
+                  color: isFollowing ? "#333" : "#fff",
+                  borderRadius: 999,
+                  cursor: "pointer",
+                  border: "none",
+                  fontSize: 14,
+                }}
+              >
+                {followSubmitting ? "处理中..." : isFollowing ? "已关注" : "关注"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push(`/user/${userId}/profile`)}
+                style={{
+                  padding: "8px 16px",
+                  background: "#f5faf3",
+                  color: "#4f7b45",
+                  borderRadius: 999,
+                  cursor: "pointer",
+                  border: "1px solid #dce8d8",
+                  fontSize: 14,
+                }}
+              >
+                查看资料
+              </button>
+            </div>
 
             <div
               onClick={() => setShowCard(false)}
@@ -714,6 +750,46 @@ export default function UserSpacePage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={showUnfollowConfirm}
+        title="取消关注用户"
+        message={`确定不再关注“${cardProfile?.username || username || "这个用户"}”吗？`}
+        confirmText={followSubmitting ? "处理中..." : "取消关注"}
+        cancelText="保留关注"
+        danger
+        onClose={() => {
+          if (!followSubmitting) setShowUnfollowConfirm(false);
+        }}
+        onConfirm={async () => {
+          if (followSubmitting) return;
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (!user) {
+            router.push("/login");
+            return;
+          }
+
+          setFollowSubmitting(true);
+          const { error } = await supabase
+            .from("follows")
+            .delete()
+            .eq("follower_id", user.id)
+            .eq("following_id", userId);
+          setFollowSubmitting(false);
+
+          if (error) {
+            showToast("取消关注失败");
+            return;
+          }
+
+          setIsFollowing(false);
+          setShowUnfollowConfirm(false);
+          showToast("已取消关注该用户");
+        }}
+      />
+
     </main>
   );
 }
@@ -792,4 +868,14 @@ const endedBadgeStyle: React.CSSProperties = {
   color: "#77756b",
   fontSize: 12,
   fontWeight: 550,
+};
+
+const followedBadgeStyle: React.CSSProperties = {
+  flex: "0 0 auto",
+  padding: "3px 8px",
+  borderRadius: 999,
+  background: "#eef4ff",
+  color: "#4b6bb0",
+  fontSize: 12,
+  fontWeight: 600,
 };

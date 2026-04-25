@@ -5,6 +5,16 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
+import type {
+  ActionMessage,
+  PlantAliasRow,
+  PlantCareGuideRow,
+  PlantParametersRow,
+  PlantRecordItem,
+  PlantSpeciesI18nRow,
+  PlantSpeciesRow,
+} from "@/lib/plant-detail-types";
 
 const categoryLabels: Record<string, string> = {
   vegetable: "蔬菜 / 蔬果",
@@ -103,7 +113,7 @@ function phRequirementLabel(value: unknown) {
   return "很敏感";
 }
 
-function phRequirementText(parameters: any) {
+function phRequirementText(parameters: PlantParametersRow | null | undefined) {
   const sensitivity = phRequirementLabel(parameters?.ph_sensitivity_score);
   const phRange = formatRange(parameters?.ph_min, parameters?.ph_max);
 
@@ -154,7 +164,7 @@ function uniqueTextList(items: unknown[]) {
     });
 }
 
-function guideTitle(plant: any) {
+function guideTitle(plant: PlantSpeciesRow | null | undefined) {
   const category = plant?.category;
   const subCategory = plant?.sub_category;
 
@@ -175,7 +185,14 @@ function TextBlock({ text }: { text?: string | null }) {
   if (!hasText(text)) return null;
 
   return (
-    <div style={{ color: "#333", lineHeight: 1.85, whiteSpace: "pre-line" }}>
+    <div
+      style={{
+        color: "#555",
+        fontSize: 15,
+        lineHeight: 1.95,
+        whiteSpace: "pre-line",
+      }}
+    >
       {text}
     </div>
   );
@@ -208,8 +225,18 @@ function Card({
         background: "#fafafa",
       }}
     >
-      <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontWeight: 650, color: "#333" }}>{value}</div>
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: "#555",
+          marginBottom: 8,
+          lineHeight: 1.5,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: "#2f2f2f" }}>{value}</div>
       {hint && <div style={{ marginTop: 4, color: "#999", fontSize: 12 }}>{hint}</div>}
     </div>
   );
@@ -234,7 +261,16 @@ function Section({
         background: "#fff",
       }}
     >
-      <h2 style={{ margin: "0 0 12px", fontSize: 18 }}>{title}</h2>
+      <h2
+        style={{
+          margin: "0 0 14px",
+          fontSize: 21,
+          fontWeight: 700,
+          color: "#222",
+        }}
+      >
+        {title}
+      </h2>
       {children}
     </section>
   );
@@ -255,21 +291,16 @@ export default function PlantDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
 
-  const [plant, setPlant] = useState<any>(null);
-  const [i18n, setI18n] = useState<any[]>([]);
-  const [aliases, setAliases] = useState<any[]>([]);
-  const [parameters, setParameters] = useState<any>(null);
-  const [careGuide, setCareGuide] = useState<any>(null);
-  const [relatedRecords, setRelatedRecords] = useState<any[]>([]);
+  const [plant, setPlant] = useState<PlantSpeciesRow | null>(null);
+  const [i18n, setI18n] = useState<PlantSpeciesI18nRow[]>([]);
+  const [aliases, setAliases] = useState<PlantAliasRow[]>([]);
+  const [parameters, setParameters] = useState<PlantParametersRow | null>(null);
+  const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
+  const [relatedRecords, setRelatedRecords] = useState<PlantRecordItem[]>([]);
   const [interestAdded, setInterestAdded] = useState(false);
   const [planAdded, setPlanAdded] = useState(false);
   const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
-  const [actionMessage, setActionMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-    href?: string;
-    hrefText?: string;
-  } | null>(null);
+  const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -312,12 +343,12 @@ export default function PlantDetailPage() {
           .limit(6),
       ]);
 
-      setPlant(plantData);
-      setI18n(i18nData || []);
-      setAliases(aliasData || []);
-      setParameters(parameterData);
-      setCareGuide(careGuideData);
-      setRelatedRecords(relatedData || []);
+      setPlant((plantData || null) as PlantSpeciesRow | null);
+      setI18n((i18nData || []) as PlantSpeciesI18nRow[]);
+      setAliases((aliasData || []) as PlantAliasRow[]);
+      setParameters((parameterData || null) as PlantParametersRow | null);
+      setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
+      setRelatedRecords((relatedData || []) as PlantRecordItem[]);
 
       const {
         data: { user },
@@ -353,17 +384,17 @@ export default function PlantDetailPage() {
   }, [id]);
 
   const zh = useMemo(
-    () => i18n.find((item) => item.language_code === "zh"),
+    () => i18n.find((item: PlantSpeciesI18nRow) => item.language_code === "zh"),
     [i18n]
   );
 
   const en = useMemo(
-    () => i18n.find((item) => item.language_code === "en"),
+    () => i18n.find((item: PlantSpeciesI18nRow) => item.language_code === "en"),
     [i18n]
   );
 
   const aliasNames = useMemo(
-    () => uniqueTextList(aliases.map((alias) => alias.alias_name)),
+    () => uniqueTextList(aliases.map((alias: PlantAliasRow) => alias.alias_name)),
     [aliases]
   );
 
@@ -371,6 +402,8 @@ export default function PlantDetailPage() {
     zh?.common_name || plant?.common_name || plant?.scientific_name || "植物百科";
 
   const difficulty = difficultyMeta(parameters?.management_difficulty_score);
+  const environmentTags = getEnvironmentTags(parameters, { includeIndoor: true });
+  const environmentCards = getEnvironmentDetailItems(parameters);
 
   const parameterCards = [
     { label: "日照强度", value: scoreLabel(parameters?.sun_score) },
@@ -412,49 +445,49 @@ export default function PlantDetailPage() {
       label: "旺盛生长点",
       value: isEmpty(parameters?.vigorous_growth_temp)
         ? null
-        : `${parameters.vigorous_growth_temp}℃`,
+        : `${parameters?.vigorous_growth_temp}℃`,
     },
     {
       label: "生长减缓点",
       value: isEmpty(parameters?.growth_slow_temp)
         ? null
-        : `${parameters.growth_slow_temp}℃`,
+        : `${parameters?.growth_slow_temp}℃`,
     },
     {
       label: "冻害触发",
       value: isEmpty(parameters?.frost_damage_temp)
         ? null
-        : `${parameters.frost_damage_temp}℃`,
+        : `${parameters?.frost_damage_temp}℃`,
     },
     {
       label: "致死低温",
       value: isEmpty(parameters?.lethal_low_temp)
         ? null
-        : `${parameters.lethal_low_temp}℃`,
+        : `${parameters?.lethal_low_temp}℃`,
     },
     {
       label: "低温停长",
       value: isEmpty(parameters?.stop_low_temp)
         ? null
-        : `${parameters.stop_low_temp}℃`,
+        : `${parameters?.stop_low_temp}℃`,
     },
     {
       label: "高温停长",
       value: isEmpty(parameters?.stop_high_temp)
         ? null
-        : `${parameters.stop_high_temp}℃`,
+        : `${parameters?.stop_high_temp}℃`,
     },
     {
       label: "高温灼伤风险",
       value: isEmpty(parameters?.heat_scorch_temp)
         ? null
-        : `${parameters.heat_scorch_temp}℃`,
+        : `${parameters?.heat_scorch_temp}℃`,
     },
     {
       label: "致死高温",
       value: isEmpty(parameters?.lethal_high_temp)
         ? null
-        : `${parameters.lethal_high_temp}℃`,
+        : `${parameters?.lethal_high_temp}℃`,
     },
   ].filter((item) => item.value);
 
@@ -485,7 +518,7 @@ export default function PlantDetailPage() {
       label: "临界日长",
       value: isEmpty(parameters?.critical_day_length_hours)
         ? null
-        : `${parameters.critical_day_length_hours} 小时`,
+        : `${parameters?.critical_day_length_hours} 小时`,
     },
     {
       label: "触发阶段",
@@ -642,47 +675,76 @@ export default function PlantDetailPage() {
 
         <h1 style={{ margin: 0, fontSize: 30 }}>{displayName}</h1>
 
-        <div style={{ marginTop: 8, color: "#666", lineHeight: 1.7 }}>
-          {en?.common_name && <div>英文名：{en.common_name}</div>}
+        <div style={{ marginTop: 10, color: "#666", lineHeight: 1.85 }}>
           {plant.scientific_name && <div>学名：{plant.scientific_name}</div>}
+          {aliasNames.length > 0 && <div>别名：{aliasNames.join("、")}</div>}
           {(zh?.family || plant.family) && <div>科属：{zh?.family || plant.family}</div>}
-          <div>
-            分类：{categoryLabel(plant.category)}
-            {plant.sub_category ? ` · ${subCategoryLabel(plant.sub_category)}` : ""}
-          </div>
+          <div>分类：{categoryLabel(plant.category)}</div>
+          {en?.common_name && <div>英文名：{en.common_name}</div>}
         </div>
+
 
         {(careGuide?.summary || zh?.description || plant.description) && (
-          <p
+          <div
             style={{
-              margin: "16px 0 0",
-              lineHeight: 1.85,
-              color: "#222",
-              fontSize: 16,
-              fontWeight: 550,
+              marginTop: 4,
+              paddingTop: 2,
             }}
           >
-            {careGuide?.summary || zh?.description || plant.description}
-          </p>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#666",
+                marginBottom: 8,
+              }}
+            >
+              简介
+            </div>
+            <div
+              style={{
+                lineHeight: 1,
+                color: "#303030",
+                fontSize: 18,
+              }}
+            >
+              {careGuide?.summary || zh?.description || plant.description}
+            </div>
+          </div>
         )}
 
-        <div
-          style={{
-            marginTop: 14,
-            padding: "10px 12px",
-            borderRadius: 14,
-            background: "#f7fbf7",
-            color: "#4b6b4b",
-            fontSize: 13,
-            lineHeight: 1.7,
-          }}
-        >
-          不同地区季节不同，请优先参考温度、霜期、光照和植物阶段；月份只作为当地经验参考。
-        </div>
+        {environmentTags.length > 0 && (
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            {environmentTags.map((tag) => (
+              <span
+                key={`${plant.id}-hero-env-${tag}`}
+                style={{
+                  fontSize: 16,
+                  fontWeight: 600,
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background: "#f6fbf6",
+                  border: "1px solid #dfeedd",
+                  color: "#2e7d32",
+                }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
 
         <div
           style={{
-            marginTop: 18,
+            marginTop: 22,
             display: "flex",
             gap: 10,
             flexWrap: "wrap",
@@ -692,16 +754,22 @@ export default function PlantDetailPage() {
           <Link
             href={`/archive/new?species=${plant.id}`}
             style={{
-              padding: "10px 14px",
-              borderRadius: 999,
-              background: "#4CAF50",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 650,
+              padding: "12px 20px",
+              borderRadius: 14,
+              border: "1.5px solid #cfe1d0",
+              background: "#fff",
+              color: "#2f6f35",
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.2,
               textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
             }}
           >
-            创建植物项目
+            新建种植项目
           </Link>
 
           <button
@@ -709,14 +777,16 @@ export default function PlantDetailPage() {
             onClick={handleAddPlan}
             disabled={planAdded || actionLoading !== null}
             style={{
-              padding: "10px 14px",
-              borderRadius: 999,
-              border: "1px solid #d6ead6",
-              background: planAdded ? "#f1f7f1" : "#fff",
-              color: planAdded ? "#6a8f6a" : "#4CAF50",
-              fontSize: 14,
-              fontWeight: 650,
+              padding: "12px 20px",
+              borderRadius: 14,
+              border: "1.5px solid #cfe1d0",
+              background: planAdded ? "#f5faf5" : "#fff",
+              color: planAdded ? "#5f7f5f" : "#2f6f35",
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.2,
               cursor: planAdded || actionLoading !== null ? "default" : "pointer",
+              boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
             }}
           >
             {planAdded
@@ -731,14 +801,16 @@ export default function PlantDetailPage() {
             onClick={handleAddInterest}
             disabled={interestAdded || actionLoading !== null}
             style={{
-              padding: "10px 14px",
-              borderRadius: 999,
-              border: "1px solid #eee",
-              background: interestAdded ? "#f7f7f7" : "#fff",
-              color: interestAdded ? "#888" : "#555",
-              fontSize: 14,
-              fontWeight: 650,
+              padding: "12px 20px",
+              borderRadius: 14,
+              border: "1.5px solid #cfe1d0",
+              background: interestAdded ? "#f5faf5" : "#fff",
+              color: interestAdded ? "#5f7f5f" : "#2f6f35",
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.2,
               cursor: interestAdded || actionLoading !== null ? "default" : "pointer",
+              boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
             }}
           >
             {interestAdded
@@ -782,65 +854,61 @@ export default function PlantDetailPage() {
             )}
           </div>
         )}
+      </section>
 
-        {aliasNames.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 13, color: "#888", marginBottom: 8 }}>
-              常见别名
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {aliasNames.map((alias, index) => (
-                <span
-                  key={`${plant.id}-alias-${index}-${alias}`}
-                  style={{
-                    fontSize: 12,
-                    padding: "4px 8px",
-                    borderRadius: 999,
-                    background: "#f5f5f5",
-                    border: "1px solid #eee",
-                  }}
-                >
-                  {alias}
-                </span>
+      {environmentCards.length > 0 && (
+        <Section title="环境与场景">
+          {environmentCards.length > 0 && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                gap: 12,
+                marginTop: 0,
+              }}
+            >
+              {environmentCards.map((item) => (
+                <Card key={item.label} label={item.label} value={item.value} />
               ))}
             </div>
-          </div>
-        )}
-      </section>
+          )}
+
+        </Section>
+      )}
 
       {hasText(careGuide?.climate_timing_note) && (
         <Section title="气候与时机">
-          <TextBlock text={careGuide.climate_timing_note} />
+          <TextBlock text={careGuide?.climate_timing_note} />
         </Section>
       )}
 
       {hasText(careGuide?.planting_guide) && (
         <Section title="种植">
-          <TextBlock text={careGuide.planting_guide} />
+          <TextBlock text={careGuide?.planting_guide} />
         </Section>
       )}
 
       {hasText(careGuide?.care_guide) && (
         <Section title="养护">
-          <TextBlock text={careGuide.care_guide} />
+          <TextBlock text={careGuide?.care_guide} />
         </Section>
       )}
 
       {hasText(careGuide?.harvest_guide) && (
         <Section title={guideTitle(plant)}>
-          <TextBlock text={careGuide.harvest_guide} />
+          <TextBlock text={careGuide?.harvest_guide} />
         </Section>
       )}
 
       {hasText(careGuide?.common_problem_guide) && (
         <Section title="常见问题">
-          <TextBlock text={careGuide.common_problem_guide} />
+          <TextBlock text={careGuide?.common_problem_guide} />
         </Section>
       )}
 
       {hasText(careGuide?.rotation_intercrop_guide) && (
         <Section title="轮作 / 间种 / 伴生">
-          <TextBlock text={careGuide.rotation_intercrop_guide} />
+          <TextBlock text={careGuide?.rotation_intercrop_guide} />
         </Section>
       )}
 
@@ -877,8 +945,8 @@ export default function PlantDetailPage() {
           )}
 
           {hasText(parameters?.temperature_note) && (
-            <div style={{ marginTop: 12, color: "#666", lineHeight: 1.7 }}>
-              {parameters.temperature_note}
+            <div style={{ marginTop: 12, color: "#555", fontSize: 15, lineHeight: 1.9 }}>
+              {parameters?.temperature_note}
             </div>
           )}
         </Section>
@@ -901,8 +969,8 @@ export default function PlantDetailPage() {
           )}
 
           {hasText(parameters?.photoperiod_note) && (
-            <div style={{ marginTop: 12, color: "#666", lineHeight: 1.7 }}>
-              {parameters.photoperiod_note}
+            <div style={{ marginTop: 12, color: "#555", fontSize: 15, lineHeight: 1.9 }}>
+              {parameters?.photoperiod_note}
             </div>
           )}
         </Section>

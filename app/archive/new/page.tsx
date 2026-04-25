@@ -1,28 +1,18 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
-
-type ArchiveCategory = "plant" | "system";
-
-const DEFAULT_SYSTEM_NAMES = [
-  "补光灯",
-  "花盆",
-  "育苗盘",
-  "支架",
-  "爬藤架",
-  "灌溉系统",
-  "滴灌",
-  "喷雾器",
-  "温湿度计",
-  "遮阳网",
-  "防虫网",
-  "土壤",
-  "肥料",
-  "营养液",
-  "基质",
-];
+import { showToast } from "@/components/Toast";
+import {
+  type ArchiveCategory,
+  archiveCategoryOptions,
+  getArchiveCategoryLabel,
+  getDefaultSystemNames,
+  isNonPlantArchiveCategory,
+} from "@/lib/archive-categories";
+import type { PlantSpeciesOption } from "@/lib/archive-page-types";
+import type { PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
 
 export default function NewArchivePage() {
   return (
@@ -48,7 +38,7 @@ function NewArchiveContent() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory>("plant");
 
-  const [speciesList, setSpeciesList] = useState<any[]>([]);
+  const [speciesList, setSpeciesList] = useState<PlantSpeciesOption[]>([]);
   const [speciesId, setSpeciesId] = useState<string | null>(null);
   const [pendingSpeciesName, setPendingSpeciesName] = useState<string | null>(
     null
@@ -86,7 +76,7 @@ function NewArchiveContent() {
 
       const aliasesBySpecies = new Map<string, string[]>();
 
-      (aliasData || []).forEach((alias: any) => {
+      ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
         const list = aliasesBySpecies.get(alias.species_id) || [];
         if (alias.alias_name) list.push(alias.alias_name);
         if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {
@@ -95,8 +85,10 @@ function NewArchiveContent() {
         aliasesBySpecies.set(alias.species_id, list);
       });
 
-      const list = (speciesData || []).map((species: any) => {
-        const aliases = Array.from(new Set(aliasesBySpecies.get(species.id) || []));
+      const list: PlantSpeciesOption[] = ((speciesData || []) as PlantSpeciesOption[]).map((species) => {
+        const aliases = Array.from(
+          new Set(aliasesBySpecies.get(species.id) || [])
+        );
         const displayName =
           species.common_name || species.scientific_name || "未命名植物";
 
@@ -120,7 +112,7 @@ function NewArchiveContent() {
       setSpeciesList(list);
 
       if (preselectedSpeciesId) {
-        const selected = list.find((s: any) => s.id === preselectedSpeciesId);
+        const selected = list.find((s) => s.id === preselectedSpeciesId);
 
         if (selected) {
           const selectedName =
@@ -143,6 +135,45 @@ function NewArchiveContent() {
     loadSpecies();
   }, [preselectedSpeciesId]);
 
+  const systemOptions = useMemo(() => {
+    if (!isNonPlantArchiveCategory(category)) return [];
+
+    const keyword = systemSearch.trim().toLowerCase();
+    const presetNames = getDefaultSystemNames(category);
+
+    if (!keyword) {
+      return presetNames.slice(0, 10);
+    }
+
+    return presetNames
+      .filter((name) => name.toLowerCase().includes(keyword))
+      .slice(0, 10);
+  }, [category, systemSearch]);
+
+  function resetPlantSelection() {
+    setSpeciesId(null);
+    setPendingSpeciesName(null);
+    setSpeciesSearch("");
+    setPlantSuggestionsOpen(false);
+  }
+
+  function resetSystemSelection() {
+    setSystemSearch("");
+    setSystemName("");
+    setSystemSuggestionsOpen(false);
+  }
+
+  function switchCategory(nextCategory: ArchiveCategory) {
+    setCategory(nextCategory);
+
+    if (nextCategory === "plant") {
+      resetSystemSelection();
+      return;
+    }
+
+    resetPlantSelection();
+  }
+
   function getPlantSearchResults() {
     const keyword = speciesSearch.trim().toLowerCase();
 
@@ -151,7 +182,7 @@ function NewArchiveContent() {
     }
 
     return speciesList
-      .filter((species: any) => species.search_text?.includes(keyword))
+      .filter((species) => species.search_text?.includes(keyword))
       .slice(0, 10);
   }
 
@@ -159,7 +190,7 @@ function NewArchiveContent() {
     const keyword = speciesSearch.trim().toLowerCase();
     if (!keyword) return false;
 
-    return speciesList.some((species: any) => {
+    return speciesList.some((species) => {
       const names = [
         species.display_name,
         species.common_name,
@@ -178,7 +209,7 @@ function NewArchiveContent() {
     const name = speciesSearch.trim();
 
     if (!name) {
-      alert("请输入候选植物名称");
+      showToast("请输入候选植物名称");
       return;
     }
 
@@ -188,19 +219,11 @@ function NewArchiveContent() {
     setPlantSuggestionsOpen(false);
   }
 
-  function getSystemNameOptions(keyword = systemSearch) {
-    const normalizedKeyword = keyword.trim().toLowerCase();
-
-    return DEFAULT_SYSTEM_NAMES.filter((name) =>
-      normalizedKeyword ? name.toLowerCase().includes(normalizedKeyword) : true
-    ).slice(0, 10);
-  }
-
   function hasExactSystemNameMatch() {
     const keyword = systemSearch.trim().toLowerCase();
-    if (!keyword) return false;
+    if (!keyword || !isNonPlantArchiveCategory(category)) return false;
 
-    return DEFAULT_SYSTEM_NAMES.some(
+    return getDefaultSystemNames(category).some(
       (name) => name.trim().toLowerCase() === keyword
     );
   }
@@ -211,17 +234,17 @@ function NewArchiveContent() {
     if (loading) return;
 
     if (!title.trim()) {
-      alert("请输入项目名称");
+      showToast("请输入项目名称");
       return;
     }
 
     if (category === "plant" && !speciesId && !pendingSpeciesName) {
-      alert("请选择系统名，或新增一个候选植物");
+      showToast("请选择系统名，或新增一个候选植物");
       return;
     }
 
-    if (category === "system" && !systemName.trim()) {
-      alert("请选择或添加配套设施系统名");
+    if (category !== "plant" && !systemName.trim()) {
+      showToast(`请选择或添加${getArchiveCategoryLabel(category)}候选系统名`);
       return;
     }
 
@@ -232,7 +255,7 @@ function NewArchiveContent() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      alert("未登录");
+      showToast("未登录");
       setLoading(false);
       return;
     }
@@ -266,7 +289,7 @@ function NewArchiveContent() {
           category,
           species_id: category === "plant" ? speciesId : null,
           species_name_snapshot: speciesNameSnapshot,
-          system_name: category === "system" ? systemName.trim() : null,
+          system_name: category === "plant" ? null : systemName.trim(),
           source: source.trim() || null,
           note: note.trim() || null,
           user_id: user.id,
@@ -278,7 +301,7 @@ function NewArchiveContent() {
 
     if (error) {
       setLoading(false);
-      alert("创建失败：" + error.message);
+      showToast("创建失败：" + error.message);
       return;
     }
 
@@ -294,7 +317,7 @@ function NewArchiveContent() {
 
       if (planError) {
         setLoading(false);
-        alert(
+        showToast(
           "项目已创建，但种植计划状态没有自动更新：" + planError.message
         );
         router.push(`/archive/${createdArchive.id}`);
@@ -344,51 +367,33 @@ function NewArchiveContent() {
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 14, marginBottom: 6 }}>种类 *</div>
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => {
-                setCategory("plant");
-                setSystemSearch("");
-                setSystemName("");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px",
-                borderRadius: 999,
-                border:
-                  category === "plant" ? "1px solid #3f7d3d" : "1px solid #ddd",
-                background: category === "plant" ? "#3f7d3d" : "#fff",
-                color: category === "plant" ? "#fff" : "#333",
-                cursor: "pointer",
-              }}
-            >
-              种植
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setCategory("system");
-                setSpeciesId(null);
-                setPendingSpeciesName(null);
-                setSpeciesSearch("");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px",
-                borderRadius: 999,
-                border:
-                  category === "system"
-                    ? "1px solid #3f7d3d"
-                    : "1px solid #ddd",
-                background: category === "system" ? "#3f7d3d" : "#fff",
-                color: category === "system" ? "#fff" : "#333",
-                cursor: "pointer",
-              }}
-            >
-              配套设施
-            </button>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 10,
+            }}
+          >
+            {archiveCategoryOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => switchCategory(option.value)}
+                style={{
+                  padding: "10px",
+                  borderRadius: 999,
+                  border:
+                    category === option.value
+                      ? "1px solid #3f7d3d"
+                      : "1px solid #ddd",
+                  background: category === option.value ? "#3f7d3d" : "#fff",
+                  color: category === option.value ? "#fff" : "#333",
+                  cursor: "pointer",
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -426,87 +431,89 @@ function NewArchiveContent() {
                     borderRadius: 12,
                     background: "#fff",
                     maxHeight: 250,
-                  overflow: "auto",
-                  padding: 8,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                {getPlantSearchResults().map((species: any) => (
-                  <button
-                    key={species.id}
-                    type="button"
-                    onClick={() => {
-                      const name =
-                        species.display_name ||
-                        species.common_name ||
-                        species.scientific_name ||
-                        "未命名植物";
+                    overflow: "auto",
+                    padding: 8,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  {getPlantSearchResults().map((species) => (
+                    <button
+                      key={species.id}
+                      type="button"
+                      onClick={() => {
+                        const name =
+                          species.display_name ||
+                          species.common_name ||
+                          species.scientific_name ||
+                          "未命名植物";
 
-                      setSpeciesId(species.id);
-                      setPendingSpeciesName(null);
-                      setSpeciesSearch(name);
-                      setPlantSuggestionsOpen(false);
-                    }}
-                    style={{
-                      textAlign: "left",
-                      padding: "8px 10px",
-                      borderRadius: 8,
-                      border:
-                        speciesId === species.id
-                          ? "1px solid #4CAF50"
-                          : "1px solid transparent",
-                      background: speciesId === species.id ? "#f0fff4" : "#fafafa",
-                      color: "#263326",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    <strong style={{ color: "#263326" }}>
-                      {species.display_name ||
-                        species.common_name ||
-                        species.scientific_name ||
-                        "未命名植物"}
-                    </strong>
-                    {species.scientific_name && (
-                      <span style={{ color: "#888", marginLeft: 6 }}>
-                        {species.scientific_name}
-                      </span>
-                    )}
-                    {Array.isArray(species.aliases) && species.aliases.length > 0 && (
-                      <div style={{ color: "#999", marginTop: 2 }}>
-                        别名：{species.aliases.slice(0, 4).join("、")}
-                      </div>
-                    )}
-                  </button>
-                ))}
+                        setSpeciesId(species.id);
+                        setPendingSpeciesName(null);
+                        setSpeciesSearch(name);
+                        setPlantSuggestionsOpen(false);
+                      }}
+                      style={{
+                        textAlign: "left",
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border:
+                          speciesId === species.id
+                            ? "1px solid #4CAF50"
+                            : "1px solid transparent",
+                        background:
+                          speciesId === species.id ? "#f0fff4" : "#fafafa",
+                        color: "#263326",
+                        cursor: "pointer",
+                        fontSize: 13,
+                      }}
+                    >
+                      <strong style={{ color: "#263326" }}>
+                        {species.display_name ||
+                          species.common_name ||
+                          species.scientific_name ||
+                          "未命名植物"}
+                      </strong>
+                      {species.scientific_name && (
+                        <span style={{ color: "#888", marginLeft: 6 }}>
+                          {species.scientific_name}
+                        </span>
+                      )}
+                      {Array.isArray(species.aliases) &&
+                        species.aliases.length > 0 && (
+                          <div style={{ color: "#999", marginTop: 2 }}>
+                            别名：{species.aliases.slice(0, 4).join("、")}
+                          </div>
+                        )}
+                    </button>
+                  ))}
 
-                {getPlantSearchResults().length === 0 && (
-                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
-                    没有找到匹配植物
-                  </div>
-                )}
+                  {getPlantSearchResults().length === 0 && (
+                    <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
+                      没有找到匹配植物
+                    </div>
+                  )}
 
-                {speciesSearch.trim() && !hasExactPlantMatch() && (
-                  <button
-                    type="button"
-                    onClick={submitPendingSpeciesName}
-                    style={{
-                      textAlign: "left",
-                      padding: "8px 10px",
-                      borderRadius: 8,
-                      border: "1px dashed #4CAF50",
-                      background: "#fff",
-                      color: "#4CAF50",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    + 新增候选植物：{speciesSearch.trim()}
-                  </button>
-                )}
-              </div>
+                  {speciesSearch.trim() && !hasExactPlantMatch() && (
+                    <button
+                      type="button"
+                      onClick={submitPendingSpeciesName}
+                      style={{
+                        textAlign: "left",
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border: "1px dashed #4CAF50",
+                        background: "#fff",
+                        color: "#4CAF50",
+                        cursor: "pointer",
+                        fontSize: 13,
+                      }}
+                    >
+                      + 新增候选植物：{speciesSearch.trim()}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -526,20 +533,23 @@ function NewArchiveContent() {
           </div>
         )}
 
-        {category === "system" && (
+        {category !== "plant" && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>
-              系统名 *
-            </div>
+            <div style={{ fontSize: 14, marginBottom: 6 }}>候选系统名 *</div>
 
             <input
-              placeholder="输入后点选，例如：补光灯"
+              placeholder={
+                category === "other"
+                  ? "输入候选系统名"
+                  : `输入后点选，例如：${systemOptions[0] || "补光灯"}`
+              }
               value={systemSearch}
               onChange={(e) => {
                 setSystemSearch(e.target.value);
                 setSystemName("");
                 setSystemSuggestionsOpen(true);
               }}
+              onFocus={() => setSystemSuggestionsOpen(true)}
               style={{
                 padding: "10px",
                 width: "100%",
@@ -558,70 +568,76 @@ function NewArchiveContent() {
                   borderRadius: 12,
                   background: "#fff",
                   maxHeight: 220,
-                overflow: "auto",
-                padding: 8,
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-              }}
-            >
-              {getSystemNameOptions().map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => {
-                    setSystemName(name);
-                    setSystemSearch(name);
-                    setSystemSuggestionsOpen(false);
-                  }}
-                  style={{
-                    textAlign: "left",
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border:
-                      systemName === name
-                        ? "1px solid #4CAF50"
-                        : "1px solid transparent",
-                    background: systemName === name ? "#f0fff4" : "#fafafa",
-                    color: "#263326",
-                    cursor: "pointer",
-                    fontSize: 13,
-                  }}
-                >
-                  {name}
-                </button>
-              ))}
+                  overflow: "auto",
+                  padding: 8,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {systemOptions.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => {
+                      setSystemName(name);
+                      setSystemSearch(name);
+                      setSystemSuggestionsOpen(false);
+                    }}
+                    style={{
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border:
+                        systemName === name
+                          ? "1px solid #4CAF50"
+                          : "1px solid transparent",
+                      background: systemName === name ? "#f0fff4" : "#fafafa",
+                      color: "#263326",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    {name}
+                  </button>
+                ))}
 
-              {getSystemNameOptions().length === 0 && (
-                <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
-                  没有找到匹配系统名
-                </div>
-              )}
+                {systemOptions.length === 0 && category !== "other" && (
+                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
+                    没有找到匹配候选系统名
+                  </div>
+                )}
 
-              {systemSearch.trim() && !hasExactSystemNameMatch() && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const name = systemSearch.trim();
-                    setSystemName(name);
-                    setSystemSearch(name);
-                    setSystemSuggestionsOpen(false);
-                  }}
-                  style={{
-                    textAlign: "left",
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1px dashed #4CAF50",
-                    background: "#fff",
-                    color: "#4CAF50",
-                    cursor: "pointer",
-                    fontSize: 13,
-                  }}
-                >
-                  + 作为备选系统名：{systemSearch.trim()}
-                </button>
-              )}
-            </div>
+                {systemSearch.trim() && !hasExactSystemNameMatch() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name = systemSearch.trim();
+                      setSystemName(name);
+                      setSystemSearch(name);
+                      setSystemSuggestionsOpen(false);
+                    }}
+                    style={{
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1px dashed #4CAF50",
+                      background: "#fff",
+                      color: "#4CAF50",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    + 作为候选系统名：{systemSearch.trim()}
+                  </button>
+                )}
+
+                {!systemSearch.trim() && category === "other" && (
+                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
+                    其他不设预设名，直接输入即可。
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

@@ -2,21 +2,28 @@
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { CSSProperties } from "react";
 import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
-export default function DeleteRecordButton({ id }: { id: string }) {
+export default function DeleteRecordButton({
+  id,
+  style,
+}: {
+  id: string;
+  style?: CSSProperties;
+}) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  async function handleDelete(e: any) {
-    // 防止被父层点击影响
-    e.stopPropagation();
-
-    const confirmDelete = confirm(t.confirm_delete);
-    if (!confirmDelete) return;
+  async function handleDelete() {
+    if (isDeleting) return;
+    setIsDeleting(true);
 
     try {
-      // 1️⃣ 删除 media（图片记录）
       const { error: mediaError } = await supabase
         .from("media")
         .delete()
@@ -28,7 +35,6 @@ export default function DeleteRecordButton({ id }: { id: string }) {
         return;
       }
 
-      // 2️⃣ 删除 record
       const { error: recordError } = await supabase
         .from("records")
         .delete()
@@ -36,27 +42,32 @@ export default function DeleteRecordButton({ id }: { id: string }) {
 
       if (recordError) {
         console.log("删除记录失败:", recordError);
-       showToast("删除失败");
+        showToast("删除失败");
         return;
       }
 
-      // 3️⃣ 刷新页面
-     showToast("删除成功");
+      showToast("删除成功");
+      setOpen(false);
 
-setTimeout(() => {
-  router.refresh();
-}, 800);
+      setTimeout(() => {
+        router.refresh();
+      }, 800);
     } catch (err) {
       console.log("删除异常:", err);
       showToast("操作失败");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
   return (
+    <>
     <button
-      onClick={handleDelete}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen(true);
+      }}
       style={{
-        marginTop: "5px",
         fontSize: "12px",
         color: "#888",
         background: "none",
@@ -64,9 +75,22 @@ setTimeout(() => {
         cursor: "pointer",
         position: "relative",
         zIndex: 10,
+        padding: 0,
+        ...style,
       }}
     >
       {t.delete}
     </button>
+    <ConfirmDialog
+      open={open}
+      title="删除记录"
+      message="确定删除这条记录吗？其中的图片也会一起删除，删除后无法恢复。"
+      confirmText={isDeleting ? "删除中..." : "删除"}
+      cancelText="取消"
+      onClose={() => { if (!isDeleting) setOpen(false); }}
+      onConfirm={handleDelete}
+      danger
+    />
+    </>
   );
 }

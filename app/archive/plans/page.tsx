@@ -4,18 +4,26 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { showToast } from "@/components/Toast";
+import type {
+  PlantPlanLocationType,
+  PlantPlanRow,
+  PlantPlanStatus,
+} from "@/lib/domain-types";
+import ArchivePlantPageHero from "@/components/archive-plant/ArchivePlantPageHero";
+import ArchivePlantEmptyState from "@/components/archive-plant/ArchivePlantEmptyState";
+import ArchivePlantCardHeader from "@/components/archive-plant/ArchivePlantCardHeader";
+import {
+  cardStyle,
+  plantDisplayName,
+  sectionHeaderStyle,
+  subtleTextareaStyle,
+  neutralActionLinkStyle,
+  dangerActionButtonStyle,
+} from "@/lib/archive-plant-shared";
 
-type PlanStatus = "want" | "preparing" | "started" | "abandoned";
-type LocationType =
-  | "indoor"
-  | "balcony"
-  | "garden"
-  | "terrace"
-  | "greenhouse"
-  | "field"
-  | "other";
-
-const statusLabels: Record<PlanStatus, string> = {
+const statusLabels: Record<PlantPlanStatus, string> = {
   want: "想种",
   preparing: "准备中",
   started: "已开始",
@@ -23,7 +31,7 @@ const statusLabels: Record<PlanStatus, string> = {
 };
 
 const statusStyles: Record<
-  PlanStatus,
+  PlantPlanStatus,
   { background: string; color: string; border: string }
 > = {
   want: {
@@ -48,7 +56,7 @@ const statusStyles: Record<
   },
 };
 
-const locationLabels: Record<LocationType, string> = {
+const locationLabels: Record<PlantPlanLocationType, string> = {
   indoor: "室内",
   balcony: "阳台",
   garden: "花园",
@@ -58,34 +66,15 @@ const locationLabels: Record<LocationType, string> = {
   other: "其他",
 };
 
-function plantDisplayName(plant: any) {
-  return plant?.common_name || plant?.scientific_name || "未命名植物";
-}
-
-function categoryLabel(value?: string | null) {
-  const labels: Record<string, string> = {
-    vegetable: "蔬菜 / 蔬果",
-    fruit: "果树 / 果类",
-    herb: "香草 / 药草",
-    flower: "花卉",
-    houseplant: "观叶植物",
-    succulent: "多肉 / 仙人掌",
-    grain: "谷物 / 作物",
-    field_crop: "谷物 / 作物",
-    tree: "乔木 / 灌木",
-  };
-
-  if (!value) return "未分类";
-  return labels[value] || value;
-}
-
 export default function PlantPlansPage() {
   const router = useRouter();
 
   const [userId, setUserId] = useState("");
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<PlantPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [removePlanTarget, setRemovePlanTarget] = useState<PlantPlanRow | null>(null);
+  const [removingPlanId, setRemovingPlanId] = useState<string | null>(null);
 
   async function loadPlans() {
     setLoading(true);
@@ -120,7 +109,7 @@ export default function PlantPlansPage() {
       .order("updated_at", { ascending: false });
 
     if (error) {
-      alert("读取种植计划失败：" + error.message);
+      showToast("读取种植计划失败：" + error.message);
       setPlans([]);
     } else {
       setPlans(data || []);
@@ -134,7 +123,7 @@ export default function PlantPlansPage() {
   }, []);
 
   const groupedPlans = useMemo(() => {
-    const groups: Record<PlanStatus, any[]> = {
+    const groups: Record<PlantPlanStatus, PlantPlanRow[]> = {
       want: [],
       preparing: [],
       started: [],
@@ -142,7 +131,7 @@ export default function PlantPlansPage() {
     };
 
     plans.forEach((plan) => {
-      const status = (plan.status || "want") as PlanStatus;
+      const status = (plan.status || "want") as PlantPlanStatus;
       if (groups[status]) {
         groups[status].push(plan);
       } else {
@@ -153,7 +142,15 @@ export default function PlantPlansPage() {
     return groups;
   }, [plans]);
 
-  async function updatePlan(id: string, payload: Record<string, any>) {
+  async function updatePlan(
+    id: string,
+    payload: Partial<
+      Pick<
+        PlantPlanRow,
+        "status" | "planned_start_date" | "location_type" | "note" | "created_archive_id"
+      >
+    >
+  ) {
     if (!userId) return;
 
     setSavingId(id);
@@ -167,7 +164,7 @@ export default function PlantPlansPage() {
     setSavingId(null);
 
     if (error) {
-      alert("保存失败：" + error.message);
+      showToast("保存失败：" + error.message);
       return;
     }
 
@@ -176,106 +173,55 @@ export default function PlantPlansPage() {
     );
   }
 
-  async function removePlan(id: string) {
+  function removePlan(id: string) {
     if (!userId) return;
-    if (!confirm("确定从种植计划中移除？")) return;
+    const target = plans.find((item) => item.id === id) || null;
+    setRemovePlanTarget(target);
+  }
+
+  async function confirmRemovePlan() {
+    if (!userId || !removePlanTarget || removingPlanId) return;
+
+    setRemovingPlanId(removePlanTarget.id);
 
     const { error } = await supabase
       .from("user_plant_plans")
       .delete()
-      .eq("id", id)
+      .eq("id", removePlanTarget.id)
       .eq("user_id", userId);
 
+    setRemovingPlanId(null);
+
     if (error) {
-      alert("移除失败：" + error.message);
+      showToast("移除失败：" + error.message);
       return;
     }
 
-    setPlans((prev) => prev.filter((item) => item.id !== id));
+    setPlans((prev) => prev.filter((item) => item.id !== removePlanTarget.id));
+    setRemovePlanTarget(null);
+    showToast("已从种植计划中移除");
   }
 
-  function renderPlanCard(plan: any) {
-    const plant = plan.plant_species;
-    const name = plantDisplayName(plant);
-    const status = ((plan.status || "want") as PlanStatus);
+  function renderPlanCard(plan: PlantPlanRow) {
+    const status = (plan.status || "want") as PlantPlanStatus;
     const statusStyle = statusStyles[status] || statusStyles.want;
     const metaItems = [
       plan.planned_start_date ? `计划：${plan.planned_start_date}` : null,
-      plan.location_type ? `位置：${locationLabels[plan.location_type as LocationType] || plan.location_type}` : null,
+      plan.location_type
+        ? `位置：${locationLabels[plan.location_type as PlantPlanLocationType] || plan.location_type}`
+        : null,
       plan.created_archive_id ? "已创建项目" : null,
-    ].filter(Boolean);
+    ].filter(Boolean) as string[];
 
     return (
-      <article
-        key={plan.id}
-        style={{
-          padding: 16,
-          border: "1px solid #eee",
-          borderRadius: 18,
-          background: "#fff",
-          boxShadow: "0 6px 18px rgba(0,0,0,0.03)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            alignItems: "flex-start",
-          }}
-        >
-          <div>
-            <Link
-              href={`/plant/${plan.species_id}`}
-              style={{
-                color: "#111",
-                fontWeight: 700,
-                fontSize: 18,
-                textDecoration: "none",
-              }}
-            >
-              {name}
-            </Link>
-
-            {plant?.scientific_name && (
-              <div
-                style={{
-                  marginTop: 4,
-                  color: "#777",
-                  fontSize: 13,
-                  fontStyle: "italic",
-                }}
-              >
-                {plant.scientific_name}
-              </div>
-            )}
-
-            <div style={{ marginTop: 8, color: "#888", fontSize: 13 }}>
-              {categoryLabel(plant?.category)}
-            </div>
-
-            {metaItems.length > 0 && (
-              <div style={{ marginTop: 6, color: "#777", fontSize: 13 }}>
-                {metaItems.join(" · ")}
-              </div>
-            )}
-          </div>
-
-          <span
-            style={{
-              whiteSpace: "nowrap",
-              borderRadius: 999,
-              padding: "5px 10px",
-              background: statusStyle.background,
-              color: statusStyle.color,
-              border: statusStyle.border,
-              fontSize: 12,
-              fontWeight: 650,
-            }}
-          >
-            {plan.created_archive_id ? "已开始 · 有项目" : statusLabels[status]}
-          </span>
-        </div>
+      <article key={plan.id} style={cardStyle}>
+        <ArchivePlantCardHeader
+          speciesId={plan.species_id}
+          plant={plan.plant_species}
+          badgeText={plan.created_archive_id ? "已开始 · 有项目" : statusLabels[status]}
+          badgeStyle={statusStyle}
+          metaItems={metaItems}
+        />
 
         <div
           style={{
@@ -291,7 +237,7 @@ export default function PlantPlansPage() {
               value={plan.status || "want"}
               disabled={savingId === plan.id}
               onChange={(event) =>
-                updatePlan(plan.id, { status: event.target.value })
+                updatePlan(plan.id, { status: event.target.value as PlantPlanStatus })
               }
               style={{
                 width: "100%",
@@ -339,7 +285,7 @@ export default function PlantPlansPage() {
               disabled={savingId === plan.id}
               onChange={(event) =>
                 updatePlan(plan.id, {
-                  location_type: event.target.value || null,
+                  location_type: (event.target.value || null) as PlantPlanLocationType | null,
                 })
               }
               style={{
@@ -383,16 +329,7 @@ export default function PlantPlansPage() {
             onBlur={(event) => updatePlan(plan.id, { note: event.target.value })}
             placeholder="比如：等春天播种、先买苗、想试试阳台盆栽..."
             rows={3}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              marginTop: 6,
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              resize: "vertical",
-              lineHeight: 1.6,
-            }}
+            style={subtleTextareaStyle}
           />
         </label>
 
@@ -438,40 +375,15 @@ export default function PlantPlansPage() {
             </Link>
           )}
 
-          <Link
-            href={`/plant/${plan.species_id}`}
-            style={{
-              padding: "9px 12px",
-              borderRadius: 999,
-              border: "1px solid #ddd",
-              color: "#444",
-              fontSize: 13,
-              textDecoration: "none",
-              background: "#fff",
-            }}
-          >
+          <Link href={`/plant/${plan.species_id}`} style={neutralActionLinkStyle}>
             查看百科
           </Link>
 
-          <button
-            type="button"
-            onClick={() => removePlan(plan.id)}
-            style={{
-              padding: "9px 12px",
-              borderRadius: 999,
-              border: "1px solid #ffe0e0",
-              color: "#d44",
-              fontSize: 13,
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
+          <button type="button" onClick={() => removePlan(plan.id)} style={dangerActionButtonStyle}>
             移除
           </button>
 
-          {savingId === plan.id && (
-            <span style={{ color: "#888", fontSize: 13 }}>保存中...</span>
-          )}
+          {savingId === plan.id && <span style={{ color: "#888", fontSize: 13 }}>保存中...</span>}
         </div>
       </article>
     );
@@ -487,105 +399,32 @@ export default function PlantPlansPage() {
         ← 返回空间
       </Link>
 
-      <section
-        style={{
-          marginTop: 14,
-          padding: 22,
-          border: "1px solid #eee",
-          borderRadius: 20,
-          background: "#fff",
-        }}
-      >
-        <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
-          个人种植路径
-        </div>
-        <h1 style={{ margin: 0, fontSize: 28 }}>我的种植计划</h1>
-        <p style={{ margin: "10px 0 0", color: "#666", lineHeight: 1.7 }}>
-          这里保存准备种、等待季节、正在筹备的植物。真正开始种植后，再创建正式项目并长期记录。
-        </p>
-
-        <div
-          style={{
-            marginTop: 14,
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <Link
-            href="/plant"
-            style={{
-              padding: "8px 12px",
-              borderRadius: 999,
-              background: "#4CAF50",
-              color: "#fff",
-              fontSize: 13,
-              fontWeight: 650,
-              textDecoration: "none",
-            }}
-          >
-            去植物百科选择植物
-          </Link>
-          <Link
-            href="/archive/interests"
-            style={{
-              padding: "8px 12px",
-              borderRadius: 999,
-              border: "1px solid #d6ead6",
-              color: "#4CAF50",
-              fontSize: 13,
-              fontWeight: 650,
-              textDecoration: "none",
-              background: "#fff",
-            }}
-          >
-            查看感兴趣植物
-          </Link>
-        </div>
-      </section>
+      <ArchivePlantPageHero
+        badge="个人种植路径"
+        title="我的种植计划"
+        description="这里保存准备种、等待季节、正在筹备的植物。真正开始种植后，再创建正式项目并长期记录。"
+        primaryHref="/plant"
+        primaryLabel="去植物百科选择植物"
+        secondaryHref="/archive/interests"
+        secondaryLabel="查看感兴趣植物"
+      />
 
       {plans.length === 0 ? (
-        <section
-          style={{
-            marginTop: 16,
-            padding: 24,
-            border: "1px dashed #dcefdc",
-            borderRadius: 18,
-            background: "#f8fff8",
-            color: "#4b6b4b",
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#2f4f2f" }}>
-            还没有种植计划
-          </div>
-          <p style={{ margin: "8px 0 14px", lineHeight: 1.7 }}>
-            看到想尝试的植物，可以先加入计划；等真的开始种，再转成正式项目。
-          </p>
-          <Link
-            href="/plant"
-            style={{
-              display: "inline-flex",
-              padding: "9px 13px",
-              borderRadius: 999,
-              background: "#4CAF50",
-              color: "#fff",
-              fontSize: 13,
-              fontWeight: 650,
-              textDecoration: "none",
-            }}
-          >
-            去植物百科看看
-          </Link>
-        </section>
+        <ArchivePlantEmptyState
+          title="还没有种植计划"
+          description="看到想尝试的植物，可以先加入计划；等真的开始种，再转成正式项目。"
+          href="/plant"
+          label="去植物百科看看"
+        />
       ) : (
         <div style={{ marginTop: 16, display: "grid", gap: 18 }}>
-          {(Object.keys(statusLabels) as PlanStatus[]).map((status) => {
+          {(Object.keys(statusLabels) as PlantPlanStatus[]).map((status) => {
             const items = groupedPlans[status];
             if (!items.length) return null;
 
             return (
               <section key={status}>
-                <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>
+                <h2 style={sectionHeaderStyle}>
                   {statusLabels[status]} · {items.length}
                 </h2>
 
@@ -597,6 +436,19 @@ export default function PlantPlansPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(removePlanTarget)}
+        title="移除种植计划"
+        message={`确定将“${removePlanTarget ? plantDisplayName(removePlanTarget.plant_species) : "这株植物"}”从种植计划中移除吗？`}
+        confirmText={removingPlanId ? "移除中..." : "移除"}
+        cancelText="取消"
+        danger
+        onClose={() => {
+          if (!removingPlanId) setRemovePlanTarget(null);
+        }}
+        onConfirm={confirmRemovePlan}
+      />
     </main>
   );
 }

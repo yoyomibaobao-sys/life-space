@@ -234,7 +234,7 @@ export default function AddRecord({
       router.refresh();
     } catch (err) {
       console.log(err);
-      alert(t.error);
+      showToast(t.error);
     }
 
     setLoading(false);

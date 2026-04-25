@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 
 export default function Navbar() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [username, setUsername] = useState("");
   const pathname = usePathname();
   const router = useRouter();
 
-  // ===== 加载用户信息 =====
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
@@ -37,7 +37,6 @@ export default function Navbar() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ===== 获取用户名 =====
   async function loadProfile(userId: string) {
     const { data } = await supabase
       .from("profiles")
@@ -45,18 +44,17 @@ export default function Navbar() {
       .eq("id", userId)
       .maybeSingle();
 
-    setUsername(data?.username || "");
+    const profile = (data as AppProfile | null) || null;
+    setUsername(profile?.username || "");
   }
 
-  // ===== 退出 =====
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/login");
   }
 
-  // ===== 当前高亮 =====
   function isActive(path: string) {
-    return pathname.startsWith(path);
+    return pathname === path || pathname.startsWith(`${path}/`);
   }
 
   return (
@@ -66,7 +64,7 @@ export default function Navbar() {
         justifyContent: "space-between",
         alignItems: "center",
         gap: 20,
-        padding: "16px 20px",
+        padding: "14px 20px",
         borderBottom: "1px solid #eee",
         background: "#fff",
         position: "sticky",
@@ -75,13 +73,13 @@ export default function Navbar() {
         flexWrap: "wrap",
       }}
     >
-      {/* ===== 左侧：品牌 + 主导航 ===== */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 28,
+          gap: 24,
           flexWrap: "wrap",
+          minWidth: 0,
         }}
       >
         <Link
@@ -92,6 +90,7 @@ export default function Navbar() {
             fontWeight: 700,
             letterSpacing: 1,
             whiteSpace: "nowrap",
+            fontSize: 16,
           }}
         >
           有时·耕作
@@ -101,16 +100,20 @@ export default function Navbar() {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 22,
+            gap: 18,
             flexWrap: "wrap",
           }}
         >
-          <NavItem href="/archive" active={isActive("/archive")}>
-            空间
-          </NavItem>
-
           <NavItem href="/discover" active={isActive("/discover")}>
             发现
+          </NavItem>
+
+          <NavItem href="/follow" active={isActive("/follow")}>
+            关注
+          </NavItem>
+
+          <NavItem href="/archive" active={isActive("/archive")}>
+            空间
           </NavItem>
 
           <NavItem href="/plant" active={isActive("/plant")}>
@@ -119,33 +122,41 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* ===== 右侧：用户状态 ===== */}
       {user ? (
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 16,
+            gap: 14,
             fontSize: 13,
             flexWrap: "wrap",
+            justifyContent: "flex-end",
           }}
         >
           <Link
-            href={
-              pathname === `/user/${user.id}`
-                ? "/profile"
-                : `/user/${user.id}`
-            }
+            href="/profile"
             style={{
               textDecoration: "none",
               color: "#000",
               fontWeight: 500,
+              whiteSpace: "nowrap",
             }}
           >
-            {username || "未设置用户名"} ▾
+            {username || "未设置用户名"} · 资料
           </Link>
 
-          <div style={{ color: "#888" }}>{user.email}</div>
+          <div
+            style={{
+              color: "#888",
+              maxWidth: 220,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={user.email}
+          >
+            {user.email}
+          </div>
 
           <button
             type="button"
@@ -157,6 +168,7 @@ export default function Navbar() {
               cursor: "pointer",
               color: "#f44336",
               fontSize: 13,
+              whiteSpace: "nowrap",
             }}
           >
             退出
@@ -177,6 +189,7 @@ export default function Navbar() {
               textDecoration: "none",
               color: "#496b3f",
               fontWeight: 500,
+              whiteSpace: "nowrap",
             }}
           >
             登录
@@ -191,6 +204,7 @@ export default function Navbar() {
               padding: "8px 14px",
               borderRadius: 999,
               fontWeight: 500,
+              whiteSpace: "nowrap",
             }}
           >
             注册
@@ -201,7 +215,6 @@ export default function Navbar() {
   );
 }
 
-// ===== 导航项 =====
 function NavItem({
   href,
   active,
@@ -217,10 +230,11 @@ function NavItem({
       style={{
         textDecoration: "none",
         color: active ? "#3f7d3d" : "#333",
-        fontWeight: active ? 600 : 400,
+        fontWeight: active ? 600 : 500,
         borderBottom: active ? "2px solid #3f7d3d" : "2px solid transparent",
         paddingBottom: 4,
         whiteSpace: "nowrap",
+        lineHeight: 1.2,
       }}
     >
       {children}

@@ -4,12 +4,15 @@ import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 
+import type { CSSProperties } from "react";
+
 type Props = {
   tags?: string[] | null;
   editable?: boolean;
   recordId?: string;
   userTags?: string[]; // 仅用户补充标签可删除
   onChange?: (tag: string, action: "remove") => void;
+  containerStyle?: CSSProperties;
 };
 
 export default function TagList({
@@ -18,6 +21,7 @@ export default function TagList({
   recordId,
   userTags = [],
   onChange,
+  containerStyle,
 }: Props) {
   if (!Array.isArray(tags) || tags.length === 0) return null;
 
@@ -27,7 +31,9 @@ export default function TagList({
         display: "flex",
         gap: 6,
         flexWrap: "wrap",
-        marginTop: 6,
+        alignItems: "center",
+        marginTop: 0,
+        ...containerStyle,
       }}
     >
       {tags.map((tag) => {
@@ -38,21 +44,24 @@ export default function TagList({
             key={tag}
             style={{
               fontSize: 12,
-              padding: "2px 6px",
+              padding: "4px 8px",
               borderRadius: 999,
               border: "1px solid #ddd",
               background: "#fafafa",
               color: "#555",
-              display: "flex",
+              display: "inline-flex",
               alignItems: "center",
               gap: 4,
+              lineHeight: 1.2,
             }}
           >
             {getBehaviorTagLabel(tag)}
 
-            {editable && isUserTag && recordId && (
+            {editable && isUserTag && recordId ? (
               <span
                 onClick={async () => {
+                  const scrollY = window.scrollY;
+
                   const { error } = await supabase
                     .from("record_tags")
                     .delete()
@@ -67,6 +76,7 @@ export default function TagList({
                   }
 
                   onChange?.(tag, "remove");
+                  requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
                   showToast("已删除标签");
                 }}
                 style={{
@@ -77,7 +87,7 @@ export default function TagList({
               >
                 ×
               </span>
-            )}
+            ) : null}
           </span>
         );
       })}
