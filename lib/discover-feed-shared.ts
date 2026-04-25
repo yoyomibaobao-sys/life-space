@@ -48,8 +48,18 @@ export async function fetchDiscoverFeedRange(options: {
     .order("record_time", { ascending: false })
     .range(options.from, options.to);
 
-  query = applyDiscoverCategoryFilter(query, options.category);
-  query = applyDiscoverHelpFilter(query, options.category === "help");
+  if (
+    options.category === "plant" ||
+    options.category === "system" ||
+    options.category === "insect_fish" ||
+    options.category === "other"
+  ) {
+    query = query.eq("archive_category", options.category);
+  }
+
+  if (options.category === "help") {
+    query = query.eq("status_tag", "help");
+  }
 
   const { data, error } = await query;
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -27,7 +27,7 @@ type FlowerSourceItem = {
 
 type TabKey = "received" | "sent";
 
-export default function ProfileFlowersPage() {
+function ProfileFlowersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const defaultTab = searchParams.get("tab") === "sent" ? "sent" : "received";
@@ -226,6 +226,25 @@ export default function ProfileFlowersPage() {
         onConfirm={handleConfirmRevoke}
       />
     </main>
+  );
+}
+
+
+export default function ProfileFlowersPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ maxWidth: 920, margin: "0 auto", padding: "24px 16px 48px" }}>
+          <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
+            <div style={{ fontSize: 13, color: "#6d7968" }}>我的花朵</div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>花朵来源</h1>
+            <div style={{ marginTop: 18, color: "#6f7b69" }}>加载中...</div>
+          </section>
+        </main>
+      }
+    >
+      <ProfileFlowersContent />
+    </Suspense>
   );
 }
 

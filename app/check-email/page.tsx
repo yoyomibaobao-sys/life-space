@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function CheckEmailPage() {
+function CheckEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -147,5 +147,31 @@ export default function CheckEmailPage() {
         )}
       </div>
     </main>
+  );
+}
+
+
+export default function CheckEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          style={{
+            padding: 40,
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ width: 360, textAlign: "center" }}>
+            <h1>请验证邮箱</h1>
+            <p style={{ marginTop: 20, fontSize: 14, color: "#666", lineHeight: 1.8 }}>
+              页面加载中...
+            </p>
+          </div>
+        </main>
+      }
+    >
+      <CheckEmailContent />
+    </Suspense>
   );
 }

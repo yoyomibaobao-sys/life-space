@@ -83,9 +83,19 @@ export function buildMediaList(
     }));
 }
 
-export function getTouchDistance(touches: TouchList) {
+type TouchPointList = {
+  length: number;
+  [index: number]: { clientX: number; clientY: number } | undefined;
+};
+
+export function getTouchDistance(touches: TouchPointList) {
   if (touches.length < 2) return null;
-  const [first, second] = [touches[0], touches[1]];
+
+  const first = touches[0];
+  const second = touches[1];
+
+  if (!first || !second) return null;
+
   return Math.hypot(
     second.clientX - first.clientX,
     second.clientY - first.clientY
