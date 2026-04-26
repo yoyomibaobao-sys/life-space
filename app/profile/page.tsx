@@ -362,12 +362,12 @@ export default function ProfilePage() {
                 value={String(stats.followingCount)}
                 hint="我在关注谁"
               />
-              <StatActionCard
-                label="粉丝"
-                value={String(stats.followerCount)}
-                hint="谁在关注我"
-                onClick={() => showToast("粉丝列表功能准备中")}
-              />
+              <StatLinkCard
+  href="/profile/followers"
+  label="粉丝"
+  value={String(stats.followerCount)}
+  hint="谁在关注我"
+/>
               <StatLinkCard
                 href="/profile/flowers"
                 label="花朵来源"
@@ -380,12 +380,13 @@ export default function ProfilePage() {
                 value={String(stats.sentFlowerCount || 0)}
                 hint="查看我送出的花"
               />
-              <StatActionCard
-                label="通知"
-                value="暂无"
-                hint="关注、送花和互动提醒"
-                onClick={() => showToast("通知功能准备中")}
-              />
+
+  <StatLinkCard
+  href="/notifications"
+  label="通知"
+  value="进入"
+  hint="关注、送花和互动提醒"
+/>
           </div>
         </section>
       </section>

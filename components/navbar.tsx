@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
@@ -9,6 +9,8 @@ import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 export default function Navbar() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [username, setUsername] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const pathname = usePathname();
   const router = useRouter();
 
@@ -17,25 +19,48 @@ export default function Navbar() {
       if (data.user) {
         setUser(data.user);
         loadProfile(data.user.id);
+        loadUnreadCount(data.user.id);
       }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      const currentUser = session?.user;
+      const currentUser = session?.user || null;
 
-      setUser(currentUser || null);
+      setUser(currentUser);
 
       if (currentUser) {
         loadProfile(currentUser.id);
+        loadUnreadCount(currentUser.id);
       } else {
         setUsername("");
+        setUnreadCount(0);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadUnreadCount(user.id);
+    }
+  }, [pathname, user?.id]);
+
+useEffect(() => {
+  function handleNotificationChanged() {
+    if (user?.id) {
+      loadUnreadCount(user.id);
+    }
+  }
+
+  window.addEventListener("notifications-changed", handleNotificationChanged);
+
+  return () => {
+    window.removeEventListener("notifications-changed", handleNotificationChanged);
+  };
+}, [user?.id]);
 
   async function loadProfile(userId: string) {
     const { data } = await supabase
@@ -46,6 +71,22 @@ export default function Navbar() {
 
     const profile = (data as AppProfile | null) || null;
     setUsername(profile?.username || "");
+  }
+
+  async function loadUnreadCount(userId: string) {
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_read", false);
+
+    if (error) {
+      console.error("load unread notifications error:", error);
+      setUnreadCount(0);
+      return;
+    }
+
+    setUnreadCount(count || 0);
   }
 
   async function handleLogout() {
@@ -134,6 +175,42 @@ export default function Navbar() {
           }}
         >
           <Link
+            href="/notifications"
+            style={{
+              position: "relative",
+              textDecoration: "none",
+              color: "#1f2a1f",
+              fontSize: 18,
+              lineHeight: 1,
+              padding: "3px 5px",
+            }}
+            title="通知"
+          >
+            🔔
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: -6,
+                  right: -8,
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 999,
+                  background: "#e85d3f",
+                  color: "#fff",
+                  fontSize: 10,
+                  lineHeight: "16px",
+                  textAlign: "center",
+                  fontWeight: 700,
+                  padding: "0 4px",
+                }}
+              >
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </Link>
+
+          <Link
             href="/profile"
             style={{
               textDecoration: "none",
@@ -142,7 +219,7 @@ export default function Navbar() {
               whiteSpace: "nowrap",
             }}
           >
-            {username || "未设置用户名"} 
+            {username || "未设置用户名"}
           </Link>
 
           <div
@@ -153,7 +230,7 @@ export default function Navbar() {
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}
-            title={user.email}
+            title={user.email || ""}
           >
             {user.email}
           </div>
@@ -222,7 +299,7 @@ function NavItem({
 }: {
   href: string;
   active: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <Link
