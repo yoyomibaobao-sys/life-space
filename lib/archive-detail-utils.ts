@@ -1,21 +1,11 @@
 import { getArchiveNamePlaceholder } from "@/lib/archive-categories";
+export { RECORD_TAG_OPTIONS } from "@/lib/record-tags";
 import type {
   ArchiveDetailArchive,
   LightboxImage,
   PlantSpeciesLite,
 } from "@/lib/archive-detail-types";
 
-export const RECORD_TAG_OPTIONS = [
-  "扦插",
-  "播种",
-  "发芽",
-  "修剪",
-  "施肥",
-  "浇水",
-  "换盆",
-  "开花",
-  "病害",
-] as const;
 
 export function formatDate(value?: string | null) {
   if (!value) return "";

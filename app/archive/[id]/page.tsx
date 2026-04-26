@@ -57,6 +57,7 @@ function Content({ id }: { id: string }) {
   const [isDeletingMedia, setIsDeletingMedia] = useState(false);
   const [showUnfollowProjectConfirm, setShowUnfollowProjectConfirm] = useState(false);
   const [projectFollowSubmitting, setProjectFollowSubmitting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const searchParams = useSearchParams();
   const modeParam = searchParams.get("mode");
@@ -215,7 +216,7 @@ function Content({ id }: { id: string }) {
     }
 
     load();
-  }, [id]);
+  }, [id, reloadKey]);
 
   useEffect(() => {
     async function loadSameTagCounts() {
@@ -702,7 +703,11 @@ function Content({ id }: { id: string }) {
         />
 
         {mode === "owner" ? (
-          <ArchiveAddRecordSection archiveId={activeArchive.id} archiveIsPublic={activeArchive.is_public} />
+          <ArchiveAddRecordSection
+            archiveId={activeArchive.id}
+            archiveIsPublic={activeArchive.is_public}
+            onRecordCreated={() => setReloadKey((value) => value + 1)}
+          />
         ) : null}
 
         <section style={{ position: "relative", paddingLeft: 22 }}>
@@ -744,6 +749,10 @@ function Content({ id }: { id: string }) {
                 onAddTag={handleAddTag}
                 currentUserId={me ?? null}
                 onCommentCountChange={handleCommentCountChange}
+                onRecordDeleted={(recordId) => {
+                  setRecords((prev) => prev.filter((record) => record.id !== recordId));
+                  setReloadKey((value) => value + 1);
+                }}
               />
             );
           })}

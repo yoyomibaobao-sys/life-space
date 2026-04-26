@@ -13,12 +13,14 @@ type Props = {
   archiveId: string;
   archiveIsPublic: boolean;
   placeholder?: string;
+  onRecordCreated?: () => void;
 };
 
 export default function AddRecord({
   archiveId,
   archiveIsPublic,
   placeholder,
+  onRecordCreated,
 }: Props) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -231,6 +233,7 @@ export default function AddRecord({
       setRecordVisibility("public");
       setIsHelpRecord(false);
 
+      onRecordCreated?.();
       router.refresh();
     } catch (err) {
       console.log(err);

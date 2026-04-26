@@ -142,7 +142,7 @@ export default function DiscoverSearchForm({
           <input
             value={filters.name}
             onChange={(e) => patch({ name: e.target.value, speciesId: filters.speciesId ? null : filters.speciesId })}
-            placeholder="项目名 / 植物名"
+            placeholder="项目名 / 系统名"
             style={inputStyle}
           />
         </label>

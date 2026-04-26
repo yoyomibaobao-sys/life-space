@@ -12,10 +12,7 @@ export function DiscoverHeader() {
       >
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>
-            发现大家的种植故事
-          </div>
-          <div style={{ fontSize: 13, color: "#6f7f6f", marginTop: 4 }}>
-            看看不同环境下，植物如何被照顾、等待，也慢慢生长。
+            发现大家的耕作项目
           </div>
         </div>
       </div>
@@ -38,7 +35,7 @@ export function DiscoverHeader() {
           boxSizing: "border-box",
         }}
       >
-        🔍 搜索地区、种类、名称、内容、标签或求助记录
+        🔍 搜索记录
       </a>
     </header>
   );

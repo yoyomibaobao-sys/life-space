@@ -1,4 +1,5 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import { RECORD_TAG_OPTIONS } from "@/lib/record-tags";
 
 export type SearchCategory = "all" | ArchiveCategory;
 
@@ -17,23 +18,7 @@ export type SearchFilters = {
 
 export const SEARCH_BATCH_SIZE = 120;
 
-export const commonSearchTags = [
-  "发芽",
-  "开花",
-  "结果",
-  "叶片",
-  "病害",
-  "浇水",
-  "施肥",
-  "换盆",
-  "修剪",
-  "播种",
-  "扦插",
-  "移植",
-  "堆肥",
-  "育苗",
-  "补光",
-] as const;
+export const commonSearchTags = RECORD_TAG_OPTIONS;
 
 export const emptySearchFilters: SearchFilters = {
   countryCode: "",

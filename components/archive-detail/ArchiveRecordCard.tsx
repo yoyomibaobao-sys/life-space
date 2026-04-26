@@ -36,6 +36,7 @@ type ArchiveRecordCardProps = {
   onAddTag: (recordId: string, tag: string) => Promise<void>;
   currentUserId?: string | null;
   onCommentCountChange?: (recordId: string, count: number) => void;
+  onRecordDeleted?: (recordId: string) => void;
 };
 
 export default function ArchiveRecordCard({
@@ -54,6 +55,7 @@ export default function ArchiveRecordCard({
   onAddTag,
   currentUserId,
   onCommentCountChange,
+  onRecordDeleted,
 }: ArchiveRecordCardProps) {
   const mediaList = buildMediaList(item.media, archive.title || "项目");
 
@@ -278,7 +280,7 @@ export default function ArchiveRecordCard({
                 ))}
               </select>
 
-              <DeleteRecordButton id={item.id} style={{ marginLeft: "auto" }} />
+              <DeleteRecordButton id={item.id} style={{ marginLeft: "auto" }} onDeleted={onRecordDeleted} />
             </>
           ) : null}
         </div>

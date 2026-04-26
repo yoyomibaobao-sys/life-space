@@ -403,7 +403,7 @@ function NewArchiveContent() {
 
             <div style={{ position: "relative" }}>
               <input
-                placeholder="输入植物名 / 学名 / 别名后点选"
+                placeholder="输入名称，点选对应条目"
                 value={speciesSearch}
                 onChange={(e) => {
                   setSpeciesSearch(e.target.value);

@@ -100,7 +100,7 @@ export default function FollowPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("projects");
+  const [tab, setTab] = useState<TabKey>(() => getInitialTabFromUrl());
   const [keyword, setKeyword] = useState("");
   const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter>("all");
   const [projectCards, setProjectCards] = useState<FollowProjectCard[]>([]);
@@ -669,6 +669,12 @@ function StatusBadge({
       {children}
     </span>
   );
+}
+
+function getInitialTabFromUrl(): TabKey {
+  if (typeof window === "undefined") return "projects";
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return tab === "users" ? "users" : "projects";
 }
 
 function unique<T>(items: T[]) {

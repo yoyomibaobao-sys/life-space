@@ -16,6 +16,15 @@ import type {
   PlantSpeciesRow,
 } from "@/lib/plant-detail-types";
 
+type PlantGrowthCycleRow = {
+  species_id: string;
+  germination_days?: number | null;
+  seedling_days?: number | null;
+  vegetative_days?: number | null;
+  flowering_days?: number | null;
+  harvest_days?: number | null;
+};
+
 const categoryLabels: Record<string, string> = {
   vegetable: "蔬菜 / 蔬果",
   fruit: "果树 / 果类",
@@ -286,6 +295,174 @@ function TempCard({
   if (!value) return null;
   return <Card label={label} value={value} />;
 }
+function toPositiveDay(value: unknown) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return null;
+  return Math.round(numberValue);
+}
+
+function GrowthCycleSection({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
+  const rawStages = [
+    {
+      label: "发芽期",
+      days: toPositiveDay(cycle?.germination_days),
+    },
+    {
+      label: "幼苗期",
+      days: toPositiveDay(cycle?.seedling_days),
+    },
+    {
+      label: "营养生长期",
+      days: toPositiveDay(cycle?.vegetative_days),
+    },
+    {
+      label: "开花期",
+      days: toPositiveDay(cycle?.flowering_days),
+    },
+    {
+      label: "采收期",
+      days: toPositiveDay(cycle?.harvest_days),
+    },
+  ].filter((stage) => stage.days !== null);
+
+  if (rawStages.length === 0) return null;
+
+  let cursor = 0;
+
+  const stages = rawStages.map((stage) => {
+    const start = cursor;
+    const end = cursor + (stage.days || 0);
+    cursor = end;
+
+    return {
+      ...stage,
+      start,
+      end,
+      duration: stage.days || 0,
+    };
+  });
+
+  const totalDays = stages[stages.length - 1]?.end || 0;
+  if (totalDays <= 0) return null;
+const columnWidths = stages.map((stage) => Math.max(96, stage.duration * 4));
+const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+  return (
+    <Section title="生长周期（参考）">
+      <div style={{ display: "grid", gap: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 8,
+            color: "#555",
+            fontSize: 15,
+          }}
+        >
+          <span>总周期：</span>
+          <strong style={{ color: "#315a2f", fontSize: 18 }}>
+            约 {totalDays} 天
+          </strong>
+        </div>
+
+        <div
+          style={{
+            overflowX: "auto",
+            paddingBottom: 4,
+          }}
+        >
+         <table
+  style={{
+    width: tableWidth,
+    minWidth: "100%",
+    borderCollapse: "separate",
+    borderSpacing: 0,
+    tableLayout: "fixed",
+              border: "1px solid #dce8d5",
+              borderRadius: 16,
+              overflow: "hidden",
+              background: "#fbfdf9",
+            }}
+          >
+      <colgroup>
+  {stages.map((stage, index) => (
+    <col
+      key={`${stage.label}-col`}
+      style={{
+        width: columnWidths[index],
+      }}
+    />
+  ))}
+</colgroup>
+
+            <tbody>
+  <tr>
+    {stages.map((stage, index) => (
+      <td
+        key={`${stage.label}-name`}
+        style={{
+          padding: "14px 10px 12px",
+          textAlign: "center",
+          background: index % 2 === 0 ? "#eef6e9" : "#f8fbf5",
+          borderRight:
+            index === stages.length - 1 ? "none" : "1px solid #dce8d5",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 700,
+            color: "#315a2f",
+            lineHeight: 1.5,
+          }}
+        >
+          {stage.label}
+        </div>
+
+        <div
+          style={{
+            marginTop: 2,
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#5f7f55",
+            lineHeight: 1.5,
+          }}
+        >
+          （{stage.duration}天）
+        </div>
+      </td>
+    ))}
+  </tr>
+
+  <tr>
+    {stages.map((stage, index) => (
+      <td
+        key={`${stage.label}-range`}
+        style={{
+          padding: "9px 10px",
+          textAlign: "center",
+          fontSize: 12,
+          color: "#777",
+          background: "#fff",
+          borderTop: "1px solid #dce8d5",
+          borderRight:
+            index === stages.length - 1 ? "none" : "1px solid #edf0e9",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {stage.start === 0
+          ? `第0–${stage.end}天`
+          : `第${stage.start + 1}–${stage.end}天`}
+      </td>
+    ))}
+  </tr>
+</tbody>
+          </table>
+        </div>
+      </div>
+    </Section>
+  );
+}
 
 export default function PlantDetailPage() {
   const params = useParams<{ id: string }>();
@@ -294,9 +471,10 @@ export default function PlantDetailPage() {
   const [plant, setPlant] = useState<PlantSpeciesRow | null>(null);
   const [i18n, setI18n] = useState<PlantSpeciesI18nRow[]>([]);
   const [aliases, setAliases] = useState<PlantAliasRow[]>([]);
-  const [parameters, setParameters] = useState<PlantParametersRow | null>(null);
-  const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
-  const [relatedRecords, setRelatedRecords] = useState<PlantRecordItem[]>([]);
+const [parameters, setParameters] = useState<PlantParametersRow | null>(null);
+const [growthCycle, setGrowthCycle] = useState<PlantGrowthCycleRow | null>(null);
+const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
+const [relatedRecords, setRelatedRecords] = useState<PlantRecordItem[]>([]);
   const [interestAdded, setInterestAdded] = useState(false);
   const [planAdded, setPlanAdded] = useState(false);
   const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
@@ -310,14 +488,15 @@ export default function PlantDetailPage() {
       setLoading(true);
       setActionMessage(null);
 
-      const [
-        { data: plantData },
-        { data: i18nData },
-        { data: aliasData },
-        { data: parameterData },
-        { data: careGuideData },
-        { data: relatedData },
-      ] = await Promise.all([
+const [
+  { data: plantData },
+  { data: i18nData },
+  { data: aliasData },
+  { data: parameterData },
+  { data: growthCycleData },
+  { data: careGuideData },
+  { data: relatedData },
+] = await Promise.all([
         supabase.from("plant_species").select("*").eq("id", id).maybeSingle(),
         supabase
           .from("plant_species_i18n")
@@ -330,6 +509,7 @@ export default function PlantDetailPage() {
           .eq("species_id", id)
           .order("alias_name", { ascending: true }),
         supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle(),
+        supabase.from("plant_growth_cycle").select("*").eq("species_id", id).maybeSingle(),
         supabase
           .from("plant_care_guides")
           .select("*")
@@ -346,8 +526,9 @@ export default function PlantDetailPage() {
       setPlant((plantData || null) as PlantSpeciesRow | null);
       setI18n((i18nData || []) as PlantSpeciesI18nRow[]);
       setAliases((aliasData || []) as PlantAliasRow[]);
-      setParameters((parameterData || null) as PlantParametersRow | null);
-      setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
+setParameters((parameterData || null) as PlantParametersRow | null);
+setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
+setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
       setRelatedRecords((relatedData || []) as PlantRecordItem[]);
 
       const {
@@ -881,6 +1062,7 @@ export default function PlantDetailPage() {
           <TextBlock text={careGuide?.climate_timing_note} />
         </Section>
       )}
+      <GrowthCycleSection cycle={growthCycle} />
 
       {hasText(careGuide?.planting_guide) && (
         <Section title="种植">

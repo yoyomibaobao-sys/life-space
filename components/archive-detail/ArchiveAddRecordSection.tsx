@@ -5,9 +5,11 @@ import AddRecord from "@/app/archive/[id]/AddRecord";
 export default function ArchiveAddRecordSection({
   archiveId,
   archiveIsPublic,
+  onRecordCreated,
 }: {
   archiveId: string;
   archiveIsPublic: boolean;
+  onRecordCreated?: () => void;
 }) {
   return (
     <section
@@ -26,6 +28,7 @@ export default function ArchiveAddRecordSection({
         archiveId={archiveId}
         archiveIsPublic={archiveIsPublic}
         placeholder="记录今天看到的变化…"
+        onRecordCreated={onRecordCreated}
       />
     </section>
   );

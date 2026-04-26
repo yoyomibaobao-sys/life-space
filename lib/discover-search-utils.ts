@@ -29,3 +29,24 @@ export function parseSearchFiltersFromUrl(search: string): SearchFilters {
     speciesId: params.get("species"),
   };
 }
+export function buildDiscoverSearchUrl(filters: SearchFilters, extraParams?: Record<string, string>) {
+  const params = new URLSearchParams();
+
+  if (filters.countryCode) params.set("country", filters.countryCode);
+  if (filters.countryName) params.set("countryName", filters.countryName);
+  if (filters.region) params.set("region", filters.region);
+  if (filters.city) params.set("city", filters.city);
+  if (filters.category && filters.category !== "all") params.set("category", filters.category);
+  if (filters.name.trim()) params.set("name", filters.name.trim());
+  if (filters.tag.trim()) params.set("tag", filters.tag.trim());
+  if (filters.content.trim()) params.set("content", filters.content.trim());
+  if (filters.helpOnly) params.set("help", "1");
+  if (filters.speciesId) params.set("species", filters.speciesId);
+
+  Object.entries(extraParams || {}).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+
+  const query = params.toString();
+  return query ? `/discover/search?${query}` : "/discover/search";
+}

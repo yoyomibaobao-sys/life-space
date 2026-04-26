@@ -32,6 +32,14 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [viewportWidth, setViewportWidth] = useState(1200);
+
+  useEffect(() => {
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    updateViewportWidth();
+    window.addEventListener("resize", updateViewportWidth);
+    return () => window.removeEventListener("resize", updateViewportWidth);
+  }, []);
 
   useEffect(() => {
     async function init() {
@@ -82,6 +90,16 @@ export default function ProfilePage() {
     const limit = formatStorage(Number(profile?.storage_limit || 0));
     return `${used} / ${limit}`;
   }, [profile]);
+
+  const privateArchiveCount = Math.max(0, Number(stats?.archiveCount || 0) - Number(stats?.publicArchiveCount || 0));
+  const planHint = getPlanHint(stats?.planNames || [], Number(stats?.planCount || 0));
+  const topGridColumns = viewportWidth < 820 ? "1fr" : "minmax(280px, 0.95fr) minmax(420px, 1.05fr)";
+  const formGridColumns = viewportWidth < 560 ? "1fr" : "repeat(2, minmax(0, 1fr))";
+  const statsGridColumns = viewportWidth < 640
+    ? "1fr"
+    : viewportWidth < 900
+      ? "repeat(2, minmax(0, 1fr))"
+      : "repeat(3, minmax(0, 1fr))";
 
   async function refreshStats(targetUserId: string) {
     const data = await loadUserProfileData(supabase, targetUserId);
@@ -205,23 +223,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px 48px" }}>
-      <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 13, color: "#6b7b66" }}>我的资料</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>用户信息页</h1>
-            <div style={{ marginTop: 8, color: "#61705c", fontSize: 14 }}>
-              管理头像、用户名和所在地区，并从这里进入我的空间、关注、计划、感兴趣和花朵来源。
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <QuickLink href="/archive" label="我的空间" />
-            <QuickLink href="/follow" label="我的关注" />
-            <QuickLink href="/archive/plans" label="种植计划" />
-            <QuickLink href="/archive/interests" label="感兴趣" />
-          </div>
+    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "16px 14px 32px" }}>
+      <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 18, padding: 18, boxShadow: "0 10px 24px rgba(32,56,24,0.05)" }}>
+        <div>
+          <div style={{ fontSize: 13, color: "#6b7b66" }}>我的资料</div>
+          <h1 style={{ margin: "4px 0 0", fontSize: 24, color: "#1f2a1f" }}>用户信息页</h1>
         </div>
 
         {errorMsg ? (
@@ -230,28 +236,28 @@ export default function ProfilePage() {
           </div>
         ) : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 280px) minmax(0, 1fr)", gap: 20, marginTop: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: topGridColumns, gap: 14, marginTop: 14, alignItems: "start" }}>
           <section style={panelStyle}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {profile.avatar_url ? (
-                <img src={String(profile.avatar_url)} alt="" style={{ width: 88, height: 88, borderRadius: "50%", objectFit: "cover", border: "1px solid #e4ebe0" }} />
+                <img src={String(profile.avatar_url)} alt="" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "1px solid #e4ebe0" }} />
               ) : (
-                <div style={{ width: 88, height: 88, borderRadius: "50%", background: "#eef5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34 }}>🌱</div>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#eef5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🌱</div>
               )}
 
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, color: "#1f2a1f" }}>{profile.username || "未设置用户名"}</div>
-                <div style={{ marginTop: 4, fontSize: 14, color: "#6f7b69", wordBreak: "break-all" }}>{user.email}</div>
-                <div style={{ marginTop: 8, fontSize: 13, color: "#6f7b69" }}>
+                <div style={{ fontSize: 19, fontWeight: 700, color: "#1f2a1f" }}>{profile.username || "未设置用户名"}</div>
+                <div style={{ marginTop: 3, fontSize: 13, color: "#6f7b69", wordBreak: "break-all" }}>{user.email}</div>
+                <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
                   所在地区：{locationPreview}
                 </div>
               </div>
             </div>
 
-            <div style={{ marginTop: 18 }}>
+            <div style={{ marginTop: 12 }}>
               <label style={fieldLabelStyle}>更换头像</label>
               <input type="file" accept="image/*" onChange={handleUpload} />
-              <div style={{ marginTop: 6, fontSize: 12, color: "#7b8676" }}>
+              <div style={{ marginTop: 4, fontSize: 12, color: "#7b8676" }}>
                 建议上传正方形图片，3MB 以内。{uploading ? "上传中..." : ""}
               </div>
             </div>
@@ -266,7 +272,7 @@ export default function ProfilePage() {
 
           <section style={panelStyle}>
             <div style={sectionTitleStyle}>基础信息</div>
-            <div style={formGridStyle}>
+            <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns }}>
               <div>
                 <label style={fieldLabelStyle}>用户名</label>
                 <input value={username} onChange={(e) => setUsername(e.target.value)} style={inputStyle} placeholder="输入你的用户名" />
@@ -305,39 +311,93 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 10, fontSize: 13, color: "#5e6959" }}>
+            <div style={{ marginTop: 8, fontSize: 13, color: "#5e6959" }}>
               显示为：<span style={{ fontWeight: 700, color: "#243123" }}>{locationPreview}</span>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginTop: 20 }}>
-              <StatCard label="项目" value={String(stats.archiveCount)} hint={`公开 ${stats.publicArchiveCount}`} />
-              <StatCard label="关注" value={String(stats.followingCount)} hint="我在关注谁" />
-              <StatCard label="粉丝" value={String(stats.followerCount)} hint="谁在关注我" />
-              <StatLinkCard href="/profile/flowers" label="花朵来源" value={`🌸 ${Number(profile.flower_count || 0)}`} hint="查看谁给我送花" />
-              <StatCard label="计划" value={String(stats.planCount)} hint="待种清单" />
-              <StatLinkCard href="/profile/flowers?tab=sent" label="送给谁" value={String(stats.sentFlowerCount || 0)} hint="查看我送出的花" />
-              <StatCard label="感兴趣" value={String(stats.interestCount)} hint="想再看看" />
-              <StatCard label="最近更新" value={formatProfileDateTime(stats.latestRecordTime)} hint="按公开项目统计" />
-            </div>
-
-            <div style={{ marginTop: 20, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button type="button" onClick={handleSave} disabled={saving} style={primaryButtonStyle}>{saving ? "保存中..." : "保存资料"}</button>
               <Link href={`/user/${user.id}/profile`} style={secondaryLinkStyle}>查看公开资料页</Link>
               <Link href="/archive" style={secondaryLinkStyle}>进入我的空间</Link>
             </div>
           </section>
         </div>
+
+        <section style={statsSectionStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的空间</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>空间、关注与互动</h2>
+            </div>
+          </div>
+
+          <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns }}>
+              <StatLinkCard
+                href="/archive"
+                label="我的项目"
+                value={String(stats.archiveCount)}
+                hint={`公开 ${stats.publicArchiveCount} · 私密 ${privateArchiveCount}`}
+              />
+              <StatLinkCard
+                href="/archive/plans"
+                label="我的计划"
+                value={String(stats.planCount)}
+                hint={planHint}
+              />
+              <StatActionCard
+                label="最近浏览"
+                value="暂无"
+                hint="最近看过的记录"
+                onClick={() => showToast("最近浏览功能准备中")}
+              />
+              <StatLinkCard
+  href="/follow?tab=projects"
+  label="我关注的项目"
+  value={String(stats.projectFollowCount)}
+  hint="我关注的项目"
+/>
+              <StatLinkCard
+                href="/follow?tab=users"
+                label="我关注的用户"
+                value={String(stats.followingCount)}
+                hint="我在关注谁"
+              />
+              <StatActionCard
+                label="粉丝"
+                value={String(stats.followerCount)}
+                hint="谁在关注我"
+                onClick={() => showToast("粉丝列表功能准备中")}
+              />
+              <StatLinkCard
+                href="/profile/flowers"
+                label="花朵来源"
+                value={String(stats.receivedFlowerCount)}
+                hint="查看谁给我送花"
+              />
+              <StatLinkCard
+                href="/profile/flowers?tab=sent"
+                label="花朵送给谁"
+                value={String(stats.sentFlowerCount || 0)}
+                hint="查看我送出的花"
+              />
+              <StatActionCard
+                label="通知"
+                value="暂无"
+                hint="关注、送花和互动提醒"
+                onClick={() => showToast("通知功能准备中")}
+              />
+          </div>
+        </section>
       </section>
     </main>
   );
 }
 
-function QuickLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} style={{ textDecoration: "none", padding: "10px 14px", borderRadius: 999, border: "1px solid #dce8d8", background: "#f8fbf6", color: "#476b3d", fontSize: 14 }}>
-      {label}
-    </Link>
-  );
+function getPlanHint(planNames: string[], planCount: number) {
+  if (!planCount) return "还没有种植计划";
+  if (!planNames.length) return "查看我的种植计划";
+  const suffix = planCount > planNames.length ? "等" : "";
+  return `${planNames.join("、")}${suffix}`;
 }
 
 function MetaItem({ label, value }: { label: string; value: string }) {
@@ -349,36 +409,54 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div style={{ background: "#f8fbf6", border: "1px solid #e4ece0", borderRadius: 16, padding: 14 }}>
-      <div style={{ fontSize: 13, color: "#6d7968" }}>{label}</div>
-      <div style={{ marginTop: 6, fontSize: 20, fontWeight: 700, color: "#22301f" }}>{value}</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: "#7b8676", lineHeight: 1.5 }}>{hint}</div>
-    </div>
-  );
-}
-
 function StatLinkCard({ href, label, value, hint }: { href: string; label: string; value: string; hint: string }) {
   return (
     <Link href={href} style={{ ...statCardBaseStyle, textDecoration: "none" }}>
-      <div style={{ fontSize: 13, color: "#6d7968" }}>{label}</div>
-      <div style={{ marginTop: 6, fontSize: 20, fontWeight: 700, color: "#22301f" }}>{value}</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: "#7b8676", lineHeight: 1.5 }}>{hint}</div>
+      <div style={{ fontSize: 14, color: "#6d7968" }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
+      <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
     </Link>
+  );
+}
+
+function StatActionCard({
+  label,
+  value,
+  hint,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} style={statActionCardStyle}>
+      <div style={{ fontSize: 14, color: "#6d7968" }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
+      <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
+    </button>
   );
 }
 
 const panelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e8efe4",
+  borderRadius: 16,
+  padding: 14,
+};
+
+const statsSectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#fbfdf9",
+  border: "1px solid #e6eee2",
   borderRadius: 18,
-  padding: 18,
+  padding: 14,
 };
 
 const fieldLabelStyle: CSSProperties = {
   display: "block",
-  marginBottom: 8,
+  marginBottom: 5,
   fontSize: 13,
   color: "#5e6959",
   fontWeight: 600,
@@ -386,8 +464,8 @@ const fieldLabelStyle: CSSProperties = {
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  padding: "11px 12px",
-  borderRadius: 12,
+  padding: "9px 11px",
+  borderRadius: 10,
   border: "1px solid #d8e3d3",
   fontSize: 14,
   outline: "none",
@@ -397,20 +475,20 @@ const inputStyle: CSSProperties = {
 const formGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 14,
+  gap: 10,
 };
 
 const sectionTitleStyle: CSSProperties = {
-  fontSize: 18,
+  fontSize: 17,
   fontWeight: 700,
   color: "#1f2a1f",
-  marginBottom: 14,
+  marginBottom: 10,
 };
 
 const metaListStyle: CSSProperties = {
   display: "grid",
-  gap: 10,
-  marginTop: 18,
+  gap: 7,
+  marginTop: 12,
 };
 
 const primaryButtonStyle: CSSProperties = {
@@ -418,7 +496,7 @@ const primaryButtonStyle: CSSProperties = {
   background: "#4f7b45",
   color: "#fff",
   borderRadius: 12,
-  padding: "12px 18px",
+  padding: "10px 14px",
   cursor: "pointer",
   fontSize: 14,
   fontWeight: 600,
@@ -430,15 +508,32 @@ const secondaryLinkStyle: CSSProperties = {
   background: "#fff",
   color: "#40583a",
   borderRadius: 12,
-  padding: "11px 16px",
+  padding: "9px 13px",
   fontSize: 14,
   fontWeight: 600,
 };
 
+const statsGridStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginTop: 14,
+};
+
 const statCardBaseStyle: CSSProperties = {
-  background: "#f8fbf6",
+  background: "#fff",
   border: "1px solid #e4ece0",
   borderRadius: 16,
   padding: 14,
   display: "block",
+  color: "inherit",
+  minHeight: 104,
+  boxSizing: "border-box",
+};
+
+const statActionCardStyle: CSSProperties = {
+  ...statCardBaseStyle,
+  width: "100%",
+  textAlign: "left",
+  cursor: "pointer",
+  font: "inherit",
 };

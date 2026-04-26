@@ -11,9 +11,11 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 export default function DeleteRecordButton({
   id,
   style,
+  onDeleted,
 }: {
   id: string;
   style?: CSSProperties;
+  onDeleted?: (id: string) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -24,17 +26,6 @@ export default function DeleteRecordButton({
     setIsDeleting(true);
 
     try {
-      const { error: mediaError } = await supabase
-        .from("media")
-        .delete()
-        .eq("record_id", id);
-
-      if (mediaError) {
-        console.log("删除图片失败:", mediaError);
-        showToast("删除失败");
-        return;
-      }
-
       const { error: recordError } = await supabase
         .from("records")
         .delete()
@@ -48,10 +39,8 @@ export default function DeleteRecordButton({
 
       showToast("删除成功");
       setOpen(false);
-
-      setTimeout(() => {
-        router.refresh();
-      }, 800);
+      onDeleted?.(id);
+      router.refresh();
     } catch (err) {
       console.log("删除异常:", err);
       showToast("操作失败");

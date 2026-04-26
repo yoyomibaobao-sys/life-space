@@ -142,7 +142,7 @@ export default function Navbar() {
               whiteSpace: "nowrap",
             }}
           >
-            {username || "未设置用户名"} · 资料
+            {username || "未设置用户名"} 
           </Link>
 
           <div

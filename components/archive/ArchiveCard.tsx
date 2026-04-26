@@ -416,22 +416,39 @@ export default function ArchiveCard({
       </div>
 
       <div
-        data-no-card-nav="true"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          minWidth: 42,
-          marginLeft: 10,
-          paddingLeft: 12,
-          borderLeft: "1px solid #f0f0ec",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "flex-end",
-          alignItems: "flex-end",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => onDeleteArchive(item)}
+  data-no-card-nav="true"
+  onClick={(e) => e.stopPropagation()}
+  style={{
+    minWidth: 58,
+    marginLeft: 10,
+    paddingLeft: 12,
+    borderLeft: "1px solid #f0f0ec",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
+    gap: 8,
+  }}
+>
+  <button
+    type="button"
+    onClick={() => onUpdateArchiveStatus(item, ended ? "active" : "ended")}
+    style={{
+      border: "none",
+      background: "transparent",
+      color: ended ? "#4f8f46" : "#8a8f84",
+      cursor: "pointer",
+      fontSize: 12,
+      padding: 0,
+      whiteSpace: "nowrap",
+    }}
+  >
+    {ended ? "恢复" : "结束"}
+  </button>
+
+  <button
+    type="button"
+    onClick={() => onDeleteArchive(item)}
           style={{
             border: "none",
             background: "transparent",

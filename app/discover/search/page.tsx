@@ -10,7 +10,10 @@ import {
   emptySearchFilters,
   type SearchFilters,
 } from "@/lib/discover-search-types";
-import { parseSearchFiltersFromUrl } from "@/lib/discover-search-utils";
+import {
+  buildDiscoverSearchUrl,
+  parseSearchFiltersFromUrl,
+} from "@/lib/discover-search-utils";
 import type { FeedItem } from "@/lib/discover-types";
 
 export default function DiscoverSearchPage() {
@@ -21,25 +24,37 @@ export default function DiscoverSearchPage() {
   const [fromArchiveId, setFromArchiveId] = useState("");
   const [fromArchiveTitle, setFromArchiveTitle] = useState("");
 
-  async function performSearch(nextFilters: SearchFilters) {
-    setSearchLoading(true);
-    setSearchHasRun(true);
-    const nextItems = await fetchDiscoverSearchResults(nextFilters);
-    setSearchResults(nextItems);
-    setSearchLoading(false);
+async function performSearch(nextFilters: SearchFilters, options?: { syncUrl?: boolean }) {
+  if (options?.syncUrl) {
+    const extraParams: Record<string, string> = {};
+
+    if (fromArchiveId) extraParams.fromArchive = fromArchiveId;
+    if (fromArchiveTitle) extraParams.fromTitle = fromArchiveTitle;
+
+    window.history.pushState(null, "", buildDiscoverSearchUrl(nextFilters, extraParams));
   }
 
-  function runSearch() {
-    performSearch(filters);
-  }
+  setSearchLoading(true);
+  setSearchHasRun(true);
+  const nextItems = await fetchDiscoverSearchResults(nextFilters);
+  setSearchResults(nextItems);
+  setSearchLoading(false);
+}
+
+function runSearch() {
+  performSearch(filters, { syncUrl: true });
+}
 
   function resetSearchFilters() {
-    setFilters(emptySearchFilters);
-    window.history.replaceState(null, "", "/discover/search");
-    performSearch(emptySearchFilters);
-  }
+  setFilters(emptySearchFilters);
+  setFromArchiveId("");
+  setFromArchiveTitle("");
+  window.history.pushState(null, "", "/discover/search");
+  performSearch(emptySearchFilters);
+}
 
-  useEffect(() => {
+ useEffect(() => {
+  function loadFromUrl() {
     const initialFilters = parseSearchFiltersFromUrl(window.location.search);
     const params = new URLSearchParams(window.location.search);
 
@@ -47,8 +62,18 @@ export default function DiscoverSearchPage() {
     setFromArchiveTitle(params.get("fromTitle") || "");
     setFilters(initialFilters);
     performSearch(initialFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
+
+  loadFromUrl();
+
+  window.addEventListener("popstate", loadFromUrl);
+
+  return () => {
+    window.removeEventListener("popstate", loadFromUrl);
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   return (
     <main
