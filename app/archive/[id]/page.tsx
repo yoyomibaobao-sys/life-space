@@ -1,5 +1,5 @@
 "use client";
-
+import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -92,6 +92,13 @@ function Content({ id }: { id: string }) {
         setRecords([]);
         return;
       }
+saveRecentArchiveBrowse({
+  id: archiveData.id,
+  title: archiveData.title,
+  systemName: archiveData.system_name || archiveData.species_name_snapshot || null,
+  category: archiveData.category,
+  userId: archiveData.user_id,
+});
 
       if (archiveData.is_public && !isOwnerView) {
         const viewSessionKey = `archive_viewed_${archiveData.id}`;

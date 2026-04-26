@@ -344,12 +344,12 @@ export default function ProfilePage() {
                 value={String(stats.planCount)}
                 hint={planHint}
               />
-              <StatActionCard
-                label="最近浏览"
-                value="暂无"
-                hint="最近看过的记录"
-                onClick={() => showToast("最近浏览功能准备中")}
-              />
+              <StatLinkCard
+  href="/profile/recent"
+  label="最近浏览"
+  value="进入"
+  hint="最近看过的项目"
+/>
               <StatLinkCard
   href="/follow?tab=projects"
   label="我关注的项目"
