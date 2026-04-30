@@ -23,6 +23,7 @@ export default function ProfilePage() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [stats, setStats] = useState<UserProfileStats | null>(null);
+  const [marketPostCount, setMarketPostCount] = useState(0);
   const [username, setUsername] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [customCountryName, setCustomCountryName] = useState("");
@@ -58,6 +59,17 @@ export default function ProfilePage() {
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
       setStats(data.stats);
+      const { count: marketCount, error: marketCountError } = await supabase
+  .from("market_posts")
+  .select("id", { count: "exact", head: true })
+  .eq("user_id", user.id);
+
+if (marketCountError) {
+  console.error("load my market post count error:", marketCountError);
+  setMarketPostCount(0);
+} else {
+  setMarketPostCount(Number(marketCount || 0));
+}
       setUsername(String(data.profile?.username || ""));
 
       const legacy = parseLegacyLocation(data.profile?.location);
@@ -387,6 +399,36 @@ export default function ProfilePage() {
   value="进入"
   hint="关注、送花和互动提醒"
 />
+                    </div>
+        </section>
+
+        <section style={marketInfoSectionStyle}>
+          <div style={marketInfoHeaderStyle}>
+            <div>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>集市信息</div>
+              <h2 style={marketInfoTitleStyle}>我的集市</h2>
+              <p style={marketInfoDescStyle}>
+                管理你的交换、赠送、转让和求购信息。
+              </p>
+            </div>
+          </div>
+
+          <div style={marketInfoGridStyle}>
+            <Link href="/market/mine" style={marketInfoCardStyle}>
+              <div style={marketInfoCardLabelStyle}>我的集市发布</div>
+              <div style={marketInfoCardValueStyle}>{marketPostCount}</div>
+              <div style={marketInfoCardHintStyle}>
+                查看和管理我发布的集市信息
+              </div>
+            </Link>
+
+            <Link href="/market/new" style={marketInfoCardStyle}>
+              <div style={marketInfoCardLabelStyle}>发布新信息</div>
+              <div style={marketInfoCardValueStyle}>＋</div>
+              <div style={marketInfoCardHintStyle}>
+                发布交换、赠送、转让或求购
+              </div>
+            </Link>
           </div>
         </section>
       </section>
@@ -454,7 +496,71 @@ const statsSectionStyle: CSSProperties = {
   borderRadius: 18,
   padding: 14,
 };
+const marketInfoSectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#fffaf3",
+  border: "1px solid #efe1c9",
+  borderRadius: 18,
+  padding: 14,
+};
 
+const marketInfoHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
+  marginBottom: 14,
+};
+
+const marketInfoTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  color: "#1f2a1f",
+  fontSize: 20,
+};
+
+const marketInfoDescStyle: CSSProperties = {
+  margin: "5px 0 0",
+  color: "#6f7b69",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+const marketInfoGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 10,
+};
+
+const marketInfoCardStyle: CSSProperties = {
+  textDecoration: "none",
+  color: "inherit",
+  background: "#fff",
+  border: "1px solid #eadfcf",
+  borderRadius: 16,
+  padding: 14,
+  display: "block",
+  minHeight: 104,
+  boxSizing: "border-box",
+};
+
+const marketInfoCardLabelStyle: CSSProperties = {
+  color: "#6d5f45",
+  fontSize: 14,
+};
+
+const marketInfoCardValueStyle: CSSProperties = {
+  marginTop: 6,
+  color: "#22301f",
+  fontSize: 24,
+  fontWeight: 700,
+};
+
+const marketInfoCardHintStyle: CSSProperties = {
+  marginTop: 6,
+  color: "#7b8676",
+  fontSize: 13,
+  lineHeight: 1.35,
+};
 const fieldLabelStyle: CSSProperties = {
   display: "block",
   marginBottom: 5,

@@ -1,5 +1,5 @@
 "use client";
-
+import Link from "next/link";
 import EditRecord from "@/components/EditRecord";
 import TagList from "@/components/TagList";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
@@ -227,6 +227,15 @@ export default function ArchiveRecordCard({
             >
               已解决
             </button>
+            <Link
+  href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
+  style={{
+    ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
+    textDecoration: "none",
+  }}
+>
+  发布到集市
+</Link>
           </div>
         ) : null}
 

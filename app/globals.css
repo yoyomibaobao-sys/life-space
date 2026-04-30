@@ -1,119 +1,348 @@
-/* ---------- 基础颜色 & 字体 ---------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-
-  /* ⭐ 字体变量（配合 layout.tsx） */
+  --background: #f6f8f3;
+  --foreground: #1f2a1f;
+  --surface: #ffffff;
+  --surface-soft: #fafcf8;
+  --surface-warm: #fffaf3;
+  --border: #e4ece0;
+  --border-strong: #d7e2d2;
+  --text: #1f2a1f;
+  --muted: #6f7b69;
+  --muted-2: #8a9585;
+  --primary: #4f7b45;
+  --primary-dark: #3f6d37;
+  --danger: #c23a2b;
+  --danger-bg: #fff2f0;
+  --warning-bg: #fffaf0;
+  --warning-border: #f1e3c7;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --shadow-soft: 0 10px 24px rgba(32, 56, 24, 0.05);
+  --shadow-nav: 0 1px 0 rgba(31, 42, 31, 0.06);
+  --page-max: 1040px;
+  --page-pad-x: 16px;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-/* ---------- 深色模式 ---------- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
-/* ---------- 全局基础 ---------- */
-body {
+html {
+  min-height: 100%;
   background: var(--background);
-  color: var(--foreground);
+}
 
-  /* ⭐ 使用 Geist */
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
-
-  /* 📱 手机优先 */
-  font-size: 18px;
-  line-height: 1.7;
-
+body {
+  min-height: 100%;
   margin: 0;
   padding: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ---------- 标题 ---------- */
-h1 {
-  font-size: 24px;
+a {
+  color: inherit;
 }
 
-h2 {
-  font-size: 20px;
-}
-
-h3 {
-  font-size: 18px;
-}
-
-/* ---------- 段落 ---------- */
-p {
-  font-size: 17px;
-  line-height: 1.7;
-}
-
-/* ---------- 表单元素 & 按钮 ---------- */
-textarea,
+button,
 input,
+textarea,
+select {
+  font: inherit;
+}
+
 button {
-  font-size: 17px;
+  cursor: pointer;
+}
+
+img {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+.app-main {
+  width: 100%;
+  min-height: calc(100vh - 58px);
+}
+
+.page-shell {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 22px var(--page-pad-x) 48px;
+}
+
+.page-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 18px;
+}
+
+.page-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1.25;
+  font-weight: 750;
+}
+
+.page-subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
   line-height: 1.6;
 }
 
-button {
-  padding: 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  border: none;
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-nav);
+}
 
-  background: #222;
+.site-nav__inner {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.site-nav__left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+}
+
+.site-nav__brand {
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  font-size: 16px;
+}
+
+.site-nav__links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.site-nav__link {
+  text-decoration: none;
+  color: #40503d;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.site-nav__link:hover {
+  background: #f2f7ef;
+  color: var(--primary-dark);
+}
+
+.site-nav__link--active {
+  background: #edf4e8;
+  color: var(--primary-dark);
+}
+
+.site-nav__right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.site-nav__notification {
+  position: relative;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  padding: 7px 8px;
+  border-radius: 999px;
+}
+
+.site-nav__notification:hover {
+  background: #f2f7ef;
+}
+
+.site-nav__badge {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #e85d3f;
   color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 800;
+  padding: 0 4px;
 }
 
-/* ---------- 卡片 ---------- */
-.card {
-  width: 100%;
-  padding: 16px;
-  border-radius: 10px;
-  box-sizing: border-box;
-  margin-bottom: 16px;
-
-  background: var(--background);
-
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+.site-nav__profile {
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ---------- 图片缩略图 ---------- */
-.thumbnail {
-  width: 100%;
-  aspect-ratio: 1/1;
-  object-fit: cover;
-  border-radius: 8px;
-  cursor: pointer;
+.site-nav__email {
+  color: #8a9585;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
-/* ---------- PC适配 ---------- */
-@media (min-width: 768px) {
+.site-nav__logout {
+  border: 0;
+  background: transparent;
+  padding: 5px 0;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.site-nav__auth {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.site-nav__login {
+  text-decoration: none;
+  color: var(--primary-dark);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.site-nav__register {
+  text-decoration: none;
+  color: #fff;
+  background: var(--primary);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --page-pad-x: 12px;
+  }
+
   body {
-    font-size: 18px;
+    font-size: 15px;
   }
 
-  h1 {
-    font-size: 26px;
+  .app-main {
+    min-height: calc(100vh - 104px);
   }
 
-  h2 {
-    font-size: 22px;
+  .site-nav__inner {
+    padding: 9px 12px 10px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 
-  h3 {
-    font-size: 20px;
+  .site-nav__left,
+  .site-nav__right {
+    width: 100%;
   }
 
-  p {
-    font-size: 16px;
+  .site-nav__left {
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
-  button {
-    font-size: 16px;
+  .site-nav__brand {
+    font-size: 15px;
+  }
+
+  .site-nav__links {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .site-nav__links::-webkit-scrollbar {
+    display: none;
+  }
+
+  .site-nav__link {
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .site-nav__right {
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .site-nav__email {
+    display: none;
+  }
+
+  .site-nav__profile {
+    max-width: 150px;
+    font-size: 13px;
+  }
+
+  .page-shell {
+    padding-top: 16px;
+    padding-bottom: 36px;
+  }
+
+  .page-panel {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .page-title {
+    font-size: 24px;
   }
 }
