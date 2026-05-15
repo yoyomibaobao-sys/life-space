@@ -8,7 +8,6 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import ArchiveCard from "@/components/archive/ArchiveCard";
 import ArchiveFiltersPanel from "@/components/archive/ArchiveFiltersPanel";
 import ArchiveGroupPanel from "@/components/archive/ArchiveGroupPanel";
-import ArchiveOverviewCards from "@/components/archive/ArchiveOverviewCards";
 import ArchiveToolbar from "@/components/archive/ArchiveToolbar";
 import {
   archiveCategoryOptions,
@@ -20,8 +19,6 @@ import {
 import type {
   ArchiveItem,
   GroupTagItem,
-  PlantInterestItem,
-  PlantPlanItem,
   PlantSpeciesOption,
   SortMode,
   SubTagItem,
@@ -42,6 +39,14 @@ import {
   sumMediaSizeBytes,
 } from "@/lib/storage-usage";
 
+type LatestArchiveRecord = {
+  archive_id: string | null;
+  note?: string | null;
+  record_time?: string | null;
+  primary_image_url?: string | null;
+  media_count?: number | null;
+};
+
 export default function ArchivePage() {
   const router = useRouter();
   const loadingRef = useRef(false);
@@ -51,8 +56,6 @@ export default function ArchivePage() {
   const [groupTags, setGroupTags] = useState<GroupTagItem[]>([]);
   const [subTags, setSubTags] = useState<SubTagItem[]>([]);
   const [speciesList, setSpeciesList] = useState<PlantSpeciesOption[]>([]);
-  const [plantPlans, setPlantPlans] = useState<PlantPlanItem[]>([]);
-  const [plantInterests, setPlantInterests] = useState<PlantInterestItem[]>([]);
 
   const [editingPlantArchiveId, setEditingPlantArchiveId] = useState<string | null>(null);
   const [editingSpeciesId, setEditingSpeciesId] = useState("");
@@ -68,7 +71,7 @@ export default function ArchivePage() {
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("created");
+  const [sortMode, setSortMode] = useState<SortMode>("updated");
   const [deleteArchiveTarget, setDeleteArchiveTarget] = useState<ArchiveItem | null>(null);
   const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
@@ -110,8 +113,7 @@ export default function ArchivePage() {
         { data: subTagsData },
         { data: speciesData },
         { data: aliasData },
-        { data: plansData },
-        { data: interestsData },
+        { data: archiveFollowRows },
         membershipResult,
       ] = await Promise.all([
         supabase.from("archives").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
@@ -123,8 +125,7 @@ export default function ArchivePage() {
           .eq("is_active", true)
           .order("common_name", { ascending: true }),
         supabase.from("plant_species_aliases").select("species_id, alias_name, normalized_name"),
-        supabase.from("user_plant_plans").select("id, status, created_archive_id").eq("user_id", user.id),
-        supabase.from("user_plant_interests").select("id").eq("user_id", user.id),
+        supabase.from("archive_follows").select("archive_id"),
         supabase.rpc("get_my_membership"),
       ]);
 
@@ -160,23 +161,57 @@ export default function ArchivePage() {
       });
 
       const speciesMap = new Map(speciesRows.map((item) => [item.id, item.display_name]));
+      const archiveIds = ((archivesData || []) as ArchiveItem[]).map((item) => item.id).filter(Boolean);
+      const archiveIdSet = new Set(archiveIds);
+      const followerCountMap = new Map<string, number>();
+      ((archiveFollowRows || []) as { archive_id?: string | null }[])
+        .filter((row) => row.archive_id && archiveIdSet.has(row.archive_id))
+        .forEach((row) => {
+          const archiveId = String(row.archive_id);
+          followerCountMap.set(archiveId, (followerCountMap.get(archiveId) || 0) + 1);
+        });
+      const latestRecordMap = new Map<string, LatestArchiveRecord>();
 
-      const enrichedArchives: ArchiveItem[] = ((archivesData || []) as ArchiveItem[]).map((item) => ({
-        ...item,
-        status: item.status || "active",
-        species_display_name:
-          item.category === "plant"
-            ? item.species_name_snapshot || (item.species_id ? speciesMap.get(item.species_id) : null) || null
-            : null,
-      }));
+      if (archiveIds.length > 0) {
+        const { data: latestRecordRows, error: latestRecordError } = await supabase
+          .from("records")
+          .select("archive_id, note, record_time, primary_image_url, media_count")
+          .eq("user_id", user.id)
+          .in("archive_id", archiveIds)
+          .order("record_time", { ascending: false });
+
+        if (latestRecordError) {
+          console.error("load latest archive records error:", latestRecordError);
+        } else {
+          ((latestRecordRows || []) as LatestArchiveRecord[]).forEach((record) => {
+            if (!record.archive_id || latestRecordMap.has(record.archive_id)) return;
+            latestRecordMap.set(record.archive_id, record);
+          });
+        }
+      }
+
+      const enrichedArchives: ArchiveItem[] = ((archivesData || []) as ArchiveItem[]).map((item) => {
+        const latestRecord = latestRecordMap.get(item.id);
+
+        return {
+          ...item,
+          status: item.status || "active",
+          latest_record_note: latestRecord?.note || null,
+          latest_record_time: latestRecord?.record_time || item.last_record_time || null,
+          latest_record_primary_image_url: latestRecord?.primary_image_url || null,
+          latest_record_media_count: latestRecord?.media_count || 0,
+          follower_count: followerCountMap.get(item.id) || 0,
+          species_display_name:
+            item.category === "plant"
+              ? item.species_name_snapshot || (item.species_id ? speciesMap.get(item.species_id) : null) || null
+              : null,
+        };
+      });
 
       setArchives(enrichedArchives);
       setGroupTags((groupTagsData || []) as GroupTagItem[]);
       setSubTags((subTagsData || []) as SubTagItem[]);
       setSpeciesList(speciesRows);
-      setPlantPlans((plansData || []) as PlantPlanItem[]);
-      setPlantInterests((interestsData || []) as PlantInterestItem[]);
-
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
         setMembership(null);
@@ -541,6 +576,7 @@ export default function ArchivePage() {
 
   async function toggleArchivePublic(item: ArchiveItem) {
     const newValue = !item.is_public;
+    const nextRecordVisibility = newValue ? "public" : "private";
 
     const { error } = await supabase.from("archives").update({ is_public: newValue }).eq("id", item.id);
     if (error) {
@@ -548,14 +584,20 @@ export default function ArchivePage() {
       return;
     }
 
-    if (!newValue) {
-      await supabase.from("records").update({ visibility: "private" }).eq("archive_id", item.id);
+    const { error: recordsError } = await supabase
+      .from("records")
+      .update({ visibility: nextRecordVisibility })
+      .eq("archive_id", item.id);
+
+    if (recordsError) {
+      showToast("项目状态已更新，但同步记录可见状态失败");
+      return;
     }
 
     setArchives((prev) =>
       prev.map((archive) => (archive.id === item.id ? { ...archive, is_public: newValue } : archive))
     );
-    showToast(newValue ? "已公开到发现" : "已设为仅自己可见");
+    showToast(newValue ? "项目和记录已公开到发现" : "项目和记录已设为仅自己可见");
   }
 
   async function updateArchiveCategory(item: ArchiveItem, value: string) {
@@ -778,25 +820,14 @@ export default function ArchivePage() {
         {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
       </div>
 
-      <ArchiveOverviewCards
-        plantPlans={plantPlans}
-        plantInterests={plantInterests}
-        onOpenPlans={() => router.push("/archive/plans")}
-        onOpenInterests={() => router.push("/archive/interests")}
-      />
-
       <ArchiveToolbar
-        searchKeyword={searchKeyword}
-        sortMode={sortMode}
-        onSearchKeywordChange={setSearchKeyword}
-        onSortModeChange={setSortMode}
-        onCreateArchive={() => {
+        onCreateArchive={(category) => {
           if (contentBlocked) {
             showToast(getCreateContentBlockedText(membership));
             return;
           }
 
-          router.push("/archive/new");
+          router.push(`/archive/new?category=${category}`);
         }}
         createDisabled={contentBlocked}
         createDisabledTitle={contentBlocked ? getCreateContentBlockedText(membership) : undefined}
@@ -855,6 +886,61 @@ export default function ArchivePage() {
         onDeleteGroupTag={deleteGroupTag}
         onCreateGroupTag={createGroupTag}
       />
+
+      <section
+        style={{
+          margin: "0 0 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        <input
+          value={searchKeyword}
+          onChange={(event) => setSearchKeyword(event.target.value)}
+          placeholder="搜索项目、记录或标签"
+          style={{
+            flex: "1 1 260px",
+            minWidth: 0,
+            border: "1px solid #dfe7d9",
+            borderRadius: 999,
+            padding: "10px 14px",
+            fontSize: 14,
+            outline: "none",
+            background: "#fff",
+          }}
+        />
+
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            color: "#777",
+            fontSize: 14,
+          }}
+        >
+          排序：
+          <select
+            value={sortMode}
+            onChange={(event) => setSortMode(event.target.value as SortMode)}
+            style={{
+              border: "1px solid #dfe7d9",
+              borderRadius: 999,
+              padding: "9px 12px",
+              fontSize: 14,
+              background: "#fff",
+              color: "#3d4a3d",
+              cursor: "pointer",
+            }}
+          >
+            <option value="updated">最近更新</option>
+            <option value="created">新建顺序</option>
+            <option value="name">按名字</option>
+          </select>
+        </label>
+      </section>
 
       <section>
         {activeArchives.length === 0 && endedArchives.length === 0 ? (

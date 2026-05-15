@@ -23,6 +23,26 @@ type Props = {
   onCreateSubTag: (category: ArchiveCategory) => void;
 };
 
+const rowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap" as const,
+};
+
+function pillStyle(active: boolean) {
+  return {
+    border: active ? "1px solid #3f7d3d" : "1px solid #cfe3c8",
+    background: active ? "#3f7d3d" : "#f8fbf5",
+    color: active ? "#fff" : "#335033",
+    borderRadius: 999,
+    padding: "7px 14px",
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: "pointer",
+  };
+}
+
 export default function ArchiveFiltersPanel({
   activeCategory,
   activeSubTag,
@@ -45,6 +65,10 @@ export default function ArchiveFiltersPanel({
     { category: "other" as const, tags: otherSubTags },
   ];
 
+  const currentGroup = activeCategory
+    ? groups.find((group) => group.category === activeCategory) || null
+    : null;
+
   return (
     <section
       style={{
@@ -55,68 +79,44 @@ export default function ArchiveFiltersPanel({
         background: "#fff",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onReset}
-          style={{
-            border:
-              activeCategory || activeSubTag
-                ? "1px solid #cfe3c8"
-                : "1px solid #3f7d3d",
-            background: activeCategory || activeSubTag ? "#f8fbf5" : "#3f7d3d",
-            color: activeCategory || activeSubTag ? "#335033" : "#fff",
-            borderRadius: 999,
-            padding: "7px 14px",
-            fontSize: 15,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
+      <div style={rowStyle}>
+        <button type="button" onClick={onReset} style={pillStyle(!activeCategory && !activeSubTag)}>
           全部
         </button>
 
-        {groups.map(({ category, tags }, index) => (
-          <div
+        {groups.map(({ category }) => (
+          <button
             key={category}
-            style={{
-              display: "inline-flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 4,
-              marginLeft: index === 0 ? 0 : 8,
-            }}
+            type="button"
+            onClick={() => onSelectCategory(category)}
+            style={pillStyle(activeCategory === category && !activeSubTag)}
           >
+            {getArchiveCategoryLabel(category)}
+          </button>
+        ))}
+      </div>
+
+      {currentGroup ? (
+        <>
+          <div
+            style={{
+              height: 1,
+              background: "#edf0e8",
+              margin: "12px 0 10px",
+            }}
+          />
+
+          <div style={rowStyle}>
             <button
               type="button"
-              onClick={() => onSelectCategory(category)}
-              style={{
-                border:
-                  activeCategory === category && !activeSubTag
-                    ? "1px solid #3f7d3d"
-                    : "1px solid #cfe3c8",
-                background:
-                  activeCategory === category && !activeSubTag ? "#dff2da" : "#f4faf1",
-                color:
-                  activeCategory === category && !activeSubTag ? "#235d24" : "#3f633a",
-                borderRadius: 999,
-                padding: "7px 12px",
-                cursor: "pointer",
-                fontSize: 15,
-                fontWeight: 700,
-              }}
+              onClick={() => onSelectCategory(currentGroup.category)}
+              style={pillStyle(!activeSubTag)}
+              title="点击显示当前大类下全部项目"
             >
-              {getArchiveCategoryLabel(category)}：
+              子分类：
             </button>
 
-            {tags.map((tag) => (
+            {currentGroup.tags.map((tag) => (
               <ArchiveSubTagChip
                 key={tag.id}
                 tag={tag}
@@ -129,7 +129,7 @@ export default function ArchiveFiltersPanel({
 
             <button
               type="button"
-              onClick={() => onCreateSubTag(category)}
+              onClick={() => onCreateSubTag(currentGroup.category)}
               style={{
                 border: "1px dashed #cbdcc2",
                 background: "#fbfdf9",
@@ -139,12 +139,13 @@ export default function ArchiveFiltersPanel({
                 cursor: "pointer",
                 fontSize: 14,
               }}
+              title="新增子分类"
             >
               ＋
             </button>
           </div>
-        ))}
-      </div>
+        </>
+      ) : null}
     </section>
   );
 }

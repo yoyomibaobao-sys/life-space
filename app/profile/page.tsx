@@ -43,6 +43,7 @@ export default function ProfilePage() {
   const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [viewportWidth, setViewportWidth] = useState(1200);
 
@@ -203,6 +204,64 @@ export default function ProfilePage() {
 
     showToast("资料已保存");
     void refreshStats(user.id);
+  }
+
+
+  async function handleExport() {
+    if (!user || exporting) return;
+
+    setExporting(true);
+    setErrorMsg("");
+
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error || !session?.access_token) {
+        setErrorMsg("请先重新登录后再导出");
+        showToast("请先重新登录后再导出");
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch("/api/export/my-records", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        const message = text || "导出失败，请稍后再试";
+        setErrorMsg(message);
+        showToast(message);
+        return;
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const fileNameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+      const fileName = fileNameMatch?.[1]
+        ? decodeURIComponent(fileNameMatch[1])
+        : fileNameMatch?.[2] || `有时耕作-我的记录-${new Date().toISOString().slice(0, 10)}.zip`;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast("导出完成，文件已交给浏览器下载；请查看浏览器下载栏或“下载”文件夹。");
+    } catch {
+      setErrorMsg("导出失败，请稍后再试");
+      showToast("导出失败，请稍后再试");
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
@@ -374,9 +433,28 @@ export default function ProfilePage() {
               </p>
             </div>
 
-            <Link href="/membership" style={secondaryLinkStyle}>
-              查看年度使用权
-            </Link>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exporting}
+                style={{
+                  ...secondaryLinkStyle,
+                  cursor: exporting ? "not-allowed" : "pointer",
+                  opacity: exporting ? 0.65 : 1,
+                }}
+              >
+                {exporting ? "正在打包记录和图片..." : "导出我的记录"}
+              </button>
+              <Link href="/membership" style={secondaryLinkStyle}>
+                查看年度使用权
+              </Link>
+            </div>
+            {exporting ? (
+              <p style={{ margin: "8px 0 0", color: "#7b8676", fontSize: 13, lineHeight: 1.5 }}>
+                正在打包你的记录和图片，图片较多时可能需要 1～3 分钟，请不要关闭页面。导出完成后，文件会保存到浏览器默认下载位置；如果浏览器设置了下载前询问，会弹出保存位置选择。
+              </p>
+            ) : null}
           </div>
 
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
@@ -417,12 +495,6 @@ export default function ProfilePage() {
                 label="我的项目"
                 value={String(stats.archiveCount)}
                 hint={`公开 ${stats.publicArchiveCount} · 私密 ${privateArchiveCount}`}
-              />
-              <StatLinkCard
-                href="/archive/plans"
-                label="我的计划"
-                value={String(stats.planCount)}
-                hint={planHint}
               />
               <StatLinkCard
   href="/profile/recent"
@@ -470,6 +542,32 @@ export default function ProfilePage() {
                     </div>
         </section>
 
+        <section style={plantInfoSectionStyle}>
+          <div style={plantInfoHeaderStyle}>
+            <div>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>植物资料</div>
+              <h2 style={plantInfoTitleStyle}>我的植物计划与收藏</h2>
+              <p style={plantInfoDescStyle}>
+                管理还没有正式建档的种植准备和感兴趣植物。开始记录后，可以再转入项目档案。
+              </p>
+            </div>
+          </div>
+
+          <div style={plantInfoGridStyle}>
+            <Link href="/archive/plans" style={plantInfoCardStyle}>
+              <div style={plantInfoCardLabelStyle}>种植计划</div>
+              <div style={plantInfoCardValueStyle}>{stats.planCount}</div>
+              <div style={plantInfoCardHintStyle}>{planHint}</div>
+            </Link>
+
+            <Link href="/archive/interests" style={plantInfoCardStyle}>
+              <div style={plantInfoCardLabelStyle}>植物收藏</div>
+              <div style={plantInfoCardValueStyle}>{stats.interestCount}</div>
+              <div style={plantInfoCardHintStyle}>{getInterestHint(Number(stats.interestCount || 0))}</div>
+            </Link>
+          </div>
+        </section>
+
         <section style={marketInfoSectionStyle}>
           <div style={marketInfoHeaderStyle}>
             <div>
@@ -509,6 +607,11 @@ function getPlanHint(planNames: string[], planCount: number) {
   if (!planNames.length) return "查看我的种植计划";
   const suffix = planCount > planNames.length ? "等" : "";
   return `${planNames.join("、")}${suffix}`;
+}
+
+function getInterestHint(interestCount: number) {
+  if (!interestCount) return "还没有植物收藏";
+  return "查看我感兴趣的植物";
 }
 
 function MetaItem({ label, value }: { label: string; value: string }) {
@@ -582,6 +685,70 @@ const statsSectionStyle: CSSProperties = {
   borderRadius: 18,
   padding: 14,
 };
+const plantInfoSectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#f8fff8",
+  border: "1px solid #dcebd6",
+  borderRadius: 18,
+  padding: 14,
+};
+
+const plantInfoHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
+  marginBottom: 14,
+};
+
+const plantInfoTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  color: "#1f2a1f",
+  fontSize: 20,
+};
+
+const plantInfoDescStyle: CSSProperties = {
+  margin: "5px 0 0",
+  color: "#6f7b69",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+const plantInfoGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+};
+
+const plantInfoCardStyle: CSSProperties = {
+  display: "block",
+  textDecoration: "none",
+  background: "#fff",
+  border: "1px solid #e2ecdc",
+  borderRadius: 16,
+  padding: 14,
+  color: "#1f2a1f",
+};
+
+const plantInfoCardLabelStyle: CSSProperties = {
+  fontSize: 14,
+  color: "#6d7968",
+};
+
+const plantInfoCardValueStyle: CSSProperties = {
+  marginTop: 6,
+  fontSize: 24,
+  fontWeight: 700,
+  color: "#22301f",
+};
+
+const plantInfoCardHintStyle: CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  color: "#7b8676",
+  lineHeight: 1.35,
+};
+
 const marketInfoSectionStyle: CSSProperties = {
   marginTop: 14,
   background: "#fffaf3",

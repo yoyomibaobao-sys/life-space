@@ -486,6 +486,8 @@ saveRecentArchiveBrowse({
     if (!isOwner) return;
 
     const nextValue = !activeArchive.is_public;
+    const nextRecordVisibility = nextValue ? "public" : "private";
+
     const { error } = await supabase
       .from("archives")
       .update({ is_public: nextValue })
@@ -496,20 +498,26 @@ saveRecentArchiveBrowse({
       return;
     }
 
-    if (!nextValue) {
-      await supabase.from("records").update({ visibility: "private" }).eq("archive_id", activeArchive.id);
+    const { error: recordsError } = await supabase
+      .from("records")
+      .update({ visibility: nextRecordVisibility })
+      .eq("archive_id", activeArchive.id);
 
-      setRecords((prev) =>
-        prev.map((record) => ({
-          ...record,
-          visibility: "private",
-        }))
-      );
+    if (recordsError) {
+      showToast("项目状态已更新，但同步记录可见状态失败");
+      return;
     }
+
+    setRecords((prev) =>
+      prev.map((record) => ({
+        ...record,
+        visibility: nextRecordVisibility,
+      }))
+    );
 
     setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
 
-    showToast(nextValue ? "已公开" : "已设为仅自己可见");
+    showToast(nextValue ? "项目和记录已公开" : "项目和记录已设为仅自己可见");
   }
 
   async function toggleProjectFollow() {

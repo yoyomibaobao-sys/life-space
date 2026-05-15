@@ -12,7 +12,7 @@ export function DiscoverHeader() {
       >
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>
-            发现公开的耕作项目
+            发现公开的项目
           </div>
         </div>
       </div>

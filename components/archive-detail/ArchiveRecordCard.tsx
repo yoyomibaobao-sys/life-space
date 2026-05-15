@@ -118,18 +118,29 @@ export default function ArchiveRecordCard({
             {mediaList.map((media, mediaIndex) => {
               const target = item.media?.[mediaIndex];
               return (
-                <div key={media.url} style={{ position: "relative" }}>
+                <div
+                  key={media.url}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="打开图片预览"
+                  onClick={() => onOpenLightbox(item.media || [], mediaIndex)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOpenLightbox(item.media || [], mediaIndex);
+                    }
+                  }}
+                  style={{ position: "relative", cursor: "pointer" }}
+                >
                   <img
                     src={media.url}
                     alt={media.alt}
-                    onClick={() => onOpenLightbox(item.media || [], mediaIndex)}
                     style={{
                       width: "100%",
                       aspectRatio: "1 / 1",
                       objectFit: "cover",
                       borderRadius: 14,
                       display: "block",
-                      cursor: "pointer",
                       background: "#f3f6f1",
                     }}
                   />

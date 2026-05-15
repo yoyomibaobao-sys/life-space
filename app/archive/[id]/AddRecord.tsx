@@ -24,7 +24,7 @@ type Props = {
   archiveId: string;
   archiveIsPublic: boolean;
   placeholder?: string;
-  onRecordCreated?: () => void;
+  onRecordCreated?: () => void | Promise<void>;
 };
 
 export default function AddRecord({
@@ -192,7 +192,7 @@ export default function AddRecord({
 
     if (uploadError) {
       console.error("媒体上传失败", uploadError);
-      return;
+      return 0;
     }
 
     const { data: urlData } = supabase.storage
@@ -211,10 +211,10 @@ export default function AddRecord({
 
     if (mediaError) {
       console.error("media 写入失败", mediaError);
-      return;
+      return 0;
     }
 
-    await addStorageUsed(userId, file.size);
+    return file.size;
   }
 
   async function handleAdd() {
@@ -254,6 +254,7 @@ export default function AddRecord({
         ? recordVisibility
         : "private";
       const finalStatusTag = isHelpRecord ? "help" : null;
+      let uploadedBytes = 0;
 
       if (files.length > 0) {
         if (mergeMode) {
@@ -289,7 +290,7 @@ export default function AddRecord({
           }
 
           for (const file of files) {
-            await uploadMedia(record.id, user.id, file);
+            uploadedBytes += await uploadMedia(record.id, user.id, file);
           }
         } else {
           for (const file of files) {
@@ -321,7 +322,7 @@ export default function AddRecord({
 
             if (!record) continue;
 
-            await uploadMedia(record.id, user.id, file);
+            uploadedBytes += await uploadMedia(record.id, user.id, file);
           }
         }
       } else {
@@ -340,13 +341,17 @@ export default function AddRecord({
         });
       }
 
+      if (uploadedBytes > 0) {
+        await addStorageUsed(user.id, uploadedBytes);
+      }
+
       setText("");
       setFiles([]);
       setCustomTime("");
       setRecordVisibility("public");
       setIsHelpRecord(false);
 
-      onRecordCreated?.();
+      await onRecordCreated?.();
       router.refresh();
     } catch (err) {
       console.log(err);

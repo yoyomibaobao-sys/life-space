@@ -9,7 +9,7 @@ export default function ArchiveAddRecordSection({
 }: {
   archiveId: string;
   archiveIsPublic: boolean;
-  onRecordCreated?: () => void;
+  onRecordCreated?: () => void | Promise<void>;
 }) {
   return (
     <section

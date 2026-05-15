@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import type { LightboxImage } from "@/lib/archive-detail-types";
 import { getTouchDistance } from "@/lib/archive-detail-utils";
 
+type PanOffset = {
+  x: number;
+  y: number;
+};
+
 export default function ArchiveLightbox({
   images,
   index,
@@ -16,19 +21,31 @@ export default function ArchiveLightbox({
   onChange: (next: number) => void;
 }) {
   const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState<PanOffset>({ x: 0, y: 0 });
   const touchStartX = useRef<number | null>(null);
   const touchCurrentX = useRef<number | null>(null);
   const pinchStartDistance = useRef<number | null>(null);
   const pinchStartScale = useRef(1);
+  const panStartPoint = useRef<PanOffset | null>(null);
+  const panStartOffset = useRef<PanOffset>({ x: 0, y: 0 });
+  const mousePanStartPoint = useRef<PanOffset | null>(null);
+  const mousePanStartOffset = useRef<PanOffset>({ x: 0, y: 0 });
+  const [isMousePanning, setIsMousePanning] = useState(false);
   const interactedRef = useRef(false);
   const suppressClickRef = useRef(false);
 
   useEffect(() => {
     setScale(1);
+    setOffset({ x: 0, y: 0 });
     touchStartX.current = null;
     touchCurrentX.current = null;
     pinchStartDistance.current = null;
     pinchStartScale.current = 1;
+    panStartPoint.current = null;
+    panStartOffset.current = { x: 0, y: 0 };
+    mousePanStartPoint.current = null;
+    mousePanStartOffset.current = { x: 0, y: 0 };
+    setIsMousePanning(false);
     interactedRef.current = false;
     suppressClickRef.current = false;
   }, [index, images.length]);
@@ -64,55 +81,156 @@ export default function ArchiveLightbox({
     return Math.min(4, Math.max(1, Number(next.toFixed(2))));
   }
 
+  function clampOffset(next: PanOffset, nextScale = scale): PanOffset {
+    if (nextScale <= 1.02) return { x: 0, y: 0 };
+
+    const viewportWidth = typeof window === "undefined" ? 0 : window.innerWidth;
+    const viewportHeight = typeof window === "undefined" ? 0 : window.innerHeight;
+    const maxX = Math.max(40, (viewportWidth * (nextScale - 1)) / 2 + 80);
+    const maxY = Math.max(40, (viewportHeight * (nextScale - 1)) / 2 + 80);
+
+    return {
+      x: Math.min(maxX, Math.max(-maxX, next.x)),
+      y: Math.min(maxY, Math.max(-maxY, next.y)),
+    };
+  }
+
+  function setNextScale(next: number) {
+    const clamped = clampScale(next);
+    setScale(clamped);
+    setOffset((prev) => clampOffset(prev, clamped));
+  }
+
   function go(step: number) {
     const next = (index + step + images.length) % images.length;
     setScale(1);
+    setOffset({ x: 0, y: 0 });
+    setIsMousePanning(false);
+    mousePanStartPoint.current = null;
     onChange(next);
+  }
+
+  function closeFromTap() {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    onClose();
+  }
+
+  function startMousePan(event: React.MouseEvent<HTMLImageElement>) {
+    if (scale <= 1.02) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    mousePanStartPoint.current = { x: event.clientX, y: event.clientY };
+    mousePanStartOffset.current = offset;
+    interactedRef.current = false;
+    suppressClickRef.current = false;
+    setIsMousePanning(true);
+  }
+
+  function moveMousePan(event: React.MouseEvent<HTMLDivElement>) {
+    if (!isMousePanning || !mousePanStartPoint.current) return;
+
+    event.preventDefault();
+    const dx = event.clientX - mousePanStartPoint.current.x;
+    const dy = event.clientY - mousePanStartPoint.current.y;
+
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      interactedRef.current = true;
+      suppressClickRef.current = true;
+    }
+
+    setOffset(
+      clampOffset({
+        x: mousePanStartOffset.current.x + dx,
+        y: mousePanStartOffset.current.y + dy,
+      })
+    );
+  }
+
+  function endMousePan() {
+    if (!isMousePanning) return;
+    setIsMousePanning(false);
+    mousePanStartPoint.current = null;
   }
 
   return (
     <div
-      onClick={() => {
-        if (suppressClickRef.current) {
-          suppressClickRef.current = false;
-          return;
-        }
-        onClose();
-      }}
+      onClick={closeFromTap}
       onWheel={(event) => {
         event.preventDefault();
         interactedRef.current = true;
-        setScale((prev) => clampScale(prev + (event.deltaY < 0 ? 0.2 : -0.2)));
+        setNextScale(scale + (event.deltaY < 0 ? 0.2 : -0.2));
       }}
+      onMouseMove={moveMousePan}
+      onMouseUp={endMousePan}
+      onMouseLeave={endMousePan}
       onTouchStart={(event) => {
         if (event.touches.length >= 2) {
           pinchStartDistance.current = getTouchDistance(event.touches);
           pinchStartScale.current = scale;
+          panStartPoint.current = null;
           touchStartX.current = null;
           return;
         }
 
-        touchStartX.current = event.touches[0]?.clientX ?? null;
-        touchCurrentX.current = touchStartX.current;
+        const touch = event.touches[0];
+        if (!touch) return;
+
+        touchStartX.current = touch.clientX;
+        touchCurrentX.current = touch.clientX;
         interactedRef.current = false;
+
+        if (scale > 1.02) {
+          panStartPoint.current = { x: touch.clientX, y: touch.clientY };
+          panStartOffset.current = offset;
+        } else {
+          panStartPoint.current = null;
+          panStartOffset.current = { x: 0, y: 0 };
+        }
       }}
       onTouchMove={(event) => {
         if (event.touches.length >= 2) {
           const currentDistance = getTouchDistance(event.touches);
           if (pinchStartDistance.current && currentDistance) {
             const ratio = currentDistance / pinchStartDistance.current;
-            setScale(clampScale(pinchStartScale.current * ratio));
+            const nextScale = clampScale(pinchStartScale.current * ratio);
+            setScale(nextScale);
+            setOffset((prev) => clampOffset(prev, nextScale));
           }
           interactedRef.current = true;
           suppressClickRef.current = true;
           return;
         }
 
-        const nextX = event.touches[0]?.clientX ?? null;
+        const touch = event.touches[0];
+        if (!touch) return;
+
+        if (scale > 1.02 && panStartPoint.current) {
+          event.preventDefault();
+          const dx = touch.clientX - panStartPoint.current.x;
+          const dy = touch.clientY - panStartPoint.current.y;
+
+          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            interactedRef.current = true;
+            suppressClickRef.current = true;
+          }
+
+          setOffset(
+            clampOffset({
+              x: panStartOffset.current.x + dx,
+              y: panStartOffset.current.y + dy,
+            })
+          );
+          return;
+        }
+
+        const nextX = touch.clientX;
         touchCurrentX.current = nextX;
         if (
           touchStartX.current !== null &&
-          nextX !== null &&
           Math.abs(nextX - touchStartX.current) > 6
         ) {
           interactedRef.current = true;
@@ -133,10 +251,15 @@ export default function ArchiveLightbox({
           }
         }
 
+        if (scale <= 1.02) {
+          setOffset({ x: 0, y: 0 });
+        }
+
         touchStartX.current = null;
         touchCurrentX.current = null;
         pinchStartDistance.current = null;
         pinchStartScale.current = scale;
+        panStartPoint.current = null;
       }}
       style={{
         position: "fixed",
@@ -146,7 +269,8 @@ export default function ArchiveLightbox({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 16,
+        padding: 0,
+        touchAction: "none",
       }}
     >
       <button
@@ -164,25 +288,36 @@ export default function ArchiveLightbox({
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          maxWidth: "min(92vw, 1200px)",
-          maxHeight: "90vh",
+          width: "100vw",
+          height: "100dvh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 10,
+          justifyContent: "center",
+          gap: 8,
           userSelect: "none",
+          padding: "12px 0 10px",
+          boxSizing: "border-box",
+          overflow: "hidden",
         }}
       >
         <img
           src={current.url}
           alt={current.alt}
+          onMouseDown={startMousePan}
+          onClick={(event) => {
+            event.stopPropagation();
+            closeFromTap();
+          }}
           style={{
-            maxWidth: "100%",
-            maxHeight: "80vh",
+            maxWidth: "100vw",
+            maxHeight: "calc(100dvh - 58px)",
             objectFit: "contain",
-            borderRadius: 16,
-            transform: `scale(${scale})`,
+            borderRadius: 0,
+            transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
             transition: interactedRef.current ? "none" : "transform 0.16s ease",
+            touchAction: "none",
+            cursor: isMousePanning ? "grabbing" : scale > 1.02 ? "grab" : "zoom-in",
           }}
         />
 
@@ -212,19 +347,49 @@ export default function ArchiveLightbox({
         aria-label="关闭图片预览"
         style={{
           position: "fixed",
-          top: 16,
-          right: 16,
-          width: 40,
-          height: 40,
+          top: "calc(12px + env(safe-area-inset-top))",
+          right: 12,
+          zIndex: 1002,
+          width: 44,
+          height: 44,
           borderRadius: 999,
           border: "none",
-          background: "rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.2)",
           color: "#fff",
-          fontSize: 24,
+          fontSize: 26,
+          lineHeight: 1,
           cursor: "pointer",
         }}
       >
         ×
+      </button>
+
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+        aria-label="关闭图片预览"
+        style={{
+          position: "fixed",
+          left: "50%",
+          bottom: "calc(18px + env(safe-area-inset-bottom))",
+          zIndex: 1002,
+          transform: "translateX(-50%)",
+          minWidth: 96,
+          height: 40,
+          padding: "0 18px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.28)",
+          background: "rgba(0,0,0,0.38)",
+          color: "#fff",
+          fontSize: 14,
+          cursor: "pointer",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        关闭
       </button>
     </div>
   );

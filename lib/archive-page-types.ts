@@ -23,6 +23,10 @@ export type ArchiveItem = {
   view_count?: number | null;
   follower_count?: number | null;
   help_status?: "open" | "resolved" | "none" | string | null;
+  latest_record_note?: string | null;
+  latest_record_time?: string | null;
+  latest_record_primary_image_url?: string | null;
+  latest_record_media_count?: number | null;
 };
 
 export type GroupTagItem = {

@@ -111,11 +111,11 @@ export default function Navbar() {
           </NavItem>
 
           <NavItem href="/follow" active={isActive("/follow")}>
-            关注
+            我的关注
           </NavItem>
 
           <NavItem href={user ? "/archive" : "/login"} active={isActive("/archive")}>
-            空间
+            本人空间
           </NavItem>
 
           <NavItem href="/market" active={isActive("/market")}>
@@ -228,7 +228,7 @@ function navLinkStyle(active: boolean): CSSProperties {
     textDecoration: "none",
     color: active ? "#1a1c1a" : "#40423f",
     background: active ? "#cbdac3"  : "transparent",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: active ? 700 : 600,
     padding: "7px 11px",
     borderRadius: 999,

@@ -11,7 +11,7 @@ const copy = {
     poem: "人生的本质，是一个人的旅行，也是一场修行。",
     intro:
       "有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。",
-    spirit: "种植、农法设施、虫鱼生态与自然生活的长期记录。",
+    spirit: "留其间，守其度，顺其时，共养成。",
     trialNote: "注册后开始免费试用；未注册可先浏览公开内容。",
     register: "开始记录",
     login: "登录",
@@ -31,6 +31,10 @@ const copy = {
         title: "虫鱼生态",
         description:
           "观察鱼缸、虾缸、蚯蚓、黑水虻、小动物和小生态的变化。",
+      },
+      {
+        title: "其他",
+        description: "记录其他与自然生活相关的长期项目。",
       },
     ],
   },
@@ -111,61 +115,79 @@ export default function Home() {
       >
         <section
           style={{
-            maxWidth: 720,
+            maxWidth: 760,
             margin: "0 auto",
             textAlign: "center",
-            padding: "48px 20px 36px",
+            padding: "44px 20px 34px",
           }}
         >
-          <div
+          <h1
             style={{
-              fontSize: 16,
-              color: "#6f7f5f",
-              letterSpacing: 2,
-              marginBottom: 20,
+              margin: "0 0 16px",
+              color: "#243024",
+              fontSize: "clamp(28px, 5vw, 38px)",
+              fontWeight: 600,
+              letterSpacing: 1.6,
+              lineHeight: 1.2,
             }}
           >
             {t.brand}
-          </div>
+          </h1>
 
-          <h1
+          <p
             style={{
-              fontSize: 34,
-              lineHeight: 1.35,
-              margin: "0 0 22px",
-              fontWeight: 600,
-              color: "#1f2a1f",
+              maxWidth: 680,
+              margin: "0 auto 16px",
+              color: "#2f3b2f",
+              fontSize: "clamp(20px, 3.2vw, 26px)",
+              fontWeight: 500,
+              lineHeight: 1.55,
             }}
           >
             {t.poem}
-          </h1>
+          </p>
 
           <p
             style={{
               maxWidth: 620,
               margin: "0 auto",
-              color: "#3f4a3f",
-              fontSize: 18,
+              color: "#4d5a4d",
+              fontSize: 17,
               lineHeight: 1.9,
             }}
           >
             {t.intro}
           </p>
 
-          <p
+          <div
             style={{
-              marginTop: 18,
-              color: "#75816f",
-              fontSize: 16,
-              lineHeight: 1.8,
+              display: "inline-block",
+              margin: "28px auto 0",
+              padding: "13px 24px",
+              borderRadius: 18,
+              border: "1px solid #d9e5cf",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(246,250,240,0.92))",
+              boxShadow: "0 10px 28px rgba(71, 102, 55, 0.08)",
             }}
           >
-            {t.spirit}
-          </p>
+            <p
+              style={{
+                margin: 0,
+                color: "#2f4b2b",
+                fontSize: "clamp(18px, 3.4vw, 22px)",
+                fontWeight: 600,
+                lineHeight: 1.7,
+                letterSpacing: 1.2,
+              }}
+            >
+              {t.spirit}
+            </p>
+          </div>
 
           <p
             style={{
-              marginTop: 8,
+              marginTop: 16,
               color: "#8a9584",
               fontSize: 13,
               lineHeight: 1.7,
@@ -178,9 +200,9 @@ export default function Home() {
             style={{
               display: "flex",
               justifyContent: "center",
-              gap: 14,
+              gap: 12,
               flexWrap: "wrap",
-              marginTop: 34,
+              marginTop: 30,
             }}
           >
             <Link
@@ -243,8 +265,8 @@ export default function Home() {
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 18,
-            marginTop: 24,
+            gap: 16,
+            marginTop: 18,
           }}
         >
           {t.cards.map((card) => (
@@ -254,14 +276,15 @@ export default function Home() {
                 background: "rgba(255, 255, 255, 0.86)",
                 border: "1px solid #e6ecdf",
                 borderRadius: 18,
-                padding: 22,
-                boxShadow: "0 10px 30px rgba(44, 74, 38, 0.06)",
+                padding: "18px 18px 20px",
+                boxShadow: "0 8px 24px rgba(44, 74, 38, 0.05)",
               }}
             >
               <h2
                 style={{
-                  margin: "0 0 10px",
-                  fontSize: 18,
+                  margin: "0 0 8px",
+                  fontSize: 17,
+                  fontWeight: 600,
                   color: "#263326",
                 }}
               >
@@ -272,8 +295,8 @@ export default function Home() {
                 style={{
                   margin: 0,
                   color: "#687468",
-                  fontSize: 15,
-                  lineHeight: 1.8,
+                  fontSize: 14.5,
+                  lineHeight: 1.75,
                 }}
               >
                 {card.description}

@@ -69,6 +69,19 @@ function NewArchiveContent() {
   const searchParams = useSearchParams();
   const preselectedSpeciesId = searchParams.get("species");
   const selectedPlanId = searchParams.get("plan");
+  const preselectedCategory = searchParams.get("category");
+  const validPreselectedCategory = archiveCategoryOptions.some(
+    (option) => option.value === preselectedCategory
+  )
+    ? (preselectedCategory as ArchiveCategory)
+    : null;
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(!validPreselectedCategory);
+
+  useEffect(() => {
+    if (!validPreselectedCategory || preselectedSpeciesId) return;
+    switchCategory(validPreselectedCategory);
+    setCategoryPickerOpen(false);
+  }, [validPreselectedCategory, preselectedSpeciesId]);
 
   useEffect(() => {
     async function loadSpecies() {
@@ -132,6 +145,7 @@ function NewArchiveContent() {
             "";
 
           setCategory("plant");
+          setCategoryPickerOpen(false);
           setSpeciesId(selected.id);
           setPendingSpeciesName(null);
           setSpeciesSearch(selectedName);
@@ -433,36 +447,6 @@ function NewArchiveContent() {
 
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 10,
-            }}
-          >
-            {archiveCategoryOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => switchCategory(option.value)}
-                style={{
-                  padding: "10px",
-                  borderRadius: 999,
-                  border:
-                    category === option.value
-                      ? "1px solid #3f7d3d"
-                      : "1px solid #ddd",
-                  background: category === option.value ? "#3f7d3d" : "#fff",
-                  color: category === option.value ? "#fff" : "#333",
-                  cursor: "pointer",
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
               padding: "10px 12px",
               borderRadius: 12,
               background: "#f6f9f3",
@@ -472,8 +456,79 @@ function NewArchiveContent() {
               lineHeight: 1.7,
             }}
           >
-            {getArchiveCategoryDescription(category)}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                已选择：
+                <strong style={{ color: "#2f6d2f" }}>
+                  {getArchiveCategoryLabel(category)}
+                </strong>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setCategoryPickerOpen((open) => !open)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#3f7d3d",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: 0,
+                }}
+              >
+                {categoryPickerOpen ? "收起选择" : "重新选择"}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 6 }}>{getArchiveCategoryDescription(category)}</div>
+            <div style={{ marginTop: 4, color: "#7f8c78" }}>
+              创建时只需要先确定大类；子分类和分组可以之后在项目卡片中慢慢整理。
+            </div>
           </div>
+
+          {categoryPickerOpen ? (
+            <div
+              style={{
+                marginTop: 10,
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 10,
+              }}
+            >
+              {archiveCategoryOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    switchCategory(option.value);
+                    setCategoryPickerOpen(false);
+                  }}
+                  style={{
+                    padding: "10px",
+                    borderRadius: 999,
+                    border:
+                      category === option.value
+                        ? "1px solid #3f7d3d"
+                        : "1px solid #ddd",
+                    background: category === option.value ? "#3f7d3d" : "#fff",
+                    color: category === option.value ? "#fff" : "#333",
+                    cursor: "pointer",
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {category === "plant" && (

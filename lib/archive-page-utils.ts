@@ -24,7 +24,7 @@ export function getArchiveSortTime(
     return new Date(item.created_at || 0).getTime();
   }
 
-  return new Date(item.last_record_time || item.created_at || 0).getTime();
+  return new Date(item.latest_record_time || item.last_record_time || item.created_at || 0).getTime();
 }
 
 export function getArchiveSystemName(item: ArchiveItem) {
@@ -46,6 +46,7 @@ export function buildArchiveSearchText(
     item.species_display_name,
     item.species_name_snapshot,
     item.note,
+    item.latest_record_note,
     getArchiveCategoryLabel(item.category),
     item.sub_tag_id ? subTagNameMap.get(item.sub_tag_id) : "",
     item.group_tag_id ? groupTagNameMap.get(item.group_tag_id) : "",
