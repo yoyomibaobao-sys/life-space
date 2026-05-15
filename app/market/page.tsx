@@ -13,6 +13,11 @@ import {
   type MarketPostRow,
   type MarketPostType,
 } from "@/lib/market-types";
+import {
+  getCreateMarketPostBlockedText,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
 
 type ProfileBrief = {
   id: string;
@@ -36,6 +41,8 @@ export default function MarketPage() {
   const [profiles, setProfiles] = useState<Map<string, ProfileBrief>>(new Map());
   const [archives, setArchives] = useState<Map<string, ArchiveBrief>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<"all" | MarketPostType>("all");
   const [categoryFilter, setCategoryFilter] =
@@ -47,6 +54,25 @@ export default function MarketPage() {
       setLoading(true);
 
       try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        setCurrentUserId(user?.id || null);
+
+        if (user) {
+          const { data: membershipData, error: membershipError } = await supabase.rpc("get_my_membership");
+
+          if (membershipError) {
+            console.error("load membership error:", membershipError);
+            setMembership(null);
+          } else {
+            setMembership(normalizeMembershipRpcResult(membershipData));
+          }
+        } else {
+          setMembership(null);
+        }
+
         let query = supabase
           .from("market_posts")
           .select("*")
@@ -140,6 +166,8 @@ export default function MarketPage() {
     categoryFilter !== "all" ||
     locationFilter.trim() !== "";
 
+  const marketBlocked = membership?.can_create_market_post === false;
+
   const locationOptions = useMemo(() => {
     const optionSet = new Set<string>();
 
@@ -201,13 +229,37 @@ export default function MarketPage() {
           <div style={marketIntroStyle}>交换与求购</div>
 
           <div style={headerActionStyle}>
-            <Link href="/market/mine" style={mineButtonStyle}>
-              我的发布
-            </Link>
+            {currentUserId ? (
+              <>
+                <Link href="/market/mine" style={mineButtonStyle}>
+                  我的发布
+                </Link>
 
-            <Link href="/market/new" style={publishButtonStyle}>
-              发布信息
-            </Link>
+                {marketBlocked ? (
+                  <Link
+                    href="/membership"
+                    style={disabledPublishButtonStyle}
+                    title={getCreateMarketPostBlockedText(membership)}
+                  >
+                    发布受限
+                  </Link>
+                ) : (
+                  <Link href="/market/new" style={publishButtonStyle}>
+                    发布信息
+                  </Link>
+                )}
+              </>
+            ) : (
+              <>
+                <Link href="/login" style={mineButtonStyle}>
+                  登录后发布
+                </Link>
+
+                <Link href="/register" style={publishButtonStyle}>
+                  注册试用
+                </Link>
+              </>
+            )}
           </div>
         </header>
 
@@ -576,4 +628,10 @@ const emptyStyle: CSSProperties = {
   padding: 28,
   color: "#6f7b69",
   textAlign: "center",
+};
+
+const disabledPublishButtonStyle: CSSProperties = {
+  ...publishButtonStyle,
+  background: "#9aa398",
+  cursor: "not-allowed",
 };

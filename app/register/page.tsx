@@ -90,7 +90,22 @@ export default function RegisterPage() {
   return (
     <main style={{ padding: 40, display: "flex", justifyContent: "center" }}>
       <div style={{ width: 320 }}>
-        <h1>注册账号</h1>
+        <h1 style={{ marginBottom: 10 }}>注册账号</h1>
+
+        <div
+          style={{
+            marginBottom: 20,
+            padding: 12,
+            borderRadius: 12,
+            background: "#f6faf3",
+            border: "1px solid #e1ecd9",
+            color: "#5f6f58",
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
+          注册后开始免费试用，可以创建项目、添加记录和上传照片。未注册用户可先浏览公开内容。
+        </div>
 
         <form onSubmit={handleRegister}>
           <p>邮箱</p>

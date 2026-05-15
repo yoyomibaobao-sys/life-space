@@ -131,8 +131,8 @@ export default function DiscoverSearchForm({
           >
             <option value="all">全部</option>
             <option value="plant">种植</option>
-            <option value="system">农法/设施</option>
-            <option value="insect_fish">虫鱼</option>
+            <option value="system">农法设施</option>
+            <option value="insect_fish">虫鱼生态</option>
             <option value="other">其他</option>
           </select>
         </label>
@@ -142,7 +142,7 @@ export default function DiscoverSearchForm({
           <input
             value={filters.name}
             onChange={(e) => patch({ name: e.target.value, speciesId: filters.speciesId ? null : filters.speciesId })}
-            placeholder="项目名 / 系统名"
+            placeholder="项目名 / 植物名 / 具体名称"
             style={inputStyle}
           />
         </label>

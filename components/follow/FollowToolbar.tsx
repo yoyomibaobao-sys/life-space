@@ -27,7 +27,7 @@ export default function FollowToolbar({
         <input
           value={keyword}
           onChange={(e) => onKeywordChange(e.target.value)}
-          placeholder={tab === "projects" ? "搜索项目 / 系统名 / 用户名" : "搜索用户名 / 项目名"}
+          placeholder={tab === "projects" ? "搜索项目 / 具体名称 / 用户名" : "搜索用户名 / 项目名"}
           style={searchInputStyle}
         />
 

@@ -5,11 +5,28 @@ export type NonPlantArchiveCategory = Exclude<ArchiveCategory, "plant">;
 export const archiveCategoryOptions: {
   value: ArchiveCategory;
   label: string;
+  description: string;
 }[] = [
-  { value: "plant", label: "种植" },
-  { value: "system", label: "农法/设施" },
-  { value: "insect_fish", label: "虫鱼" },
-  { value: "other", label: "其他" },
+  {
+    value: "plant",
+    label: "种植",
+    description: "花草、蔬菜、果树、多肉、香草、盆栽、地栽",
+  },
+  {
+    value: "system",
+    label: "农法设施",
+    description: "堆肥、架子、灌溉、水培、过滤、温室、工具系统",
+  },
+  {
+    value: "insect_fish",
+    label: "虫鱼生态",
+    description: "鱼缸、虾缸、蚯蚓、黑水虻、小动物、小生态",
+  },
+  {
+    value: "other",
+    label: "其他",
+    description: "其他与自然生活相关的长期记录",
+  },
 ];
 
 export const defaultSystemNamesByCategory: Record<
@@ -65,10 +82,16 @@ export function isNonPlantArchiveCategory(
 }
 
 export function getArchiveNamePlaceholder(value?: string | null) {
-  if (value === "system") return "农法/设施";
-  if (value === "insect_fish") return "虫鱼";
+  if (value === "system") return "农法设施";
+  if (value === "insect_fish") return "虫鱼生态";
   if (value === "other") return "其他";
   return "种植";
+}
+
+export function getArchiveCategoryDescription(value?: string | null) {
+  const match = archiveCategoryOptions.find((item) => item.value === value);
+
+  return match?.description || "为一个长期照料的项目建立档案";
 }
 
 export function getDefaultSystemNames(

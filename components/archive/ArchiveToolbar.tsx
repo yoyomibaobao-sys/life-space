@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { SortMode } from "@/lib/archive-page-types";
 
 type Props = {
@@ -8,6 +9,9 @@ type Props = {
   onSearchKeywordChange: (value: string) => void;
   onSortModeChange: (value: SortMode) => void;
   onCreateArchive: () => void;
+  createDisabled?: boolean;
+  createDisabledTitle?: string;
+  createDisabledHref?: string;
 };
 
 export default function ArchiveToolbar({
@@ -16,6 +20,9 @@ export default function ArchiveToolbar({
   onSearchKeywordChange,
   onSortModeChange,
   onCreateArchive,
+  createDisabled = false,
+  createDisabledTitle,
+  createDisabledHref,
 }: Props) {
   return (
     <section
@@ -27,23 +34,46 @@ export default function ArchiveToolbar({
         marginBottom: 14,
       }}
     >
-      <button
-        type="button"
-        onClick={onCreateArchive}
-        style={{
-          padding: "10px 16px",
-          borderRadius: 999,
-          border: "1px solid #cfe3c8",
-          background: "#3f7d3d",
-          color: "#fff",
-          cursor: "pointer",
-          fontSize: 14,
-          fontWeight: 500,
-          whiteSpace: "nowrap",
-        }}
-      >
-        新建项目
-      </button>
+      {createDisabled && createDisabledHref ? (
+        <Link
+          href={createDisabledHref}
+          title={createDisabledTitle}
+          style={{
+            padding: "10px 16px",
+            borderRadius: 999,
+            border: "1px solid #cfe3c8",
+            background: "#9aa398",
+            color: "#fff",
+            cursor: "pointer",
+            fontSize: 14,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          开通年度使用权
+        </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={onCreateArchive}
+          disabled={createDisabled}
+          title={createDisabledTitle}
+          style={{
+            padding: "10px 16px",
+            borderRadius: 999,
+            border: "1px solid #cfe3c8",
+            background: createDisabled ? "#9aa398" : "#3f7d3d",
+            color: "#fff",
+            cursor: createDisabled ? "not-allowed" : "pointer",
+            fontSize: 14,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          新建项目
+        </button>
+      )}
 
       <input
         value={searchKeyword}

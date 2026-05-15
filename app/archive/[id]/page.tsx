@@ -27,6 +27,11 @@ import type {
 } from "@/lib/archive-detail-types";
 import type { MediaItem } from "@/lib/domain-types";
 import { buildMediaList, getDisplayName } from "@/lib/archive-detail-utils";
+import {
+  removeMediaFilesFromStorage,
+  subtractStorageUsed,
+  sumMediaSizeBytes,
+} from "@/lib/storage-usage";
 
 export default function ArchiveDetail({
   params,
@@ -613,12 +618,27 @@ saveRecentArchiveBrowse({
 
     setIsDeletingMedia(true);
 
+    const targetRecord = records.find((record) => record.id === deleteMediaTarget.recordId);
+    const targetMedia = (targetRecord?.media || []).find(
+      (media) => media.id === deleteMediaTarget.mediaId
+    );
+    const deletedBytes = targetMedia ? sumMediaSizeBytes([targetMedia]) : 0;
+    const ownerId = targetMedia?.user_id || activeArchive.user_id || me;
+
+    if (targetMedia) {
+      await removeMediaFilesFromStorage([targetMedia]);
+    }
+
     const { error } = await supabase.from("media").delete().eq("id", deleteMediaTarget.mediaId);
 
     if (error) {
       showToast("删除图片失败");
       setIsDeletingMedia(false);
       return;
+    }
+
+    if (deletedBytes > 0) {
+      await subtractStorageUsed(ownerId, deletedBytes);
     }
 
     setRecords((prev) =>
@@ -634,7 +654,7 @@ saveRecentArchiveBrowse({
       )
     );
 
-    showToast("图片已删除");
+    showToast("图片已删除，容量已释放");
     setDeleteMediaTarget(null);
     setIsDeletingMedia(false);
   }

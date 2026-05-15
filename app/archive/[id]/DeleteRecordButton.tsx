@@ -7,6 +7,12 @@ import type { CSSProperties } from "react";
 import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import {
+  removeMediaFilesFromStorage,
+  subtractStorageUsed,
+  sumMediaSizeBytes,
+} from "@/lib/storage-usage";
+import type { MediaItem } from "@/lib/domain-types";
 
 export default function DeleteRecordButton({
   id,
@@ -26,6 +32,16 @@ export default function DeleteRecordButton({
     setIsDeleting(true);
 
     try {
+      const { data: mediaItemsRaw } = await supabase
+        .from("media")
+        .select("id, url, size_mb, user_id")
+        .eq("record_id", id);
+      const mediaItems = (mediaItemsRaw || []) as MediaItem[];
+      const deletedBytes = sumMediaSizeBytes(mediaItems);
+      const ownerId = mediaItems.find((media) => media.user_id)?.user_id;
+
+      await removeMediaFilesFromStorage(mediaItems);
+
       const { error: recordError } = await supabase
         .from("records")
         .delete()
@@ -37,7 +53,11 @@ export default function DeleteRecordButton({
         return;
       }
 
-      showToast("删除成功");
+      if (deletedBytes > 0) {
+        await subtractStorageUsed(ownerId, deletedBytes);
+      }
+
+      showToast("删除成功，容量已释放");
       setOpen(false);
       onDeleted?.(id);
       router.refresh();

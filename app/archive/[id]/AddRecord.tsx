@@ -1,11 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import exifr from "exifr";
 import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
+import {
+  canCreateMembershipContent,
+  canUploadWithinStorageLimit,
+  formatStorageBytes,
+  getCreateContentBlockedText,
+  getStorageLimitExceededText,
+  getStorageRemainingBytes,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
 
 type RecordVisibility = "public" | "private";
 
@@ -31,8 +42,60 @@ export default function AddRecord({
     useState<RecordVisibility>("public");
   const [isHelpRecord, setIsHelpRecord] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [storageUsedBytes, setStorageUsedBytes] = useState(0);
+  const [membershipLoading, setMembershipLoading] = useState(true);
 
   const router = useRouter();
+  const contentBlocked = membership?.can_create_content === false;
+  const selectedFileBytes = files.reduce((total, file) => total + file.size, 0);
+  const storageLimitBytes = Number(membership?.storage_limit_bytes || 0);
+  const storageRemainingBytes = getStorageRemainingBytes({
+    usedBytes: storageUsedBytes,
+    limitBytes: storageLimitBytes,
+  });
+  const uploadWouldExceedStorage =
+    selectedFileBytes > 0 &&
+    !canUploadWithinStorageLimit({
+      usedBytes: storageUsedBytes,
+      limitBytes: storageLimitBytes,
+      uploadBytes: selectedFileBytes,
+    });
+
+  useEffect(() => {
+    async function loadMembership() {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setMembership(null);
+        setMembershipLoading(false);
+        return;
+      }
+
+      const [membershipResult, profileResult] = await Promise.all([
+        supabase.rpc("get_my_membership"),
+        supabase.from("profiles").select("storage_used").eq("id", user.id).maybeSingle(),
+      ]);
+
+      if (membershipResult.error) {
+        console.error("load membership error:", membershipResult.error);
+        setMembership(null);
+      } else {
+        setMembership(normalizeMembershipRpcResult(membershipResult.data));
+      }
+
+      if (profileResult.error) {
+        console.error("load profile storage error:", profileResult.error);
+        setStorageUsedBytes(0);
+      } else {
+        setStorageUsedBytes(Number(profileResult.data?.storage_used || 0));
+      }
+
+      setMembershipLoading(false);
+    }
+
+    void loadMembership();
+  }, []);
 
   function resolveTime({
     timeMode,
@@ -89,6 +152,36 @@ export default function AddRecord({
     return record;
   }
 
+  async function refreshStorageUsed(userId: string) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("storage_used")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("refresh storage used error:", error);
+      return;
+    }
+
+    setStorageUsedBytes(Number(data?.storage_used || 0));
+  }
+
+  async function addStorageUsed(userId: string, sizeBytes: number) {
+    const nextStorageUsed = Math.max(0, storageUsedBytes + sizeBytes);
+    setStorageUsedBytes(nextStorageUsed);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ storage_used: nextStorageUsed })
+      .eq("id", userId);
+
+    if (error) {
+      console.error("update storage used error:", error);
+      void refreshStorageUsed(userId);
+    }
+  }
+
   async function uploadMedia(recordId: string, userId: string, file: File) {
     const safeName = file.name.replace(/[^\w.\-]+/g, "_");
     const fileName = `${userId}/${recordId}/${Date.now()}-${safeName}`;
@@ -112,17 +205,37 @@ export default function AddRecord({
         type: "image",
         url: urlData.publicUrl,
         user_id: userId,
+        size_mb: file.size / (1024 * 1024),
       },
     ]);
 
     if (mediaError) {
       console.error("media 写入失败", mediaError);
+      return;
     }
+
+    await addStorageUsed(userId, file.size);
   }
 
   async function handleAdd() {
     if (loading) return;
     if (!text.trim() && files.length === 0) return;
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
+      return;
+    }
+
+    if (uploadWouldExceedStorage) {
+      showToast(
+        getStorageLimitExceededText({
+          usedBytes: storageUsedBytes,
+          limitBytes: storageLimitBytes,
+          uploadBytes: selectedFileBytes,
+        })
+      );
+      return;
+    }
 
     setLoading(true);
 
@@ -245,6 +358,26 @@ export default function AddRecord({
 
   return (
     <div style={{ marginBottom: "20px" }}>
+      {contentBlocked ? (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #ead9b8",
+            background: "#fff8ea",
+            color: "#7a5c24",
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
+          <span>{getCreateContentBlockedText(membership)}</span>{" "}
+          <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+            查看年度使用权
+          </Link>
+        </div>
+      ) : null}
+
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -313,6 +446,31 @@ export default function AddRecord({
           accept="image/*"
           onChange={(e) => setFiles(Array.from(e.target.files || []))}
         />
+        {selectedFileBytes > 0 ? (
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 12,
+              color: uploadWouldExceedStorage ? "#9a4a14" : "#777",
+              lineHeight: 1.6,
+            }}
+          >
+            本次选择约 {formatStorageBytes(selectedFileBytes)}。
+            {storageRemainingBytes !== null
+              ? ` 当前剩余约 ${formatStorageBytes(storageRemainingBytes)}。`
+              : ""}
+            {uploadWouldExceedStorage ? (
+              <>
+                <br />
+                当前容量不足，请减少图片、删除旧图片释放空间，或{" "}
+                <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+                  查看年度使用权
+                </Link>
+                。
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {files.length > 1 && (
@@ -330,14 +488,17 @@ export default function AddRecord({
 
       <button
         onClick={handleAdd}
-        disabled={loading}
+        disabled={loading || membershipLoading || contentBlocked || uploadWouldExceedStorage}
         style={{
           marginTop: "12px",
           padding: "8px 14px",
           borderRadius: "8px",
           border: "1px solid #ddd",
           background: "#fff",
-          cursor: loading ? "not-allowed" : "pointer",
+          cursor:
+            loading || membershipLoading || contentBlocked || uploadWouldExceedStorage
+              ? "not-allowed"
+              : "pointer",
         }}
       >
         {loading ? (t.submitting ?? "提交中...") : t.submit ?? "发布记录"}

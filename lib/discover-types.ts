@@ -52,8 +52,8 @@ export const RECORD_BATCH_SIZE = 80;
 export const filterOptions: FilterOption[] = [
   { value: "all", label: "全部" },
   { value: "plant", label: "种植" },
-  { value: "system", label: "农法/设施" },
-  { value: "insect_fish", label: "虫鱼" },
+  { value: "system", label: "农法设施" },
+  { value: "insect_fish", label: "虫鱼生态" },
   { value: "other", label: "其他" },
   { value: "help", label: "只看求助" },
 ];

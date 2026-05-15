@@ -52,12 +52,23 @@ export function formatProfileDateTime(value?: string | null) {
   });
 }
 
+function formatStorageNumber(value: number) {
+  const rounded = value >= 10 ? Math.round(value * 10) / 10 : Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 export function formatStorage(bytes?: number | null) {
-  const size = Number(bytes || 0);
-  if (size >= 1024 * 1024 * 1024) return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${size} B`;
+  const size = Math.max(0, Number(bytes || 0));
+  if (!Number.isFinite(size) || size <= 0) return "0 B";
+
+  const kb = 1000;
+  const mb = 1000 * 1000;
+  const gb = 1000 * 1000 * 1000;
+
+  if (size >= gb) return `${formatStorageNumber(size / gb)} GB`;
+  if (size >= mb) return `${formatStorageNumber(size / mb)} MB`;
+  if (size >= kb) return `${formatStorageNumber(size / kb)} KB`;
+  return `${Math.round(size)} B`;
 }
 
 export async function loadUserProfileData(supabase: any, userId: string): Promise<PublicUserProfileData> {

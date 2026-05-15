@@ -114,7 +114,7 @@ export default function Navbar() {
             关注
           </NavItem>
 
-          <NavItem href="/archive" active={isActive("/archive")}>
+          <NavItem href={user ? "/archive" : "/login"} active={isActive("/archive")}>
             空间
           </NavItem>
 

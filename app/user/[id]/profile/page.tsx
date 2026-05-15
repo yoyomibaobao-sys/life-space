@@ -296,7 +296,7 @@ export default function PublicUserProfilePage() {
                     </div>
 
                     <div style={{ marginTop: 6, fontSize: 13, color: "#63705d" }}>
-                      系统名：{item.system_name || "未填写"} · 分类：
+                      具体名称：{item.system_name || "未填写"} · 分类：
                       {item.category || "未分类"}
                     </div>
 

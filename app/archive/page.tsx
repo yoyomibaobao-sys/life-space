@@ -26,11 +26,21 @@ import type {
   SortMode,
   SubTagItem,
 } from "@/lib/archive-page-types";
-import type { PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
 import {
   buildArchiveSearchText,
   getArchiveSortTime,
 } from "@/lib/archive-page-utils";
+import {
+  getCreateContentBlockedText,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
+import {
+  removeMediaFilesFromStorage,
+  subtractStorageUsed,
+  sumMediaSizeBytes,
+} from "@/lib/storage-usage";
 
 export default function ArchivePage() {
   const router = useRouter();
@@ -61,6 +71,7 @@ export default function ArchivePage() {
   const [sortMode, setSortMode] = useState<SortMode>("created");
   const [deleteArchiveTarget, setDeleteArchiveTarget] = useState<ArchiveItem | null>(null);
   const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
 
   function shouldIgnoreCardNavigation(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -101,6 +112,7 @@ export default function ArchivePage() {
         { data: aliasData },
         { data: plansData },
         { data: interestsData },
+        membershipResult,
       ] = await Promise.all([
         supabase.from("archives").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
         supabase.from("group_tags").select("*").eq("user_id", user.id),
@@ -113,6 +125,7 @@ export default function ArchivePage() {
         supabase.from("plant_species_aliases").select("species_id, alias_name, normalized_name"),
         supabase.from("user_plant_plans").select("id, status, created_archive_id").eq("user_id", user.id),
         supabase.from("user_plant_interests").select("id").eq("user_id", user.id),
+        supabase.rpc("get_my_membership"),
       ]);
 
       const aliasesBySpecies = new Map<string, string[]>();
@@ -163,6 +176,13 @@ export default function ArchivePage() {
       setSpeciesList(speciesRows);
       setPlantPlans((plansData || []) as PlantPlanItem[]);
       setPlantInterests((interestsData || []) as PlantInterestItem[]);
+
+      if (membershipResult.error) {
+        console.error("load membership error:", membershipResult.error);
+        setMembership(null);
+      } else {
+        setMembership(normalizeMembershipRpcResult(membershipResult.data));
+      }
     } finally {
       loadingRef.current = false;
     }
@@ -352,7 +372,7 @@ export default function ArchivePage() {
   async function saveSystemSelection(item: ArchiveItem) {
     const systemName = editingSystemName.trim();
     if (!systemName) {
-      showToast("请从匹配结果中点选系统名，或点击作为备选系统名");
+      showToast("请从匹配结果中点选具体名称，或新增为具体名称");
       return;
     }
 
@@ -371,7 +391,7 @@ export default function ArchivePage() {
     );
 
     cancelSystemEditing();
-    showToast("已更新系统名");
+    showToast("已更新具体名称");
   }
 
   function cancelSystemEditing() {
@@ -583,6 +603,26 @@ export default function ArchivePage() {
     if (!deleteArchiveTarget || deletingArchiveId) return;
 
     setDeletingArchiveId(deleteArchiveTarget.id);
+
+    const { data: recordRows } = await supabase
+      .from("records")
+      .select("id")
+      .eq("archive_id", deleteArchiveTarget.id);
+    const recordIds = (recordRows || []).map((record) => record.id).filter(Boolean);
+    let mediaItems: MediaItem[] = [];
+
+    if (recordIds.length > 0) {
+      const { data: mediaRows } = await supabase
+        .from("media")
+        .select("id, url, size_mb, user_id")
+        .in("record_id", recordIds);
+      mediaItems = (mediaRows || []) as MediaItem[];
+      await removeMediaFilesFromStorage(mediaItems);
+    }
+
+    const deletedBytes = sumMediaSizeBytes(mediaItems);
+    const ownerId = deleteArchiveTarget.user_id || mediaItems.find((media) => media.user_id)?.user_id;
+
     const { error } = await supabase.from("archives").delete().eq("id", deleteArchiveTarget.id);
     setDeletingArchiveId(null);
 
@@ -591,8 +631,12 @@ export default function ArchivePage() {
       return;
     }
 
+    if (deletedBytes > 0) {
+      await subtractStorageUsed(ownerId, deletedBytes);
+    }
+
     setDeleteArchiveTarget(null);
-    showToast("项目已删除");
+    showToast("项目已删除，容量已释放");
     await loadData();
   }
 
@@ -637,6 +681,7 @@ export default function ArchivePage() {
   const publicArchiveCount = archives.filter((item) => item.is_public).length;
   const privateArchiveCount = archiveCount - publicArchiveCount;
   const endedArchiveCount = archives.filter((item) => item.status === "ended").length;
+  const contentBlocked = membership?.can_create_content === false;
 
   const plantSubTags = subTags.filter((tag) => tag.category === "plant");
   const methodFacilitySubTags = subTags.filter((tag) => tag.category === "system");
@@ -745,7 +790,17 @@ export default function ArchivePage() {
         sortMode={sortMode}
         onSearchKeywordChange={setSearchKeyword}
         onSortModeChange={setSortMode}
-        onCreateArchive={() => router.push("/archive/new")}
+        onCreateArchive={() => {
+          if (contentBlocked) {
+            showToast(getCreateContentBlockedText(membership));
+            return;
+          }
+
+          router.push("/archive/new");
+        }}
+        createDisabled={contentBlocked}
+        createDisabledTitle={contentBlocked ? getCreateContentBlockedText(membership) : undefined}
+        createDisabledHref={contentBlocked ? "/membership" : undefined}
       />
 
       <ArchiveFiltersPanel

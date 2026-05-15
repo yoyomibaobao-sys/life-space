@@ -345,7 +345,7 @@ export default function ArchiveCard({
                   color: ended ? "#888" : "#546b4e",
                   fontWeight: 500,
                 }}
-                title="点击可修改系统名"
+                title="点击可修改具体名称"
               >
                 {systemName}
               </span>

@@ -1,12 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { showToast } from "@/components/Toast";
 import {
+  canCreateMembershipContent,
+  getCreateContentBlockedText,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
+import {
   type ArchiveCategory,
   archiveCategoryOptions,
+  getArchiveCategoryDescription,
   getArchiveCategoryLabel,
   getDefaultSystemNames,
   isNonPlantArchiveCategory,
@@ -54,6 +62,8 @@ function NewArchiveContent() {
   const [note, setNote] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(true);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -134,6 +144,35 @@ function NewArchiveContent() {
 
     loadSpecies();
   }, [preselectedSpeciesId]);
+
+  useEffect(() => {
+    async function loadMembership() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setMembership(null);
+        setMembershipLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.rpc("get_my_membership");
+
+      if (error) {
+        console.error("load membership error:", error);
+        setMembership(null);
+      } else {
+        setMembership(normalizeMembershipRpcResult(data));
+      }
+
+      setMembershipLoading(false);
+    }
+
+    void loadMembership();
+  }, []);
+
+  const contentBlocked = membership?.can_create_content === false;
 
   const systemOptions = useMemo(() => {
     if (!isNonPlantArchiveCategory(category)) return [];
@@ -233,18 +272,23 @@ function NewArchiveContent() {
 
     if (loading) return;
 
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
+      return;
+    }
+
     if (!title.trim()) {
       showToast("请输入项目名称");
       return;
     }
 
     if (category === "plant" && !speciesId && !pendingSpeciesName) {
-      showToast("请选择系统名，或新增一个候选植物");
+      showToast("请选择植物名称，或新增一个候选植物");
       return;
     }
 
     if (category !== "plant" && !systemName.trim()) {
-      showToast(`请选择或添加${getArchiveCategoryLabel(category)}候选系统名`);
+      showToast(`请选择或添加${getArchiveCategoryLabel(category)}具体名称`);
       return;
     }
 
@@ -345,6 +389,26 @@ function NewArchiveContent() {
     >
       <h2 style={{ margin: "0 0 20px", color: "#1f2d1f" }}>新建项目</h2>
 
+      {contentBlocked ? (
+        <div
+          style={{
+            marginBottom: 18,
+            padding: "12px 14px",
+            borderRadius: 14,
+            border: "1px solid #ead9b8",
+            background: "#fff8ea",
+            color: "#7a5c24",
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
+          <span>{getCreateContentBlockedText(membership)}</span>{" "}
+          <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+            查看年度使用权
+          </Link>
+        </div>
+      ) : null}
+
       <form onSubmit={handleCreate}>
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 14, marginBottom: 6 }}>项目名称 *</div>
@@ -365,7 +429,7 @@ function NewArchiveContent() {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>种类 *</div>
+          <div style={{ fontSize: 14, marginBottom: 6 }}>项目大类 *</div>
 
           <div
             style={{
@@ -395,11 +459,26 @@ function NewArchiveContent() {
               </button>
             ))}
           </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              padding: "10px 12px",
+              borderRadius: 12,
+              background: "#f6f9f3",
+              border: "1px solid #e5ecde",
+              color: "#65725f",
+              fontSize: 12,
+              lineHeight: 1.7,
+            }}
+          >
+            {getArchiveCategoryDescription(category)}
+          </div>
         </div>
 
         {category === "plant" && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>系统名 *</div>
+            <div style={{ fontSize: 14, marginBottom: 6 }}>植物名称 *</div>
 
             <div style={{ position: "relative" }}>
               <input
@@ -535,12 +614,12 @@ function NewArchiveContent() {
 
         {category !== "plant" && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>候选系统名 *</div>
+            <div style={{ fontSize: 14, marginBottom: 6 }}>具体名称 *</div>
 
             <input
               placeholder={
                 category === "other"
-                  ? "输入候选系统名"
+                  ? "输入具体名称"
                   : `输入后点选，例如：${systemOptions[0] || "补光灯"}`
               }
               value={systemSearch}
@@ -604,7 +683,7 @@ function NewArchiveContent() {
 
                 {systemOptions.length === 0 && category !== "other" && (
                   <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
-                    没有找到匹配候选系统名
+                    没有找到匹配名称
                   </div>
                 )}
 
@@ -628,13 +707,13 @@ function NewArchiveContent() {
                       fontSize: 13,
                     }}
                   >
-                    + 作为候选系统名：{systemSearch.trim()}
+                    + 新增为具体名称：{systemSearch.trim()}
                   </button>
                 )}
 
                 {!systemSearch.trim() && category === "other" && (
                   <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
-                    其他不设预设名，直接输入即可。
+                    其他不设预设名称，直接输入即可。
                   </div>
                 )}
               </div>
@@ -700,16 +779,16 @@ function NewArchiveContent() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || membershipLoading || contentBlocked}
           style={{
             width: "100%",
             padding: "12px",
-            background: loading ? "#999" : "#4CAF50",
+            background: loading || membershipLoading || contentBlocked ? "#999" : "#4CAF50",
             color: "#fff",
             border: "none",
             borderRadius: "8px",
             fontSize: 14,
-            cursor: loading ? "not-allowed" : "pointer",
+            cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
           }}
         >
           {loading ? "创建中..." : "创建"}

@@ -93,7 +93,7 @@ export default function ArchiveSystemNameEditor({
 
             {value.trim() && options.length === 0 && (
               <div style={{ fontSize: 12, color: "#999", padding: 6 }}>
-                没有找到匹配系统名
+                没有找到匹配具体名称
               </div>
             )}
 
@@ -112,7 +112,7 @@ export default function ArchiveSystemNameEditor({
                   cursor: "pointer",
                 }}
               >
-                + 作为备选系统名：{value.trim()}
+                + 新增为具体名称：{value.trim()}
               </button>
             )}
 

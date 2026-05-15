@@ -12,6 +12,13 @@ import {
   type MarketPostStatus,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
+import {
+  getCreateMarketPostBlockedText,
+  getMarketPostQuotaHint,
+  getMarketPostQuotaLabel,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
 
 type StatusFilter = "all" | MarketPostStatus;
 
@@ -21,6 +28,7 @@ export default function MyMarketPostsPage() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [items, setItems] = useState<MarketPostRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   useEffect(() => {
@@ -38,6 +46,16 @@ export default function MyMarketPostsPage() {
       }
 
       setUser(user);
+
+      const { data: membershipData, error: membershipError } = await supabase.rpc("get_my_membership");
+
+      if (membershipError) {
+        console.error("load membership error:", membershipError);
+        setMembership(null);
+      } else {
+        setMembership(normalizeMembershipRpcResult(membershipData));
+      }
+
       await loadItems(user.id);
       setLoading(false);
     }
@@ -68,6 +86,8 @@ export default function MyMarketPostsPage() {
     setItems((data || []) as MarketPostRow[]);
   }
 
+  const marketBlocked = membership?.can_create_market_post === false;
+
   return (
     <main style={pageStyle}>
       <div style={shellStyle}>
@@ -82,10 +102,38 @@ export default function MyMarketPostsPage() {
             </p>
           </div>
 
-          <Link href="/market/new" style={publishButtonStyle}>
-            发布信息
-          </Link>
+          {marketBlocked ? (
+            <Link
+              href="/membership"
+              style={disabledPublishButtonStyle}
+              title={getCreateMarketPostBlockedText(membership)}
+            >
+              发布受限
+            </Link>
+          ) : (
+            <Link href="/market/new" style={publishButtonStyle}>
+              发布信息
+            </Link>
+          )}
         </header>
+
+        <section style={quotaPanelStyle(marketBlocked)}>
+          <div>
+            <div style={quotaTitleStyle}>集市发布额度</div>
+            <div style={quotaTextStyle}>
+              {getMarketPostQuotaLabel(membership)}
+            </div>
+            <div style={quotaHintStyle}>
+              {getMarketPostQuotaHint(membership)}
+            </div>
+          </div>
+
+          {marketBlocked ? (
+            <Link href="/membership" style={quotaLinkStyle}>
+              查看年度使用权
+            </Link>
+          ) : null}
+        </section>
 
         <section style={filterPanelStyle}>
           <button
@@ -227,6 +275,54 @@ const publishButtonStyle: CSSProperties = {
   borderRadius: 999,
   padding: "9px 15px",
   fontSize: 14,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+};
+
+
+function quotaPanelStyle(blocked: boolean): CSSProperties {
+  return {
+    background: blocked ? "#fff8ea" : "#fff",
+    border: blocked ? "1px solid #ead9b8" : "1px solid #e4ece0",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  };
+}
+
+const quotaTitleStyle: CSSProperties = {
+  color: "#1f2a1f",
+  fontWeight: 800,
+  fontSize: 14,
+  marginBottom: 4,
+};
+
+const quotaTextStyle: CSSProperties = {
+  color: "#40583a",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const quotaHintStyle: CSSProperties = {
+  color: "#6f7b69",
+  fontSize: 13,
+  lineHeight: 1.6,
+  marginTop: 4,
+};
+
+const quotaLinkStyle: CSSProperties = {
+  textDecoration: "none",
+  border: "1px solid #d7e2d2",
+  background: "#fff",
+  color: "#40583a",
+  borderRadius: 999,
+  padding: "7px 12px",
+  fontSize: 13,
   fontWeight: 700,
   whiteSpace: "nowrap",
 };
@@ -403,4 +499,9 @@ const emptyStyle: CSSProperties = {
   padding: 28,
   color: "#6f7b69",
   textAlign: "center",
+};
+const disabledPublishButtonStyle: CSSProperties = {
+  ...publishButtonStyle,
+  background: "#9aa398",
+  cursor: "not-allowed",
 };

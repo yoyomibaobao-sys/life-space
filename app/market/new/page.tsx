@@ -18,6 +18,14 @@ import {
   type MarketPostType,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
+import {
+  canCreateMembershipMarketPost,
+  getCreateMarketPostBlockedText,
+  getMarketPostQuotaHint,
+  getMarketPostQuotaLabel,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
 
 type ArchiveOption = {
   id: string;
@@ -87,8 +95,10 @@ function NewMarketPostPageContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [membership, setMembership] = useState<MyMembership | null>(null);
 
   const isFromSourceRecord = Boolean(sourceRecordId);
+  const marketBlocked = membership?.can_create_market_post === false;
 
   useEffect(() => {
     async function init() {
@@ -106,7 +116,7 @@ function NewMarketPostPageContent() {
 
       setUser(user);
 
-      const [profileResult, archivesResult] = await Promise.all([
+      const [profileResult, archivesResult, membershipResult] = await Promise.all([
         supabase
           .from("profiles")
           .select("country_name, region_name, city_name, location")
@@ -118,6 +128,8 @@ function NewMarketPostPageContent() {
           .select("id, title, system_name, species_name_snapshot")
           .eq("user_id", user.id)
           .order("last_record_time", { ascending: false }),
+
+        supabase.rpc("get_my_membership"),
       ]);
 
       const profile = (profileResult.data || null) as ProfileLocation | null;
@@ -126,6 +138,13 @@ function NewMarketPostPageContent() {
 
       const archiveRows = (archivesResult.data || []) as ArchiveOption[];
       setArchives(archiveRows);
+
+      if (membershipResult.error) {
+        console.error("load membership error:", membershipResult.error);
+        setMembership(null);
+      } else {
+        setMembership(normalizeMembershipRpcResult(membershipResult.data));
+      }
 
       if (sourceArchiveIdParam) {
         setArchiveId(sourceArchiveIdParam);
@@ -294,8 +313,29 @@ function NewMarketPostPageContent() {
     };
   }
 
+
+  async function refreshMembership() {
+    const { data, error } = await supabase.rpc("get_my_membership");
+
+    if (error) {
+      console.error("refresh membership error:", error);
+      return membership;
+    }
+
+    const nextMembership = normalizeMembershipRpcResult(data);
+    setMembership(nextMembership);
+    return nextMembership;
+  }
+
   async function handleSubmit() {
     if (!user || saving) return;
+
+    const latestMembership = await refreshMembership();
+
+    if (!canCreateMembershipMarketPost(latestMembership)) {
+      setErrorMsg(getCreateMarketPostBlockedText(latestMembership));
+      return;
+    }
 
     const safeTitle = title.trim();
     const safeDescription = description.trim();
@@ -434,6 +474,16 @@ function NewMarketPostPageContent() {
           </p>
 
           {errorMsg ? <div style={errorStyle}>{errorMsg}</div> : null}
+
+          <div style={quotaInfoStyle(marketBlocked)}>
+            <strong>{getMarketPostQuotaLabel(membership)}</strong>
+            <span>{getMarketPostQuotaHint(membership)}</span>
+            {marketBlocked ? (
+              <Link href="/membership" style={quotaLinkStyle}>
+                查看年度使用权
+              </Link>
+            ) : null}
+          </div>
 
           <div style={formStyle}>
             <div>
@@ -626,8 +676,8 @@ function NewMarketPostPageContent() {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={saving}
-              style={primaryButtonStyle}
+              disabled={saving || marketBlocked}
+              style={marketBlocked ? disabledPrimaryButtonStyle : primaryButtonStyle}
             >
               {saving ? "发布中..." : "发布"}
             </button>
@@ -841,6 +891,29 @@ const sourceRecordHintStyle: CSSProperties = {
   lineHeight: 1.6,
 };
 
+
+function quotaInfoStyle(blocked: boolean): CSSProperties {
+  return {
+    marginTop: 12,
+    display: "grid",
+    gap: 5,
+    padding: "11px 12px",
+    borderRadius: 14,
+    border: blocked ? "1px solid #ead9b8" : "1px solid #dfe8da",
+    background: blocked ? "#fff8ea" : "#f7fbf2",
+    color: blocked ? "#7a5c24" : "#587050",
+    fontSize: 13,
+    lineHeight: 1.6,
+  };
+}
+
+const quotaLinkStyle: CSSProperties = {
+  width: "fit-content",
+  color: "#4f7b45",
+  textDecoration: "none",
+  fontWeight: 700,
+};
+
 const noticeStyle: CSSProperties = {
   marginTop: 14,
   background: "#fffaf0",
@@ -888,4 +961,12 @@ const errorStyle: CSSProperties = {
   padding: "10px 12px",
   borderRadius: 12,
   fontSize: 14,
+};
+
+
+
+const disabledPrimaryButtonStyle: CSSProperties = {
+  ...primaryButtonStyle,
+  background: "#9aa398",
+  cursor: "not-allowed",
 };

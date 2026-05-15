@@ -8,6 +8,15 @@ import { showToast } from "@/components/Toast";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import { formatProfileDateTime, formatStorage, loadUserProfileData, type UserProfileStats } from "@/lib/user-profile-shared";
 import {
+  formatMembershipDate,
+  getMembershipEndDate,
+  getMembershipPlanLabel,
+  getMembershipStatusLabel,
+  getMembershipSummary,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
+import {
   buildLocationTextFromFields,
   buildRegionDisplay,
   countryOptions,
@@ -24,6 +33,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [stats, setStats] = useState<UserProfileStats | null>(null);
   const [marketPostCount, setMarketPostCount] = useState(0);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [membershipError, setMembershipError] = useState("");
   const [username, setUsername] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [customCountryName, setCustomCountryName] = useState("");
@@ -59,17 +70,29 @@ export default function ProfilePage() {
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
       setStats(data.stats);
-      const { count: marketCount, error: marketCountError } = await supabase
-  .from("market_posts")
-  .select("id", { count: "exact", head: true })
-  .eq("user_id", user.id);
+      const [marketCountResult, membershipResult] = await Promise.all([
+        supabase
+          .from("market_posts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        supabase.rpc("get_my_membership"),
+      ]);
 
-if (marketCountError) {
-  console.error("load my market post count error:", marketCountError);
-  setMarketPostCount(0);
-} else {
-  setMarketPostCount(Number(marketCount || 0));
-}
+      if (marketCountResult.error) {
+        console.error("load my market post count error:", marketCountResult.error);
+        setMarketPostCount(0);
+      } else {
+        setMarketPostCount(Number(marketCountResult.count || 0));
+      }
+
+      if (membershipResult.error) {
+        console.error("load membership error:", membershipResult.error);
+        setMembership(null);
+        setMembershipError("暂时无法读取试用与额度信息");
+      } else {
+        setMembership(normalizeMembershipRpcResult(membershipResult.data));
+        setMembershipError("");
+      }
       setUsername(String(data.profile?.username || ""));
 
       const legacy = parseLegacyLocation(data.profile?.location);
@@ -99,9 +122,15 @@ if (marketCountError) {
 
   const storageText = useMemo(() => {
     const used = formatStorage(Number(profile?.storage_used || 0));
-    const limit = formatStorage(Number(profile?.storage_limit || 0));
+    const limit = formatStorage(Number(membership?.storage_limit_bytes || profile?.storage_limit || 0));
     return `${used} / ${limit}`;
-  }, [profile]);
+  }, [profile, membership]);
+
+  const membershipEndDate = getMembershipEndDate(membership);
+  const membershipStatusText = membershipError || getMembershipSummary(membership);
+  const marketQuotaText = membership
+    ? `${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} 条`
+    : "暂无";
 
   const privateArchiveCount = Math.max(0, Number(stats?.archiveCount || 0) - Number(stats?.publicArchiveCount || 0));
   const planHint = getPlanHint(stats?.planNames || [], Number(stats?.planCount || 0));
@@ -335,6 +364,45 @@ if (marketCountError) {
           </section>
         </div>
 
+        <section style={membershipSectionStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>试用与额度</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>当前使用状态</h2>
+              <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
+                {membershipStatusText}
+              </p>
+            </div>
+
+            <Link href="/membership" style={secondaryLinkStyle}>
+              查看年度使用权
+            </Link>
+          </div>
+
+          <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
+            <InfoCard
+              label="当前方案"
+              value={membership ? getMembershipPlanLabel(membership.plan) : "暂无"}
+              hint={membership ? getMembershipStatusLabel(membership.status) : "试用记录生成后显示"}
+            />
+            <InfoCard
+              label="有效期至"
+              value={formatMembershipDate(membershipEndDate)}
+              hint={membership?.can_create_content === false ? "已限制新增，仍可查看和导出" : "到期前可继续新增记录"}
+            />
+            <InfoCard
+              label="云端容量"
+              value={storageText}
+              hint="容量主要用于照片与媒体文件"
+            />
+            <InfoCard
+              label="集市发布"
+              value={marketQuotaText}
+              hint={membership?.can_create_market_post === false ? "当前不可继续发布" : "同时在线发布数量"}
+            />
+          </div>
+        </section>
+
         <section style={statsSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
@@ -462,6 +530,16 @@ function StatLinkCard({ href, label, value, hint }: { href: string; label: strin
   );
 }
 
+function InfoCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div style={statCardBaseStyle}>
+      <div style={{ fontSize: 14, color: "#6d7968" }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: 22, fontWeight: 700, color: "#22301f" }}>{value}</div>
+      <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
+    </div>
+  );
+}
+
 function StatActionCard({
   label,
   value,
@@ -486,6 +564,14 @@ const panelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e8efe4",
   borderRadius: 16,
+  padding: 14,
+};
+
+const membershipSectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#f8fbf3",
+  border: "1px solid #e1ecd9",
+  borderRadius: 18,
   padding: 14,
 };
 

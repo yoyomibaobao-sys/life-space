@@ -8,28 +8,29 @@ import { supabase } from "@/lib/supabase";
 const copy = {
   zhCN: {
     brand: "有时·耕作",
-    poem: "好雨知时节，当春乃发生",
+    poem: "人生的本质，是一个人的旅行，也是一场修行。",
     intro:
-      "在这里，记录你正在照料的一切，让生命有迹可循。",
-    spirit: "留其间，守其度，顺其时，共养成。",
-    register: "注册",
+      "有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。",
+    spirit: "种植、农法设施、虫鱼生态与自然生活的长期记录。",
+    trialNote: "注册后开始免费试用；未注册可先浏览公开内容。",
+    register: "开始记录",
     login: "登录",
-    discover: "先看看其他人",
+    discover: "先浏览发现",
     cards: [
       {
-        title: "记录正在照顾的一切",
+        title: "种植",
         description:
-          "把每一株植物、每一处耕作、每一个正在发生的变化，慢慢整理进自己的空间。",
+          "为花草、蔬菜、果树、多肉、香草、盆栽和地栽建立长期档案。",
       },
       {
-        title: "留下变化的过程",
+        title: "农法设施",
         description:
-          "发芽、长叶、修剪、搭设、失败与重新开始，都可以被安静地保存。",
+          "记录堆肥、架子、灌溉、水培、过滤、温室和工具系统的搭建与调整。",
       },
       {
-        title: "以个人空间为主",
+        title: "虫鱼生态",
         description:
-          "你可以独自记录，也可以公开一部分过程，让别人看见你的照顾与等待、你的成长与收获。",
+          "观察鱼缸、虾缸、蚯蚓、黑水虻、小动物和小生态的变化。",
       },
     ],
   },
@@ -160,6 +161,17 @@ export default function Home() {
             }}
           >
             {t.spirit}
+          </p>
+
+          <p
+            style={{
+              marginTop: 8,
+              color: "#8a9584",
+              fontSize: 13,
+              lineHeight: 1.7,
+            }}
+          >
+            {t.trialNote}
           </p>
 
           <div
