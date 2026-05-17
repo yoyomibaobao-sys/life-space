@@ -437,15 +437,11 @@ export default function FollowPage() {
           filteredProjectCards.length ? (
             <div style={listStyle}>
               {filteredProjectCards.map((item) => {
-                const meta = [item.ownerName, item.categoryLabel];
+                const meta = [item.displaySystemName, item.ownerName];
                 if (item.subTagName) meta.push(item.subTagName);
                 if (item.groupTagName) meta.push(item.groupTagName);
 
-                const stats = [
-                  `${formatDateTime(item.latestRecordTime)}更新`,
-                  `${item.recordCount}条记录`,
-                  `已持续${item.durationDays}天`,
-                ];
+                const latestRecordText = `最新：${item.latestNote} · ${formatDateTime(item.latestRecordTime)}`;
 
                 return (
                   <article key={item.id} style={cardStyle}>
@@ -458,22 +454,18 @@ export default function FollowPage() {
                     </div>
 
                     <div style={cardBodyStyle}>
-                      <div style={cardTopRowStyle}>
-                        <div style={lineClampOneStyle}>
-                          <span style={projectTitleStyle}>{item.title}</span>
-                          <span style={projectSubTitleStyle}> · {item.displaySystemName}</span>
-                        </div>
-
+                      <div style={cardInlineTitleRowStyle}>
+                        <span style={projectInlineMetaStyle}>{item.categoryLabel} ·</span>
+                        <span style={projectTitleInlineStyle}>{item.title}</span>
+                        <span style={projectStatsPillStyle}>{item.recordCount}条 · 持续{item.durationDays}天</span>
                         {item.statusKind !== "normal" ? (
                           <StatusBadge kind={item.statusKind}>{item.statusLabel}</StatusBadge>
                         ) : null}
                       </div>
 
-                      <div style={metaLineStyle}>{meta.join(" · ")}</div>
+                      <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || "关注项目"}</div>
 
-                      <div style={noteLineStyle}>最近记录：{item.latestNote}</div>
-
-                      <div style={statsLineStyle}>{stats.join(" · ")}</div>
+                      <div style={noteLineStyle}>{latestRecordText}</div>
 
                       <div style={buttonRowStyle}>
                         <button
@@ -659,9 +651,9 @@ function StatusBadge({
       style={{
         display: "inline-flex",
         alignItems: "center",
-        padding: "4px 10px",
+        padding: "2px 7px",
         borderRadius: 999,
-        fontSize: 12,
+        fontSize: 11,
         whiteSpace: "nowrap",
         ...palette[kind],
       }}
@@ -837,17 +829,18 @@ const selectStyle: React.CSSProperties = {
 
 const listStyle: React.CSSProperties = {
   display: "grid",
-  gap: 14,
+  gap: 10,
 };
 
 const cardStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "112px minmax(0, 1fr)",
-  gap: 14,
-  padding: 14,
+  gridTemplateColumns: "100px minmax(0, 1fr)",
+  gap: 10,
+  padding: 8,
   border: "1px solid #ebf0e7",
-  borderRadius: 20,
+  borderRadius: 16,
   background: "#fff",
+  alignItems: "start",
 };
 
 const userCardStyle: React.CSSProperties = {
@@ -861,9 +854,12 @@ const userCardStyle: React.CSSProperties = {
 };
 
 const coverStyle: React.CSSProperties = {
-  width: 112,
-  height: 112,
-  borderRadius: 16,
+  width: 100,
+  height: 100,
+  minHeight: 100,
+  maxHeight: 100,
+  alignSelf: "start",
+  borderRadius: 14,
   overflow: "hidden",
   background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
   display: "flex",
@@ -905,8 +901,19 @@ const userAvatarFallbackStyle: React.CSSProperties = {
 const cardBodyStyle: React.CSSProperties = {
   minWidth: 0,
   display: "grid",
-  gap: 8,
-  alignContent: "center",
+  gridTemplateRows: "auto auto auto auto",
+  gap: 3,
+  alignContent: "space-between",
+};
+
+const cardInlineTitleRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  gap: 5,
+  minWidth: 0,
+  overflow: "hidden",
+  whiteSpace: "nowrap",
 };
 
 const cardTopRowStyle: React.CSSProperties = {
@@ -914,6 +921,14 @@ const cardTopRowStyle: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 10,
+  minWidth: 0,
+};
+
+const cardTopMetaWrapStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  flexShrink: 0,
 };
 
 const lineClampOneStyle: React.CSSProperties = {
@@ -924,19 +939,38 @@ const lineClampOneStyle: React.CSSProperties = {
 };
 
 const projectTitleStyle: React.CSSProperties = {
-  fontSize: 18,
+  fontSize: 14,
   fontWeight: 700,
   color: "#253125",
 };
 
-const projectSubTitleStyle: React.CSSProperties = {
-  fontSize: 15,
-  color: "#667266",
+const projectTitleInlineStyle: React.CSSProperties = {
+  ...projectTitleStyle,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+
+const projectInlineMetaStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "#7b8578",
+  fontWeight: 600,
+};
+
+const projectStatsPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  color: "#7b8578",
+  fontSize: 11,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 const metaLineStyle: React.CSSProperties = {
-  color: "#5d685b",
-  fontSize: 14,
+  color: "#7a8578",
+  fontSize: 11,
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -945,7 +979,7 @@ const metaLineStyle: React.CSSProperties = {
 
 const noteLineStyle: React.CSSProperties = {
   color: "#334033",
-  fontSize: 14,
+  fontSize: 12,
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -963,10 +997,11 @@ const statsLineStyle: React.CSSProperties = {
 
 const buttonRowStyle: React.CSSProperties = {
   display: "flex",
-  gap: 10,
+  gap: 5,
   alignItems: "center",
-  flexWrap: "wrap",
-  marginTop: 2,
+  flexWrap: "nowrap",
+  overflow: "hidden",
+  marginTop: 0,
 };
 
 const primaryButtonStyle: React.CSSProperties = {
@@ -974,10 +1009,12 @@ const primaryButtonStyle: React.CSSProperties = {
   background: "#4f7b45",
   color: "#fff",
   borderRadius: 999,
-  padding: "8px 14px",
+  padding: "4px 8px",
   cursor: "pointer",
-  fontSize: 14,
+  fontSize: 11,
   fontWeight: 600,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 const ghostButtonStyle: React.CSSProperties = {
@@ -985,16 +1022,20 @@ const ghostButtonStyle: React.CSSProperties = {
   background: "#fff",
   color: "#445244",
   borderRadius: 999,
-  padding: "8px 14px",
+  padding: "4px 8px",
   cursor: "pointer",
-  fontSize: 14,
+  fontSize: 11,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 const textLinkStyle: React.CSSProperties = {
   color: "#4f7b45",
   textDecoration: "none",
-  fontSize: 14,
+  fontSize: 11,
   fontWeight: 600,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 const emptyWrapStyle: React.CSSProperties = {

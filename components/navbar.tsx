@@ -13,6 +13,18 @@ export default function Navbar() {
 
   const pathname = usePathname();
   const router = useRouter();
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    function updateCompact() {
+      setIsCompact(window.innerWidth < 760);
+    }
+
+    updateCompact();
+    window.addEventListener("resize", updateCompact);
+
+    return () => window.removeEventListener("resize", updateCompact);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -58,7 +70,10 @@ export default function Navbar() {
     window.addEventListener("notifications-changed", handleNotificationChanged);
 
     return () => {
-      window.removeEventListener("notifications-changed", handleNotificationChanged);
+      window.removeEventListener(
+        "notifications-changed",
+        handleNotificationChanged,
+      );
     };
   }, [user?.id]);
 
@@ -99,13 +114,13 @@ export default function Navbar() {
   }
 
   return (
-    <nav style={navStyle}>
-      <div style={leftGroupStyle}>
+    <nav style={getNavStyle(isCompact)}>
+      <div style={getLeftGroupStyle(isCompact)}>
         <Link href="/" style={brandStyle}>
           有时·耕作
         </Link>
 
-        <div style={navItemsWrapStyle}>
+        <div style={getNavItemsWrapStyle(isCompact)}>
           <NavItem href="/discover" active={isActive("/discover")}>
             发现
           </NavItem>
@@ -114,7 +129,10 @@ export default function Navbar() {
             我的关注
           </NavItem>
 
-          <NavItem href={user ? "/archive" : "/login"} active={isActive("/archive")}>
+          <NavItem
+            href={user ? "/archive" : "/login"}
+            active={isActive("/archive")}
+          >
             本人空间
           </NavItem>
 
@@ -129,7 +147,7 @@ export default function Navbar() {
       </div>
 
       {user ? (
-        <div style={userAreaStyle}>
+        <div style={getUserAreaStyle(isCompact)}>
           <Link href="/notifications" style={notificationStyle} title="通知">
             🔔
             {unreadCount > 0 ? (
@@ -139,20 +157,26 @@ export default function Navbar() {
             ) : null}
           </Link>
 
-          <Link href="/profile" style={profileLinkStyle}>
+          <Link href="/profile" style={getProfileLinkStyle(isCompact)}>
             {username || "未设置用户名"}
           </Link>
 
-          <div style={emailStyle} title={user.email || ""}>
-            {user.email}
-          </div>
+          {!isCompact ? (
+            <div style={emailStyle} title={user.email || ""}>
+              {user.email}
+            </div>
+          ) : null}
 
-          <button type="button" onClick={handleLogout} style={logoutButtonStyle}>
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={logoutButtonStyle}
+          >
             退出
           </button>
         </div>
       ) : (
-        <div style={guestAreaStyle}>
+        <div style={getGuestAreaStyle(isCompact)}>
           <Link href="/login" style={loginLinkStyle}>
             登录
           </Link>
@@ -182,28 +206,34 @@ function NavItem({
   );
 }
 
-const navStyle: CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 100,
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 16,
-  padding: "10px 16px",
-  borderBottom: "1px solid #e4ece0",
-  background: "rgba(255,255,255,0.96)",
-  backdropFilter: "blur(10px)",
-  boxSizing: "border-box",
-};
+function getNavStyle(compact: boolean): CSSProperties {
+  return {
+    position: "sticky",
+    top: 0,
+    zIndex: 100,
+    display: "flex",
+    flexDirection: compact ? "column" : "row",
+    justifyContent: compact ? "flex-start" : "space-between",
+    alignItems: compact ? "stretch" : "center",
+    gap: compact ? 8 : 16,
+    padding: compact ? "8px 12px" : "10px 16px",
+    borderBottom: "1px solid #e4ece0",
+    background: "rgba(255,255,255,0.96)",
+    backdropFilter: "blur(10px)",
+    boxSizing: "border-box",
+  };
+}
 
-const leftGroupStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-  minWidth: 0,
-  flex: 1,
-};
+function getLeftGroupStyle(compact: boolean): CSSProperties {
+  return {
+    display: "flex",
+    flexDirection: compact ? "column" : "row",
+    alignItems: compact ? "stretch" : "center",
+    gap: compact ? 8 : 16,
+    minWidth: 0,
+    flex: compact ? "none" : 1,
+  };
+}
 
 const brandStyle: CSSProperties = {
   textDecoration: "none",
@@ -214,20 +244,24 @@ const brandStyle: CSSProperties = {
   fontSize: 16,
 };
 
-const navItemsWrapStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-  minWidth: 0,
-  overflowX: "auto",
-  scrollbarWidth: "none",
-};
+function getNavItemsWrapStyle(compact: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: compact ? 3 : 4,
+    minWidth: 0,
+    width: compact ? "100%" : undefined,
+    overflowX: "auto",
+    scrollbarWidth: "none",
+    paddingBottom: compact ? 2 : 0,
+  };
+}
 
 function navLinkStyle(active: boolean): CSSProperties {
   return {
     textDecoration: "none",
     color: active ? "#1a1c1a" : "#40423f",
-    background: active ? "#cbdac3"  : "transparent",
+    background: active ? "#cbdac3" : "transparent",
     fontSize: 16,
     fontWeight: active ? 700 : 600,
     padding: "7px 11px",
@@ -237,14 +271,19 @@ function navLinkStyle(active: boolean): CSSProperties {
   };
 }
 
-const userAreaStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  fontSize: 13,
-  justifyContent: "flex-end",
-  minWidth: 0,
-};
+function getUserAreaStyle(compact: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: compact ? 8 : 10,
+    fontSize: compact ? 12 : 13,
+    justifyContent: compact ? "flex-start" : "flex-end",
+    minWidth: 0,
+    maxWidth: "100%",
+    overflowX: compact ? "auto" : "visible",
+    whiteSpace: "nowrap",
+  };
+}
 
 const notificationStyle: CSSProperties = {
   position: "relative",
@@ -272,12 +311,17 @@ const notificationBadgeStyle: CSSProperties = {
   padding: "0 4px",
 };
 
-const profileLinkStyle: CSSProperties = {
-  textDecoration: "none",
-  color: "#1f2a1f",
-  fontWeight: 700,
-  whiteSpace: "nowrap",
-};
+function getProfileLinkStyle(compact: boolean): CSSProperties {
+  return {
+    textDecoration: "none",
+    color: "#1f2a1f",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    maxWidth: compact ? 120 : undefined,
+    overflow: compact ? "hidden" : undefined,
+    textOverflow: compact ? "ellipsis" : undefined,
+  };
+}
 
 const emailStyle: CSSProperties = {
   color: "#7b8676",
@@ -297,13 +341,16 @@ const logoutButtonStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const guestAreaStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  fontSize: 14,
-  whiteSpace: "nowrap",
-};
+function getGuestAreaStyle(compact: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    fontSize: 14,
+    whiteSpace: "nowrap",
+    justifyContent: compact ? "flex-start" : "flex-end",
+  };
+}
 
 const loginLinkStyle: CSSProperties = {
   textDecoration: "none",

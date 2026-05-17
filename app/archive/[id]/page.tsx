@@ -28,6 +28,13 @@ import type {
 import type { MediaItem } from "@/lib/domain-types";
 import { buildMediaList, getDisplayName } from "@/lib/archive-detail-utils";
 import {
+  canCreateMembershipContent,
+  canUploadWithinStorageLimit,
+  getCreateContentBlockedText,
+  getStorageLimitExceededText,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
+import {
   removeMediaFilesFromStorage,
   subtractStorageUsed,
   sumMediaSizeBytes,
@@ -667,6 +674,122 @@ saveRecentArchiveBrowse({
     setIsDeletingMedia(false);
   }
 
+  async function handleAddMediaToRecord(recordId: string, files: File[]) {
+    if (!files.length) return;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user || user.id !== activeArchive.user_id) {
+      showToast("请先登录后再添加图片");
+      return;
+    }
+
+    const uploadBytes = files.reduce((total, file) => total + file.size, 0);
+
+    const [membershipResult, profileResult] = await Promise.all([
+      supabase.rpc("get_my_membership"),
+      supabase.from("profiles").select("storage_used").eq("id", user.id).maybeSingle(),
+    ]);
+
+    const membership = membershipResult.error
+      ? null
+      : normalizeMembershipRpcResult(membershipResult.data);
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
+      return;
+    }
+
+    const storageUsedBytes = Number(profileResult.data?.storage_used || 0);
+    const storageLimitBytes = Number(membership?.storage_limit_bytes || 0);
+
+    if (
+      !canUploadWithinStorageLimit({
+        usedBytes: storageUsedBytes,
+        limitBytes: storageLimitBytes,
+        uploadBytes,
+      })
+    ) {
+      showToast(
+        getStorageLimitExceededText({
+          usedBytes: storageUsedBytes,
+          limitBytes: storageLimitBytes,
+          uploadBytes,
+        })
+      );
+      return;
+    }
+
+    const uploadedMedia: MediaItem[] = [];
+    let uploadedBytes = 0;
+
+    for (const [index, file] of files.entries()) {
+      const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+      const fileName = `${user.id}/${recordId}/${Date.now()}-${index}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("media")
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.error("add record media upload error:", uploadError);
+        showToast("部分图片上传失败");
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from("media").getPublicUrl(fileName);
+
+      const { data: mediaRow, error: mediaError } = await supabase
+        .from("media")
+        .insert([
+          {
+            record_id: recordId,
+            type: "image",
+            url: urlData.publicUrl,
+            user_id: user.id,
+            size_mb: file.size / (1024 * 1024),
+          },
+        ])
+        .select()
+        .single();
+
+      if (mediaError) {
+        console.error("add record media insert error:", mediaError);
+        await supabase.storage.from("media").remove([fileName]);
+        showToast("部分图片保存失败");
+        continue;
+      }
+
+      uploadedMedia.push(mediaRow as MediaItem);
+      uploadedBytes += file.size;
+    }
+
+    if (uploadedBytes > 0) {
+      const nextStorageUsed = Math.max(0, storageUsedBytes + uploadedBytes);
+      const { error: storageError } = await supabase
+        .from("profiles")
+        .update({ storage_used: nextStorageUsed })
+        .eq("id", user.id);
+
+      if (storageError) {
+        console.error("add media update storage used error:", storageError);
+      }
+    }
+
+    if (uploadedMedia.length > 0) {
+      setRecords((prev) =>
+        prev.map((record) =>
+          record.id === recordId
+            ? { ...record, media: [...(record.media || []), ...uploadedMedia] }
+            : record
+        )
+      );
+      showToast("图片已添加");
+    }
+  }
+
   async function handleRecordVisibilityChange(recordId: string, nextVisibility: string) {
     await supabase.from("records").update({ visibility: nextVisibility }).eq("id", recordId);
 
@@ -784,6 +907,7 @@ saveRecentArchiveBrowse({
                 onAddTag={handleAddTag}
                 currentUserId={me ?? null}
                 onCommentCountChange={handleCommentCountChange}
+                onAddMedia={handleAddMediaToRecord}
                 onRecordDeleted={(recordId) => {
                   setRecords((prev) => prev.filter((record) => record.id !== recordId));
                   setReloadKey((value) => value + 1);

@@ -8,12 +8,10 @@ import { supabase } from "@/lib/supabase";
 const copy = {
   zhCN: {
     brand: "有时·耕作",
-    poem: "人生的本质，是一个人的旅行，也是一场修行。",
-    intro:
-      "有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。",
+    poem: "人生是一个场的旅行，也是一场修行；有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。",
     spirit: "留其间，守其度，顺其时，共养成。",
     trialNote: "注册后开始免费试用；未注册可先浏览公开内容。",
-    register: "开始记录",
+    register: "注册",
     login: "登录",
     discover: "先浏览发现",
     cards: [
@@ -141,23 +139,13 @@ export default function Home() {
               color: "#2f3b2f",
               fontSize: "clamp(20px, 3.2vw, 26px)",
               fontWeight: 500,
-              lineHeight: 1.55,
+              lineHeight: 1.6,
             }}
           >
             {t.poem}
           </p>
 
-          <p
-            style={{
-              maxWidth: 620,
-              margin: "0 auto",
-              color: "#4d5a4d",
-              fontSize: 17,
-              lineHeight: 1.9,
-            }}
-          >
-            {t.intro}
-          </p>
+         
 
           <div
             style={{
@@ -177,8 +165,8 @@ export default function Home() {
                 color: "#2f4b2b",
                 fontSize: "clamp(18px, 3.4vw, 22px)",
                 fontWeight: 600,
-                lineHeight: 1.7,
-                letterSpacing: 1.2,
+                lineHeight: 1.6,
+                letterSpacing: 1.3,
               }}
             >
               {t.spirit}
@@ -190,7 +178,7 @@ export default function Home() {
               marginTop: 16,
               color: "#8a9584",
               fontSize: 13,
-              lineHeight: 1.7,
+              lineHeight: 1.6,
             }}
           >
             {t.trialNote}

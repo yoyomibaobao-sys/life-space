@@ -33,11 +33,20 @@ export function formatDateTime(value?: string | null) {
   });
 }
 
+function getLocalDayStartTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
 export function getDayNumber(start: string, current: string) {
-  const startDate = new Date(start).getTime();
-  const currentDate = new Date(current).getTime();
+  const startDate = getLocalDayStartTime(start);
+  const currentDate = getLocalDayStartTime(current);
+
+  if (startDate === null || currentDate === null) return 1;
+
   const diff = currentDate - startDate;
-  return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
+  return Math.max(1, Math.floor(diff / (1000 * 60 * 60 * 24)) + 1);
 }
 
 export function getDisplayName(

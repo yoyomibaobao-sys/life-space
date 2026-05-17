@@ -276,7 +276,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
   <section class="hero">
     <div class="muted">有时·耕作 · 我的导出记录</div>
     <h1>${escapeHtml(profile?.username || "我的空间")}</h1>
-    <p>人生的本质，是一个人的旅行，也是一场修行。<br />有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。</p>
+    <p>人生，是一个场的旅行，也是一场修行。<br />有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。</p>
     <div class="grid">
       <div class="meta"><strong>导出时间</strong><br />${escapeHtml(exportedAt)}</div>
       <div class="meta"><strong>项目数量</strong><br />${archives.length}</div>

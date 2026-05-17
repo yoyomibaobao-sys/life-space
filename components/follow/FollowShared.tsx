@@ -170,17 +170,18 @@ export const selectStyle: React.CSSProperties = {
 
 export const listStyle: React.CSSProperties = {
   display: "grid",
-  gap: 14,
+  gap: 12,
 };
 
 export const cardStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "112px minmax(0, 1fr)",
-  gap: 14,
-  padding: 14,
+  gridTemplateColumns: "104px minmax(0, 1fr)",
+  gap: 12,
+  padding: 10,
   border: "1px solid #ebf0e7",
-  borderRadius: 20,
+  borderRadius: 18,
   background: "#fff",
+  alignItems: "stretch",
 };
 
 export const userCardStyle: React.CSSProperties = {
@@ -194,8 +195,8 @@ export const userCardStyle: React.CSSProperties = {
 };
 
 export const coverStyle: React.CSSProperties = {
-  width: 112,
-  height: 112,
+  width: 104,
+  height: 104,
   borderRadius: 16,
   overflow: "hidden",
   background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
@@ -236,6 +237,10 @@ export const userAvatarFallbackStyle: React.CSSProperties = {
 
 export const cardBodyStyle: React.CSSProperties = {
   minWidth: 0,
+  display: "grid",
+  gridTemplateRows: "auto auto auto auto",
+  gap: 5,
+  alignContent: "center",
 };
 
 export const cardTopRowStyle: React.CSSProperties = {
@@ -243,6 +248,14 @@ export const cardTopRowStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 10,
+  minWidth: 0,
+};
+
+export const cardTopMetaWrapStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  flexShrink: 0,
 };
 
 export const lineClampOneStyle: React.CSSProperties = {
@@ -253,27 +266,44 @@ export const lineClampOneStyle: React.CSSProperties = {
 };
 
 export const projectTitleStyle: React.CSSProperties = {
-  fontSize: 18,
+  fontSize: 15,
   fontWeight: 700,
   color: "#223022",
 };
 
-export const projectSubTitleStyle: React.CSSProperties = {
-  fontSize: 15,
-  color: "#5f6a60",
+export const projectInlineMetaStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#7b8578",
+  fontWeight: 600,
+};
+
+export const projectStatsPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  borderRadius: 999,
+  background: "#f4f8f1",
+  color: "#6c7869",
+  padding: "3px 8px",
+  fontSize: 12,
+  whiteSpace: "nowrap",
 };
 
 export const metaLineStyle: React.CSSProperties = {
-  marginTop: 8,
-  fontSize: 13,
-  color: "#6b756c",
+  fontSize: 12,
+  color: "#7a8578",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 export const noteLineStyle: React.CSSProperties = {
-  marginTop: 10,
-  fontSize: 14,
+  fontSize: 13,
   color: "#3a463b",
-  lineHeight: 1.65,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 export const statsLineStyle: React.CSSProperties = {
@@ -284,9 +314,9 @@ export const statsLineStyle: React.CSSProperties = {
 
 export const buttonRowStyle: React.CSSProperties = {
   display: "flex",
-  gap: 10,
+  gap: 8,
   flexWrap: "wrap",
-  marginTop: 14,
+  marginTop: 1,
   alignItems: "center",
 };
 
@@ -294,9 +324,9 @@ export const primaryButtonStyle: React.CSSProperties = {
   border: "1px solid #4f8f46",
   background: "#4f8f46",
   color: "#fff",
-  borderRadius: 12,
-  padding: "9px 14px",
-  fontSize: 14,
+  borderRadius: 999,
+  padding: "6px 11px",
+  fontSize: 12,
   fontWeight: 650,
   cursor: "pointer",
 };
@@ -305,9 +335,9 @@ export const ghostButtonStyle: React.CSSProperties = {
   border: "1px solid #d8e2d1",
   background: "#fff",
   color: "#455244",
-  borderRadius: 12,
-  padding: "9px 14px",
-  fontSize: 14,
+  borderRadius: 999,
+  padding: "6px 11px",
+  fontSize: 12,
   fontWeight: 650,
   cursor: "pointer",
 };
@@ -315,7 +345,7 @@ export const ghostButtonStyle: React.CSSProperties = {
 export const textLinkStyle: React.CSSProperties = {
   color: "#4d7c5b",
   textDecoration: "none",
-  fontSize: 14,
+  fontSize: 12,
   fontWeight: 650,
 };
 

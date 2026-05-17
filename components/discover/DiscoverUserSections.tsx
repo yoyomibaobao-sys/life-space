@@ -1,6 +1,6 @@
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { FeedItem, UserSection } from "@/lib/discover-types";
-import { formatDate, getArchiveLifecycleStatus } from "@/lib/discover-utils";
+import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { DefaultUserAvatar, ProjectCardRows } from "@/components/discover/DiscoverShared";
 
 function DiscoverUserRecordCard({ record, index }: { record: FeedItem; index: number }) {
@@ -171,7 +171,6 @@ function DiscoverUserSectionCard({
               · {section.user_location}
             </span>
           ) : null}
-          <span>· 更新 {formatDate(section.latest_time)}</span>
         </span>
       </button>
 

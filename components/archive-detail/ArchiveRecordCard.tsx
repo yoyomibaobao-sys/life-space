@@ -1,4 +1,5 @@
 "use client";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import EditRecord from "@/components/EditRecord";
 import TagList from "@/components/TagList";
@@ -30,10 +31,17 @@ type ArchiveRecordCardProps = {
   sameTagLinks: Array<{ tag: string; count: number; href: string }>;
   onOpenLightbox: (media: MediaItem[], index: number) => void;
   onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
-  onVisibilityChange: (recordId: string, nextVisibility: string) => Promise<void>;
-  onSetHelpStatus: (recordId: string, nextStatus: "help" | "resolved" | null) => Promise<void>;
+  onVisibilityChange: (
+    recordId: string,
+    nextVisibility: string,
+  ) => Promise<void>;
+  onSetHelpStatus: (
+    recordId: string,
+    nextStatus: "help" | "resolved" | null,
+  ) => Promise<void>;
   onRemoveTag: (recordId: string, tag: string) => void;
   onAddTag: (recordId: string, tag: string) => Promise<void>;
+  onAddMedia?: (recordId: string, files: File[]) => Promise<void>;
   currentUserId?: string | null;
   onCommentCountChange?: (recordId: string, count: number) => void;
   onRecordDeleted?: (recordId: string) => void;
@@ -53,18 +61,45 @@ export default function ArchiveRecordCard({
   onSetHelpStatus,
   onRemoveTag,
   onAddTag,
+  onAddMedia,
   currentUserId,
   onCommentCountChange,
   onRecordDeleted,
 }: ArchiveRecordCardProps) {
   const mediaList = buildMediaList(item.media, archive.title || "项目");
+  const isPlantArchive = archive.category === "plant";
+  const isHelpRecord = item.status_tag === "help";
+  const isResolvedRecord = item.status_tag === "resolved";
+  const [addingMedia, setAddingMedia] = useState(false);
+  const chooseInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleAddMediaFiles(fileList: FileList | null) {
+    const nextFiles = Array.from(fileList || []);
+    if (!nextFiles.length || !onAddMedia || addingMedia) return;
+
+    setAddingMedia(true);
+    try {
+      await onAddMedia(item.id, nextFiles);
+    } finally {
+      setAddingMedia(false);
+      if (chooseInputRef.current) chooseInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
+    }
+  }
+
+  const statusBadge = isHelpRecord
+    ? { label: "求助中", kind: "help" as const }
+    : isResolvedRecord
+      ? { label: "已解决", kind: "resolved" as const }
+      : null;
 
   return (
     <article
       id={`record-${item.id}`}
       style={{
         position: "relative",
-        marginBottom: 22,
+        marginBottom: 14,
         paddingLeft: 10,
         scrollMarginTop: 120,
       }}
@@ -82,28 +117,60 @@ export default function ArchiveRecordCard({
         }}
       />
 
-      {archive && startTime ? (
-        <div
-          style={{
-            fontSize: 12,
-            color: "#8a9588",
-            marginBottom: 6,
-          }}
-        >
-          {index === 0 ? "最新进展 · " : ""}
-          第 {getDayNumber(startTime, item.record_time)} 天 · {formatDateTime(item.record_time)}
-        </div>
-      ) : null}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 6,
+        }}
+      >
+        {archive && startTime ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: "#8a9588",
+              minWidth: 0,
+            }}
+          >
+            {index === 0 ? "最新进展 · " : ""}第{" "}
+            {getDayNumber(startTime, item.record_time)} 天 ·{" "}
+            {formatDateTime(item.record_time)}
+          </div>
+        ) : (
+          <span />
+        )}
+        {statusBadge ? (
+          <ArchiveStatusBadge kind={statusBadge.kind}>
+            {statusBadge.label}
+          </ArchiveStatusBadge>
+        ) : null}
+      </div>
 
       <div
         style={{
-          background: "#fff",
-          padding: 14,
-          borderRadius: 18,
-          border: isHighlighted ? "1px solid #b6ddb4" : "1px solid #ebefea",
-          boxShadow: isHighlighted
-            ? "0 0 0 4px rgba(79, 143, 70, 0.08)"
-            : "0 4px 18px rgba(0,0,0,0.03)",
+          background: isHelpRecord
+            ? "#fffaf5"
+            : isResolvedRecord
+              ? "#fbfffb"
+              : "#fff",
+          padding: 12,
+          borderRadius: 16,
+          border: isHelpRecord
+            ? "1px solid #edc6a9"
+            : isResolvedRecord
+              ? "1px solid #cfe4d4"
+              : isHighlighted
+                ? "1px solid #b6ddb4"
+                : "1px solid #ebefea",
+          boxShadow: isHelpRecord
+            ? "0 0 0 3px rgba(166, 95, 69, 0.08)"
+            : isResolvedRecord
+              ? "0 0 0 3px rgba(77, 124, 91, 0.08)"
+              : isHighlighted
+                ? "0 0 0 4px rgba(79, 143, 70, 0.08)"
+                : "0 3px 14px rgba(0,0,0,0.025)",
         }}
       >
         {mediaList.length > 0 ? (
@@ -112,7 +179,7 @@ export default function ArchiveRecordCard({
               display: "grid",
               gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
               gap: 8,
-              marginBottom: 12,
+              marginBottom: 8,
             }}
           >
             {mediaList.map((media, mediaIndex) => {
@@ -175,7 +242,7 @@ export default function ArchiveRecordCard({
           </div>
         ) : null}
 
-        <div style={{ marginBottom: 10 }}>
+        <div style={{ marginBottom: 8 }}>
           <EditRecord
             key={`${item.id}-${mode}`}
             id={item.id}
@@ -217,58 +284,118 @@ export default function ArchiveRecordCard({
 
             <button
               type="button"
-              onClick={() => onSetHelpStatus(item.id, item.status_tag === "help" ? null : "help")}
+              onClick={() =>
+                onSetHelpStatus(
+                  item.id,
+                  item.status_tag === "help" ? null : "help",
+                )
+              }
               style={smallActionButtonStyle(
-                item.status_tag === "help" ? undefined : "#fff5ee",
-                item.status_tag === "help" ? undefined : "#a65f45",
-                item.status_tag === "help" ? undefined : "#efd8cc"
+                item.status_tag === "help" ? "#fff0e4" : "#fff8f3",
+                item.status_tag === "help" ? "#8f4a22" : "#a65f45",
+                item.status_tag === "help" ? "#e1a77d" : "#efd8cc",
               )}
             >
-              {item.status_tag === "help" ? "取消求助" : "求助"}
+              {item.status_tag === "help" ? "求助中 · 取消" : "求助"}
             </button>
 
             <button
               type="button"
               onClick={() => onSetHelpStatus(item.id, "resolved")}
               style={smallActionButtonStyle(
-                item.status_tag === "resolved" ? "#eef7ef" : "#f7faf7",
-                item.status_tag === "resolved" ? "#3f7d4c" : "#6f7f6f",
-                item.status_tag === "resolved" ? "#cfe1d0" : "#dfe7de"
+                item.status_tag === "resolved" ? "#e8f6ec" : "#f7faf7",
+                item.status_tag === "resolved" ? "#286b3c" : "#6f7f6f",
+                item.status_tag === "resolved" ? "#acd7b5" : "#dfe7de",
               )}
             >
-              已解决
+              {item.status_tag === "resolved" ? "已解决 ✓" : "已解决"}
             </button>
+            {onAddMedia ? (
+              <>
+                <input
+                  ref={chooseInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(event) =>
+                    void handleAddMediaFiles(event.target.files)
+                  }
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  style={{ display: "none" }}
+                  onChange={(event) =>
+                    void handleAddMediaFiles(event.target.files)
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => chooseInputRef.current?.click()}
+                  disabled={addingMedia}
+                  style={smallActionButtonStyle(
+                    "#f8fbf6",
+                    "#4c7441",
+                    "#dbe9d6",
+                  )}
+                >
+                  {addingMedia ? "添加中..." : "+ 图片"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  disabled={addingMedia}
+                  style={smallActionButtonStyle(
+                    "#f8fbf6",
+                    "#4c7441",
+                    "#dbe9d6",
+                  )}
+                >
+                  拍照添加
+                </button>
+              </>
+            ) : null}
+
             <Link
-  href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
-  style={{
-    ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
-    textDecoration: "none",
-  }}
->
-  发布到集市
-</Link>
+              href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
+              style={{
+                ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
+                textDecoration: "none",
+              }}
+            >
+              发布到集市
+            </Link>
+
+            <DeleteRecordButton
+              id={item.id}
+              style={{ marginLeft: "auto" }}
+              onDeleted={onRecordDeleted}
+            />
           </div>
         ) : null}
 
-        <div
-          style={{
-            marginTop: 2,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            alignItems: "center",
-          }}
-        >
-          <TagList
-            tags={item.display_tags}
-            editable={mode === "owner"}
-            recordId={item.id}
-            userTags={item.user_behavior_tags}
-            onChange={(tag) => onRemoveTag(item.id, tag)}
-          />
+        {isPlantArchive ? (
+          <div
+            style={{
+              marginTop: 2,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <TagList
+              tags={item.display_tags}
+              editable={mode === "owner"}
+              recordId={item.id}
+              userTags={item.user_behavior_tags}
+              onChange={(tag) => onRemoveTag(item.id, tag)}
+            />
 
-          {mode === "owner" ? (
-            <>
+            {mode === "owner" ? (
               <select
                 onChange={async (event) => {
                   const newTag = event.target.value;
@@ -280,7 +407,7 @@ export default function ArchiveRecordCard({
 
                   await onAddTag(item.id, newTag);
                   requestAnimationFrame(() =>
-                    window.scrollTo({ top: currentScrollY })
+                    window.scrollTo({ top: currentScrollY }),
                   );
                 }}
                 defaultValue=""
@@ -299,13 +426,9 @@ export default function ArchiveRecordCard({
                   </option>
                 ))}
               </select>
-
-              <DeleteRecordButton id={item.id} style={{ marginLeft: "auto" }} onDeleted={onRecordDeleted} />
-            </>
-          ) : null}
-        </div>
-
-
+            ) : null}
+          </div>
+        ) : null}
 
         <ArchiveCommentsSection
           recordId={item.id}
@@ -313,10 +436,12 @@ export default function ArchiveRecordCard({
           recordStatusTag={item.status_tag}
           currentUserId={currentUserId}
           initialCommentCount={item.comment_count}
-          onCommentCountChange={(count) => onCommentCountChange?.(item.id, count)}
+          onCommentCountChange={(count) =>
+            onCommentCountChange?.(item.id, count)
+          }
         />
 
-        {sameTagLinks.length > 0 ? (
+        {isPlantArchive && sameTagLinks.length > 0 ? (
           <div
             style={{
               marginTop: 12,

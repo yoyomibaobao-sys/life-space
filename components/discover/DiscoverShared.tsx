@@ -6,6 +6,8 @@ import {
   formatDate,
   getArchiveLifecycleStatus,
   getArchiveRecordCount,
+  getArchiveDurationDays,
+  getArchiveFollowerCount,
   getArchiveSystemName,
   getArchiveUserTitle,
   getArchiveViewCount,
@@ -186,6 +188,8 @@ export function ProjectCardRows({
   const archiveSystemName = getArchiveSystemName(record);
   const archiveRecordCount = getArchiveRecordCount(record);
   const archiveViewCount = getArchiveViewCount(record);
+  const archiveDurationDays = getArchiveDurationDays(record);
+  const archiveFollowerCount = getArchiveFollowerCount(record);
   const commentCount = typeof record.comment_count === "number" ? record.comment_count : 0;
   const tags = Array.isArray(record.display_tags) ? record.display_tags.slice(0, 2) : [];
   const updateText = formatDate(record.record_time);
@@ -193,6 +197,8 @@ export function ProjectCardRows({
   const statParts = [
     showUsername ? displayUsername : null,
     archiveRecordCount !== null ? `共 ${archiveRecordCount} 条记录` : null,
+    archiveDurationDays !== null ? `已持续 ${archiveDurationDays} 天` : null,
+    `关注 ${archiveFollowerCount}`,
     archiveViewCount !== null ? `浏览 ${archiveViewCount} 次` : null,
     `${commentCount} 评论`,
   ].filter((item): item is string => Boolean(item));
@@ -220,9 +226,6 @@ export function ProjectCardRows({
         }}
       >
         <CategoryBadge category={record.archive_category} />
-        {isHelp && <HelpBadge />}
-        {isResolved && <ResolvedBadge />}
-        {lifecycleStatus === "ended" && <EndedBadge />}
         <span
           style={{
             fontSize: titleFontSize,
@@ -233,39 +236,58 @@ export function ProjectCardRows({
             whiteSpace: "nowrap",
             minWidth: 0,
             flex: "0 1 auto",
-            maxWidth: "44%",
+            maxWidth: "42%",
           }}
           title={archiveUserTitle}
         >
           {archiveUserTitle}
         </span>
 
-        <span
-          aria-hidden="true"
-          style={{
-            color: "#c7d0c3",
-            flexShrink: 0,
-            fontSize: Math.max(12, titleFontSize - 2),
-          }}
-        >
-          ·
-        </span>
+        {archiveSystemName ? (
+          <>
+            <span
+              aria-hidden="true"
+              style={{
+                color: "#c7d0c3",
+                flexShrink: 0,
+                fontSize: Math.max(12, titleFontSize - 2),
+              }}
+            >
+              ·
+            </span>
 
-        <span
-          style={{
-            color: record.archive_category === "plant" ? "#5f7f58" : "#8a742d",
-            fontSize: Math.max(12, titleFontSize - 2),
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
-            flex: "0 1 auto",
-            maxWidth: "30%",
-          }}
-          title={archiveSystemName}
-        >
-          {archiveSystemName}
-        </span>
+            <span
+              style={{
+                color: record.archive_category === "plant" ? "#5f7f58" : "#8a742d",
+                fontSize: Math.max(12, titleFontSize - 2),
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+                flex: "0 1 auto",
+                maxWidth: "30%",
+              }}
+              title={archiveSystemName}
+            >
+              {archiveSystemName}
+            </span>
+          </>
+        ) : null}
+
+        {(isHelp || isResolved || lifecycleStatus === "ended") && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              flexShrink: 0,
+            }}
+          >
+            {isHelp && <HelpBadge />}
+            {isResolved && <ResolvedBadge />}
+            {lifecycleStatus === "ended" && <EndedBadge />}
+          </span>
+        )}
       </div>
 
       <div

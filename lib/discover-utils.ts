@@ -51,6 +51,30 @@ export function getArchiveViewCount(record: FeedItem) {
   return null;
 }
 
+export function getArchiveFollowerCount(record: FeedItem) {
+  const value = record.archive_follower_count;
+  if (typeof value === "number" && value >= 0) return value;
+  return 0;
+}
+
+function toLocalDateStart(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+}
+
+export function getArchiveDurationDays(record: FeedItem) {
+  const startValue = record.archive_created_at || record.record_time;
+  if (!startValue) return null;
+
+  const start = new Date(startValue);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const end = record.archive_ended_at ? new Date(record.archive_ended_at) : new Date();
+  const safeEnd = Number.isNaN(end.getTime()) ? new Date() : end;
+  const diff = toLocalDateStart(safeEnd) - toLocalDateStart(start);
+
+  return Math.max(1, Math.floor(diff / 86400000) + 1);
+}
+
 export function getArchiveLifecycleStatus(record: FeedItem) {
   return record.archive_status === "ended" ? "ended" : "active";
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +27,16 @@ type Props = {
   onRecordCreated?: () => void | Promise<void>;
 };
 
+type SelectedPreview = {
+  key: string;
+  url: string;
+  name: string;
+};
+
+function buildFileKey(file: File, index: number) {
+  return `${file.name}-${file.size}-${file.lastModified}-${index}`;
+}
+
 export default function AddRecord({
   archiveId,
   archiveIsPublic,
@@ -35,6 +45,7 @@ export default function AddRecord({
 }: Props) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<SelectedPreview[]>([]);
   const [timeMode, setTimeMode] = useState("exif");
   const [customTime, setCustomTime] = useState("");
   const [mergeMode, setMergeMode] = useState(true);
@@ -46,7 +57,10 @@ export default function AddRecord({
   const [storageUsedBytes, setStorageUsedBytes] = useState(0);
   const [membershipLoading, setMembershipLoading] = useState(true);
 
+  const chooseInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
+
   const contentBlocked = membership?.can_create_content === false;
   const selectedFileBytes = files.reduce((total, file) => total + file.size, 0);
   const storageLimitBytes = Number(membership?.storage_limit_bytes || 0);
@@ -97,6 +111,20 @@ export default function AddRecord({
     void loadMembership();
   }, []);
 
+  useEffect(() => {
+    const previews = files.map((file, index) => ({
+      key: buildFileKey(file, index),
+      url: URL.createObjectURL(file),
+      name: file.name,
+    }));
+
+    setFilePreviews(previews);
+
+    return () => {
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [files]);
+
   function resolveTime({
     timeMode,
     customTime,
@@ -115,6 +143,15 @@ export default function AddRecord({
     }
 
     return new Date().toISOString();
+  }
+
+  function appendFiles(nextFiles: File[]) {
+    if (nextFiles.length === 0) return;
+    setFiles((prev) => [...prev, ...nextFiles]);
+  }
+
+  function removeSelectedFile(index: number) {
+    setFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   }
 
   async function createRecord(params: {
@@ -445,12 +482,111 @@ export default function AddRecord({
       )}
 
       <div style={{ marginTop: "10px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => chooseInputRef.current?.click()}
+            disabled={loading || membershipLoading || contentBlocked}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: "1px solid #dfe6dc",
+              background: "#fff",
+              color: "#52614f",
+              cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
+            }}
+          >
+            选择照片
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={loading || membershipLoading || contentBlocked}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: "1px solid #dfe6dc",
+              background: "#f7faf6",
+              color: "#52614f",
+              cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
+            }}
+          >
+            拍照
+          </button>
+        </div>
+
         <input
+          ref={chooseInputRef}
           type="file"
           multiple
           accept="image/*"
-          onChange={(e) => setFiles(Array.from(e.target.files || []))}
+          onChange={(e) => {
+            appendFiles(Array.from(e.target.files || []));
+            e.currentTarget.value = "";
+          }}
+          style={{ display: "none" }}
         />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(e) => {
+            appendFiles(Array.from(e.target.files || []));
+            e.currentTarget.value = "";
+          }}
+          style={{ display: "none" }}
+        />
+
+        {filePreviews.length > 0 ? (
+          <div
+            style={{
+              marginTop: 10,
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: 8,
+            }}
+          >
+            {filePreviews.map((preview, index) => (
+              <div key={preview.key} style={{ position: "relative" }}>
+                <img
+                  src={preview.url}
+                  alt={preview.name || `待上传图片 ${index + 1}`}
+                  style={{
+                    width: "100%",
+                    aspectRatio: "1 / 1",
+                    objectFit: "cover",
+                    borderRadius: 12,
+                    border: "1px solid #edf1ea",
+                    background: "#f4f7f2",
+                    display: "block",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeSelectedFile(index)}
+                  aria-label="移除这张图片"
+                  style={{
+                    position: "absolute",
+                    top: 5,
+                    right: 5,
+                    width: 24,
+                    height: 24,
+                    borderRadius: 999,
+                    border: "none",
+                    background: "rgba(0,0,0,0.55)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    lineHeight: "24px",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         {selectedFileBytes > 0 ? (
           <div
             style={{

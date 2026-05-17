@@ -10,22 +10,22 @@ export const archiveCategoryOptions: {
   {
     value: "plant",
     label: "种植",
-    description: "花草、蔬菜、果树、多肉、香草、盆栽、地栽",
+    description: "花草、蔬果、树木、菌菇、苔藓、水草等植物的种植栽培记录",
   },
   {
     value: "system",
     label: "农法设施",
-    description: "堆肥、架子、灌溉、水培、过滤、温室、工具系统",
+    description: "堆肥、架子、灌溉系统、温室等设施制作及无土、永续、免耕等农法实践",
   },
   {
     value: "insect_fish",
     label: "虫鱼生态",
-    description: "鱼缸、虾缸、蚯蚓、黑水虻、小动物、小生态",
+    description: "蚯蚓、黑水虻等昆虫饲养及鱼缸、虾缸等小生态、微景观的养成",
   },
   {
     value: "other",
     label: "其他",
-    description: "其他与自然生活相关的长期记录",
+    description: "其他与自然生活相关的项目记录",
   },
 ];
 

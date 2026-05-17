@@ -28,6 +28,8 @@ export type FeedItem = {
   archive_view_count?: number | null;
   archive_status?: string | null;
   archive_ended_at?: string | null;
+  archive_created_at?: string | null;
+  archive_follower_count?: number | null;
 };
 
 export type FilterMode = "all" | ArchiveCategory | "help";

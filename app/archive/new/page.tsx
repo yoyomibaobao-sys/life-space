@@ -351,7 +351,7 @@ function NewArchiveContent() {
           source: source.trim() || null,
           note: note.trim() || null,
           user_id: user.id,
-          is_public: false,
+          is_public: true,
         },
       ])
       .select("id")
@@ -491,7 +491,7 @@ function NewArchiveContent() {
 
             <div style={{ marginTop: 6 }}>{getArchiveCategoryDescription(category)}</div>
             <div style={{ marginTop: 4, color: "#7f8c78" }}>
-              创建时只需要先确定大类；子分类和分组可以之后在项目卡片中慢慢整理。
+              创建时只需要选择大类，子分类和分组由用户根据需要自定义设置，项目创建之后再行归置。
             </div>
           </div>
 
@@ -829,7 +829,7 @@ function NewArchiveContent() {
             lineHeight: 1.6,
           }}
         >
-          新建项目默认仅自己可见，之后可以在项目详情页选择公开到发现。
+          新建项目默认公开到发现。你也可以在项目详情页切换为仅自己可见。
         </div>
 
         <button
