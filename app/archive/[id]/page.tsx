@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { compressImageFile } from "@/lib/image-compression";
 import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ArchiveDetailHeader from "@/components/archive-detail/ArchiveDetailHeader";
@@ -29,13 +30,14 @@ import type { MediaItem } from "@/lib/domain-types";
 import { buildMediaList, getDisplayName } from "@/lib/archive-detail-utils";
 import {
   canCreateMembershipContent,
-  canUploadWithinStorageLimit,
   getCreateContentBlockedText,
   getStorageLimitExceededText,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
 import {
+  releaseStorageBytes,
   removeMediaFilesFromStorage,
+  reserveStorageBytes,
   subtractStorageUsed,
   sumMediaSizeBytes,
 } from "@/lib/storage-usage";
@@ -686,52 +688,61 @@ saveRecentArchiveBrowse({
       return;
     }
 
-    const uploadBytes = files.reduce((total, file) => total + file.size, 0);
+    const { data: membershipData, error: membershipError } = await supabase.rpc("get_my_membership");
 
-    const [membershipResult, profileResult] = await Promise.all([
-      supabase.rpc("get_my_membership"),
-      supabase.from("profiles").select("storage_used").eq("id", user.id).maybeSingle(),
-    ]);
-
-    const membership = membershipResult.error
+    const membership = membershipError
       ? null
-      : normalizeMembershipRpcResult(membershipResult.data);
+      : normalizeMembershipRpcResult(membershipData);
 
     if (!canCreateMembershipContent(membership)) {
       showToast(getCreateContentBlockedText(membership));
       return;
     }
 
-    const storageUsedBytes = Number(profileResult.data?.storage_used || 0);
-    const storageLimitBytes = Number(membership?.storage_limit_bytes || 0);
+    const compressedResults = await Promise.all(
+      files.map(async (file) => ({
+        originalFile: file,
+        compressed: await compressImageFile(file),
+      }))
+    );
+    const uploadBytes = compressedResults.reduce(
+      (total, item) => total + item.compressed.file.size,
+      0
+    );
 
-    if (
-      !canUploadWithinStorageLimit({
-        usedBytes: storageUsedBytes,
-        limitBytes: storageLimitBytes,
-        uploadBytes,
-      })
-    ) {
-      showToast(
-        getStorageLimitExceededText({
-          usedBytes: storageUsedBytes,
-          limitBytes: storageLimitBytes,
-          uploadBytes,
-        })
-      );
+    const reserveResult = await reserveStorageBytes(uploadBytes);
+
+    if (!reserveResult.ok) {
+      if (reserveResult.message === "storage_limit_exceeded") {
+        showToast(
+          getStorageLimitExceededText({
+            usedBytes: reserveResult.storage_used,
+            limitBytes: reserveResult.storage_limit_bytes,
+            uploadBytes,
+          })
+        );
+      } else if (reserveResult.message === "membership_inactive") {
+        showToast(getCreateContentBlockedText(membership));
+      } else {
+        showToast("容量检查失败，请稍后再试");
+      }
+
       return;
     }
 
     const uploadedMedia: MediaItem[] = [];
     let uploadedBytes = 0;
 
-    for (const [index, file] of files.entries()) {
+    for (const [index, item] of compressedResults.entries()) {
+      const file = item.compressed.file;
       const safeName = file.name.replace(/[^\w.\-]+/g, "_");
       const fileName = `${user.id}/${recordId}/${Date.now()}-${index}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("media")
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          contentType: file.type || "image/jpeg",
+        });
 
       if (uploadError) {
         console.error("add record media upload error:", uploadError);
@@ -750,6 +761,13 @@ saveRecentArchiveBrowse({
             url: urlData.publicUrl,
             user_id: user.id,
             size_mb: file.size / (1024 * 1024),
+            size_bytes: file.size,
+            storage_path: fileName,
+            mime_type: file.type || "image/jpeg",
+            width: item.compressed.width ?? null,
+            height: item.compressed.height ?? null,
+            original_filename: item.originalFile.name,
+            storage_class: "hot",
           },
         ])
         .select()
@@ -766,16 +784,10 @@ saveRecentArchiveBrowse({
       uploadedBytes += file.size;
     }
 
-    if (uploadedBytes > 0) {
-      const nextStorageUsed = Math.max(0, storageUsedBytes + uploadedBytes);
-      const { error: storageError } = await supabase
-        .from("profiles")
-        .update({ storage_used: nextStorageUsed })
-        .eq("id", user.id);
+    const failedBytes = Math.max(0, uploadBytes - uploadedBytes);
 
-      if (storageError) {
-        console.error("add media update storage used error:", storageError);
-      }
+    if (failedBytes > 0) {
+      await releaseStorageBytes(failedBytes);
     }
 
     if (uploadedMedia.length > 0) {
@@ -787,6 +799,8 @@ saveRecentArchiveBrowse({
         )
       );
       showToast("图片已添加");
+    } else {
+      showToast("没有图片成功上传");
     }
   }
 

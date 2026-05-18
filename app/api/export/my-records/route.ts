@@ -51,6 +51,7 @@ type MediaRow = {
   type: string | null;
   url: string | null;
   size_mb: number | null;
+  size_bytes?: number | null;
   duration_sec: number | null;
   storage_class: string | null;
   created_at: string | null;
@@ -429,7 +430,7 @@ export async function GET(request: Request) {
   if (recordIds.length > 0) {
     const mediaResult = await supabase
       .from("media")
-      .select("id,record_id,type,url,size_mb,duration_sec,storage_class,created_at,sort_order")
+      .select("id,record_id,type,url,size_mb,size_bytes,duration_sec,storage_class,created_at,sort_order")
       .eq("user_id", user.id)
       .in("record_id", recordIds)
       .order("sort_order", { ascending: true })

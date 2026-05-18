@@ -139,9 +139,11 @@ export default function MembershipPage() {
         />
         <PlanCard
           title="基础年费"
-          price="小额年费"
+          price="¥18 / 年 · US$3 / year"
           description="适合长期使用。费用用于维持云端存储、网页打开和基础集市发布。"
           items={[
+            "国内用户：¥18 / 年",
+            "海外用户：US$3 / year",
             "基础云端容量 1GB",
             "集市同时在线 10 条",
             "可继续新增项目、记录和照片",
@@ -162,6 +164,58 @@ export default function MembershipPage() {
         />
       </section>
 
+      <section style={paymentCardStyle}>
+        <div>
+          <div style={sectionLabelStyle}>付款方式</div>
+          <h2 style={noteTitleStyle}>当前采用人工确认开通</h2>
+          <p style={mutedTextStyle}>
+            自动在线支付暂未接入。付款时请备注注册邮箱；管理员确认后会手动开通对应会员期限。
+          </p>
+        </div>
+
+        <div style={paymentGridStyle}>
+          <div style={paymentItemStyle}>
+            <div style={paymentTitleStyle}>国内用户</div>
+            <div style={paymentPriceStyle}>¥18 / 年</div>
+            <p style={paymentDescStyle}>
+              支持微信或支付宝人工付款。请先发送邮件至 {" "}
+              <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
+                yoyomibaobao@gmail.com
+              </a>{" "}
+              获取收款方式，邮件中请写明注册邮箱和开通方案；付款后请将付款截图发送至该邮箱。
+            </p>
+          </div>
+
+          <div style={paymentItemStyle}>
+            <div style={paymentTitleStyle}>海外用户</div>
+            <div style={paymentPriceStyle}>US$3 / year</div>
+            <p style={paymentDescStyle}>
+              可通过 PayPal 付款：{" "}
+              <a
+                href="https://paypal.me/ying0chen/3"
+                target="_blank"
+                rel="noreferrer"
+                style={inlineLinkStyle}
+              >
+                paypal.me/ying0chen/3
+              </a>
+              。付款时请备注注册邮箱；如果付款后未及时开通，请发送邮件至 {" "}
+              <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
+                yoyomibaobao@gmail.com
+              </a>{" "}
+              并附上 PayPal 付款记录。
+            </p>
+          </div>
+        </div>
+
+        <div style={adminContactStyle}>
+          管理员邮箱：
+          <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
+            yoyomibaobao@gmail.com
+          </a>
+        </div>
+      </section>
+
       <section style={noteCardStyle}>
         <h2 style={noteTitleStyle}>使用规则</h2>
         <ul style={ruleListStyle}>
@@ -169,7 +223,7 @@ export default function MembershipPage() {
           <li>注册后开始免费试用，试用期内可新增项目、记录、照片和少量集市发布。</li>
           <li>试用期满或年费到期后，仍可查看、导出和删除已有内容。</li>
           <li>继续新增记录、上传照片或发布集市信息，需要开通年度使用权。</li>
-          <li>支付功能暂未接入，当前页面先用于说明规则和承接入口。</li>
+          <li>当前为人工确认付款并手动开通；后续可再接入 PayPal、Stripe 或应用商店内购。</li>
         </ul>
       </section>
     </main>
@@ -403,6 +457,62 @@ const planListStyle: CSSProperties = {
   color: "#3c4638",
   fontSize: 14,
   lineHeight: 1.8,
+};
+
+const paymentCardStyle: CSSProperties = {
+  ...cardStyle,
+  display: "grid",
+  gap: 16,
+  marginBottom: 20,
+  background: "#fffdf7",
+};
+
+const paymentGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+};
+
+const paymentItemStyle: CSSProperties = {
+  border: "1px solid #efe6c8",
+  borderRadius: 16,
+  background: "#fffaf0",
+  padding: 14,
+};
+
+const paymentTitleStyle: CSSProperties = {
+  color: "#6f5b24",
+  fontSize: 13,
+  fontWeight: 800,
+  marginBottom: 6,
+};
+
+const paymentPriceStyle: CSSProperties = {
+  color: "#2d3828",
+  fontSize: 22,
+  fontWeight: 900,
+  marginBottom: 8,
+};
+
+const paymentDescStyle: CSSProperties = {
+  margin: 0,
+  color: "#6f6655",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+
+const adminContactStyle: CSSProperties = {
+  borderTop: "1px solid #efe6c8",
+  paddingTop: 12,
+  color: "#6f6655",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+
+const inlineLinkStyle: CSSProperties = {
+  color: "#356b34",
+  fontWeight: 800,
+  textDecoration: "none",
 };
 
 const noteCardStyle: CSSProperties = {

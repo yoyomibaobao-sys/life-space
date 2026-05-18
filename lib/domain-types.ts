@@ -88,7 +88,15 @@ export type MediaItem = {
   url?: string | null;
   file_url?: string | null;
   path?: string | null;
+  storage_path?: string | null;
+  thumb_url?: string | null;
+  thumb_path?: string | null;
   size_mb?: number | null;
+  size_bytes?: number | null;
+  mime_type?: string | null;
+  width?: number | null;
+  height?: number | null;
+  original_filename?: string | null;
   duration_sec?: number | null;
   storage_class?: string | null;
   sort_order?: number | null;

@@ -34,7 +34,7 @@ export default function DeleteRecordButton({
     try {
       const { data: mediaItemsRaw } = await supabase
         .from("media")
-        .select("id, url, size_mb, user_id")
+        .select("id, url, size_mb, size_bytes, user_id")
         .eq("record_id", id);
       const mediaItems = (mediaItemsRaw || []) as MediaItem[];
       const deletedBytes = sumMediaSizeBytes(mediaItems);

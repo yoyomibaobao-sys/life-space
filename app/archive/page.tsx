@@ -656,7 +656,7 @@ export default function ArchivePage() {
     if (recordIds.length > 0) {
       const { data: mediaRows } = await supabase
         .from("media")
-        .select("id, url, size_mb, user_id")
+        .select("id, url, size_mb, size_bytes, user_id")
         .in("record_id", recordIds);
       mediaItems = (mediaRows || []) as MediaItem[];
       await removeMediaFilesFromStorage(mediaItems);

@@ -35,6 +35,7 @@ export default function ProfilePage() {
   const [marketPostCount, setMarketPostCount] = useState(0);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipError, setMembershipError] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [username, setUsername] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [customCountryName, setCustomCountryName] = useState("");
@@ -71,12 +72,13 @@ export default function ProfilePage() {
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
       setStats(data.stats);
-      const [marketCountResult, membershipResult] = await Promise.all([
+      const [marketCountResult, membershipResult, adminResult] = await Promise.all([
         supabase
           .from("market_posts")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id),
         supabase.rpc("get_my_membership"),
+        supabase.rpc("is_app_admin", { p_user_id: user.id }),
       ]);
 
       if (marketCountResult.error) {
@@ -94,6 +96,14 @@ export default function ProfilePage() {
         setMembership(normalizeMembershipRpcResult(membershipResult.data));
         setMembershipError("");
       }
+
+      if (adminResult.error) {
+        console.error("load admin status error:", adminResult.error);
+        setIsAdmin(false);
+      } else {
+        setIsAdmin(Boolean(adminResult.data));
+      }
+
       setUsername(String(data.profile?.username || ""));
 
       const legacy = parseLegacyLocation(data.profile?.location);
@@ -419,6 +429,10 @@ export default function ProfilePage() {
               <button type="button" onClick={handleSave} disabled={saving} style={primaryButtonStyle}>{saving ? "保存中..." : "保存资料"}</button>
               <Link href={`/user/${user.id}/profile`} style={secondaryLinkStyle}>查看公开资料页</Link>
               <Link href="/archive" style={secondaryLinkStyle}>进入我的空间</Link>
+              <Link href="/membership" style={secondaryLinkStyle}>会员与续费</Link>
+              {isAdmin ? (
+                <Link href="/admin/memberships" style={adminLinkStyle}>会员管理</Link>
+              ) : null}
             </div>
           </section>
         </div>
@@ -426,8 +440,8 @@ export default function ProfilePage() {
         <section style={membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>试用与额度</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>当前使用状态</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的会员</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>当前会员与额度</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 {membershipStatusText}
               </p>
@@ -447,7 +461,7 @@ export default function ProfilePage() {
                 {exporting ? "正在打包记录和图片..." : "导出我的记录"}
               </button>
               <Link href="/membership" style={secondaryLinkStyle}>
-                查看年度使用权
+                查看会员与续费
               </Link>
             </div>
             {exporting ? (
@@ -871,6 +885,13 @@ const secondaryLinkStyle: CSSProperties = {
   padding: "9px 13px",
   fontSize: 14,
   fontWeight: 600,
+};
+
+const adminLinkStyle: CSSProperties = {
+  ...secondaryLinkStyle,
+  border: "1px solid #c9d8be",
+  background: "#edf6e8",
+  color: "#2f5a27",
 };
 
 const statsGridStyle: CSSProperties = {

@@ -9,7 +9,6 @@ import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
 import {
   canCreateMembershipContent,
-  canUploadWithinStorageLimit,
   formatStorageBytes,
   getCreateContentBlockedText,
   getStorageLimitExceededText,
@@ -17,6 +16,8 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import { compressImageFile } from "@/lib/image-compression";
+import { releaseStorageBytes, reserveStorageBytes } from "@/lib/storage-usage";
 
 type RecordVisibility = "public" | "private";
 
@@ -68,13 +69,9 @@ export default function AddRecord({
     usedBytes: storageUsedBytes,
     limitBytes: storageLimitBytes,
   });
-  const uploadWouldExceedStorage =
-    selectedFileBytes > 0 &&
-    !canUploadWithinStorageLimit({
-      usedBytes: storageUsedBytes,
-      limitBytes: storageLimitBytes,
-      uploadBytes: selectedFileBytes,
-    });
+  // 图片会在上传前压缩，因此这里不再用“原图大小”提前拦截。
+  // 真正的容量检查在 uploadMedia 内按压缩后的大小调用 reserveStorageBytes。
+  const uploadWouldExceedStorage = false;
 
   useEffect(() => {
     async function loadMembership() {
@@ -204,31 +201,46 @@ export default function AddRecord({
     setStorageUsedBytes(Number(data?.storage_used || 0));
   }
 
-  async function addStorageUsed(userId: string, sizeBytes: number) {
-    const nextStorageUsed = Math.max(0, storageUsedBytes + sizeBytes);
-    setStorageUsedBytes(nextStorageUsed);
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({ storage_used: nextStorageUsed })
-      .eq("id", userId);
-
-    if (error) {
-      console.error("update storage used error:", error);
-      void refreshStorageUsed(userId);
-    }
-  }
-
   async function uploadMedia(recordId: string, userId: string, file: File) {
-    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const compressed = await compressImageFile(file);
+    const uploadFile = compressed.file;
+    const uploadBytes = uploadFile.size;
+
+    const reserveResult = await reserveStorageBytes(uploadBytes);
+
+    if (!reserveResult.ok) {
+      if (reserveResult.message === "storage_limit_exceeded") {
+        showToast(
+          getStorageLimitExceededText({
+            usedBytes: reserveResult.storage_used,
+            limitBytes: reserveResult.storage_limit_bytes,
+            uploadBytes,
+          })
+        );
+      } else if (reserveResult.message === "membership_inactive") {
+        showToast(getCreateContentBlockedText(membership));
+      } else {
+        showToast("容量检查失败，请稍后再试");
+      }
+
+      return 0;
+    }
+
+    setStorageUsedBytes(reserveResult.storage_used);
+
+    const safeName = uploadFile.name.replace(/[^\w.\-]+/g, "_");
     const fileName = `${userId}/${recordId}/${Date.now()}-${safeName}`;
 
     const { error: uploadError } = await supabase.storage
       .from("media")
-      .upload(fileName, file);
+      .upload(fileName, uploadFile, {
+        contentType: uploadFile.type || "image/jpeg",
+      });
 
     if (uploadError) {
       console.error("媒体上传失败", uploadError);
+      const releaseResult = await releaseStorageBytes(uploadBytes);
+      setStorageUsedBytes(releaseResult.storage_used);
       return 0;
     }
 
@@ -242,16 +254,26 @@ export default function AddRecord({
         type: "image",
         url: urlData.publicUrl,
         user_id: userId,
-        size_mb: file.size / (1024 * 1024),
+        size_mb: uploadBytes / (1024 * 1024),
+        size_bytes: uploadBytes,
+        storage_path: fileName,
+        mime_type: uploadFile.type || "image/jpeg",
+        width: compressed.width ?? null,
+        height: compressed.height ?? null,
+        original_filename: file.name,
+        storage_class: "hot",
       },
     ]);
 
     if (mediaError) {
       console.error("media 写入失败", mediaError);
+      await supabase.storage.from("media").remove([fileName]);
+      const releaseResult = await releaseStorageBytes(uploadBytes);
+      setStorageUsedBytes(releaseResult.storage_used);
       return 0;
     }
 
-    return file.size;
+    return uploadBytes;
   }
 
   async function handleAdd() {
@@ -379,7 +401,7 @@ export default function AddRecord({
       }
 
       if (uploadedBytes > 0) {
-        await addStorageUsed(user.id, uploadedBytes);
+        await refreshStorageUsed(user.id);
       }
 
       setText("");
@@ -596,7 +618,7 @@ export default function AddRecord({
               lineHeight: 1.6,
             }}
           >
-            本次选择约 {formatStorageBytes(selectedFileBytes)}。
+            本次原图约 {formatStorageBytes(selectedFileBytes)}，上传时会自动压缩后再占用容量。
             {storageRemainingBytes !== null
               ? ` 当前剩余约 ${formatStorageBytes(storageRemainingBytes)}。`
               : ""}
