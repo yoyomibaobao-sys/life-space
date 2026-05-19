@@ -116,7 +116,7 @@ export function getCreateContentBlockedText(membership?: MyMembership | null) {
   }
 
   if (membership.can_create_content === false) {
-    return `${label} · ${status}。你仍可查看、导出或删除已有内容；继续新增项目和记录需要开通年度使用权。`;
+    return `${label} · ${status}。你仍可查看、导出或删除已有内容；如需继续新增项目和记录，请查看会员与续费。`;
   }
 
   return "可以继续新增内容。";
@@ -131,11 +131,11 @@ export function getCreateMarketPostBlockedText(membership?: MyMembership | null)
   }
 
   if (membership.can_create_content === false) {
-    return `${label} · ${status}。继续发布集市信息需要开通年度使用权。`;
+    return `${label} · ${status}。如需继续发布集市信息，请查看会员与续费。`;
   }
 
   if (membership.can_create_market_post === false) {
-    return `当前集市发布额度已满：${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} 条。你可以结束旧发布，或以后开通集市加量包。`;
+    return `当前集市发布额度已满：${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} 条。你可以结束旧发布，或查看会员与续费。`;
   }
 
   return "可以继续发布集市信息。";
@@ -223,5 +223,5 @@ export function getStorageLimitExceededText(params: {
   const remainingText = remaining === null ? "暂无" : formatStorageBytes(remaining);
   const limitText = formatStorageBytes(params.limitBytes || 0);
 
-  return `当前容量不足。本次选择约 ${uploadText}，剩余约 ${remainingText}，当前容量上限 ${limitText}。你可以减少图片、删除旧图片释放空间，或查看年度使用权。`;
+  return `当前容量不足。本次选择约 ${uploadText}，剩余约 ${remainingText}，当前容量上限 ${limitText}。你可以减少图片、删除旧图片释放空间，或查看会员与续费。`;
 }

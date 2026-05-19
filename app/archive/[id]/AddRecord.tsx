@@ -57,6 +57,7 @@ export default function AddRecord({
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [storageUsedBytes, setStorageUsedBytes] = useState(0);
   const [membershipLoading, setMembershipLoading] = useState(true);
+  const [membershipNotice, setMembershipNotice] = useState("");
 
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -210,16 +211,19 @@ export default function AddRecord({
 
     if (!reserveResult.ok) {
       if (reserveResult.message === "storage_limit_exceeded") {
-        showToast(
-          getStorageLimitExceededText({
-            usedBytes: reserveResult.storage_used,
-            limitBytes: reserveResult.storage_limit_bytes,
-            uploadBytes,
-          })
-        );
+        const message = getStorageLimitExceededText({
+          usedBytes: reserveResult.storage_used,
+          limitBytes: reserveResult.storage_limit_bytes,
+          uploadBytes,
+        });
+        setMembershipNotice(message);
+        showToast(message);
       } else if (reserveResult.message === "membership_inactive") {
-        showToast(getCreateContentBlockedText(membership));
+        const message = getCreateContentBlockedText(membership);
+        setMembershipNotice(message);
+        showToast(message);
       } else {
+        setMembershipNotice("容量检查失败，请稍后再试，或查看会员与续费页面。");
         showToast("容量检查失败，请稍后再试");
       }
 
@@ -279,6 +283,7 @@ export default function AddRecord({
   async function handleAdd() {
     if (loading) return;
     if (!text.trim() && files.length === 0) return;
+    setMembershipNotice("");
 
     if (!canCreateMembershipContent(membership)) {
       showToast(getCreateContentBlockedText(membership));
@@ -437,7 +442,27 @@ export default function AddRecord({
         >
           <span>{getCreateContentBlockedText(membership)}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            查看年度使用权
+            查看会员与续费
+          </Link>
+        </div>
+      ) : null}
+
+      {!contentBlocked && membershipNotice ? (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #ead9b8",
+            background: "#fff8ea",
+            color: "#7a5c24",
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
+          <span>{membershipNotice}</span>{" "}
+          <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+            查看会员与续费
           </Link>
         </div>
       ) : null}
@@ -627,7 +652,7 @@ export default function AddRecord({
                 <br />
                 当前容量不足，请减少图片、删除旧图片释放空间，或{" "}
                 <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                  查看年度使用权
+                  查看会员与续费
                 </Link>
                 。
               </>

@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import type { AppProfile } from "@/lib/domain-types";
 import type { MarketPostStatus } from "@/lib/market-types";
+import {
+  canCreateMembershipContent,
+  getCreateContentBlockedText,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
 
 type MarketCommentRow = {
   id: string;
@@ -35,13 +42,42 @@ export default function MarketCommentsSection({
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(false);
 
-  const canWrite = Boolean(currentUserId && postStatus === "active");
+  const membershipBlocked = Boolean(
+    currentUserId && !membershipLoading && membership?.can_create_content === false,
+  );
+  const canWrite = Boolean(currentUserId && !membershipLoading && postStatus === "active" && !membershipBlocked);
 
   useEffect(() => {
     void loadComments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketPostId, currentUserId]);
+
+  useEffect(() => {
+    async function loadMembership() {
+      if (!currentUserId) {
+        setMembership(null);
+        setMembershipLoading(false);
+        return;
+      }
+
+      setMembershipLoading(true);
+      const { data, error } = await supabase.rpc("get_my_membership");
+
+      if (error) {
+        console.error("load market comment membership error:", error);
+        setMembership(null);
+      } else {
+        setMembership(normalizeMembershipRpcResult(data));
+      }
+
+      setMembershipLoading(false);
+    }
+
+    void loadMembership();
+  }, [currentUserId]);
 
   async function loadComments() {
     setLoading(true);
@@ -114,6 +150,16 @@ export default function MarketCommentsSection({
 
     if (content.length > 1000) {
       showToast("留言不能超过 1000 字");
+      return;
+    }
+
+    if (membershipLoading) {
+      showToast("会员状态读取中，请稍后再试");
+      return;
+    }
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
       return;
     }
 
@@ -239,9 +285,8 @@ export default function MarketCommentsSection({
       </div>
 
       <div style={formWrapStyle}>
-        {currentUserId ? (
-          postStatus === "active" ? (
-            <>
+        {canWrite ? (
+          <>
               <textarea
                 value={commentText}
                 onChange={(event) => setCommentText(event.target.value)}
@@ -261,9 +306,18 @@ export default function MarketCommentsSection({
                 </button>
               </div>
             </>
-          ) : (
-            <div style={closedNoticeStyle}>这条集市信息已结束，不能继续留言。</div>
-          )
+        ) : membershipLoading && currentUserId ? (
+          <div style={closedNoticeStyle}>会员状态读取中...</div>
+        ) : membershipBlocked ? (
+          <div style={closedNoticeStyle}>
+            当前使用权已到期。已有内容仍可查看、导出和删除；如需继续留言，请{" "}
+            <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
+              查看会员与续费
+            </Link>
+            。
+          </div>
+        ) : currentUserId && postStatus !== "active" ? (
+          <div style={closedNoticeStyle}>这条集市信息已结束，不能继续留言。</div>
         ) : (
           <div style={closedNoticeStyle}>登录后可以留言。</div>
         )}

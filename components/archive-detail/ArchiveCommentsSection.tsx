@@ -15,6 +15,12 @@ import type {
   RecordLikeRow,
 } from "@/lib/archive-detail-types";
 import type { AppProfile } from "@/lib/domain-types";
+import {
+  canCreateMembershipContent,
+  getCreateContentBlockedText,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
 
 type CommentItem = RecordComment & {
   profile: Pick<AppProfile, "id" | "username" | "avatar_url"> | null;
@@ -48,8 +54,13 @@ export default function ArchiveCommentsSection({
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(false);
 
-  const canWrite = Boolean(currentUserId);
+  const membershipBlocked = Boolean(
+    currentUserId && !membershipLoading && membership?.can_create_content === false,
+  );
+  const canWrite = Boolean(currentUserId && !membershipLoading && !membershipBlocked);
   const canAwardFlowers = Boolean(
     currentUserId &&
     currentUserId === recordOwnerId &&
@@ -63,6 +74,30 @@ export default function ArchiveCommentsSection({
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId, currentUserId]);
+
+  useEffect(() => {
+    async function loadMembership() {
+      if (!currentUserId) {
+        setMembership(null);
+        setMembershipLoading(false);
+        return;
+      }
+
+      setMembershipLoading(true);
+      const { data, error } = await supabase.rpc("get_my_membership");
+
+      if (error) {
+        console.error("load comment membership error:", error);
+        setMembership(null);
+      } else {
+        setMembership(normalizeMembershipRpcResult(data));
+      }
+
+      setMembershipLoading(false);
+    }
+
+    void loadMembership();
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!onCommentCountChange) return;
@@ -214,6 +249,16 @@ export default function ArchiveCommentsSection({
     }
     if (!content) {
       showToast("请输入评论内容");
+      return;
+    }
+
+    if (membershipLoading) {
+      showToast("会员状态读取中，请稍后再试");
+      return;
+    }
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
       return;
     }
 
@@ -436,6 +481,15 @@ export default function ArchiveCommentsSection({
           >
             写评论
           </button>
+        ) : membershipLoading && currentUserId ? (
+          <span style={{ fontSize: 12, color: "#8b9688" }}>会员状态读取中...</span>
+        ) : membershipBlocked ? (
+          <span style={{ fontSize: 12, color: "#9a6232" }}>
+            当前使用权已到期，
+            <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
+              查看会员与续费
+            </Link>
+          </span>
         ) : (
           <span style={{ fontSize: 12, color: "#8b9688" }}>登录后可评论</span>
         )}
@@ -701,6 +755,18 @@ export default function ArchiveCommentsSection({
                     </div>
                   </div>
                 </>
+              ) : membershipLoading && currentUserId ? (
+                <div style={{ fontSize: 12, color: "#7b8776" }}>
+                  会员状态读取中...
+                </div>
+              ) : membershipBlocked ? (
+                <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
+                  当前使用权已到期。已有内容仍可查看、导出和删除；如需继续评论，请{" "}
+                  <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
+                    查看会员与续费
+                  </Link>
+                  。
+                </div>
               ) : (
                 <div style={{ fontSize: 12, color: "#7b8776" }}>
                   登录后可评论和点赞。

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
@@ -10,6 +10,8 @@ export default function Navbar() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [username, setUsername] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const unreadRequestSeq = useRef(0);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -32,6 +34,7 @@ export default function Navbar() {
         setUser(data.user);
         void loadProfile(data.user.id);
         void loadUnreadCount(data.user.id);
+        void loadAdminFlag(data.user.id);
       }
     });
 
@@ -45,20 +48,16 @@ export default function Navbar() {
       if (currentUser) {
         void loadProfile(currentUser.id);
         void loadUnreadCount(currentUser.id);
+        void loadAdminFlag(currentUser.id);
       } else {
         setUsername("");
         setUnreadCount(0);
+        setIsAdmin(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (user?.id) {
-      void loadUnreadCount(user.id);
-    }
-  }, [pathname, user?.id]);
 
   useEffect(() => {
     function handleNotificationChanged() {
@@ -88,15 +87,36 @@ export default function Navbar() {
     setUsername(profile?.username || "");
   }
 
+
+  async function loadAdminFlag(userId: string) {
+    const { data, error } = await supabase.rpc("is_app_admin", {
+      p_user_id: userId,
+    });
+
+    if (error) {
+      console.error("load admin flag error:", error);
+      setIsAdmin(false);
+      return;
+    }
+
+    setIsAdmin(Boolean(data));
+  }
+
   async function loadUnreadCount(userId: string) {
+    const requestId = unreadRequestSeq.current + 1;
+    unreadRequestSeq.current = requestId;
+
     const { count, error } = await supabase
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("is_read", false);
 
+    if (requestId !== unreadRequestSeq.current) return;
+
     if (error) {
-      console.error("load unread notifications error:", error);
+      // 通知数量不是核心功能；开发环境里 Supabase auth/fetch 偶尔会因重复请求出现 AbortError。
+      // 这里降级为 0，避免每次后台操作都刷一条控制台错误。
       setUnreadCount(0);
       return;
     }
@@ -156,6 +176,16 @@ export default function Navbar() {
               </span>
             ) : null}
           </Link>
+
+          {isAdmin ? (
+            <Link
+              href="/admin/memberships"
+              style={adminLinkStyle(isActive("/admin"))}
+              title="管理会员"
+            >
+              管理
+            </Link>
+          ) : null}
 
           <Link href="/profile" style={getProfileLinkStyle(isCompact)}>
             {username || "未设置用户名"}
@@ -320,6 +350,21 @@ function getProfileLinkStyle(compact: boolean): CSSProperties {
     maxWidth: compact ? 120 : undefined,
     overflow: compact ? "hidden" : undefined,
     textOverflow: compact ? "ellipsis" : undefined,
+  };
+}
+
+
+function adminLinkStyle(active: boolean): CSSProperties {
+  return {
+    textDecoration: "none",
+    color: active ? "#1a1c1a" : "#4d6447",
+    background: active ? "#dbe8d3" : "#eef5ea",
+    border: "1px solid #d7e3cf",
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
   };
 }
 

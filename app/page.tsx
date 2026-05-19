@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 const copy = {
   zhCN: {
     brand: "有时·耕作",
-    poem: "人生是一个场的旅行，也是一场修行；有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。",
+    poem: "你所照料的、陪伴着的生命，正滋养、成就着彼此；有时，记录这些过程，让生命有迹可循。",
     spirit: "留其间，守其度，顺其时，共养成。",
     trialNote: "注册后开始免费试用；未注册可先浏览公开内容。",
     register: "注册",

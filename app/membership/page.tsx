@@ -7,6 +7,7 @@ import { formatStorage } from "@/lib/user-profile-shared";
 import {
   formatMembershipDate,
   getMembershipEndDate,
+  getDaysRemaining,
   getMembershipPlanLabel,
   getMembershipStatusLabel,
   getMembershipSummary,
@@ -59,6 +60,17 @@ export default function MembershipPage() {
   }, []);
 
   const endDate = getMembershipEndDate(membership);
+  const daysRemaining = getDaysRemaining(endDate);
+  const shouldShowRenewalNotice = Boolean(
+    membership &&
+      (membership.can_create_content === false ||
+        (typeof daysRemaining === "number" && daysRemaining <= 14))
+  );
+  const renewalNoticeText = membership?.can_create_content === false
+    ? "当前使用权已到期。已有内容仍可查看、导出和删除；如需继续新增记录、上传照片或发布集市信息，请开通基础年费。"
+    : typeof daysRemaining === "number" && daysRemaining <= 14
+      ? `当前使用权还有 ${daysRemaining} 天到期。你可以提前完成付款，管理员确认后会延长使用期限。`
+      : "";
   const storageLimitText = useMemo(() => {
     if (!membership?.storage_limit_bytes) return "暂无";
     return formatStorage(Number(membership.storage_limit_bytes));
@@ -94,6 +106,18 @@ export default function MembershipPage() {
             <InfoItem label="云端容量" value={storageLimitText} hint="主要用于照片与媒体文件" />
             <InfoItem label="集市发布" value={marketQuotaText} hint="同时在线发布数量" />
           </div>
+
+          {shouldShowRenewalNotice ? (
+            <div style={renewalNoticeStyle}>
+              <strong>续费提醒：</strong>{renewalNoticeText}
+              <div style={{ marginTop: 8 }}>
+                付款时请备注注册邮箱；有问题可联系管理员邮箱：
+                <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
+                  yoyomibaobao@gmail.com
+                </a>
+              </div>
+            </div>
+          ) : null}
 
           <div style={actionRowStyle}>
             <button type="button" disabled style={disabledPrimaryButtonStyle}>
@@ -153,13 +177,13 @@ export default function MembershipPage() {
         />
         <PlanCard
           title="集市加量包"
-          price="按月加购"
-          description="适合某段时间集中交换、赠送、转让或求购的用户。"
+          price="后续开放"
+          description="适合某段时间集中交换、赠送、转让或求购的用户。当前先作为预留说明，暂未开放自动购买。"
           items={[
-            "基础年费用户可加购",
-            "按月增加集市发布数量",
-            "适合季节性集中发布",
-            "长期大量经营性发布以后进入商家版",
+            "基础年费用户可后续加购",
+            "只增加集市同时在线数量",
+            "不增加云端图片空间",
+            "长期大量发布可联系管理员单独评估",
           ]}
         />
       </section>
@@ -214,6 +238,10 @@ export default function MembershipPage() {
             yoyomibaobao@gmail.com
           </a>
         </div>
+
+        <div style={customStorageStyle}>
+          <strong>更多空间需求：</strong>如果你有大量图片保存、长期项目归档或更高容量需求，可以通过管理员邮箱单独联系评估。大空间方案不公开展示，按实际需求确认。
+        </div>
       </section>
 
       <section style={noteCardStyle}>
@@ -223,7 +251,7 @@ export default function MembershipPage() {
           <li>注册后开始免费试用，试用期内可新增项目、记录、照片和少量集市发布。</li>
           <li>试用期满或年费到期后，仍可查看、导出和删除已有内容。</li>
           <li>继续新增记录、上传照片或发布集市信息，需要开通年度使用权。</li>
-          <li>当前为人工确认付款并手动开通；后续可再接入 PayPal、Stripe 或应用商店内购。</li>
+          <li>当前为人工确认付款并手动开通；后续可再接入自动支付或应用商店内购。</li>
         </ul>
       </section>
     </main>
@@ -366,6 +394,17 @@ const infoHintStyle: CSSProperties = {
   fontSize: 12,
   color: "#7d8b76",
   lineHeight: 1.5,
+};
+
+
+const renewalNoticeStyle: CSSProperties = {
+  border: "1px solid #ead9b8",
+  borderRadius: 16,
+  background: "#fff8ea",
+  color: "#72541f",
+  padding: "12px 14px",
+  fontSize: 13,
+  lineHeight: 1.7,
 };
 
 const actionRowStyle: CSSProperties = {
@@ -533,3 +572,13 @@ const ruleListStyle: CSSProperties = {
   fontSize: 14,
   lineHeight: 1.8,
 };
+const customStorageStyle: CSSProperties = {
+  marginTop: 14,
+  padding: "12px 14px",
+  borderRadius: 14,
+  background: "#f7f2e7",
+  color: "#5e503d",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+

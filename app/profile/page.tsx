@@ -9,6 +9,7 @@ import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import { formatProfileDateTime, formatStorage, loadUserProfileData, type UserProfileStats } from "@/lib/user-profile-shared";
 import {
   formatMembershipDate,
+  getDaysRemaining,
   getMembershipEndDate,
   getMembershipPlanLabel,
   getMembershipStatusLabel,
@@ -27,6 +28,38 @@ import {
   type RegionOption,
 } from "@/lib/region-shared";
 
+
+type MembershipPaymentRow = {
+  id: string;
+  plan: string | null;
+  status: string | null;
+  amount: number | string | null;
+  currency: string | null;
+  payment_method: string | null;
+  payment_reference: string | null;
+  note: string | null;
+  paid_at: string | null;
+  service_started_at: string | null;
+  service_ends_at: string | null;
+};
+
+function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
+  const value = Number(amount || 0);
+  if (!Number.isFinite(value)) return `${currency || ""} ${amount || ""}`.trim();
+  if (currency === "CNY") return `¥${value.toFixed(2)}`;
+  if (currency === "USD") return `US$${value.toFixed(2)}`;
+  return `${value.toFixed(2)} ${currency || ""}`.trim();
+}
+
+function getPaymentMethodLabel(method?: string | null) {
+  if (method === "wechat") return "微信";
+  if (method === "alipay") return "支付宝";
+  if (method === "paypal") return "PayPal";
+  if (method === "manual") return "人工确认";
+  if (method === "other") return "其他";
+  return method || "未记录";
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -35,6 +68,8 @@ export default function ProfilePage() {
   const [marketPostCount, setMarketPostCount] = useState(0);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipError, setMembershipError] = useState("");
+  const [paymentRows, setPaymentRows] = useState<MembershipPaymentRow[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [username, setUsername] = useState("");
   const [countryCode, setCountryCode] = useState("");
@@ -72,13 +107,20 @@ export default function ProfilePage() {
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
       setStats(data.stats);
-      const [marketCountResult, membershipResult, adminResult] = await Promise.all([
+      const [marketCountResult, membershipResult, adminResult, paymentsResult] = await Promise.all([
         supabase
           .from("market_posts")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id),
         supabase.rpc("get_my_membership"),
         supabase.rpc("is_app_admin", { p_user_id: user.id }),
+        supabase
+          .from("membership_payments")
+          .select("id, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, service_started_at, service_ends_at")
+          .eq("user_id", user.id)
+          .eq("status", "confirmed")
+          .order("paid_at", { ascending: false })
+          .limit(5),
       ]);
 
       if (marketCountResult.error) {
@@ -102,6 +144,13 @@ export default function ProfilePage() {
         setIsAdmin(false);
       } else {
         setIsAdmin(Boolean(adminResult.data));
+      }
+
+      if (paymentsResult.error) {
+        console.error("load membership payments error:", paymentsResult.error);
+        setPaymentRows([]);
+      } else {
+        setPaymentRows(Array.isArray(paymentsResult.data) ? (paymentsResult.data as MembershipPaymentRow[]) : []);
       }
 
       setUsername(String(data.profile?.username || ""));
@@ -138,6 +187,17 @@ export default function ProfilePage() {
   }, [profile, membership]);
 
   const membershipEndDate = getMembershipEndDate(membership);
+  const membershipDaysRemaining = getDaysRemaining(membershipEndDate);
+  const showMembershipNotice = Boolean(
+    membership &&
+      (membership.can_create_content === false ||
+        (typeof membershipDaysRemaining === "number" && membershipDaysRemaining <= 14))
+  );
+  const membershipNoticeText = membership?.can_create_content === false
+    ? "当前使用权已到期。已有内容仍可查看、导出和删除；如需继续新增记录、上传照片或发布集市信息，请查看会员与续费。"
+    : typeof membershipDaysRemaining === "number" && membershipDaysRemaining <= 14
+      ? `当前使用权还有 ${membershipDaysRemaining} 天到期。你可以提前查看付款方式，管理员确认后会延长使用期限。`
+      : "";
   const membershipStatusText = membershipError || getMembershipSummary(membership);
   const marketQuotaText = membership
     ? `${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} 条`
@@ -157,6 +217,26 @@ export default function ProfilePage() {
     const data = await loadUserProfileData(supabase, targetUserId);
     setProfile(data.profile);
     setStats(data.stats);
+  }
+
+  async function refreshPaymentRows(targetUserId: string) {
+    setPaymentLoading(true);
+    const { data, error } = await supabase
+      .from("membership_payments")
+      .select("id, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, service_started_at, service_ends_at")
+      .eq("user_id", targetUserId)
+      .eq("status", "confirmed")
+      .order("paid_at", { ascending: false })
+      .limit(5);
+
+    if (error) {
+      console.error("refresh membership payments error:", error);
+      showToast("付款记录读取失败");
+    } else {
+      setPaymentRows(Array.isArray(data) ? (data as MembershipPaymentRow[]) : []);
+    }
+
+    setPaymentLoading(false);
   }
 
   async function handleSave() {
@@ -471,6 +551,15 @@ export default function ProfilePage() {
             ) : null}
           </div>
 
+          {showMembershipNotice ? (
+            <div style={membershipNoticeStyle}>
+              <div>{membershipNoticeText}</div>
+              <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+                查看会员与续费
+              </Link>
+            </div>
+          ) : null}
+
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
             <InfoCard
               label="当前方案"
@@ -492,6 +581,68 @@ export default function ProfilePage() {
               value={marketQuotaText}
               hint={membership?.can_create_market_post === false ? "当前不可继续发布" : "同时在线发布数量"}
             />
+          </div>
+        </section>
+
+        <section style={paymentHistorySectionStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>付款记录</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>我的会员付款</h2>
+              <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
+                这里只显示管理员已确认的最近付款记录；已取消或退款的记录不会显示。若已付款但未显示，请联系管理员邮箱：yoyomibaobao@gmail.com。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshPaymentRows(user.id)}
+              disabled={paymentLoading}
+              style={{
+                ...secondaryLinkStyle,
+                cursor: paymentLoading ? "not-allowed" : "pointer",
+                opacity: paymentLoading ? 0.65 : 1,
+              }}
+            >
+              {paymentLoading ? "刷新中..." : "刷新付款记录"}
+            </button>
+          </div>
+
+          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+            {paymentRows.length === 0 ? (
+              <div style={emptyPaymentStyle}>暂无已确认的付款记录。</div>
+            ) : (
+              paymentRows.map((payment) => (
+                <div key={payment.id} style={paymentCardStyle}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#243123" }}>
+                        {formatPaymentAmount(payment.amount, payment.currency)}
+                      </div>
+                      <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
+                        {getMembershipPlanLabel(payment.plan)} · {getPaymentMethodLabel(payment.payment_method)}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#6f7b69", textAlign: "right" }}>
+                      付款时间：{formatMembershipDate(payment.paid_at)}
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 8, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
+                    服务期：{formatMembershipDate(payment.service_started_at)} - {formatMembershipDate(payment.service_ends_at)}
+                  </div>
+                  {payment.payment_reference ? (
+                    <div style={{ marginTop: 4, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
+                      流水号 / 交易号：{payment.payment_reference}
+                    </div>
+                  ) : null}
+                  {payment.note ? (
+                    <div style={{ marginTop: 4, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
+                      备注：{payment.note}
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            )}
           </div>
         </section>
 
@@ -684,12 +835,54 @@ const panelStyle: CSSProperties = {
   padding: 14,
 };
 
+
+const membershipNoticeStyle: CSSProperties = {
+  marginTop: 14,
+  border: "1px solid #ead9b8",
+  borderRadius: 14,
+  background: "#fff8ea",
+  color: "#72541f",
+  padding: "10px 12px",
+  fontSize: 13,
+  lineHeight: 1.7,
+  display: "flex",
+  gap: 10,
+  justifyContent: "space-between",
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
 const membershipSectionStyle: CSSProperties = {
   marginTop: 14,
   background: "#f8fbf3",
   border: "1px solid #e1ecd9",
   borderRadius: 18,
   padding: 14,
+};
+
+
+const paymentHistorySectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#fffdf7",
+  border: "1px solid #eadfca",
+  borderRadius: 18,
+  padding: 14,
+};
+
+const paymentCardStyle: CSSProperties = {
+  background: "#fffaf0",
+  border: "1px solid #eadfca",
+  borderRadius: 14,
+  padding: "12px 13px",
+};
+
+const emptyPaymentStyle: CSSProperties = {
+  border: "1px dashed #d9ceb8",
+  borderRadius: 14,
+  padding: "14px 13px",
+  color: "#7b6d55",
+  background: "#fffaf2",
+  fontSize: 13,
 };
 
 const statsSectionStyle: CSSProperties = {
