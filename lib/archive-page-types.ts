@@ -26,6 +26,7 @@ export type ArchiveItem = {
   latest_record_note?: string | null;
   latest_record_time?: string | null;
   latest_record_primary_image_url?: string | null;
+  latest_record_primary_thumb_url?: string | null;
   latest_record_media_count?: number | null;
 };
 

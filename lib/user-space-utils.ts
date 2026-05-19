@@ -9,8 +9,20 @@ export function getMediaUrl(media: {
   file_url?: string | null;
   url?: string | null;
   path?: string | null;
+  thumb_url?: string | null;
+  thumb_path?: string | null;
 }) {
   return media?.file_url || media?.url || media?.path || "";
+}
+
+export function getMediaPreviewUrl(media: {
+  file_url?: string | null;
+  url?: string | null;
+  path?: string | null;
+  thumb_url?: string | null;
+  thumb_path?: string | null;
+}) {
+  return media?.thumb_url || getMediaUrl(media);
 }
 
 export function buildStatsMap(records: UserSpaceRecord[]) {
@@ -48,14 +60,19 @@ export function buildCoverMap(records: UserSpaceRecord[]) {
   records.forEach((record) => {
     if (map[record.archive_id]) return;
 
-    if (record.primary_image_url) {
-      map[record.archive_id] = record.primary_image_url;
-      return;
+    if (record.media?.length) {
+      const primaryMedia = record.media.find(
+        (media) => media.url && record.primary_image_url && media.url === record.primary_image_url
+      );
+      const previewUrl = getMediaPreviewUrl(primaryMedia || record.media[0]);
+      if (previewUrl) {
+        map[record.archive_id] = previewUrl;
+        return;
+      }
     }
 
-    if (record.media?.length) {
-      const url = getMediaUrl(record.media[0]);
-      if (url) map[record.archive_id] = url;
+    if (record.primary_image_url) {
+      map[record.archive_id] = record.primary_image_url;
     }
   });
 

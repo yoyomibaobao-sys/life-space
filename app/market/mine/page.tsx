@@ -171,8 +171,13 @@ export default function MyMarketPostsPage() {
           <section style={listStyle}>
             {items.map((item) => (
               <article key={item.id} style={cardStyle}>
-                {item.cover_image_url ? (
-                  <img src={item.cover_image_url} alt="" style={cardImageStyle} />
+                {item.cover_thumb_url || item.cover_image_url ? (
+                  <img
+                    src={item.cover_thumb_url || item.cover_image_url || ""}
+                    alt=""
+                    style={cardImageStyle}
+                    loading="lazy"
+                  />
                 ) : (
                   <div style={cardImageFallbackStyle}>集市</div>
                 )}

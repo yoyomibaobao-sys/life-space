@@ -1,13 +1,14 @@
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { FeedItem } from "@/lib/discover-types";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
-import { ProjectCardRows } from "@/components/discover/DiscoverShared";
+import { ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
 
 export function DiscoverHelpList({ items }: { items: FeedItem[] }) {
   return (
     <div>
       {items.map((record) => {
         const isHelp = record.status_tag === "help";
+        const displayImageUrl = getFeedItemDisplayImageUrl(record);
 
         return (
           <a
@@ -29,10 +30,11 @@ export function DiscoverHelpList({ items }: { items: FeedItem[] }) {
             }}
           >
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              {record.primary_image_url ? (
+              {displayImageUrl ? (
                 <img
-                  src={record.primary_image_url}
+                  src={displayImageUrl}
                   alt={record.archive_title || "record image"}
+                  loading="lazy"
                   style={{
                     width: 58,
                     height: 58,

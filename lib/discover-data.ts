@@ -11,14 +11,23 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
   const locationMap = new Map<string, string | null>();
   const archiveCreatedAtMap = new Map<string, string | null>();
   const archiveFollowerCountMap = new Map<string, number>();
+  const recordThumbMap = new Map<string, string | null>();
 
   if (recordIds.length > 0) {
-    const { data: tagRows } = await supabase
-      .from("record_tags")
-      .select("record_id, tag, tag_type, is_active")
-      .in("record_id", recordIds)
-      .eq("tag_type", "behavior")
-      .neq("is_active", false);
+    const [{ data: tagRows }, { data: mediaRows }] = await Promise.all([
+      supabase
+        .from("record_tags")
+        .select("record_id, tag, tag_type, is_active")
+        .in("record_id", recordIds)
+        .eq("tag_type", "behavior")
+        .neq("is_active", false),
+      supabase
+        .from("media")
+        .select("record_id, url, thumb_url, created_at")
+        .in("record_id", recordIds)
+        .eq("type", "image")
+        .order("created_at", { ascending: true }),
+    ]);
 
     (tagRows || []).forEach((row: RecordTagRow) => {
       const prev = tagMap.get(row.record_id) || [];
@@ -26,6 +35,16 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
         prev.push(row.tag);
       }
       tagMap.set(row.record_id, prev);
+    });
+
+    (mediaRows || []).forEach((row: { record_id: string | null; url: string | null; thumb_url: string | null }) => {
+      if (!row.record_id || !row.thumb_url) return;
+      const item = nextItems.find((feedItem) => feedItem.record_id === row.record_id);
+      const isPrimaryMedia = !item?.primary_image_url || item.primary_image_url === row.url;
+
+      if (isPrimaryMedia || !recordThumbMap.has(row.record_id)) {
+        recordThumbMap.set(row.record_id, row.thumb_url);
+      }
     });
   }
 
@@ -63,6 +82,7 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
   return nextItems.map((item) => ({
     ...item,
     user_location: item.user_location || locationMap.get(item.user_id) || null,
+    primary_thumb_url: item.primary_thumb_url || recordThumbMap.get(item.record_id) || null,
     archive_created_at: item.archive_created_at || archiveCreatedAtMap.get(item.archive_id) || null,
     archive_follower_count:
       typeof item.archive_follower_count === "number"

@@ -224,15 +224,11 @@ export default function MarketCommentsSection({
         <span style={countStyle}>{comments.length} 条</span>
       </div>
 
-      <div style={hintStyle}>
-        集市留言用于公开沟通交换、赠送、转让或求购信息。请谨慎交换个人联系方式。
-      </div>
-
       <div style={listStyle}>
         {loading ? (
           <div style={emptyStyle}>留言加载中...</div>
         ) : comments.length === 0 ? (
-          <div style={emptyStyle}>还没有留言，可以留下第一个问题或意向。</div>
+          <div style={emptyStyle}>暂无留言</div>
         ) : (
           comments.map((comment) => {
             const canDelete =
@@ -363,12 +359,6 @@ const countStyle: CSSProperties = {
   color: "#7a8676",
 };
 
-const hintStyle: CSSProperties = {
-  marginTop: 8,
-  color: "#7a8676",
-  fontSize: 13,
-  lineHeight: 1.7,
-};
 
 const listStyle: CSSProperties = {
   marginTop: 12,

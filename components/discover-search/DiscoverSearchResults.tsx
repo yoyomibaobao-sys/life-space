@@ -1,6 +1,6 @@
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { FeedItem } from "@/lib/discover-types";
-import { ProjectCardRows } from "@/components/discover/DiscoverShared";
+import { ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
 
 type Props = {
   items: FeedItem[];
@@ -55,6 +55,7 @@ export default function DiscoverSearchResults({ items, loading, hasRun }: Props)
         items.map((record) => {
           const isHelp = record.status_tag === "help";
           const isResolved = record.status_tag === "resolved";
+          const displayImageUrl = getFeedItemDisplayImageUrl(record);
 
           return (
             <a
@@ -87,10 +88,11 @@ export default function DiscoverSearchResults({ items, loading, hasRun }: Props)
                   gap: 8,
                 }}
               >
-                {record.primary_image_url ? (
+                {displayImageUrl ? (
                   <img
-                    src={record.primary_image_url}
+                    src={displayImageUrl}
                     alt={record.archive_title || "record image"}
+                    loading="lazy"
                     style={{
                       width: 58,
                       height: 58,

@@ -16,7 +16,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
-import { compressImageFile } from "@/lib/image-compression";
+import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { releaseStorageBytes, reserveStorageBytes } from "@/lib/storage-usage";
 
 type RecordVisibility = "public" | "private";
@@ -205,16 +205,20 @@ export default function AddRecord({
   async function uploadMedia(recordId: string, userId: string, file: File) {
     const compressed = await compressImageFile(file);
     const uploadFile = compressed.file;
+    const thumbnail = await createImageThumbnailFile(uploadFile);
+    const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
     const uploadBytes = uploadFile.size;
+    const thumbBytes = thumbFile?.size || 0;
+    const reservedBytes = uploadBytes + thumbBytes;
 
-    const reserveResult = await reserveStorageBytes(uploadBytes);
+    const reserveResult = await reserveStorageBytes(reservedBytes);
 
     if (!reserveResult.ok) {
       if (reserveResult.message === "storage_limit_exceeded") {
         const message = getStorageLimitExceededText({
           usedBytes: reserveResult.storage_used,
           limitBytes: reserveResult.storage_limit_bytes,
-          uploadBytes,
+          uploadBytes: reservedBytes,
         });
         setMembershipNotice(message);
         showToast(message);
@@ -233,7 +237,12 @@ export default function AddRecord({
     setStorageUsedBytes(reserveResult.storage_used);
 
     const safeName = uploadFile.name.replace(/[^\w.\-]+/g, "_");
-    const fileName = `${userId}/${recordId}/${Date.now()}-${safeName}`;
+    const timestamp = Date.now();
+    const fileName = `${userId}/${recordId}/${timestamp}-${safeName}`;
+    const thumbSafeName = thumbFile?.name.replace(/[^\w.\-]+/g, "_") || null;
+    const thumbName = thumbFile && thumbSafeName
+      ? `${userId}/${recordId}/thumbs/${timestamp}-${thumbSafeName}`
+      : null;
 
     const { error: uploadError } = await supabase.storage
       .from("media")
@@ -243,11 +252,35 @@ export default function AddRecord({
 
     if (uploadError) {
       console.error("媒体上传失败", uploadError);
-      const releaseResult = await releaseStorageBytes(uploadBytes);
+      const releaseResult = await releaseStorageBytes(reservedBytes);
       setStorageUsedBytes(releaseResult.storage_used);
       return 0;
     }
 
+    let uploadedThumbPath: string | null = null;
+    let uploadedThumbUrl: string | null = null;
+    let uploadedThumbBytes = 0;
+
+    if (thumbFile && thumbName) {
+      const { error: thumbUploadError } = await supabase.storage
+        .from("media")
+        .upload(thumbName, thumbFile, {
+          contentType: thumbFile.type || "image/jpeg",
+        });
+
+      if (thumbUploadError) {
+        console.error("缩略图上传失败", thumbUploadError);
+      } else {
+        const { data: thumbUrlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(thumbName);
+        uploadedThumbPath = thumbName;
+        uploadedThumbUrl = thumbUrlData.publicUrl;
+        uploadedThumbBytes = thumbBytes;
+      }
+    }
+
+    const actualBytes = uploadBytes + uploadedThumbBytes;
     const { data: urlData } = supabase.storage
       .from("media")
       .getPublicUrl(fileName);
@@ -258,9 +291,11 @@ export default function AddRecord({
         type: "image",
         url: urlData.publicUrl,
         user_id: userId,
-        size_mb: uploadBytes / (1024 * 1024),
-        size_bytes: uploadBytes,
+        size_mb: actualBytes / (1024 * 1024),
+        size_bytes: actualBytes,
         storage_path: fileName,
+        thumb_url: uploadedThumbUrl,
+        thumb_path: uploadedThumbPath,
         mime_type: uploadFile.type || "image/jpeg",
         width: compressed.width ?? null,
         height: compressed.height ?? null,
@@ -271,13 +306,21 @@ export default function AddRecord({
 
     if (mediaError) {
       console.error("media 写入失败", mediaError);
-      await supabase.storage.from("media").remove([fileName]);
-      const releaseResult = await releaseStorageBytes(uploadBytes);
+      await supabase.storage
+        .from("media")
+        .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
+      const releaseResult = await releaseStorageBytes(reservedBytes);
       setStorageUsedBytes(releaseResult.storage_used);
       return 0;
     }
 
-    return uploadBytes;
+    const unusedReservedBytes = Math.max(0, reservedBytes - actualBytes);
+    if (unusedReservedBytes > 0) {
+      const releaseResult = await releaseStorageBytes(unusedReservedBytes);
+      setStorageUsedBytes(releaseResult.storage_used);
+    }
+
+    return actualBytes;
   }
 
   async function handleAdd() {

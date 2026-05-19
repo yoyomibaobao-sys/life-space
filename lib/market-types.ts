@@ -24,8 +24,12 @@ export type MarketPostRow = {
   post_type: MarketPostType;
   item_category: MarketItemCategory;
   location_text: string | null;
+  external_url?: string | null;
+  external_label?: string | null;
   cover_image_url: string | null;
   cover_image_path: string | null;
+  cover_thumb_url?: string | null;
+  cover_thumb_path?: string | null;
   status: MarketPostStatus;
   view_count: number | null;
   created_at: string;

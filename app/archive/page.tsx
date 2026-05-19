@@ -40,10 +40,12 @@ import {
 } from "@/lib/storage-usage";
 
 type LatestArchiveRecord = {
+  id: string;
   archive_id: string | null;
   note?: string | null;
   record_time?: string | null;
   primary_image_url?: string | null;
+  primary_thumb_url?: string | null;
   media_count?: number | null;
 };
 
@@ -175,7 +177,7 @@ export default function ArchivePage() {
       if (archiveIds.length > 0) {
         const { data: latestRecordRows, error: latestRecordError } = await supabase
           .from("records")
-          .select("archive_id, note, record_time, primary_image_url, media_count")
+          .select("id, archive_id, note, record_time, primary_image_url, media_count")
           .eq("user_id", user.id)
           .in("archive_id", archiveIds)
           .order("record_time", { ascending: false });
@@ -183,9 +185,56 @@ export default function ArchivePage() {
         if (latestRecordError) {
           console.error("load latest archive records error:", latestRecordError);
         } else {
-          ((latestRecordRows || []) as LatestArchiveRecord[]).forEach((record) => {
+          const latestRecords = (latestRecordRows || []) as LatestArchiveRecord[];
+          const latestRecordIds = latestRecords.map((record) => record.id).filter(Boolean);
+          const thumbByRecordId = new Map<string, string>();
+
+          if (latestRecordIds.length > 0) {
+            const { data: mediaRows, error: mediaError } = await supabase
+              .from("media")
+              .select("record_id, url, thumb_url, sort_order, created_at")
+              .in("record_id", latestRecordIds)
+              .order("sort_order", { ascending: true })
+              .order("created_at", { ascending: true });
+
+            if (mediaError) {
+              console.error("load latest archive record thumbnails error:", mediaError);
+            } else {
+              const mediaByRecordId = new Map<string, Array<{
+                record_id?: string | null;
+                url?: string | null;
+                thumb_url?: string | null;
+              }>>();
+
+              ((mediaRows || []) as Array<{
+                record_id?: string | null;
+                url?: string | null;
+                thumb_url?: string | null;
+              }>).forEach((media) => {
+                if (!media.record_id) return;
+                const list = mediaByRecordId.get(media.record_id) || [];
+                list.push(media);
+                mediaByRecordId.set(media.record_id, list);
+              });
+
+              latestRecords.forEach((record) => {
+                const mediaList = mediaByRecordId.get(record.id) || [];
+                const matchedPrimary = mediaList.find(
+                  (media) => media.thumb_url && media.url && record.primary_image_url && media.url === record.primary_image_url
+                );
+                const firstThumb = mediaList.find((media) => media.thumb_url);
+                const thumbUrl = matchedPrimary?.thumb_url || firstThumb?.thumb_url || null;
+                if (thumbUrl) thumbByRecordId.set(record.id, thumbUrl);
+              });
+            }
+          }
+
+          latestRecords.forEach((record) => {
             if (!record.archive_id || latestRecordMap.has(record.archive_id)) return;
-            latestRecordMap.set(record.archive_id, record);
+            latestRecordMap.set(record.archive_id, {
+              ...record,
+              primary_thumb_url: thumbByRecordId.get(record.id) || null,
+            });
           });
         }
       }
@@ -199,6 +248,7 @@ export default function ArchivePage() {
           latest_record_note: latestRecord?.note || null,
           latest_record_time: latestRecord?.record_time || item.last_record_time || null,
           latest_record_primary_image_url: latestRecord?.primary_image_url || null,
+          latest_record_primary_thumb_url: latestRecord?.primary_thumb_url || null,
           latest_record_media_count: latestRecord?.media_count || 0,
           follower_count: followerCountMap.get(item.id) || 0,
           species_display_name:

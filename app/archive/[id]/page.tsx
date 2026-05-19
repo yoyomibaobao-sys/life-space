@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { compressImageFile } from "@/lib/image-compression";
+import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ArchiveDetailHeader from "@/components/archive-detail/ArchiveDetailHeader";
@@ -699,14 +699,25 @@ saveRecentArchiveBrowse({
       return;
     }
 
-    const compressedResults = await Promise.all(
-      files.map(async (file) => ({
-        originalFile: file,
-        compressed: await compressImageFile(file),
-      }))
+    const preparedFiles = await Promise.all(
+      files.map(async (originalFile) => {
+        const compressed = await compressImageFile(originalFile);
+        const file = compressed.file;
+        const thumbnail = await createImageThumbnailFile(file);
+        const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
+
+        return {
+          originalFile,
+          compressed,
+          file,
+          thumbFile,
+          reservedBytes: file.size + (thumbFile?.size || 0),
+        };
+      })
     );
-    const uploadBytes = compressedResults.reduce(
-      (total, item) => total + item.compressed.file.size,
+
+    const uploadBytes = preparedFiles.reduce(
+      (total, item) => total + item.reservedBytes,
       0
     );
 
@@ -733,10 +744,16 @@ saveRecentArchiveBrowse({
     const uploadedMedia: MediaItem[] = [];
     let uploadedBytes = 0;
 
-    for (const [index, item] of compressedResults.entries()) {
-      const file = item.compressed.file;
+    for (const [index, item] of preparedFiles.entries()) {
+      const file = item.file;
+      const thumbFile = item.thumbFile;
       const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-      const fileName = `${user.id}/${recordId}/${Date.now()}-${index}-${safeName}`;
+      const timestamp = Date.now();
+      const fileName = `${user.id}/${recordId}/${timestamp}-${index}-${safeName}`;
+      const thumbSafeName = thumbFile?.name.replace(/[^\w.\-]+/g, "_") || null;
+      const thumbName = thumbFile && thumbSafeName
+        ? `${user.id}/${recordId}/thumbs/${timestamp}-${index}-${thumbSafeName}`
+        : null;
 
       const { error: uploadError } = await supabase.storage
         .from("media")
@@ -750,6 +767,28 @@ saveRecentArchiveBrowse({
         continue;
       }
 
+      let uploadedThumbPath: string | null = null;
+      let uploadedThumbUrl: string | null = null;
+      let uploadedThumbBytes = 0;
+
+      if (thumbFile && thumbName) {
+        const { error: thumbUploadError } = await supabase.storage
+          .from("media")
+          .upload(thumbName, thumbFile, {
+            contentType: thumbFile.type || "image/jpeg",
+          });
+
+        if (thumbUploadError) {
+          console.error("add record thumbnail upload error:", thumbUploadError);
+        } else {
+          const { data: thumbUrlData } = supabase.storage.from("media").getPublicUrl(thumbName);
+          uploadedThumbPath = thumbName;
+          uploadedThumbUrl = thumbUrlData.publicUrl;
+          uploadedThumbBytes = thumbFile.size;
+        }
+      }
+
+      const actualBytes = file.size + uploadedThumbBytes;
       const { data: urlData } = supabase.storage.from("media").getPublicUrl(fileName);
 
       const { data: mediaRow, error: mediaError } = await supabase
@@ -760,9 +799,11 @@ saveRecentArchiveBrowse({
             type: "image",
             url: urlData.publicUrl,
             user_id: user.id,
-            size_mb: file.size / (1024 * 1024),
-            size_bytes: file.size,
+            size_mb: actualBytes / (1024 * 1024),
+            size_bytes: actualBytes,
             storage_path: fileName,
+            thumb_url: uploadedThumbUrl,
+            thumb_path: uploadedThumbPath,
             mime_type: file.type || "image/jpeg",
             width: item.compressed.width ?? null,
             height: item.compressed.height ?? null,
@@ -775,13 +816,15 @@ saveRecentArchiveBrowse({
 
       if (mediaError) {
         console.error("add record media insert error:", mediaError);
-        await supabase.storage.from("media").remove([fileName]);
+        await supabase.storage
+          .from("media")
+          .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
         showToast("部分图片保存失败");
         continue;
       }
 
       uploadedMedia.push(mediaRow as MediaItem);
-      uploadedBytes += file.size;
+      uploadedBytes += actualBytes;
     }
 
     const failedBytes = Math.max(0, uploadBytes - uploadedBytes);

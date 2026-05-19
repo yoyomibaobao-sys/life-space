@@ -20,6 +20,8 @@ export type UserSpaceMedia = {
   file_url?: string | null;
   url?: string | null;
   path?: string | null;
+  thumb_url?: string | null;
+  thumb_path?: string | null;
 };
 
 export type UserSpaceRecord = {

@@ -226,7 +226,10 @@ export default function MarketPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <header style={headerStyle}>
-          <div style={marketIntroStyle}>交换与求购</div>
+          <div>
+            <div style={marketIntroStyle}>交换与求购</div>
+            <div style={marketSubIntroStyle}>基于真实记录的信息发布，交易、支付、物流请双方自行确认</div>
+          </div>
 
           <div style={headerActionStyle}>
             {currentUserId ? (
@@ -344,17 +347,23 @@ export default function MarketPage() {
               const archiveTitle = archive?.title || "";
               const systemName =
                 archive?.system_name || archive?.species_name_snapshot || "";
+              const publisherName = profile?.username || "未设置用户名";
 
               return (
                 <Link key={item.id} href={`/market/${item.id}`} style={cardStyle}>
-                  {item.cover_image_url ? (
-                    <img src={item.cover_image_url} alt="" style={cardImageStyle} />
+                  {item.cover_thumb_url || item.cover_image_url ? (
+                    <img
+                      src={item.cover_thumb_url || item.cover_image_url || ""}
+                      alt=""
+                      style={cardImageStyle}
+                      loading="lazy"
+                    />
                   ) : (
                     <div style={cardImageFallbackStyle}>集市</div>
                   )}
 
                   <div style={cardContentStyle}>
-                    <div style={cardTopStyle}>
+                    <div style={cardHeaderStyle}>
                       <div style={badgeRowStyle}>
                         <span style={typeBadgeStyle}>
                           {getMarketPostTypeLabel(item.post_type)}
@@ -375,11 +384,29 @@ export default function MarketPage() {
                       <p style={descriptionStyle}>{item.description}</p>
                     ) : null}
 
-                    <div style={metaStyle}>
-                      <span>{profile?.username || "未设置用户名"}</span>
-                      {locationText ? <span> · {locationText}</span> : null}
-                      {archiveTitle ? <span> · 来自：{archiveTitle}</span> : null}
-                      {systemName ? <span> · {systemName}</span> : null}
+                    <div style={infoGridStyle}>
+                      <div style={infoLineStyle}>
+                        <span style={infoLabelStyle}>地点</span>
+                        <span style={infoValueStyle}>{locationText || "未填写"}</span>
+                      </div>
+                      <div style={infoLineStyle}>
+                        <span style={infoLabelStyle}>来源</span>
+                        <span style={{ ...infoValueStyle, ...sourceValueStyle }}>
+                          <span style={sourceUserStyle}>{publisherName}</span>
+                          <span style={sourceDividerStyle}>·</span>
+                          {archiveTitle ? (
+                            <span style={sourceArchiveStyle}>{archiveTitle}</span>
+                          ) : (
+                            <span style={sourceMissingStyle}>未关联记录</span>
+                          )}
+                          {systemName ? (
+                            <>
+                              <span style={sourceDividerStyle}>·</span>
+                              <span style={sourceSystemStyle}>{systemName}</span>
+                            </>
+                          ) : null}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </Link>
@@ -433,6 +460,12 @@ const marketIntroStyle: CSSProperties = {
   fontWeight: 700,
 };
 
+const marketSubIntroStyle: CSSProperties = {
+  marginTop: 3,
+  color: "#7b8676",
+  fontSize: 12,
+};
+
 const headerActionStyle: CSSProperties = {
   display: "flex",
   gap: 8,
@@ -466,8 +499,8 @@ const publishButtonStyle: CSSProperties = {
 const filterPanelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e4ece0",
-  borderRadius: 16,
-  padding: 12,
+  borderRadius: 14,
+  padding: 10,
   display: "grid",
   gap: 10,
   marginBottom: 12,
@@ -512,59 +545,60 @@ function filterButtonStyle(active: boolean): CSSProperties {
 
 const listStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 9,
 };
 
 const cardStyle: CSSProperties = {
-  display: "flex",
-  gap: 12,
+  display: "grid",
+  gridTemplateColumns: "88px minmax(0, 1fr)",
+  gap: 9,
   textDecoration: "none",
   color: "inherit",
   background: "#fff",
   border: "1px solid #e4ece0",
-  borderRadius: 16,
-  padding: 12,
-  alignItems: "flex-start",
+  borderRadius: 14,
+  padding: 8,
+  alignItems: "center",
   boxShadow: "0 8px 20px rgba(32,56,24,0.04)",
 };
 
 const cardImageStyle: CSSProperties = {
-  width: 96,
-  height: 96,
+  width: "88px",
+  height: "88px",
   objectFit: "cover",
-  borderRadius: 13,
+  borderRadius: 12,
   background: "#f0f4ed",
   border: "1px solid #e4ece0",
-  flexShrink: 0,
 };
 
 const cardImageFallbackStyle: CSSProperties = {
-  width: 96,
-  height: 96,
-  borderRadius: 13,
+  width: "88px",
+  height: "88px",
+  borderRadius: 12,
   background: "#edf4e8",
   border: "1px solid #e4ece0",
   color: "#6f7b69",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 13,
+  fontSize: 12,
   fontWeight: 700,
-  flexShrink: 0,
 };
 
 const cardContentStyle: CSSProperties = {
   minWidth: 0,
-  flex: 1,
+  minHeight: 88,
+  display: "flex",
+  flexDirection: "column",
 };
 
-const cardTopStyle: CSSProperties = {
+const cardHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: 10,
-  alignItems: "center",
-  marginBottom: 8,
+  gap: 6,
+  alignItems: "flex-start",
+  marginBottom: 4,
 };
 
 const badgeRowStyle: CSSProperties = {
@@ -577,8 +611,8 @@ const typeBadgeStyle: CSSProperties = {
   borderRadius: 999,
   background: "#edf4e8",
   color: "#4f7b45",
-  padding: "3px 8px",
-  fontSize: 12,
+  padding: "2px 7px",
+  fontSize: 11,
   fontWeight: 700,
 };
 
@@ -586,39 +620,111 @@ const categoryBadgeStyle: CSSProperties = {
   borderRadius: 999,
   background: "#f5f3e8",
   color: "#7a6b35",
-  padding: "3px 8px",
-  fontSize: 12,
+  padding: "2px 7px",
+  fontSize: 11,
   fontWeight: 700,
 };
 
 const timeStyle: CSSProperties = {
   color: "#8a9585",
-  fontSize: 12,
+  fontSize: 11,
+  lineHeight: 1.25,
   whiteSpace: "nowrap",
 };
 
 const cardTitleStyle: CSSProperties = {
   margin: 0,
   color: "#1f2a1f",
-  fontSize: 17,
-};
-
-const descriptionStyle: CSSProperties = {
-  margin: "8px 0 0",
-  color: "#5f6a5b",
-  fontSize: 14,
-  lineHeight: 1.6,
+  fontSize: 15,
+  lineHeight: 1.25,
+  fontWeight: 700,
   display: "-webkit-box",
-  WebkitLineClamp: 2,
+  WebkitLineClamp: 1,
   WebkitBoxOrient: "vertical",
   overflow: "hidden",
 };
 
-const metaStyle: CSSProperties = {
-  marginTop: 9,
+const descriptionStyle: CSSProperties = {
+  margin: "3px 0 0",
+  color: "#5f6a5b",
+  fontSize: 12,
+  lineHeight: 1.2,
+  display: "-webkit-box",
+  WebkitLineClamp: 1,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
+};
+
+const infoGridStyle: CSSProperties = {
+  display: "grid",
+  gap: 1,
+  marginTop: "auto",
+  paddingTop: 4,
+};
+
+const infoLineStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "38px minmax(0, 1fr)",
+  gap: 5,
+  alignItems: "baseline",
+  color: "#6b7665",
+  fontSize: 12,
+  lineHeight: 1.2,
+};
+
+const infoLabelStyle: CSSProperties = {
+  color: "#8a9585",
+  fontWeight: 700,
+};
+
+const infoValueStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const sourceValueStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "baseline",
+  gap: 4,
+};
+
+const sourceUserStyle: CSSProperties = {
   color: "#7b8676",
-  fontSize: 13,
-  lineHeight: 1.5,
+  fontSize: 11,
+  fontWeight: 600,
+};
+
+const sourceArchiveStyle: CSSProperties = {
+  color: "#2f3a2f",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const sourceSystemStyle: CSSProperties = {
+  color: "#4f7b45",
+  fontSize: 11,
+  fontWeight: 700,
+  background: "#edf4e8",
+  borderRadius: 999,
+  padding: "1px 6px",
+};
+
+const sourceMissingStyle: CSSProperties = {
+  color: "#9aa398",
+  fontSize: 11,
+};
+
+const sourceDividerStyle: CSSProperties = {
+  color: "#c1cbbb",
+  fontSize: 11,
+};
+
+const publisherStyle: CSSProperties = {
+  marginTop: 6,
+  color: "#8a9585",
+  fontSize: 12,
 };
 
 const emptyStyle: CSSProperties = {

@@ -9,6 +9,7 @@ export type FeedItem = {
   visibility?: string | null;
   status_tag: string | null;
   primary_image_url: string | null;
+  primary_thumb_url?: string | null;
   comment_count: number;
   media_count: number;
   archive_title: string;

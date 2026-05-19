@@ -18,6 +18,10 @@ import {
   type MarketPostType,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
+import {
+  compressImageFile,
+  createImageThumbnailFile,
+} from "@/lib/image-compression";
 
 type ArchiveOption = {
   id: string;
@@ -32,6 +36,8 @@ type MarketMediaRow = {
   user_id: string;
   url: string;
   path: string | null;
+  thumb_url?: string | null;
+  thumb_path?: string | null;
   source_media_id: string | null;
   source_record_id: string | null;
   sort_order: number | null;
@@ -55,6 +61,8 @@ export default function EditMarketPostPage() {
     useState<MarketItemCategory>("seedling");
   const [archiveId, setArchiveId] = useState("");
   const [locationText, setLocationText] = useState("");
+  const [externalUrl, setExternalUrl] = useState("");
+  const [externalLabel, setExternalLabel] = useState("");
 
   const [uploading, setUploading] = useState(false);
   const [workingMediaId, setWorkingMediaId] = useState<string | null>(null);
@@ -115,6 +123,8 @@ export default function EditMarketPostPage() {
       setItemCategory(row.item_category);
       setArchiveId(row.archive_id || "");
       setLocationText(row.location_text || "");
+      setExternalUrl(row.external_url || "");
+      setExternalLabel(row.external_label || "");
 
       const [archiveResult, mediaResult] = await Promise.all([
         supabase
@@ -175,6 +185,13 @@ export default function EditMarketPostPage() {
     const safeTitle = title.trim();
     const safeDescription = description.trim();
     const safeLocation = locationText.trim();
+    const safeExternalUrl = normalizeExternalUrl(externalUrl);
+    const safeExternalLabel = externalLabel.trim();
+
+    if (externalUrl.trim() && !safeExternalUrl) {
+      setErrorMsg("外部链接格式不正确，请填写 http:// 或 https:// 开头的链接");
+      return;
+    }
 
     if (!safeTitle) {
       setErrorMsg("请输入标题");
@@ -193,6 +210,8 @@ export default function EditMarketPostPage() {
         post_type: postType,
         item_category: itemCategory,
         location_text: safeLocation || null,
+        external_url: safeExternalUrl || null,
+        external_label: safeExternalLabel || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", item.id)
@@ -240,18 +259,27 @@ export default function EditMarketPostPage() {
     const uploadedRows: {
       url: string;
       path: string;
+      thumb_url: string;
+      thumb_path: string;
       sort_order: number;
     }[] = [];
 
     try {
       for (let index = 0; index < imageFiles.length; index += 1) {
         const file = imageFiles[index];
-        const safeName = file.name.replace(/[^\w.\-]+/g, "_") || "image.jpg";
-        const filePath = `${user.id}/market/${item.id}/${Date.now()}-${index}-${safeName}`;
+        const compressed = await compressImageFile(file);
+        const thumbnail = await createImageThumbnailFile(compressed.file);
+        const safeName =
+          compressed.file.name.replace(/[^\w.\-]+/g, "_") || "image.jpg";
+        const safeThumbName =
+          thumbnail.file.name.replace(/[^\w.\-]+/g, "_") || `thumb-${safeName}`;
+        const timestamp = Date.now();
+        const filePath = `${user.id}/market/${item.id}/${timestamp}-${index}-${safeName}`;
+        const thumbPath = `${user.id}/market/${item.id}/thumbs/${timestamp}-${index}-${safeThumbName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("media")
-          .upload(filePath, file, {
+          .upload(filePath, compressed.file, {
             cacheControl: "3600",
             upsert: false,
           });
@@ -260,11 +288,28 @@ export default function EditMarketPostPage() {
           throw uploadError;
         }
 
+        const { error: thumbUploadError } = await supabase.storage
+          .from("media")
+          .upload(thumbPath, thumbnail.file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (thumbUploadError) {
+          await supabase.storage.from("media").remove([filePath]);
+          throw thumbUploadError;
+        }
+
         const { data } = supabase.storage.from("media").getPublicUrl(filePath);
+        const { data: thumbData } = supabase.storage
+          .from("media")
+          .getPublicUrl(thumbPath);
 
         uploadedRows.push({
           url: data.publicUrl,
           path: filePath,
+          thumb_url: thumbData.publicUrl,
+          thumb_path: thumbPath,
           sort_order: currentMaxSort + index + 1,
         });
       }
@@ -274,6 +319,8 @@ export default function EditMarketPostPage() {
         user_id: user.id,
         url: row.url,
         path: row.path,
+        thumb_url: row.thumb_url,
+        thumb_path: row.thumb_path,
         source_media_id: null,
         source_record_id: null,
         sort_order: row.sort_order,
@@ -291,6 +338,8 @@ export default function EditMarketPostPage() {
         await setCoverFromValue({
           url: uploadedRows[0].url,
           path: uploadedRows[0].path,
+          thumbUrl: uploadedRows[0].thumb_url,
+          thumbPath: uploadedRows[0].thumb_path,
         });
       }
 
@@ -298,7 +347,7 @@ export default function EditMarketPostPage() {
     } catch (err) {
       console.error("upload market images error:", err);
 
-      const paths = uploadedRows.map((row) => row.path);
+      const paths = uploadedRows.flatMap((row) => [row.path, row.thumb_path]);
       if (paths.length > 0) {
         await supabase.storage.from("media").remove(paths);
       }
@@ -309,10 +358,16 @@ export default function EditMarketPostPage() {
     }
   }
 
-  async function setCoverFromValue(params: { url: string; path: string | null }) {
+  async function setCoverFromValue(params: {
+    url: string;
+    path: string | null;
+    thumbUrl?: string | null;
+    thumbPath?: string | null;
+  }) {
     if (!user || !item) return;
 
     const oldCoverPath = item.cover_image_path || null;
+    const oldCoverThumbPath = item.cover_thumb_path || null;
     const oldCoverPathIsStillMedia = Boolean(
       oldCoverPath && marketMedia.some((media) => media.path === oldCoverPath)
     );
@@ -322,6 +377,8 @@ export default function EditMarketPostPage() {
       .update({
         cover_image_url: params.url,
         cover_image_path: params.path,
+        cover_thumb_url: params.thumbUrl || null,
+        cover_thumb_path: params.thumbPath || null,
       })
       .eq("id", item.id)
       .eq("user_id", user.id);
@@ -337,9 +394,10 @@ export default function EditMarketPostPage() {
       oldCoverPath !== params.path &&
       !oldCoverPathIsStillMedia
     ) {
+      const oldCoverPaths = [oldCoverPath, oldCoverThumbPath].filter(Boolean) as string[];
       const { error: removeOldError } = await supabase.storage
         .from("media")
-        .remove([oldCoverPath]);
+        .remove(oldCoverPaths);
 
       if (removeOldError) {
         console.error("remove old standalone cover error:", removeOldError);
@@ -350,6 +408,8 @@ export default function EditMarketPostPage() {
       ...item,
       cover_image_url: params.url,
       cover_image_path: params.path,
+      cover_thumb_url: params.thumbUrl || null,
+      cover_thumb_path: params.thumbPath || null,
     });
   }
 
@@ -360,6 +420,8 @@ export default function EditMarketPostPage() {
     await setCoverFromValue({
       url: media.url,
       path: media.path,
+      thumbUrl: media.thumb_url || null,
+      thumbPath: media.thumb_path || null,
     });
     setWorkingMediaId(null);
   }
@@ -373,10 +435,13 @@ export default function EditMarketPostPage() {
     setWorkingMediaId(media.id);
     setErrorMsg("");
 
-    if (media.path) {
+    const pathsToRemove = media.path
+      ? ([media.path, media.thumb_path].filter(Boolean) as string[])
+      : [];
+    if (pathsToRemove.length > 0) {
       const { error: removeError } = await supabase.storage
         .from("media")
-        .remove([media.path]);
+        .remove(pathsToRemove);
 
       if (removeError) {
         console.error("remove market media storage error:", removeError);
@@ -410,6 +475,8 @@ export default function EditMarketPostPage() {
         .update({
           cover_image_url: nextCover?.url || null,
           cover_image_path: nextCover?.path || null,
+          cover_thumb_url: nextCover?.thumb_url || null,
+          cover_thumb_path: nextCover?.thumb_path || null,
         })
         .eq("id", item.id)
         .eq("user_id", user.id);
@@ -421,6 +488,8 @@ export default function EditMarketPostPage() {
           ...item,
           cover_image_url: nextCover?.url || null,
           cover_image_path: nextCover?.path || null,
+          cover_thumb_url: nextCover?.thumb_url || null,
+          cover_thumb_path: nextCover?.thumb_path || null,
         });
       }
     }
@@ -503,7 +572,12 @@ export default function EditMarketPostPage() {
                   return (
                     <article key={media.id} style={mediaManageCardStyle}>
                       <div style={mediaImageWrapStyle}>
-                        <img src={media.url} alt="" style={mediaManageImageStyle} />
+                        <img
+                          src={media.thumb_url || media.url}
+                          alt=""
+                          style={mediaManageImageStyle}
+                          loading="lazy"
+                        />
                         {isCover ? (
                           <span style={coverBadgeStyle}>封面</span>
                         ) : null}
@@ -628,6 +702,29 @@ export default function EditMarketPostPage() {
             </div>
 
             <div>
+              <label style={labelStyle}>外部链接，可选</label>
+              <input
+                value={externalUrl}
+                onChange={(event) => setExternalUrl(event.target.value)}
+                style={inputStyle}
+                placeholder="例如：https://example.com/item"
+              />
+              <div style={coverHintStyle}>
+                可放置更详细的说明页、预约表单或个人主页链接。
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>外链名称，可选</label>
+              <input
+                value={externalLabel}
+                onChange={(event) => setExternalLabel(event.target.value)}
+                style={inputStyle}
+                placeholder="例如：查看详细说明 / 联系方式 / 原发布页"
+              />
+            </div>
+
+            <div>
               <label style={labelStyle}>说明</label>
               <textarea
                 value={description}
@@ -660,6 +757,19 @@ export default function EditMarketPostPage() {
       </div>
     </main>
   );
+}
+
+function normalizeExternalUrl(value: string) {
+  const raw = value.trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 const pageStyle: CSSProperties = {
@@ -879,6 +989,13 @@ const archiveHintStyle: CSSProperties = {
   padding: "9px 10px",
   color: "#5f6a5b",
   fontSize: 13,
+};
+
+const coverHintStyle: CSSProperties = {
+  marginTop: 6,
+  color: "#7b8575",
+  fontSize: 12,
+  lineHeight: 1.5,
 };
 
 const noticeStyle: CSSProperties = {

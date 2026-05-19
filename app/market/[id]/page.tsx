@@ -5,6 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import MarketCommentsSection from "@/components/market/MarketCommentsSection";
+import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import {
   formatMarketTime,
   getMarketItemCategoryLabel,
@@ -12,6 +13,7 @@ import {
   type MarketPostRow,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
+import type { LightboxImage } from "@/lib/archive-detail-types";
 
 type ProfileBrief = {
   id: string;
@@ -39,6 +41,8 @@ type MarketMediaRow = {
   user_id: string;
   url: string;
   path: string | null;
+  thumb_url?: string | null;
+  thumb_path?: string | null;
   source_media_id: string | null;
   source_record_id: string | null;
   sort_order: number | null;
@@ -58,6 +62,8 @@ export default function MarketDetailPage() {
     null
   );
   const [marketMedia, setMarketMedia] = useState<MarketMediaRow[]>([]);
+  const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
 
@@ -153,6 +159,22 @@ export default function MarketDetailPage() {
   }, [id]);
 
   const isOwner = Boolean(user?.id && item?.user_id === user.id);
+  const isLightboxOpen = lightboxImages.length > 0;
+
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyTouchAction = document.body.style.touchAction;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.touchAction = previousBodyTouchAction;
+    };
+  }, [isLightboxOpen]);
 
   async function updateStatus(nextStatus: "active" | "ended") {
     if (!item || !isOwner || working) return;
@@ -187,17 +209,26 @@ export default function MarketDetailPage() {
     setWorking(true);
 
     const mediaPaths = marketMedia
-      .map((media) => media.path)
+      .flatMap((media) =>
+        media.path ? [media.path, media.thumb_path] : []
+      )
       .filter(Boolean) as string[];
 
     const standaloneCoverPath =
       item.cover_image_path && !mediaPaths.includes(item.cover_image_path)
         ? item.cover_image_path
         : null;
+    const standaloneCoverThumbPath =
+      standaloneCoverPath &&
+      item.cover_thumb_path &&
+      !mediaPaths.includes(item.cover_thumb_path)
+        ? item.cover_thumb_path
+        : null;
 
     const pathsToRemove = [
       ...mediaPaths,
       ...(standaloneCoverPath ? [standaloneCoverPath] : []),
+      ...(standaloneCoverThumbPath ? [standaloneCoverThumbPath] : []),
     ];
 
     const { error } = await supabase
@@ -226,6 +257,18 @@ export default function MarketDetailPage() {
     router.push("/market");
   }
 
+  function openMarketLightbox(targetUrl: string) {
+    if (!item) return;
+
+    const images = buildMarketLightboxImages(item, marketMedia);
+    const nextIndex = images.findIndex((image) => image.url === targetUrl);
+
+    if (!images.length || nextIndex < 0) return;
+
+    setLightboxImages(images);
+    setLightboxIndex(nextIndex);
+  }
+
   if (loading) {
     return <main style={pageStyle}>加载中...</main>;
   }
@@ -246,170 +289,265 @@ export default function MarketDetailPage() {
   const archiveName = archive?.title || "";
   const systemName = archive?.system_name || archive?.species_name_snapshot || "";
   const sourceArchiveId = sourceRecord?.archive_id || item.archive_id || "";
+  const sourceTime = sourceRecord?.photo_time ? formatSourceRecordTime(sourceRecord.photo_time) : "";
+  const sourceNoteText = sourceRecord?.note?.trim() || "";
   const hasSource = Boolean(archive || sourceRecord);
+  const externalUrl = normalizeExternalUrl(item.external_url || "");
+  const externalLabel = item.external_label?.trim() || getExternalLinkLabel(externalUrl);
 
   return (
-    <main style={pageStyle}>
-      <div style={shellStyle}>
-        <Link href="/market" style={backLinkStyle}>
-          ← 返回集市
-        </Link>
+    <>
+      <main style={pageStyle}>
+        <div style={shellStyle}>
+          <Link href="/market" style={backLinkStyle}>
+            ← 返回集市
+          </Link>
 
-        <section style={panelStyle}>
-          <div style={topRowStyle}>
-            <div style={badgeRowStyle}>
-              <span style={typeBadgeStyle}>
-                {getMarketPostTypeLabel(item.post_type)}
-              </span>
-              <span style={categoryBadgeStyle}>
-                {getMarketItemCategoryLabel(item.item_category)}
-              </span>
-              {item.status === "ended" ? (
-                <span style={endedBadgeStyle}>已结束</span>
-              ) : null}
+          <section style={panelStyle}>
+            <div style={topRowStyle}>
+              <div style={badgeRowStyle}>
+                <span style={typeBadgeStyle}>
+                  {getMarketPostTypeLabel(item.post_type)}
+                </span>
+                <span style={categoryBadgeStyle}>
+                  {getMarketItemCategoryLabel(item.item_category)}
+                </span>
+                {item.status === "ended" ? (
+                  <span style={endedBadgeStyle}>已结束</span>
+                ) : null}
+              </div>
+
+              <span style={timeStyle}>{formatMarketTime(item.created_at)}</span>
             </div>
 
-            <span style={timeStyle}>{formatMarketTime(item.created_at)}</span>
-          </div>
+            <h1 style={titleStyle}>{item.title}</h1>
 
-          <h1 style={titleStyle}>{item.title}</h1>
-
-          {item.cover_image_url ? (
-            <img
-              src={item.cover_image_url}
-              alt={item.title}
-              style={coverImageStyle}
-            />
-          ) : null}
-
-          {marketMedia.length > 0 ? (
-            <section style={marketMediaSectionStyle}>
-              <div style={marketMediaTitleStyle}>集市图片</div>
-              <div style={marketMediaGridStyle}>
-                {marketMedia.map((media) => {
-                  const isCover = item.cover_image_url === media.url;
-
-                  return (
-                    <a
-                      key={media.id}
-                      href={media.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={marketMediaItemStyle}
-                    >
-                      <img src={media.url} alt="" style={marketMediaImageStyle} />
-                      {isCover ? (
-                        <span style={marketMediaCoverBadgeStyle}>封面</span>
-                      ) : null}
-                    </a>
-                  );
-                })}
-              </div>
-            </section>
-          ) : null}
-
-          <div style={metaStyle}>
-            发布人：
-            <Link
-              href={`/user/${item.user_id}/profile`}
-              style={publisherLinkStyle}
-            >
-              {profile?.username || "未设置用户名"}
-            </Link>
-            {item.location_text ? ` · ${item.location_text}` : ""}
-            {Number(item.view_count || 0) > 0
-              ? ` · 浏览 ${Number(item.view_count || 0)}`
-              : ""}
-          </div>
-
-          {item.description ? (
-            <section style={descriptionBlockStyle}>{item.description}</section>
-          ) : (
-            <section style={descriptionBlockStyle}>没有填写说明。</section>
-          )}
-
-          {hasSource ? (
-            <section style={linkedSourceStyle}>
-              <div style={{ color: "#6f7b69", fontSize: 13 }}>来源</div>
-
-              <div style={{ marginTop: 4, fontWeight: 700, color: "#1f2a1f" }}>
-                {archiveName || "未命名项目"}
-                {systemName ? ` · ${systemName}` : ""}
-                {sourceRecord?.photo_time
-                  ? ` · ${formatSourceRecordTime(sourceRecord.photo_time)}`
-                  : ""}
-              </div>
-
-              {sourceRecord?.note ? (
-                <div style={sourceRecordNoteStyle}>{sourceRecord.note}</div>
-              ) : null}
-
-              {sourceRecord && sourceArchiveId ? (
+            <section style={summaryInlineStyle}>
+              <span style={summaryInlineItemStyle}>
+                <span style={summaryLabelStyle}>发布人</span>
                 <Link
-                  href={`/archive/${sourceArchiveId}?record=${sourceRecord.id}`}
-                  style={archiveLinkStyle}
+                  href={`/user/${item.user_id}/profile`}
+                  style={publisherLinkStyle}
                 >
-                  查看来源记录
+                  {profile?.username || "未设置用户名"}
                 </Link>
-              ) : archive ? (
-                <Link href={`/archive/${archive.id}`} style={archiveLinkStyle}>
-                  查看来源项目
-                </Link>
-              ) : null}
+              </span>
+
+              <span style={summarySeparatorStyle}>·</span>
+
+              <span style={summaryInlineItemStyle}>
+                <span style={summaryLabelStyle}>地点</span>
+                <span style={summaryValueStyle}>{item.location_text || "未填写"}</span>
+              </span>
+
+              <span style={summarySeparatorStyle}>·</span>
+
+              <span style={summaryInlineItemStyle}>
+                <span style={summaryLabelStyle}>记录来源</span>
+                {hasSource && sourceArchiveId ? (
+                  <>
+                    <Link
+                      href={
+                        sourceRecord
+                          ? `/archive/${sourceArchiveId}?record=${sourceRecord.id}`
+                          : `/archive/${sourceArchiveId}`
+                      }
+                      style={archiveLinkStyle}
+                    >
+                      <span style={sourceDetailInlineStyle}>
+                        {archiveName ? (
+                          <span style={sourceDetailArchiveStyle}>{archiveName}</span>
+                        ) : (
+                          <span style={sourceDetailMissingStyle}>查看来源记录</span>
+                        )}
+                        {systemName ? (
+                          <span style={sourceDetailSystemStyle}>{systemName}</span>
+                        ) : null}
+                        {sourceTime ? (
+                          <span style={sourceDetailTimeStyle}>{sourceTime}</span>
+                        ) : null}
+                      </span>
+                    </Link>
+                    {sourceNoteText ? (
+                      <span style={sourceInlineNoteStyle}>{sourceNoteText}</span>
+                    ) : null}
+                  </>
+                ) : (
+                  <span style={summaryValueStyle}>未关联记录</span>
+                )}
+              </span>
             </section>
-          ) : null}
 
-          <section style={noticeStyle}>
-            集市第一版只做信息发布，不做平台支付、担保、物流和纠纷处理。
-          </section>
-
-          <MarketCommentsSection
-            marketPostId={item.id}
-            postOwnerId={item.user_id}
-            postStatus={item.status}
-            currentUserId={user?.id || null}
-          />
-
-          {isOwner ? (
-            <div style={ownerButtonRowStyle}>
-              <Link href={`/market/${item.id}/edit`} style={editLinkStyle}>
-                编辑
-              </Link>
-
-              {item.status === "ended" ? (
-                <button
-                  type="button"
-                  onClick={() => updateStatus("active")}
-                  disabled={working}
-                  style={primaryButtonStyle}
+            {externalUrl ? (
+              <section style={externalLinkBarStyle}>
+                <span style={externalLinkLabelStyle}>外链</span>
+                <a
+                  href={externalUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  style={externalLinkStyle}
                 >
-                  恢复进行中
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => updateStatus("ended")}
-                  disabled={working}
-                  style={secondaryButtonStyle}
-                >
-                  标记已结束
-                </button>
-              )}
+                  {externalLabel}
+                </a>
+              </section>
+            ) : null}
 
+            {item.cover_image_url ? (
               <button
                 type="button"
-                onClick={deletePost}
-                disabled={working}
-                style={dangerButtonStyle}
+                onClick={() => openMarketLightbox(item.cover_image_url || "")}
+                aria-label="打开封面图片预览"
+                style={coverButtonStyle}
               >
-                删除
+                <img
+                  src={item.cover_image_url}
+                  alt={item.title}
+                  style={coverImageStyle}
+                />
               </button>
-            </div>
-          ) : null}
-        </section>
-      </div>
-    </main>
+            ) : null}
+
+            {marketMedia.length > 0 ? (
+              <section style={marketMediaSectionStyle}>
+                <div style={marketMediaTitleStyle}>图片</div>
+                <div style={marketMediaGridStyle}>
+                  {marketMedia.map((media) => {
+                    const isCover = item.cover_image_url === media.url;
+
+                    return (
+                      <button
+                        key={media.id}
+                        type="button"
+                        onClick={() => openMarketLightbox(media.url)}
+                        aria-label="打开集市图片预览"
+                        style={marketMediaItemStyle}
+                      >
+                        <img
+                          src={media.thumb_url || media.url}
+                          alt=""
+                          style={marketMediaImageStyle}
+                          loading="lazy"
+                        />
+                        {isCover ? (
+                          <span style={marketMediaCoverBadgeStyle}>封面</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            {item.description ? (
+              <section style={descriptionBlockStyle}>{item.description}</section>
+            ) : null}
+
+            <MarketCommentsSection
+              marketPostId={item.id}
+              postOwnerId={item.user_id}
+              postStatus={item.status}
+              currentUserId={user?.id || null}
+            />
+
+            {isOwner ? (
+              <div style={ownerButtonRowStyle}>
+                <Link href={`/market/${item.id}/edit`} style={editLinkStyle}>
+                  编辑
+                </Link>
+
+                {item.status === "ended" ? (
+                  <button
+                    type="button"
+                    onClick={() => updateStatus("active")}
+                    disabled={working}
+                    style={primaryButtonStyle}
+                  >
+                    恢复进行中
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => updateStatus("ended")}
+                    disabled={working}
+                    style={secondaryButtonStyle}
+                  >
+                    标记已结束
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={deletePost}
+                  disabled={working}
+                  style={dangerButtonStyle}
+                >
+                  删除
+                </button>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      </main>
+
+      {isLightboxOpen ? (
+        <ArchiveLightbox
+          images={lightboxImages}
+          index={lightboxIndex}
+          onChange={setLightboxIndex}
+          onClose={() => {
+            setLightboxImages([]);
+            setLightboxIndex(0);
+          }}
+        />
+      ) : null}
+    </>
   );
+}
+
+function normalizeExternalUrl(value?: string | null) {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function getExternalLinkLabel(url: string) {
+  if (!url) return "打开外部链接";
+
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./, "") || "打开外部链接";
+  } catch {
+    return "打开外部链接";
+  }
+}
+
+function buildMarketLightboxImages(
+  item: MarketPostRow,
+  marketMedia: MarketMediaRow[]
+): LightboxImage[] {
+  const seen = new Set<string>();
+  const images: LightboxImage[] = [];
+
+  function add(url?: string | null, alt?: string | null) {
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    images.push({ url, alt: alt || item.title || "集市图片" });
+  }
+
+  add(item.cover_image_url, item.title || "集市封面");
+
+  marketMedia.forEach((media, index) => {
+    add(media.url, `${item.title || "集市图片"} ${index + 1}`);
+  });
+
+  return images;
 }
 
 function formatSourceRecordTime(value?: string | null) {
@@ -503,7 +641,94 @@ const timeStyle: CSSProperties = {
 const titleStyle: CSSProperties = {
   margin: 0,
   color: "#1f2a1f",
-  fontSize: 26,
+  fontSize: 25,
+  lineHeight: 1.35,
+};
+
+const summaryInlineStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: "5px 8px",
+  marginTop: 10,
+  marginBottom: 12,
+  padding: "8px 10px",
+  border: "1px solid #e4ece0",
+  background: "#fafcf8",
+  borderRadius: 12,
+};
+
+const summaryInlineItemStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "baseline",
+  gap: 5,
+  minWidth: 0,
+  maxWidth: "100%",
+};
+
+const summarySeparatorStyle: CSSProperties = {
+  color: "#c1cbbb",
+  fontSize: 12,
+};
+
+const sourceInlineNoteStyle: CSSProperties = {
+  color: "#5f6a5b",
+  fontSize: 13,
+  lineHeight: 1.35,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  maxWidth: "100%",
+};
+
+const summaryLabelStyle: CSSProperties = {
+  color: "#8a9585",
+  fontSize: 12,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+};
+
+const summaryValueStyle: CSSProperties = {
+  color: "#2f3a2f",
+  fontSize: 14,
+  lineHeight: 1.35,
+};
+
+const externalLinkBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 12,
+  padding: "8px 10px",
+  border: "1px solid #e4ece0",
+  background: "#fffdf6",
+  borderRadius: 12,
+};
+
+const externalLinkLabelStyle: CSSProperties = {
+  color: "#8a7a42",
+  fontSize: 12,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+};
+
+const externalLinkStyle: CSSProperties = {
+  color: "#4f7b45",
+  fontSize: 14,
+  fontWeight: 700,
+  textDecoration: "none",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const coverButtonStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  cursor: "zoom-in",
 };
 
 const coverImageStyle: CSSProperties = {
@@ -512,7 +737,6 @@ const coverImageStyle: CSSProperties = {
   objectFit: "cover",
   borderRadius: 16,
   border: "1px solid #e4ece0",
-  marginTop: 12,
   background: "#f0f4ed",
 };
 
@@ -540,12 +764,15 @@ const marketMediaGridStyle: CSSProperties = {
 const marketMediaItemStyle: CSSProperties = {
   position: "relative",
   display: "block",
-  textDecoration: "none",
+  width: "100%",
+  padding: 0,
+  textAlign: "left",
   color: "inherit",
   borderRadius: 12,
   overflow: "hidden",
   border: "1px solid #dfe8da",
   background: "#fff",
+  cursor: "zoom-in",
 };
 
 const marketMediaImageStyle: CSSProperties = {
@@ -567,43 +794,50 @@ const marketMediaCoverBadgeStyle: CSSProperties = {
   fontWeight: 700,
 };
 
-const metaStyle: CSSProperties = {
-  marginTop: 10,
-  color: "#6f7b69",
-  fontSize: 14,
-  lineHeight: 1.6,
-};
-
 const publisherLinkStyle: CSSProperties = {
   color: "#4f7b45",
   textDecoration: "none",
   fontWeight: 700,
-};
-
-const linkedSourceStyle: CSSProperties = {
-  marginTop: 14,
-  background: "#f7fbf2",
-  border: "1px solid #dfe8da",
-  borderRadius: 14,
-  padding: 12,
-};
-
-const sourceRecordNoteStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#5f6a5b",
-  fontSize: 13,
-  lineHeight: 1.6,
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
+  fontSize: 14,
 };
 
 const archiveLinkStyle: CSSProperties = {
-  display: "inline-block",
-  marginTop: 8,
   color: "#4f7b45",
   textDecoration: "none",
+  fontSize: 14,
+  fontWeight: 700,
+};
+
+const sourceDetailInlineStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "baseline",
+  gap: 6,
+  flexWrap: "wrap",
+};
+
+const sourceDetailArchiveStyle: CSSProperties = {
+  color: "#2f3a2f",
+  fontSize: 14,
+  fontWeight: 700,
+};
+
+const sourceDetailSystemStyle: CSSProperties = {
+  color: "#4f7b45",
+  fontSize: 12,
+  fontWeight: 700,
+  background: "#edf4e8",
+  borderRadius: 999,
+  padding: "2px 7px",
+};
+
+const sourceDetailTimeStyle: CSSProperties = {
+  color: "#8a9585",
+  fontSize: 12,
+  fontWeight: 500,
+};
+
+const sourceDetailMissingStyle: CSSProperties = {
+  color: "#4f7b45",
   fontSize: 14,
   fontWeight: 700,
 };
@@ -616,16 +850,6 @@ const descriptionBlockStyle: CSSProperties = {
   whiteSpace: "pre-wrap",
 };
 
-const noticeStyle: CSSProperties = {
-  marginTop: 14,
-  background: "#fffaf0",
-  border: "1px solid #f1e3c7",
-  borderRadius: 12,
-  padding: "10px 12px",
-  color: "#7a6636",
-  fontSize: 13,
-  lineHeight: 1.7,
-};
 
 const ownerButtonRowStyle: CSSProperties = {
   display: "flex",

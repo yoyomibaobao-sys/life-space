@@ -14,6 +14,11 @@ import {
   shortText,
 } from "@/lib/discover-utils";
 
+
+export function getFeedItemDisplayImageUrl(record: FeedItem) {
+  return record.primary_thumb_url || record.primary_image_url || null;
+}
+
 export function DefaultUserAvatar({ size = 30 }: { size?: number }) {
   return (
     <span

@@ -1,11 +1,12 @@
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { FeedItem, UserSection } from "@/lib/discover-types";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
-import { DefaultUserAvatar, ProjectCardRows } from "@/components/discover/DiscoverShared";
+import { DefaultUserAvatar, ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
 
 function DiscoverUserRecordCard({ record, index }: { record: FeedItem; index: number }) {
   const isHelp = record.status_tag === "help";
   const isResolved = record.status_tag === "resolved";
+  const displayImageUrl = getFeedItemDisplayImageUrl(record);
 
   return (
     <a
@@ -31,10 +32,11 @@ function DiscoverUserRecordCard({ record, index }: { record: FeedItem; index: nu
       }}
     >
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-        {record.primary_image_url ? (
+        {displayImageUrl ? (
           <img
-            src={record.primary_image_url}
+            src={displayImageUrl}
             alt={record.archive_title || "record image"}
+            loading="lazy"
             style={{
               width: 62,
               height: 62,
