@@ -151,8 +151,5 @@ USING (
   AND ("storage"."foldername"("name"))[1] = ("auth"."uid"())::text
 );
 
-COMMENT ON POLICY "avatars_public_select" ON "storage"."objects" IS
-'Public avatar read policy. Writes must be authenticated and scoped to avatars/{auth.uid()}/ paths.';
 
-COMMENT ON POLICY "media_public_select" ON "storage"."objects" IS
-'Temporary P0a public media read policy. The media bucket remains public; private record images may still be reachable by URL. TODO(P0b): migrate to a private bucket plus signed URLs.';
+
