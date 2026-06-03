@@ -15,7 +15,8 @@
 
 DROP POLICY IF EXISTS "public upload" ON "storage"."objects";
 
-ALTER TABLE "storage"."objects" ENABLE ROW LEVEL SECURITY;
+-- storage.objects is a Supabase-managed table. RLS is already enabled by the
+-- platform; migration roles are not the table owner and cannot ALTER it here.
 
 -- ---------------------------------------------------------------------------
 -- 2. Bucket configuration.
