@@ -22,6 +22,24 @@ export type AppProfile = {
   is_public?: boolean | null;
 };
 
+export const PUBLIC_PROFILE_SELECT =
+  'id, username, avatar_url, level, flower_count, view_count, country_code, country_name, region_name, city_name, created_at';
+
+export type PublicProfile = Pick<
+  AppProfile,
+  | 'id'
+  | 'username'
+  | 'avatar_url'
+  | 'level'
+  | 'flower_count'
+  | 'view_count'
+  | 'country_code'
+  | 'country_name'
+  | 'region_name'
+  | 'city_name'
+  | 'created_at'
+>;
+
 export type PlantSpeciesSummary = {
   id: string;
   common_name?: string | null;

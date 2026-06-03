@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import {
   buttonRowStyle,
   cardBodyStyle,
@@ -97,8 +98,8 @@ export default function FollowersPage() {
 
       const [profilesResult, archivesResult] = await Promise.all([
         supabase
-          .from("profiles")
-          .select("id, username, avatar_url")
+          .from("public_profiles")
+          .select(PUBLIC_PROFILE_SELECT)
           .in("id", followerIds),
 
         supabase

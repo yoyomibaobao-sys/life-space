@@ -4,7 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
-import type { AppProfile } from "@/lib/domain-types";
+import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import type { MarketPostStatus } from "@/lib/market-types";
 import {
   canCreateMembershipContent,
@@ -102,8 +102,8 @@ export default function MarketCommentsSection({
 
     const profilesResult = profileIds.length
       ? await supabase
-          .from("profiles")
-          .select("id, username, avatar_url")
+          .from("public_profiles")
+          .select(PUBLIC_PROFILE_SELECT)
           .in("id", profileIds)
       : { data: [] };
 

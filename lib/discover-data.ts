@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type { FeedItem } from "@/lib/discover-types";
-import type { ProfileLocationRow, RecordTagRow } from "@/lib/domain-types";
+import type { PublicProfile, RecordTagRow } from "@/lib/domain-types";
+import { buildLocationTextFromFields } from "@/lib/region-shared";
 
 export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
   const recordIds = nextItems.map((item) => item.record_id);
@@ -70,12 +71,20 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
 
   if (userIds.length > 0) {
     const { data: profileRows } = await supabase
-      .from("profiles")
-      .select("id, location")
+      .from("public_profiles")
+      .select("id, country_code, country_name, region_name, city_name")
       .in("id", userIds);
 
-    (profileRows || []).forEach((row: ProfileLocationRow) => {
-      locationMap.set(row.id, row.location || null);
+    (profileRows || []).forEach((row: PublicProfile) => {
+      locationMap.set(
+        row.id,
+        buildLocationTextFromFields({
+          countryCode: row.country_code,
+          countryName: row.country_name,
+          regionName: row.region_name,
+          cityName: row.city_name,
+        }) || null
+      );
     });
   }
 

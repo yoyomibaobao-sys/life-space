@@ -178,8 +178,8 @@ export async function findUserIdsByRegionFilters(
   if (!keywords.length) return [] as string[];
 
   let query = supabase
-    .from("profiles")
-    .select("id, location, country_code, country_name, region_name, city_name")
+    .from("public_profiles")
+    .select("id, country_code, country_name, region_name, city_name")
     .limit(500);
 
   if (countryCode && countryCode !== "OTHER") {
@@ -211,7 +211,7 @@ export async function findUserIdsByRegionFilters(
       countryName: row.country_name,
       regionName: row.region_name,
       cityName: row.city_name,
-    }) || String(row.location || "").toLowerCase();
+    });
 
     if (lowerKeywords.every((keyword) => text.includes(keyword))) {
       ids.add(String(row.id));

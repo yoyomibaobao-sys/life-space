@@ -8,7 +8,7 @@ import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   formatProfileDateTime,
-  loadUserProfileData,
+  loadPublicUserProfileData,
   type PublicUserProfileData,
 } from "@/lib/user-profile-shared";
 import { formatRegionDisplayFromProfile } from "@/lib/region-shared";
@@ -42,7 +42,7 @@ export default function PublicUserProfilePage() {
         const [{ data: authData }, profileData, marketResult] =
           await Promise.all([
             supabase.auth.getUser(),
-            loadUserProfileData(supabase, userId),
+            loadPublicUserProfileData(supabase, userId),
             supabase
               .from("market_posts")
               .select("*")

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
@@ -193,7 +194,7 @@ export default function FollowPage() {
 
       const [profilesResult, subTagsResult, groupTagsResult] = await Promise.all([
         profileIds.length
-          ? supabase.from("profiles").select("id, username, avatar_url").in("id", profileIds)
+          ? supabase.from("public_profiles").select(PUBLIC_PROFILE_SELECT).in("id", profileIds)
           : Promise.resolve({ data: [] as ProfileRow[], error: null }),
         subTagIds.length
           ? supabase.from("sub_tags").select("id, name").in("id", subTagIds)

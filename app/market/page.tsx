@@ -18,6 +18,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 
 type ProfileBrief = {
   id: string;
@@ -26,7 +27,6 @@ type ProfileBrief = {
   country_name: string | null;
   region_name: string | null;
   city_name: string | null;
-  location: string | null;
 };
 
 type ArchiveBrief = {
@@ -109,10 +109,8 @@ export default function MarketPage() {
         const [profilesResult, archivesResult] = await Promise.all([
           userIds.length
             ? supabase
-                .from("profiles")
-                .select(
-                  "id, username, avatar_url, country_name, region_name, city_name, location"
-                )
+                .from("public_profiles")
+                .select(PUBLIC_PROFILE_SELECT)
                 .in("id", userIds)
             : Promise.resolve({ data: [], error: null }),
 
@@ -191,7 +189,6 @@ export default function MarketPage() {
       addOption(profile?.country_name);
       addOption(profile?.region_name);
       addOption(profile?.city_name);
-      addOption(profile?.location);
       addOption(buildLocationText(profile));
     });
 
@@ -211,7 +208,6 @@ export default function MarketPage() {
         profile?.country_name,
         profile?.region_name,
         profile?.city_name,
-        profile?.location,
         buildLocationText(profile),
       ]
         .filter(Boolean)
@@ -430,7 +426,7 @@ function buildLocationText(profile?: ProfileBrief | null) {
 
   if (parts.length > 0) return parts.join(" · ");
 
-  return profile.location || "";
+  return "";
 }
 
 const pageStyle: CSSProperties = {

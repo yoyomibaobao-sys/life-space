@@ -1,4 +1,4 @@
-import type { AppProfile } from "@/lib/domain-types";
+import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 
 export type UserProfileStats = {
   archiveCount: number;
@@ -71,7 +71,16 @@ export function formatStorage(bytes?: number | null) {
   return `${Math.round(size)} B`;
 }
 
-export async function loadUserProfileData(supabase: any, userId: string): Promise<PublicUserProfileData> {
+async function loadUserProfileDataWithProfile(
+  supabase: any,
+  userId: string,
+  profileSource: "own" | "public"
+): Promise<PublicUserProfileData> {
+  const profileQuery =
+    profileSource === "own"
+      ? supabase.from("profiles").select("*").eq("id", userId).maybeSingle()
+      : supabase.from("public_profiles").select(PUBLIC_PROFILE_SELECT).eq("id", userId).maybeSingle();
+
   const [
     profileResult,
     archivesResult,
@@ -83,7 +92,7 @@ export async function loadUserProfileData(supabase: any, userId: string): Promis
     receivedFlowersResult,
     sentFlowersResult,
   ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    profileQuery,
     supabase
       .from("archives")
       .select("id, title, system_name, category, last_record_time, record_count, view_count, is_public")
@@ -127,4 +136,12 @@ export async function loadUserProfileData(supabase: any, userId: string): Promis
     },
     recentArchives: publicArchives.slice(0, 6),
   };
+}
+
+export async function loadUserProfileData(supabase: any, userId: string): Promise<PublicUserProfileData> {
+  return loadUserProfileDataWithProfile(supabase, userId, "own");
+}
+
+export async function loadPublicUserProfileData(supabase: any, userId: string): Promise<PublicUserProfileData> {
+  return loadUserProfileDataWithProfile(supabase, userId, "public");
 }

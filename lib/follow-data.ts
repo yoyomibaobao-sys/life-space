@@ -11,6 +11,7 @@ import type {
   SubTagRow,
   UserFollowRow,
 } from "@/lib/follow-types";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import {
   byRecentProject,
   getDurationDays,
@@ -85,7 +86,7 @@ export async function loadFollowPageData(supabase: any, userId: string): Promise
 
   const [profilesResult, subTagsResult, groupTagsResult] = await Promise.all([
     profileIds.length
-      ? supabase.from("profiles").select("id, username, avatar_url").in("id", profileIds)
+      ? supabase.from("public_profiles").select(PUBLIC_PROFILE_SELECT).in("id", profileIds)
       : Promise.resolve({ data: [] as ProfileRow[], error: null }),
     subTagIds.length
       ? supabase.from("sub_tags").select("id, name").in("id", subTagIds)

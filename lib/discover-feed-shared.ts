@@ -7,10 +7,11 @@ import { sanitizeOrSearchText } from "@/lib/discover-search-utils";
 import type {
   PlantAliasIdRow,
   PlantI18nIdRow,
-  ProfileLocationRow,
+  PublicProfile,
   RecordIdRow,
   SpeciesIdRow,
 } from "@/lib/domain-types";
+import { makeRegionSearchText } from "@/lib/region-shared";
 
 export type DiscoverCategoryFilter = FilterMode | SearchCategory;
 
@@ -161,16 +162,26 @@ export async function resolveDiscoverRegionUserIds(regionTerm: string) {
   if (!cleanRegionTerm) return null as string[] | null;
 
   const { data: profileRows, error: profileError } = await supabase
-    .from("profiles")
-    .select("id")
-    .ilike("location", `%${cleanRegionTerm}%`)
+    .from("public_profiles")
+    .select("id, country_code, country_name, region_name, city_name")
     .limit(200);
 
   if (profileError) {
     console.error("discover search profile error:", profileError);
   }
 
-  return (profileRows || []).map((row: ProfileLocationRow) => row.id);
+  const keyword = cleanRegionTerm.toLowerCase();
+
+  return (profileRows || [])
+    .filter((row: PublicProfile) =>
+      makeRegionSearchText({
+        countryCode: row.country_code,
+        countryName: row.country_name,
+        regionName: row.region_name,
+        cityName: row.city_name,
+      }).includes(keyword)
+    )
+    .map((row: PublicProfile) => row.id);
 }
 
 export function mergeDiscoverFeedItems(prev: FeedItem[], next: FeedItem[]) {

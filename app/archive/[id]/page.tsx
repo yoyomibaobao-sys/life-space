@@ -145,7 +145,7 @@ saveRecentArchiveBrowse({
       }
 
       const { data: profile } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("username")
         .eq("id", archiveData.user_id)
         .maybeSingle();

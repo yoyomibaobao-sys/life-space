@@ -12,7 +12,7 @@ import {
   getMarketPostTypeLabel,
   type MarketPostRow,
 } from "@/lib/market-types";
-import type { SupabaseUser } from "@/lib/domain-types";
+import { PUBLIC_PROFILE_SELECT, type SupabaseUser } from "@/lib/domain-types";
 import type { LightboxImage } from "@/lib/archive-detail-types";
 
 type ProfileBrief = {
@@ -101,8 +101,8 @@ export default function MarketDetailPage() {
       const [profileResult, archiveResult, sourceRecordResult, mediaResult] =
         await Promise.all([
           supabase
-            .from("profiles")
-            .select("id, username, avatar_url")
+            .from("public_profiles")
+            .select(PUBLIC_PROFILE_SELECT)
             .eq("id", row.user_id)
             .maybeSingle(),
 

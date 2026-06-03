@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { formatProfileDateTime } from "@/lib/user-profile-shared";
 
 type FlowerSourceItem = {
@@ -67,7 +68,7 @@ function ProfileFlowersContent() {
 
       const [profilesResult, commentsResult, recordsResult] = await Promise.all([
         profileIds.length
-          ? supabase.from("profiles").select("id, username").in("id", profileIds)
+          ? supabase.from("public_profiles").select(PUBLIC_PROFILE_SELECT).in("id", profileIds)
           : Promise.resolve({ data: [] as Array<{ id: string; username?: string | null }> }),
         commentIds.length
           ? supabase.from("comments").select("id, content").in("id", commentIds)

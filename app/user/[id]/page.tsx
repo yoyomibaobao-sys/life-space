@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import {
   type ArchiveCategory,
   getArchiveCategoryIcon,
@@ -69,7 +70,7 @@ export default function UserSpacePage() {
 
     try {
       const { data: profile } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("username")
         .eq("id", userId)
         .maybeSingle();
@@ -136,8 +137,8 @@ export default function UserSpacePage() {
     } = await supabase.auth.getUser();
 
     const { data } = await supabase
-      .from("profiles")
-      .select("*")
+      .from("public_profiles")
+      .select(PUBLIC_PROFILE_SELECT)
       .eq("id", userId)
       .maybeSingle();
 

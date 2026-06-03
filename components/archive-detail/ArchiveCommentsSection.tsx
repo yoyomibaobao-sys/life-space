@@ -14,7 +14,7 @@ import type {
   RecordComment,
   RecordLikeRow,
 } from "@/lib/archive-detail-types";
-import type { AppProfile } from "@/lib/domain-types";
+import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -128,8 +128,8 @@ export default function ArchiveCommentsSection({
     ] = await Promise.all([
       profileIds.length
         ? supabase
-            .from("profiles")
-            .select("id, username, avatar_url")
+            .from("public_profiles")
+            .select(PUBLIC_PROFILE_SELECT)
             .in("id", profileIds)
         : Promise.resolve({
             data: [] as Pick<AppProfile, "id" | "username" | "avatar_url">[],
