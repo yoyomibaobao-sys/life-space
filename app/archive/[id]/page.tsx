@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -60,7 +60,7 @@ function Content({ id }: { id: string }) {
   const [species, setSpecies] = useState<PlantSpeciesLite | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [me, setMe] = useState<string | null | undefined>(undefined);
-  const [username, setUsername] = useState("用户");
+  const [username, setUsername] = useState("鐢ㄦ埛");
   const [sameTagCounts, setSameTagCounts] = useState<Record<string, number>>({});
   const [isProjectFollowed, setIsProjectFollowed] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
@@ -151,7 +151,7 @@ saveRecentArchiveBrowse({
         .eq("id", archiveData.user_id)
         .maybeSingle();
 
-      setUsername(profile?.username || "用户");
+      setUsername(profile?.username || "鐢ㄦ埛");
 
       if (currentUserId && !isOwnerView) {
         const { data: archiveFollow } = await supabase
@@ -385,7 +385,7 @@ saveRecentArchiveBrowse({
   }, []);
 
   if (!archive || me === undefined) {
-    return <div style={{ padding: 20 }}>加载中...</div>;
+    return <div style={{ padding: 20 }}>鍔犺浇涓?..</div>;
   }
 
   const activeArchive = archive;
@@ -471,7 +471,7 @@ saveRecentArchiveBrowse({
       .eq("id", recordId);
 
     if (error) {
-      showToast("更新求助状态失败");
+      showToast("鏇存柊姹傚姪鐘舵€佸け璐?);
       return;
     }
 
@@ -488,10 +488,10 @@ saveRecentArchiveBrowse({
 
     showToast(
       nextStatus === "help"
-        ? "已标记为求助"
+        ? "宸叉爣璁颁负姹傚姪"
         : nextStatus === "resolved"
-        ? "已标记为已解决"
-        : "已取消求助"
+        ? "宸叉爣璁颁负宸茶В鍐?
+        : "宸插彇娑堟眰鍔?
     );
   }
 
@@ -508,7 +508,7 @@ saveRecentArchiveBrowse({
       .eq("id", activeArchive.id);
 
     if (error) {
-      showToast("更新可见状态失败");
+      showToast("鏇存柊鍙鐘舵€佸け璐?);
       return;
     }
 
@@ -518,7 +518,7 @@ saveRecentArchiveBrowse({
       .eq("archive_id", activeArchive.id);
 
     if (recordsError) {
-      showToast("项目状态已更新，但同步记录可见状态失败");
+      showToast("椤圭洰鐘舵€佸凡鏇存柊锛屼絾鍚屾璁板綍鍙鐘舵€佸け璐?);
       return;
     }
 
@@ -531,7 +531,7 @@ saveRecentArchiveBrowse({
 
     setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
 
-    showToast(nextValue ? "项目和记录已公开" : "项目和记录已设为仅自己可见");
+    showToast(nextValue ? "椤圭洰鍜岃褰曞凡鍏紑" : "椤圭洰鍜岃褰曞凡璁句负浠呰嚜宸卞彲瑙?);
   }
 
   async function toggleProjectFollow() {
@@ -561,12 +561,12 @@ saveRecentArchiveBrowse({
     setProjectFollowSubmitting(false);
 
     if (error) {
-      showToast("关注项目失败");
+      showToast("鍏虫敞椤圭洰澶辫触");
       return;
     }
 
     setIsProjectFollowed(true);
-    showToast("已关注该项目");
+    showToast("宸插叧娉ㄨ椤圭洰");
   }
 
   async function confirmUnfollowProject() {
@@ -590,17 +590,17 @@ saveRecentArchiveBrowse({
     setProjectFollowSubmitting(false);
 
     if (error) {
-      showToast("取消关注失败");
+      showToast("鍙栨秷鍏虫敞澶辫触");
       return;
     }
 
     setIsProjectFollowed(false);
     setShowUnfollowProjectConfirm(false);
-    showToast("已取消关注该项目");
+    showToast("宸插彇娑堝叧娉ㄨ椤圭洰");
   }
 
   function openLightbox(media: MediaItem[], index: number) {
-    const images = buildMediaList(media, activeArchive.title || "项目");
+    const images = buildMediaList(media, activeArchive.title || "椤圭洰");
     if (!images.length) return;
     setLightboxImages(images);
     setLightboxIndex(index);
@@ -654,7 +654,7 @@ saveRecentArchiveBrowse({
     const { error } = await supabase.from("media").delete().eq("id", deleteMediaTarget.mediaId);
 
     if (error) {
-      showToast("删除图片失败");
+      showToast("鍒犻櫎鍥剧墖澶辫触");
       setIsDeletingMedia(false);
       return;
     }
@@ -676,7 +676,7 @@ saveRecentArchiveBrowse({
       )
     );
 
-    showToast("图片已删除，容量已释放");
+    showToast("鍥剧墖宸插垹闄わ紝瀹归噺宸查噴鏀?);
     setDeleteMediaTarget(null);
     setIsDeletingMedia(false);
   }
@@ -689,7 +689,7 @@ saveRecentArchiveBrowse({
     } = await supabase.auth.getUser();
 
     if (!user || user.id !== activeArchive.user_id) {
-      showToast("请先登录后再添加图片");
+      showToast("璇峰厛鐧诲綍鍚庡啀娣诲姞鍥剧墖");
       return;
     }
 
@@ -740,7 +740,7 @@ saveRecentArchiveBrowse({
       } else if (reserveResult.message === "membership_inactive") {
         showToast(getCreateContentBlockedText(membership));
       } else {
-        showToast("容量检查失败，请稍后再试");
+        showToast("瀹归噺妫€鏌ュけ璐ワ紝璇风◢鍚庡啀璇?);
       }
 
       return;
@@ -768,7 +768,7 @@ saveRecentArchiveBrowse({
 
       if (uploadError) {
         console.error("add record media upload error:", uploadError);
-        showToast("部分图片上传失败");
+        showToast("閮ㄥ垎鍥剧墖涓婁紶澶辫触");
         continue;
       }
 
@@ -824,7 +824,7 @@ saveRecentArchiveBrowse({
         await supabase.storage
           .from("media")
           .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
-        showToast("部分图片保存失败");
+        showToast("閮ㄥ垎鍥剧墖淇濆瓨澶辫触");
         continue;
       }
 
@@ -850,9 +850,9 @@ saveRecentArchiveBrowse({
             : record
         )
       );
-      showToast("图片已添加");
+      showToast("鍥剧墖宸叉坊鍔?);
     } else {
-      showToast("没有图片成功上传");
+      showToast("娌℃湁鍥剧墖鎴愬姛涓婁紶");
     }
   }
 
@@ -883,12 +883,12 @@ saveRecentArchiveBrowse({
     ]);
 
     if (error) {
-      showToast("添加标签失败");
+      showToast("娣诲姞鏍囩澶辫触");
       return;
     }
 
     updateRecordTagState(recordId, newTag, "add");
-    showToast("已添加标签");
+    showToast("宸叉坊鍔犳爣绛?);
   }
 
   return (
@@ -908,7 +908,7 @@ saveRecentArchiveBrowse({
             href={mode === "owner" ? "/archive" : "/discover"}
             style={{ fontSize: 14, color: "#666", textDecoration: "none" }}
           >
-            {mode === "owner" ? "← 我的空间主页" : "← 返回发现"}
+            {mode === "owner" ? "鈫?鎴戠殑绌洪棿涓婚〉" : "鈫?杩斿洖鍙戠幇"}
           </Link>
         </div>
 
@@ -993,7 +993,7 @@ saveRecentArchiveBrowse({
                 fontSize: 14,
               }}
             >
-              这里还没有可显示的记录。
+              杩欓噷杩樻病鏈夊彲鏄剧ず鐨勮褰曘€?
             </div>
           ) : null}
         </section>
@@ -1013,10 +1013,10 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={showUnfollowProjectConfirm}
-        title="取消关注项目"
-        message="确定不再关注这个项目吗？之后该项目的新进展将不会出现在你的关注列表里。"
-        confirmText={projectFollowSubmitting ? "处理中..." : "取消关注"}
-        cancelText="保留关注"
+        title="鍙栨秷鍏虫敞椤圭洰"
+        message="纭畾涓嶅啀鍏虫敞杩欎釜椤圭洰鍚楋紵涔嬪悗璇ラ」鐩殑鏂拌繘灞曞皢涓嶄細鍑虹幇鍦ㄤ綘鐨勫叧娉ㄥ垪琛ㄩ噷銆?
+        confirmText={projectFollowSubmitting ? "澶勭悊涓?.." : "鍙栨秷鍏虫敞"}
+        cancelText="淇濈暀鍏虫敞"
         onClose={() => {
           if (!projectFollowSubmitting) setShowUnfollowProjectConfirm(false);
         }}
@@ -1027,10 +1027,10 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={Boolean(deleteMediaTarget)}
-        title="删除图片"
-        message="确定删除这张图片吗？删除后无法恢复。"
-        confirmText={isDeletingMedia ? "删除中..." : "删除"}
-        cancelText="取消"
+        title="鍒犻櫎鍥剧墖"
+        message="纭畾鍒犻櫎杩欏紶鍥剧墖鍚楋紵鍒犻櫎鍚庢棤娉曟仮澶嶃€?
+        confirmText={isDeletingMedia ? "鍒犻櫎涓?.." : "鍒犻櫎"}
+        cancelText="鍙栨秷"
         onClose={() => {
           if (!isDeletingMedia) setDeleteMediaTarget(null);
         }}
@@ -1040,3 +1040,4 @@ saveRecentArchiveBrowse({
     </>
   );
 }
+

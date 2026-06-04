@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -144,7 +144,7 @@ export default function ArchivePage() {
 
       const speciesRows: PlantSpeciesOption[] = ((speciesData || []) as PlantSpeciesOption[]).map((species) => {
         const aliases = Array.from(new Set(aliasesBySpecies.get(species.id) || []));
-        const displayName = species.common_name || species.scientific_name || "未命名植物";
+        const displayName = species.common_name || species.scientific_name || "鏈懡鍚嶆鐗?;
 
         return {
           ...species,
@@ -327,7 +327,7 @@ export default function ArchivePage() {
   function submitPendingSpeciesName(name?: string) {
     const pendingName = (name ?? editingPlantSearch).trim();
     if (!pendingName) {
-      showToast("请输入候选植物名称");
+      showToast("璇疯緭鍏ュ€欓€夋鐗╁悕绉?);
       return;
     }
 
@@ -366,7 +366,7 @@ export default function ArchivePage() {
     const pendingName = editingPendingSpeciesName.trim();
 
     if (!editingSpeciesId && !pendingName) {
-      showToast("请选择植物，或提交一个候选植物");
+      showToast("璇烽€夋嫨妞嶇墿锛屾垨鎻愪氦涓€涓€欓€夋鐗?);
       return;
     }
 
@@ -391,7 +391,7 @@ export default function ArchivePage() {
         .eq("id", item.id);
 
       if (error) {
-        showToast("保存失败");
+        showToast("淇濆瓨澶辫触");
         return;
       }
 
@@ -409,17 +409,17 @@ export default function ArchivePage() {
       );
 
       cancelPlantEditing();
-      showToast("已使用候选植物");
+      showToast("宸蹭娇鐢ㄥ€欓€夋鐗?);
       return;
     }
 
     const selectedSpecies = speciesList.find((item) => item.id === editingSpeciesId);
     if (!selectedSpecies) {
-      showToast("请选择植物");
+      showToast("璇烽€夋嫨妞嶇墿");
       return;
     }
 
-    const speciesName = selectedSpecies.common_name || selectedSpecies.scientific_name || "未命名植物";
+    const speciesName = selectedSpecies.common_name || selectedSpecies.scientific_name || "鏈懡鍚嶆鐗?;
 
     const { error } = await supabase
       .from("archives")
@@ -427,7 +427,7 @@ export default function ArchivePage() {
       .eq("id", item.id);
 
     if (error) {
-      showToast("保存失败");
+      showToast("淇濆瓨澶辫触");
       return;
     }
 
@@ -445,7 +445,7 @@ export default function ArchivePage() {
     );
 
     cancelPlantEditing();
-    showToast("已更新植物");
+    showToast("宸叉洿鏂版鐗?);
   }
 
   function cancelPlantEditing() {
@@ -500,7 +500,7 @@ export default function ArchivePage() {
   async function saveSystemSelection(item: ArchiveItem) {
     const systemName = editingSystemName.trim();
     if (!systemName) {
-      showToast("请从匹配结果中点选具体名称，或新增为具体名称");
+      showToast("璇蜂粠鍖归厤缁撴灉涓偣閫夊叿浣撳悕绉帮紝鎴栨柊澧炰负鍏蜂綋鍚嶇О");
       return;
     }
 
@@ -510,7 +510,7 @@ export default function ArchivePage() {
       .eq("id", item.id);
 
     if (error) {
-      showToast("保存失败");
+      showToast("淇濆瓨澶辫触");
       return;
     }
 
@@ -519,7 +519,7 @@ export default function ArchivePage() {
     );
 
     cancelSystemEditing();
-    showToast("已更新具体名称");
+    showToast("宸叉洿鏂板叿浣撳悕绉?);
   }
 
   function cancelSystemEditing() {
@@ -530,7 +530,7 @@ export default function ArchivePage() {
   }
 
   async function createSubTag(category: ArchiveCategory) {
-    const name = prompt(`新增${getArchiveCategoryLabel(category)}分类`);
+    const name = prompt(`鏂板${getArchiveCategoryLabel(category)}鍒嗙被`);
     if (!name?.trim()) return;
 
     const {
@@ -546,7 +546,7 @@ export default function ArchivePage() {
       .single();
 
     if (error) {
-      showToast("新增分类失败");
+      showToast("鏂板鍒嗙被澶辫触");
       return;
     }
 
@@ -556,12 +556,12 @@ export default function ArchivePage() {
   }
 
   async function renameSubTag(tag: SubTagItem) {
-    const name = prompt("修改分类名称", tag.name);
+    const name = prompt("淇敼鍒嗙被鍚嶇О", tag.name);
     if (!name?.trim()) return;
 
     const { error } = await supabase.from("sub_tags").update({ name: name.trim() }).eq("id", tag.id);
     if (error) {
-      showToast("修改分类失败");
+      showToast("淇敼鍒嗙被澶辫触");
       return;
     }
 
@@ -569,7 +569,7 @@ export default function ArchivePage() {
   }
 
   async function deleteSubTag(tag: SubTagItem) {
-    if (!confirm("删除后，该分类下的项目会回到对应类型，确认？")) return;
+    if (!confirm("鍒犻櫎鍚庯紝璇ュ垎绫讳笅鐨勯」鐩細鍥炲埌瀵瑰簲绫诲瀷锛岀‘璁わ紵")) return;
 
     await supabase.from("archives").update({ sub_tag_id: null, group_tag_id: null }).eq("sub_tag_id", tag.id);
     await supabase.from("group_tags").delete().eq("sub_tag_id", tag.id);
@@ -592,7 +592,7 @@ export default function ArchivePage() {
   async function createGroupTag() {
     if (!activeSubTag) return;
 
-    const name = prompt("新增分组");
+    const name = prompt("鏂板鍒嗙粍");
     if (!name?.trim()) return;
 
     const {
@@ -608,7 +608,7 @@ export default function ArchivePage() {
       .single();
 
     if (error) {
-      showToast("新增分组失败");
+      showToast("鏂板鍒嗙粍澶辫触");
       return;
     }
 
@@ -618,12 +618,12 @@ export default function ArchivePage() {
   }
 
   async function renameGroupTag(tag: GroupTagItem) {
-    const name = prompt("修改分组名称", tag.name);
+    const name = prompt("淇敼鍒嗙粍鍚嶇О", tag.name);
     if (!name?.trim()) return;
 
     const { error } = await supabase.from("group_tags").update({ name: name.trim() }).eq("id", tag.id);
     if (error) {
-      showToast("修改分组失败");
+      showToast("淇敼鍒嗙粍澶辫触");
       return;
     }
 
@@ -631,7 +631,7 @@ export default function ArchivePage() {
   }
 
   async function deleteGroupTag(tag: GroupTagItem) {
-    if (!confirm("删除该分组？")) return;
+    if (!confirm("鍒犻櫎璇ュ垎缁勶紵")) return;
 
     await supabase.from("archives").update({ group_tag_id: null }).eq("group_tag_id", tag.id);
     await supabase.from("group_tags").delete().eq("id", tag.id);
@@ -649,7 +649,7 @@ export default function ArchivePage() {
   async function updateArchiveStatus(item: ArchiveItem, nextStatus: "active" | "ended") {
     const isEnding = nextStatus === "ended";
 
-    if (isEnding && !confirm("确认将这个项目标记为已结束吗？之后仍可查看，也可以恢复。")) {
+    if (isEnding && !confirm("纭灏嗚繖涓」鐩爣璁颁负宸茬粨鏉熷悧锛熶箣鍚庝粛鍙煡鐪嬶紝涔熷彲浠ユ仮澶嶃€?)) {
       return;
     }
 
@@ -659,12 +659,12 @@ export default function ArchivePage() {
     );
 
     if (error) {
-      showToast(isEnding ? "标记结束失败" : "恢复失败");
+      showToast(isEnding ? "鏍囪缁撴潫澶辫触" : "鎭㈠澶辫触");
       return;
     }
 
     await loadData();
-    showToast(isEnding ? "已标记为结束" : "已恢复为进行中");
+    showToast(isEnding ? "宸叉爣璁颁负缁撴潫" : "宸叉仮澶嶄负杩涜涓?);
   }
 
   async function toggleArchivePublic(item: ArchiveItem) {
@@ -673,7 +673,7 @@ export default function ArchivePage() {
 
     const { error } = await supabase.from("archives").update({ is_public: newValue }).eq("id", item.id);
     if (error) {
-      showToast("更新可见状态失败");
+      showToast("鏇存柊鍙鐘舵€佸け璐?);
       return;
     }
 
@@ -683,14 +683,14 @@ export default function ArchivePage() {
       .eq("archive_id", item.id);
 
     if (recordsError) {
-      showToast("项目状态已更新，但同步记录可见状态失败");
+      showToast("椤圭洰鐘舵€佸凡鏇存柊锛屼絾鍚屾璁板綍鍙鐘舵€佸け璐?);
       return;
     }
 
     setArchives((prev) =>
       prev.map((archive) => (archive.id === item.id ? { ...archive, is_public: newValue } : archive))
     );
-    showToast(newValue ? "项目和记录已公开到发现" : "项目和记录已设为仅自己可见");
+    showToast(newValue ? "椤圭洰鍜岃褰曞凡鍏紑鍒板彂鐜? : "椤圭洰鍜岃褰曞凡璁句负浠呰嚜宸卞彲瑙?);
   }
 
   async function updateArchiveCategory(item: ArchiveItem, value: string) {
@@ -762,7 +762,7 @@ export default function ArchivePage() {
     setDeletingArchiveId(null);
 
     if (error) {
-      showToast("删除项目失败");
+      showToast("鍒犻櫎椤圭洰澶辫触");
       return;
     }
 
@@ -771,12 +771,12 @@ export default function ArchivePage() {
     }
 
     setDeleteArchiveTarget(null);
-    showToast("项目已删除，容量已释放");
+    showToast("椤圭洰宸插垹闄わ紝瀹归噺宸查噴鏀?);
     await loadData();
   }
 
   function renameArchiveTitle(item: ArchiveItem) {
-    const name = prompt("修改名称", item.title || "");
+    const name = prompt("淇敼鍚嶇О", item.title || "");
     if (!name?.trim()) return;
 
     supabase.from("archives").update({ title: name.trim() }).eq("id", item.id).then(() => {
@@ -897,7 +897,7 @@ export default function ArchivePage() {
               fontWeight: 700,
             }}
           >
-            我的空间
+            鎴戠殑绌洪棿
           </h1>
         </div>
       </section>
@@ -909,8 +909,8 @@ export default function ArchivePage() {
           marginBottom: 18,
         }}
       >
-        我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 私密 {privateArchiveCount}
-        {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
+        鎴戠殑椤圭洰 {archiveCount} 涓?路 鍏紑 {publicArchiveCount} 路 绉佸瘑 {privateArchiveCount}
+        {endedArchiveCount > 0 ? ` 路 宸茬粨鏉?${endedArchiveCount}` : ""}
       </div>
 
       <ArchiveToolbar
@@ -992,7 +992,7 @@ export default function ArchivePage() {
         <input
           value={searchKeyword}
           onChange={(event) => setSearchKeyword(event.target.value)}
-          placeholder="搜索项目、记录或标签"
+          placeholder="鎼滅储椤圭洰銆佽褰曟垨鏍囩"
           style={{
             flex: "1 1 260px",
             minWidth: 0,
@@ -1014,7 +1014,7 @@ export default function ArchivePage() {
             fontSize: 14,
           }}
         >
-          排序：
+          鎺掑簭锛?
           <select
             value={sortMode}
             onChange={(event) => setSortMode(event.target.value as SortMode)}
@@ -1028,9 +1028,9 @@ export default function ArchivePage() {
               cursor: "pointer",
             }}
           >
-            <option value="updated">最近更新</option>
-            <option value="created">新建顺序</option>
-            <option value="name">按名字</option>
+            <option value="updated">鏈€杩戞洿鏂?/option>
+            <option value="created">鏂板缓椤哄簭</option>
+            <option value="name">鎸夊悕瀛?/option>
           </select>
         </label>
       </section>
@@ -1047,7 +1047,7 @@ export default function ArchivePage() {
               background: "#fcfdfb",
             }}
           >
-            还没有找到项目。
+            杩樻病鏈夋壘鍒伴」鐩€?
           </div>
         ) : (
           activeArchives.map((item) => (
@@ -1083,7 +1083,7 @@ export default function ArchivePage() {
               onSelectPlantSpecies={(species) => {
                 setEditingSpeciesId(species.id);
                 setEditingPendingSpeciesName("");
-                setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "未命名植物");
+                setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "鏈懡鍚嶆鐗?);
                 setPlantSuggestionsOpen(false);
               }}
               onSubmitPendingSpecies={() => submitPendingSpeciesName()}
@@ -1123,8 +1123,8 @@ export default function ArchivePage() {
               color: "#777",
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>已结束</h2>
-            <span style={{ fontSize: 13 }}>这些项目已经告一段落，仍然保存在你的空间里。</span>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>宸茬粨鏉?/h2>
+            <span style={{ fontSize: 13 }}>杩欎簺椤圭洰宸茬粡鍛婁竴娈佃惤锛屼粛鐒朵繚瀛樺湪浣犵殑绌洪棿閲屻€?/span>
           </div>
 
           {endedArchives.map((item) => (
@@ -1160,7 +1160,7 @@ export default function ArchivePage() {
               onSelectPlantSpecies={(species) => {
                 setEditingSpeciesId(species.id);
                 setEditingPendingSpeciesName("");
-                setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "未命名植物");
+                setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "鏈懡鍚嶆鐗?);
                 setPlantSuggestionsOpen(false);
               }}
               onSubmitPendingSpecies={() => submitPendingSpeciesName()}
@@ -1190,10 +1190,10 @@ export default function ArchivePage() {
       )}
       <ConfirmDialog
         open={Boolean(deleteArchiveTarget)}
-        title="删除项目"
-        message={`确定删除“${deleteArchiveTarget?.title || "这个项目"}”吗？项目内的记录会一起删除，删除后无法恢复。`}
-        confirmText={deletingArchiveId ? "删除中..." : "删除"}
-        cancelText="取消"
+        title="鍒犻櫎椤圭洰"
+        message={`纭畾鍒犻櫎鈥?{deleteArchiveTarget?.title || "杩欎釜椤圭洰"}鈥濆悧锛熼」鐩唴鐨勮褰曚細涓€璧峰垹闄わ紝鍒犻櫎鍚庢棤娉曟仮澶嶃€俙}
+        confirmText={deletingArchiveId ? "鍒犻櫎涓?.." : "鍒犻櫎"}
+        cancelText="鍙栨秷"
         danger
         onClose={() => {
           if (!deletingArchiveId) setDeleteArchiveTarget(null);
@@ -1204,3 +1204,4 @@ export default function ArchivePage() {
     </main>
   );
 }
+
