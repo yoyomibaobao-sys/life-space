@@ -771,7 +771,7 @@ export default function ArchivePage() {
     }
 
     setDeleteArchiveTarget(null);
-    showToast("项目已删除，容量已释放");
+    showToast("项目已删除");
     await loadData();
   }
 

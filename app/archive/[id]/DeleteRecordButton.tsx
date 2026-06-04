@@ -57,7 +57,7 @@ export default function DeleteRecordButton({
         await subtractStorageUsed(ownerId, deletedBytes);
       }
 
-      showToast("删除成功，容量已释放");
+      showToast("记录已删除");
       setOpen(false);
       onDeleted?.(id);
       router.refresh();

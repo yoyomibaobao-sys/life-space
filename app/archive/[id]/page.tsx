@@ -676,7 +676,7 @@ saveRecentArchiveBrowse({
       )
     );
 
-    showToast("图片已删除，容量已释放");
+    showToast("图片已删除");
     setDeleteMediaTarget(null);
     setIsDeletingMedia(false);
   }
