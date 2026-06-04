@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -48,8 +48,8 @@ export default function DeleteRecordButton({
         .eq("id", id);
 
       if (recordError) {
-        console.log("鍒犻櫎璁板綍澶辫触:", recordError);
-        showToast("鍒犻櫎澶辫触");
+        console.log("删除记录失败:", recordError);
+        showToast("删除失败");
         return;
       }
 
@@ -57,13 +57,13 @@ export default function DeleteRecordButton({
         await subtractStorageUsed(ownerId, deletedBytes);
       }
 
-      showToast("鍒犻櫎鎴愬姛锛屽閲忓凡閲婃斁");
+      showToast("删除成功，容量已释放");
       setOpen(false);
       onDeleted?.(id);
       router.refresh();
     } catch (err) {
-      console.log("鍒犻櫎寮傚父:", err);
-      showToast("鎿嶄綔澶辫触");
+      console.log("删除异常:", err);
+      showToast("操作失败");
     } finally {
       setIsDeleting(false);
     }
@@ -92,10 +92,10 @@ export default function DeleteRecordButton({
     </button>
     <ConfirmDialog
       open={open}
-      title="鍒犻櫎璁板綍"
-      message="纭畾鍒犻櫎杩欐潯璁板綍鍚楋紵鍏朵腑鐨勫浘鐗囦篃浼氫竴璧峰垹闄わ紝鍒犻櫎鍚庢棤娉曟仮澶嶃€?
-      confirmText={isDeleting ? "鍒犻櫎涓?.." : "鍒犻櫎"}
-      cancelText="鍙栨秷"
+      title="删除记录"
+      message="确定删除这条记录吗？其中的图片也会一起删除，删除后无法恢复。"
+      confirmText={isDeleting ? "删除中..." : "删除"}
+      cancelText="取消"
       onClose={() => { if (!isDeleting) setOpen(false); }}
       onConfirm={handleDelete}
       danger
@@ -103,4 +103,3 @@ export default function DeleteRecordButton({
     </>
   );
 }
-
