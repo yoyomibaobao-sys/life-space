@@ -91,10 +91,7 @@ AS $$
             NULLIF(to_jsonb("r")->>'primary_image_path', ''),
             "public"."media_object_path_from_public_url"(to_jsonb("r")->>'primary_image_url')
           ) = "p_object_name"
-          OR COALESCE(
-            NULLIF(to_jsonb("r")->>'primary_thumb_path', ''),
-            "public"."media_object_path_from_public_url"(to_jsonb("r")->>'primary_thumb_url')
-          ) = "p_object_name"
+          OR NULLIF(to_jsonb("r")->>'primary_thumb_path', '') = "p_object_name"
         )
         AND "r"."visibility" = 'public'
         AND "a"."is_public" IS TRUE
@@ -108,10 +105,7 @@ AS $$
             NULLIF(to_jsonb("a")->>'cover_image_path', ''),
             "public"."media_object_path_from_public_url"(to_jsonb("a")->>'cover_image_url')
           ) = "p_object_name"
-          OR COALESCE(
-            NULLIF(to_jsonb("a")->>'cover_thumb_path', ''),
-            "public"."media_object_path_from_public_url"(to_jsonb("a")->>'cover_thumb_url')
-          ) = "p_object_name"
+          OR NULLIF(to_jsonb("a")->>'cover_thumb_path', '') = "p_object_name"
         )
         AND "a"."is_public" IS TRUE
     );
@@ -147,7 +141,7 @@ AS $$
       SELECT 1
       FROM "public"."market_media" AS "mm"
       JOIN "public"."market_posts" AS "mp"
-        ON "mp"."id" = "mm"."post_id"
+        ON "mp"."id" = "mm"."market_post_id"
       WHERE
         "mp"."status" = 'active'
         AND (
@@ -176,10 +170,33 @@ COMMENT ON FUNCTION "public"."can_read_public_record_media_object"(text) IS
 'P0b Storage helper: returns whether one media object path belongs to a public record in a public archive. Uses path fields first, with URL parsing fallback. Does not expose paths or row data.';
 
 COMMENT ON FUNCTION "public"."can_read_public_market_media_object"(text) IS
-'P0b Storage helper: returns whether one media object path belongs to an active public market post. Uses path fields first, with URL parsing fallback. Does not expose paths or row data.';
+'P0b Storage helper: returns whether one media object path belongs to an active public market post cover image or market_media row. Uses path fields first, with URL parsing fallback. Does not expose paths or row data.';
 
 -- ---------------------------------------------------------------------------
--- 2. Backfill parseable historical public media URLs into path fields.
+-- 2. Ensure path columns exist before historical URL backfill.
+-- ---------------------------------------------------------------------------
+
+-- Production checks showed some path fields may not exist yet. Add only the
+-- path columns needed for media private compatibility; keep old URL fallback
+-- columns intact.
+ALTER TABLE "public"."archives"
+  ADD COLUMN IF NOT EXISTS "cover_image_path" text,
+  ADD COLUMN IF NOT EXISTS "cover_thumb_path" text;
+
+ALTER TABLE "public"."records"
+  ADD COLUMN IF NOT EXISTS "primary_image_path" text,
+  ADD COLUMN IF NOT EXISTS "primary_thumb_path" text;
+
+ALTER TABLE "public"."market_posts"
+  ADD COLUMN IF NOT EXISTS "cover_image_path" text,
+  ADD COLUMN IF NOT EXISTS "cover_thumb_path" text;
+
+ALTER TABLE "public"."market_media"
+  ADD COLUMN IF NOT EXISTS "path" text,
+  ADD COLUMN IF NOT EXISTS "thumb_path" text;
+
+-- ---------------------------------------------------------------------------
+-- 3. Backfill parseable historical public media URLs into path fields.
 -- ---------------------------------------------------------------------------
 
 -- The following block updates only countable, parseable Supabase public media
@@ -211,29 +228,9 @@ BEGIN
     RAISE NOTICE 'TODO: archives.cover_image_path or archives.cover_image_url missing; skipped cover image path backfill.';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'archives'
-      AND column_name = 'cover_thumb_path'
-  )
-  AND EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'archives'
-      AND column_name = 'cover_thumb_url'
-  ) THEN
-    EXECUTE $sql$
-      UPDATE "public"."archives"
-      SET "cover_thumb_path" = "public"."media_object_path_from_public_url"("cover_thumb_url")
-      WHERE NULLIF("cover_thumb_path", '') IS NULL
-        AND "public"."media_object_path_from_public_url"("cover_thumb_url") IS NOT NULL
-    $sql$;
-  ELSE
-    RAISE NOTICE 'TODO: archives.cover_thumb_path or archives.cover_thumb_url missing; skipped cover thumb path backfill.';
-  END IF;
+  -- The confirmed production schema has no archive thumb URL source column.
+  -- cover_thumb_path is added above for future writes, but no historical thumb
+  -- URL backfill is attempted here.
 
   IF EXISTS (
     SELECT 1
@@ -259,29 +256,9 @@ BEGIN
     RAISE NOTICE 'TODO: records.primary_image_path or records.primary_image_url missing; skipped primary image path backfill.';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'records'
-      AND column_name = 'primary_thumb_path'
-  )
-  AND EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'records'
-      AND column_name = 'primary_thumb_url'
-  ) THEN
-    EXECUTE $sql$
-      UPDATE "public"."records"
-      SET "primary_thumb_path" = "public"."media_object_path_from_public_url"("primary_thumb_url")
-      WHERE NULLIF("primary_thumb_path", '') IS NULL
-        AND "public"."media_object_path_from_public_url"("primary_thumb_url") IS NOT NULL
-    $sql$;
-  ELSE
-    RAISE NOTICE 'TODO: records.primary_thumb_path or records.primary_thumb_url missing; skipped primary thumb path backfill.';
-  END IF;
+  -- The confirmed production schema has no record thumb URL source column.
+  -- primary_thumb_path is added above for future writes, but no historical thumb
+  -- URL backfill is attempted here.
 
   IF EXISTS (
     SELECT 1
@@ -381,7 +358,7 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 3. Replace P0a's unconditional public media SELECT.
+-- 4. Replace P0a's unconditional public media SELECT.
 -- ---------------------------------------------------------------------------
 
 DROP POLICY IF EXISTS "media_public_select" ON "storage"."objects";
@@ -413,16 +390,16 @@ USING (
   AND "public"."can_read_public_record_media_object"("storage"."objects"."name")
 );
 
--- Public active market post media may be read from either market_media rows or
--- market_posts cover fields. The helper uses path fields first and falls back
--- to parsing old public URL fields for historical rows.
+-- Public active market post media may be read from market_posts cover fields
+-- and market_media rows. The helper uses path fields first and falls back to
+-- parsing old public URL fields for historical rows.
 --
 -- TODO before execution:
--- - Confirm market_media has columns: post_id, path, thumb_path, url,
---   thumb_url.
 -- - Confirm market_posts has columns: id, status, cover_image_path,
 --   cover_thumb_path, cover_image_url, cover_thumb_url.
 -- - Confirm status = 'active' is the only public-readable market status.
+-- - Production field check confirmed market_media.market_post_id points to
+--   market_posts.id.
 CREATE POLICY "media_public_market_select"
 ON "storage"."objects"
 FOR SELECT
@@ -439,10 +416,10 @@ COMMENT ON POLICY "media_public_record_select" ON "storage"."objects" IS
 'P0b: public record media can be read when linked media rows belong to public records in public archives. Uses path fields first, with URL parsing fallback for historical rows.';
 
 COMMENT ON POLICY "media_public_market_select" ON "storage"."objects" IS
-'P0b: public active market post media can be read when linked through market_posts or market_media path fields. Uses path fields first, with URL parsing fallback for historical rows.';
+'P0b: public active market post media can be read through market_posts cover fields or market_media.market_post_id. Uses path fields first, with URL parsing fallback for historical rows.';
 
 -- ---------------------------------------------------------------------------
--- 4. Finally make media private while preserving image limits.
+-- 5. Finally make media private while preserving image limits.
 -- ---------------------------------------------------------------------------
 
 UPDATE "storage"."buckets"
