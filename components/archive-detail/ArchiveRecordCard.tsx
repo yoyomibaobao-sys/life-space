@@ -200,7 +200,7 @@ export default function ArchiveRecordCard({
                   style={{ position: "relative", cursor: "pointer" }}
                 >
                   <img
-                    src={target?.thumb_url || media.url}
+                    src={target?.display_thumb_url || target?.thumb_url || media.url}
                     alt={media.alt}
                     loading="lazy"
                     decoding="async"

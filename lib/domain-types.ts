@@ -109,6 +109,8 @@ export type MediaItem = {
   storage_path?: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
   size_mb?: number | null;
   size_bytes?: number | null;
   mime_type?: string | null;

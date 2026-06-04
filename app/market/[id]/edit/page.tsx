@@ -22,6 +22,7 @@ import {
   compressImageFile,
   createImageThumbnailFile,
 } from "@/lib/image-compression";
+import { attachMediaDisplayUrls } from "@/lib/media-urls";
 
 type ArchiveOption = {
   id: string;
@@ -38,6 +39,8 @@ type MarketMediaRow = {
   path: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
   source_media_id: string | null;
   source_record_id: string | null;
   sort_order: number | null;
@@ -150,7 +153,12 @@ export default function EditMarketPostPage() {
       }
 
       setArchives((archiveResult.data || []) as ArchiveOption[]);
-      setMarketMedia((mediaResult.data || []) as MarketMediaRow[]);
+      setMarketMedia(
+        await attachMediaDisplayUrls(
+          supabase,
+          (mediaResult.data || []) as MarketMediaRow[]
+        )
+      );
       setLoading(false);
     }
 
@@ -176,7 +184,9 @@ export default function EditMarketPostPage() {
       return;
     }
 
-    setMarketMedia((data || []) as MarketMediaRow[]);
+    setMarketMedia(
+      await attachMediaDisplayUrls(supabase, (data || []) as MarketMediaRow[])
+    );
   }
 
   async function handleSubmit() {
@@ -435,7 +445,7 @@ export default function EditMarketPostPage() {
     setWorkingMediaId(media.id);
     setErrorMsg("");
 
-    const pathsToRemove = media.path
+    const pathsToRemove = media.path && !media.source_media_id
       ? ([media.path, media.thumb_path].filter(Boolean) as string[])
       : [];
     if (pathsToRemove.length > 0) {
@@ -566,14 +576,19 @@ export default function EditMarketPostPage() {
             {marketMedia.length > 0 ? (
               <div style={mediaManageGridStyle}>
                 {marketMedia.map((media) => {
-                  const isCover = item.cover_image_url === media.url;
+                  const isCover = item.cover_image_path
+                    ? item.cover_image_path === media.path
+                    : item.cover_image_url === media.url;
                   const isWorking = workingMediaId === media.id;
+                  const mediaImageUrl = media.display_url || media.url;
+                  const mediaThumbUrl =
+                    media.display_thumb_url || media.thumb_url || mediaImageUrl;
 
                   return (
                     <article key={media.id} style={mediaManageCardStyle}>
                       <div style={mediaImageWrapStyle}>
                         <img
-                          src={media.thumb_url || media.url}
+                          src={mediaThumbUrl}
                           alt=""
                           style={mediaManageImageStyle}
                           loading="lazy"
@@ -581,7 +596,7 @@ export default function EditMarketPostPage() {
                         {isCover ? (
                           <span style={coverBadgeStyle}>封面</span>
                         ) : null}
-                        {media.path ? (
+                        {media.path && !media.source_media_id ? (
                           <span style={uploadedBadgeStyle}>上传图</span>
                         ) : (
                           <span style={sourceBadgeStyle}>记录图</span>

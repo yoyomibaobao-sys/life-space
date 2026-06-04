@@ -14,6 +14,10 @@ import {
 } from "@/lib/market-types";
 import { PUBLIC_PROFILE_SELECT, type SupabaseUser } from "@/lib/domain-types";
 import type { LightboxImage } from "@/lib/archive-detail-types";
+import {
+  attachMediaDisplayUrls,
+  resolveMediaDisplayPairs,
+} from "@/lib/media-urls";
 
 type ProfileBrief = {
   id: string;
@@ -43,11 +47,37 @@ type MarketMediaRow = {
   path: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
   source_media_id: string | null;
   source_record_id: string | null;
   sort_order: number | null;
   created_at: string | null;
 };
+
+type MarketPostDisplayRow = MarketPostRow & {
+  display_cover_image_url?: string | null;
+  display_cover_thumb_url?: string | null;
+};
+
+async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
+  const pairs = await resolveMediaDisplayPairs(
+    supabase,
+    rows.map((row) => ({
+      url: row.cover_image_url,
+      path: row.cover_image_path,
+      thumb_url: row.cover_thumb_url,
+      thumb_path: row.cover_thumb_path,
+    }))
+  );
+
+  return rows.map((row, index) => ({
+    ...row,
+    display_cover_image_url: pairs[index]?.display_url || row.cover_image_url,
+    display_cover_thumb_url:
+      pairs[index]?.display_thumb_url || row.cover_thumb_url || row.cover_image_url,
+  }));
+}
 
 export default function MarketDetailPage() {
   const params = useParams();
@@ -55,7 +85,7 @@ export default function MarketDetailPage() {
   const id = String(params?.id || "");
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [item, setItem] = useState<MarketPostRow | null>(null);
+  const [item, setItem] = useState<MarketPostDisplayRow | null>(null);
   const [profile, setProfile] = useState<ProfileBrief | null>(null);
   const [archive, setArchive] = useState<ArchiveBrief | null>(null);
   const [sourceRecord, setSourceRecord] = useState<SourceRecordBrief | null>(
@@ -91,12 +121,15 @@ export default function MarketDetailPage() {
       }
 
       const row = (data || null) as MarketPostRow | null;
-      setItem(row);
 
       if (!row) {
+        setItem(null);
         setLoading(false);
         return;
       }
+
+      const [displayRow] = await attachMarketPostDisplayUrls([row]);
+      setItem(displayRow);
 
       const [profileResult, archiveResult, sourceRecordResult, mediaResult] =
         await Promise.all([
@@ -140,7 +173,12 @@ export default function MarketDetailPage() {
         console.error("load market media error:", mediaResult.error);
         setMarketMedia([]);
       } else {
-        setMarketMedia((mediaResult.data || []) as MarketMediaRow[]);
+        setMarketMedia(
+          await attachMediaDisplayUrls(
+            supabase,
+            (mediaResult.data || []) as MarketMediaRow[]
+          )
+        );
       }
 
       if (row.status === "active") {
@@ -160,6 +198,10 @@ export default function MarketDetailPage() {
 
   const isOwner = Boolean(user?.id && item?.user_id === user.id);
   const isLightboxOpen = lightboxImages.length > 0;
+  const coverImageUrl =
+    item?.display_cover_image_url || item?.cover_image_url || null;
+  const coverThumbUrl =
+    item?.display_cover_thumb_url || item?.cover_thumb_url || coverImageUrl;
 
   useEffect(() => {
     if (!isLightboxOpen) return;
@@ -208,25 +250,31 @@ export default function MarketDetailPage() {
 
     setWorking(true);
 
-    const mediaPaths = marketMedia
+    const allMediaPaths = marketMedia
+      .flatMap((media) =>
+        media.path ? [media.path, media.thumb_path] : []
+      )
+      .filter(Boolean) as string[];
+    const removableMediaPaths = marketMedia
+      .filter((media) => !media.source_media_id)
       .flatMap((media) =>
         media.path ? [media.path, media.thumb_path] : []
       )
       .filter(Boolean) as string[];
 
     const standaloneCoverPath =
-      item.cover_image_path && !mediaPaths.includes(item.cover_image_path)
+      item.cover_image_path && !allMediaPaths.includes(item.cover_image_path)
         ? item.cover_image_path
         : null;
     const standaloneCoverThumbPath =
       standaloneCoverPath &&
       item.cover_thumb_path &&
-      !mediaPaths.includes(item.cover_thumb_path)
+      !allMediaPaths.includes(item.cover_thumb_path)
         ? item.cover_thumb_path
         : null;
 
     const pathsToRemove = [
-      ...mediaPaths,
+      ...removableMediaPaths,
       ...(standaloneCoverPath ? [standaloneCoverPath] : []),
       ...(standaloneCoverThumbPath ? [standaloneCoverThumbPath] : []),
     ];
@@ -392,15 +440,15 @@ export default function MarketDetailPage() {
               </section>
             ) : null}
 
-            {item.cover_image_url ? (
+            {coverImageUrl ? (
               <button
                 type="button"
-                onClick={() => openMarketLightbox(item.cover_image_url || "")}
+                onClick={() => openMarketLightbox(coverImageUrl)}
                 aria-label="打开封面图片预览"
                 style={coverButtonStyle}
               >
                 <img
-                  src={item.cover_image_url}
+                  src={coverThumbUrl || coverImageUrl}
                   alt={item.title}
                   style={coverImageStyle}
                 />
@@ -412,18 +460,23 @@ export default function MarketDetailPage() {
                 <div style={marketMediaTitleStyle}>图片</div>
                 <div style={marketMediaGridStyle}>
                   {marketMedia.map((media) => {
-                    const isCover = item.cover_image_url === media.url;
+                    const mediaImageUrl = media.display_url || media.url;
+                    const mediaThumbUrl =
+                      media.display_thumb_url || media.thumb_url || mediaImageUrl;
+                    const isCover = item.cover_image_path
+                      ? item.cover_image_path === media.path
+                      : item.cover_image_url === media.url;
 
                     return (
                       <button
                         key={media.id}
                         type="button"
-                        onClick={() => openMarketLightbox(media.url)}
+                        onClick={() => openMarketLightbox(mediaImageUrl)}
                         aria-label="打开集市图片预览"
                         style={marketMediaItemStyle}
                       >
                         <img
-                          src={media.thumb_url || media.url}
+                          src={mediaThumbUrl}
                           alt=""
                           style={marketMediaImageStyle}
                           loading="lazy"
@@ -529,7 +582,7 @@ function getExternalLinkLabel(url: string) {
 }
 
 function buildMarketLightboxImages(
-  item: MarketPostRow,
+  item: MarketPostDisplayRow,
   marketMedia: MarketMediaRow[]
 ): LightboxImage[] {
   const seen = new Set<string>();
@@ -541,10 +594,10 @@ function buildMarketLightboxImages(
     images.push({ url, alt: alt || item.title || "集市图片" });
   }
 
-  add(item.cover_image_url, item.title || "集市封面");
+  add(item.display_cover_image_url || item.cover_image_url, item.title || "集市封面");
 
   marketMedia.forEach((media, index) => {
-    add(media.url, `${item.title || "集市图片"} ${index + 1}`);
+    add(media.display_url || media.url, `${item.title || "集市图片"} ${index + 1}`);
   });
 
   return images;

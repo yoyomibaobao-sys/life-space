@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
+import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import {
   type ArchiveCategory,
   getArchiveCategoryIcon,
@@ -33,11 +34,11 @@ function categoryLabel(category?: string | null) {
 }
 
 function getMediaUrl(media: any) {
-  return media?.file_url || media?.url || media?.path || "";
+  return media?.display_url || media?.file_url || media?.url || "";
 }
 
 function getMediaPreviewUrl(media: any) {
-  return media?.thumb_url || getMediaUrl(media);
+  return media?.display_thumb_url || media?.thumb_url || getMediaUrl(media);
 }
 
 export default function UserSpacePage() {
@@ -122,13 +123,28 @@ export default function UserSpacePage() {
 
       setSubTags(subTagResult.data || []);
       setGroupTags(groupTagResult.data || []);
-      setRecords(recordsResult.data || []);
+      setRecords(await attachRecordMediaDisplayUrls(recordsResult.data || []));
       setFollowedArchiveIds(
         (followsResult.data || []).map((row: any) => row.archive_id)
       );
     } finally {
       loadingRef.current = false;
     }
+  }
+
+  async function attachRecordMediaDisplayUrls(nextRecords: any[]) {
+    const allMedia = nextRecords.flatMap((record) => record.media || []);
+    if (allMedia.length === 0) return nextRecords;
+
+    const displayMedia = await attachMediaDisplayUrls(supabase, allMedia);
+    let mediaIndex = 0;
+
+    return nextRecords.map((record) => {
+      const mediaCount = record.media?.length || 0;
+      const media = displayMedia.slice(mediaIndex, mediaIndex + mediaCount);
+      mediaIndex += mediaCount;
+      return { ...record, media };
+    });
   }
 
   async function openCard() {

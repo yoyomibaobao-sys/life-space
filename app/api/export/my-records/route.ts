@@ -50,6 +50,9 @@ type MediaRow = {
   record_id: string | null;
   type: string | null;
   url: string | null;
+  storage_path?: string | null;
+  thumb_url?: string | null;
+  thumb_path?: string | null;
   size_mb: number | null;
   size_bytes?: number | null;
   duration_sec: number | null;
@@ -208,11 +211,26 @@ async function blobToUint8Array(blob: Blob) {
 
 async function downloadUrlAsBytes({
   supabase,
+  storagePath,
   url,
 }: {
   supabase: SupabaseServerClient;
+  storagePath?: string | null | undefined;
   url: string | null | undefined;
 }) {
+  if (storagePath) {
+    const { data, error } = await supabase.storage
+      .from("media")
+      .download(storagePath);
+
+    if (!error && data) {
+      return {
+        bytes: await blobToUint8Array(data),
+        contentType: data.type || null,
+      };
+    }
+  }
+
   if (!url) return null;
 
   const storageObject = getStorageObjectFromPublicUrl(url);
@@ -430,7 +448,7 @@ export async function GET(request: Request) {
   if (recordIds.length > 0) {
     const mediaResult = await supabase
       .from("media")
-      .select("id,record_id,type,url,size_mb,size_bytes,duration_sec,storage_class,created_at,sort_order")
+      .select("id,record_id,type,url,storage_path,thumb_url,thumb_path,size_mb,size_bytes,duration_sec,storage_class,created_at,sort_order")
       .eq("user_id", user.id)
       .in("record_id", recordIds)
       .order("sort_order", { ascending: true })
@@ -479,7 +497,11 @@ export async function GET(request: Request) {
 
       for (let mediaIndex = 0; mediaIndex < media.length; mediaIndex += 1) {
         const item = media[mediaIndex];
-        const downloaded = await downloadUrlAsBytes({ supabase, url: item.url });
+        const downloaded = await downloadUrlAsBytes({
+          supabase,
+          storagePath: item.storage_path,
+          url: item.url,
+        });
         const ext = inferExtension(item.url, downloaded?.contentType || null);
         const fileName = `${padNumber(recordIndex + 1, 3)}-${padNumber(mediaIndex + 1, 2)}-${safeFileName(item.id, "image")}.${ext}`;
         const zipPath = uniquePath(`${archiveDir}images/${fileName}`, usedPaths);

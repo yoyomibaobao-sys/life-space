@@ -24,6 +24,7 @@ import type {
   SubTagItem,
 } from "@/lib/archive-page-types";
 import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import {
   buildArchiveSearchText,
   getArchiveSortTime,
@@ -192,7 +193,7 @@ export default function ArchivePage() {
           if (latestRecordIds.length > 0) {
             const { data: mediaRows, error: mediaError } = await supabase
               .from("media")
-              .select("record_id, url, thumb_url, sort_order, created_at")
+              .select("record_id, url, thumb_url, storage_path, thumb_path, sort_order, created_at")
               .in("record_id", latestRecordIds)
               .order("sort_order", { ascending: true })
               .order("created_at", { ascending: true });
@@ -204,13 +205,23 @@ export default function ArchivePage() {
                 record_id?: string | null;
                 url?: string | null;
                 thumb_url?: string | null;
+                storage_path?: string | null;
+                thumb_path?: string | null;
+                display_thumb_url?: string | null;
               }>>();
 
-              ((mediaRows || []) as Array<{
-                record_id?: string | null;
-                url?: string | null;
-                thumb_url?: string | null;
-              }>).forEach((media) => {
+              const displayMediaRows = await attachMediaDisplayUrls(
+                supabase,
+                (mediaRows || []) as Array<{
+                  record_id?: string | null;
+                  url?: string | null;
+                  thumb_url?: string | null;
+                  storage_path?: string | null;
+                  thumb_path?: string | null;
+                }>
+              );
+
+              displayMediaRows.forEach((media) => {
                 if (!media.record_id) return;
                 const list = mediaByRecordId.get(media.record_id) || [];
                 list.push(media);
@@ -222,8 +233,13 @@ export default function ArchivePage() {
                 const matchedPrimary = mediaList.find(
                   (media) => media.thumb_url && media.url && record.primary_image_url && media.url === record.primary_image_url
                 );
-                const firstThumb = mediaList.find((media) => media.thumb_url);
-                const thumbUrl = matchedPrimary?.thumb_url || firstThumb?.thumb_url || null;
+                const firstThumb = mediaList.find((media) => media.display_thumb_url || media.thumb_url);
+                const thumbUrl =
+                  matchedPrimary?.display_thumb_url ||
+                  matchedPrimary?.thumb_url ||
+                  firstThumb?.display_thumb_url ||
+                  firstThumb?.thumb_url ||
+                  null;
                 if (thumbUrl) thumbByRecordId.set(record.id, thumbUrl);
               });
             }

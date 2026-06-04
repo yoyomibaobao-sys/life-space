@@ -41,6 +41,7 @@ import {
   subtractStorageUsed,
   sumMediaSizeBytes,
 } from "@/lib/storage-usage";
+import { attachMediaDisplayUrls } from "@/lib/media-urls";
 
 export default function ArchiveDetail({
   params,
@@ -192,8 +193,12 @@ saveRecentArchiveBrowse({
 
       if (recordIds.length > 0) {
         const { data: mediaRaw } = await supabase.from("media").select("*").in("record_id", recordIds);
+        const mediaRows = await attachMediaDisplayUrls(
+          supabase,
+          ((mediaRaw || []) as MediaItem[])
+        );
 
-        (mediaRaw as MediaItem[] | null)?.forEach((media) => {
+        mediaRows.forEach((media) => {
           const recordId = media.record_id;
           if (!recordId) return;
           if (!mediaMap[recordId]) mediaMap[recordId] = [];
@@ -823,7 +828,11 @@ saveRecentArchiveBrowse({
         continue;
       }
 
-      uploadedMedia.push(mediaRow as MediaItem);
+      const [displayMediaRow] = await attachMediaDisplayUrls(
+        supabase,
+        [mediaRow as MediaItem]
+      );
+      uploadedMedia.push(displayMediaRow);
       uploadedBytes += actualBytes;
     }
 

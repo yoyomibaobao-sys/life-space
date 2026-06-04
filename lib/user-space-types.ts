@@ -22,6 +22,9 @@ export type UserSpaceMedia = {
   path?: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
+  storage_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
 };
 
 export type UserSpaceRecord = {

@@ -74,7 +74,7 @@ export function buildMediaList(
   archiveTitle: string
 ): LightboxImage[] {
   return (media || [])
-    .map((item: any) => item?.url || item?.file_url || item?.path)
+    .map((item: any) => item?.display_url || item?.url || item?.file_url)
     .filter(Boolean)
     .map((url: string, index: number) => ({
       url,

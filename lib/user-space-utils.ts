@@ -11,8 +11,10 @@ export function getMediaUrl(media: {
   path?: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
 }) {
-  return media?.file_url || media?.url || media?.path || "";
+  return media?.display_url || media?.file_url || media?.url || "";
 }
 
 export function getMediaPreviewUrl(media: {
@@ -21,8 +23,10 @@ export function getMediaPreviewUrl(media: {
   path?: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
 }) {
-  return media?.thumb_url || getMediaUrl(media);
+  return media?.display_thumb_url || media?.thumb_url || getMediaUrl(media);
 }
 
 export function buildStatsMap(records: UserSpaceRecord[]) {

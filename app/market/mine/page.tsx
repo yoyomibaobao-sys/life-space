@@ -19,14 +19,39 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
 type StatusFilter = "all" | MarketPostStatus;
+
+type MarketPostDisplayRow = MarketPostRow & {
+  display_cover_image_url?: string | null;
+  display_cover_thumb_url?: string | null;
+};
+
+async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
+  const pairs = await resolveMediaDisplayPairs(
+    supabase,
+    rows.map((row) => ({
+      url: row.cover_image_url,
+      path: row.cover_image_path,
+      thumb_url: row.cover_thumb_url,
+      thumb_path: row.cover_thumb_path,
+    }))
+  );
+
+  return rows.map((row, index) => ({
+    ...row,
+    display_cover_image_url: pairs[index]?.display_url || row.cover_image_url,
+    display_cover_thumb_url:
+      pairs[index]?.display_thumb_url || row.cover_thumb_url || row.cover_image_url,
+  }));
+}
 
 export default function MyMarketPostsPage() {
   const router = useRouter();
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [items, setItems] = useState<MarketPostRow[]>([]);
+  const [items, setItems] = useState<MarketPostDisplayRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -83,7 +108,7 @@ export default function MyMarketPostsPage() {
       return;
     }
 
-    setItems((data || []) as MarketPostRow[]);
+    setItems(await attachMarketPostDisplayUrls((data || []) as MarketPostRow[]));
   }
 
   const marketBlocked = membership?.can_create_market_post === false;
@@ -171,9 +196,15 @@ export default function MyMarketPostsPage() {
           <section style={listStyle}>
             {items.map((item) => (
               <article key={item.id} style={cardStyle}>
-                {item.cover_thumb_url || item.cover_image_url ? (
+                {item.display_cover_thumb_url || item.display_cover_image_url || item.cover_thumb_url || item.cover_image_url ? (
                   <img
-                    src={item.cover_thumb_url || item.cover_image_url || ""}
+                    src={
+                      item.display_cover_thumb_url ||
+                      item.display_cover_image_url ||
+                      item.cover_thumb_url ||
+                      item.cover_image_url ||
+                      ""
+                    }
                     alt=""
                     style={cardImageStyle}
                     loading="lazy"

@@ -18,6 +18,31 @@ import {
   getMarketPostTypeLabel,
   type MarketPostRow,
 } from "@/lib/market-types";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+
+type MarketPostDisplayRow = MarketPostRow & {
+  display_cover_image_url?: string | null;
+  display_cover_thumb_url?: string | null;
+};
+
+async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
+  const pairs = await resolveMediaDisplayPairs(
+    supabase,
+    rows.map((row) => ({
+      url: row.cover_image_url,
+      path: row.cover_image_path,
+      thumb_url: row.cover_thumb_url,
+      thumb_path: row.cover_thumb_path,
+    }))
+  );
+
+  return rows.map((row, index) => ({
+    ...row,
+    display_cover_image_url: pairs[index]?.display_url || row.cover_image_url,
+    display_cover_thumb_url:
+      pairs[index]?.display_thumb_url || row.cover_thumb_url || row.cover_image_url,
+  }));
+}
 
 export default function PublicUserProfilePage() {
   const params = useParams<{ id: string }>();
@@ -30,7 +55,7 @@ export default function PublicUserProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [data, setData] = useState<PublicUserProfileData | null>(null);
-  const [marketPosts, setMarketPosts] = useState<MarketPostRow[]>([]);
+  const [marketPosts, setMarketPosts] = useState<MarketPostDisplayRow[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -62,7 +87,11 @@ export default function PublicUserProfilePage() {
           console.error("load public user market posts error:", marketResult.error);
           setMarketPosts([]);
         } else {
-          setMarketPosts((marketResult.data || []) as MarketPostRow[]);
+          setMarketPosts(
+            await attachMarketPostDisplayUrls(
+              (marketResult.data || []) as MarketPostRow[]
+            )
+          );
         }
 
         if (realViewerId && realViewerId !== userId) {
@@ -334,8 +363,17 @@ export default function PublicUserProfilePage() {
             <div style={marketListStyle}>
               {marketPosts.map((item) => (
                 <Link key={item.id} href={`/market/${item.id}`} style={marketCardStyle}>
-                  {item.cover_image_url ? (
-                    <img src={item.cover_image_url} alt="" style={marketImageStyle} />
+                  {item.display_cover_thumb_url || item.display_cover_image_url || item.cover_image_url ? (
+                    <img
+                      src={
+                        item.display_cover_thumb_url ||
+                        item.display_cover_image_url ||
+                        item.cover_image_url ||
+                        ""
+                      }
+                      alt=""
+                      style={marketImageStyle}
+                    />
                   ) : (
                     <div style={marketImageFallbackStyle}>集市</div>
                   )}

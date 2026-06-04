@@ -19,6 +19,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
 type ProfileBrief = {
   id: string;
@@ -36,8 +37,32 @@ type ArchiveBrief = {
   species_name_snapshot: string | null;
 };
 
+type MarketPostDisplayRow = MarketPostRow & {
+  display_cover_image_url?: string | null;
+  display_cover_thumb_url?: string | null;
+};
+
+async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
+  const pairs = await resolveMediaDisplayPairs(
+    supabase,
+    rows.map((row) => ({
+      url: row.cover_image_url,
+      path: row.cover_image_path,
+      thumb_url: row.cover_thumb_url,
+      thumb_path: row.cover_thumb_path,
+    }))
+  );
+
+  return rows.map((row, index) => ({
+    ...row,
+    display_cover_image_url: pairs[index]?.display_url || row.cover_image_url,
+    display_cover_thumb_url:
+      pairs[index]?.display_thumb_url || row.cover_thumb_url || row.cover_image_url,
+  }));
+}
+
 export default function MarketPage() {
-  const [items, setItems] = useState<MarketPostRow[]>([]);
+  const [items, setItems] = useState<MarketPostDisplayRow[]>([]);
   const [profiles, setProfiles] = useState<Map<string, ProfileBrief>>(new Map());
   const [archives, setArchives] = useState<Map<string, ArchiveBrief>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -98,7 +123,7 @@ export default function MarketPage() {
           return;
         }
 
-        const rows = (data || []) as MarketPostRow[];
+        const rows = await attachMarketPostDisplayUrls((data || []) as MarketPostRow[]);
         setItems(rows);
 
         const userIds = Array.from(new Set(rows.map((item) => item.user_id)));
@@ -347,9 +372,15 @@ export default function MarketPage() {
 
               return (
                 <Link key={item.id} href={`/market/${item.id}`} style={cardStyle}>
-                  {item.cover_thumb_url || item.cover_image_url ? (
+                  {item.display_cover_thumb_url || item.display_cover_image_url || item.cover_thumb_url || item.cover_image_url ? (
                     <img
-                      src={item.cover_thumb_url || item.cover_image_url || ""}
+                      src={
+                        item.display_cover_thumb_url ||
+                        item.display_cover_image_url ||
+                        item.cover_thumb_url ||
+                        item.cover_image_url ||
+                        ""
+                      }
                       alt=""
                       style={cardImageStyle}
                       loading="lazy"

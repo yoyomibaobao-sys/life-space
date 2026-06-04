@@ -30,6 +30,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import { attachMediaDisplayUrls } from "@/lib/media-urls";
 
 type ArchiveOption = {
   id: string;
@@ -57,8 +58,11 @@ type SourceMediaOption = {
   id: string;
   record_id: string | null;
   url: string;
+  storage_path?: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
   created_at: string | null;
 };
 export default function NewMarketPostPage() {
@@ -203,7 +207,7 @@ function NewMarketPostPageContent() {
 
           const { data: mediaData, error: mediaError } = await supabase
             .from("media")
-            .select("id, record_id, url, thumb_url, thumb_path, created_at")
+            .select("id, record_id, url, storage_path, thumb_url, thumb_path, created_at")
             .eq("record_id", sourceRecord.id)
             .eq("user_id", user.id)
             .eq("type", "image")
@@ -213,7 +217,12 @@ function NewMarketPostPageContent() {
             console.error("load source record media error:", mediaError);
             setSourceMediaOptions([]);
           } else {
-            setSourceMediaOptions((mediaData || []) as SourceMediaOption[]);
+            setSourceMediaOptions(
+              await attachMediaDisplayUrls(
+                supabase,
+                (mediaData || []) as SourceMediaOption[]
+              )
+            );
           }
         }
       }
@@ -406,7 +415,7 @@ function NewMarketPostPageContent() {
         external_url: safeExternalUrl || null,
         external_label: safeExternalLabel || null,
         cover_image_url: firstSourceMedia?.url || null,
-        cover_image_path: null,
+        cover_image_path: firstSourceMedia?.storage_path || null,
         cover_thumb_url: firstSourceMedia?.thumb_url || null,
         cover_thumb_path: firstSourceMedia?.thumb_path || null,
         status: "active",
@@ -428,7 +437,7 @@ function NewMarketPostPageContent() {
         market_post_id: postId,
         user_id: user.id,
         url: item.url,
-        path: null,
+        path: item.storage_path || null,
         thumb_url: item.thumb_url || null,
         thumb_path: item.thumb_path || null,
         source_media_id: item.id,
@@ -600,7 +609,7 @@ function NewMarketPostPageContent() {
                             style={sourceMediaButtonStyle(active)}
                           >
                             <img
-                              src={media.thumb_url || media.url}
+                              src={media.display_thumb_url || media.thumb_url || media.url}
                               alt=""
                               style={sourceMediaImageStyle}
                               loading="lazy"

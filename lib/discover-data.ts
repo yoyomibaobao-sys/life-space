@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase";
 import type { FeedItem } from "@/lib/discover-types";
 import type { PublicProfile, RecordTagRow } from "@/lib/domain-types";
 import { buildLocationTextFromFields } from "@/lib/region-shared";
+import { attachMediaDisplayUrls } from "@/lib/media-urls";
 
 export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
   const recordIds = nextItems.map((item) => item.record_id);
@@ -24,7 +25,7 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
         .neq("is_active", false),
       supabase
         .from("media")
-        .select("record_id, url, thumb_url, created_at")
+        .select("record_id, url, thumb_url, storage_path, thumb_path, created_at")
         .in("record_id", recordIds)
         .eq("type", "image")
         .order("created_at", { ascending: true }),
@@ -38,13 +39,25 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
       tagMap.set(row.record_id, prev);
     });
 
-    (mediaRows || []).forEach((row: { record_id: string | null; url: string | null; thumb_url: string | null }) => {
-      if (!row.record_id || !row.thumb_url) return;
+    const displayMediaRows = await attachMediaDisplayUrls(
+      supabase,
+      (mediaRows || []) as Array<{
+        record_id: string | null;
+        url: string | null;
+        thumb_url: string | null;
+        storage_path?: string | null;
+        thumb_path?: string | null;
+      }>
+    );
+
+    displayMediaRows.forEach((row) => {
+      const thumbUrl = row.display_thumb_url || row.thumb_url;
+      if (!row.record_id || !thumbUrl) return;
       const item = nextItems.find((feedItem) => feedItem.record_id === row.record_id);
       const isPrimaryMedia = !item?.primary_image_url || item.primary_image_url === row.url;
 
       if (isPrimaryMedia || !recordThumbMap.has(row.record_id)) {
-        recordThumbMap.set(row.record_id, row.thumb_url);
+        recordThumbMap.set(row.record_id, thumbUrl);
       }
     });
   }
