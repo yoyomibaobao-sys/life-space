@@ -154,6 +154,27 @@ AS $$
             "public"."media_object_path_from_public_url"(to_jsonb("mm")->>'thumb_url')
           ) = "p_object_name"
         )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM "public"."market_media" AS "mm"
+      JOIN "public"."market_posts" AS "mp"
+        ON "mp"."id" = "mm"."market_post_id"
+      JOIN "public"."media" AS "m"
+        ON "m"."id" = "mm"."source_media_id"
+      WHERE
+        "mp"."status" = 'active'
+        AND "mm"."source_media_id" IS NOT NULL
+        AND (
+          COALESCE(
+            NULLIF(to_jsonb("m")->>'storage_path', ''),
+            "public"."media_object_path_from_public_url"(to_jsonb("m")->>'url')
+          ) = "p_object_name"
+          OR COALESCE(
+            NULLIF(to_jsonb("m")->>'thumb_path', ''),
+            "public"."media_object_path_from_public_url"(to_jsonb("m")->>'thumb_url')
+          ) = "p_object_name"
+        )
     );
 $$;
 
@@ -308,53 +329,11 @@ BEGIN
     RAISE NOTICE 'TODO: market_posts.cover_thumb_path or market_posts.cover_thumb_url missing; skipped cover thumb path backfill.';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'market_media'
-      AND column_name = 'path'
-  )
-  AND EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'market_media'
-      AND column_name = 'url'
-  ) THEN
-    EXECUTE $sql$
-      UPDATE "public"."market_media"
-      SET "path" = "public"."media_object_path_from_public_url"("url")
-      WHERE NULLIF("path", '') IS NULL
-        AND "public"."media_object_path_from_public_url"("url") IS NOT NULL
-    $sql$;
-  ELSE
-    RAISE NOTICE 'TODO: market_media.path or market_media.url missing; skipped media path backfill.';
-  END IF;
-
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'market_media'
-      AND column_name = 'thumb_path'
-  )
-  AND EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'market_media'
-      AND column_name = 'thumb_url'
-  ) THEN
-    EXECUTE $sql$
-      UPDATE "public"."market_media"
-      SET "thumb_path" = "public"."media_object_path_from_public_url"("thumb_url")
-      WHERE NULLIF("thumb_path", '') IS NULL
-        AND "public"."media_object_path_from_public_url"("thumb_url") IS NOT NULL
-    $sql$;
-  ELSE
-    RAISE NOTICE 'TODO: market_media.thumb_path or market_media.thumb_url missing; skipped media thumb path backfill.';
-  END IF;
+  -- Do not backfill market_media.path or market_media.thumb_path here.
+  -- Production has a source_media_path_must_be_null constraint for rows linked
+  -- to source media/records. The market media read helper covers existing path
+  -- fields, URL fallback parsing, and source_media_id -> media path fallback
+  -- without updating market_media rows.
 END $$;
 
 -- ---------------------------------------------------------------------------
