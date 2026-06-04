@@ -11,6 +11,7 @@ import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
 type TabKey = "projects" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -220,8 +221,18 @@ export default function FollowPage() {
         }
       });
 
+      const projectCoverPairs = await resolveMediaDisplayPairs(
+        supabase,
+        archives.map((archive) => {
+          const latestRecord = latestRecordMap.get(archive.id);
+          return {
+            url: archive.cover_image_url || latestRecord?.primary_image_url || null,
+          };
+        })
+      );
+
       const nextProjectCards = archives
-        .map((archive) => {
+        .map((archive, index) => {
           const latestRecord = latestRecordMap.get(archive.id);
           const profile = profileMap.get(archive.user_id);
           const systemName =
@@ -249,7 +260,11 @@ export default function FollowPage() {
             statusLabel: getProjectStatusLabel(archive.help_status, archive.status),
             statusKind: getProjectStatusKind(archive.help_status, archive.status),
             coverUrl:
-              archive.cover_image_url || latestRecord?.primary_image_url || null,
+              projectCoverPairs[index]?.display_thumb_url ||
+              projectCoverPairs[index]?.display_url ||
+              archive.cover_image_url ||
+              latestRecord?.primary_image_url ||
+              null,
           } satisfies FollowProjectCard;
         })
         .sort(byRecentProject);

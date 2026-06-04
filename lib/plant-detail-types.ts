@@ -17,6 +17,8 @@ export type PlantRecordItem = {
   archive_title?: string | null;
   note?: string | null;
   primary_image_url?: string | null;
+  primary_thumb_url?: string | null;
+  display_primary_image_url?: string | null;
 };
 
 

@@ -41,7 +41,13 @@ export default function PlantRelatedRecords({
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
-          {records.map((record) => (
+          {records.map((record) => {
+            const imageUrl =
+              record.display_primary_image_url ||
+              record.primary_thumb_url ||
+              record.primary_image_url;
+
+            return (
             <Link
               key={record.record_id}
               href={`/archive/${record.archive_id}?mode=viewer`}
@@ -55,9 +61,9 @@ export default function PlantRelatedRecords({
                 textDecoration: "none",
               }}
             >
-              {record.primary_image_url && (
+              {imageUrl && (
                 <img
-                  src={record.primary_image_url}
+                  src={imageUrl}
                   alt=""
                   style={{
                     width: "100%",
@@ -84,7 +90,8 @@ export default function PlantRelatedRecords({
                 {record.note || "没有文字内容"}
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

@@ -20,6 +20,7 @@ import {
   unique,
 } from "@/lib/follow-utils";
 import { getRecentArchiveTitles, getTimeValue, sortRecentArchives } from "@/lib/social-space-shared";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
 export async function loadFollowPageData(supabase: any, userId: string): Promise<FollowPageData> {
   const [{ data: archiveFollows }, { data: userFollows }] = await Promise.all([
@@ -112,8 +113,18 @@ export async function loadFollowPageData(supabase: any, userId: string): Promise
     }
   });
 
+  const projectCoverPairs = await resolveMediaDisplayPairs(
+    supabase,
+    archives.map((archive) => {
+      const latestRecord = latestRecordMap.get(archive.id);
+      return {
+        url: archive.cover_image_url || latestRecord?.primary_image_url || null,
+      };
+    })
+  );
+
   const projectCards = archives
-    .map((archive) => {
+    .map((archive, index) => {
       const latestRecord = latestRecordMap.get(archive.id);
       const profile = profileMap.get(archive.user_id);
       const systemName = archive.system_name || archive.species_name_snapshot || "未填写";
@@ -137,7 +148,12 @@ export async function loadFollowPageData(supabase: any, userId: string): Promise
         viewCount: Number(archive.view_count || 0),
         statusLabel: getProjectStatusLabel(archive.help_status, archive.status),
         statusKind: getProjectStatusKind(archive.help_status, archive.status),
-        coverUrl: archive.cover_image_url || latestRecord?.primary_image_url || null,
+        coverUrl:
+          projectCoverPairs[index]?.display_thumb_url ||
+          projectCoverPairs[index]?.display_url ||
+          archive.cover_image_url ||
+          latestRecord?.primary_image_url ||
+          null,
       } satisfies FollowProjectCard;
     })
     .sort(byRecentProject);

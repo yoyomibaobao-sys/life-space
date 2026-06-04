@@ -11,6 +11,7 @@ import {
 } from "@/lib/recent-browse";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import type { SupabaseUser } from "@/lib/domain-types";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
 type RecentArchiveRow = {
   id: string;
@@ -23,6 +24,7 @@ type RecentArchiveRow = {
   record_count: number | null;
   view_count: number | null;
   cover_image_url: string | null;
+  display_cover_image_url?: string | null;
 };
 
 export default function RecentBrowsePage() {
@@ -80,7 +82,18 @@ export default function RecentBrowsePage() {
         .map((id) => rowMap.get(id))
         .filter(Boolean) as RecentArchiveRow[];
 
-      setItems(sortedRows);
+      const coverPairs = await resolveMediaDisplayPairs(
+        supabase,
+        sortedRows.map((row) => ({ url: row.cover_image_url }))
+      );
+
+      setItems(
+        sortedRows.map((row, index) => ({
+          ...row,
+          display_cover_image_url:
+            coverPairs[index]?.display_url || row.cover_image_url || null,
+        }))
+      );
       setLoading(false);
     }
 
@@ -137,9 +150,9 @@ export default function RecentBrowsePage() {
                   href={`/archive/${item.id}`}
                   style={cardStyle}
                 >
-                  {item.cover_image_url ? (
+                  {item.display_cover_image_url || item.cover_image_url ? (
                     <img
-                      src={item.cover_image_url}
+                      src={item.display_cover_image_url || item.cover_image_url || ""}
                       alt={title}
                       style={coverStyle}
                     />

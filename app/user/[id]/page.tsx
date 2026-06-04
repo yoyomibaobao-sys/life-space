@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
-import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   type ArchiveCategory,
   getArchiveCategoryIcon,
@@ -134,12 +134,22 @@ export default function UserSpacePage() {
 
   async function attachRecordMediaDisplayUrls(nextRecords: any[]) {
     const allMedia = nextRecords.flatMap((record) => record.media || []);
-    if (allMedia.length === 0) return nextRecords;
+    const primaryPairs = await resolveMediaDisplayPairs(
+      supabase,
+      nextRecords.map((record) => ({ url: record.primary_image_url }))
+    );
+    const recordsWithDisplayPrimary = nextRecords.map((record, index) => ({
+      ...record,
+      display_primary_image_url:
+        primaryPairs[index]?.display_url || record.primary_image_url || null,
+    }));
+
+    if (allMedia.length === 0) return recordsWithDisplayPrimary;
 
     const displayMedia = await attachMediaDisplayUrls(supabase, allMedia);
     let mediaIndex = 0;
 
-    return nextRecords.map((record) => {
+    return recordsWithDisplayPrimary.map((record) => {
       const mediaCount = record.media?.length || 0;
       const media = displayMedia.slice(mediaIndex, mediaIndex + mediaCount);
       mediaIndex += mediaCount;
@@ -267,8 +277,8 @@ export default function UserSpacePage() {
         }
       }
 
-      if (record.primary_image_url) {
-        map[record.archive_id] = record.primary_image_url;
+      if (record.display_primary_image_url || record.primary_image_url) {
+        map[record.archive_id] = record.display_primary_image_url || record.primary_image_url;
       }
     });
 

@@ -24,7 +24,7 @@ import type {
   SubTagItem,
 } from "@/lib/archive-page-types";
 import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
-import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   buildArchiveSearchText,
   getArchiveSortTime,
@@ -174,6 +174,12 @@ export default function ArchivePage() {
           followerCountMap.set(archiveId, (followerCountMap.get(archiveId) || 0) + 1);
         });
       const latestRecordMap = new Map<string, LatestArchiveRecord>();
+      const archiveCoverPairs = await resolveMediaDisplayPairs(
+        supabase,
+        ((archivesData || []) as ArchiveItem[]).map((item) => ({
+          url: item.cover_image_url,
+        }))
+      );
 
       if (archiveIds.length > 0) {
         const { data: latestRecordRows, error: latestRecordError } = await supabase
@@ -189,6 +195,11 @@ export default function ArchivePage() {
           const latestRecords = (latestRecordRows || []) as LatestArchiveRecord[];
           const latestRecordIds = latestRecords.map((record) => record.id).filter(Boolean);
           const thumbByRecordId = new Map<string, string>();
+          const primaryImageByRecordId = new Map<string, string>();
+          const primaryImagePairs = await resolveMediaDisplayPairs(
+            supabase,
+            latestRecords.map((record) => ({ url: record.primary_image_url }))
+          );
 
           if (latestRecordIds.length > 0) {
             const { data: mediaRows, error: mediaError } = await supabase
@@ -207,6 +218,7 @@ export default function ArchivePage() {
                 thumb_url?: string | null;
                 storage_path?: string | null;
                 thumb_path?: string | null;
+                display_url?: string | null;
                 display_thumb_url?: string | null;
               }>>();
 
@@ -231,35 +243,50 @@ export default function ArchivePage() {
               latestRecords.forEach((record) => {
                 const mediaList = mediaByRecordId.get(record.id) || [];
                 const matchedPrimary = mediaList.find(
-                  (media) => media.thumb_url && media.url && record.primary_image_url && media.url === record.primary_image_url
+                  (media) => media.url && record.primary_image_url && media.url === record.primary_image_url
                 );
                 const firstThumb = mediaList.find((media) => media.display_thumb_url || media.thumb_url);
+                const firstImage = mediaList.find((media) => media.display_url || media.url);
                 const thumbUrl =
                   matchedPrimary?.display_thumb_url ||
                   matchedPrimary?.thumb_url ||
                   firstThumb?.display_thumb_url ||
                   firstThumb?.thumb_url ||
                   null;
+                const imageUrl =
+                  matchedPrimary?.display_url ||
+                  matchedPrimary?.url ||
+                  firstImage?.display_url ||
+                  firstImage?.url ||
+                  null;
                 if (thumbUrl) thumbByRecordId.set(record.id, thumbUrl);
+                if (imageUrl) primaryImageByRecordId.set(record.id, imageUrl);
               });
             }
           }
 
-          latestRecords.forEach((record) => {
+          latestRecords.forEach((record, index) => {
             if (!record.archive_id || latestRecordMap.has(record.archive_id)) return;
             latestRecordMap.set(record.archive_id, {
               ...record,
+              primary_image_url:
+                primaryImageByRecordId.get(record.id) ||
+                primaryImagePairs[index]?.display_url ||
+                record.primary_image_url ||
+                null,
               primary_thumb_url: thumbByRecordId.get(record.id) || null,
             });
           });
         }
       }
 
-      const enrichedArchives: ArchiveItem[] = ((archivesData || []) as ArchiveItem[]).map((item) => {
+      const enrichedArchives: ArchiveItem[] = ((archivesData || []) as ArchiveItem[]).map((item, index) => {
         const latestRecord = latestRecordMap.get(item.id);
 
         return {
           ...item,
+          display_cover_image_url:
+            archiveCoverPairs[index]?.display_url || item.cover_image_url || null,
           status: item.status || "active",
           latest_record_note: latestRecord?.note || null,
           latest_record_time: latestRecord?.record_time || item.last_record_time || null,
@@ -722,7 +749,7 @@ export default function ArchivePage() {
     if (recordIds.length > 0) {
       const { data: mediaRows } = await supabase
         .from("media")
-        .select("id, url, size_mb, size_bytes, user_id")
+        .select("id, url, storage_path, thumb_path, size_mb, size_bytes, user_id")
         .in("record_id", recordIds);
       mediaItems = (mediaRows || []) as MediaItem[];
       await removeMediaFilesFromStorage(mediaItems);

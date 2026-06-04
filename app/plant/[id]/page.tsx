@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
+import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
 import type {
   ActionMessage,
   PlantAliasRow,
@@ -529,7 +530,61 @@ const [
 setParameters((parameterData || null) as PlantParametersRow | null);
 setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
 setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
-      setRelatedRecords((relatedData || []) as PlantRecordItem[]);
+      const relatedRows = (relatedData || []) as PlantRecordItem[];
+      const relatedRecordIds = relatedRows.map((record) => record.record_id).filter(Boolean);
+      const primaryImagePairs = await resolveMediaDisplayPairs(
+        supabase,
+        relatedRows.map((record) => ({ url: record.primary_image_url }))
+      );
+      const relatedMediaPreviewMap = new Map<string, string>();
+
+      if (relatedRecordIds.length > 0) {
+        const { data: mediaRows } = await supabase
+          .from("media")
+          .select("record_id, url, thumb_url, storage_path, thumb_path, created_at")
+          .in("record_id", relatedRecordIds)
+          .eq("type", "image")
+          .order("created_at", { ascending: true });
+
+        const displayMediaRows = await attachMediaDisplayUrls(
+          supabase,
+          (mediaRows || []) as Array<{
+            record_id?: string | null;
+            url?: string | null;
+            thumb_url?: string | null;
+            storage_path?: string | null;
+            thumb_path?: string | null;
+          }>
+        );
+
+        displayMediaRows.forEach((media) => {
+          if (!media.record_id) return;
+          const record = relatedRows.find((item) => item.record_id === media.record_id);
+          const isPrimaryMedia =
+            !record?.primary_image_url ||
+            (media.url && record.primary_image_url === media.url);
+          const imageUrl = media.display_thumb_url || media.display_url || media.thumb_url || media.url;
+
+          if (imageUrl && (isPrimaryMedia || !relatedMediaPreviewMap.has(media.record_id))) {
+            relatedMediaPreviewMap.set(media.record_id, imageUrl);
+          }
+        });
+      }
+
+      setRelatedRecords(
+        relatedRows.map((record, index) => ({
+          ...record,
+          primary_thumb_url:
+            relatedMediaPreviewMap.get(record.record_id) ||
+            primaryImagePairs[index]?.display_thumb_url ||
+            null,
+          display_primary_image_url:
+            relatedMediaPreviewMap.get(record.record_id) ||
+            primaryImagePairs[index]?.display_url ||
+            record.primary_image_url ||
+            null,
+        }))
+      );
 
       const {
         data: { user },
@@ -1190,7 +1245,13 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            {relatedRecords.map((record) => (
+            {relatedRecords.map((record) => {
+              const imageUrl =
+                record.display_primary_image_url ||
+                record.primary_thumb_url ||
+                record.primary_image_url;
+
+              return (
               <Link
                 key={record.record_id}
                 href={`/archive/${record.archive_id}?mode=viewer`}
@@ -1204,9 +1265,9 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
                   textDecoration: "none",
                 }}
               >
-                {record.primary_image_url && (
+                {imageUrl && (
                   <img
-                    src={record.primary_image_url}
+                    src={imageUrl}
                     alt=""
                     style={{
                       width: "100%",
@@ -1233,7 +1294,8 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
                   {record.note || "没有文字内容"}
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
