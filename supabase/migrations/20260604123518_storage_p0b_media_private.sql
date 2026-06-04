@@ -388,14 +388,7 @@ USING (
   AND "public"."can_read_public_market_media_object"("storage"."objects"."name")
 );
 
-COMMENT ON POLICY "media_owner_select" ON "storage"."objects" IS
-'P0b: authenticated users can read media objects only under media/{auth.uid()}/ paths.';
 
-COMMENT ON POLICY "media_public_record_select" ON "storage"."objects" IS
-'P0b: public record media can be read when linked media rows belong to public records in public archives. Uses path fields first, with URL parsing fallback for historical rows.';
-
-COMMENT ON POLICY "media_public_market_select" ON "storage"."objects" IS
-'P0b: public active market post media can be read through market_posts cover fields or market_media.market_post_id. Uses path fields first, with URL parsing fallback for historical rows.';
 
 -- ---------------------------------------------------------------------------
 -- 5. Finally make media private while preserving image limits.
