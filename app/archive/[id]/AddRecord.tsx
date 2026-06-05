@@ -227,8 +227,8 @@ export default function AddRecord({
         setMembershipNotice(message);
         showToast(message);
       } else {
-        setMembershipNotice("容量检查失败，请稍后再试，或查看会员与续费页面。");
-        showToast("容量检查失败，请稍后再试");
+        setMembershipNotice("容量检查失败");
+        showToast("容量检查失败");
       }
 
       return 0;
@@ -544,7 +544,7 @@ export default function AddRecord({
         </select>
       ) : (
         <span style={{ marginLeft: 8, fontSize: 12, color: "#888" }}>
-          项目私密，记录仅自己可见
+          项目和记录仅自己可见
         </span>
       )}
 
@@ -693,7 +693,7 @@ export default function AddRecord({
             {uploadWouldExceedStorage ? (
               <>
                 <br />
-                当前容量不足，请减少图片、删除旧图片释放空间，或{" "}
+                空间不足，无法上传。{" "}
                 <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
                   查看会员与续费
                 </Link>

@@ -426,7 +426,7 @@ export default function ArchiveCard({
         >
           <button
             type="button"
-            title={item.is_public ? "点击设为私密" : "点击公开到发现"}
+            title={item.is_public ? "设为仅自己可见" : "公开"}
             onClick={(e) => {
               e.stopPropagation();
               onTogglePublic(item);
@@ -441,7 +441,7 @@ export default function ArchiveCard({
               cursor: "pointer",
             }}
           >
-            {item.is_public ? "已公开" : "私密"}
+            {item.is_public ? "已公开" : "仅自己可见"}
           </button>
 
           <ArchiveCategoryDropdown

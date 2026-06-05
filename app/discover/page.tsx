@@ -174,12 +174,12 @@ export default function DiscoverPage() {
           ""
         ) : filterMode === "help" ? (
           helpStreamItems.length > 0 ? (
-            <span style={{ color: "#aaa", fontSize: 12 }}>没有更多了</span>
+            <span style={{ color: "#aaa", fontSize: 12 }}>已到底</span>
           ) : (
             ""
           )
         ) : sections.length > 0 ? (
-          <span style={{ color: "#aaa", fontSize: 12 }}>没有更多了</span>
+          <span style={{ color: "#aaa", fontSize: 12 }}>已到底</span>
         ) : (
           ""
         )}

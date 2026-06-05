@@ -67,7 +67,7 @@ export default function MembershipPage() {
         (typeof daysRemaining === "number" && daysRemaining <= 14))
   );
   const renewalNoticeText = membership?.can_create_content === false
-    ? "当前使用权已到期。已有内容仍可查看、导出和删除；如需继续新增记录、上传照片或发布集市信息，请开通基础年费。"
+    ? "使用权已到期"
     : typeof daysRemaining === "number" && daysRemaining <= 14
       ? `当前使用权还有 ${daysRemaining} 天到期。你可以提前完成付款，管理员确认后会延长使用期限。`
       : "";

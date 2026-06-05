@@ -112,11 +112,11 @@ export function getCreateContentBlockedText(membership?: MyMembership | null) {
   const status = getMembershipStatusLabel(membership?.status);
 
   if (!membership) {
-    return "暂时无法确认试用状态，请稍后再试。";
+    return "试用状态无法确认";
   }
 
   if (membership.can_create_content === false) {
-    return `${label} · ${status}。你仍可查看、导出或删除已有内容；如需继续新增项目和记录，请查看会员与续费。`;
+    return "暂不能新增内容";
   }
 
   return "可以继续新增内容。";
@@ -127,7 +127,7 @@ export function getCreateMarketPostBlockedText(membership?: MyMembership | null)
   const status = getMembershipStatusLabel(membership?.status);
 
   if (!membership) {
-    return "暂时无法确认集市发布额度，请稍后再试。";
+    return "集市额度无法确认";
   }
 
   if (membership.can_create_content === false) {
@@ -135,7 +135,7 @@ export function getCreateMarketPostBlockedText(membership?: MyMembership | null)
   }
 
   if (membership.can_create_market_post === false) {
-    return `当前集市发布额度已满：${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} 条。你可以结束旧发布，或查看会员与续费。`;
+    return "集市发布已达上限";
   }
 
   return "可以继续发布集市信息。";
@@ -156,7 +156,7 @@ export function getMarketPostQuotaLabel(membership?: MyMembership | null) {
 
 export function getMarketPostQuotaHint(membership?: MyMembership | null) {
   if (!membership) {
-    return "暂时无法确认集市发布额度，请稍后再试。";
+    return "集市额度无法确认";
   }
 
   if (membership.can_create_market_post === false) {
@@ -209,19 +209,10 @@ export function canUploadWithinStorageLimit(params: {
   return used + upload <= limit;
 }
 
-export function getStorageLimitExceededText(params: {
+export function getStorageLimitExceededText(_params: {
   usedBytes?: number | null;
   limitBytes?: number | null;
   uploadBytes?: number | null;
 }) {
-  const remaining = getStorageRemainingBytes({
-    usedBytes: params.usedBytes,
-    limitBytes: params.limitBytes,
-  });
-
-  const uploadText = formatStorageBytes(params.uploadBytes || 0);
-  const remainingText = remaining === null ? "暂无" : formatStorageBytes(remaining);
-  const limitText = formatStorageBytes(params.limitBytes || 0);
-
-  return `当前容量不足。本次选择约 ${uploadText}，剩余约 ${remainingText}，当前容量上限 ${limitText}。你可以减少图片、删除旧图片释放空间，或查看会员与续费。`;
+  return "空间不足，无法上传";
 }

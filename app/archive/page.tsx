@@ -683,7 +683,7 @@ export default function ArchivePage() {
       .eq("archive_id", item.id);
 
     if (recordsError) {
-      showToast("项目状态已更新，但同步记录可见状态失败");
+      showToast("记录同步失败");
       return;
     }
 
@@ -909,7 +909,7 @@ export default function ArchivePage() {
           marginBottom: 18,
         }}
       >
-        我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 私密 {privateArchiveCount}
+        我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
         {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
       </div>
 

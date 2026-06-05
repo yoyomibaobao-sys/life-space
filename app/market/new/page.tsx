@@ -632,7 +632,7 @@ function NewMarketPostPageContent() {
                   </>
                 ) : (
                   <div style={coverHintStyle}>
-                    这条来源记录还没有图片。你可以先发布，之后在集市详情或编辑页补充图片。
+                    来源记录没有图片
                   </div>
                 )}
               </div>

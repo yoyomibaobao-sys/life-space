@@ -306,7 +306,7 @@ export default function MarketCommentsSection({
           <div style={closedNoticeStyle}>会员状态读取中...</div>
         ) : membershipBlocked ? (
           <div style={closedNoticeStyle}>
-            当前使用权已到期。已有内容仍可查看、导出和删除；如需继续留言，请{" "}
+            使用权已到期，请{" "}
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
               查看会员与续费
             </Link>

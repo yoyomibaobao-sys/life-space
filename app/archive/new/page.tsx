@@ -829,7 +829,7 @@ function NewArchiveContent() {
             lineHeight: 1.6,
           }}
         >
-          新建项目默认公开到发现。你也可以在项目详情页切换为仅自己可见。
+          默认公开，可改为仅自己可见
         </div>
 
         <button

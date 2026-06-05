@@ -19,7 +19,7 @@ export default function ArchivePrivateState() {
           color: "#666",
         }}
       >
-        该项目为私密，仅项目主人可见。
+        该项目仅自己可见。
       </div>
     </main>
   );

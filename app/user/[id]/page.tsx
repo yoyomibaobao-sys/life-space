@@ -703,7 +703,7 @@ export default function UserSpacePage() {
             </div>
 
             <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
-              关注 {cardProfile.followingCount || 0} · 粉丝{" "}
+              关注 {cardProfile.followingCount || 0} · 被关注{" "}
               {cardProfile.followerCount || 0}
             </div>
 

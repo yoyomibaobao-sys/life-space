@@ -177,8 +177,8 @@ function ProfileFlowersContent() {
           ) : visibleItems.length === 0 ? (
             <div style={{ color: "#6f7b69", lineHeight: 1.8 }}>
               {tab === "received"
-                ? "你还没有收到花朵。等别人帮助你解决问题后，你送出的花朵会记在对方名下；别人送给你的花朵，也会在这里留下来源记录。"
-                : "你还没有送出花朵。只有求助记录的主人，才能给这条求助下真正有帮助的评论送花。"}
+                ? "还没有花朵"
+                : "还没有送花"}
             </div>
           ) : (
             visibleItems.map((item) => {

@@ -326,7 +326,7 @@ export function ProjectCardRows({
             flex: 1,
           }}
         >
-          {record.note ? shortText(record.note, noteMaxLength) : "这条记录没有文字内容"}
+          {record.note ? shortText(record.note, noteMaxLength) : "没有文字"}
           {updateText ? <span style={{ color: "#9aa59a" }}>　更新 {updateText}</span> : null}
         </span>
       </div>

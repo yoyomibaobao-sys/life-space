@@ -174,7 +174,7 @@ export default function DiscoverSearchForm({
       </div>
 
       <div style={{ marginTop: 8, fontSize: 12, color: "#6f7f6f", lineHeight: 1.6 }}>
-        地区会优先按用户资料中的“国家 / 省州 / 城市”匹配公开记录；没有拆分地区的旧资料，仍会回退按原地区文本匹配。
+        按地区匹配公开记录
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 10 }}>

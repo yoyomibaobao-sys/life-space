@@ -518,7 +518,7 @@ saveRecentArchiveBrowse({
       .eq("archive_id", activeArchive.id);
 
     if (recordsError) {
-      showToast("项目状态已更新，但同步记录可见状态失败");
+      showToast("记录同步失败");
       return;
     }
 
@@ -740,7 +740,7 @@ saveRecentArchiveBrowse({
       } else if (reserveResult.message === "membership_inactive") {
         showToast(getCreateContentBlockedText(membership));
       } else {
-        showToast("容量检查失败，请稍后再试");
+        showToast("容量检查失败");
       }
 
       return;
@@ -993,7 +993,7 @@ saveRecentArchiveBrowse({
                 fontSize: 14,
               }}
             >
-              这里还没有可显示的记录。
+              还没有记录
             </div>
           ) : null}
         </section>

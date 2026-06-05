@@ -281,7 +281,7 @@ export default function ArchiveRecordCard({
                 <option value="private">仅自己可见</option>
               </select>
             ) : (
-              <ArchiveStatusBadge>项目私密，记录仅自己可见</ArchiveStatusBadge>
+              <ArchiveStatusBadge>项目和记录仅自己可见</ArchiveStatusBadge>
             )}
 
             <button

@@ -183,7 +183,7 @@ export default function FollowersPage() {
         {loading ? (
           <section style={emptyStyle}>加载中...</section>
         ) : followers.length === 0 ? (
-          <section style={emptyStyle}>还没有用户关注你</section>
+          <section style={emptyStyle}>还没有关注者</section>
         ) : (
           <section style={listStyle}>
             {followers.map((item) => (

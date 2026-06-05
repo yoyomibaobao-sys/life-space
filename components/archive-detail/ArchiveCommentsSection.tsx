@@ -206,7 +206,7 @@ export default function ArchiveCommentsSection({
 
   async function handleToggleRecordLike() {
     if (!currentUserId) {
-      showToast("请先登录后再点赞");
+      showToast("请先登录");
       return;
     }
 
@@ -284,7 +284,7 @@ export default function ArchiveCommentsSection({
 
   async function handleToggleCommentLike(comment: CommentItem) {
     if (!currentUserId) {
-      showToast("请先登录后再点赞");
+      showToast("请先登录");
       return;
     }
 
@@ -485,7 +485,7 @@ export default function ArchiveCommentsSection({
           <span style={{ fontSize: 12, color: "#8b9688" }}>会员状态读取中...</span>
         ) : membershipBlocked ? (
           <span style={{ fontSize: 12, color: "#9a6232" }}>
-            当前使用权已到期，
+            使用权已到期，
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
               查看会员与续费
             </Link>
@@ -761,7 +761,7 @@ export default function ArchiveCommentsSection({
                 </div>
               ) : membershipBlocked ? (
                 <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
-                  当前使用权已到期。已有内容仍可查看、导出和删除；如需继续评论，请{" "}
+                  使用权已到期，请{" "}
                   <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
                     查看会员与续费
                   </Link>

@@ -194,7 +194,7 @@ export default function ProfilePage() {
         (typeof membershipDaysRemaining === "number" && membershipDaysRemaining <= 14))
   );
   const membershipNoticeText = membership?.can_create_content === false
-    ? "当前使用权已到期。已有内容仍可查看、导出和删除；如需继续新增记录、上传照片或发布集市信息，请查看会员与续费。"
+    ? "使用权已到期"
     : typeof membershipDaysRemaining === "number" && membershipDaysRemaining <= 14
       ? `当前使用权还有 ${membershipDaysRemaining} 天到期。你可以提前查看付款方式，管理员确认后会延长使用期限。`
       : "";
@@ -659,7 +659,7 @@ export default function ProfilePage() {
                 href="/archive"
                 label="我的项目"
                 value={String(stats.archiveCount)}
-                hint={`公开 ${stats.publicArchiveCount} · 私密 ${privateArchiveCount}`}
+                hint={`公开 ${stats.publicArchiveCount} · 仅自己可见 ${privateArchiveCount}`}
               />
               <StatLinkCard
   href="/profile/recent"

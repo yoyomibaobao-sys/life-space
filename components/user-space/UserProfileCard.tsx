@@ -63,7 +63,7 @@ export default function UserProfileCard({
         </div>
 
         <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
-          关注 {profile.followingCount || 0} · 粉丝 {profile.followerCount || 0}
+          关注 {profile.followingCount || 0} · 被关注 {profile.followerCount || 0}
         </div>
 
         <button
