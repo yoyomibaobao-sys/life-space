@@ -9,11 +9,11 @@ function getLoginErrorMessage(message: string) {
   const text = message.toLowerCase();
 
   if (text.includes("invalid login credentials")) {
-    return "邮箱或密码不正确；如果刚注册，请先完成邮箱验证";
+    return "邮箱或密码不正确；刚注册请先确认邮箱";
   }
 
   if (text.includes("email not confirmed")) {
-    return "该邮箱还未验证，请先前往邮箱完成验证";
+    return "邮箱未确认，请查找来自“有时·耕作”的邮件";
   }
 
   return `登录失败：${message}`;
@@ -68,7 +68,7 @@ export default function LoginPage() {
 
       router.replace("/archive");
     } catch {
-      setMessage("网络异常，请稍后再试");
+      setMessage("网络异常");
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,7 @@ export default function LoginPage() {
     const now = Date.now();
 
     if (now - lastSentTime < 30000) {
-      setMessage("请稍后再试（30秒内只能发送一次）");
+      setMessage("30 秒后再试");
       return;
     }
 
@@ -103,9 +103,9 @@ export default function LoginPage() {
       }
 
       setLastSentTime(now);
-      setMessage("已发送重置密码邮件，请前往邮箱查看");
+      setMessage("重置邮件已发送，请查找来自“有时·耕作”的邮件");
     } catch {
-      setMessage("网络异常，请稍后再试");
+      setMessage("网络异常");
     } finally {
       setLoading(false);
     }
@@ -134,7 +134,7 @@ export default function LoginPage() {
             lineHeight: 1.7,
           }}
         >
-          登录后进入你的空间。未登录时可以浏览发现、百科和集市公开内容。
+          登录后进入我的项目。
         </div>
 
         <form onSubmit={handleLogin}>

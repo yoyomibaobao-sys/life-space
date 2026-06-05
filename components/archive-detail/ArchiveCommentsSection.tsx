@@ -253,7 +253,7 @@ export default function ArchiveCommentsSection({
     }
 
     if (membershipLoading) {
-      showToast("会员状态读取中，请稍后再试");
+      showToast("会员状态读取中");
       return;
     }
 
@@ -423,9 +423,9 @@ export default function ArchiveCommentsSection({
 
   const commentHint = useMemo(() => {
     if (recordStatusTag === "help")
-      return "求助记录：记录主人可给真正有帮助的评论送花。";
+      return "记录主人可送花。";
     if (recordStatusTag === "resolved")
-      return "已解决：历史花朵保留，仍可补送花。";
+      return "可补送花。";
     return "";
   }, [recordStatusTag]);
 
@@ -527,7 +527,7 @@ export default function ArchiveCommentsSection({
                 评论加载中...
               </div>
             ) : comments.length === 0 ? (
-              <div style={{ fontSize: 12, color: "#8b9688" }}>暂无评论。</div>
+              <div style={{ fontSize: 12, color: "#8b9688" }}>暂无评论</div>
             ) : (
               comments.map((comment) => {
                 const revokeUntilTime = comment.myFlower?.revoke_until
@@ -769,7 +769,7 @@ export default function ArchiveCommentsSection({
                 </div>
               ) : (
                 <div style={{ fontSize: 12, color: "#7b8776" }}>
-                  登录后可评论和点赞。
+                  登录后可评论。
                 </div>
               )}
             </div>

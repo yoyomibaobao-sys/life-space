@@ -690,7 +690,7 @@ export default function ArchivePage() {
     setArchives((prev) =>
       prev.map((archive) => (archive.id === item.id ? { ...archive, is_public: newValue } : archive))
     );
-    showToast(newValue ? "项目和记录已公开到发现" : "项目和记录已设为仅自己可见");
+    showToast(newValue ? "项目和记录已公开" : "项目和记录仅自己可见");
   }
 
   async function updateArchiveCategory(item: ArchiveItem, value: string) {
@@ -1047,7 +1047,7 @@ export default function ArchivePage() {
               background: "#fcfdfb",
             }}
           >
-            还没有找到项目。
+            没有找到项目
           </div>
         ) : (
           activeArchives.map((item) => (

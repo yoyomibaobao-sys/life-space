@@ -81,7 +81,7 @@ export default function RegisterPage() {
 
       router.push(`/check-email?email=${encodeURIComponent(cleanEmail)}&type=signup`);
     } catch {
-      setMessage("网络异常，请稍后再试");
+      setMessage("网络异常");
     } finally {
       setLoading(false);
     }
@@ -104,7 +104,7 @@ export default function RegisterPage() {
             lineHeight: 1.7,
           }}
         >
-          注册后开始免费试用，可以创建项目、添加记录和上传照片。未注册用户可先浏览公开内容。
+          注册后可创建项目、添加记录和上传照片。
         </div>
 
         <form onSubmit={handleRegister}>

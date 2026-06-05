@@ -359,7 +359,7 @@ function NewArchiveContent() {
 
     if (error) {
       setLoading(false);
-      showToast("创建失败：" + error.message);
+      showToast("创建失败");
       return;
     }
 
@@ -376,7 +376,7 @@ function NewArchiveContent() {
       if (planError) {
         setLoading(false);
         showToast(
-          "项目已创建，但种植计划状态没有自动更新：" + planError.message
+          "项目已创建，计划未同步"
         );
         router.push(`/archive/${createdArchive.id}`);
         return;
@@ -491,7 +491,7 @@ function NewArchiveContent() {
 
             <div style={{ marginTop: 6 }}>{getArchiveCategoryDescription(category)}</div>
             <div style={{ marginTop: 4, color: "#7f8c78" }}>
-              创建时只需要选择大类，子分类和分组由用户根据需要自定义设置，项目创建之后再行归置。
+              先选择大类，之后可整理分类和分组。
             </div>
           </div>
 
@@ -800,7 +800,7 @@ function NewArchiveContent() {
           <div style={{ fontSize: 13, marginBottom: 4 }}>备注（选填）</div>
 
           <textarea
-            placeholder="简单记录一下背景..."
+            placeholder="记录背景"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             style={{

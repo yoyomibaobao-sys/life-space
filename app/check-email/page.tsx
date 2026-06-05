@@ -23,7 +23,7 @@ function CheckEmailContent() {
 
     const now = Date.now();
     if (now - lastSentTime < 30000) {
-      setMessage("请稍后再试（30秒内只能发送一次）");
+      setMessage("30 秒后再试");
       return;
     }
 
@@ -45,9 +45,9 @@ function CheckEmailContent() {
       }
 
       setLastSentTime(now);
-      setMessage("验证邮件已重新发送，请前往邮箱查看");
+      setMessage("确认邮件已发送，请查找来自“有时·耕作”的邮件");
     } catch {
-      setMessage("网络异常，请稍后再试");
+      setMessage("网络异常");
     } finally {
       setLoading(false);
     }
@@ -62,10 +62,10 @@ function CheckEmailContent() {
       }}
     >
       <div style={{ width: 360, textAlign: "center" }}>
-        <h1>请验证邮箱</h1>
+        <h1>请确认邮箱</h1>
 
         <p style={{ marginTop: 20, fontSize: 14, color: "#666", lineHeight: 1.8 }}>
-          注册成功后，需要先前往邮箱点击验证链接，再进入系统。
+          请在邮箱中查找来自“有时·耕作”的确认邮件。也请检查垃圾邮件或促销邮件。
         </p>
 
         {email && (
@@ -98,7 +98,7 @@ function CheckEmailContent() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? "处理中..." : "重新发送验证邮件"}
+            {loading ? "处理中..." : "重新发送确认邮件"}
           </button>
 
           <button
@@ -163,7 +163,7 @@ export default function CheckEmailPage() {
           }}
         >
           <div style={{ width: 360, textAlign: "center" }}>
-            <h1>请验证邮箱</h1>
+            <h1>请确认邮箱</h1>
             <p style={{ marginTop: 20, fontSize: 14, color: "#666", lineHeight: 1.8 }}>
               页面加载中...
             </p>

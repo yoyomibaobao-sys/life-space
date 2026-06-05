@@ -8,9 +8,9 @@ import { supabase } from "@/lib/supabase";
 const copy = {
   zhCN: {
     brand: "有时·耕作",
-    poem: "你所照料的、陪伴着的生命，正滋养、成就着彼此；有时，记录这些过程，让生命有迹可循。",
-    spirit: "留其间，守其度，顺其时，共养成。",
-    trialNote: "注册后开始免费试用；未注册可先浏览公开内容。",
+    poem: "记录种植、养护、农法设施和生态观察。",
+    spirit: "按项目整理，按时间记录。",
+    trialNote: "注册后可创建项目；未注册可浏览公开内容。",
     register: "注册",
     login: "登录",
     discover: "先浏览发现",
@@ -32,7 +32,7 @@ const copy = {
       },
       {
         title: "其他",
-        description: "记录其他与自然生活相关的长期项目。",
+        description: "记录其他耕作相关项目。",
       },
     ],
   },

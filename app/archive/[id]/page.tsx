@@ -531,7 +531,7 @@ saveRecentArchiveBrowse({
 
     setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
 
-    showToast(nextValue ? "项目和记录已公开" : "项目和记录已设为仅自己可见");
+    showToast(nextValue ? "项目和记录已公开" : "项目和记录仅自己可见");
   }
 
   async function toggleProjectFollow() {

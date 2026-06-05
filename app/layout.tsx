@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "有时 · 耕作",
-  description:  "种植、农法设施、虫鱼生态与自然生活的长期记录工具。记录照料、陪伴、滋养与成长，让生命有迹可循。",
+  description: "有时·耕作是种植、养护、农法设施和生态观察的记录工具。",
 };
 
 export default function RootLayout({

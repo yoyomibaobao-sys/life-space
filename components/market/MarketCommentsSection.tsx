@@ -154,7 +154,7 @@ export default function MarketCommentsSection({
     }
 
     if (membershipLoading) {
-      showToast("会员状态读取中，请稍后再试");
+      showToast("会员状态读取中");
       return;
     }
 
