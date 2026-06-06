@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 import { supabase } from "@/lib/supabase";
@@ -10,9 +10,81 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [canReset, setCanReset] = useState(false);
   const [saving, setSaving] = useState(false);
+  const isSuccessMessage = message.includes("已更新");
+
+  useEffect(() => {
+    let mounted = true;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+
+      if (event === "PASSWORD_RECOVERY" || session) {
+        setCanReset(true);
+        setMessage("");
+      }
+
+      setCheckingSession(false);
+    });
+
+    async function checkSession() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (session) {
+        setCanReset(true);
+        setMessage("");
+        setCheckingSession(false);
+        return;
+      }
+
+      const code = new URLSearchParams(window.location.search).get("code");
+
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (!mounted) return;
+
+        if (!error && data.session) {
+          window.history.replaceState(null, "", "/reset-password");
+          setCanReset(true);
+          setMessage("");
+        } else {
+          setCanReset(false);
+          setMessage("重置链接无效或已过期");
+        }
+
+        setCheckingSession(false);
+        return;
+      } else {
+        setCanReset(false);
+        setMessage("请从重置邮件打开此页面");
+      }
+
+      setCheckingSession(false);
+    }
+
+    void checkSession();
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   async function handleUpdate() {
+    if (!canReset) {
+      setMessage("请从重置邮件打开此页面");
+      return;
+    }
+
     const nextPassword = password.trim();
     const nextConfirmPassword = confirmPassword.trim();
 
@@ -34,27 +106,29 @@ export default function ResetPasswordPage() {
     setSaving(true);
     setMessage("");
 
-    const { error } = await supabase.auth.updateUser({ password: nextPassword });
+    try {
+      const { error } = await supabase.auth.updateUser({ password: nextPassword });
 
-    setSaving(false);
+      if (error) {
+        setMessage("密码更新失败");
+        return;
+      }
 
-    if (error) {
-      setMessage("修改失败：" + error.message);
-      return;
+      setMessage("密码已更新，请重新登录");
+
+      setTimeout(() => {
+        router.push("/login");
+      }, 900);
+    } finally {
+      setSaving(false);
     }
-
-    setMessage("密码修改成功，请重新登录");
-
-    setTimeout(() => {
-      router.push("/login");
-    }, 900);
   }
 
   return (
     <main style={{ padding: "40px 20px", maxWidth: 420, margin: "0 auto", color: "#1f2d1f" }}>
       <h2 style={{ marginBottom: 8 }}>重置密码</h2>
       <p style={{ marginTop: 0, marginBottom: 22, color: "#6f7f6f", fontSize: 14 }}>
-        请输入新的登录密码，并再次确认。
+        从重置邮件打开后，设置新密码。
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -75,20 +149,20 @@ export default function ResetPasswordPage() {
         <button
           type="button"
           onClick={handleUpdate}
-          disabled={saving}
+          disabled={checkingSession || saving || !canReset}
           style={{
             marginTop: 4,
             width: "100%",
             padding: "12px",
             borderRadius: 10,
             border: "none",
-            background: saving ? "#9aa59a" : "#111",
+            background: checkingSession || saving || !canReset ? "#9aa59a" : "#111",
             color: "#fff",
-            cursor: saving ? "default" : "pointer",
+            cursor: checkingSession || saving || !canReset ? "default" : "pointer",
             fontWeight: 700,
           }}
         >
-          {saving ? "修改中..." : "确认修改"}
+          {checkingSession ? "确认链接中..." : saving ? "更新中..." : "更新密码"}
         </button>
       </div>
 
@@ -98,9 +172,9 @@ export default function ResetPasswordPage() {
             marginTop: 14,
             padding: "10px 12px",
             borderRadius: 10,
-            background: message.includes("成功") ? "#f0fff4" : "#fff7f7",
-            border: message.includes("成功") ? "1px solid #cae9ca" : "1px solid #e6c9c9",
-            color: message.includes("成功") ? "#2e7d32" : "#8a4a4a",
+            background: isSuccessMessage ? "#f0fff4" : "#fff7f7",
+            border: isSuccessMessage ? "1px solid #cae9ca" : "1px solid #e6c9c9",
+            color: isSuccessMessage ? "#2e7d32" : "#8a4a4a",
             fontSize: 13,
           }}
         >
