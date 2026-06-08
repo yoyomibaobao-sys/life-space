@@ -578,7 +578,7 @@ export default function AddRecord({
             onClick={() => chooseInputRef.current?.click()}
             disabled={loading || membershipLoading || contentBlocked}
             style={{
-              padding: "8px 12px",
+              padding: "10px 14px",
               borderRadius: 999,
               border: "1px solid #dfe6dc",
               background: "#fff",
@@ -593,7 +593,7 @@ export default function AddRecord({
             onClick={() => cameraInputRef.current?.click()}
             disabled={loading || membershipLoading || contentBlocked}
             style={{
-              padding: "8px 12px",
+              padding: "10px 14px",
               borderRadius: 999,
               border: "1px solid #dfe6dc",
               background: "#f7faf6",
@@ -633,7 +633,7 @@ export default function AddRecord({
             style={{
               marginTop: 10,
               display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))",
               gap: 8,
             }}
           >
@@ -660,14 +660,14 @@ export default function AddRecord({
                     position: "absolute",
                     top: 5,
                     right: 5,
-                    width: 24,
-                    height: 24,
+                    width: 30,
+                    height: 30,
                     borderRadius: 999,
                     border: "none",
                     background: "rgba(0,0,0,0.55)",
                     color: "#fff",
                     cursor: "pointer",
-                    lineHeight: "24px",
+                    lineHeight: "30px",
                   }}
                 >
                   ×
@@ -722,7 +722,7 @@ export default function AddRecord({
         disabled={loading || membershipLoading || contentBlocked || uploadWouldExceedStorage}
         style={{
           marginTop: "12px",
-          padding: "8px 14px",
+          padding: "10px 16px",
           borderRadius: "8px",
           border: "1px solid #ddd",
           background: "#fff",

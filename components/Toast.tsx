@@ -39,6 +39,10 @@ export default function Toast() {
         padding: "10px 16px",
         borderRadius: "20px",
         fontSize: "14px",
+        lineHeight: 1.5,
+        maxWidth: "calc(100vw - 32px)",
+        boxSizing: "border-box",
+        textAlign: "center",
         zIndex: 9999,
       }}
     >

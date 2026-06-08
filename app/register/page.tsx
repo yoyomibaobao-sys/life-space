@@ -88,8 +88,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <main style={{ padding: 40, display: "flex", justifyContent: "center" }}>
-      <div style={{ width: 320 }}>
+    <main style={{ padding: "32px 20px", display: "flex", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 320 }}>
         <h1 style={{ marginBottom: 10 }}>注册账号</h1>
 
         <div
@@ -116,7 +116,7 @@ export default function RegisterPage() {
             autoComplete="email"
             style={{
               width: "100%",
-              padding: 10,
+              padding: 12,
               borderRadius: 6,
               border: "1px solid #ccc",
               boxSizing: "border-box",
@@ -131,7 +131,7 @@ export default function RegisterPage() {
             disabled={loading}
             style={{
               width: "100%",
-              padding: 10,
+              padding: 12,
               marginTop: 20,
               background: "#4CAF50",
               color: "#fff",
@@ -166,7 +166,7 @@ export default function RegisterPage() {
             style={{
               marginTop: 20,
               background: "#f5f5f5",
-              padding: 10,
+              padding: 12,
               borderRadius: 6,
               fontSize: 14,
               lineHeight: 1.6,

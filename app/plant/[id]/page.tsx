@@ -939,9 +939,9 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
             </div>
             <div
               style={{
-                lineHeight: 1,
+                lineHeight: 1.7,
                 color: "#303030",
-                fontSize: 18,
+                fontSize: 16,
               }}
             >
               {careGuide?.summary || zh?.description || plant.description}

@@ -56,12 +56,12 @@ function CheckEmailContent() {
   return (
     <main
       style={{
-        padding: 40,
+        padding: "32px 20px",
         display: "flex",
         justifyContent: "center",
       }}
     >
-      <div style={{ width: 360, textAlign: "center" }}>
+      <div style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
         <h1>请确认邮箱</h1>
 
         <p style={{ marginTop: 20, fontSize: 14, color: "#666", lineHeight: 1.8 }}>
@@ -72,7 +72,7 @@ function CheckEmailContent() {
           <div
             style={{
               marginTop: 12,
-              padding: "10px 12px",
+              padding: "12px 14px",
               background: "#f5f5f5",
               borderRadius: 8,
               fontSize: 14,
@@ -89,7 +89,7 @@ function CheckEmailContent() {
             onClick={handleResend}
             disabled={loading}
             style={{
-              padding: "10px 20px",
+              padding: "12px 20px",
               background: "#4CAF50",
               color: "#fff",
               border: "none",
@@ -104,7 +104,7 @@ function CheckEmailContent() {
           <button
             onClick={() => router.push("/login")}
             style={{
-              padding: "10px 20px",
+              padding: "12px 20px",
               background: "#fff",
               color: "#333",
               border: "1px solid #ddd",
@@ -118,7 +118,7 @@ function CheckEmailContent() {
           <button
             onClick={() => router.push("/register")}
             style={{
-              padding: "10px 20px",
+              padding: "12px 20px",
               background: "#fff",
               color: "#333",
               border: "1px solid #ddd",
@@ -157,12 +157,12 @@ export default function CheckEmailPage() {
       fallback={
         <main
           style={{
-            padding: 40,
+            padding: "32px 20px",
             display: "flex",
             justifyContent: "center",
           }}
         >
-          <div style={{ width: 360, textAlign: "center" }}>
+          <div style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
             <h1>请确认邮箱</h1>
             <p style={{ marginTop: 20, fontSize: 14, color: "#666", lineHeight: 1.8 }}>
               页面加载中...

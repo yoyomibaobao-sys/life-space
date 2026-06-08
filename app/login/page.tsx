@@ -114,12 +114,12 @@ export default function LoginPage() {
   return (
     <main
       style={{
-        padding: "40px",
+        padding: "32px 20px",
         display: "flex",
         justifyContent: "center",
       }}
     >
-      <div style={{ width: 320 }}>
+      <div style={{ width: "100%", maxWidth: 320 }}>
         <h1 style={{ marginBottom: 10 }}>登录</h1>
 
         <div
@@ -145,7 +145,7 @@ export default function LoginPage() {
             placeholder="请输入邮箱"
             autoComplete="email"
             style={{
-              padding: "10px",
+              padding: "12px",
               width: "100%",
               borderRadius: "6px",
               border: "1px solid #ccc",
@@ -173,7 +173,7 @@ export default function LoginPage() {
             disabled={loading}
             style={{
               width: "100%",
-              padding: "10px",
+              padding: "12px",
               borderRadius: "6px",
               border: "none",
               background: "#4CAF50",
@@ -192,7 +192,7 @@ export default function LoginPage() {
             disabled={loading}
             style={{
               width: "100%",
-              padding: "10px",
+              padding: "12px",
               borderRadius: "6px",
               border: "1px solid #ddd",
               background: "#fafafa",

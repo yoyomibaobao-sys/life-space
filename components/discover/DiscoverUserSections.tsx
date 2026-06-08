@@ -200,7 +200,7 @@ function DiscoverUserSectionCard({
                 lineHeight: 1.6,
               }}
             >
-              这里只展示最近 4 个项目，更多内容可以进入他的空间慢慢看。
+              更多项目可进入空间查看。
             </span>
 
             <button
@@ -217,7 +217,7 @@ function DiscoverUserSectionCard({
                 whiteSpace: "nowrap",
               }}
             >
-              进入他的空间
+              进入空间
             </button>
           </div>
         )}

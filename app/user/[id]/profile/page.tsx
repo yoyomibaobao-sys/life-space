@@ -239,7 +239,7 @@ export default function PublicUserProfilePage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 220px) minmax(0, 1fr)",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: 20,
             marginTop: 20,
           }}
