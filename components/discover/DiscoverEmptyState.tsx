@@ -18,7 +18,7 @@ export function DiscoverEmptyState({
       }}
     >
       {filterMode === "help"
-        ? "暂时没有公开的求助记录"
+        ? "还没有公开求助记录"
         : `还没有${activeFilterLabel === "全部" ? "" : activeFilterLabel}公开记录`}
       <div style={{ marginTop: 8, fontSize: 12, color: "#9aa59a" }}>
         公开记录会显示在这里

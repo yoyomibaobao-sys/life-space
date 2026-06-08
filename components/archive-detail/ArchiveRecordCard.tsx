@@ -344,7 +344,7 @@ export default function ArchiveRecordCard({
                     "#dbe9d6",
                   )}
                 >
-                  {addingMedia ? "添加中..." : "+ 图片"}
+                  {addingMedia ? "添加中..." : "添加图片"}
                 </button>
                 <button
                   type="button"
@@ -356,7 +356,7 @@ export default function ArchiveRecordCard({
                     "#dbe9d6",
                   )}
                 >
-                  拍照添加
+                  拍照
                 </button>
               </>
             ) : null}

@@ -48,7 +48,7 @@ export default function MembershipPage() {
       if (error) {
         console.error("load membership error:", error);
         setMembership(null);
-        setErrorMsg("暂时无法读取你的试用与额度信息，请稍后再试。");
+        setErrorMsg("使用状态读取失败");
       } else {
         setMembership(normalizeMembershipRpcResult(data));
       }
@@ -69,7 +69,7 @@ export default function MembershipPage() {
   const renewalNoticeText = membership?.can_create_content === false
     ? "使用权已到期"
     : typeof daysRemaining === "number" && daysRemaining <= 14
-      ? `当前使用权还有 ${daysRemaining} 天到期。你可以提前完成付款，管理员确认后会延长使用期限。`
+      ? `使用权还有 ${daysRemaining} 天到期`
       : "";
   const storageLimitText = useMemo(() => {
     if (!membership?.storage_limit_bytes) return "暂无";
@@ -84,14 +84,14 @@ export default function MembershipPage() {
     <main style={pageStyle}>
       <section style={heroStyle}>
         <div style={eyebrowStyle}>年度使用权</div>
-        <h1 style={titleStyle}>小额年费，维持长期记录</h1>
+        <h1 style={titleStyle}>年度使用权</h1>
         <p style={subtitleStyle}>
-          有时·耕作采用免费试用 + 小额年费的方式。试用结束后，已有内容仍可查看、导出和删除；继续新增记录、上传照片或发布集市信息，需要开通年度使用权。
+          试用结束后，已有内容仍可查看、导出和删除。继续新增记录、上传照片或发布集市信息，需要年度使用权。
         </p>
       </section>
 
       {loading ? (
-        <section style={cardStyle}>正在读取当前使用状态...</section>
+        <section style={cardStyle}>正在读取使用状态...</section>
       ) : userEmail ? (
         <section style={statusCardStyle}>
           <div>
@@ -134,7 +134,7 @@ export default function MembershipPage() {
             <div style={sectionLabelStyle}>尚未登录</div>
             <h2 style={sectionTitleStyle}>注册后开始免费试用</h2>
             <p style={mutedTextStyle}>
-              未注册用户可浏览公开内容。注册后可创建项目、添加记录和上传照片，并开始 6 个月免费试用。
+              注册后可创建项目、添加记录和上传照片，免费试用 6 个月。
             </p>
           </div>
 
@@ -153,7 +153,7 @@ export default function MembershipPage() {
         <PlanCard
           title="免费试用"
           price="6 个月"
-          description="适合刚开始记录的用户，先完整体验项目档案、时间线、照片和集市基础发布。"
+          description="适合先体验项目、记录、照片和集市基础发布。"
           items={[
             "注册后自动开始试用",
             "云端容量 300MB",
@@ -164,7 +164,7 @@ export default function MembershipPage() {
         <PlanCard
           title="基础年费"
           price="¥18 / 年 · US$3 / year"
-          description="适合长期使用。费用用于维持云端存储、网页打开和基础集市发布。"
+          description="适合长期记录。"
           items={[
             "国内用户：¥18 / 年",
             "海外用户：US$3 / year",

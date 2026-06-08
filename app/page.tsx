@@ -13,7 +13,7 @@ const copy = {
     trialNote: "注册后可创建项目；未注册可浏览公开内容。",
     register: "注册",
     login: "登录",
-    discover: "先浏览发现",
+    discover: "浏览发现",
     cards: [
       {
         title: "种植",
@@ -88,7 +88,7 @@ export default function Home() {
           fontSize: 14,
         }}
       >
-        正在进入你的空间...
+        正在进入...
       </section>
     );
   }

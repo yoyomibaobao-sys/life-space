@@ -1047,7 +1047,7 @@ export default function ArchivePage() {
               background: "#fcfdfb",
             }}
           >
-            没有找到项目
+            {archiveCount === 0 ? "还没有项目，请先新建项目" : "没有找到项目"}
           </div>
         ) : (
           activeArchives.map((item) => (

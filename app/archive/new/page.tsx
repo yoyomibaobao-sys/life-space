@@ -491,7 +491,7 @@ function NewArchiveContent() {
 
             <div style={{ marginTop: 6 }}>{getArchiveCategoryDescription(category)}</div>
             <div style={{ marginTop: 4, color: "#7f8c78" }}>
-              先选择大类，之后可整理分类和分组。
+              之后可调整分类和分组。
             </div>
           </div>
 
@@ -846,7 +846,7 @@ function NewArchiveContent() {
             cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
           }}
         >
-          {loading ? "创建中..." : "创建"}
+          {loading ? "创建中..." : "创建项目"}
         </button>
       </form>
     </main>

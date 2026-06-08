@@ -908,7 +908,7 @@ saveRecentArchiveBrowse({
             href={mode === "owner" ? "/archive" : "/discover"}
             style={{ fontSize: 14, color: "#666", textDecoration: "none" }}
           >
-            {mode === "owner" ? "← 我的空间主页" : "← 返回发现"}
+            {mode === "owner" ? "← 我的项目" : "← 返回发现"}
           </Link>
         </div>
 
@@ -993,7 +993,7 @@ saveRecentArchiveBrowse({
                 fontSize: 14,
               }}
             >
-              还没有记录
+              {mode === "owner" ? "还没有记录，添加第一条记录" : "还没有公开记录"}
             </div>
           ) : null}
         </section>

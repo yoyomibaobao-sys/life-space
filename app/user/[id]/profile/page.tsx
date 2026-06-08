@@ -338,7 +338,7 @@ export default function PublicUserProfilePage() {
               </div>
             ) : (
               <div style={{ color: "#6d7968", lineHeight: 1.8 }}>
-                这个用户暂时还没有公开项目。
+                还没有公开项目
               </div>
             )}
           </section>

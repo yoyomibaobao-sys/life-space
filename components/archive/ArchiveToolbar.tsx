@@ -42,7 +42,7 @@ export default function ArchiveToolbar({
             新建项目
           </div>
           <div style={{ marginTop: 3, fontSize: 12, color: "#7d8a75" }}>
-            先选择项目大类，再填写项目名称和具体内容。
+            选择大类，填写项目名称。
           </div>
         </div>
 

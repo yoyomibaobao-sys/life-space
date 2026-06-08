@@ -108,9 +108,6 @@ export function canCreateMembershipMarketPost(membership?: MyMembership | null) 
 }
 
 export function getCreateContentBlockedText(membership?: MyMembership | null) {
-  const label = getMembershipPlanLabel(membership?.plan);
-  const status = getMembershipStatusLabel(membership?.status);
-
   if (!membership) {
     return "试用状态无法确认";
   }
@@ -119,26 +116,23 @@ export function getCreateContentBlockedText(membership?: MyMembership | null) {
     return "暂不能新增内容";
   }
 
-  return "可以继续新增内容。";
+  return "可新增内容";
 }
 
 export function getCreateMarketPostBlockedText(membership?: MyMembership | null) {
-  const label = getMembershipPlanLabel(membership?.plan);
-  const status = getMembershipStatusLabel(membership?.status);
-
   if (!membership) {
     return "集市额度无法确认";
   }
 
   if (membership.can_create_content === false) {
-    return `${label} · ${status}。如需继续发布集市信息，请查看会员与续费。`;
+    return "暂不能发布集市信息";
   }
 
   if (membership.can_create_market_post === false) {
     return "集市发布已达上限";
   }
 
-  return "可以继续发布集市信息。";
+  return "可发布集市信息";
 }
 
 export function getMarketPostQuotaLabel(membership?: MyMembership | null) {
@@ -163,7 +157,7 @@ export function getMarketPostQuotaHint(membership?: MyMembership | null) {
     return getCreateMarketPostBlockedText(membership);
   }
 
-  return `${getMarketPostQuotaLabel(membership)}。免费试用期可同时在线 3 条，基础年费可同时在线 10 条。`;
+  return `${getMarketPostQuotaLabel(membership)}。试用 3 条，基础年费 10 条。`;
 }
 
 

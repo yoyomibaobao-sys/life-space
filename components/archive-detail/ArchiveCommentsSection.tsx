@@ -244,16 +244,16 @@ export default function ArchiveCommentsSection({
   async function handleSubmitComment() {
     const content = commentText.trim();
     if (!currentUserId) {
-      showToast("请先登录后再评论");
+      showToast("请先登录");
       return;
     }
     if (!content) {
-      showToast("请输入评论内容");
+      showToast("请输入评论");
       return;
     }
 
     if (membershipLoading) {
-      showToast("会员状态读取中");
+      showToast("状态读取中");
       return;
     }
 
@@ -482,7 +482,7 @@ export default function ArchiveCommentsSection({
             写评论
           </button>
         ) : membershipLoading && currentUserId ? (
-          <span style={{ fontSize: 12, color: "#8b9688" }}>会员状态读取中...</span>
+          <span style={{ fontSize: 12, color: "#8b9688" }}>状态读取中...</span>
         ) : membershipBlocked ? (
           <span style={{ fontSize: 12, color: "#9a6232" }}>
             使用权已到期，
@@ -691,7 +691,7 @@ export default function ArchiveCommentsSection({
                   <textarea
                     value={commentText}
                     onChange={(event) => setCommentText(event.target.value)}
-                    placeholder="写下你的评论或经验…"
+                    placeholder="写评论"
                     rows={2}
                     style={{
                       width: "100%",
@@ -750,14 +750,14 @@ export default function ArchiveCommentsSection({
                           cursor: "pointer",
                         }}
                       >
-                        {submitting ? "发送中..." : "发表评论"}
+                        {submitting ? "发送中..." : "发布评论"}
                       </button>
                     </div>
                   </div>
                 </>
               ) : membershipLoading && currentUserId ? (
                 <div style={{ fontSize: 12, color: "#7b8776" }}>
-                  会员状态读取中...
+                  状态读取中...
                 </div>
               ) : membershipBlocked ? (
                 <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>

@@ -22,12 +22,12 @@ export default function ArchiveAddRecordSection({
       }}
     >
       <div style={{ fontSize: 15, fontWeight: 650, color: "#233223", marginBottom: 10 }}>
-        增加记录
+        添加记录
       </div>
       <AddRecord
         archiveId={archiveId}
         archiveIsPublic={archiveIsPublic}
-        placeholder="记录今天看到的变化…"
+        placeholder="记录今天的变化"
         onRecordCreated={onRecordCreated}
       />
     </section>

@@ -1241,7 +1241,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
               background: "#fff",
             }}
           >
-            暂时还没有相关公开记录。
+            还没有相关公开记录
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
@@ -1291,7 +1291,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
                     overflow: "hidden",
                   }}
                 >
-                  {record.note || "没有文字内容"}
+                  {record.note || "没有文字"}
                 </div>
               </Link>
               );

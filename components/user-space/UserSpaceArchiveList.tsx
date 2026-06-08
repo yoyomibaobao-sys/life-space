@@ -47,7 +47,7 @@ export default function UserSpaceArchiveList({
           background: "#fff",
         }}
       >
-        这里暂时没有公开项目。
+        还没有公开项目
       </div>
     );
   }
@@ -168,7 +168,7 @@ export default function UserSpaceArchiveList({
                   fontSize: 14,
                 }}
               >
-                {latest?.note || "这个项目还没有公开记录"}
+                {latest?.note || "还没有公开记录"}
                 {latest?.record_time ? (
                   <span style={{ color: "#9a9f94" }}>
                     {" "}· 更新 {formatDate(latest.record_time)}
