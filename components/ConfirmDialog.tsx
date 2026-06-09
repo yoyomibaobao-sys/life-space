@@ -1,21 +1,27 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 export default function ConfirmDialog({
   open,
   title,
   message,
-  confirmText = "确定",
+  children,
+  confirmText = "确认",
   cancelText = "取消",
   danger = false,
+  confirmDisabled = false,
   onConfirm,
   onClose,
 }: {
   open: boolean;
   title: string;
   message: string;
+  children?: ReactNode;
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }) {
@@ -55,10 +61,12 @@ export default function ConfirmDialog({
             lineHeight: 1.7,
             color: "#4f5e4f",
             marginBottom: 16,
+            whiteSpace: "pre-line",
           }}
         >
           {message}
         </div>
+        {children ? <div style={{ marginBottom: 16 }}>{children}</div> : null}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <button
@@ -80,6 +88,7 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={() => void onConfirm()}
+            disabled={confirmDisabled}
             style={{
               minWidth: 88,
               height: 40,
@@ -89,7 +98,8 @@ export default function ConfirmDialog({
               color: danger ? "#a44444" : "#2f5d2b",
               fontSize: 14,
               fontWeight: 600,
-              cursor: "pointer",
+              cursor: confirmDisabled ? "not-allowed" : "pointer",
+              opacity: confirmDisabled ? 0.55 : 1,
             }}
           >
             {confirmText}

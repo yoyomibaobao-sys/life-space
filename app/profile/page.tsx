@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import { formatProfileDateTime, formatStorage, loadUserProfileData, type UserProfileStats } from "@/lib/user-profile-shared";
@@ -43,6 +44,8 @@ type MembershipPaymentRow = {
   service_ends_at: string | null;
 };
 
+const ACCOUNT_DELETE_CONFIRMATION = "删除我的账号";
+
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
   const value = Number(amount || 0);
   if (!Number.isFinite(value)) return `${currency || ""} ${amount || ""}`.trim();
@@ -80,6 +83,10 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [viewportWidth, setViewportWidth] = useState(1200);
 
@@ -351,6 +358,72 @@ export default function ProfilePage() {
       showToast("导出失败，请稍后再试");
     } finally {
       setExporting(false);
+    }
+  }
+
+  function openDeleteDialog() {
+    setDeleteConfirmText("");
+    setDeleteAccountError("");
+    setDeleteDialogOpen(true);
+  }
+
+  function closeDeleteDialog() {
+    if (deleteLoading) return;
+    setDeleteDialogOpen(false);
+    setDeleteConfirmText("");
+    setDeleteAccountError("");
+  }
+
+  async function handleDeleteAccount() {
+    if (!user || deleteLoading) return;
+
+    if (deleteConfirmText !== ACCOUNT_DELETE_CONFIRMATION) {
+      setDeleteAccountError("确认文字不正确");
+      return;
+    }
+
+    setDeleteLoading(true);
+    setDeleteAccountError("");
+
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error || !session?.access_token) {
+        setDeleteAccountError("请先重新登录后再注销账号");
+        showToast("请先重新登录后再注销账号");
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ confirmation: deleteConfirmText }),
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+      if (!response.ok) {
+        const message = payload?.error || "注销账号失败，请稍后再试";
+        setDeleteAccountError(message);
+        showToast(message);
+        return;
+      }
+
+      await supabase.auth.signOut();
+      showToast("账号已注销");
+      router.replace("/");
+    } catch {
+      const message = "注销账号失败，请稍后再试";
+      setDeleteAccountError(message);
+      showToast(message);
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
@@ -762,7 +835,48 @@ export default function ProfilePage() {
             </Link>
           </div>
         </section>
+        <section style={dangerSectionStyle}>
+          <div>
+            <div style={{ fontSize: 13, color: "#9a5b55" }}>危险操作</div>
+            <h2 style={dangerTitleStyle}>注销账号</h2>
+            <p style={dangerDescStyle}>
+              注销后，你的项目、记录、图片、个人资料和公开内容将被删除。此操作无法恢复。建议先导出数据。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openDeleteDialog}
+            style={dangerButtonStyle}
+          >
+            注销账号
+          </button>
+        </section>
       </section>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="确认注销账号？"
+        message={"注销后，你的项目、记录、图片、个人资料和公开内容将被删除。\n此操作无法恢复。\n\n请输入“删除我的账号”确认。"}
+        confirmText={deleteLoading ? "注销中..." : "确认注销"}
+        cancelText="取消"
+        danger
+        confirmDisabled={deleteLoading || deleteConfirmText !== ACCOUNT_DELETE_CONFIRMATION}
+        onConfirm={handleDeleteAccount}
+        onClose={closeDeleteDialog}
+      >
+        <input
+          value={deleteConfirmText}
+          onChange={(event) => {
+            setDeleteConfirmText(event.target.value);
+            setDeleteAccountError("");
+          }}
+          placeholder={ACCOUNT_DELETE_CONFIRMATION}
+          disabled={deleteLoading}
+          style={deleteConfirmInputStyle}
+        />
+        {deleteAccountError ? (
+          <div style={deleteErrorStyle}>{deleteAccountError}</div>
+        ) : null}
+      </ConfirmDialog>
     </main>
   );
 }
@@ -1021,6 +1135,62 @@ const marketInfoCardHintStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.35,
 };
+
+const dangerSectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#fffafa",
+  border: "1px solid #ead6d3",
+  borderRadius: 18,
+  padding: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+  flexWrap: "wrap",
+};
+
+const dangerTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  color: "#442b28",
+  fontSize: 20,
+};
+
+const dangerDescStyle: CSSProperties = {
+  margin: "6px 0 0",
+  color: "#705b57",
+  fontSize: 13,
+  lineHeight: 1.6,
+  maxWidth: 640,
+};
+
+const dangerButtonStyle: CSSProperties = {
+  border: "1px solid #d88f8f",
+  background: "#fff7f7",
+  color: "#a44444",
+  borderRadius: 12,
+  padding: "9px 13px",
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 600,
+};
+
+const deleteConfirmInputStyle: CSSProperties = {
+  width: "100%",
+  padding: "9px 11px",
+  borderRadius: 10,
+  border: "1px solid #d8b6b2",
+  fontSize: 14,
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const deleteErrorStyle: CSSProperties = {
+  marginTop: 8,
+  color: "#a44444",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
 const fieldLabelStyle: CSSProperties = {
   display: "block",
   marginBottom: 5,
