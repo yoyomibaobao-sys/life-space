@@ -44,8 +44,6 @@ type MembershipPaymentRow = {
   service_ends_at: string | null;
 };
 
-const ACCOUNT_DELETE_CONFIRMATION = "删除我的账号";
-
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
   const value = Number(amount || 0);
   if (!Number.isFinite(value)) return `${currency || ""} ${amount || ""}`.trim();
@@ -84,7 +82,7 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -362,7 +360,7 @@ export default function ProfilePage() {
   }
 
   function openDeleteDialog() {
-    setDeleteConfirmText("");
+    setDeleteConfirmed(false);
     setDeleteAccountError("");
     setDeleteDialogOpen(true);
   }
@@ -370,15 +368,15 @@ export default function ProfilePage() {
   function closeDeleteDialog() {
     if (deleteLoading) return;
     setDeleteDialogOpen(false);
-    setDeleteConfirmText("");
+    setDeleteConfirmed(false);
     setDeleteAccountError("");
   }
 
   async function handleDeleteAccount() {
     if (!user || deleteLoading) return;
 
-    if (deleteConfirmText !== ACCOUNT_DELETE_CONFIRMATION) {
-      setDeleteAccountError("确认文字不正确");
+    if (!deleteConfirmed) {
+      setDeleteAccountError("请先勾选确认");
       return;
     }
 
@@ -404,7 +402,7 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ confirmation: deleteConfirmText }),
+        body: JSON.stringify({ confirm: true }),
       });
       const payload = (await response.json().catch(() => null)) as { error?: string } | null;
 
@@ -855,24 +853,28 @@ export default function ProfilePage() {
       <ConfirmDialog
         open={deleteDialogOpen}
         title="确认注销账号？"
-        message={"注销后，你的项目、记录、图片、个人资料和公开内容将被删除。\n此操作无法恢复。\n\n请输入“删除我的账号”确认。"}
+        message={"注销后，你的项目、记录、图片、个人资料和公开内容将被删除。\n此操作无法恢复。"}
         confirmText={deleteLoading ? "注销中..." : "确认注销"}
         cancelText="取消"
         danger
-        confirmDisabled={deleteLoading || deleteConfirmText !== ACCOUNT_DELETE_CONFIRMATION}
+        confirmDisabled={deleteLoading || !deleteConfirmed}
+        cancelDisabled={deleteLoading}
         onConfirm={handleDeleteAccount}
         onClose={closeDeleteDialog}
       >
-        <input
-          value={deleteConfirmText}
-          onChange={(event) => {
-            setDeleteConfirmText(event.target.value);
-            setDeleteAccountError("");
-          }}
-          placeholder={ACCOUNT_DELETE_CONFIRMATION}
-          disabled={deleteLoading}
-          style={deleteConfirmInputStyle}
-        />
+        <label style={deleteConfirmCheckStyle}>
+          <input
+            type="checkbox"
+            checked={deleteConfirmed}
+            onChange={(event) => {
+              setDeleteConfirmed(event.target.checked);
+              setDeleteAccountError("");
+            }}
+            disabled={deleteLoading}
+            style={deleteConfirmCheckboxStyle}
+          />
+          <span>我已了解，仍要注销账号</span>
+        </label>
         {deleteAccountError ? (
           <div style={deleteErrorStyle}>{deleteAccountError}</div>
         ) : null}
@@ -1174,14 +1176,22 @@ const dangerButtonStyle: CSSProperties = {
   fontWeight: 600,
 };
 
-const deleteConfirmInputStyle: CSSProperties = {
-  width: "100%",
-  padding: "9px 11px",
-  borderRadius: 10,
-  border: "1px solid #d8b6b2",
+const deleteConfirmCheckStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  color: "#442b28",
   fontSize: 14,
-  outline: "none",
-  boxSizing: "border-box",
+  lineHeight: 1.5,
+  cursor: "pointer",
+};
+
+const deleteConfirmCheckboxStyle: CSSProperties = {
+  width: 16,
+  height: 16,
+  accentColor: "#a44444",
+  flexShrink: 0,
+  cursor: "pointer",
 };
 
 const deleteErrorStyle: CSSProperties = {

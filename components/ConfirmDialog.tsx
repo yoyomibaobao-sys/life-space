@@ -11,6 +11,7 @@ export default function ConfirmDialog({
   cancelText = "取消",
   danger = false,
   confirmDisabled = false,
+  cancelDisabled = false,
   onConfirm,
   onClose,
 }: {
@@ -22,6 +23,7 @@ export default function ConfirmDialog({
   cancelText?: string;
   danger?: boolean;
   confirmDisabled?: boolean;
+  cancelDisabled?: boolean;
   onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }) {
@@ -72,6 +74,7 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onClose}
+            disabled={cancelDisabled}
             style={{
               minWidth: 88,
               height: 40,
@@ -80,7 +83,8 @@ export default function ConfirmDialog({
               background: "#fff",
               color: "#314131",
               fontSize: 14,
-              cursor: "pointer",
+              cursor: cancelDisabled ? "not-allowed" : "pointer",
+              opacity: cancelDisabled ? 0.55 : 1,
             }}
           >
             {cancelText}

@@ -4,13 +4,12 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 
 export const runtime = "nodejs";
 
-const CONFIRM_PHRASE = "删除我的账号";
 const DB_IN_BATCH_SIZE = 200;
 const STORAGE_BATCH_SIZE = 100;
 const STORAGE_LIST_LIMIT = 1000;
 
 type AccountDeletionBody = {
-  confirmation?: string;
+  confirm?: boolean;
 };
 
 type StoragePathSets = {
@@ -86,10 +85,6 @@ function getBearerToken(request: Request) {
   const authorization = request.headers.get("authorization") || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
-}
-
-function normalizeConfirmation(value: unknown) {
-  return typeof value === "string" ? value : "";
 }
 
 async function getRequestUserId(request: Request) {
@@ -619,8 +614,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "请求内容无效" }, { status: 400 });
   }
 
-  if (normalizeConfirmation(body?.confirmation) !== CONFIRM_PHRASE) {
-    return Response.json({ error: "确认文字不正确" }, { status: 400 });
+  if (body?.confirm !== true) {
+    return Response.json({ error: "请先确认注销账号" }, { status: 400 });
   }
 
   const userId = await getRequestUserId(request);
