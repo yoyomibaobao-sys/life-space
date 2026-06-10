@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
@@ -49,6 +49,22 @@ type LatestArchiveRecord = {
   primary_thumb_url?: string | null;
   media_count?: number | null;
 };
+
+const archiveSystemTabs: Array<{ value: ArchiveCategory | null; label: string }> = [
+  { value: null, label: "全部" },
+  { value: "plant", label: "种植" },
+  { value: "system", label: "农法设施" },
+  { value: "insect_fish", label: "虫鱼生态" },
+  { value: "other", label: "其他" },
+];
+
+function getSystemCategory(value?: string | null): ArchiveCategory {
+  if (value === "plant" || value === "system" || value === "insect_fish") {
+    return value;
+  }
+
+  return "other";
+}
 
 export default function ArchivePage() {
   const router = useRouter();
@@ -818,10 +834,10 @@ export default function ArchivePage() {
   const endedArchiveCount = archives.filter((item) => item.status === "ended").length;
   const contentBlocked = membership?.can_create_content === false;
 
-  const plantSubTags = subTags.filter((tag) => tag.category === "plant");
-  const methodFacilitySubTags = subTags.filter((tag) => tag.category === "system");
-  const insectFishSubTags = subTags.filter((tag) => tag.category === "insect_fish");
-  const otherSubTags = subTags.filter((tag) => tag.category === "other");
+  const plantSubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "plant");
+  const methodFacilitySubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "system");
+  const insectFishSubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "insect_fish");
+  const otherSubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "other");
 
   const currentSubTag = subTags.find((tag) => tag.id === activeSubTag) || null;
   const visibleGroupTags = activeSubTag && currentSubTag
@@ -837,7 +853,7 @@ export default function ArchivePage() {
     const filtered = archives.filter((item) => {
       if (activeGroupTag && item.group_tag_id !== activeGroupTag) return false;
       if (activeSubTag && item.sub_tag_id !== activeSubTag) return false;
-      if (!activeSubTag && activeCategory && item.category !== activeCategory) return false;
+      if (!activeSubTag && activeCategory && getSystemCategory(item.category) !== activeCategory) return false;
       if (!keyword) return true;
 
       return buildArchiveSearchText(item, subTagNameMap, groupTagNameMap).includes(keyword);
@@ -913,6 +929,29 @@ export default function ArchivePage() {
         {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
       </div>
 
+      <section style={systemTabWrapStyle} aria-label="项目一级大类">
+        {archiveSystemTabs.map((tab) => {
+          const active = activeCategory === tab.value && !activeSubTag && !activeGroupTag;
+
+          return (
+            <button
+              key={tab.label}
+              type="button"
+              onClick={() =>
+                updateFilterWithoutJump(() => {
+                  setActiveCategory(tab.value);
+                  setActiveSubTag(null);
+                  setActiveGroupTag(null);
+                })
+              }
+              style={systemTabButtonStyle(active)}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </section>
+
       <ArchiveToolbar
         onCreateArchive={(category) => {
           if (contentBlocked) {
@@ -935,13 +974,6 @@ export default function ArchivePage() {
         methodFacilitySubTags={methodFacilitySubTags}
         insectFishSubTags={insectFishSubTags}
         otherSubTags={otherSubTags}
-        onReset={() =>
-          updateFilterWithoutJump(() => {
-            setActiveCategory(null);
-            setActiveSubTag(null);
-            setActiveGroupTag(null);
-          })
-        }
         onSelectCategory={(category) =>
           updateFilterWithoutJump(() => {
             setActiveCategory(category);
@@ -1203,4 +1235,32 @@ export default function ArchivePage() {
 
     </main>
   );
+}
+
+const systemTabWrapStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: 6,
+  marginBottom: 14,
+  padding: 4,
+  border: "1px solid #e2ecd9",
+  borderRadius: 16,
+  background: "#fff",
+};
+
+function systemTabButtonStyle(active: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    minHeight: 38,
+    border: "none",
+    borderRadius: 12,
+    background: active ? "#e3f1dd" : "transparent",
+    color: active ? "#2f6a31" : "#61705d",
+    fontSize: 13,
+    fontWeight: active ? 800 : 700,
+    whiteSpace: "normal",
+    lineHeight: 1.2,
+    padding: "6px 3px",
+    cursor: "pointer",
+  };
 }

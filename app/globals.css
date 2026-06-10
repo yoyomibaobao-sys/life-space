@@ -279,6 +279,7 @@ p {
 
   .app-main {
     min-height: calc(100vh - 104px);
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
   }
 
   .site-nav__inner {

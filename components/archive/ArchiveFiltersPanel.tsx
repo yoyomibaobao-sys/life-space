@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { SubTagItem } from "@/lib/archive-page-types";
@@ -15,7 +14,6 @@ type Props = {
   methodFacilitySubTags: SubTagItem[];
   insectFishSubTags: SubTagItem[];
   otherSubTags: SubTagItem[];
-  onReset: () => void;
   onSelectCategory: (category: ArchiveCategory) => void;
   onSelectSubTag: (category: ArchiveCategory, id: string) => void;
   onRenameSubTag: (tag: SubTagItem) => void;
@@ -51,7 +49,6 @@ export default function ArchiveFiltersPanel({
   methodFacilitySubTags,
   insectFishSubTags,
   otherSubTags,
-  onReset,
   onSelectCategory,
   onSelectSubTag,
   onRenameSubTag,
@@ -69,6 +66,8 @@ export default function ArchiveFiltersPanel({
     ? groups.find((group) => group.category === activeCategory) || null
     : null;
 
+  if (!currentGroup) return null;
+
   return (
     <section
       style={{
@@ -80,72 +79,43 @@ export default function ArchiveFiltersPanel({
       }}
     >
       <div style={rowStyle}>
-        <button type="button" onClick={onReset} style={pillStyle(!activeCategory && !activeSubTag)}>
-          全部
+        <button
+          type="button"
+          onClick={() => onSelectCategory(currentGroup.category)}
+          style={pillStyle(!activeSubTag)}
+          title="点击显示当前大类下全部项目"
+        >
+          子分类：
         </button>
 
-        {groups.map(({ category }) => (
-          <button
-            key={category}
-            type="button"
-            onClick={() => onSelectCategory(category)}
-            style={pillStyle(activeCategory === category && !activeSubTag)}
-          >
-            {getArchiveCategoryLabel(category)}
-          </button>
-        ))}
-      </div>
-
-      {currentGroup ? (
-        <>
-          <div
-            style={{
-              height: 1,
-              background: "#edf0e8",
-              margin: "12px 0 10px",
-            }}
+        {currentGroup.tags.map((tag) => (
+          <ArchiveSubTagChip
+            key={tag.id}
+            tag={tag}
+            active={activeSubTag === tag.id}
+            onSelect={() => onSelectSubTag(tag.category, tag.id)}
+            onRename={() => onRenameSubTag(tag)}
+            onDelete={() => onDeleteSubTag(tag)}
           />
+        ))}
 
-          <div style={rowStyle}>
-            <button
-              type="button"
-              onClick={() => onSelectCategory(currentGroup.category)}
-              style={pillStyle(!activeSubTag)}
-              title="点击显示当前大类下全部项目"
-            >
-              子分类：
-            </button>
-
-            {currentGroup.tags.map((tag) => (
-              <ArchiveSubTagChip
-                key={tag.id}
-                tag={tag}
-                active={activeSubTag === tag.id}
-                onSelect={() => onSelectSubTag(tag.category, tag.id)}
-                onRename={() => onRenameSubTag(tag)}
-                onDelete={() => onDeleteSubTag(tag)}
-              />
-            ))}
-
-            <button
-              type="button"
-              onClick={() => onCreateSubTag(currentGroup.category)}
-              style={{
-                border: "1px dashed #cbdcc2",
-                background: "#fbfdf9",
-                color: "#4CAF50",
-                borderRadius: 999,
-                padding: "5px 10px",
-                cursor: "pointer",
-                fontSize: 14,
-              }}
-              title="新增子分类"
-            >
-              ＋
-            </button>
-          </div>
-        </>
-      ) : null}
+        <button
+          type="button"
+          onClick={() => onCreateSubTag(currentGroup.category)}
+          style={{
+            border: "1px dashed #cbdcc2",
+            background: "#fbfdf9",
+            color: "#4CAF50",
+            borderRadius: 999,
+            padding: "5px 10px",
+            cursor: "pointer",
+            fontSize: 14,
+          }}
+          title="新增子分类"
+        >
+          ＋
+        </button>
+      </div>
     </section>
   );
 }

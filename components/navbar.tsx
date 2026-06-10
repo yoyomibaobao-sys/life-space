@@ -133,6 +133,33 @@ export default function Navbar() {
     return pathname === path || pathname.startsWith(`${path}/`);
   }
 
+  if (isCompact) {
+    return (
+      <>
+        <nav style={mobileTopNavStyle}>
+          <Link href={user ? "/archive" : "/"} style={brandStyle}>
+            有时·耕作
+          </Link>
+
+          <Link
+            href={getMobileCreateHref(pathname, Boolean(user))}
+            style={mobileCreateButtonStyle}
+            aria-label={getMobileCreateLabel(pathname)}
+            title={getMobileCreateLabel(pathname)}
+          >
+            ＋
+          </Link>
+        </nav>
+
+        <MobileBottomNav
+          pathname={pathname}
+          user={user}
+          unreadCount={unreadCount}
+        />
+      </>
+    );
+  }
+
   return (
     <nav style={getNavStyle(isCompact)}>
       <div style={getLeftGroupStyle(isCompact)}>
@@ -220,6 +247,81 @@ export default function Navbar() {
   );
 }
 
+function MobileBottomNav({
+  pathname,
+  user,
+  unreadCount,
+}: {
+  pathname: string;
+  user: SupabaseUser | null;
+  unreadCount: number;
+}) {
+  const items = [
+    {
+      label: "发现",
+      href: "/discover",
+      activePaths: ["/discover", "/market"],
+    },
+    {
+      label: "关注",
+      href: user ? "/follow" : "/login",
+      activePaths: ["/follow"],
+    },
+    {
+      label: "空间",
+      href: user ? "/archive" : "/login",
+      activePaths: ["/archive"],
+    },
+    {
+      label: "百科",
+      href: "/plant",
+      activePaths: ["/plant"],
+    },
+    {
+      label: "我",
+      href: user ? "/profile" : "/login",
+      activePaths: ["/profile", "/notifications", "/membership", "/admin", "/login", "/register"],
+      badge: user && unreadCount > 0 ? (unreadCount > 99 ? "99+" : String(unreadCount)) : null,
+    },
+  ];
+
+  return (
+    <nav style={mobileBottomNavStyle} aria-label="手机端主导航">
+      {items.map((item) => (
+        <MobileBottomNavItem
+          key={item.label}
+          href={item.href}
+          active={item.activePaths.some((path) => isPathActive(pathname, path))}
+          badge={item.badge}
+        >
+          {item.label}
+        </MobileBottomNavItem>
+      ))}
+    </nav>
+  );
+}
+
+function MobileBottomNavItem({
+  href,
+  active,
+  badge,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  badge?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <Link href={href} style={mobileBottomNavItemStyle(active)}>
+      <span style={mobileBottomNavLabelStyle}>
+        {children}
+        {badge ? <span style={mobileBottomBadgeStyle}>{badge}</span> : null}
+      </span>
+    </Link>
+  );
+}
+
 function NavItem({
   href,
   active,
@@ -234,6 +336,30 @@ function NavItem({
       {children}
     </Link>
   );
+}
+
+function isPathActive(pathname: string, path: string) {
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+function getArchiveDetailPath(pathname: string) {
+  const match = pathname.match(/^\/archive\/([^/]+)$/);
+  const segment = match?.[1] || "";
+  if (!segment || ["new", "plans", "interests"].includes(segment)) return null;
+  return pathname;
+}
+
+function getMobileCreateHref(pathname: string, hasUser: boolean) {
+  if (!hasUser) return "/login";
+
+  const archiveDetailPath = getArchiveDetailPath(pathname);
+  if (archiveDetailPath) return `${archiveDetailPath}#add-record`;
+
+  return "/archive/new";
+}
+
+function getMobileCreateLabel(pathname: string) {
+  return getArchiveDetailPath(pathname) ? "添加记录" : "新建项目";
 }
 
 function getNavStyle(compact: boolean): CSSProperties {
@@ -253,6 +379,96 @@ function getNavStyle(compact: boolean): CSSProperties {
     boxSizing: "border-box",
   };
 }
+
+const mobileTopNavStyle: CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 100,
+  height: 54,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "8px 14px",
+  borderBottom: "1px solid #e4ece0",
+  background: "rgba(255,255,255,0.96)",
+  backdropFilter: "blur(10px)",
+  boxSizing: "border-box",
+};
+
+const mobileCreateButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  border: "1px solid #cfe0c8",
+  background: "#f3f9ef",
+  color: "#2f6a31",
+  textDecoration: "none",
+  fontSize: 22,
+  lineHeight: 1,
+  fontWeight: 600,
+};
+
+const mobileBottomNavStyle: CSSProperties = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 1100,
+  height: "calc(58px + env(safe-area-inset-bottom))",
+  padding: "5px 8px calc(5px + env(safe-area-inset-bottom))",
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: 4,
+  borderTop: "1px solid #dfe8da",
+  background: "rgba(255,255,255,0.98)",
+  boxShadow: "0 -8px 22px rgba(40, 62, 34, 0.08)",
+  boxSizing: "border-box",
+};
+
+function mobileBottomNavItemStyle(active: boolean): CSSProperties {
+  return {
+    position: "relative",
+    minWidth: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    color: active ? "#2f6a31" : "#657160",
+    background: active ? "#edf6e8" : "transparent",
+    borderRadius: 12,
+    fontSize: 13,
+    fontWeight: active ? 800 : 650,
+    lineHeight: 1,
+  };
+}
+
+const mobileBottomNavLabelStyle: CSSProperties = {
+  position: "relative",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 0,
+};
+
+const mobileBottomBadgeStyle: CSSProperties = {
+  position: "absolute",
+  top: -13,
+  right: -18,
+  minWidth: 16,
+  height: 16,
+  borderRadius: 999,
+  background: "#e85d3f",
+  color: "#fff",
+  fontSize: 10,
+  lineHeight: "16px",
+  textAlign: "center",
+  fontWeight: 800,
+  padding: "0 4px",
+};
 
 function getLeftGroupStyle(compact: boolean): CSSProperties {
   return {

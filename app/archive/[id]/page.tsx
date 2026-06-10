@@ -1,6 +1,6 @@
 "use client";
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -912,19 +912,36 @@ saveRecentArchiveBrowse({
           </Link>
         </div>
 
-        <ArchiveDetailHeader
-          mode={mode}
-          archive={activeArchive}
-          username={username}
-          archiveDisplayName={archiveDisplayName}
-          archiveCategoryLabel={archiveCategoryLabel}
-          latestUpdate={latestUpdate}
-          recordCount={activeArchive.record_count || records.length || 0}
-          encyclopediaHref={encyclopediaHref}
-          isProjectFollowed={isProjectFollowed}
-          onToggleArchiveVisibility={toggleArchiveVisibility}
-          onToggleProjectFollow={toggleProjectFollow}
-        />
+        <nav style={archiveDetailTabWrapStyle} aria-label="项目详情导航">
+          <a href="#archive-records" style={archiveDetailTabStyle}>
+            记录
+          </a>
+          <a href="#archive-profile" style={archiveDetailTabStyle}>
+            档案
+          </a>
+          <a
+            href={mode === "owner" ? "/follow?tab=projects" : "#archive-profile"}
+            style={archiveDetailTabStyle}
+          >
+            关注
+          </a>
+        </nav>
+
+        <div id="archive-profile" style={archiveDetailAnchorStyle}>
+          <ArchiveDetailHeader
+            mode={mode}
+            archive={activeArchive}
+            username={username}
+            archiveDisplayName={archiveDisplayName}
+            archiveCategoryLabel={archiveCategoryLabel}
+            latestUpdate={latestUpdate}
+            recordCount={activeArchive.record_count || records.length || 0}
+            encyclopediaHref={encyclopediaHref}
+            isProjectFollowed={isProjectFollowed}
+            onToggleArchiveVisibility={toggleArchiveVisibility}
+            onToggleProjectFollow={toggleProjectFollow}
+          />
+        </div>
 
         {mode === "owner" ? (
           <ArchiveAddRecordSection
@@ -934,7 +951,7 @@ saveRecentArchiveBrowse({
           />
         ) : null}
 
-        <section style={{ position: "relative", paddingLeft: 22 }}>
+        <section id="archive-records" style={{ position: "relative", paddingLeft: 22, scrollMarginTop: 76 }}>
           <div
             style={{
               position: "absolute",
@@ -1040,3 +1057,31 @@ saveRecentArchiveBrowse({
     </>
   );
 }
+
+const archiveDetailTabWrapStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 6,
+  marginBottom: 12,
+  padding: 4,
+  border: "1px solid #e2ecd9",
+  borderRadius: 16,
+  background: "#fff",
+};
+
+const archiveDetailTabStyle: CSSProperties = {
+  minHeight: 38,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 12,
+  color: "#40583a",
+  background: "#f7fbf4",
+  textDecoration: "none",
+  fontSize: 14,
+  fontWeight: 800,
+};
+
+const archiveDetailAnchorStyle: CSSProperties = {
+  scrollMarginTop: 76,
+};

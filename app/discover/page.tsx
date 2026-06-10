@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { DiscoverEmptyState } from "@/components/discover/DiscoverEmptyState";
@@ -142,6 +143,46 @@ export default function DiscoverPage() {
       }}
     >
       <DiscoverHeader />
+
+      <section
+        style={{
+          margin: "0 0 12px",
+          border: "1px solid #eadfca",
+          borderRadius: 16,
+          background: "#fffaf3",
+          padding: "12px 13px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#2b3328" }}>
+            集市
+          </div>
+          <div style={{ marginTop: 3, fontSize: 13, color: "#6f6758", lineHeight: 1.55 }}>
+            查看交换、赠送、转让和求购。
+          </div>
+        </div>
+        <Link
+          href="/market"
+          style={{
+            textDecoration: "none",
+            border: "1px solid #d9c6a8",
+            background: "#fff",
+            color: "#654e2d",
+            borderRadius: 999,
+            padding: "8px 12px",
+            fontSize: 14,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+          }}
+        >
+          进入集市
+        </Link>
+      </section>
 
       <DiscoverFilterBar
         options={filterOptions}

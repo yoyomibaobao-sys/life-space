@@ -13,6 +13,7 @@ export default function ArchiveAddRecordSection({
 }) {
   return (
     <section
+      id="add-record"
       style={{
         border: "1px solid #e9ede5",
         borderRadius: 22,
