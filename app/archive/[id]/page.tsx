@@ -912,7 +912,11 @@ saveRecentArchiveBrowse({
           </Link>
         </div>
 
-        <nav style={archiveDetailTabWrapStyle} aria-label="项目详情导航">
+        <nav
+          className="mobile-app-grid-only"
+          style={archiveDetailTabWrapStyle}
+          aria-label="项目详情导航"
+        >
           <a href="#archive-records" style={archiveDetailTabStyle}>
             记录
           </a>

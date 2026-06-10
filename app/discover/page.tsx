@@ -145,6 +145,7 @@ export default function DiscoverPage() {
       <DiscoverHeader />
 
       <section
+        className="mobile-app-flex-only"
         style={{
           margin: "0 0 12px",
           border: "1px solid #eadfca",

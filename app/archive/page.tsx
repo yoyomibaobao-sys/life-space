@@ -94,6 +94,18 @@ export default function ArchivePage() {
   const [deleteArchiveTarget, setDeleteArchiveTarget] = useState<ArchiveItem | null>(null);
   const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
 
   function shouldIgnoreCardNavigation(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -834,10 +846,18 @@ export default function ArchivePage() {
   const endedArchiveCount = archives.filter((item) => item.status === "ended").length;
   const contentBlocked = membership?.can_create_content === false;
 
-  const plantSubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "plant");
-  const methodFacilitySubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "system");
-  const insectFishSubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "insect_fish");
-  const otherSubTags = subTags.filter((tag) => getSystemCategory(tag.category) === "other");
+  const plantSubTags = subTags.filter((tag) =>
+    isMobileViewport ? getSystemCategory(tag.category) === "plant" : tag.category === "plant"
+  );
+  const methodFacilitySubTags = subTags.filter((tag) =>
+    isMobileViewport ? getSystemCategory(tag.category) === "system" : tag.category === "system"
+  );
+  const insectFishSubTags = subTags.filter((tag) =>
+    isMobileViewport ? getSystemCategory(tag.category) === "insect_fish" : tag.category === "insect_fish"
+  );
+  const otherSubTags = subTags.filter((tag) =>
+    isMobileViewport ? getSystemCategory(tag.category) === "other" : tag.category === "other"
+  );
 
   const currentSubTag = subTags.find((tag) => tag.id === activeSubTag) || null;
   const visibleGroupTags = activeSubTag && currentSubTag
@@ -853,7 +873,13 @@ export default function ArchivePage() {
     const filtered = archives.filter((item) => {
       if (activeGroupTag && item.group_tag_id !== activeGroupTag) return false;
       if (activeSubTag && item.sub_tag_id !== activeSubTag) return false;
-      if (!activeSubTag && activeCategory && getSystemCategory(item.category) !== activeCategory) return false;
+      if (
+        !activeSubTag &&
+        activeCategory &&
+        (isMobileViewport ? getSystemCategory(item.category) : item.category) !== activeCategory
+      ) {
+        return false;
+      }
       if (!keyword) return true;
 
       return buildArchiveSearchText(item, subTagNameMap, groupTagNameMap).includes(keyword);
@@ -880,6 +906,7 @@ export default function ArchivePage() {
     sortMode,
     subTagNameMap,
     groupTagNameMap,
+    isMobileViewport,
   ]);
 
   const activeArchives = filteredArchives.filter((item) => item.status !== "ended");
@@ -929,28 +956,30 @@ export default function ArchivePage() {
         {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
       </div>
 
-      <section style={systemTabWrapStyle} aria-label="项目一级大类">
-        {archiveSystemTabs.map((tab) => {
-          const active = activeCategory === tab.value && !activeSubTag && !activeGroupTag;
+      {isMobileViewport ? (
+        <section style={systemTabWrapStyle} aria-label="项目一级大类">
+          {archiveSystemTabs.map((tab) => {
+            const active = activeCategory === tab.value && !activeSubTag && !activeGroupTag;
 
-          return (
-            <button
-              key={tab.label}
-              type="button"
-              onClick={() =>
-                updateFilterWithoutJump(() => {
-                  setActiveCategory(tab.value);
-                  setActiveSubTag(null);
-                  setActiveGroupTag(null);
-                })
-              }
-              style={systemTabButtonStyle(active)}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </section>
+            return (
+              <button
+                key={tab.label}
+                type="button"
+                onClick={() =>
+                  updateFilterWithoutJump(() => {
+                    setActiveCategory(tab.value);
+                    setActiveSubTag(null);
+                    setActiveGroupTag(null);
+                  })
+                }
+                style={systemTabButtonStyle(active)}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </section>
+      ) : null}
 
       <ArchiveToolbar
         onCreateArchive={(category) => {
@@ -966,32 +995,42 @@ export default function ArchivePage() {
         createDisabledHref={contentBlocked ? "/membership" : undefined}
       />
 
-      <ArchiveFiltersPanel
-        activeCategory={activeCategory}
-        activeSubTag={activeSubTag}
-        visibleGroupTagCount={visibleGroupTags.length}
-        plantSubTags={plantSubTags}
-        methodFacilitySubTags={methodFacilitySubTags}
-        insectFishSubTags={insectFishSubTags}
-        otherSubTags={otherSubTags}
-        onSelectCategory={(category) =>
-          updateFilterWithoutJump(() => {
-            setActiveCategory(category);
-            setActiveSubTag(null);
-            setActiveGroupTag(null);
-          })
-        }
-        onSelectSubTag={(category, id) =>
-          updateFilterWithoutJump(() => {
-            setActiveCategory(category);
-            setActiveSubTag(id);
-            setActiveGroupTag(null);
-          })
-        }
-        onRenameSubTag={renameSubTag}
-        onDeleteSubTag={deleteSubTag}
-        onCreateSubTag={createSubTag}
-      />
+      {!isMobileViewport || activeCategory ? (
+        <ArchiveFiltersPanel
+          activeCategory={activeCategory}
+          activeSubTag={activeSubTag}
+          visibleGroupTagCount={visibleGroupTags.length}
+          plantSubTags={plantSubTags}
+          methodFacilitySubTags={methodFacilitySubTags}
+          insectFishSubTags={insectFishSubTags}
+          otherSubTags={otherSubTags}
+          mobileMode={isMobileViewport}
+          onReset={() =>
+            updateFilterWithoutJump(() => {
+              setActiveCategory(null);
+              setActiveSubTag(null);
+              setActiveGroupTag(null);
+            })
+          }
+          onSelectCategory={(category) =>
+            updateFilterWithoutJump(() => {
+              setActiveCategory(category);
+              setActiveSubTag(null);
+              setActiveGroupTag(null);
+            })
+          }
+          onSelectSubTag={(category, id) =>
+            updateFilterWithoutJump(() => {
+              setActiveCategory(category);
+              setActiveSubTag(id);
+              setActiveGroupTag(null);
+            })
+          }
+          onRenameSubTag={renameSubTag}
+          onDeleteSubTag={deleteSubTag}
+          onCreateSubTag={createSubTag}
+        />
+      ) : null}
 
       <ArchiveGroupPanel
         activeGroupTag={activeGroupTag}

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { SubTagItem } from "@/lib/archive-page-types";
@@ -14,6 +15,8 @@ type Props = {
   methodFacilitySubTags: SubTagItem[];
   insectFishSubTags: SubTagItem[];
   otherSubTags: SubTagItem[];
+  mobileMode?: boolean;
+  onReset: () => void;
   onSelectCategory: (category: ArchiveCategory) => void;
   onSelectSubTag: (category: ArchiveCategory, id: string) => void;
   onRenameSubTag: (tag: SubTagItem) => void;
@@ -49,6 +52,8 @@ export default function ArchiveFiltersPanel({
   methodFacilitySubTags,
   insectFishSubTags,
   otherSubTags,
+  mobileMode = false,
+  onReset,
   onSelectCategory,
   onSelectSubTag,
   onRenameSubTag,
@@ -66,7 +71,7 @@ export default function ArchiveFiltersPanel({
     ? groups.find((group) => group.category === activeCategory) || null
     : null;
 
-  if (!currentGroup) return null;
+  if (mobileMode && !currentGroup) return null;
 
   return (
     <section
@@ -78,6 +83,36 @@ export default function ArchiveFiltersPanel({
         background: "#fff",
       }}
     >
+      {!mobileMode ? (
+        <div style={rowStyle}>
+          <button type="button" onClick={onReset} style={pillStyle(!activeCategory && !activeSubTag)}>
+            全部
+          </button>
+
+          {groups.map(({ category }) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => onSelectCategory(category)}
+              style={pillStyle(activeCategory === category && !activeSubTag)}
+            >
+              {getArchiveCategoryLabel(category)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {!mobileMode && currentGroup ? (
+        <div
+          style={{
+            height: 1,
+            background: "#edf0e8",
+            margin: "12px 0 10px",
+          }}
+        />
+      ) : null}
+
+      {currentGroup ? (
       <div style={rowStyle}>
         <button
           type="button"
@@ -116,6 +151,7 @@ export default function ArchiveFiltersPanel({
           ＋
         </button>
       </div>
+      ) : null}
     </section>
   );
 }

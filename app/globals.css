@@ -80,6 +80,11 @@ p {
   min-height: calc(100vh - 58px);
 }
 
+.mobile-app-flex-only,
+.mobile-app-grid-only {
+  display: none !important;
+}
+
 .page-shell {
   width: 100%;
   max-width: var(--page-max);
@@ -280,6 +285,14 @@ p {
   .app-main {
     min-height: calc(100vh - 104px);
     padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-app-flex-only {
+    display: flex !important;
+  }
+
+  .mobile-app-grid-only {
+    display: grid !important;
   }
 
   .site-nav__inner {
