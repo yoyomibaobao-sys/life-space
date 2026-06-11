@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { DiscoverEmptyState } from "@/components/discover/DiscoverEmptyState";
 import { DiscoverFilterBar } from "@/components/discover/DiscoverFilterBar";
 import { DiscoverHeader } from "@/components/discover/DiscoverHeader";
 import { DiscoverHelpList } from "@/components/discover/DiscoverHelpList";
 import { DiscoverUserSections } from "@/components/discover/DiscoverUserSections";
+import DiscoverMarketTabs from "@/components/mobile/DiscoverMarketTabs";
 import { fetchDiscoverFeedRange, mergeDiscoverFeedItems } from "@/lib/discover-feed-shared";
 import {
   type FeedItem,
@@ -24,6 +24,9 @@ export default function DiscoverPage() {
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [hasMore, setHasMore] = useState(true);
   const [expandedUserIds, setExpandedUserIds] = useState<string[]>([]);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileSearchText, setMobileSearchText] = useState("");
 
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
@@ -99,6 +102,31 @@ export default function DiscoverPage() {
     load(0, mode);
   }
 
+  function submitMobileSearch() {
+    const text = mobileSearchText.trim();
+    window.location.href = text
+      ? `/discover/search?content=${encodeURIComponent(text)}`
+      : "/discover/search";
+  }
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
+
+  useEffect(() => {
+    if (isMobileViewport && filterMode === "help") {
+      changeFilter("all");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileViewport, filterMode]);
+
   useEffect(() => {
     setItems([]);
     setPage(0);
@@ -133,6 +161,9 @@ export default function DiscoverPage() {
   const activeFilterLabel =
     filterOptions.find((item) => item.value === filterMode)?.label || "全部";
   const isEmpty = !loading && (filterMode === "help" ? helpStreamItems.length === 0 : sections.length === 0);
+  const visibleFilterOptions = isMobileViewport
+    ? filterOptions.filter((item) => item.value !== "help")
+    : filterOptions;
 
   return (
     <main
@@ -142,65 +173,78 @@ export default function DiscoverPage() {
         margin: "0 auto",
       }}
     >
-      <DiscoverHeader />
+      <DiscoverMarketTabs active="discover" />
 
-      <nav
-        className="mobile-app-flex-only"
-        style={{
-          margin: "0 0 12px",
-          padding: 4,
-          border: "1px solid #e2ecd9",
-          borderRadius: 16,
-          background: "#fff",
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-        }}
-        aria-label="发现页入口"
-      >
-        <Link
-          href="/discover"
-          style={{
-            flex: 1,
-            minHeight: 36,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            textDecoration: "none",
-            borderRadius: 12,
-            background: "#e3f1dd",
-            color: "#2f6a31",
-            fontSize: 14,
-            fontWeight: 800,
-          }}
-        >
-          动态
-        </Link>
-        <Link
-          href="/market"
-          style={{
-            flex: 1,
-            minHeight: 36,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            textDecoration: "none",
-            borderRadius: 12,
-            background: "transparent",
-            color: "#61705d",
-            fontSize: 14,
-            fontWeight: 800,
-          }}
-        >
-          集市
-        </Link>
-      </nav>
+      <div className="mobile-app-desktop-only">
+        <DiscoverHeader />
+      </div>
 
       <DiscoverFilterBar
-        options={filterOptions}
+        options={visibleFilterOptions}
         activeMode={filterMode}
         onChange={changeFilter}
       />
+
+      <button
+        type="button"
+        className="mobile-app-flex-only"
+        onClick={() => setMobileSearchOpen(true)}
+        style={{
+          width: "100%",
+          minHeight: 38,
+          alignItems: "center",
+          gap: 10,
+          margin: "-4px 0 14px",
+          border: "1px solid #e1e8dd",
+          borderRadius: 999,
+          background: "#fff",
+          color: "#7a8577",
+          padding: "0 14px",
+          fontSize: 14,
+          textAlign: "left",
+        }}
+      >
+        <span aria-hidden="true">🔍</span>
+        <span>搜索</span>
+      </button>
+
+      {mobileSearchOpen ? (
+        <div style={mobileSearchOverlayStyle}>
+          <div style={mobileSearchPanelStyle}>
+            <div style={mobileSearchHeaderStyle}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#1f2d1f" }}>
+                搜索
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileSearchOpen(false)}
+                style={mobileSearchCancelStyle}
+              >
+                取消
+              </button>
+            </div>
+
+            <input
+              autoFocus
+              value={mobileSearchText}
+              onChange={(event) => setMobileSearchText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") submitMobileSearch();
+              }}
+              placeholder="搜索记录、项目或关键词"
+              style={mobileSearchInputStyle}
+            />
+
+            <button
+              type="button"
+              onClick={submitMobileSearch}
+              style={mobileSearchSubmitStyle}
+            >
+              搜索
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {filterMode === "help" ? (
         <DiscoverHelpList items={helpStreamItems} />
@@ -240,3 +284,65 @@ export default function DiscoverPage() {
     </main>
   );
 }
+
+const mobileSearchOverlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 230,
+  background: "rgba(31, 42, 31, 0.24)",
+  display: "flex",
+  justifyContent: "flex-end",
+};
+
+const mobileSearchPanelStyle: CSSProperties = {
+  width: "min(88vw, 360px)",
+  height: "100%",
+  background: "#fff",
+  borderLeft: "1px solid #e1e8dd",
+  boxShadow: "-16px 0 36px rgba(31, 42, 31, 0.16)",
+  padding: "16px 14px",
+  transform: "translateX(0)",
+};
+
+const mobileSearchHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const mobileSearchCancelStyle: CSSProperties = {
+  border: "1px solid #dfe7d9",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#5f6f5b",
+  fontSize: 13,
+  fontWeight: 700,
+  padding: "7px 12px",
+  cursor: "pointer",
+};
+
+const mobileSearchInputStyle: CSSProperties = {
+  width: "100%",
+  height: 42,
+  border: "1px solid #dfe7d9",
+  borderRadius: 14,
+  padding: "0 12px",
+  fontSize: 14,
+  outline: "none",
+  color: "#273327",
+};
+
+const mobileSearchSubmitStyle: CSSProperties = {
+  width: "100%",
+  height: 40,
+  marginTop: 12,
+  border: "none",
+  borderRadius: 999,
+  background: "#2f6a31",
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 800,
+  cursor: "pointer",
+};

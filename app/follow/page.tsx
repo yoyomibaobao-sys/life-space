@@ -111,6 +111,18 @@ export default function FollowPage() {
   const [userConfirmId, setUserConfirmId] = useState<string | null>(null);
   const [projectSubmitting, setProjectSubmitting] = useState(false);
   const [userSubmitting, setUserSubmitting] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -393,19 +405,21 @@ export default function FollowPage() {
   }
 
   return (
-    <main style={pageStyle}>
-      <section style={heroStyle}>
-        <div>
-          <div style={eyebrowStyle}>持续追踪中心</div>
-          <h1 style={titleStyle}>我的关注</h1>
-          <div style={subtitleStyle}>查看你正在追踪的项目和用户最近发生了什么。</div>
-        </div>
+    <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
+      {!isMobileViewport ? (
+        <section style={heroStyle}>
+          <div>
+            <div style={eyebrowStyle}>持续追踪中心</div>
+            <h1 style={titleStyle}>我的关注</h1>
+            <div style={subtitleStyle}>查看你正在追踪的项目和用户最近发生了什么。</div>
+          </div>
 
-        <div style={summaryWrapStyle}>
-          <SummaryCard label="关注项目" value={projectCards.length} />
-          <SummaryCard label="关注用户" value={userCards.length} />
-        </div>
-      </section>
+          <div style={summaryWrapStyle}>
+            <SummaryCard label="关注项目" value={projectCards.length} />
+            <SummaryCard label="关注用户" value={userCards.length} />
+          </div>
+        </section>
+      ) : null}
 
       <section style={panelStyle}>
         <div style={tabRowStyle}>
@@ -414,14 +428,14 @@ export default function FollowPage() {
             onClick={() => setTab("projects")}
             style={tabButtonStyle(tab === "projects")}
           >
-            关注项目
+            {isMobileViewport ? `关注项目（${projectCards.length}）` : "关注项目"}
           </button>
           <button
             type="button"
             onClick={() => setTab("users")}
             style={tabButtonStyle(tab === "users")}
           >
-            关注用户
+            {isMobileViewport ? `关注用户（${userCards.length}）` : "关注用户"}
           </button>
         </div>
 
@@ -742,6 +756,12 @@ const pageStyle: React.CSSProperties = {
   maxWidth: 1120,
   margin: "0 auto",
   padding: "28px 16px 56px",
+};
+
+const mobilePageStyle: React.CSSProperties = {
+  maxWidth: 1120,
+  margin: "0 auto",
+  padding: "12px 12px 28px",
 };
 
 const heroStyle: React.CSSProperties = {

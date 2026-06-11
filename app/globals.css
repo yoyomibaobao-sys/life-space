@@ -300,6 +300,10 @@ p {
     display: block !important;
   }
 
+  .mobile-app-desktop-only {
+    display: none !important;
+  }
+
   .site-nav__inner {
     padding: 9px 12px 10px;
     align-items: flex-start;

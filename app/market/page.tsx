@@ -18,6 +18,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import DiscoverMarketTabs from "@/components/mobile/DiscoverMarketTabs";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
@@ -246,6 +247,8 @@ export default function MarketPage() {
   return (
     <main style={pageStyle}>
       <div style={shellStyle}>
+        <DiscoverMarketTabs active="market" />
+
         <header style={headerStyle}>
           <div>
             <div style={marketIntroStyle}>交换与求购</div>

@@ -905,34 +905,36 @@ export default function ArchivePage() {
         margin: "0 auto",
       }}
     >
-      <section
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 16,
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: isMobileViewport ? 22 : 26,
-              color: "#1f2d1f",
-              fontWeight: 700,
-            }}
-          >
-            我的空间
-          </h1>
-        </div>
-      </section>
+      {!isMobileViewport ? (
+        <section
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
+            marginBottom: 10,
+          }}
+        >
+          <div>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 26,
+                color: "#1f2d1f",
+                fontWeight: 700,
+              }}
+            >
+              我的空间
+            </h1>
+          </div>
+        </section>
+      ) : null}
 
       <div
         style={{
           fontSize: 14,
           color: "#6f7b6a",
-          marginBottom: 18,
+          marginBottom: isMobileViewport ? 12 : 18,
         }}
       >
         我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}

@@ -159,26 +159,35 @@ function FilterSelect({
   value,
   onChange,
   options,
+  compact = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
+  compact?: boolean;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6 }}>
+    <label
+      style={{
+        display: "grid",
+        gap: compact ? 4 : 6,
+        minWidth: compact ? 136 : undefined,
+        flex: compact ? "0 0 136px" : undefined,
+      }}
+    >
       <span style={{ fontSize: 12, color: "#777" }}>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={{
-          height: 38,
+          height: compact ? 34 : 38,
           borderRadius: 12,
           border: "1px solid #e5e7eb",
-          padding: "0 12px",
+          padding: compact ? "0 9px" : "0 12px",
           background: "#fff",
           color: "#333",
-          fontSize: 14,
+          fontSize: compact ? 13 : 14,
         }}
       >
         {options.map((option) => (
@@ -199,6 +208,7 @@ export default function PlantIndexPage() {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [filters, setFilters] = useState<EnvironmentFilters>({
     light: "all",
     water: "all",
@@ -206,6 +216,17 @@ export default function PlantIndexPage() {
     scene: "all",
     indoor: "all",
   });
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -377,23 +398,25 @@ export default function PlantIndexPage() {
   }
 
   return (
-    <main style={{ padding: "16px", maxWidth: 1080, margin: "0 auto" }}>
+    <main style={{ padding: isMobileViewport ? "12px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
       <section
         style={{
-          padding: 22,
+          padding: isMobileViewport ? 12 : 22,
           border: "1px solid #eee",
-          borderRadius: 20,
+          borderRadius: isMobileViewport ? 16 : 20,
           background: "#fff",
           boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
         }}
       >
-        <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
-          植物百科
+        <div className="mobile-app-desktop-only">
+          <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
+            植物百科
+          </div>
+
+          <h1 style={{ margin: 0, fontSize: 28 }}>系统植物索引库</h1>
         </div>
 
-        <h1 style={{ margin: 0, fontSize: 28 }}>系统植物索引库</h1>
-
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: isMobileViewport ? 0 : 16 }}>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -413,8 +436,11 @@ export default function PlantIndexPage() {
           style={{
             display: "flex",
             gap: 8,
-            flexWrap: "wrap",
-            marginTop: 14,
+            flexWrap: isMobileViewport ? "nowrap" : "wrap",
+            overflowX: isMobileViewport ? "auto" : "visible",
+            marginTop: isMobileViewport ? 10 : 14,
+            paddingBottom: isMobileViewport ? 2 : 0,
+            scrollbarWidth: "none",
           }}
         >
           {categories.map((category) => (
@@ -434,6 +460,7 @@ export default function PlantIndexPage() {
                 padding: "7px 12px",
                 cursor: "pointer",
                 fontSize: 13,
+                whiteSpace: "nowrap",
               }}
             >
               {categoryLabel(category)}
@@ -443,11 +470,11 @@ export default function PlantIndexPage() {
 
         <div
           style={{
-            marginTop: 16,
-            paddingTop: 16,
+            marginTop: isMobileViewport ? 10 : 16,
+            paddingTop: isMobileViewport ? 10 : 16,
             borderTop: "1px solid #f0f0f0",
             display: "grid",
-            gap: 12,
+            gap: isMobileViewport ? 8 : 12,
           }}
         >
           <div
@@ -481,9 +508,12 @@ export default function PlantIndexPage() {
 
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: 12,
+              display: isMobileViewport ? "flex" : "grid",
+              gridTemplateColumns: isMobileViewport ? undefined : "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: isMobileViewport ? 8 : 12,
+              overflowX: isMobileViewport ? "auto" : "visible",
+              paddingBottom: isMobileViewport ? 2 : 0,
+              scrollbarWidth: "none",
             }}
           >
             <FilterSelect
@@ -491,36 +521,42 @@ export default function PlantIndexPage() {
               value={activeCategory}
               onChange={setActiveCategory}
               options={categoryFilterOptions}
+              compact={isMobileViewport}
             />
             <FilterSelect
               label="光照"
               value={filters.light}
               onChange={(value) => updateFilter("light", value)}
               options={lightOptions}
+              compact={isMobileViewport}
             />
             <FilterSelect
               label="水分"
               value={filters.water}
               onChange={(value) => updateFilter("water", value)}
               options={waterOptions}
+              compact={isMobileViewport}
             />
             <FilterSelect
               label="温度"
               value={filters.temperature}
               onChange={(value) => updateFilter("temperature", value)}
               options={temperatureOptions}
+              compact={isMobileViewport}
             />
             <FilterSelect
               label="场景"
               value={filters.scene}
               onChange={(value) => updateFilter("scene", value)}
               options={sceneOptions}
+              compact={isMobileViewport}
             />
             <FilterSelect
               label="室内辅助参考"
               value={filters.indoor}
               onChange={(value) => updateFilter("indoor", value)}
               options={indoorOptions}
+              compact={isMobileViewport}
             />
           </div>
         </div>
@@ -537,7 +573,7 @@ export default function PlantIndexPage() {
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 18 }}>全部植物</h2>
+          {!isMobileViewport ? <h2 style={{ margin: 0, fontSize: 18 }}>全部植物</h2> : null}
 
           <div style={{ fontSize: 13, color: "#888" }}>
             {loading ? "加载中..." : `${filteredPlants.length} 个结果`}
