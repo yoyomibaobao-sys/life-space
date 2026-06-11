@@ -27,7 +27,7 @@ import type {
   RelatedTagCountRow,
 } from "@/lib/archive-detail-types";
 import type { MediaItem } from "@/lib/domain-types";
-import { buildMediaList, getDisplayName } from "@/lib/archive-detail-utils";
+import { buildMediaList, formatDate, getDisplayName } from "@/lib/archive-detail-utils";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -73,6 +73,14 @@ function Content({ id }: { id: string }) {
   const [showUnfollowProjectConfirm, setShowUnfollowProjectConfirm] = useState(false);
   const [projectFollowSubmitting, setProjectFollowSubmitting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileDetailTab, setMobileDetailTab] = useState<"profile" | "records">("records");
+  const [mobileAddRecordOpen, setMobileAddRecordOpen] = useState(false);
+  const [mobileArchiveEditing, setMobileArchiveEditing] = useState(false);
+  const [mobileArchiveSource, setMobileArchiveSource] = useState("");
+  const [mobileArchiveNote, setMobileArchiveNote] = useState("");
+  const [mobileArchiveSaving, setMobileArchiveSaving] = useState(false);
+  const [mobileArchiveError, setMobileArchiveError] = useState("");
 
   const searchParams = useSearchParams();
   const modeParam = searchParams.get("mode");
@@ -369,6 +377,46 @@ saveRecentArchiveBrowse({
     };
   }, [isLightboxOpen]);
 
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
+
+  useEffect(() => {
+    function openAddRecordPanel() {
+      setMobileDetailTab("records");
+      setMobileAddRecordOpen(true);
+    }
+
+    function handleHashChange() {
+      if (window.location.hash === "#add-record") {
+        openAddRecordPanel();
+      }
+    }
+
+    window.addEventListener("mobile-add-record-request", openAddRecordPanel);
+    window.addEventListener("hashchange", handleHashChange);
+    handleHashChange();
+
+    return () => {
+      window.removeEventListener("mobile-add-record-request", openAddRecordPanel);
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!archive || mobileArchiveEditing) return;
+
+    setMobileArchiveSource(archive.source || "");
+    setMobileArchiveNote(archive.note || "");
+    setMobileArchiveError("");
+  }, [archive, mobileArchiveEditing]);
 
   const handleCommentCountChange = useCallback((recordId: string, count: number) => {
     setRecords((prev) => {
@@ -532,6 +580,38 @@ saveRecentArchiveBrowse({
     setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
 
     showToast(nextValue ? "项目和记录已公开" : "项目和记录仅自己可见");
+  }
+
+  async function saveMobileArchiveProfile() {
+    if (!isOwner || mobileArchiveSaving) return;
+
+    setMobileArchiveSaving(true);
+    setMobileArchiveError("");
+
+    const nextSource = mobileArchiveSource.trim();
+    const nextNote = mobileArchiveNote.trim();
+    const patch = {
+      source: nextSource || null,
+      note: nextNote || null,
+    };
+
+    const { error } = await supabase
+      .from("archives")
+      .update(patch)
+      .eq("id", activeArchive.id)
+      .eq("user_id", activeArchive.user_id);
+
+    setMobileArchiveSaving(false);
+
+    if (error) {
+      setMobileArchiveError("保存失败，请稍后重试");
+      showToast("档案保存失败");
+      return;
+    }
+
+    setArchive((prev) => (prev ? { ...prev, ...patch } : prev));
+    setMobileArchiveEditing(false);
+    showToast("档案已保存");
   }
 
   async function toggleProjectFollow() {
@@ -917,44 +997,82 @@ saveRecentArchiveBrowse({
           style={archiveDetailTabWrapStyle}
           aria-label="项目详情导航"
         >
-          <a href="#archive-records" style={archiveDetailTabStyle}>
-            记录
-          </a>
-          <a href="#archive-profile" style={archiveDetailTabStyle}>
-            档案
-          </a>
-          <a
-            href={mode === "owner" ? "/follow?tab=projects" : "#archive-profile"}
-            style={archiveDetailTabStyle}
+          <button
+            type="button"
+            onClick={() => setMobileDetailTab("profile")}
+            style={archiveDetailTabButtonStyle(mobileDetailTab === "profile")}
           >
-            关注
-          </a>
+            档案
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileDetailTab("records")}
+            style={archiveDetailTabButtonStyle(mobileDetailTab === "records")}
+          >
+            记录
+          </button>
         </nav>
 
-        <div id="archive-profile" style={archiveDetailAnchorStyle}>
-          <ArchiveDetailHeader
-            mode={mode}
+        {!isMobileViewport ? (
+          <div id="archive-profile" style={archiveDetailAnchorStyle}>
+            <ArchiveDetailHeader
+              mode={mode}
+              archive={activeArchive}
+              username={username}
+              archiveDisplayName={archiveDisplayName}
+              archiveCategoryLabel={archiveCategoryLabel}
+              latestUpdate={latestUpdate}
+              recordCount={activeArchive.record_count || records.length || 0}
+              encyclopediaHref={encyclopediaHref}
+              isProjectFollowed={isProjectFollowed}
+              onToggleArchiveVisibility={toggleArchiveVisibility}
+              onToggleProjectFollow={toggleProjectFollow}
+            />
+          </div>
+        ) : null}
+
+        {isMobileViewport && mobileDetailTab === "profile" ? (
+          <MobileArchiveProfile
             archive={activeArchive}
-            username={username}
             archiveDisplayName={archiveDisplayName}
             archiveCategoryLabel={archiveCategoryLabel}
-            latestUpdate={latestUpdate}
-            recordCount={activeArchive.record_count || records.length || 0}
-            encyclopediaHref={encyclopediaHref}
-            isProjectFollowed={isProjectFollowed}
-            onToggleArchiveVisibility={toggleArchiveVisibility}
-            onToggleProjectFollow={toggleProjectFollow}
+            source={mobileArchiveSource}
+            note={mobileArchiveNote}
+            editing={mobileArchiveEditing}
+            saving={mobileArchiveSaving}
+            error={mobileArchiveError}
+            isOwner={isOwner}
+            onSourceChange={setMobileArchiveSource}
+            onNoteChange={setMobileArchiveNote}
+            onEdit={() => {
+              setMobileArchiveEditing(true);
+              setMobileArchiveError("");
+            }}
+            onCancel={() => {
+              setMobileArchiveEditing(false);
+              setMobileArchiveSource(activeArchive.source || "");
+              setMobileArchiveNote(activeArchive.note || "");
+              setMobileArchiveError("");
+            }}
+            onSave={saveMobileArchiveProfile}
           />
-        </div>
+        ) : null}
 
         {mode === "owner" ? (
           <ArchiveAddRecordSection
             archiveId={activeArchive.id}
             archiveIsPublic={activeArchive.is_public}
-            onRecordCreated={() => setReloadKey((value) => value + 1)}
+            mobileMode={isMobileViewport}
+            open={!isMobileViewport || mobileAddRecordOpen}
+            onClose={() => setMobileAddRecordOpen(false)}
+            onRecordCreated={() => {
+              setReloadKey((value) => value + 1);
+              if (isMobileViewport) setMobileAddRecordOpen(false);
+            }}
           />
         ) : null}
 
+        {!isMobileViewport || mobileDetailTab === "records" ? (
         <section id="archive-records" style={{ position: "relative", paddingLeft: 22, scrollMarginTop: 76 }}>
           <div
             style={{
@@ -1018,6 +1136,7 @@ saveRecentArchiveBrowse({
             </div>
           ) : null}
         </section>
+        ) : null}
       </main>
 
       {isLightboxOpen ? (
@@ -1062,9 +1181,134 @@ saveRecentArchiveBrowse({
   );
 }
 
+function MobileArchiveProfile({
+  archive,
+  archiveDisplayName,
+  archiveCategoryLabel,
+  source,
+  note,
+  editing,
+  saving,
+  error,
+  isOwner,
+  onSourceChange,
+  onNoteChange,
+  onEdit,
+  onCancel,
+  onSave,
+}: {
+  archive: ArchiveDetailArchive;
+  archiveDisplayName: string;
+  archiveCategoryLabel: string;
+  source: string;
+  note: string;
+  editing: boolean;
+  saving: boolean;
+  error: string;
+  isOwner: boolean;
+  onSourceChange: (value: string) => void;
+  onNoteChange: (value: string) => void;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const createdAtText = formatDate(archive.created_at) || "未填写";
+
+  return (
+    <section id="archive-profile" style={mobileArchiveProfileStyle}>
+      <div style={mobileArchiveProfileHeaderStyle}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#1f2d1f" }}>档案</div>
+        {isOwner ? (
+          editing ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={saving}
+                style={mobileArchiveSecondaryButtonStyle}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={saving}
+                style={mobileArchivePrimaryButtonStyle}
+              >
+                {saving ? "保存中..." : "保存"}
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={onEdit} style={mobileArchiveSecondaryButtonStyle}>
+              编辑
+            </button>
+          )
+        ) : null}
+      </div>
+
+      <MobileArchiveField label="项目名称" value={archive.title || "未命名项目"} />
+      <MobileArchiveField label="种类" value={archiveCategoryLabel || "其他"} />
+      <MobileArchiveField label="植物名称" value={archiveDisplayName || "未填写"} />
+
+      {editing ? (
+        <>
+          <label style={mobileArchiveEditFieldStyle}>
+            <span style={mobileArchiveLabelStyle}>来源</span>
+            <input
+              value={source}
+              onChange={(event) => onSourceChange(event.target.value)}
+              placeholder="未填写"
+              style={mobileArchiveInputStyle}
+            />
+          </label>
+
+          <label style={mobileArchiveEditFieldStyle}>
+            <span style={mobileArchiveLabelStyle}>备注</span>
+            <textarea
+              value={note}
+              onChange={(event) => onNoteChange(event.target.value)}
+              placeholder="未填写"
+              rows={4}
+              style={mobileArchiveTextareaStyle}
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <MobileArchiveField label="来源" value={source || "未填写"} />
+          <MobileArchiveField label="备注" value={note || "未填写"} multiline />
+        </>
+      )}
+
+      <MobileArchiveField label="创建时间" value={createdAtText} />
+
+      {error ? <div style={mobileArchiveErrorStyle}>{error}</div> : null}
+    </section>
+  );
+}
+
+function MobileArchiveField({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  multiline?: boolean;
+}) {
+  return (
+    <div style={mobileArchiveFieldStyle}>
+      <div style={mobileArchiveLabelStyle}>{label}</div>
+      <div style={multiline ? mobileArchiveMultilineValueStyle : mobileArchiveValueStyle}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 const archiveDetailTabWrapStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 6,
   marginBottom: 12,
   padding: 4,
@@ -1073,19 +1317,123 @@ const archiveDetailTabWrapStyle: CSSProperties = {
   background: "#fff",
 };
 
-const archiveDetailTabStyle: CSSProperties = {
-  minHeight: 38,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderRadius: 12,
-  color: "#40583a",
-  background: "#f7fbf4",
-  textDecoration: "none",
-  fontSize: 14,
-  fontWeight: 800,
-};
+function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
+  return {
+    minHeight: 38,
+    border: "none",
+    borderRadius: 12,
+    color: active ? "#2f6a31" : "#40583a",
+    background: active ? "#e3f1dd" : "transparent",
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: "pointer",
+  };
+}
 
 const archiveDetailAnchorStyle: CSSProperties = {
   scrollMarginTop: 76,
+};
+
+const mobileArchiveProfileStyle: CSSProperties = {
+  border: "1px solid #e6ece1",
+  borderRadius: 16,
+  background: "#fff",
+  padding: 14,
+  marginBottom: 14,
+};
+
+const mobileArchiveProfileHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 10,
+};
+
+const mobileArchiveFieldStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "72px minmax(0, 1fr)",
+  gap: 10,
+  padding: "9px 0",
+  borderTop: "1px solid #f1f3ef",
+  alignItems: "start",
+};
+
+const mobileArchiveEditFieldStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "72px minmax(0, 1fr)",
+  gap: 10,
+  padding: "9px 0",
+  borderTop: "1px solid #f1f3ef",
+  alignItems: "start",
+};
+
+const mobileArchiveLabelStyle: CSSProperties = {
+  color: "#7a8577",
+  fontSize: 13,
+  lineHeight: 1.45,
+};
+
+const mobileArchiveValueStyle: CSSProperties = {
+  minWidth: 0,
+  color: "#273327",
+  fontSize: 14,
+  lineHeight: 1.45,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileArchiveMultilineValueStyle: CSSProperties = {
+  color: "#273327",
+  fontSize: 14,
+  lineHeight: 1.5,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+};
+
+const mobileArchiveInputStyle: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  border: "1px solid #dfe7d9",
+  borderRadius: 12,
+  padding: "9px 10px",
+  color: "#273327",
+  fontSize: 14,
+  outline: "none",
+};
+
+const mobileArchiveTextareaStyle: CSSProperties = {
+  ...mobileArchiveInputStyle,
+  resize: "vertical",
+  lineHeight: 1.5,
+};
+
+const mobileArchivePrimaryButtonStyle: CSSProperties = {
+  border: "none",
+  borderRadius: 999,
+  background: "#2f6a31",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 800,
+  padding: "7px 12px",
+  cursor: "pointer",
+};
+
+const mobileArchiveSecondaryButtonStyle: CSSProperties = {
+  border: "1px solid #dfe7d9",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#5f6f5b",
+  fontSize: 13,
+  fontWeight: 700,
+  padding: "7px 12px",
+  cursor: "pointer",
+};
+
+const mobileArchiveErrorStyle: CSSProperties = {
+  marginTop: 8,
+  color: "#b94a48",
+  fontSize: 13,
 };

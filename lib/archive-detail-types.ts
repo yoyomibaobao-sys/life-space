@@ -92,6 +92,8 @@ export type ArchiveDetailArchive = {
   species_id?: string | null;
   species_name_snapshot?: string | null;
   system_name?: string | null;
+  source?: string | null;
+  note?: string | null;
   help_status?: string | null;
   help_opened_at?: string | null;
   help_resolved_at?: string | null;

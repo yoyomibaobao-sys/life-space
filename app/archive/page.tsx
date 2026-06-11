@@ -917,7 +917,7 @@ export default function ArchivePage() {
   return (
     <main
       style={{
-        padding: "22px 18px 42px",
+        padding: isMobileViewport ? "14px 12px 24px" : "22px 18px 42px",
         maxWidth: 1080,
         margin: "0 auto",
       }}
@@ -935,7 +935,7 @@ export default function ArchivePage() {
           <h1
             style={{
               margin: 0,
-              fontSize: 26,
+              fontSize: isMobileViewport ? 22 : 26,
               color: "#1f2d1f",
               fontWeight: 700,
             }}
@@ -981,19 +981,21 @@ export default function ArchivePage() {
         </section>
       ) : null}
 
-      <ArchiveToolbar
-        onCreateArchive={(category) => {
-          if (contentBlocked) {
-            showToast(getCreateContentBlockedText(membership));
-            return;
-          }
+      {!isMobileViewport || archiveCount === 0 ? (
+        <ArchiveToolbar
+          onCreateArchive={(category) => {
+            if (contentBlocked) {
+              showToast(getCreateContentBlockedText(membership));
+              return;
+            }
 
-          router.push(`/archive/new?category=${category}`);
-        }}
-        createDisabled={contentBlocked}
-        createDisabledTitle={contentBlocked ? getCreateContentBlockedText(membership) : undefined}
-        createDisabledHref={contentBlocked ? "/membership" : undefined}
-      />
+            router.push(`/archive/new?category=${category}`);
+          }}
+          createDisabled={contentBlocked}
+          createDisabledTitle={contentBlocked ? getCreateContentBlockedText(membership) : undefined}
+          createDisabledHref={contentBlocked ? "/membership" : undefined}
+        />
+      ) : null}
 
       {!isMobileViewport || activeCategory ? (
         <ArchiveFiltersPanel
@@ -1126,6 +1128,7 @@ export default function ArchivePage() {
               key={item.id}
               item={item}
               ended={false}
+              mobileMode={isMobileViewport}
               subTags={subTags}
               groupTags={groupTags}
               editingPlantArchiveId={editingPlantArchiveId}
@@ -1203,6 +1206,7 @@ export default function ArchivePage() {
               key={item.id}
               item={item}
               ended
+              mobileMode={isMobileViewport}
               subTags={subTags}
               groupTags={groupTags}
               editingPlantArchiveId={editingPlantArchiveId}

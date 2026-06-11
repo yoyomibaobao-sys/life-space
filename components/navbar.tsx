@@ -16,6 +16,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isCompact, setIsCompact] = useState(false);
+  const [mobileTitle, setMobileTitle] = useState("有时·耕作");
 
   useEffect(() => {
     function updateCompact() {
@@ -75,6 +76,38 @@ export default function Navbar() {
       );
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const archiveDetailPath = getArchiveDetailPath(pathname);
+
+    async function loadMobileTitle() {
+      if (!archiveDetailPath) {
+        setMobileTitle(getMobilePageTitle(pathname));
+        return;
+      }
+
+      setMobileTitle("项目");
+      const archiveId = archiveDetailPath.split("/").pop();
+      if (!archiveId) return;
+
+      const { data } = await supabase
+        .from("archives")
+        .select("title")
+        .eq("id", archiveId)
+        .maybeSingle();
+
+      if (!cancelled) {
+        setMobileTitle(String(data?.title || "项目"));
+      }
+    }
+
+    void loadMobileTitle();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   async function loadProfile(userId: string) {
     const { data } = await supabase
@@ -137,17 +170,23 @@ export default function Navbar() {
     return (
       <>
         <nav style={mobileTopNavStyle}>
-          <Link href={user ? "/archive" : "/"} style={brandStyle}>
-            有时·耕作
-          </Link>
+          <div style={mobilePageTitleStyle} title={mobileTitle}>
+            {mobileTitle}
+          </div>
 
           <Link
             href={getMobileCreateHref(pathname, Boolean(user))}
             style={mobileCreateButtonStyle}
             aria-label={getMobileCreateLabel(pathname)}
             title={getMobileCreateLabel(pathname)}
+            onClick={(event) => {
+              if (user && getArchiveDetailPath(pathname)) {
+                event.preventDefault();
+                window.dispatchEvent(new Event("mobile-add-record-request"));
+              }
+            }}
           >
-            ＋
+            ＋ {getMobileCreateLabel(pathname)}
           </Link>
         </nav>
 
@@ -362,6 +401,21 @@ function getMobileCreateLabel(pathname: string) {
   return getArchiveDetailPath(pathname) ? "添加记录" : "新建项目";
 }
 
+function getMobilePageTitle(pathname: string) {
+  if (pathname === "/" || pathname === "/archive") return "我的空间";
+  if (pathname.startsWith("/discover")) return "发现";
+  if (pathname.startsWith("/follow")) return "关注";
+  if (pathname.startsWith("/plant")) return "百科";
+  if (pathname.startsWith("/profile")) return "我";
+  if (pathname.startsWith("/notifications")) return "通知";
+  if (pathname.startsWith("/membership")) return "会员";
+  if (pathname.startsWith("/archive/new")) return "新建项目";
+  if (pathname.startsWith("/market")) return "集市";
+  if (pathname.startsWith("/login")) return "登录";
+  if (pathname.startsWith("/register")) return "注册";
+  return "有时·耕作";
+}
+
 function getNavStyle(compact: boolean): CSSProperties {
   return {
     position: "sticky",
@@ -384,7 +438,7 @@ const mobileTopNavStyle: CSSProperties = {
   position: "sticky",
   top: 0,
   zIndex: 100,
-  height: 54,
+  height: 50,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -396,8 +450,19 @@ const mobileTopNavStyle: CSSProperties = {
   boxSizing: "border-box",
 };
 
+const mobilePageTitleStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: "#1f2a1f",
+  fontSize: 17,
+  fontWeight: 800,
+  lineHeight: 1.2,
+};
+
 const mobileCreateButtonStyle: CSSProperties = {
-  width: 34,
+  minWidth: 0,
   height: 34,
   display: "inline-flex",
   alignItems: "center",
@@ -407,9 +472,12 @@ const mobileCreateButtonStyle: CSSProperties = {
   background: "#f3f9ef",
   color: "#2f6a31",
   textDecoration: "none",
-  fontSize: 22,
+  fontSize: 13,
   lineHeight: 1,
-  fontWeight: 600,
+  fontWeight: 800,
+  padding: "0 11px",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 const mobileBottomNavStyle: CSSProperties = {

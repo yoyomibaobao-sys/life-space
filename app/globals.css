@@ -81,7 +81,8 @@ p {
 }
 
 .mobile-app-flex-only,
-.mobile-app-grid-only {
+.mobile-app-grid-only,
+.mobile-app-block-only {
   display: none !important;
 }
 
@@ -293,6 +294,10 @@ p {
 
   .mobile-app-grid-only {
     display: grid !important;
+  }
+
+  .mobile-app-block-only {
+    display: block !important;
   }
 
   .site-nav__inner {

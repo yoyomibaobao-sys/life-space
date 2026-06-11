@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -53,6 +54,7 @@ type Props = {
   onUpdateArchiveCategory: (item: ArchiveItem, value: string) => void;
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
   onDeleteArchive: (item: ArchiveItem) => void;
+  mobileMode?: boolean;
 };
 
 type StatusPill = {
@@ -166,6 +168,7 @@ export default function ArchiveCard({
   onUpdateArchiveCategory,
   onUpdateArchiveGroupTag,
   onDeleteArchive,
+  mobileMode = false,
 }: Props) {
   const hasLatestRecord = Boolean(
     item.latest_record_time ||
@@ -185,6 +188,22 @@ export default function ArchiveCard({
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
+
+  if (mobileMode) {
+    return (
+      <MobileArchiveCard
+        item={item}
+        ended={ended}
+        imageUrl={cardImageUrl}
+        imageAlt={cardImageAlt}
+        systemName={systemName}
+        subTags={subTags}
+        groupTags={groupTags}
+        onNavigate={onNavigate}
+        shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
+      />
+    );
+  }
 
   return (
     <div
@@ -543,3 +562,169 @@ export default function ArchiveCard({
     </div>
   );
 }
+
+function MobileArchiveCard({
+  item,
+  ended,
+  imageUrl,
+  imageAlt,
+  systemName,
+  subTags,
+  groupTags,
+  onNavigate,
+  shouldIgnoreCardNavigation,
+}: {
+  item: ArchiveItem;
+  ended: boolean;
+  imageUrl: string;
+  imageAlt: string;
+  systemName: string;
+  subTags: SubTagItem[];
+  groupTags: GroupTagItem[];
+  onNavigate: (id: string) => void;
+  shouldIgnoreCardNavigation: (target: EventTarget | null) => boolean;
+}) {
+  const categoryText = getMobileArchiveCategoryText(item, systemName, subTags, groupTags);
+  const updateText = getRecentUpdateLabel(item.latest_record_time || item.last_record_time || item.created_at);
+
+  return (
+    <div
+      onClick={(event) => {
+        if (shouldIgnoreCardNavigation(event.target)) return;
+        onNavigate(item.id);
+      }}
+      style={{
+        cursor: "pointer",
+        border: "1px solid #e4e6df",
+        borderRadius: 14,
+        padding: 9,
+        marginBottom: 10,
+        background: ended ? "#fafafa" : "#fff",
+        opacity: ended ? 0.82 : 1,
+        boxShadow: ended ? "none" : "0 6px 18px rgba(44, 74, 38, 0.045)",
+      }}
+    >
+      <div style={mobileCardImageWrapStyle}>
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={imageAlt}
+            loading="lazy"
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              borderRadius: 11,
+            }}
+          />
+        ) : (
+          <div style={mobileCardPlaceholderStyle}>
+            <span>{getArchiveCategoryIcon(item.category)}</span>
+          </div>
+        )}
+      </div>
+
+      <div style={mobileCardBodyStyle}>
+        <div style={mobileCardTitleStyle} title={item.title || "未命名项目"}>
+          {item.title || "未命名项目"}
+        </div>
+        <div style={mobileCardMetaStyle} title={categoryText}>
+          {categoryText}
+        </div>
+        <div style={mobileCardUpdateStyle}>最近更新：{updateText}</div>
+      </div>
+    </div>
+  );
+}
+
+function getMobileArchiveCategoryText(
+  item: ArchiveItem,
+  systemName: string,
+  subTags: SubTagItem[],
+  groupTags: GroupTagItem[]
+) {
+  const categoryLabel = getArchiveCategoryLabel(item.category);
+  const subTagName = item.sub_tag_id
+    ? subTags.find((tag) => String(tag.id) === String(item.sub_tag_id))?.name
+    : "";
+  const groupTagName = item.group_tag_id
+    ? groupTags.find((tag) => String(tag.id) === String(item.group_tag_id))?.name
+    : "";
+  const detail = groupTagName || subTagName || systemName;
+
+  if (!detail || detail === categoryLabel) return categoryLabel;
+  return `${categoryLabel} · ${detail}`;
+}
+
+function getRecentUpdateLabel(value?: string | null) {
+  if (!value) return "暂无";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "暂无";
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.floor((today - target) / (24 * 60 * 60 * 1000));
+
+  if (diffDays <= 0) return "今天";
+  if (diffDays <= 6) return `${diffDays} 天前`;
+
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+const mobileCardImageWrapStyle: CSSProperties = {
+  position: "relative",
+  width: "100%",
+  height: 136,
+  borderRadius: 11,
+  overflow: "hidden",
+  background: "#f4f7f1",
+};
+
+const mobileCardPlaceholderStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
+  color: "#9aaa9a",
+  fontSize: 28,
+};
+
+const mobileCardBodyStyle: CSSProperties = {
+  padding: "8px 2px 1px",
+  minWidth: 0,
+};
+
+const mobileCardTitleStyle: CSSProperties = {
+  color: "#1f2d1f",
+  fontSize: 15,
+  fontWeight: 800,
+  lineHeight: 1.3,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileCardMetaStyle: CSSProperties = {
+  marginTop: 4,
+  color: "#60705b",
+  fontSize: 12,
+  lineHeight: 1.35,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileCardUpdateStyle: CSSProperties = {
+  marginTop: 4,
+  color: "#8a9588",
+  fontSize: 12,
+  lineHeight: 1.35,
+};
