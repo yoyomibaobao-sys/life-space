@@ -1,11 +1,12 @@
 "use client";
-import { useRef, useState } from "react";
+
+import { useRef, useState, type RefObject } from "react";
 import Link from "next/link";
+import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
 import TagList from "@/components/TagList";
-import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
-import ArchiveStatusBadge from "@/components/archive-detail/ArchiveStatusBadge";
 import ArchiveCommentsSection from "@/components/archive-detail/ArchiveCommentsSection";
+import ArchiveStatusBadge from "@/components/archive-detail/ArchiveStatusBadge";
 import {
   RECORD_TAG_OPTIONS,
   buildMediaList,
@@ -13,13 +14,13 @@ import {
   getDayNumber,
   smallActionButtonStyle,
 } from "@/lib/archive-detail-utils";
-import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import type {
   ArchiveDetailArchive,
   ArchiveMode,
   RecordItem,
 } from "@/lib/archive-detail-types";
 import type { MediaItem } from "@/lib/domain-types";
+import { getBehaviorTagLabel } from "@/lib/tag-labels";
 
 type ArchiveRecordCardProps = {
   archive: ArchiveDetailArchive;
@@ -76,6 +77,12 @@ export default function ArchiveRecordCard({
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
+  const statusBadge = isHelpRecord
+    ? { label: "求助中", kind: "help" as const }
+    : isResolvedRecord
+      ? { label: "已解决", kind: "resolved" as const }
+      : null;
+
   async function handleAddMediaFiles(fileList: FileList | null) {
     const nextFiles = Array.from(fileList || []);
     if (!nextFiles.length || !onAddMedia || addingMedia) return;
@@ -89,12 +96,6 @@ export default function ArchiveRecordCard({
       if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
   }
-
-  const statusBadge = isHelpRecord
-    ? { label: "求助中", kind: "help" as const }
-    : isResolvedRecord
-      ? { label: "已解决", kind: "resolved" as const }
-      : null;
 
   return (
     <article
@@ -143,6 +144,7 @@ export default function ArchiveRecordCard({
         ) : (
           <span />
         )}
+
         {!isMobileViewport && statusBadge ? (
           <ArchiveStatusBadge kind={statusBadge.kind}>
             {statusBadge.label}
@@ -176,16 +178,24 @@ export default function ArchiveRecordCard({
         }}
       >
         {isMobileViewport ? (
-          <MobileRecordTagStrip
-            item={item}
-            mode={mode}
-            isPlantArchive={isPlantArchive}
-            statusBadge={statusBadge}
-            sameTagLinks={sameTagLinks}
-            onSetHelpStatus={onSetHelpStatus}
-            onRemoveTag={onRemoveTag}
-            onAddTag={onAddTag}
-          />
+          <>
+            <MobileRecordPublishRow
+              archive={archive}
+              item={item}
+              mode={mode}
+              onVisibilityChange={onVisibilityChange}
+            />
+            <MobileRecordTagStrip
+              item={item}
+              mode={mode}
+              isPlantArchive={isPlantArchive}
+              statusBadge={statusBadge}
+              sameTagLinks={sameTagLinks}
+              onSetHelpStatus={onSetHelpStatus}
+              onRemoveTag={onRemoveTag}
+              onAddTag={onAddTag}
+            />
+          </>
         ) : null}
 
         {mediaList.length > 0 ? (
@@ -250,7 +260,7 @@ export default function ArchiveRecordCard({
                         cursor: "pointer",
                       }}
                     >
-                      ×
+                      x
                     </button>
                   ) : null}
                 </div>
@@ -269,186 +279,27 @@ export default function ArchiveRecordCard({
         </div>
 
         {mode === "owner" ? (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              alignItems: "center",
-              marginBottom: 10,
-            }}
-          >
-            {archive.is_public ? (
-              <select
-                value={item.visibility || "public"}
-                onChange={async (event) => {
-                  await onVisibilityChange(item.id, event.target.value);
-                }}
-                style={{
-                  fontSize: 12,
-                  borderRadius: 999,
-                  border: "1px solid #dfe5dc",
-                  padding: "6px 10px",
-                  background: "#fff",
-                }}
-              >
-                <option value="public">已公开</option>
-                <option value="private">仅自己可见</option>
-              </select>
-            ) : (
-              <ArchiveStatusBadge>项目和记录仅自己可见</ArchiveStatusBadge>
-            )}
-
-            {!isMobileViewport ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSetHelpStatus(
-                      item.id,
-                      item.status_tag === "help" ? null : "help",
-                    )
-                  }
-                  style={smallActionButtonStyle(
-                    item.status_tag === "help" ? "#fff0e4" : "#fff8f3",
-                    item.status_tag === "help" ? "#8f4a22" : "#a65f45",
-                    item.status_tag === "help" ? "#e1a77d" : "#efd8cc",
-                  )}
-                >
-                  {item.status_tag === "help" ? "求助中 · 取消" : "求助"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onSetHelpStatus(item.id, "resolved")}
-                  style={smallActionButtonStyle(
-                    item.status_tag === "resolved" ? "#e8f6ec" : "#f7faf7",
-                    item.status_tag === "resolved" ? "#286b3c" : "#6f7f6f",
-                    item.status_tag === "resolved" ? "#acd7b5" : "#dfe7de",
-                  )}
-                >
-                  {item.status_tag === "resolved" ? "已解决 ✓" : "已解决"}
-                </button>
-              </>
-            ) : null}
-            {onAddMedia ? (
-              <>
-                <input
-                  ref={chooseInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  style={{ display: "none" }}
-                  onChange={(event) =>
-                    void handleAddMediaFiles(event.target.files)
-                  }
-                />
-                <input
-                  ref={cameraInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  style={{ display: "none" }}
-                  onChange={(event) =>
-                    void handleAddMediaFiles(event.target.files)
-                  }
-                />
-                <button
-                  type="button"
-                  onClick={() => chooseInputRef.current?.click()}
-                  disabled={addingMedia}
-                  style={smallActionButtonStyle(
-                    "#f8fbf6",
-                    "#4c7441",
-                    "#dbe9d6",
-                  )}
-                >
-                  {addingMedia ? "添加中..." : "添加图片"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  disabled={addingMedia}
-                  style={smallActionButtonStyle(
-                    "#f8fbf6",
-                    "#4c7441",
-                    "#dbe9d6",
-                  )}
-                >
-                  拍照
-                </button>
-              </>
-            ) : null}
-
-            <Link
-              href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
-              style={{
-                ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
-                textDecoration: "none",
-              }}
-            >
-              发布到集市
-            </Link>
-
-            <DeleteRecordButton
-              id={item.id}
-              style={{ marginLeft: "auto" }}
-              onDeleted={onRecordDeleted}
-            />
-          </div>
+          <DesktopAndMobileRecordActions
+            archive={archive}
+            item={item}
+            isMobileViewport={isMobileViewport}
+            addingMedia={addingMedia}
+            chooseInputRef={chooseInputRef}
+            cameraInputRef={cameraInputRef}
+            onSetHelpStatus={onSetHelpStatus}
+            onVisibilityChange={onVisibilityChange}
+            onAddMediaFiles={handleAddMediaFiles}
+            onRecordDeleted={onRecordDeleted}
+          />
         ) : null}
 
         {!isMobileViewport && isPlantArchive ? (
-          <div
-            style={{
-              marginTop: 2,
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              alignItems: "center",
-            }}
-          >
-            <TagList
-              tags={item.display_tags}
-              editable={mode === "owner"}
-              recordId={item.id}
-              userTags={item.user_behavior_tags}
-              onChange={(tag) => onRemoveTag(item.id, tag)}
-            />
-
-            {mode === "owner" ? (
-              <select
-                onChange={async (event) => {
-                  const newTag = event.target.value;
-                  const currentScrollY = window.scrollY;
-                  event.target.value = "";
-                  event.target.blur();
-
-                  if (!newTag) return;
-
-                  await onAddTag(item.id, newTag);
-                  requestAnimationFrame(() =>
-                    window.scrollTo({ top: currentScrollY }),
-                  );
-                }}
-                defaultValue=""
-                style={{
-                  fontSize: 12,
-                  borderRadius: 999,
-                  border: "1px solid #dfe5dc",
-                  padding: "6px 10px",
-                  background: "#fff",
-                }}
-              >
-                <option value="">+ 添加标签</option>
-                {RECORD_TAG_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-          </div>
+          <DesktopRecordTags
+            item={item}
+            mode={mode}
+            onRemoveTag={onRemoveTag}
+            onAddTag={onAddTag}
+          />
         ) : null}
 
         <ArchiveCommentsSection
@@ -464,39 +315,312 @@ export default function ArchiveRecordCard({
         />
 
         {!isMobileViewport && isPlantArchive && sameTagLinks.length > 0 ? (
-          <div
-            style={{
-              marginTop: 12,
-              paddingTop: 10,
-              borderTop: "1px dashed #ebefea",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              alignItems: "center",
-            }}
-          >
-            <span style={{ fontSize: 12, color: "#9aa59a" }}>同类记录：</span>
-            {sameTagLinks.map((linkItem) => (
-              <a
-                key={linkItem.tag}
-                href={linkItem.href}
-                style={{
-                  fontSize: 12,
-                  color: "#4CAF50",
-                  textDecoration: "none",
-                  border: "1px solid #d9ead5",
-                  background: "#f7fcf5",
-                  padding: "4px 10px",
-                  borderRadius: 999,
-                }}
-              >
-                {getBehaviorTagLabel(linkItem.tag)}（{linkItem.count}） →
-              </a>
-            ))}
-          </div>
+          <DesktopSameTagLinks sameTagLinks={sameTagLinks} />
         ) : null}
       </div>
     </article>
+  );
+}
+
+function DesktopAndMobileRecordActions({
+  archive,
+  item,
+  isMobileViewport,
+  addingMedia,
+  chooseInputRef,
+  cameraInputRef,
+  onSetHelpStatus,
+  onVisibilityChange,
+  onAddMediaFiles,
+  onRecordDeleted,
+}: {
+  archive: ArchiveDetailArchive;
+  item: RecordItem;
+  isMobileViewport: boolean;
+  addingMedia: boolean;
+  chooseInputRef: RefObject<HTMLInputElement | null>;
+  cameraInputRef: RefObject<HTMLInputElement | null>;
+  onSetHelpStatus: (
+    recordId: string,
+    nextStatus: "help" | "resolved" | null,
+  ) => Promise<void>;
+  onVisibilityChange: (
+    recordId: string,
+    nextVisibility: string,
+  ) => Promise<void>;
+  onAddMediaFiles: (fileList: FileList | null) => Promise<void>;
+  onRecordDeleted?: (recordId: string) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        alignItems: "center",
+        marginBottom: 10,
+      }}
+    >
+      {!isMobileViewport ? (
+        archive.is_public ? (
+          <select
+            value={item.visibility || "public"}
+            onChange={async (event) => {
+              await onVisibilityChange(item.id, event.target.value);
+            }}
+            style={{
+              fontSize: 12,
+              borderRadius: 999,
+              border: "1px solid #dfe5dc",
+              padding: "6px 10px",
+              background: "#fff",
+            }}
+          >
+            <option value="public">已公开</option>
+            <option value="private">仅自己可见</option>
+          </select>
+        ) : (
+          <ArchiveStatusBadge>项目和记录仅自己可见</ArchiveStatusBadge>
+        )
+      ) : null}
+
+      {!isMobileViewport ? (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              onSetHelpStatus(
+                item.id,
+                item.status_tag === "help" ? null : "help",
+              )
+            }
+            style={smallActionButtonStyle(
+              item.status_tag === "help" ? "#fff0e4" : "#fff8f3",
+              item.status_tag === "help" ? "#8f4a22" : "#a65f45",
+              item.status_tag === "help" ? "#e1a77d" : "#efd8cc",
+            )}
+          >
+            {item.status_tag === "help" ? "求助中 · 取消" : "求助"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSetHelpStatus(item.id, "resolved")}
+            style={smallActionButtonStyle(
+              item.status_tag === "resolved" ? "#e8f6ec" : "#f7faf7",
+              item.status_tag === "resolved" ? "#286b3c" : "#6f7f6f",
+              item.status_tag === "resolved" ? "#acd7b5" : "#dfe7de",
+            )}
+          >
+            {item.status_tag === "resolved" ? "已解决 ✓" : "已解决"}
+          </button>
+        </>
+      ) : null}
+
+      <input
+        ref={chooseInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: "none" }}
+        onChange={(event) => void onAddMediaFiles(event.target.files)}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(event) => void onAddMediaFiles(event.target.files)}
+      />
+
+      <button
+        type="button"
+        onClick={() => chooseInputRef.current?.click()}
+        disabled={addingMedia}
+        style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
+      >
+        {addingMedia ? "添加中..." : "添加图片"}
+      </button>
+      <button
+        type="button"
+        onClick={() => cameraInputRef.current?.click()}
+        disabled={addingMedia}
+        style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
+      >
+        拍照
+      </button>
+
+      {!isMobileViewport ? (
+        <Link
+          href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
+          style={{
+            ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
+            textDecoration: "none",
+          }}
+        >
+          发布到集市
+        </Link>
+      ) : null}
+
+      <DeleteRecordButton
+        id={item.id}
+        style={{ marginLeft: "auto" }}
+        onDeleted={onRecordDeleted}
+      />
+    </div>
+  );
+}
+
+function DesktopRecordTags({
+  item,
+  mode,
+  onRemoveTag,
+  onAddTag,
+}: {
+  item: RecordItem;
+  mode: ArchiveMode;
+  onRemoveTag: (recordId: string, tag: string) => void;
+  onAddTag: (recordId: string, tag: string) => Promise<void>;
+}) {
+  return (
+    <div
+      style={{
+        marginTop: 2,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
+      <TagList
+        tags={item.display_tags}
+        editable={mode === "owner"}
+        recordId={item.id}
+        userTags={item.user_behavior_tags}
+        onChange={(tag) => onRemoveTag(item.id, tag)}
+      />
+
+      {mode === "owner" ? (
+        <select
+          onChange={async (event) => {
+            const newTag = event.target.value;
+            const currentScrollY = window.scrollY;
+            event.target.value = "";
+            event.target.blur();
+
+            if (!newTag) return;
+
+            await onAddTag(item.id, newTag);
+            requestAnimationFrame(() => window.scrollTo({ top: currentScrollY }));
+          }}
+          defaultValue=""
+          style={{
+            fontSize: 12,
+            borderRadius: 999,
+            border: "1px solid #dfe5dc",
+            padding: "6px 10px",
+            background: "#fff",
+          }}
+        >
+          <option value="">+ 添加标签</option>
+          {RECORD_TAG_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
+function DesktopSameTagLinks({
+  sameTagLinks,
+}: {
+  sameTagLinks: Array<{ tag: string; count: number; href: string }>;
+}) {
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        paddingTop: 10,
+        borderTop: "1px dashed #ebefea",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
+      <span style={{ fontSize: 12, color: "#9aa59a" }}>同类记录：</span>
+      {sameTagLinks.map((linkItem) => (
+        <a
+          key={linkItem.tag}
+          href={linkItem.href}
+          style={{
+            fontSize: 12,
+            color: "#4CAF50",
+            textDecoration: "none",
+            border: "1px solid #d9ead5",
+            background: "#f7fcf5",
+            padding: "4px 10px",
+            borderRadius: 999,
+          }}
+        >
+          {getBehaviorTagLabel(linkItem.tag)}（{linkItem.count}） →
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function MobileRecordPublishRow({
+  archive,
+  item,
+  mode,
+  onVisibilityChange,
+}: {
+  archive: ArchiveDetailArchive;
+  item: RecordItem;
+  mode: ArchiveMode;
+  onVisibilityChange: (
+    recordId: string,
+    nextVisibility: string,
+  ) => Promise<void>;
+}) {
+  const isOwner = mode === "owner";
+  const visibility = item.visibility === "private" || !archive.is_public ? "private" : "public";
+  const visibilityText = visibility === "public" ? "已公开" : "私密";
+
+  return (
+    <div style={mobileRecordPublishRowStyle}>
+      {isOwner && archive.is_public ? (
+        <button
+          type="button"
+          onClick={() =>
+            onVisibilityChange(item.id, visibility === "public" ? "private" : "public")
+          }
+          style={mobileRecordVisibilityButtonStyle(visibility)}
+        >
+          {visibilityText}
+        </button>
+      ) : (
+        <span style={mobileRecordVisibilityTextStyle(visibility)}>
+          {visibilityText}
+        </span>
+      )}
+
+      {isOwner ? (
+        <Link
+          href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
+          aria-label="发布到集市"
+          title="发布到集市"
+          style={mobileMarketShareLinkStyle}
+        >
+          ↗
+        </Link>
+      ) : null}
+    </div>
   );
 }
 
@@ -527,22 +651,34 @@ function MobileRecordTagStrip({
 
   if (!statusBadge && !hasTags && sameTagLinks.length === 0 && !canEdit) return null;
 
+  async function cycleHelpStatus() {
+    if (item.status_tag === "help") {
+      await onSetHelpStatus(item.id, "resolved");
+      return;
+    }
+
+    if (item.status_tag === "resolved") {
+      await onSetHelpStatus(item.id, null);
+      return;
+    }
+
+    await onSetHelpStatus(item.id, "help");
+  }
+
   return (
     <div style={mobileRecordTagStripStyle}>
       {canEdit ? (
-        <select
-          value={item.status_tag || ""}
-          onChange={async (event) => {
-            const nextValue = event.target.value as "help" | "resolved" | "";
-            await onSetHelpStatus(item.id, nextValue || null);
-          }}
-          style={mobileRecordStatusSelectStyle(item.status_tag)}
-          aria-label="求助状态"
+        <button
+          type="button"
+          onClick={cycleHelpStatus}
+          style={mobileRecordStatusButtonStyle(item.status_tag)}
         >
-          <option value="">状态</option>
-          <option value="help">求助中</option>
-          <option value="resolved">已解决</option>
-        </select>
+          {item.status_tag === "help"
+            ? "求助中"
+            : item.status_tag === "resolved"
+              ? "已解决"
+              : "点击求助"}
+        </button>
       ) : statusBadge ? (
         <span style={mobileRecordStatusPillStyle(statusBadge.kind)}>
           {statusBadge.label}
@@ -572,9 +708,7 @@ function MobileRecordTagStrip({
             if (!newTag) return;
 
             await onAddTag(item.id, newTag);
-            requestAnimationFrame(() =>
-              window.scrollTo({ top: currentScrollY }),
-            );
+            requestAnimationFrame(() => window.scrollTo({ top: currentScrollY }));
           }}
           defaultValue=""
           style={mobileRecordTagSelectStyle}
@@ -597,6 +731,49 @@ function MobileRecordTagStrip({
     </div>
   );
 }
+
+const mobileRecordPublishRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  margin: "0 0 6px",
+} as const;
+
+function mobileRecordVisibilityButtonStyle(visibility: "public" | "private") {
+  return {
+    border: "none",
+    background: "transparent",
+    color: visibility === "public" ? "#477341" : "#7b7568",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "2px 0",
+    cursor: "pointer",
+  } as const;
+}
+
+function mobileRecordVisibilityTextStyle(visibility: "public" | "private") {
+  return {
+    color: visibility === "public" ? "#477341" : "#7b7568",
+    fontSize: 12,
+    fontWeight: 700,
+  } as const;
+}
+
+const mobileMarketShareLinkStyle = {
+  width: 28,
+  height: 28,
+  borderRadius: 999,
+  border: "1px solid #e3eadf",
+  background: "#fff",
+  color: "#5d704f",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  fontSize: 16,
+  lineHeight: 1,
+} as const;
 
 const mobileRecordTagStripStyle = {
   display: "flex",
@@ -629,21 +806,20 @@ function mobileRecordStatusPillStyle(kind: "help" | "resolved") {
   } as const;
 }
 
-function mobileRecordStatusSelectStyle(status?: string | null) {
+function mobileRecordStatusButtonStyle(status?: string | null) {
   return {
     ...mobileRecordTagPillStyle,
-    height: 26,
-    padding: "0 7px",
     fontWeight: status ? 700 : 500,
     border: status === "help" ? "1px solid #edd2bd" : status === "resolved" ? "1px solid #cfe4d4" : "1px solid #e4eadf",
     background: status === "help" ? "#fff8f1" : status === "resolved" ? "#f4fbf5" : "#fff",
     color: status === "help" ? "#9a6232" : status === "resolved" ? "#3f7a49" : "#687463",
+    cursor: "pointer",
   } as const;
 }
 
 const mobileRecordTagSelectStyle = {
   ...mobileRecordTagPillStyle,
-  height: 26,
+  height: 24,
   padding: "0 7px",
   background: "#fff",
 } as const;

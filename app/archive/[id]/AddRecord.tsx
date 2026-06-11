@@ -26,6 +26,7 @@ type Props = {
   archiveIsPublic: boolean;
   placeholder?: string;
   onRecordCreated?: () => void | Promise<void>;
+  mobileMode?: boolean;
 };
 
 type SelectedPreview = {
@@ -43,6 +44,7 @@ export default function AddRecord({
   archiveIsPublic,
   placeholder,
   onRecordCreated,
+  mobileMode = false,
 }: Props) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -572,38 +574,61 @@ export default function AddRecord({
       )}
 
       <div style={{ marginTop: "10px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {mobileMode ? (
           <button
             type="button"
             onClick={() => chooseInputRef.current?.click()}
             disabled={loading || membershipLoading || contentBlocked}
+            aria-label="添加图片或拍照"
+            title="添加图片或拍照"
             style={{
-              padding: "10px 14px",
+              width: 38,
+              height: 38,
               borderRadius: 999,
               border: "1px solid #dfe6dc",
               background: "#fff",
-              color: "#52614f",
+              color: "#4f684b",
+              fontSize: 24,
+              lineHeight: 1,
               cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
             }}
           >
-            选择照片
+            +
           </button>
-          <button
-            type="button"
-            onClick={() => cameraInputRef.current?.click()}
-            disabled={loading || membershipLoading || contentBlocked}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 999,
-              border: "1px solid #dfe6dc",
-              background: "#f7faf6",
-              color: "#52614f",
-              cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
-            }}
-          >
-            拍照
-          </button>
-        </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => chooseInputRef.current?.click()}
+              disabled={loading || membershipLoading || contentBlocked}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 999,
+                border: "1px solid #dfe6dc",
+                background: "#fff",
+                color: "#52614f",
+                cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
+              }}
+            >
+              选择照片
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={loading || membershipLoading || contentBlocked}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 999,
+                border: "1px solid #dfe6dc",
+                background: "#f7faf6",
+                color: "#52614f",
+                cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
+              }}
+            >
+              拍照
+            </button>
+          </div>
+        )}
 
         <input
           ref={chooseInputRef}

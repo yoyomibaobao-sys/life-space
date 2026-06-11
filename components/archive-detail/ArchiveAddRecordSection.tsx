@@ -37,6 +37,7 @@ export default function ArchiveAddRecordSection({
             archiveId={archiveId}
             archiveIsPublic={archiveIsPublic}
             placeholder="记录今天的变化"
+            mobileMode
             onRecordCreated={onRecordCreated}
           />
         </section>

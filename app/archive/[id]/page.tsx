@@ -512,6 +512,9 @@ saveRecentArchiveBrowse({
   const latestUpdate = records[0]?.record_time || activeArchive.last_record_time || activeArchive.created_at;
   const archiveCategoryLabel = getArchiveCategoryLabel(activeArchive.category);
   const encyclopediaHref = activeArchive.category === "plant" && species?.id ? `/plant/${species.id}` : null;
+  const mobileEncyclopediaHref = encyclopediaHref
+    ? `${encyclopediaHref}?fromArchive=${encodeURIComponent(activeArchive.id)}`
+    : null;
   const mobilePlantSearchKeyword = mobileArchiveName.trim().toLowerCase();
   const mobilePlantSearchResults = (
     mobilePlantSearchKeyword
@@ -1201,23 +1204,25 @@ saveRecentArchiveBrowse({
   return (
     <>
       <main style={{ padding: "18px 16px 46px", maxWidth: 760, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <Link
-            href={mode === "owner" ? "/archive" : "/discover"}
-            style={{ fontSize: 14, color: "#666", textDecoration: "none" }}
+        {!isMobileViewport ? (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
           >
-            {mode === "owner" ? "← 我的项目" : "← 返回发现"}
-          </Link>
-        </div>
+            <Link
+              href={mode === "owner" ? "/archive" : "/discover"}
+              style={{ fontSize: 14, color: "#666", textDecoration: "none" }}
+            >
+              {mode === "owner" ? "← 我的项目" : "← 返回发现"}
+            </Link>
+          </div>
+        ) : null}
 
         <nav
           className="mobile-app-grid-only"
@@ -1316,7 +1321,9 @@ saveRecentArchiveBrowse({
           <MobileRecordsHeading
             title={activeArchive.title || "未命名项目"}
             systemName={archiveDisplayName || ""}
-            href={encyclopediaHref}
+            href={mobileEncyclopediaHref}
+            returnHref={mode === "owner" ? "/archive" : "/discover"}
+            returnText={mode === "owner" ? "返回我的项目" : "返回发现"}
           />
         ) : null}
         <section id="archive-records" style={{ position: "relative", paddingLeft: 22, scrollMarginTop: 76 }}>
@@ -1433,26 +1440,35 @@ function MobileRecordsHeading({
   title,
   systemName,
   href,
+  returnHref,
+  returnText,
 }: {
   title: string;
   systemName: string;
   href: string | null;
+  returnHref: string;
+  returnText: string;
 }) {
   return (
     <div style={mobileRecordsHeadingStyle}>
-      <span style={mobileRecordsTitleStyle}>{title}</span>
-      {systemName ? (
-        <>
-          <span style={mobileRecordsDotStyle}>·</span>
-          {href ? (
-            <Link href={href} style={mobileRecordsSpeciesLinkStyle}>
-              {systemName}
-            </Link>
-          ) : (
-            <span style={mobileRecordsSpeciesTextStyle}>{systemName}</span>
-          )}
-        </>
-      ) : null}
+      <div style={mobileRecordsNameWrapStyle}>
+        <span style={mobileRecordsTitleStyle}>{title}</span>
+        {systemName ? (
+          <>
+            <span style={mobileRecordsDotStyle}>·</span>
+            {href ? (
+              <Link href={href} style={mobileRecordsSpeciesLinkStyle}>
+                {systemName}
+              </Link>
+            ) : (
+              <span style={mobileRecordsSpeciesTextStyle}>{systemName}</span>
+            )}
+          </>
+        ) : null}
+      </div>
+      <Link href={returnHref} style={mobileRecordsBackLinkStyle}>
+        {returnText}
+      </Link>
     </div>
   );
 }
@@ -1835,12 +1851,21 @@ function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
 const mobileRecordsHeadingStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 5,
+  justifyContent: "space-between",
+  gap: 10,
   margin: "0 0 10px",
   color: "#253325",
   fontSize: 14,
   lineHeight: 1.35,
   minWidth: 0,
+};
+
+const mobileRecordsNameWrapStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  minWidth: 0,
+  flex: "1 1 auto",
 };
 
 const mobileRecordsTitleStyle: CSSProperties = {
@@ -1868,6 +1893,14 @@ const mobileRecordsSpeciesLinkStyle: CSSProperties = {
   color: "#2f6a31",
   textDecoration: "none",
   fontWeight: 700,
+};
+
+const mobileRecordsBackLinkStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#687463",
+  fontSize: 12,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
 
 const archiveDetailAnchorStyle: CSSProperties = {

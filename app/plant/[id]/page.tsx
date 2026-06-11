@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
 import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
@@ -467,6 +467,7 @@ const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
 
 export default function PlantDetailPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const id = params?.id;
 
   const [plant, setPlant] = useState<PlantSpeciesRow | null>(null);
@@ -481,6 +482,18 @@ const [relatedRecords, setRelatedRecords] = useState<PlantRecordItem[]>([]);
   const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -636,6 +649,13 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
 
   const displayName =
     zh?.common_name || plant?.common_name || plant?.scientific_name || "植物百科";
+  const fromArchive = searchParams.get("fromArchive");
+  const fromRecord = searchParams.get("fromRecord");
+  const returnRecordHref = fromArchive
+    ? `/archive/${encodeURIComponent(fromArchive)}${
+        fromRecord ? `?record=${encodeURIComponent(fromRecord)}` : ""
+      }`
+    : null;
 
   const difficulty = difficultyMeta(parameters?.management_difficulty_score);
   const environmentTags = getEnvironmentTags(parameters, { includeIndoor: true });
@@ -888,12 +908,19 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
   return (
     <main style={{ padding: "16px", maxWidth: 860, margin: "0 auto" }}>
       <div style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {isMobileViewport && returnRecordHref ? (
+          <Link href={returnRecordHref} style={{ color: "#4d7044", fontSize: 14, fontWeight: 700 }}>
+            返回原记录
+          </Link>
+        ) : null}
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
           ← 返回植物百科
         </Link>
-        <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-          返回我的空间
-        </Link>
+        {!isMobileViewport ? (
+          <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
+            返回我的空间
+          </Link>
+        ) : null}
       </div>
 
       <section
