@@ -13,6 +13,7 @@ type Props = {
   userTags?: string[]; // 仅用户补充标签可删除
   onChange?: (tag: string, action: "remove") => void;
   containerStyle?: CSSProperties;
+  tagStyle?: CSSProperties;
 };
 
 export default function TagList({
@@ -22,6 +23,7 @@ export default function TagList({
   userTags = [],
   onChange,
   containerStyle,
+  tagStyle,
 }: Props) {
   if (!Array.isArray(tags) || tags.length === 0) return null;
 
@@ -53,6 +55,7 @@ export default function TagList({
               alignItems: "center",
               gap: 4,
               lineHeight: 1.2,
+              ...tagStyle,
             }}
           >
             {getBehaviorTagLabel(tag)}

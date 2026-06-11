@@ -37,6 +37,7 @@ export default function ArchiveCommentsSection({
   currentUserId,
   initialCommentCount = 0,
   onCommentCountChange,
+  showStatusHint = true,
 }: {
   recordId: string;
   recordOwnerId: string;
@@ -44,6 +45,7 @@ export default function ArchiveCommentsSection({
   currentUserId: string | null | undefined;
   initialCommentCount?: number | null;
   onCommentCountChange?: (count: number) => void;
+  showStatusHint?: boolean;
 }) {
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -494,7 +496,7 @@ export default function ArchiveCommentsSection({
           <span style={{ fontSize: 12, color: "#8b9688" }}>登录后可评论</span>
         )}
 
-        {commentHint && !commentsExpanded ? (
+        {showStatusHint && commentHint && !commentsExpanded ? (
           <span
             style={{
               fontSize: 12,
@@ -508,7 +510,7 @@ export default function ArchiveCommentsSection({
 
       {commentsExpanded ? (
         <div style={{ marginTop: 8 }}>
-          {commentHint ? (
+          {showStatusHint && commentHint ? (
             <div
               style={{
                 marginBottom: 8,

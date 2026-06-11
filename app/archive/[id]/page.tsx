@@ -1359,6 +1359,7 @@ saveRecentArchiveBrowse({
                 currentUserId={me ?? null}
                 onCommentCountChange={handleCommentCountChange}
                 onAddMedia={handleAddMediaToRecord}
+                isMobileViewport={isMobileViewport}
                 onRecordDeleted={(recordId) => {
                   setRecords((prev) => prev.filter((record) => record.id !== recordId));
                   setReloadKey((value) => value + 1);

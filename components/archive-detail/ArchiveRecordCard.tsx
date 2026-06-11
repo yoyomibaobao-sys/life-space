@@ -45,6 +45,7 @@ type ArchiveRecordCardProps = {
   currentUserId?: string | null;
   onCommentCountChange?: (recordId: string, count: number) => void;
   onRecordDeleted?: (recordId: string) => void;
+  isMobileViewport?: boolean;
 };
 
 export default function ArchiveRecordCard({
@@ -65,6 +66,7 @@ export default function ArchiveRecordCard({
   currentUserId,
   onCommentCountChange,
   onRecordDeleted,
+  isMobileViewport = false,
 }: ArchiveRecordCardProps) {
   const mediaList = buildMediaList(item.media, archive.title || "项目");
   const isPlantArchive = archive.category === "plant";
@@ -141,7 +143,7 @@ export default function ArchiveRecordCard({
         ) : (
           <span />
         )}
-        {statusBadge ? (
+        {!isMobileViewport && statusBadge ? (
           <ArchiveStatusBadge kind={statusBadge.kind}>
             {statusBadge.label}
           </ArchiveStatusBadge>
@@ -173,6 +175,19 @@ export default function ArchiveRecordCard({
                 : "0 3px 14px rgba(0,0,0,0.025)",
         }}
       >
+        {isMobileViewport ? (
+          <MobileRecordTagStrip
+            item={item}
+            mode={mode}
+            isPlantArchive={isPlantArchive}
+            statusBadge={statusBadge}
+            sameTagLinks={sameTagLinks}
+            onSetHelpStatus={onSetHelpStatus}
+            onRemoveTag={onRemoveTag}
+            onAddTag={onAddTag}
+          />
+        ) : null}
+
         {mediaList.length > 0 ? (
           <div
             style={{
@@ -284,34 +299,38 @@ export default function ArchiveRecordCard({
               <ArchiveStatusBadge>项目和记录仅自己可见</ArchiveStatusBadge>
             )}
 
-            <button
-              type="button"
-              onClick={() =>
-                onSetHelpStatus(
-                  item.id,
-                  item.status_tag === "help" ? null : "help",
-                )
-              }
-              style={smallActionButtonStyle(
-                item.status_tag === "help" ? "#fff0e4" : "#fff8f3",
-                item.status_tag === "help" ? "#8f4a22" : "#a65f45",
-                item.status_tag === "help" ? "#e1a77d" : "#efd8cc",
-              )}
-            >
-              {item.status_tag === "help" ? "求助中 · 取消" : "求助"}
-            </button>
+            {!isMobileViewport ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSetHelpStatus(
+                      item.id,
+                      item.status_tag === "help" ? null : "help",
+                    )
+                  }
+                  style={smallActionButtonStyle(
+                    item.status_tag === "help" ? "#fff0e4" : "#fff8f3",
+                    item.status_tag === "help" ? "#8f4a22" : "#a65f45",
+                    item.status_tag === "help" ? "#e1a77d" : "#efd8cc",
+                  )}
+                >
+                  {item.status_tag === "help" ? "求助中 · 取消" : "求助"}
+                </button>
 
-            <button
-              type="button"
-              onClick={() => onSetHelpStatus(item.id, "resolved")}
-              style={smallActionButtonStyle(
-                item.status_tag === "resolved" ? "#e8f6ec" : "#f7faf7",
-                item.status_tag === "resolved" ? "#286b3c" : "#6f7f6f",
-                item.status_tag === "resolved" ? "#acd7b5" : "#dfe7de",
-              )}
-            >
-              {item.status_tag === "resolved" ? "已解决 ✓" : "已解决"}
-            </button>
+                <button
+                  type="button"
+                  onClick={() => onSetHelpStatus(item.id, "resolved")}
+                  style={smallActionButtonStyle(
+                    item.status_tag === "resolved" ? "#e8f6ec" : "#f7faf7",
+                    item.status_tag === "resolved" ? "#286b3c" : "#6f7f6f",
+                    item.status_tag === "resolved" ? "#acd7b5" : "#dfe7de",
+                  )}
+                >
+                  {item.status_tag === "resolved" ? "已解决 ✓" : "已解决"}
+                </button>
+              </>
+            ) : null}
             {onAddMedia ? (
               <>
                 <input
@@ -379,7 +398,7 @@ export default function ArchiveRecordCard({
           </div>
         ) : null}
 
-        {isPlantArchive ? (
+        {!isMobileViewport && isPlantArchive ? (
           <div
             style={{
               marginTop: 2,
@@ -438,12 +457,13 @@ export default function ArchiveRecordCard({
           recordStatusTag={item.status_tag}
           currentUserId={currentUserId}
           initialCommentCount={item.comment_count}
+          showStatusHint={!isMobileViewport}
           onCommentCountChange={(count) =>
             onCommentCountChange?.(item.id, count)
           }
         />
 
-        {isPlantArchive && sameTagLinks.length > 0 ? (
+        {!isMobileViewport && isPlantArchive && sameTagLinks.length > 0 ? (
           <div
             style={{
               marginTop: 12,
@@ -479,3 +499,159 @@ export default function ArchiveRecordCard({
     </article>
   );
 }
+
+function MobileRecordTagStrip({
+  item,
+  mode,
+  isPlantArchive,
+  statusBadge,
+  sameTagLinks,
+  onSetHelpStatus,
+  onRemoveTag,
+  onAddTag,
+}: {
+  item: RecordItem;
+  mode: ArchiveMode;
+  isPlantArchive: boolean;
+  statusBadge: { label: string; kind: "help" | "resolved" } | null;
+  sameTagLinks: Array<{ tag: string; count: number; href: string }>;
+  onSetHelpStatus: (
+    recordId: string,
+    nextStatus: "help" | "resolved" | null,
+  ) => Promise<void>;
+  onRemoveTag: (recordId: string, tag: string) => void;
+  onAddTag: (recordId: string, tag: string) => Promise<void>;
+}) {
+  const hasTags = isPlantArchive && Array.isArray(item.display_tags) && item.display_tags.length > 0;
+  const canEdit = mode === "owner";
+
+  if (!statusBadge && !hasTags && sameTagLinks.length === 0 && !canEdit) return null;
+
+  return (
+    <div style={mobileRecordTagStripStyle}>
+      {canEdit ? (
+        <select
+          value={item.status_tag || ""}
+          onChange={async (event) => {
+            const nextValue = event.target.value as "help" | "resolved" | "";
+            await onSetHelpStatus(item.id, nextValue || null);
+          }}
+          style={mobileRecordStatusSelectStyle(item.status_tag)}
+          aria-label="求助状态"
+        >
+          <option value="">状态</option>
+          <option value="help">求助中</option>
+          <option value="resolved">已解决</option>
+        </select>
+      ) : statusBadge ? (
+        <span style={mobileRecordStatusPillStyle(statusBadge.kind)}>
+          {statusBadge.label}
+        </span>
+      ) : null}
+
+      {isPlantArchive ? (
+        <TagList
+          tags={item.display_tags}
+          editable={canEdit}
+          recordId={item.id}
+          userTags={item.user_behavior_tags}
+          onChange={(tag) => onRemoveTag(item.id, tag)}
+          containerStyle={mobileRecordTagListStyle}
+          tagStyle={mobileRecordTagPillStyle}
+        />
+      ) : null}
+
+      {canEdit && isPlantArchive ? (
+        <select
+          onChange={async (event) => {
+            const newTag = event.target.value;
+            const currentScrollY = window.scrollY;
+            event.target.value = "";
+            event.target.blur();
+
+            if (!newTag) return;
+
+            await onAddTag(item.id, newTag);
+            requestAnimationFrame(() =>
+              window.scrollTo({ top: currentScrollY }),
+            );
+          }}
+          defaultValue=""
+          style={mobileRecordTagSelectStyle}
+          aria-label="添加标签"
+        >
+          <option value="">+ 标签</option>
+          {RECORD_TAG_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : null}
+
+      {sameTagLinks.map((linkItem) => (
+        <a key={linkItem.tag} href={linkItem.href} style={mobileSameTagLinkStyle}>
+          同类 {getBehaviorTagLabel(linkItem.tag)} {linkItem.count}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+const mobileRecordTagStripStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: 5,
+  margin: "0 0 8px",
+} as const;
+
+const mobileRecordTagListStyle = {
+  gap: 5,
+} as const;
+
+const mobileRecordTagPillStyle = {
+  fontSize: 11,
+  padding: "3px 7px",
+  borderRadius: 999,
+  border: "1px solid #e4eadf",
+  background: "#f8faf6",
+  color: "#586656",
+} as const;
+
+function mobileRecordStatusPillStyle(kind: "help" | "resolved") {
+  return {
+    ...mobileRecordTagPillStyle,
+    border: kind === "help" ? "1px solid #edd2bd" : "1px solid #cfe4d4",
+    background: kind === "help" ? "#fff8f1" : "#f4fbf5",
+    color: kind === "help" ? "#9a6232" : "#3f7a49",
+    fontWeight: 700,
+  } as const;
+}
+
+function mobileRecordStatusSelectStyle(status?: string | null) {
+  return {
+    ...mobileRecordTagPillStyle,
+    height: 26,
+    padding: "0 7px",
+    fontWeight: status ? 700 : 500,
+    border: status === "help" ? "1px solid #edd2bd" : status === "resolved" ? "1px solid #cfe4d4" : "1px solid #e4eadf",
+    background: status === "help" ? "#fff8f1" : status === "resolved" ? "#f4fbf5" : "#fff",
+    color: status === "help" ? "#9a6232" : status === "resolved" ? "#3f7a49" : "#687463",
+  } as const;
+}
+
+const mobileRecordTagSelectStyle = {
+  ...mobileRecordTagPillStyle,
+  height: 26,
+  padding: "0 7px",
+  background: "#fff",
+} as const;
+
+const mobileSameTagLinkStyle = {
+  ...mobileRecordTagPillStyle,
+  color: "#4f7e49",
+  textDecoration: "none",
+  border: "1px solid #d9ead5",
+  background: "#f7fcf5",
+} as const;

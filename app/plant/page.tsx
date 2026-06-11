@@ -172,22 +172,23 @@ function FilterSelect({
       style={{
         display: "grid",
         gap: compact ? 4 : 6,
-        minWidth: compact ? 136 : undefined,
-        flex: compact ? "0 0 136px" : undefined,
+        minWidth: compact ? 104 : undefined,
+        maxWidth: compact ? 132 : undefined,
+        flex: compact ? "1 1 104px" : undefined,
       }}
     >
-      <span style={{ fontSize: 12, color: "#777" }}>{label}</span>
+      <span style={{ fontSize: compact ? 11 : 12, color: "#777" }}>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={{
-          height: compact ? 34 : 38,
-          borderRadius: 12,
+          height: compact ? 30 : 38,
+          borderRadius: compact ? 10 : 12,
           border: "1px solid #e5e7eb",
-          padding: compact ? "0 9px" : "0 12px",
+          padding: compact ? "0 7px" : "0 12px",
           background: "#fff",
           color: "#333",
-          fontSize: compact ? 13 : 14,
+          fontSize: compact ? 12 : 14,
         }}
       >
         {options.map((option) => (
@@ -398,10 +399,10 @@ export default function PlantIndexPage() {
   }
 
   return (
-    <main style={{ padding: isMobileViewport ? "12px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
+    <main style={{ padding: isMobileViewport ? "10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
       <section
         style={{
-          padding: isMobileViewport ? 12 : 22,
+          padding: isMobileViewport ? 10 : 22,
           border: "1px solid #eee",
           borderRadius: isMobileViewport ? 16 : 20,
           background: "#fff",
@@ -413,23 +414,23 @@ export default function PlantIndexPage() {
             植物百科
           </div>
 
-          <h1 style={{ margin: 0, fontSize: isMobileViewport ? 22 : 28 }}>
+          <h1 style={{ margin: 0, fontSize: isMobileViewport ? 21 : 28 }}>
             系统植物索引库
           </h1>
         </div>
 
-        <div style={{ marginTop: isMobileViewport ? 12 : 16 }}>
+        <div style={{ marginTop: isMobileViewport ? 10 : 16 }}>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="输入搜索植物"
             style={{
               width: "100%",
-              height: 44,
-              borderRadius: 12,
+              height: isMobileViewport ? 38 : 44,
+              borderRadius: isMobileViewport ? 10 : 12,
               border: "1px solid #e5e7eb",
-              padding: "0 14px",
-              fontSize: 14,
+              padding: isMobileViewport ? "0 11px" : "0 14px",
+              fontSize: isMobileViewport ? 13 : 14,
             }}
           />
         </div>
@@ -437,12 +438,11 @@ export default function PlantIndexPage() {
         <div
           style={{
             display: "flex",
-            gap: 8,
-            flexWrap: isMobileViewport ? "nowrap" : "wrap",
-            overflowX: isMobileViewport ? "auto" : "visible",
-            marginTop: isMobileViewport ? 10 : 14,
-            paddingBottom: isMobileViewport ? 2 : 0,
-            scrollbarWidth: "none",
+            gap: isMobileViewport ? 6 : 8,
+            flexWrap: "wrap",
+            overflowX: "visible",
+            marginTop: isMobileViewport ? 8 : 14,
+            paddingBottom: 0,
           }}
         >
           {categories.map((category) => (
@@ -459,9 +459,10 @@ export default function PlantIndexPage() {
                   activeCategory === category ? "#f0fff4" : "#fafafa",
                 color: activeCategory === category ? "#2e7d32" : "#333",
                 borderRadius: 999,
-                padding: "7px 12px",
+                padding: isMobileViewport ? "5px 9px" : "7px 12px",
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: isMobileViewport ? 12 : 13,
+                lineHeight: 1.2,
                 whiteSpace: "nowrap",
               }}
             >
@@ -472,11 +473,11 @@ export default function PlantIndexPage() {
 
         <div
           style={{
-            marginTop: isMobileViewport ? 10 : 16,
-            paddingTop: isMobileViewport ? 10 : 16,
+            marginTop: isMobileViewport ? 8 : 16,
+            paddingTop: isMobileViewport ? 8 : 16,
             borderTop: "1px solid #f0f0f0",
             display: "grid",
-            gap: isMobileViewport ? 8 : 12,
+            gap: isMobileViewport ? 6 : 12,
           }}
         >
           <div
@@ -484,11 +485,11 @@ export default function PlantIndexPage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 12,
+              gap: isMobileViewport ? 8 : 12,
               flexWrap: "wrap",
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 600 }}>环境筛选</div>
+            <div style={{ fontSize: isMobileViewport ? 13 : 14, fontWeight: 600 }}>环境筛选</div>
             {hasActiveEnvironmentFilters && (
               <button
                 type="button"
@@ -497,8 +498,8 @@ export default function PlantIndexPage() {
                   border: "1px solid #eee",
                   background: "#fff",
                   borderRadius: 999,
-                  padding: "6px 12px",
-                  fontSize: 12,
+                  padding: isMobileViewport ? "4px 9px" : "6px 12px",
+                  fontSize: isMobileViewport ? 11 : 12,
                   color: "#666",
                   cursor: "pointer",
                 }}
@@ -512,10 +513,10 @@ export default function PlantIndexPage() {
             style={{
               display: isMobileViewport ? "flex" : "grid",
               gridTemplateColumns: isMobileViewport ? undefined : "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: isMobileViewport ? 8 : 12,
-              overflowX: isMobileViewport ? "auto" : "visible",
-              paddingBottom: isMobileViewport ? 2 : 0,
-              scrollbarWidth: "none",
+              gap: isMobileViewport ? 6 : 12,
+              flexWrap: isMobileViewport ? "wrap" : undefined,
+              overflowX: "visible",
+              paddingBottom: 0,
             }}
           >
             <FilterSelect
