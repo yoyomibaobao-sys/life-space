@@ -408,15 +408,17 @@ export default function PlantIndexPage() {
           boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
         }}
       >
-        <div className="mobile-app-desktop-only">
+        <div>
           <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
             植物百科
           </div>
 
-          <h1 style={{ margin: 0, fontSize: 28 }}>系统植物索引库</h1>
+          <h1 style={{ margin: 0, fontSize: isMobileViewport ? 22 : 28 }}>
+            系统植物索引库
+          </h1>
         </div>
 
-        <div style={{ marginTop: isMobileViewport ? 0 : 16 }}>
+        <div style={{ marginTop: isMobileViewport ? 12 : 16 }}>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
