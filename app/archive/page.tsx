@@ -715,7 +715,16 @@ export default function ArchivePage() {
 
   async function updateArchiveCategory(item: ArchiveItem, value: string) {
     if (archiveCategoryOptions.some((option) => option.value === value)) {
-      await supabase.from("archives").update({ category: value, sub_tag_id: null, group_tag_id: null }).eq("id", item.id);
+      const { error } = await supabase
+        .from("archives")
+        .update({ category: value, sub_tag_id: null, group_tag_id: null })
+        .eq("id", item.id);
+
+      if (error) {
+        showToast("更新分类失败");
+        return;
+      }
+
       setArchives((prev) =>
         prev.map((archive) =>
           archive.id === item.id
@@ -729,10 +738,15 @@ export default function ArchivePage() {
     const sub = subTags.find((tag) => String(tag.id) === value);
     if (!sub) return;
 
-    await supabase
+    const { error } = await supabase
       .from("archives")
       .update({ category: sub.category, sub_tag_id: sub.id, group_tag_id: null })
       .eq("id", item.id);
+
+    if (error) {
+      showToast("更新分类失败");
+      return;
+    }
 
     setArchives((prev) =>
       prev.map((archive) =>
@@ -744,7 +758,16 @@ export default function ArchivePage() {
   }
 
   async function updateArchiveGroupTag(item: ArchiveItem, value: string) {
-    await supabase.from("archives").update({ group_tag_id: value || null }).eq("id", item.id);
+    const { error } = await supabase
+      .from("archives")
+      .update({ group_tag_id: value || null })
+      .eq("id", item.id);
+
+    if (error) {
+      showToast("更新分组失败");
+      return;
+    }
+
     setArchives((prev) =>
       prev.map((archive) => (archive.id === item.id ? { ...archive, group_tag_id: value || null } : archive))
     );

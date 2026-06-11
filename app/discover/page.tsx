@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { DiscoverEmptyState } from "@/components/discover/DiscoverEmptyState";
 import { DiscoverFilterBar } from "@/components/discover/DiscoverFilterBar";
@@ -25,8 +26,6 @@ export default function DiscoverPage() {
   const [hasMore, setHasMore] = useState(true);
   const [expandedUserIds, setExpandedUserIds] = useState<string[]>([]);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [mobileSearchText, setMobileSearchText] = useState("");
 
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
@@ -100,13 +99,6 @@ export default function DiscoverPage() {
     setHasMore(true);
     setExpandedUserIds([]);
     load(0, mode);
-  }
-
-  function submitMobileSearch() {
-    const text = mobileSearchText.trim();
-    window.location.href = text
-      ? `/discover/search?content=${encodeURIComponent(text)}`
-      : "/discover/search";
   }
 
   useEffect(() => {
@@ -185,10 +177,9 @@ export default function DiscoverPage() {
         onChange={changeFilter}
       />
 
-      <button
-        type="button"
+      <Link
+        href="/discover/search"
         className="mobile-app-flex-only"
-        onClick={() => setMobileSearchOpen(true)}
         style={{
           width: "100%",
           minHeight: 38,
@@ -202,49 +193,12 @@ export default function DiscoverPage() {
           padding: "0 14px",
           fontSize: 14,
           textAlign: "left",
+          textDecoration: "none",
         }}
       >
         <span aria-hidden="true">🔍</span>
         <span>搜索</span>
-      </button>
-
-      {mobileSearchOpen ? (
-        <div style={mobileSearchOverlayStyle}>
-          <div style={mobileSearchPanelStyle}>
-            <div style={mobileSearchHeaderStyle}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#1f2d1f" }}>
-                搜索
-              </div>
-              <button
-                type="button"
-                onClick={() => setMobileSearchOpen(false)}
-                style={mobileSearchCancelStyle}
-              >
-                取消
-              </button>
-            </div>
-
-            <input
-              autoFocus
-              value={mobileSearchText}
-              onChange={(event) => setMobileSearchText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") submitMobileSearch();
-              }}
-              placeholder="搜索记录、项目或关键词"
-              style={mobileSearchInputStyle}
-            />
-
-            <button
-              type="button"
-              onClick={submitMobileSearch}
-              style={mobileSearchSubmitStyle}
-            >
-              搜索
-            </button>
-          </div>
-        </div>
-      ) : null}
+      </Link>
 
       {filterMode === "help" ? (
         <DiscoverHelpList items={helpStreamItems} />
@@ -284,65 +238,3 @@ export default function DiscoverPage() {
     </main>
   );
 }
-
-const mobileSearchOverlayStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 230,
-  background: "rgba(31, 42, 31, 0.24)",
-  display: "flex",
-  justifyContent: "flex-end",
-};
-
-const mobileSearchPanelStyle: CSSProperties = {
-  width: "min(88vw, 360px)",
-  height: "100%",
-  background: "#fff",
-  borderLeft: "1px solid #e1e8dd",
-  boxShadow: "-16px 0 36px rgba(31, 42, 31, 0.16)",
-  padding: "16px 14px",
-  transform: "translateX(0)",
-};
-
-const mobileSearchHeaderStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  marginBottom: 12,
-};
-
-const mobileSearchCancelStyle: CSSProperties = {
-  border: "1px solid #dfe7d9",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#5f6f5b",
-  fontSize: 13,
-  fontWeight: 700,
-  padding: "7px 12px",
-  cursor: "pointer",
-};
-
-const mobileSearchInputStyle: CSSProperties = {
-  width: "100%",
-  height: 42,
-  border: "1px solid #dfe7d9",
-  borderRadius: 14,
-  padding: "0 12px",
-  fontSize: 14,
-  outline: "none",
-  color: "#273327",
-};
-
-const mobileSearchSubmitStyle: CSSProperties = {
-  width: "100%",
-  height: 40,
-  marginTop: 12,
-  border: "none",
-  borderRadius: 999,
-  background: "#2f6a31",
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: 800,
-  cursor: "pointer",
-};

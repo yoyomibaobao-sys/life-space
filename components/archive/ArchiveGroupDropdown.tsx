@@ -7,9 +7,10 @@ type Props = {
   value: string;
   groupTags: GroupTagItem[];
   onChange: (value: string) => void;
+  compact?: boolean;
 };
 
-export default function ArchiveGroupDropdown({ value, groupTags, onChange }: Props) {
+export default function ArchiveGroupDropdown({ value, groupTags, onChange, compact = false }: Props) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -50,21 +51,27 @@ export default function ArchiveGroupDropdown({ value, groupTags, onChange }: Pro
           borderRadius: 999,
           background: "#fbfcfa",
           color: "#667066",
-          fontSize: 12,
-          padding: "4px 24px 4px 10px",
+          fontSize: compact ? 11 : 12,
+          padding: compact ? "2px 18px 2px 7px" : "4px 24px 4px 10px",
           cursor: "pointer",
           display: "inline-flex",
           alignItems: "center",
-          minHeight: 28,
+          maxWidth: compact ? 96 : undefined,
+          minHeight: compact ? 23 : 28,
           lineHeight: 1.15,
           whiteSpace: "nowrap",
+          position: "relative",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
         }}
       >
-        {currentLabel}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {currentLabel}
+        </span>
         <span
           style={{
             position: "absolute",
-            right: 9,
+            right: compact ? 6 : 9,
             top: "50%",
             transform: "translateY(-50%)",
             color: "#999",
@@ -84,8 +91,8 @@ export default function ArchiveGroupDropdown({ value, groupTags, onChange }: Pro
             top: "calc(100% + 6px)",
             left: 0,
             zIndex: 80,
-            minWidth: 180,
-            maxWidth: 240,
+            minWidth: compact ? 156 : 180,
+            maxWidth: compact ? 220 : 240,
             maxHeight: 280,
             overflowY: "auto",
             border: "1px solid #e6ebdf",
