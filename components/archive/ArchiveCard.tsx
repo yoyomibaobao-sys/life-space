@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -201,6 +201,8 @@ export default function ArchiveCard({
         groupTags={groupTags}
         onNavigate={onNavigate}
         shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
+        onUpdateArchiveStatus={onUpdateArchiveStatus}
+        onDeleteArchive={onDeleteArchive}
       />
     );
   }
@@ -573,6 +575,8 @@ function MobileArchiveCard({
   groupTags,
   onNavigate,
   shouldIgnoreCardNavigation,
+  onUpdateArchiveStatus,
+  onDeleteArchive,
 }: {
   item: ArchiveItem;
   ended: boolean;
@@ -583,9 +587,22 @@ function MobileArchiveCard({
   groupTags: GroupTagItem[];
   onNavigate: (id: string) => void;
   shouldIgnoreCardNavigation: (target: EventTarget | null) => boolean;
+  onUpdateArchiveStatus: (item: ArchiveItem, nextStatus: "active" | "ended") => void;
+  onDeleteArchive: (item: ArchiveItem) => void;
 }) {
-  const categoryText = getMobileArchiveCategoryText(item, systemName, subTags, groupTags);
-  const updateText = getRecentUpdateLabel(item.latest_record_time || item.last_record_time || item.created_at);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const categoryBadge = getMobileArchiveCategoryBadge(item.category);
+  const metaText = getMobileArchiveMetaText(item, systemName, subTags, groupTags, ended);
+  const updateText = formatArchiveDate(item.latest_record_time || item.last_record_time || item.created_at) || "暂无";
+  const ongoingDays = getOngoingDays(item.created_at);
+  const statsText = [
+    `记录 ${item.record_count || 0}`,
+    ongoingDays ? `${ongoingDays} 天` : "",
+    `浏览 ${item.view_count || 0}`,
+    typeof item.follower_count !== "undefined" ? `关注 ${item.follower_count || 0}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
@@ -594,11 +611,17 @@ function MobileArchiveCard({
         onNavigate(item.id);
       }}
       style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
         cursor: "pointer",
         border: "1px solid #e4e6df",
         borderRadius: 14,
-        padding: 9,
+        padding: 8,
         marginBottom: 10,
+        minHeight: 110,
+        boxSizing: "border-box",
         background: ended ? "#fafafa" : "#fff",
         opacity: ended ? 0.82 : 1,
         boxShadow: ended ? "none" : "0 6px 18px rgba(44, 74, 38, 0.045)",
@@ -615,7 +638,7 @@ function MobileArchiveCard({
               inset: 0,
               width: "100%",
               height: "100%",
-              objectFit: "cover",
+              objectFit: "contain",
               borderRadius: 11,
             }}
           />
@@ -627,60 +650,105 @@ function MobileArchiveCard({
       </div>
 
       <div style={mobileCardBodyStyle}>
-        <div style={mobileCardTitleStyle} title={item.title || "未命名项目"}>
-          {item.title || "未命名项目"}
+        <div style={mobileCardTitleRowStyle}>
+          <div style={mobileCardTitleStyle} title={item.title || "未命名项目"}>
+            {item.title || "未命名项目"}
+          </div>
+          <span style={mobileCardBadgeStyle}>{categoryBadge}</span>
+          <button
+            type="button"
+            aria-label="更多"
+            title="更多"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuOpen((prev) => !prev);
+            }}
+            style={mobileCardMoreButtonStyle}
+          >
+            ···
+          </button>
         </div>
-        <div style={mobileCardMetaStyle} title={categoryText}>
-          {categoryText}
+        <div style={mobileCardMetaStyle} title={metaText}>
+          {metaText}
         </div>
         <div style={mobileCardUpdateStyle}>最近更新：{updateText}</div>
+        <div style={mobileCardStatsStyle} title={statsText}>
+          {statsText}
+        </div>
       </div>
+
+      {menuOpen ? (
+        <div
+          data-no-card-nav="true"
+          onClick={(event) => event.stopPropagation()}
+          style={mobileCardMenuStyle}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onUpdateArchiveStatus(item, ended ? "active" : "ended");
+            }}
+            style={mobileCardMenuItemStyle}
+          >
+            {ended ? "恢复" : "结束"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onDeleteArchive(item);
+            }}
+            style={{ ...mobileCardMenuItemStyle, color: "#c85f5a" }}
+          >
+            删除
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function getMobileArchiveCategoryText(
+function getMobileArchiveMetaText(
   item: ArchiveItem,
   systemName: string,
   subTags: SubTagItem[],
-  groupTags: GroupTagItem[]
+  groupTags: GroupTagItem[],
+  ended: boolean
 ) {
-  const categoryLabel = getArchiveCategoryLabel(item.category);
   const subTagName = item.sub_tag_id
     ? subTags.find((tag) => String(tag.id) === String(item.sub_tag_id))?.name
     : "";
   const groupTagName = item.group_tag_id
     ? groupTags.find((tag) => String(tag.id) === String(item.group_tag_id))?.name
     : "";
-  const detail = groupTagName || subTagName || systemName;
+  const tagText = groupTagName || subTagName || "";
+  const visibilityText = item.is_public ? "已公开" : "仅自己可见";
+  const statusText = getMobileArchiveStatusText(item, ended);
 
-  if (!detail || detail === categoryLabel) return categoryLabel;
-  return `${categoryLabel} · ${detail}`;
+  return [systemName, tagText, visibilityText, statusText].filter(Boolean).join(" · ");
 }
 
-function getRecentUpdateLabel(value?: string | null) {
-  if (!value) return "暂无";
+function getMobileArchiveStatusText(item: ArchiveItem, ended: boolean) {
+  if (ended) return "已结束";
+  if (item.help_status === "open") return "求助中";
+  if (item.help_status === "resolved") return "求助已解决";
+  return "";
+}
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const diffDays = Math.floor((today - target) / (24 * 60 * 60 * 1000));
-
-  if (diffDays <= 0) return "今天";
-  if (diffDays <= 6) return `${diffDays} 天前`;
-
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
+function getMobileArchiveCategoryBadge(category?: string | null) {
+  if (category === "plant") return "种植";
+  if (category === "system") return "设施";
+  if (category === "insect_fish") return "生态";
+  if (category === "other") return "其他";
+  return getArchiveCategoryLabel(category);
 }
 
 const mobileCardImageWrapStyle: CSSProperties = {
   position: "relative",
-  width: "100%",
-  height: 136,
+  width: 94,
+  height: 94,
+  flexShrink: 0,
   borderRadius: 11,
   overflow: "hidden",
   background: "#f4f7f1",
@@ -698,33 +766,103 @@ const mobileCardPlaceholderStyle: CSSProperties = {
 };
 
 const mobileCardBodyStyle: CSSProperties = {
-  padding: "8px 2px 1px",
+  flex: 1,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+};
+
+const mobileCardTitleRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
   minWidth: 0,
 };
 
 const mobileCardTitleStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
   color: "#1f2d1f",
   fontSize: 15,
   fontWeight: 800,
-  lineHeight: 1.3,
+  lineHeight: 1.25,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
+const mobileCardBadgeStyle: CSSProperties = {
+  flexShrink: 0,
+  borderRadius: 999,
+  background: "#edf6e9",
+  color: "#4b7244",
+  fontSize: 11,
+  fontWeight: 800,
+  lineHeight: 1,
+  padding: "4px 7px",
+};
+
+const mobileCardMoreButtonStyle: CSSProperties = {
+  flexShrink: 0,
+  width: 26,
+  height: 24,
+  border: "1px solid #e3e8df",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#7a8577",
+  fontSize: 13,
+  fontWeight: 800,
+  lineHeight: 1,
+  cursor: "pointer",
+};
+
 const mobileCardMetaStyle: CSSProperties = {
-  marginTop: 4,
   color: "#60705b",
   fontSize: 12,
-  lineHeight: 1.35,
+  lineHeight: 1.25,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
 const mobileCardUpdateStyle: CSSProperties = {
-  marginTop: 4,
   color: "#8a9588",
   fontSize: 12,
-  lineHeight: 1.35,
+  lineHeight: 1.25,
+};
+
+const mobileCardStatsStyle: CSSProperties = {
+  color: "#8a9588",
+  fontSize: 12,
+  lineHeight: 1.25,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileCardMenuStyle: CSSProperties = {
+  position: "absolute",
+  right: 8,
+  top: 36,
+  zIndex: 20,
+  minWidth: 84,
+  border: "1px solid #e5e8df",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 12px 28px rgba(44, 74, 38, 0.14)",
+  padding: 4,
+};
+
+const mobileCardMenuItemStyle: CSSProperties = {
+  width: "100%",
+  border: "none",
+  borderRadius: 9,
+  background: "transparent",
+  color: "#586653",
+  padding: "7px 10px",
+  textAlign: "left",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
 };

@@ -144,46 +144,57 @@ export default function DiscoverPage() {
     >
       <DiscoverHeader />
 
-      <section
+      <nav
         className="mobile-app-flex-only"
         style={{
           margin: "0 0 12px",
-          border: "1px solid #eadfca",
+          padding: 4,
+          border: "1px solid #e2ecd9",
           borderRadius: 16,
-          background: "#fffaf3",
-          padding: "12px 13px",
+          background: "#fff",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
+          gap: 4,
         }}
+        aria-label="发现页入口"
       >
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "#2b3328" }}>
-            集市
-          </div>
-          <div style={{ marginTop: 3, fontSize: 13, color: "#6f6758", lineHeight: 1.55 }}>
-            查看交换、赠送、转让和求购。
-          </div>
-        </div>
+        <Link
+          href="/discover"
+          style={{
+            flex: 1,
+            minHeight: 36,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textDecoration: "none",
+            borderRadius: 12,
+            background: "#e3f1dd",
+            color: "#2f6a31",
+            fontSize: 14,
+            fontWeight: 800,
+          }}
+        >
+          动态
+        </Link>
         <Link
           href="/market"
           style={{
+            flex: 1,
+            minHeight: 36,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
             textDecoration: "none",
-            border: "1px solid #d9c6a8",
-            background: "#fff",
-            color: "#654e2d",
-            borderRadius: 999,
-            padding: "8px 12px",
+            borderRadius: 12,
+            background: "transparent",
+            color: "#61705d",
             fontSize: 14,
-            fontWeight: 700,
-            whiteSpace: "nowrap",
+            fontWeight: 800,
           }}
         >
-          进入集市
+          集市
         </Link>
-      </section>
+      </nav>
 
       <DiscoverFilterBar
         options={filterOptions}

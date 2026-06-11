@@ -174,20 +174,31 @@ export default function Navbar() {
             {mobileTitle}
           </div>
 
-          <Link
-            href={getMobileCreateHref(pathname, Boolean(user))}
-            style={mobileCreateButtonStyle}
-            aria-label={getMobileCreateLabel(pathname)}
-            title={getMobileCreateLabel(pathname)}
-            onClick={(event) => {
-              if (user && getArchiveDetailPath(pathname)) {
-                event.preventDefault();
-                window.dispatchEvent(new Event("mobile-add-record-request"));
-              }
-            }}
-          >
-            ＋ {getMobileCreateLabel(pathname)}
-          </Link>
+          <div style={mobileTopActionGroupStyle}>
+            <Link
+              href={user ? "/notifications" : "/login"}
+              style={mobileNotificationButtonStyle}
+              aria-label="通知"
+              title="通知"
+            >
+              🔔
+            </Link>
+
+            <Link
+              href={getMobileCreateHref(pathname, Boolean(user))}
+              style={mobileCreateButtonStyle}
+              aria-label={getMobileCreateLabel(pathname)}
+              title={getMobileCreateLabel(pathname)}
+              onClick={(event) => {
+                if (user && getArchiveDetailPath(pathname)) {
+                  event.preventDefault();
+                  window.dispatchEvent(new Event("mobile-add-record-request"));
+                }
+              }}
+            >
+              ＋ {getMobileCreateLabel(pathname)}
+            </Link>
+          </div>
         </nav>
 
         <MobileBottomNav
@@ -451,6 +462,7 @@ const mobileTopNavStyle: CSSProperties = {
 };
 
 const mobilePageTitleStyle: CSSProperties = {
+  flex: 1,
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -459,6 +471,28 @@ const mobilePageTitleStyle: CSSProperties = {
   fontSize: 17,
   fontWeight: 800,
   lineHeight: 1.2,
+};
+
+const mobileTopActionGroupStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  flexShrink: 0,
+};
+
+const mobileNotificationButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  border: "1px solid #dfe8da",
+  background: "#fff",
+  color: "#52634e",
+  textDecoration: "none",
+  fontSize: 16,
+  lineHeight: 1,
 };
 
 const mobileCreateButtonStyle: CSSProperties = {

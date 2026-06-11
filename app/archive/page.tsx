@@ -58,14 +58,6 @@ const archiveSystemTabs: Array<{ value: ArchiveCategory | null; label: string }>
   { value: "other", label: "其他" },
 ];
 
-function getSystemCategory(value?: string | null): ArchiveCategory {
-  if (value === "plant" || value === "system" || value === "insect_fish") {
-    return value;
-  }
-
-  return "other";
-}
-
 export default function ArchivePage() {
   const router = useRouter();
   const loadingRef = useRef(false);
@@ -846,18 +838,10 @@ export default function ArchivePage() {
   const endedArchiveCount = archives.filter((item) => item.status === "ended").length;
   const contentBlocked = membership?.can_create_content === false;
 
-  const plantSubTags = subTags.filter((tag) =>
-    isMobileViewport ? getSystemCategory(tag.category) === "plant" : tag.category === "plant"
-  );
-  const methodFacilitySubTags = subTags.filter((tag) =>
-    isMobileViewport ? getSystemCategory(tag.category) === "system" : tag.category === "system"
-  );
-  const insectFishSubTags = subTags.filter((tag) =>
-    isMobileViewport ? getSystemCategory(tag.category) === "insect_fish" : tag.category === "insect_fish"
-  );
-  const otherSubTags = subTags.filter((tag) =>
-    isMobileViewport ? getSystemCategory(tag.category) === "other" : tag.category === "other"
-  );
+  const plantSubTags = subTags.filter((tag) => tag.category === "plant");
+  const methodFacilitySubTags = subTags.filter((tag) => tag.category === "system");
+  const insectFishSubTags = subTags.filter((tag) => tag.category === "insect_fish");
+  const otherSubTags = subTags.filter((tag) => tag.category === "other");
 
   const currentSubTag = subTags.find((tag) => tag.id === activeSubTag) || null;
   const visibleGroupTags = activeSubTag && currentSubTag
@@ -876,7 +860,7 @@ export default function ArchivePage() {
       if (
         !activeSubTag &&
         activeCategory &&
-        (isMobileViewport ? getSystemCategory(item.category) : item.category) !== activeCategory
+        item.category !== activeCategory
       ) {
         return false;
       }
@@ -906,7 +890,6 @@ export default function ArchivePage() {
     sortMode,
     subTagNameMap,
     groupTagNameMap,
-    isMobileViewport,
   ]);
 
   const activeArchives = filteredArchives.filter((item) => item.status !== "ended");

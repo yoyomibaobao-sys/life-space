@@ -13,8 +13,10 @@ import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
+  archiveCategoryOptions,
   getArchiveCategoryLabel,
   isNonPlantArchiveCategory,
+  type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type {
   ArchiveDetailArchive,
@@ -77,6 +79,9 @@ function Content({ id }: { id: string }) {
   const [mobileDetailTab, setMobileDetailTab] = useState<"profile" | "records">("records");
   const [mobileAddRecordOpen, setMobileAddRecordOpen] = useState(false);
   const [mobileArchiveEditing, setMobileArchiveEditing] = useState(false);
+  const [mobileArchiveTitle, setMobileArchiveTitle] = useState("");
+  const [mobileArchiveCategory, setMobileArchiveCategory] = useState<ArchiveCategory>("plant");
+  const [mobileArchiveName, setMobileArchiveName] = useState("");
   const [mobileArchiveSource, setMobileArchiveSource] = useState("");
   const [mobileArchiveNote, setMobileArchiveNote] = useState("");
   const [mobileArchiveSaving, setMobileArchiveSaving] = useState(false);
@@ -413,10 +418,13 @@ saveRecentArchiveBrowse({
   useEffect(() => {
     if (!archive || mobileArchiveEditing) return;
 
+    setMobileArchiveTitle(archive.title || "");
+    setMobileArchiveCategory(normalizeArchiveCategory(archive.category));
+    setMobileArchiveName(getDisplayName(archive, species) || "");
     setMobileArchiveSource(archive.source || "");
     setMobileArchiveNote(archive.note || "");
     setMobileArchiveError("");
-  }, [archive, mobileArchiveEditing]);
+  }, [archive, species, mobileArchiveEditing]);
 
   const handleCommentCountChange = useCallback((recordId: string, count: number) => {
     setRecords((prev) => {
@@ -585,15 +593,55 @@ saveRecentArchiveBrowse({
   async function saveMobileArchiveProfile() {
     if (!isOwner || mobileArchiveSaving) return;
 
+    const nextTitle = mobileArchiveTitle.trim();
+    if (!nextTitle) {
+      setMobileArchiveError("项目名称不能为空");
+      showToast("项目名称不能为空");
+      return;
+    }
+
     setMobileArchiveSaving(true);
     setMobileArchiveError("");
 
+    const nextCategory = mobileArchiveCategory;
+    const nextName = mobileArchiveName.trim();
     const nextSource = mobileArchiveSource.trim();
     const nextNote = mobileArchiveNote.trim();
-    const patch = {
+    const categoryChanged = nextCategory !== activeArchive.category;
+    const patch: Partial<ArchiveDetailArchive> & {
+      category: ArchiveCategory;
+      sub_tag_id?: null;
+      group_tag_id?: null;
+      species_id?: string | null;
+      species_name_snapshot?: string | null;
+      system_name?: string | null;
+    } = {
+      title: nextTitle,
+      category: nextCategory,
       source: nextSource || null,
       note: nextNote || null,
     };
+
+    if (categoryChanged) {
+      patch.sub_tag_id = null;
+      patch.group_tag_id = null;
+    }
+
+    if (nextCategory === "plant") {
+      patch.species_name_snapshot = nextName || null;
+      if (categoryChanged || nextName !== archiveDisplayName) {
+        patch.species_id = null;
+      }
+      if (categoryChanged) {
+        patch.system_name = null;
+      }
+    } else {
+      patch.system_name = nextName || null;
+      if (categoryChanged) {
+        patch.species_id = null;
+        patch.species_name_snapshot = null;
+      }
+    }
 
     const { error } = await supabase
       .from("archives")
@@ -610,6 +658,9 @@ saveRecentArchiveBrowse({
     }
 
     setArchive((prev) => (prev ? { ...prev, ...patch } : prev));
+    if (nextCategory !== "plant") {
+      setSpecies(null);
+    }
     setMobileArchiveEditing(false);
     showToast("档案已保存");
   }
@@ -1036,20 +1087,32 @@ saveRecentArchiveBrowse({
             archive={activeArchive}
             archiveDisplayName={archiveDisplayName}
             archiveCategoryLabel={archiveCategoryLabel}
+            title={mobileArchiveTitle}
+            category={mobileArchiveCategory}
+            archiveName={mobileArchiveName}
             source={mobileArchiveSource}
             note={mobileArchiveNote}
             editing={mobileArchiveEditing}
             saving={mobileArchiveSaving}
             error={mobileArchiveError}
             isOwner={isOwner}
+            onTitleChange={setMobileArchiveTitle}
+            onCategoryChange={setMobileArchiveCategory}
+            onArchiveNameChange={setMobileArchiveName}
             onSourceChange={setMobileArchiveSource}
             onNoteChange={setMobileArchiveNote}
             onEdit={() => {
+              setMobileArchiveTitle(activeArchive.title || "");
+              setMobileArchiveCategory(normalizeArchiveCategory(activeArchive.category));
+              setMobileArchiveName(archiveDisplayName || "");
               setMobileArchiveEditing(true);
               setMobileArchiveError("");
             }}
             onCancel={() => {
               setMobileArchiveEditing(false);
+              setMobileArchiveTitle(activeArchive.title || "");
+              setMobileArchiveCategory(normalizeArchiveCategory(activeArchive.category));
+              setMobileArchiveName(archiveDisplayName || "");
               setMobileArchiveSource(activeArchive.source || "");
               setMobileArchiveNote(activeArchive.note || "");
               setMobileArchiveError("");
@@ -1185,12 +1248,18 @@ function MobileArchiveProfile({
   archive,
   archiveDisplayName,
   archiveCategoryLabel,
+  title,
+  category,
+  archiveName,
   source,
   note,
   editing,
   saving,
   error,
   isOwner,
+  onTitleChange,
+  onCategoryChange,
+  onArchiveNameChange,
   onSourceChange,
   onNoteChange,
   onEdit,
@@ -1200,12 +1269,18 @@ function MobileArchiveProfile({
   archive: ArchiveDetailArchive;
   archiveDisplayName: string;
   archiveCategoryLabel: string;
+  title: string;
+  category: ArchiveCategory;
+  archiveName: string;
   source: string;
   note: string;
   editing: boolean;
   saving: boolean;
   error: string;
   isOwner: boolean;
+  onTitleChange: (value: string) => void;
+  onCategoryChange: (value: ArchiveCategory) => void;
+  onArchiveNameChange: (value: string) => void;
   onSourceChange: (value: string) => void;
   onNoteChange: (value: string) => void;
   onEdit: () => void;
@@ -1213,6 +1288,7 @@ function MobileArchiveProfile({
   onSave: () => void;
 }) {
   const createdAtText = formatDate(archive.created_at) || "未填写";
+  const nameLabel = category === "plant" ? "植物名称" : "系统名";
 
   return (
     <section id="archive-profile" style={mobileArchiveProfileStyle}>
@@ -1246,9 +1322,54 @@ function MobileArchiveProfile({
         ) : null}
       </div>
 
-      <MobileArchiveField label="项目名称" value={archive.title || "未命名项目"} />
-      <MobileArchiveField label="种类" value={archiveCategoryLabel || "其他"} />
-      <MobileArchiveField label="植物名称" value={archiveDisplayName || "未填写"} />
+      {editing ? (
+        <>
+          <label style={mobileArchiveEditFieldStyle}>
+            <span style={mobileArchiveLabelStyle}>项目名称</span>
+            <input
+              value={title}
+              onChange={(event) => onTitleChange(event.target.value)}
+              placeholder="未命名项目"
+              style={mobileArchiveInputStyle}
+            />
+          </label>
+
+          <label style={mobileArchiveEditFieldStyle}>
+            <span style={mobileArchiveLabelStyle}>种类</span>
+            <select
+              value={category}
+              onChange={(event) => {
+                const nextCategory = normalizeArchiveCategory(event.target.value);
+                onCategoryChange(nextCategory);
+                if (nextCategory !== category) onArchiveNameChange("");
+              }}
+              style={mobileArchiveInputStyle}
+            >
+              {archiveCategoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={mobileArchiveEditFieldStyle}>
+            <span style={mobileArchiveLabelStyle}>{nameLabel}</span>
+            <input
+              value={archiveName}
+              onChange={(event) => onArchiveNameChange(event.target.value)}
+              placeholder="未填写"
+              style={mobileArchiveInputStyle}
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <MobileArchiveField label="项目名称" value={archive.title || "未命名项目"} />
+          <MobileArchiveField label="种类" value={archiveCategoryLabel || "其他"} />
+          <MobileArchiveField label={archive.category === "plant" ? "植物名称" : "系统名"} value={archiveDisplayName || "未填写"} />
+        </>
+      )}
 
       {editing ? (
         <>
@@ -1304,6 +1425,14 @@ function MobileArchiveField({
       </div>
     </div>
   );
+}
+
+function normalizeArchiveCategory(value?: string | null): ArchiveCategory {
+  if (value === "plant" || value === "system" || value === "insect_fish" || value === "other") {
+    return value;
+  }
+
+  return "other";
 }
 
 const archiveDetailTabWrapStyle: CSSProperties = {
