@@ -159,8 +159,8 @@ export default function ArchiveRecordCard({
             : isResolvedRecord
               ? "#fbfffb"
               : "#fff",
-          padding: 12,
-          borderRadius: 16,
+          padding: isMobileViewport ? 10 : 12,
+          borderRadius: isMobileViewport ? 14 : 16,
           border: isHelpRecord
             ? "1px solid #edc6a9"
             : isResolvedRecord
@@ -233,13 +233,13 @@ export default function ArchiveRecordCard({
                       width: "100%",
                       aspectRatio: "1 / 1",
                       objectFit: "cover",
-                      borderRadius: 14,
+                      borderRadius: isMobileViewport ? 10 : 14,
                       display: "block",
                       background: "#f3f6f1",
                     }}
                   />
 
-                  {mode === "owner" ? (
+                  {mode === "owner" && !isMobileViewport ? (
                     <button
                       type="button"
                       onClick={async (event) => {
@@ -269,14 +269,20 @@ export default function ArchiveRecordCard({
           </div>
         ) : null}
 
-        <div style={{ marginBottom: 8 }}>
-          <EditRecord
-            key={`${item.id}-${mode}`}
-            id={item.id}
-            initialText={item.note || ""}
-            readOnly={mode !== "owner"}
-          />
-        </div>
+        {isMobileViewport ? (
+          item.note?.trim() ? (
+            <div style={mobileRecordNoteStyle}>{item.note}</div>
+          ) : null
+        ) : (
+          <div style={{ marginBottom: 8 }}>
+            <EditRecord
+              key={`${item.id}-${mode}`}
+              id={item.id}
+              initialText={item.note || ""}
+              readOnly={mode !== "owner"}
+            />
+          </div>
+        )}
 
         {mode === "owner" ? (
           <DesktopAndMobileRecordActions
@@ -351,6 +357,8 @@ function DesktopAndMobileRecordActions({
   onAddMediaFiles: (fileList: FileList | null) => Promise<void>;
   onRecordDeleted?: (recordId: string) => void;
 }) {
+  if (isMobileViewport) return null;
+
   return (
     <div
       style={{
@@ -773,6 +781,15 @@ const mobileMarketShareLinkStyle = {
   textDecoration: "none",
   fontSize: 16,
   lineHeight: 1,
+} as const;
+
+const mobileRecordNoteStyle = {
+  color: "#2e382c",
+  fontSize: 14,
+  lineHeight: 1.55,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  margin: "2px 0 8px",
 } as const;
 
 const mobileRecordTagStripStyle = {
