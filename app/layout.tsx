@@ -1,6 +1,6 @@
 import Navbar from "@/components/navbar";
 import Toast from "@/components/Toast";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "有时 · 耕作",
   description: "有时·耕作是种植、养护、农法设施和生态观察的记录工具。",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#fbfcf7",
+  colorScheme: "light",
 };
 
 export default function RootLayout({

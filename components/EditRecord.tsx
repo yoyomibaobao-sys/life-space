@@ -8,17 +8,28 @@ export default function EditRecord({
   id,
   initialText,
   readOnly = false,
+  placeholder = "点击添加内容",
+  compact = false,
+  onSaved,
 }: {
   id: string;
   initialText: string;
   readOnly?: boolean;
+  placeholder?: string;
+  compact?: boolean;
+  onSaved?: (nextText: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(initialText);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!editing) setText(initialText);
+  }, [initialText]);
 
   // 自动聚焦 + 自动高度
   useEffect(() => {
@@ -40,21 +51,31 @@ export default function EditRecord({
 
     // 没变化不提交
     if (text === initialText) {
+      setError("");
       setEditing(false);
       return;
     }
 
     setLoading(true);
-const nextText = text.trim();
+    setError("");
+    const nextText = text.trim();
 
-await supabase
-  .from("records")
-  .update({
-    note: nextText,
-  })
-  .eq("id", id);
+    const { error: saveError } = await supabase
+      .from("records")
+      .update({
+        note: nextText,
+      })
+      .eq("id", id);
 
     setLoading(false);
+
+    if (saveError) {
+      setError("保存失败，请稍后重试");
+      return;
+    }
+
+    setText(nextText);
+    onSaved?.(nextText);
     setEditing(false);
 
     router.refresh();
@@ -62,31 +83,29 @@ await supabase
 
   function cancel() {
     setText(initialText);
+    setError("");
     setEditing(false);
   }
 
   // 👀 只读模式
   if (readOnly) {
-    return <div>{text}</div>;
+    if (!text.trim()) return null;
+    return <div style={compact ? mobileReadTextStyle : undefined}>{text}</div>;
   }
 
   // 👤 阅读态
   if (!editing) {
     return (
       <div
-        onClick={() => setEditing(true)}
-        style={{
-  cursor: "text",
-  whiteSpace: "pre-wrap",
-  fontSize: 16,
-  lineHeight: 1.6,
-  fontWeight: 500,
-  marginBottom: 6,
-}}
+        onClick={() => {
+          setError("");
+          setEditing(true);
+        }}
+        style={compact ? mobileReadTextStyle : desktopReadTextStyle}
       >
         {text || (
-          <span style={{ color: "#999" }}>
-            点击添加内容
+          <span style={compact ? mobilePlaceholderStyle : desktopPlaceholderStyle}>
+            {placeholder}
           </span>
         )}
       </div>
@@ -114,6 +133,7 @@ await supabase
           fontSize: "14px",
           lineHeight: "1.6",
           background: "transparent",
+          minHeight: compact ? 42 : undefined,
         }}
         onKeyDown={(e) => {
           // Enter 保存
@@ -144,6 +164,47 @@ await supabase
           保存中...
         </div>
       )}
+
+      {error ? (
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: "12px",
+            color: "#b64737",
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }
+
+const desktopReadTextStyle = {
+  cursor: "text",
+  whiteSpace: "pre-wrap",
+  fontSize: 16,
+  lineHeight: 1.6,
+  fontWeight: 500,
+  marginBottom: 6,
+} as const;
+
+const mobileReadTextStyle = {
+  cursor: "text",
+  whiteSpace: "pre-wrap",
+  color: "#2e382c",
+  fontSize: 14,
+  lineHeight: 1.55,
+  fontWeight: 500,
+  wordBreak: "break-word",
+  margin: "2px 0 8px",
+} as const;
+
+const desktopPlaceholderStyle = {
+  color: "#999",
+} as const;
+
+const mobilePlaceholderStyle = {
+  color: "#a1ab9d",
+  fontWeight: 500,
+} as const;

@@ -32,6 +32,11 @@ type ArchiveRecordCardProps = {
   sameTagLinks: Array<{ tag: string; count: number; href: string }>;
   onOpenLightbox: (media: MediaItem[], index: number) => void;
   onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
+  onReplaceMedia?: (
+    recordId: string,
+    mediaId: string,
+    files: File[],
+  ) => Promise<void>;
   onVisibilityChange: (
     recordId: string,
     nextVisibility: string,
@@ -42,7 +47,10 @@ type ArchiveRecordCardProps = {
   ) => Promise<void>;
   onRemoveTag: (recordId: string, tag: string) => void;
   onAddTag: (recordId: string, tag: string) => Promise<void>;
-  onAddMedia?: (recordId: string, files: File[]) => Promise<void>;
+  onAddMedia?: (recordId: string, files: File[]) => Promise<unknown>;
+  onNoteSaved?: (recordId: string, nextText: string) => void;
+  archiveDisplayName?: string;
+  archiveDisplayHref?: string | null;
   currentUserId?: string | null;
   onCommentCountChange?: (recordId: string, count: number) => void;
   onRecordDeleted?: (recordId: string) => void;
@@ -59,11 +67,15 @@ export default function ArchiveRecordCard({
   sameTagLinks,
   onOpenLightbox,
   onDeleteMedia,
+  onReplaceMedia,
   onVisibilityChange,
   onSetHelpStatus,
   onRemoveTag,
   onAddTag,
   onAddMedia,
+  onNoteSaved,
+  archiveDisplayName,
+  archiveDisplayHref,
   currentUserId,
   onCommentCountChange,
   onRecordDeleted,
@@ -74,8 +86,12 @@ export default function ArchiveRecordCard({
   const isHelpRecord = item.status_tag === "help";
   const isResolvedRecord = item.status_tag === "resolved";
   const [addingMedia, setAddingMedia] = useState(false);
+  const [replacingMedia, setReplacingMedia] = useState(false);
+  const [editingMedia, setEditingMedia] = useState(false);
+  const [replaceMediaId, setReplaceMediaId] = useState<string | null>(null);
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
 
   const statusBadge = isHelpRecord
     ? { label: "求助中", kind: "help" as const }
@@ -94,6 +110,28 @@ export default function ArchiveRecordCard({
       setAddingMedia(false);
       if (chooseInputRef.current) chooseInputRef.current.value = "";
       if (cameraInputRef.current) cameraInputRef.current.value = "";
+    }
+  }
+
+  async function handleReplaceMediaFiles(fileList: FileList | null) {
+    const nextFiles = Array.from(fileList || []).slice(0, 1);
+    if (
+      !nextFiles.length ||
+      !replaceMediaId ||
+      !onReplaceMedia ||
+      replacingMedia
+    ) {
+      if (replaceInputRef.current) replaceInputRef.current.value = "";
+      return;
+    }
+
+    setReplacingMedia(true);
+    try {
+      await onReplaceMedia(item.id, replaceMediaId, nextFiles);
+    } finally {
+      setReplacingMedia(false);
+      setReplaceMediaId(null);
+      if (replaceInputRef.current) replaceInputRef.current.value = "";
     }
   }
 
@@ -179,6 +217,11 @@ export default function ArchiveRecordCard({
       >
         {isMobileViewport ? (
           <>
+            <MobileRecordArchiveLine
+              title={archive.title || "未命名项目"}
+              systemName={archiveDisplayName || ""}
+              href={archiveDisplayHref || null}
+            />
             <MobileRecordPublishRow
               archive={archive}
               item={item}
@@ -263,16 +306,70 @@ export default function ArchiveRecordCard({
                       x
                     </button>
                   ) : null}
+
+                  {mode === "owner" && isMobileViewport && editingMedia ? (
+                    <div style={mobileMediaTileActionWrapStyle}>
+                      <button
+                        type="button"
+                        onClick={async (event) => {
+                          event.stopPropagation();
+                          if (!target?.id) return;
+                          await onDeleteMedia(item.id, target.id);
+                        }}
+                        style={mobileMediaTileDangerButtonStyle}
+                      >
+                        删除
+                      </button>
+
+                      {target?.id && onReplaceMedia ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setReplaceMediaId(target.id);
+                            replaceInputRef.current?.click();
+                          }}
+                          disabled={replacingMedia}
+                          style={mobileMediaTileButtonStyle}
+                        >
+                          {replacingMedia && replaceMediaId === target.id
+                            ? "替换中"
+                            : "替换"}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
           </div>
         ) : null}
 
+        {mode === "owner" && isMobileViewport ? (
+          <MobileRecordMediaManager
+            open={editingMedia}
+            mediaCount={mediaList.length}
+            addingMedia={addingMedia}
+            replacingMedia={replacingMedia}
+            chooseInputRef={chooseInputRef}
+            cameraInputRef={cameraInputRef}
+            replaceInputRef={replaceInputRef}
+            onToggle={() => setEditingMedia((value) => !value)}
+            onAddMediaFiles={handleAddMediaFiles}
+            onReplaceMediaFiles={handleReplaceMediaFiles}
+          />
+        ) : null}
+
         {isMobileViewport ? (
-          item.note?.trim() ? (
-            <div style={mobileRecordNoteStyle}>{item.note}</div>
-          ) : null
+          <EditRecord
+            key={`${item.id}-${mode}-mobile`}
+            id={item.id}
+            initialText={item.note || ""}
+            readOnly={mode !== "owner"}
+            compact
+            placeholder="添加文字"
+            onSaved={(nextText) => onNoteSaved?.(item.id, nextText)}
+          />
         ) : (
           <div style={{ marginBottom: 8 }}>
             <EditRecord
@@ -582,6 +679,117 @@ function DesktopSameTagLinks({
   );
 }
 
+function MobileRecordArchiveLine({
+  title,
+  systemName,
+  href,
+}: {
+  title: string;
+  systemName: string;
+  href: string | null;
+}) {
+  return (
+    <div style={mobileRecordArchiveLineStyle}>
+      <span style={mobileRecordArchiveTitleStyle}>{title}</span>
+      {systemName ? (
+        <>
+          <span style={mobileRecordArchiveDotStyle}>·</span>
+          {href ? (
+            <Link href={href} style={mobileRecordArchiveLinkStyle}>
+              {systemName}
+            </Link>
+          ) : (
+            <span style={mobileRecordArchiveSystemStyle}>{systemName}</span>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function MobileRecordMediaManager({
+  open,
+  mediaCount,
+  addingMedia,
+  replacingMedia,
+  chooseInputRef,
+  cameraInputRef,
+  replaceInputRef,
+  onToggle,
+  onAddMediaFiles,
+  onReplaceMediaFiles,
+}: {
+  open: boolean;
+  mediaCount: number;
+  addingMedia: boolean;
+  replacingMedia: boolean;
+  chooseInputRef: RefObject<HTMLInputElement | null>;
+  cameraInputRef: RefObject<HTMLInputElement | null>;
+  replaceInputRef: RefObject<HTMLInputElement | null>;
+  onToggle: () => void;
+  onAddMediaFiles: (fileList: FileList | null) => Promise<void>;
+  onReplaceMediaFiles: (fileList: FileList | null) => Promise<void>;
+}) {
+  const disabled = addingMedia || replacingMedia;
+
+  return (
+    <div style={mobileMediaManagerStyle(open, mediaCount)}>
+      <input
+        ref={chooseInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: "none" }}
+        onChange={(event) => void onAddMediaFiles(event.target.files)}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(event) => void onAddMediaFiles(event.target.files)}
+      />
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(event) => void onReplaceMediaFiles(event.target.files)}
+      />
+
+      <button
+        type="button"
+        onClick={onToggle}
+        style={mobileMediaManagerToggleStyle(open)}
+      >
+        {open ? "完成" : "管理图片"}
+      </button>
+
+      {open ? (
+        <div style={mobileMediaManagerActionsStyle}>
+          <button
+            type="button"
+            onClick={() => chooseInputRef.current?.click()}
+            disabled={disabled}
+            style={mobileMediaManagerActionButtonStyle}
+          >
+            {addingMedia ? "添加中" : "添加图片"}
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={disabled}
+            style={mobileMediaManagerActionButtonStyle}
+          >
+            拍照
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MobileRecordPublishRow({
   archive,
   item,
@@ -739,6 +947,117 @@ function MobileRecordTagStrip({
     </div>
   );
 }
+
+const mobileRecordArchiveLineStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  minWidth: 0,
+  color: "#253325",
+  fontSize: 13,
+  lineHeight: 1.35,
+  marginBottom: 6,
+} as const;
+
+const mobileRecordArchiveTitleStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontWeight: 800,
+} as const;
+
+const mobileRecordArchiveDotStyle = {
+  color: "#9aa596",
+  flexShrink: 0,
+} as const;
+
+const mobileRecordArchiveSystemStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: "#5f6f5b",
+} as const;
+
+const mobileRecordArchiveLinkStyle = {
+  ...mobileRecordArchiveSystemStyle,
+  color: "#2f6a31",
+  textDecoration: "none",
+  fontWeight: 700,
+} as const;
+
+function mobileMediaManagerStyle(open: boolean, mediaCount: number) {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    flexWrap: "wrap",
+    margin: mediaCount > 0 ? "0 0 8px" : "2px 0 8px",
+    paddingTop: open ? 2 : 0,
+  } as const;
+}
+
+function mobileMediaManagerToggleStyle(open: boolean) {
+  return {
+    border: "none",
+    background: "transparent",
+    color: open ? "#2f6a31" : "#7a8577",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "4px 0",
+    cursor: "pointer",
+  } as const;
+}
+
+const mobileMediaManagerActionsStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  flexWrap: "wrap",
+} as const;
+
+const mobileMediaManagerActionButtonStyle = {
+  minHeight: 28,
+  borderRadius: 999,
+  border: "1px solid #dbe9d6",
+  background: "#f8fbf6",
+  color: "#4c7441",
+  padding: "0 10px",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+} as const;
+
+const mobileMediaTileActionWrapStyle = {
+  position: "absolute",
+  left: 6,
+  right: 6,
+  bottom: 6,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 6,
+} as const;
+
+const mobileMediaTileButtonStyle = {
+  flex: "1 1 0",
+  minWidth: 0,
+  height: 28,
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.72)",
+  background: "rgba(255,255,255,0.9)",
+  color: "#344630",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+  backdropFilter: "blur(8px)",
+} as const;
+
+const mobileMediaTileDangerButtonStyle = {
+  ...mobileMediaTileButtonStyle,
+  color: "#9f3529",
+} as const;
 
 const mobileRecordPublishRowStyle = {
   display: "flex",

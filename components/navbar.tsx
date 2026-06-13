@@ -184,20 +184,34 @@ export default function Navbar() {
               🔔
             </Link>
 
-            <Link
-              href={getMobileCreateHref(pathname, Boolean(user))}
-              style={mobileCreateButtonStyle}
-              aria-label={getMobileCreateLabel(pathname)}
-              title={getMobileCreateLabel(pathname)}
-              onClick={(event) => {
-                if (user && getArchiveDetailPath(pathname)) {
-                  event.preventDefault();
-                  window.dispatchEvent(new Event("mobile-add-record-request"));
-                }
-              }}
-            >
-              ＋ {getMobileCreateLabel(pathname)}
-            </Link>
+            {user && isMobileMePath(pathname) ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={mobileLogoutButtonStyle}
+              >
+                退出
+              </button>
+            ) : user && shouldShowMobileCreateAction(pathname) ? (
+              <Link
+                href={getMobileCreateHref(pathname, true)}
+                style={mobileCreateButtonStyle}
+                aria-label={getMobileCreateLabel(pathname)}
+                title={getMobileCreateLabel(pathname)}
+                onClick={(event) => {
+                  if (getArchiveDetailPath(pathname)) {
+                    event.preventDefault();
+                    window.dispatchEvent(new Event("mobile-add-record-request"));
+                  }
+                }}
+              >
+                ＋ {getMobileCreateLabel(pathname)}
+              </Link>
+            ) : !user && shouldShowMobileLoginAction(pathname) ? (
+              <Link href="/login" style={mobileLoginActionStyle}>
+                登录
+              </Link>
+            ) : null}
           </div>
         </nav>
 
@@ -399,6 +413,20 @@ function getArchiveDetailPath(pathname: string) {
   return pathname;
 }
 
+function isMobileMePath(pathname: string) {
+  return pathname === "/profile" || pathname.startsWith("/profile/");
+}
+
+function shouldShowMobileCreateAction(pathname: string) {
+  if (pathname === "/plant" || pathname.startsWith("/plant/")) return false;
+  if (isMobileMePath(pathname)) return false;
+  return true;
+}
+
+function shouldShowMobileLoginAction(pathname: string) {
+  return !pathname.startsWith("/login") && !pathname.startsWith("/register");
+}
+
 function getMobileCreateHref(pathname: string, hasUser: boolean) {
   if (!hasUser) return "/login";
 
@@ -510,6 +538,39 @@ const mobileCreateButtonStyle: CSSProperties = {
   lineHeight: 1,
   fontWeight: 800,
   padding: "0 11px",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const mobileLogoutButtonStyle: CSSProperties = {
+  height: 34,
+  borderRadius: 999,
+  border: "1px solid #ead7d2",
+  background: "#fff8f6",
+  color: "#b23a2d",
+  fontSize: 13,
+  lineHeight: 1,
+  fontWeight: 800,
+  padding: "0 12px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const mobileLoginActionStyle: CSSProperties = {
+  height: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  border: "1px solid #dfe8da",
+  background: "#fff",
+  color: "#40583a",
+  textDecoration: "none",
+  fontSize: 13,
+  lineHeight: 1,
+  fontWeight: 800,
+  padding: "0 12px",
   whiteSpace: "nowrap",
   flexShrink: 0,
 };

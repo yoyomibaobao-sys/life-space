@@ -945,14 +945,14 @@ saveRecentArchiveBrowse({
     setDeleteMediaTarget({ recordId, mediaId });
   }
 
-  async function confirmDeleteMedia() {
-    if (!deleteMediaTarget || isDeletingMedia) return;
-
-    setIsDeletingMedia(true);
-
-    const targetRecord = records.find((record) => record.id === deleteMediaTarget.recordId);
+  async function deleteMediaFromRecord(
+    recordId: string,
+    mediaId: string,
+    successMessage: string | null = "图片已删除",
+  ) {
+    const targetRecord = records.find((record) => record.id === recordId);
     const targetMedia = (targetRecord?.media || []).find(
-      (media) => media.id === deleteMediaTarget.mediaId
+      (media) => media.id === mediaId
     );
     const deletedBytes = targetMedia ? sumMediaSizeBytes([targetMedia]) : 0;
     const ownerId = targetMedia?.user_id || activeArchive.user_id || me;
@@ -961,12 +961,11 @@ saveRecentArchiveBrowse({
       await removeMediaFilesFromStorage([targetMedia]);
     }
 
-    const { error } = await supabase.from("media").delete().eq("id", deleteMediaTarget.mediaId);
+    const { error } = await supabase.from("media").delete().eq("id", mediaId);
 
     if (error) {
       showToast("删除图片失败");
-      setIsDeletingMedia(false);
-      return;
+      return false;
     }
 
     if (deletedBytes > 0) {
@@ -975,24 +974,41 @@ saveRecentArchiveBrowse({
 
     setRecords((prev) =>
       prev.map((record) =>
-        record.id === deleteMediaTarget.recordId
+        record.id === recordId
           ? {
               ...record,
               media: (record.media || []).filter(
-                (media) => media.id !== deleteMediaTarget.mediaId
+                (media) => media.id !== mediaId
               ),
             }
           : record
       )
     );
 
-    showToast("图片已删除");
-    setDeleteMediaTarget(null);
+    if (successMessage) showToast(successMessage);
+    return true;
+  }
+
+  async function confirmDeleteMedia() {
+    if (!deleteMediaTarget || isDeletingMedia) return;
+
+    setIsDeletingMedia(true);
+
+    const deleted = await deleteMediaFromRecord(
+      deleteMediaTarget.recordId,
+      deleteMediaTarget.mediaId,
+    );
+
+    if (deleted) setDeleteMediaTarget(null);
     setIsDeletingMedia(false);
   }
 
-  async function handleAddMediaToRecord(recordId: string, files: File[]) {
-    if (!files.length) return;
+  async function handleAddMediaToRecord(
+    recordId: string,
+    files: File[],
+    options: { successMessage?: string | null; emptyMessage?: string | null } = {},
+  ): Promise<MediaItem[]> {
+    if (!files.length) return [];
 
     const {
       data: { user },
@@ -1000,7 +1016,7 @@ saveRecentArchiveBrowse({
 
     if (!user || user.id !== activeArchive.user_id) {
       showToast("请先登录后再添加图片");
-      return;
+      return [];
     }
 
     const { data: membershipData, error: membershipError } = await supabase.rpc("get_my_membership");
@@ -1011,7 +1027,7 @@ saveRecentArchiveBrowse({
 
     if (!canCreateMembershipContent(membership)) {
       showToast(getCreateContentBlockedText(membership));
-      return;
+      return [];
     }
 
     const preparedFiles = await Promise.all(
@@ -1053,7 +1069,7 @@ saveRecentArchiveBrowse({
         showToast("容量检查失败");
       }
 
-      return;
+      return [];
     }
 
     const uploadedMedia: MediaItem[] = [];
@@ -1160,10 +1176,40 @@ saveRecentArchiveBrowse({
             : record
         )
       );
-      showToast("图片已添加");
+      if (options.successMessage !== null) {
+        showToast(options.successMessage ?? "图片已添加");
+      }
     } else {
-      showToast("没有图片成功上传");
+      if (options.emptyMessage !== null) {
+        showToast(options.emptyMessage ?? "没有图片成功上传");
+      }
     }
+
+    return uploadedMedia;
+  }
+
+  async function handleReplaceMedia(
+    recordId: string,
+    mediaId: string,
+    files: File[],
+  ) {
+    const uploadedMedia = await handleAddMediaToRecord(recordId, files.slice(0, 1), {
+      successMessage: null,
+      emptyMessage: "替换图片失败",
+    });
+
+    if (!uploadedMedia.length) return;
+
+    const deleted = await deleteMediaFromRecord(recordId, mediaId, null);
+    showToast(deleted ? "图片已替换" : "新图片已添加，旧图片删除失败");
+  }
+
+  function handleRecordNoteSaved(recordId: string, nextText: string) {
+    setRecords((prev) =>
+      prev.map((record) =>
+        record.id === recordId ? { ...record, note: nextText } : record
+      )
+    );
   }
 
   async function handleRecordVisibilityChange(recordId: string, nextVisibility: string) {
@@ -1317,15 +1363,6 @@ saveRecentArchiveBrowse({
 
         {!isMobileViewport || mobileDetailTab === "records" ? (
         <>
-        {isMobileViewport ? (
-          <MobileRecordsHeading
-            title={activeArchive.title || "未命名项目"}
-            systemName={archiveDisplayName || ""}
-            href={mobileEncyclopediaHref}
-            returnHref={mode === "owner" ? "/archive" : "/discover"}
-            returnText={mode === "owner" ? "返回我的项目" : "返回发现"}
-          />
-        ) : null}
         <section id="archive-records" style={{ position: "relative", paddingLeft: 22, scrollMarginTop: 76 }}>
           <div
             style={{
@@ -1359,10 +1396,14 @@ saveRecentArchiveBrowse({
                 sameTagLinks={sameTagLinks}
                 onOpenLightbox={openLightbox}
                 onDeleteMedia={handleDeleteMedia}
+                onReplaceMedia={handleReplaceMedia}
                 onVisibilityChange={handleRecordVisibilityChange}
                 onSetHelpStatus={setRecordHelpStatus}
                 onRemoveTag={(recordId, tag) => updateRecordTagState(recordId, tag, "remove")}
                 onAddTag={handleAddTag}
+                onNoteSaved={handleRecordNoteSaved}
+                archiveDisplayName={archiveDisplayName}
+                archiveDisplayHref={mobileEncyclopediaHref}
                 currentUserId={me ?? null}
                 onCommentCountChange={handleCommentCountChange}
                 onAddMedia={handleAddMediaToRecord}
@@ -1399,6 +1440,7 @@ saveRecentArchiveBrowse({
           images={lightboxImages}
           index={lightboxIndex}
           onChange={setLightboxIndex}
+          isMobileViewport={isMobileViewport}
           onClose={() => {
             setLightboxImages([]);
             setLightboxIndex(0);
@@ -1433,43 +1475,6 @@ saveRecentArchiveBrowse({
         danger
       />
     </>
-  );
-}
-
-function MobileRecordsHeading({
-  title,
-  systemName,
-  href,
-  returnHref,
-  returnText,
-}: {
-  title: string;
-  systemName: string;
-  href: string | null;
-  returnHref: string;
-  returnText: string;
-}) {
-  return (
-    <div style={mobileRecordsHeadingStyle}>
-      <div style={mobileRecordsNameWrapStyle}>
-        <span style={mobileRecordsTitleStyle}>{title}</span>
-        {systemName ? (
-          <>
-            <span style={mobileRecordsDotStyle}>·</span>
-            {href ? (
-              <Link href={href} style={mobileRecordsSpeciesLinkStyle}>
-                {systemName}
-              </Link>
-            ) : (
-              <span style={mobileRecordsSpeciesTextStyle}>{systemName}</span>
-            )}
-          </>
-        ) : null}
-      </div>
-      <Link href={returnHref} style={mobileRecordsBackLinkStyle}>
-        {returnText}
-      </Link>
-    </div>
   );
 }
 
@@ -1847,61 +1852,6 @@ function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
     cursor: "pointer",
   };
 }
-
-const mobileRecordsHeadingStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  margin: "0 0 10px",
-  color: "#253325",
-  fontSize: 14,
-  lineHeight: 1.35,
-  minWidth: 0,
-};
-
-const mobileRecordsNameWrapStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 5,
-  minWidth: 0,
-  flex: "1 1 auto",
-};
-
-const mobileRecordsTitleStyle: CSSProperties = {
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  fontWeight: 800,
-};
-
-const mobileRecordsDotStyle: CSSProperties = {
-  color: "#9aa596",
-  flexShrink: 0,
-};
-
-const mobileRecordsSpeciesTextStyle: CSSProperties = {
-  color: "#5f6f5b",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const mobileRecordsSpeciesLinkStyle: CSSProperties = {
-  ...mobileRecordsSpeciesTextStyle,
-  color: "#2f6a31",
-  textDecoration: "none",
-  fontWeight: 700,
-};
-
-const mobileRecordsBackLinkStyle: CSSProperties = {
-  flexShrink: 0,
-  color: "#687463",
-  fontSize: 12,
-  textDecoration: "none",
-  whiteSpace: "nowrap",
-};
 
 const archiveDetailAnchorStyle: CSSProperties = {
   scrollMarginTop: 76,

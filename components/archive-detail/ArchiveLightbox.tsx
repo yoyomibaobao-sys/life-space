@@ -14,11 +14,13 @@ export default function ArchiveLightbox({
   index,
   onClose,
   onChange,
+  isMobileViewport = false,
 }: {
   images: LightboxImage[];
   index: number;
   onClose: () => void;
   onChange: (next: number) => void;
+  isMobileViewport?: boolean;
 }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState<PanOffset>({ x: 0, y: 0 });
@@ -264,7 +266,7 @@ export default function ArchiveLightbox({
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 1000,
+        zIndex: 3000,
         background: "rgba(0,0,0,0.86)",
         display: "flex",
         alignItems: "center",
@@ -286,7 +288,14 @@ export default function ArchiveLightbox({
       </button>
 
       <div
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          if (isMobileViewport) {
+            closeFromTap();
+            return;
+          }
+
+          event.stopPropagation();
+        }}
         style={{
           width: "100vw",
           height: "100dvh",
@@ -338,31 +347,33 @@ export default function ArchiveLightbox({
         ›
       </button>
 
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onClose();
-        }}
-        aria-label="关闭图片预览"
-        style={{
-          position: "fixed",
-          top: "calc(12px + env(safe-area-inset-top))",
-          right: 12,
-          zIndex: 1002,
-          width: 44,
-          height: 44,
-          borderRadius: 999,
-          border: "none",
-          background: "rgba(255,255,255,0.2)",
-          color: "#fff",
-          fontSize: 26,
-          lineHeight: 1,
-          cursor: "pointer",
-        }}
-      >
-        ×
-      </button>
+      {!isMobileViewport ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+          aria-label="关闭图片预览"
+          style={{
+            position: "fixed",
+            top: "calc(12px + env(safe-area-inset-top))",
+            right: 12,
+            zIndex: 3002,
+            width: 44,
+            height: 44,
+            borderRadius: 999,
+            border: "none",
+            background: "rgba(255,255,255,0.2)",
+            color: "#fff",
+            fontSize: 26,
+            lineHeight: 1,
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+      ) : null}
 
       <button
         type="button"
@@ -375,7 +386,7 @@ export default function ArchiveLightbox({
           position: "fixed",
           left: "50%",
           bottom: "calc(18px + env(safe-area-inset-bottom))",
-          zIndex: 1002,
+          zIndex: 3002,
           transform: "translateX(-50%)",
           minWidth: 96,
           height: 40,
@@ -389,7 +400,7 @@ export default function ArchiveLightbox({
           backdropFilter: "blur(8px)",
         }}
       >
-        关闭
+        {isMobileViewport ? "返回" : "关闭"}
       </button>
     </div>
   );
@@ -400,6 +411,7 @@ function navButtonStyle(side: "left" | "right") {
     position: "fixed",
     [side]: 16,
     top: "50%",
+    zIndex: 3001,
     transform: "translateY(-50%)",
     width: 40,
     height: 40,
