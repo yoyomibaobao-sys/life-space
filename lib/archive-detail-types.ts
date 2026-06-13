@@ -75,6 +75,8 @@ export type RecordItem = {
 };
 
 export type LightboxImage = {
+  id?: string;
+  recordId?: string | null;
   url: string;
   alt: string;
 };

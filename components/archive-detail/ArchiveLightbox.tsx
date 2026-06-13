@@ -15,17 +15,31 @@ export default function ArchiveLightbox({
   onClose,
   onChange,
   isMobileViewport = false,
+  metaText = "",
+  note = "",
+  onDeleteCurrentImage,
 }: {
   images: LightboxImage[];
   index: number;
   onClose: () => void;
   onChange: (next: number) => void;
   isMobileViewport?: boolean;
+  metaText?: string;
+  note?: string;
+  onDeleteCurrentImage?: (
+    image: LightboxImage,
+    currentIndex: number,
+  ) => Promise<number>;
 }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState<PanOffset>({ x: 0, y: 0 });
+  const [mobileToolbarVisible, setMobileToolbarVisible] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchCurrentX = useRef<number | null>(null);
+  const mobileTouchStart = useRef<PanOffset | null>(null);
+  const mobileTouchCurrent = useRef<PanOffset | null>(null);
+  const mobileTouchMoved = useRef(false);
   const pinchStartDistance = useRef<number | null>(null);
   const pinchStartScale = useRef(1);
   const panStartPoint = useRef<PanOffset | null>(null);
@@ -35,6 +49,7 @@ export default function ArchiveLightbox({
   const [isMousePanning, setIsMousePanning] = useState(false);
   const interactedRef = useRef(false);
   const suppressClickRef = useRef(false);
+  const pushedMobileHistoryRef = useRef(false);
 
   useEffect(() => {
     setScale(1);
@@ -48,9 +63,40 @@ export default function ArchiveLightbox({
     mousePanStartPoint.current = null;
     mousePanStartOffset.current = { x: 0, y: 0 };
     setIsMousePanning(false);
+    setMobileToolbarVisible(false);
+    setMobileMenuOpen(false);
     interactedRef.current = false;
     suppressClickRef.current = false;
   }, [index, images.length]);
+
+  useEffect(() => {
+    if (!isMobileViewport || typeof window === "undefined") return;
+
+    const themeMeta = document.querySelector<HTMLMetaElement>("meta[name='theme-color']");
+    const previousThemeColor = themeMeta?.getAttribute("content") || "";
+
+    if (themeMeta) {
+      themeMeta.setAttribute("content", "#000000");
+    }
+
+    window.history.pushState({ __archiveLightbox: true }, "");
+    pushedMobileHistoryRef.current = true;
+
+    function handlePopState() {
+      onClose();
+    }
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      if (themeMeta) {
+        themeMeta.setAttribute("content", previousThemeColor || "#fbfcf7");
+      }
+    };
+    // Run once for this mobile lightbox mount so the Android back key exits it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileViewport]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -78,6 +124,19 @@ export default function ArchiveLightbox({
   if (!images.length) return null;
 
   const current = images[((index % images.length) + images.length) % images.length];
+
+  function requestClose() {
+    onClose();
+
+    if (
+      isMobileViewport &&
+      pushedMobileHistoryRef.current &&
+      typeof window !== "undefined" &&
+      window.history.state?.__archiveLightbox
+    ) {
+      window.setTimeout(() => window.history.back(), 0);
+    }
+  }
 
   function clampScale(next: number) {
     return Math.min(4, Math.max(1, Number(next.toFixed(2))));
@@ -156,6 +215,132 @@ export default function ArchiveLightbox({
     if (!isMousePanning) return;
     setIsMousePanning(false);
     mousePanStartPoint.current = null;
+  }
+
+  async function deleteCurrentMobileImage() {
+    if (!onDeleteCurrentImage) return;
+
+    const ok = window.confirm("确定删除当前图片吗？");
+    if (!ok) return;
+
+    const remaining = await onDeleteCurrentImage(current, index);
+    setMobileMenuOpen(false);
+
+    if (remaining <= 0) {
+      requestClose();
+    }
+  }
+
+  if (isMobileViewport) {
+    return (
+      <div
+        onTouchStart={(event) => {
+          const touch = event.touches[0];
+          if (!touch) return;
+          mobileTouchStart.current = { x: touch.clientX, y: touch.clientY };
+          mobileTouchCurrent.current = { x: touch.clientX, y: touch.clientY };
+          mobileTouchMoved.current = false;
+        }}
+        onTouchMove={(event) => {
+          const touch = event.touches[0];
+          if (!touch || !mobileTouchStart.current) return;
+          mobileTouchCurrent.current = { x: touch.clientX, y: touch.clientY };
+
+          const dx = touch.clientX - mobileTouchStart.current.x;
+          const dy = touch.clientY - mobileTouchStart.current.y;
+          if (Math.max(Math.abs(dx), Math.abs(dy)) > 6) {
+            mobileTouchMoved.current = true;
+          }
+        }}
+        onTouchEnd={() => {
+          const start = mobileTouchStart.current;
+          const currentTouch = mobileTouchCurrent.current;
+
+          mobileTouchStart.current = null;
+          mobileTouchCurrent.current = null;
+
+          if (!start || !currentTouch) return;
+
+          const dx = currentTouch.x - start.x;
+          const dy = currentTouch.y - start.y;
+          const absX = Math.abs(dx);
+          const absY = Math.abs(dy);
+          const maxDistance = Math.max(absX, absY);
+
+          if (maxDistance < 8) {
+            setMobileToolbarVisible((visible) => !visible);
+            setMobileMenuOpen(false);
+            return;
+          }
+
+          if (maxDistance >= 120) {
+            requestClose();
+            return;
+          }
+
+          if (absX >= 48 && absY < 70) {
+            go(dx > 0 ? -1 : 1);
+          }
+        }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 3000,
+          background: "#000",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          touchAction: "none",
+          userSelect: "none",
+        }}
+      >
+        <img
+          src={current.url}
+          alt={current.alt}
+          style={{
+            width: "100vw",
+            height: "100dvh",
+            objectFit: "contain",
+            display: "block",
+          }}
+        />
+
+        {mobileToolbarVisible ? (
+          <>
+            <div style={mobileTopToolbarStyle}>
+              <div style={mobileMetaTextStyle}>{metaText}</div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMobileMenuOpen((open) => !open);
+                }}
+                aria-label="图片更多操作"
+                style={mobileLightboxMoreButtonStyle}
+              >
+                ⋯
+              </button>
+              {mobileMenuOpen ? (
+                <div style={mobileLightboxMenuStyle}>
+                  <button
+                    type="button"
+                    onClick={() => void deleteCurrentMobileImage()}
+                    style={mobileLightboxDangerItemStyle}
+                  >
+                    删除当前图片
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {note.trim() ? (
+              <div style={mobileBottomNoteStyle}>{note}</div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -405,6 +590,91 @@ export default function ArchiveLightbox({
     </div>
   );
 }
+
+const mobileTopToolbarStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 3002,
+  minHeight: "calc(54px + env(safe-area-inset-top))",
+  padding: "calc(10px + env(safe-area-inset-top)) 48px 10px",
+  boxSizing: "border-box",
+  background: "linear-gradient(to bottom, rgba(0,0,0,0.76), rgba(0,0,0,0))",
+  color: "#fff",
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "center",
+} as const;
+
+const mobileMetaTextStyle = {
+  maxWidth: "100%",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: "rgba(255,255,255,0.9)",
+  fontSize: 13,
+  lineHeight: 1.4,
+} as const;
+
+const mobileLightboxMoreButtonStyle = {
+  position: "absolute",
+  top: "calc(8px + env(safe-area-inset-top))",
+  right: 12,
+  width: 36,
+  height: 36,
+  borderRadius: 999,
+  border: "none",
+  background: "rgba(255,255,255,0.08)",
+  color: "#fff",
+  fontSize: 24,
+  lineHeight: 1,
+  cursor: "pointer",
+} as const;
+
+const mobileLightboxMenuStyle = {
+  position: "absolute",
+  top: "calc(48px + env(safe-area-inset-top))",
+  right: 12,
+  width: 148,
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(18,18,18,0.94)",
+  boxShadow: "0 18px 42px rgba(0,0,0,0.36)",
+  padding: 6,
+} as const;
+
+const mobileLightboxDangerItemStyle = {
+  width: "100%",
+  minHeight: 36,
+  border: "none",
+  borderRadius: 9,
+  background: "transparent",
+  color: "#ffd3ce",
+  fontSize: 13,
+  fontWeight: 700,
+  textAlign: "left",
+  padding: "0 10px",
+  cursor: "pointer",
+} as const;
+
+const mobileBottomNoteStyle = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 3002,
+  maxHeight: "34dvh",
+  overflowY: "auto",
+  padding: "18px 16px calc(18px + env(safe-area-inset-bottom))",
+  boxSizing: "border-box",
+  background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))",
+  color: "rgba(255,255,255,0.92)",
+  fontSize: 14,
+  lineHeight: 1.65,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+} as const;
 
 function navButtonStyle(side: "left" | "right") {
   return {

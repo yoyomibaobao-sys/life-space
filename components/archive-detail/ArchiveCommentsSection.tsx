@@ -38,6 +38,7 @@ export default function ArchiveCommentsSection({
   initialCommentCount = 0,
   onCommentCountChange,
   showStatusHint = true,
+  compactMobile = false,
 }: {
   recordId: string;
   recordOwnerId: string;
@@ -46,6 +47,7 @@ export default function ArchiveCommentsSection({
   initialCommentCount?: number | null;
   onCommentCountChange?: (count: number) => void;
   showStatusHint?: boolean;
+  compactMobile?: boolean;
 }) {
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -332,8 +334,20 @@ export default function ArchiveCommentsSection({
           ? { ...item, likedByMe: true, likeCount: item.likeCount + 1 }
           : item,
       ),
-    );
-  }
+  );
+}
+
+function mobileCommentActionButtonStyle(active: boolean) {
+  return {
+    border: "none",
+    background: "transparent",
+    color: active ? "#3f6b34" : "#6f7b69",
+    fontSize: 13,
+    fontWeight: active ? 750 : 650,
+    padding: "4px 0",
+    cursor: "pointer",
+  } as const;
+}
 
   async function handleDeleteComment(comment: CommentItem) {
     const canDelete = Boolean(
@@ -434,15 +448,15 @@ export default function ArchiveCommentsSection({
   return (
     <section
       style={{
-        marginTop: 8,
-        paddingTop: 8,
-        borderTop: "1px dashed #edf1ea",
+        marginTop: compactMobile ? 4 : 8,
+        paddingTop: compactMobile ? 4 : 8,
+        borderTop: compactMobile ? "none" : "1px dashed #edf1ea",
       }}
     >
       <div
         style={{
           display: "flex",
-          gap: 6,
+          gap: compactMobile ? 12 : 6,
           alignItems: "center",
           flexWrap: "wrap",
         }}
@@ -450,11 +464,15 @@ export default function ArchiveCommentsSection({
         <button
           type="button"
           onClick={handleToggleRecordLike}
-          style={smallActionButtonStyle(
-            recordLikedByMe ? "#fff3f3" : "#fff",
-            recordLikedByMe ? "#b64a4a" : "#667066",
-            recordLikedByMe ? "#efc4c4" : "#dfe5dc",
-          )}
+          style={
+            compactMobile
+              ? mobileCommentActionButtonStyle(recordLikedByMe)
+              : smallActionButtonStyle(
+                  recordLikedByMe ? "#fff3f3" : "#fff",
+                  recordLikedByMe ? "#b64a4a" : "#667066",
+                  recordLikedByMe ? "#efc4c4" : "#dfe5dc",
+                )
+          }
           aria-label={recordLikedByMe ? "取消喜欢" : "喜欢"}
         >
           {recordLikedByMe ? "♥" : "♡"} {recordLikeCount}
@@ -462,17 +480,29 @@ export default function ArchiveCommentsSection({
 
         <button
           type="button"
-          onClick={() => setCommentsExpanded((prev) => !prev)}
-          style={smallActionButtonStyle(
-            commentsExpanded ? "#f3f8f1" : "#fff",
-            commentsExpanded ? "#3f6b34" : "#667066",
-            commentsExpanded ? "#cfe0c9" : "#dfe5dc",
-          )}
+          onClick={() =>
+            setCommentsExpanded((prev) => {
+              const next = !prev;
+              if (compactMobile && next && canWrite) setComposerOpen(true);
+              return next;
+            })
+          }
+          style={
+            compactMobile
+              ? mobileCommentActionButtonStyle(commentsExpanded)
+              : smallActionButtonStyle(
+                  commentsExpanded ? "#f3f8f1" : "#fff",
+                  commentsExpanded ? "#3f6b34" : "#667066",
+                  commentsExpanded ? "#cfe0c9" : "#dfe5dc",
+                )
+          }
         >
-          {commentsExpanded ? "收起评论" : "评论"} · {commentCount}
+          {compactMobile
+            ? `评论 ${commentCount}`
+            : `${commentsExpanded ? "收起评论" : "评论"} · ${commentCount}`}
         </button>
 
-        {canWrite ? (
+        {!compactMobile && canWrite ? (
           <button
             type="button"
             onClick={() => {
@@ -483,18 +513,18 @@ export default function ArchiveCommentsSection({
           >
             写评论
           </button>
-        ) : membershipLoading && currentUserId ? (
+        ) : !compactMobile && membershipLoading && currentUserId ? (
           <span style={{ fontSize: 12, color: "#8b9688" }}>状态读取中...</span>
-        ) : membershipBlocked ? (
+        ) : !compactMobile && membershipBlocked ? (
           <span style={{ fontSize: 12, color: "#9a6232" }}>
             使用权已到期，
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
               查看会员与续费
             </Link>
           </span>
-        ) : (
+        ) : !compactMobile ? (
           <span style={{ fontSize: 12, color: "#8b9688" }}>登录后可评论</span>
-        )}
+        ) : null}
 
         {showStatusHint && commentHint && !commentsExpanded ? (
           <span

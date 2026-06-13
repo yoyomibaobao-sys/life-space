@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
 import TagList from "@/components/TagList";
 import ArchiveCommentsSection from "@/components/archive-detail/ArchiveCommentsSection";
 import ArchiveStatusBadge from "@/components/archive-detail/ArchiveStatusBadge";
+import { showToast } from "@/components/Toast";
+import { supabase } from "@/lib/supabase";
 import {
   RECORD_TAG_OPTIONS,
   buildMediaList,
@@ -30,7 +32,7 @@ type ArchiveRecordCardProps = {
   startTime?: string | null;
   isHighlighted: boolean;
   sameTagLinks: Array<{ tag: string; count: number; href: string }>;
-  onOpenLightbox: (media: MediaItem[], index: number) => void;
+  onOpenLightbox: (media: MediaItem[], index: number, record: RecordItem) => void;
   onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
   onReplaceMedia?: (
     recordId: string,
@@ -49,8 +51,7 @@ type ArchiveRecordCardProps = {
   onAddTag: (recordId: string, tag: string) => Promise<void>;
   onAddMedia?: (recordId: string, files: File[]) => Promise<unknown>;
   onNoteSaved?: (recordId: string, nextText: string) => void;
-  archiveDisplayName?: string;
-  archiveDisplayHref?: string | null;
+  onRecordUpdated?: (recordId: string, patch: Partial<RecordItem>) => void;
   currentUserId?: string | null;
   onCommentCountChange?: (recordId: string, count: number) => void;
   onRecordDeleted?: (recordId: string) => void;
@@ -74,8 +75,7 @@ export default function ArchiveRecordCard({
   onAddTag,
   onAddMedia,
   onNoteSaved,
-  archiveDisplayName,
-  archiveDisplayHref,
+  onRecordUpdated,
   currentUserId,
   onCommentCountChange,
   onRecordDeleted,
@@ -88,6 +88,11 @@ export default function ArchiveRecordCard({
   const [addingMedia, setAddingMedia] = useState(false);
   const [replacingMedia, setReplacingMedia] = useState(false);
   const [editingMedia, setEditingMedia] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tagEditorOpen, setTagEditorOpen] = useState(false);
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false);
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
   const [replaceMediaId, setReplaceMediaId] = useState<string | null>(null);
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -217,209 +222,203 @@ export default function ArchiveRecordCard({
       >
         {isMobileViewport ? (
           <>
-            <MobileRecordArchiveLine
-              title={archive.title || "未命名项目"}
-              systemName={archiveDisplayName || ""}
-              href={archiveDisplayHref || null}
-            />
-            <MobileRecordPublishRow
-              archive={archive}
-              item={item}
-              mode={mode}
-              onVisibilityChange={onVisibilityChange}
-            />
-            <MobileRecordTagStrip
-              item={item}
-              mode={mode}
-              isPlantArchive={isPlantArchive}
-              statusBadge={statusBadge}
-              sameTagLinks={sameTagLinks}
-              onSetHelpStatus={onSetHelpStatus}
-              onRemoveTag={onRemoveTag}
-              onAddTag={onAddTag}
-            />
-          </>
-        ) : null}
+            {mode === "owner" ? (
+              <MobileRecordFileInputs
+                chooseInputRef={chooseInputRef}
+                cameraInputRef={cameraInputRef}
+                replaceInputRef={replaceInputRef}
+                onAddMediaFiles={handleAddMediaFiles}
+                onReplaceMediaFiles={handleReplaceMediaFiles}
+              />
+            ) : null}
 
-        {mediaList.length > 0 ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 8,
-              marginBottom: 8,
-            }}
-          >
-            {mediaList.map((media, mediaIndex) => {
-              const target = item.media?.[mediaIndex];
-              return (
-                <div
-                  key={media.url}
-                  role="button"
-                  tabIndex={0}
-                  aria-label="打开图片预览"
-                  onClick={() => onOpenLightbox(item.media || [], mediaIndex)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onOpenLightbox(item.media || [], mediaIndex);
-                    }
-                  }}
-                  style={{ position: "relative", cursor: "pointer" }}
-                >
-                  <img
-                    src={target?.display_thumb_url || target?.thumb_url || media.url}
-                    alt={media.alt}
-                    loading="lazy"
-                    decoding="async"
-                    style={{
-                      width: "100%",
-                      aspectRatio: "1 / 1",
-                      objectFit: "cover",
-                      borderRadius: isMobileViewport ? 10 : 14,
-                      display: "block",
-                      background: "#f3f6f1",
+            {mediaList.length > 0 ? (
+              <MobileRecordMediaGrid
+                mediaList={mediaList}
+                mediaItems={item.media || []}
+                onOpen={(mediaIndex) =>
+                  onOpenLightbox(item.media || [], mediaIndex, item)
+                }
+              />
+            ) : null}
+
+            <div style={mobileRecordTextMenuRowStyle}>
+              <div style={mobileRecordTextWrapStyle}>
+                <EditRecord
+                  key={`${item.id}-${mode}-mobile`}
+                  id={item.id}
+                  initialText={item.note || ""}
+                  readOnly={mode !== "owner"}
+                  compact
+                  placeholder="添加文字"
+                  onSaved={(nextText) => onNoteSaved?.(item.id, nextText)}
+                />
+              </div>
+              {mode === "owner" ? (
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen((value) => !value);
+                      setHelpMenuOpen(false);
+                      setVisibilityMenuOpen(false);
                     }}
-                  />
+                    aria-label="更多记录操作"
+                    style={mobileRecordMoreButtonStyle}
+                  >
+                    ⋯
+                  </button>
 
-                  {mode === "owner" && !isMobileViewport ? (
-                    <button
-                      type="button"
-                      onClick={async (event) => {
-                        event.stopPropagation();
-                        if (!target?.id) return;
-                        await onDeleteMedia(item.id, target.id);
+                  {menuOpen ? (
+                    <MobileRecordMoreMenu
+                      archive={archive}
+                      item={item}
+                      helpMenuOpen={helpMenuOpen}
+                      visibilityMenuOpen={visibilityMenuOpen}
+                      onCamera={() => {
+                        setMenuOpen(false);
+                        cameraInputRef.current?.click();
                       }}
-                      style={{
-                        position: "absolute",
-                        top: 8,
-                        right: 8,
-                        width: 28,
-                        height: 28,
-                        borderRadius: 999,
-                        border: "none",
-                        background: "rgba(0,0,0,0.58)",
-                        color: "#fff",
-                        cursor: "pointer",
+                      onAlbum={() => {
+                        setMenuOpen(false);
+                        chooseInputRef.current?.click();
                       }}
-                    >
-                      x
-                    </button>
-                  ) : null}
-
-                  {mode === "owner" && isMobileViewport && editingMedia ? (
-                    <div style={mobileMediaTileActionWrapStyle}>
-                      <button
-                        type="button"
-                        onClick={async (event) => {
-                          event.stopPropagation();
-                          if (!target?.id) return;
-                          await onDeleteMedia(item.id, target.id);
-                        }}
-                        style={mobileMediaTileDangerButtonStyle}
-                      >
-                        删除
-                      </button>
-
-                      {target?.id && onReplaceMedia ? (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setReplaceMediaId(target.id);
-                            replaceInputRef.current?.click();
-                          }}
-                          disabled={replacingMedia}
-                          style={mobileMediaTileButtonStyle}
-                        >
-                          {replacingMedia && replaceMediaId === target.id
-                            ? "替换中"
-                            : "替换"}
-                        </button>
-                      ) : null}
-                    </div>
+                      onToggleHelpMenu={() => {
+                        setHelpMenuOpen((value) => !value);
+                        setVisibilityMenuOpen(false);
+                      }}
+                      onToggleVisibilityMenu={() => {
+                        setVisibilityMenuOpen((value) => !value);
+                        setHelpMenuOpen(false);
+                      }}
+                      onSetHelpStatus={async (nextStatus) => {
+                        await onSetHelpStatus(item.id, nextStatus);
+                        setMenuOpen(false);
+                        setHelpMenuOpen(false);
+                      }}
+                      onSetVisibility={async (nextVisibility) => {
+                        await onVisibilityChange(item.id, nextVisibility);
+                        setMenuOpen(false);
+                        setVisibilityMenuOpen(false);
+                      }}
+                      onEdit={() => {
+                        setMenuOpen(false);
+                        setEditPanelOpen(true);
+                      }}
+                    />
                   ) : null}
                 </div>
-              );
-            })}
-          </div>
-        ) : null}
+              ) : null}
+            </div>
 
-        {mode === "owner" && isMobileViewport ? (
-          <MobileRecordMediaManager
-            open={editingMedia}
-            mediaCount={mediaList.length}
-            addingMedia={addingMedia}
-            replacingMedia={replacingMedia}
-            chooseInputRef={chooseInputRef}
-            cameraInputRef={cameraInputRef}
-            replaceInputRef={replaceInputRef}
-            onToggle={() => setEditingMedia((value) => !value)}
-            onAddMediaFiles={handleAddMediaFiles}
-            onReplaceMediaFiles={handleReplaceMediaFiles}
-          />
-        ) : null}
-
-        {isMobileViewport ? (
-          <EditRecord
-            key={`${item.id}-${mode}-mobile`}
-            id={item.id}
-            initialText={item.note || ""}
-            readOnly={mode !== "owner"}
-            compact
-            placeholder="添加文字"
-            onSaved={(nextText) => onNoteSaved?.(item.id, nextText)}
-          />
-        ) : (
-          <div style={{ marginBottom: 8 }}>
-            <EditRecord
-              key={`${item.id}-${mode}`}
-              id={item.id}
-              initialText={item.note || ""}
-              readOnly={mode !== "owner"}
+            <MobileRecordMetaRow
+              item={item}
+              archive={archive}
+              isPlantArchive={isPlantArchive}
+              statusBadge={statusBadge}
+              canEdit={mode === "owner"}
+              tagEditorOpen={tagEditorOpen}
+              onToggleTagEditor={() => setTagEditorOpen((value) => !value)}
+              onRemoveTag={onRemoveTag}
+              onAddTag={async (newTag) => {
+                await onAddTag(item.id, newTag);
+                setTagEditorOpen(false);
+              }}
             />
-          </div>
+
+            <ArchiveCommentsSection
+              recordId={item.id}
+              recordOwnerId={archive.user_id}
+              recordStatusTag={item.status_tag}
+              currentUserId={currentUserId}
+              initialCommentCount={item.comment_count}
+              showStatusHint={false}
+              compactMobile
+              onCommentCountChange={(count) =>
+                onCommentCountChange?.(item.id, count)
+              }
+            />
+
+            {editPanelOpen ? (
+              <MobileRecordEditPanel
+                item={item}
+                onClose={() => setEditPanelOpen(false)}
+                onSaved={(patch) => {
+                  onRecordUpdated?.(item.id, patch);
+                  if (typeof patch.note === "string") {
+                    onNoteSaved?.(item.id, patch.note);
+                  }
+                  setEditPanelOpen(false);
+                }}
+                onRecordDeleted={onRecordDeleted}
+              />
+            ) : null}
+          </>
+        ) : (
+          <>
+            {mediaList.length > 0 ? (
+              <DesktopRecordMediaGrid
+                mediaList={mediaList}
+                mediaItems={item.media || []}
+                mode={mode}
+                recordId={item.id}
+                onOpen={(mediaIndex) =>
+                  onOpenLightbox(item.media || [], mediaIndex, item)
+                }
+                onDeleteMedia={onDeleteMedia}
+              />
+            ) : null}
+
+            <div style={{ marginBottom: 8 }}>
+              <EditRecord
+                key={`${item.id}-${mode}`}
+                id={item.id}
+                initialText={item.note || ""}
+                readOnly={mode !== "owner"}
+              />
+            </div>
+
+            {mode === "owner" ? (
+              <DesktopAndMobileRecordActions
+                archive={archive}
+                item={item}
+                isMobileViewport={isMobileViewport}
+                addingMedia={addingMedia}
+                chooseInputRef={chooseInputRef}
+                cameraInputRef={cameraInputRef}
+                onSetHelpStatus={onSetHelpStatus}
+                onVisibilityChange={onVisibilityChange}
+                onAddMediaFiles={handleAddMediaFiles}
+                onRecordDeleted={onRecordDeleted}
+              />
+            ) : null}
+
+            {isPlantArchive ? (
+              <DesktopRecordTags
+                item={item}
+                mode={mode}
+                onRemoveTag={onRemoveTag}
+                onAddTag={onAddTag}
+              />
+            ) : null}
+
+            <ArchiveCommentsSection
+              recordId={item.id}
+              recordOwnerId={archive.user_id}
+              recordStatusTag={item.status_tag}
+              currentUserId={currentUserId}
+              initialCommentCount={item.comment_count}
+              showStatusHint
+              onCommentCountChange={(count) =>
+                onCommentCountChange?.(item.id, count)
+              }
+            />
+
+            {isPlantArchive && sameTagLinks.length > 0 ? (
+              <DesktopSameTagLinks sameTagLinks={sameTagLinks} />
+            ) : null}
+          </>
         )}
-
-        {mode === "owner" ? (
-          <DesktopAndMobileRecordActions
-            archive={archive}
-            item={item}
-            isMobileViewport={isMobileViewport}
-            addingMedia={addingMedia}
-            chooseInputRef={chooseInputRef}
-            cameraInputRef={cameraInputRef}
-            onSetHelpStatus={onSetHelpStatus}
-            onVisibilityChange={onVisibilityChange}
-            onAddMediaFiles={handleAddMediaFiles}
-            onRecordDeleted={onRecordDeleted}
-          />
-        ) : null}
-
-        {!isMobileViewport && isPlantArchive ? (
-          <DesktopRecordTags
-            item={item}
-            mode={mode}
-            onRemoveTag={onRemoveTag}
-            onAddTag={onAddTag}
-          />
-        ) : null}
-
-        <ArchiveCommentsSection
-          recordId={item.id}
-          recordOwnerId={archive.user_id}
-          recordStatusTag={item.status_tag}
-          currentUserId={currentUserId}
-          initialCommentCount={item.comment_count}
-          showStatusHint={!isMobileViewport}
-          onCommentCountChange={(count) =>
-            onCommentCountChange?.(item.id, count)
-          }
-        />
-
-        {!isMobileViewport && isPlantArchive && sameTagLinks.length > 0 ? (
-          <DesktopSameTagLinks sameTagLinks={sameTagLinks} />
-        ) : null}
       </div>
     </article>
   );
@@ -679,61 +678,21 @@ function DesktopSameTagLinks({
   );
 }
 
-function MobileRecordArchiveLine({
-  title,
-  systemName,
-  href,
-}: {
-  title: string;
-  systemName: string;
-  href: string | null;
-}) {
-  return (
-    <div style={mobileRecordArchiveLineStyle}>
-      <span style={mobileRecordArchiveTitleStyle}>{title}</span>
-      {systemName ? (
-        <>
-          <span style={mobileRecordArchiveDotStyle}>·</span>
-          {href ? (
-            <Link href={href} style={mobileRecordArchiveLinkStyle}>
-              {systemName}
-            </Link>
-          ) : (
-            <span style={mobileRecordArchiveSystemStyle}>{systemName}</span>
-          )}
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function MobileRecordMediaManager({
-  open,
-  mediaCount,
-  addingMedia,
-  replacingMedia,
+function MobileRecordFileInputs({
   chooseInputRef,
   cameraInputRef,
   replaceInputRef,
-  onToggle,
   onAddMediaFiles,
   onReplaceMediaFiles,
 }: {
-  open: boolean;
-  mediaCount: number;
-  addingMedia: boolean;
-  replacingMedia: boolean;
   chooseInputRef: RefObject<HTMLInputElement | null>;
   cameraInputRef: RefObject<HTMLInputElement | null>;
   replaceInputRef: RefObject<HTMLInputElement | null>;
-  onToggle: () => void;
   onAddMediaFiles: (fileList: FileList | null) => Promise<void>;
   onReplaceMediaFiles: (fileList: FileList | null) => Promise<void>;
 }) {
-  const disabled = addingMedia || replacingMedia;
-
   return (
-    <div style={mobileMediaManagerStyle(open, mediaCount)}>
+    <>
       <input
         ref={chooseInputRef}
         type="file"
@@ -757,180 +716,305 @@ function MobileRecordMediaManager({
         style={{ display: "none" }}
         onChange={(event) => void onReplaceMediaFiles(event.target.files)}
       />
+    </>
+  );
+}
 
-      <button
-        type="button"
-        onClick={onToggle}
-        style={mobileMediaManagerToggleStyle(open)}
-      >
-        {open ? "完成" : "管理图片"}
-      </button>
+function MobileRecordMediaGrid({
+  mediaList,
+  mediaItems,
+  onOpen,
+}: {
+  mediaList: Array<{ url: string; alt: string }>;
+  mediaItems: MediaItem[];
+  onOpen: (mediaIndex: number) => void;
+}) {
+  if (mediaList.length === 0) return null;
 
-      {open ? (
-        <div style={mobileMediaManagerActionsStyle}>
+  return (
+    <div style={mobileRecordMediaGridStyle}>
+      {mediaList.map((media, mediaIndex) => {
+        const target = mediaItems[mediaIndex];
+
+        return (
           <button
+            key={media.url}
             type="button"
-            onClick={() => chooseInputRef.current?.click()}
-            disabled={disabled}
-            style={mobileMediaManagerActionButtonStyle}
+            aria-label="打开图片预览"
+            onClick={() => onOpen(mediaIndex)}
+            style={mobileRecordMediaButtonStyle}
           >
-            {addingMedia ? "添加中" : "添加图片"}
+            <img
+              src={target?.display_thumb_url || target?.thumb_url || media.url}
+              alt={media.alt}
+              loading="lazy"
+              decoding="async"
+              style={mobileRecordMediaImageStyle}
+            />
           </button>
-          <button
-            type="button"
-            onClick={() => cameraInputRef.current?.click()}
-            disabled={disabled}
-            style={mobileMediaManagerActionButtonStyle}
-          >
-            拍照
-          </button>
-        </div>
-      ) : null}
+        );
+      })}
     </div>
   );
 }
 
-function MobileRecordPublishRow({
+function DesktopRecordMediaGrid({
+  mediaList,
+  mediaItems,
+  mode,
+  recordId,
+  onOpen,
+  onDeleteMedia,
+}: {
+  mediaList: Array<{ url: string; alt: string }>;
+  mediaItems: MediaItem[];
+  mode: ArchiveMode;
+  recordId: string;
+  onOpen: (mediaIndex: number) => void;
+  onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gap: 8,
+        marginBottom: 8,
+      }}
+    >
+      {mediaList.map((media, mediaIndex) => {
+        const target = mediaItems[mediaIndex];
+        return (
+          <div
+            key={media.url}
+            role="button"
+            tabIndex={0}
+            aria-label="打开图片预览"
+            onClick={() => onOpen(mediaIndex)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen(mediaIndex);
+              }
+            }}
+            style={{ position: "relative", cursor: "pointer" }}
+          >
+            <img
+              src={target?.display_thumb_url || target?.thumb_url || media.url}
+              alt={media.alt}
+              loading="lazy"
+              decoding="async"
+              style={{
+                width: "100%",
+                aspectRatio: "1 / 1",
+                objectFit: "cover",
+                borderRadius: 14,
+                display: "block",
+                background: "#f3f6f1",
+              }}
+            />
+
+            {mode === "owner" ? (
+              <button
+                type="button"
+                onClick={async (event) => {
+                  event.stopPropagation();
+                  if (!target?.id) return;
+                  await onDeleteMedia(recordId, target.id);
+                }}
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  width: 28,
+                  height: 28,
+                  borderRadius: 999,
+                  border: "none",
+                  background: "rgba(0,0,0,0.58)",
+                  color: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                x
+              </button>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MobileRecordMoreMenu({
   archive,
   item,
-  mode,
-  onVisibilityChange,
+  helpMenuOpen,
+  visibilityMenuOpen,
+  onCamera,
+  onAlbum,
+  onToggleHelpMenu,
+  onToggleVisibilityMenu,
+  onSetHelpStatus,
+  onSetVisibility,
+  onEdit,
 }: {
   archive: ArchiveDetailArchive;
   item: RecordItem;
-  mode: ArchiveMode;
-  onVisibilityChange: (
-    recordId: string,
-    nextVisibility: string,
-  ) => Promise<void>;
+  helpMenuOpen: boolean;
+  visibilityMenuOpen: boolean;
+  onCamera: () => void;
+  onAlbum: () => void;
+  onToggleHelpMenu: () => void;
+  onToggleVisibilityMenu: () => void;
+  onSetHelpStatus: (nextStatus: "help" | "resolved" | null) => Promise<void>;
+  onSetVisibility: (nextVisibility: string) => Promise<void>;
+  onEdit: () => void;
 }) {
-  const isOwner = mode === "owner";
-  const visibility = item.visibility === "private" || !archive.is_public ? "private" : "public";
-  const visibilityText = visibility === "public" ? "已公开" : "私密";
+  const visibility =
+    item.visibility === "private" || !archive.is_public ? "private" : "public";
+  const nextHelp =
+    item.status_tag === "help"
+      ? { label: "标记已解决", value: "resolved" as const }
+      : item.status_tag === "resolved"
+        ? { label: "取消求助", value: null }
+        : { label: "发起求助", value: "help" as const };
+  const nextVisibility =
+    visibility === "public"
+      ? { label: "设为私密", value: "private" }
+      : { label: "设为公开", value: "public" };
 
   return (
-    <div style={mobileRecordPublishRowStyle}>
-      {isOwner && archive.is_public ? (
+    <div style={mobileRecordMenuStyle}>
+      <button type="button" onClick={onCamera} style={mobileRecordMenuItemStyle}>
+        拍照
+      </button>
+      <button type="button" onClick={onAlbum} style={mobileRecordMenuItemStyle}>
+        从相册添加
+      </button>
+      <Link
+        href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
+        style={mobileRecordMenuLinkStyle}
+      >
+        转发到集市
+      </Link>
+      <button
+        type="button"
+        onClick={onToggleHelpMenu}
+        style={mobileRecordMenuItemStyle}
+      >
+        求助状态
+      </button>
+      {helpMenuOpen ? (
         <button
           type="button"
-          onClick={() =>
-            onVisibilityChange(item.id, visibility === "public" ? "private" : "public")
-          }
-          style={mobileRecordVisibilityButtonStyle(visibility)}
+          onClick={() => onSetHelpStatus(nextHelp.value)}
+          style={mobileRecordSubMenuItemStyle}
         >
-          {visibilityText}
+          {nextHelp.label}
         </button>
-      ) : (
-        <span style={mobileRecordVisibilityTextStyle(visibility)}>
-          {visibilityText}
-        </span>
-      )}
-
-      {isOwner ? (
-        <Link
-          href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
-          aria-label="发布到集市"
-          title="发布到集市"
-          style={mobileMarketShareLinkStyle}
-        >
-          ↗
-        </Link>
       ) : null}
+      <button
+        type="button"
+        onClick={onToggleVisibilityMenu}
+        style={mobileRecordMenuItemStyle}
+      >
+        公开设置
+      </button>
+      {visibilityMenuOpen ? (
+        <button
+          type="button"
+          onClick={() => onSetVisibility(nextVisibility.value)}
+          disabled={!archive.is_public}
+          style={mobileRecordSubMenuItemStyle}
+        >
+          {archive.is_public ? nextVisibility.label : "项目私密"}
+        </button>
+      ) : null}
+      <button type="button" onClick={onEdit} style={mobileRecordMenuItemStyle}>
+        编辑
+      </button>
     </div>
   );
 }
 
-function MobileRecordTagStrip({
+function MobileRecordMetaRow({
   item,
-  mode,
+  archive,
   isPlantArchive,
   statusBadge,
-  sameTagLinks,
-  onSetHelpStatus,
+  canEdit,
+  tagEditorOpen,
+  onToggleTagEditor,
   onRemoveTag,
   onAddTag,
 }: {
   item: RecordItem;
-  mode: ArchiveMode;
+  archive: ArchiveDetailArchive;
   isPlantArchive: boolean;
   statusBadge: { label: string; kind: "help" | "resolved" } | null;
-  sameTagLinks: Array<{ tag: string; count: number; href: string }>;
-  onSetHelpStatus: (
-    recordId: string,
-    nextStatus: "help" | "resolved" | null,
-  ) => Promise<void>;
+  canEdit: boolean;
+  tagEditorOpen: boolean;
+  onToggleTagEditor: () => void;
   onRemoveTag: (recordId: string, tag: string) => void;
-  onAddTag: (recordId: string, tag: string) => Promise<void>;
+  onAddTag: (tag: string) => Promise<void>;
 }) {
-  const hasTags = isPlantArchive && Array.isArray(item.display_tags) && item.display_tags.length > 0;
-  const canEdit = mode === "owner";
-
-  if (!statusBadge && !hasTags && sameTagLinks.length === 0 && !canEdit) return null;
-
-  async function cycleHelpStatus() {
-    if (item.status_tag === "help") {
-      await onSetHelpStatus(item.id, "resolved");
-      return;
-    }
-
-    if (item.status_tag === "resolved") {
-      await onSetHelpStatus(item.id, null);
-      return;
-    }
-
-    await onSetHelpStatus(item.id, "help");
-  }
+  const tags = Array.isArray(item.display_tags) ? item.display_tags : [];
+  const visibility =
+    item.visibility === "private" || !archive.is_public ? "私密" : "已公开";
 
   return (
-    <div style={mobileRecordTagStripStyle}>
-      {canEdit ? (
-        <button
-          type="button"
-          onClick={cycleHelpStatus}
-          style={mobileRecordStatusButtonStyle(item.status_tag)}
-        >
-          {item.status_tag === "help"
-            ? "求助中"
-            : item.status_tag === "resolved"
-              ? "已解决"
-              : "点击求助"}
-        </button>
-      ) : statusBadge ? (
-        <span style={mobileRecordStatusPillStyle(statusBadge.kind)}>
-          {statusBadge.label}
-        </span>
-      ) : null}
+    <div style={mobileRecordMetaWrapStyle}>
+      <div style={mobileRecordMetaRowStyle}>
+        {isPlantArchive && tags.length > 0 ? (
+          <button
+            type="button"
+            onClick={canEdit ? onToggleTagEditor : undefined}
+            style={mobileRecordMetaTagsButtonStyle}
+          >
+            <TagList
+              tags={tags}
+              editable={canEdit && tagEditorOpen}
+              recordId={item.id}
+              userTags={item.user_behavior_tags}
+              onChange={(tag) => onRemoveTag(item.id, tag)}
+              containerStyle={mobileRecordTagListStyle}
+              tagStyle={mobileRecordTagPillStyle}
+            />
+          </button>
+        ) : canEdit && isPlantArchive ? (
+          <button
+            type="button"
+            onClick={onToggleTagEditor}
+            style={mobileRecordAddTagButtonStyle}
+          >
+            添加标签
+          </button>
+        ) : null}
 
-      {isPlantArchive ? (
-        <TagList
-          tags={item.display_tags}
-          editable={canEdit}
-          recordId={item.id}
-          userTags={item.user_behavior_tags}
-          onChange={(tag) => onRemoveTag(item.id, tag)}
-          containerStyle={mobileRecordTagListStyle}
-          tagStyle={mobileRecordTagPillStyle}
-        />
-      ) : null}
+        {statusBadge ? (
+          <span style={mobileRecordInlineStatusStyle(statusBadge.kind)}>
+            {statusBadge.label}
+          </span>
+        ) : (
+          <span style={mobileRecordMetaTextStyle}>无求助</span>
+        )}
+        <span style={mobileRecordMetaTextStyle}>{visibility}</span>
+      </div>
 
-      {canEdit && isPlantArchive ? (
+      {tagEditorOpen && canEdit && isPlantArchive ? (
         <select
           onChange={async (event) => {
             const newTag = event.target.value;
-            const currentScrollY = window.scrollY;
             event.target.value = "";
             event.target.blur();
-
             if (!newTag) return;
-
-            await onAddTag(item.id, newTag);
-            requestAnimationFrame(() => window.scrollTo({ top: currentScrollY }));
+            await onAddTag(newTag);
           }}
           defaultValue=""
-          style={mobileRecordTagSelectStyle}
-          aria-label="添加标签"
+          style={mobileRecordTagEditorSelectStyle}
+          aria-label="选择标签"
         >
-          <option value="">+ 标签</option>
+          <option value="">选择标签</option>
           {RECORD_TAG_OPTIONS.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -938,185 +1022,410 @@ function MobileRecordTagStrip({
           ))}
         </select>
       ) : null}
-
-      {sameTagLinks.map((linkItem) => (
-        <a key={linkItem.tag} href={linkItem.href} style={mobileSameTagLinkStyle}>
-          同类 {getBehaviorTagLabel(linkItem.tag)} {linkItem.count}
-        </a>
-      ))}
     </div>
   );
 }
 
-const mobileRecordArchiveLineStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: 5,
-  minWidth: 0,
-  color: "#253325",
-  fontSize: 13,
-  lineHeight: 1.35,
-  marginBottom: 6,
-} as const;
+function MobileRecordEditPanel({
+  item,
+  onClose,
+  onSaved,
+  onRecordDeleted,
+}: {
+  item: RecordItem;
+  onClose: () => void;
+  onSaved: (patch: Partial<RecordItem>) => void;
+  onRecordDeleted?: (recordId: string) => void;
+}) {
+  const [note, setNote] = useState(item.note || "");
+  const [timeValue, setTimeValue] = useState(toDateTimeLocalValue(item.record_time));
+  const [saving, setSaving] = useState(false);
 
-const mobileRecordArchiveTitleStyle = {
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  fontWeight: 800,
-} as const;
+  useEffect(() => {
+    setNote(item.note || "");
+    setTimeValue(toDateTimeLocalValue(item.record_time));
+  }, [item.id, item.note, item.record_time]);
 
-const mobileRecordArchiveDotStyle = {
-  color: "#9aa596",
-  flexShrink: 0,
-} as const;
+  async function save() {
+    if (saving) return;
 
-const mobileRecordArchiveSystemStyle = {
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  color: "#5f6f5b",
-} as const;
+    const recordTime = timeValue ? new Date(timeValue) : new Date(item.record_time);
+    if (Number.isNaN(recordTime.getTime())) {
+      showToast("记录时间无效");
+      return;
+    }
 
-const mobileRecordArchiveLinkStyle = {
-  ...mobileRecordArchiveSystemStyle,
-  color: "#2f6a31",
-  textDecoration: "none",
-  fontWeight: 700,
-} as const;
+    const patch = {
+      note: note.trim(),
+      record_time: recordTime.toISOString(),
+    };
 
-function mobileMediaManagerStyle(open: boolean, mediaCount: number) {
-  return {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    flexWrap: "wrap",
-    margin: mediaCount > 0 ? "0 0 8px" : "2px 0 8px",
-    paddingTop: open ? 2 : 0,
-  } as const;
+    setSaving(true);
+    const { error } = await supabase
+      .from("records")
+      .update(patch)
+      .eq("id", item.id);
+    setSaving(false);
+
+    if (error) {
+      showToast("保存记录失败");
+      return;
+    }
+
+    showToast("记录已更新");
+    onSaved(patch);
+  }
+
+  return (
+    <div style={mobileEditOverlayStyle} onClick={onClose}>
+      <section
+        style={mobileEditPanelStyle}
+        onClick={(event) => event.stopPropagation()}
+        aria-label="编辑记录"
+      >
+        <div style={mobileEditHeaderStyle}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#233223" }}>
+            编辑记录
+          </div>
+          <button type="button" onClick={onClose} style={mobileEditCloseButtonStyle}>
+            取消
+          </button>
+        </div>
+
+        <label style={mobileEditFieldStyle}>
+          <span style={mobileEditLabelStyle}>记录时间</span>
+          <input
+            type="datetime-local"
+            value={timeValue}
+            onChange={(event) => setTimeValue(event.target.value)}
+            style={mobileEditInputStyle}
+          />
+        </label>
+
+        <label style={mobileEditFieldStyle}>
+          <span style={mobileEditLabelStyle}>记录内容</span>
+          <textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={5}
+            style={mobileEditTextareaStyle}
+          />
+        </label>
+
+        <label style={mobileEditFieldStyle}>
+          <span style={mobileEditLabelStyle}>记录地点</span>
+          <input
+            value="暂不保存地点"
+            disabled
+            style={mobileEditDisabledInputStyle}
+            aria-label="记录地点预留"
+          />
+        </label>
+
+        <div style={mobileEditFieldStyle}>
+          <span style={mobileEditLabelStyle}>图片排序</span>
+          <div style={mobileEditHintStyle}>
+            当前媒体数据没有可安全持久化的排序字段，本轮不保存排序。
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving}
+          style={mobileEditSaveButtonStyle}
+        >
+          {saving ? "保存中..." : "保存"}
+        </button>
+
+        <div style={mobileEditDeleteWrapStyle}>
+          <DeleteRecordButton
+            id={item.id}
+            onDeleted={onRecordDeleted}
+            style={mobileEditDeleteButtonStyle}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }
 
-function mobileMediaManagerToggleStyle(open: boolean) {
-  return {
-    border: "none",
-    background: "transparent",
-    color: open ? "#2f6a31" : "#7a8577",
-    fontSize: 12,
-    fontWeight: 700,
-    padding: "4px 0",
-    cursor: "pointer",
-  } as const;
+function toDateTimeLocalValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
 }
 
-const mobileMediaManagerActionsStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  flexWrap: "wrap",
-} as const;
-
-const mobileMediaManagerActionButtonStyle = {
-  minHeight: 28,
-  borderRadius: 999,
-  border: "1px solid #dbe9d6",
-  background: "#f8fbf6",
-  color: "#4c7441",
-  padding: "0 10px",
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: "pointer",
-} as const;
-
-const mobileMediaTileActionWrapStyle = {
-  position: "absolute",
-  left: 6,
-  right: 6,
-  bottom: 6,
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 6,
-} as const;
-
-const mobileMediaTileButtonStyle = {
-  flex: "1 1 0",
-  minWidth: 0,
-  height: 28,
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.72)",
-  background: "rgba(255,255,255,0.9)",
-  color: "#344630",
-  fontSize: 12,
-  fontWeight: 800,
-  cursor: "pointer",
-  backdropFilter: "blur(8px)",
-} as const;
-
-const mobileMediaTileDangerButtonStyle = {
-  ...mobileMediaTileButtonStyle,
-  color: "#9f3529",
-} as const;
-
-const mobileRecordPublishRowStyle = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
+const mobileRecordMediaGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 8,
-  margin: "0 0 6px",
+  marginBottom: 8,
 } as const;
 
-function mobileRecordVisibilityButtonStyle(visibility: "public" | "private") {
-  return {
-    border: "none",
-    background: "transparent",
-    color: visibility === "public" ? "#477341" : "#7b7568",
-    fontSize: 12,
-    fontWeight: 700,
-    padding: "2px 0",
-    cursor: "pointer",
-  } as const;
-}
+const mobileRecordMediaButtonStyle = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  borderRadius: 10,
+  overflow: "hidden",
+  cursor: "pointer",
+} as const;
 
-function mobileRecordVisibilityTextStyle(visibility: "public" | "private") {
-  return {
-    color: visibility === "public" ? "#477341" : "#7b7568",
-    fontSize: 12,
-    fontWeight: 700,
-  } as const;
-}
+const mobileRecordMediaImageStyle = {
+  width: "100%",
+  aspectRatio: "1 / 1",
+  objectFit: "cover",
+  borderRadius: 10,
+  display: "block",
+  background: "#f3f6f1",
+} as const;
 
-const mobileMarketShareLinkStyle = {
-  width: 28,
-  height: 28,
+const mobileRecordTextMenuRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) 32px",
+  alignItems: "start",
+  gap: 6,
+  marginTop: 2,
+} as const;
+
+const mobileRecordTextWrapStyle = {
+  minWidth: 0,
+} as const;
+
+const mobileRecordMoreButtonStyle = {
+  width: 32,
+  height: 32,
   borderRadius: 999,
-  border: "1px solid #e3eadf",
-  background: "#fff",
-  color: "#5d704f",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  textDecoration: "none",
-  fontSize: 16,
+  border: "none",
+  background: "transparent",
+  color: "#6f7a6b",
+  fontSize: 22,
   lineHeight: 1,
+  cursor: "pointer",
 } as const;
 
-const mobileRecordNoteStyle = {
-  color: "#2e382c",
-  fontSize: 14,
-  lineHeight: 1.55,
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-  margin: "2px 0 8px",
+const mobileRecordMenuStyle = {
+  position: "absolute",
+  top: 34,
+  right: 0,
+  zIndex: 30,
+  width: 154,
+  border: "1px solid #e3eadf",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 12px 30px rgba(39, 55, 36, 0.14)",
+  padding: 5,
+  display: "grid",
+  gap: 2,
 } as const;
 
-const mobileRecordTagStripStyle = {
+const mobileRecordMenuItemStyle = {
+  width: "100%",
+  minHeight: 34,
+  border: "none",
+  borderRadius: 9,
+  background: "transparent",
+  color: "#2f3d2e",
+  textAlign: "left",
+  padding: "0 10px",
+  fontSize: 13,
+  fontWeight: 650,
+  cursor: "pointer",
+} as const;
+
+const mobileRecordMenuLinkStyle = {
+  ...mobileRecordMenuItemStyle,
+  display: "flex",
+  alignItems: "center",
+  textDecoration: "none",
+  boxSizing: "border-box",
+} as const;
+
+const mobileRecordSubMenuItemStyle = {
+  ...mobileRecordMenuItemStyle,
+  minHeight: 30,
+  marginLeft: 8,
+  width: "calc(100% - 8px)",
+  color: "#55704f",
+  background: "#f8fbf6",
+  fontSize: 12,
+} as const;
+
+const mobileRecordMetaWrapStyle = {
+  display: "grid",
+  gap: 5,
+  marginTop: 4,
+  marginBottom: 4,
+} as const;
+
+const mobileRecordMetaRowStyle = {
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
-  gap: 5,
-  margin: "0 0 8px",
+  gap: 6,
+  color: "#7a8577",
+  fontSize: 12,
+  lineHeight: 1.35,
+} as const;
+
+const mobileRecordMetaTagsButtonStyle = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  cursor: "pointer",
+} as const;
+
+const mobileRecordAddTagButtonStyle = {
+  border: "none",
+  background: "transparent",
+  color: "#adb7a8",
+  padding: 0,
+  fontSize: 12,
+  cursor: "pointer",
+} as const;
+
+const mobileRecordMetaTextStyle = {
+  color: "#7c8878",
+} as const;
+
+function mobileRecordInlineStatusStyle(kind: "help" | "resolved") {
+  return {
+    color: kind === "help" ? "#9a6232" : "#3f7a49",
+    fontWeight: 650,
+  } as const;
+}
+
+const mobileRecordTagEditorSelectStyle = {
+  width: "fit-content",
+  maxWidth: "100%",
+  height: 28,
+  borderRadius: 999,
+  border: "1px solid #dfe8da",
+  background: "#fff",
+  color: "#536050",
+  fontSize: 12,
+  padding: "0 8px",
+} as const;
+
+const mobileEditOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 2400,
+  background: "rgba(30, 45, 30, 0.24)",
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "center",
+  padding: "64px 10px calc(68px + env(safe-area-inset-bottom))",
+  boxSizing: "border-box",
+} as const;
+
+const mobileEditPanelStyle = {
+  width: "100%",
+  maxWidth: 560,
+  maxHeight: "80vh",
+  overflowY: "auto",
+  border: "1px solid #dfe9d7",
+  borderRadius: "22px 22px 18px 18px",
+  background: "#fff",
+  padding: 14,
+  boxShadow: "0 -12px 36px rgba(41, 65, 35, 0.18)",
+} as const;
+
+const mobileEditHeaderStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 10,
+} as const;
+
+const mobileEditCloseButtonStyle = {
+  border: "1px solid #dfe7d9",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#5f6f5b",
+  fontSize: 13,
+  fontWeight: 700,
+  padding: "7px 12px",
+  cursor: "pointer",
+} as const;
+
+const mobileEditFieldStyle = {
+  display: "grid",
+  gap: 6,
+  marginTop: 12,
+} as const;
+
+const mobileEditLabelStyle = {
+  color: "#6f7b69",
+  fontSize: 12,
+  fontWeight: 700,
+} as const;
+
+const mobileEditInputStyle = {
+  width: "100%",
+  height: 38,
+  borderRadius: 12,
+  border: "1px solid #dfe8da",
+  padding: "0 10px",
+  fontSize: 14,
+  boxSizing: "border-box",
+} as const;
+
+const mobileEditTextareaStyle = {
+  width: "100%",
+  minHeight: 120,
+  borderRadius: 12,
+  border: "1px solid #dfe8da",
+  padding: 10,
+  fontSize: 14,
+  lineHeight: 1.6,
+  resize: "vertical",
+  boxSizing: "border-box",
+} as const;
+
+const mobileEditDisabledInputStyle = {
+  ...mobileEditInputStyle,
+  color: "#9aa59a",
+  background: "#f8faf6",
+} as const;
+
+const mobileEditHintStyle = {
+  color: "#8a9588",
+  fontSize: 12,
+  lineHeight: 1.6,
+} as const;
+
+const mobileEditSaveButtonStyle = {
+  width: "100%",
+  height: 40,
+  marginTop: 14,
+  borderRadius: 999,
+  border: "1px solid #b9d9b2",
+  background: "#f2faef",
+  color: "#2f6634",
+  fontSize: 14,
+  fontWeight: 800,
+  cursor: "pointer",
+} as const;
+
+const mobileEditDeleteWrapStyle = {
+  marginTop: 16,
+  paddingTop: 12,
+  borderTop: "1px solid #f1e1dd",
+  display: "flex",
+  justifyContent: "center",
+} as const;
+
+const mobileEditDeleteButtonStyle = {
+  color: "#b33a2c",
+  fontSize: "13px",
+  fontWeight: 800,
+  padding: "8px 12px",
 } as const;
 
 const mobileRecordTagListStyle = {
@@ -1130,40 +1439,4 @@ const mobileRecordTagPillStyle = {
   border: "1px solid #e4eadf",
   background: "#f8faf6",
   color: "#586656",
-} as const;
-
-function mobileRecordStatusPillStyle(kind: "help" | "resolved") {
-  return {
-    ...mobileRecordTagPillStyle,
-    border: kind === "help" ? "1px solid #edd2bd" : "1px solid #cfe4d4",
-    background: kind === "help" ? "#fff8f1" : "#f4fbf5",
-    color: kind === "help" ? "#9a6232" : "#3f7a49",
-    fontWeight: 700,
-  } as const;
-}
-
-function mobileRecordStatusButtonStyle(status?: string | null) {
-  return {
-    ...mobileRecordTagPillStyle,
-    fontWeight: status ? 700 : 500,
-    border: status === "help" ? "1px solid #edd2bd" : status === "resolved" ? "1px solid #cfe4d4" : "1px solid #e4eadf",
-    background: status === "help" ? "#fff8f1" : status === "resolved" ? "#f4fbf5" : "#fff",
-    color: status === "help" ? "#9a6232" : status === "resolved" ? "#3f7a49" : "#687463",
-    cursor: "pointer",
-  } as const;
-}
-
-const mobileRecordTagSelectStyle = {
-  ...mobileRecordTagPillStyle,
-  height: 24,
-  padding: "0 7px",
-  background: "#fff",
-} as const;
-
-const mobileSameTagLinkStyle = {
-  ...mobileRecordTagPillStyle,
-  color: "#4f7e49",
-  textDecoration: "none",
-  border: "1px solid #d9ead5",
-  background: "#f7fcf5",
 } as const;

@@ -409,67 +409,109 @@ export default function PlantIndexPage() {
           boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
         }}
       >
-        <div>
-          <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
-            植物百科
-          </div>
-
-          <h1 style={{ margin: 0, fontSize: isMobileViewport ? 21 : 28 }}>
-            系统植物索引库
-          </h1>
-        </div>
-
-        <div style={{ marginTop: isMobileViewport ? 10 : 16 }}>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="输入搜索植物"
+        {isMobileViewport ? (
+          <div
             style={{
-              width: "100%",
-              height: isMobileViewport ? 38 : 44,
-              borderRadius: isMobileViewport ? 10 : 12,
-              border: "1px solid #e5e7eb",
-              padding: isMobileViewport ? "0 11px" : "0 14px",
-              fontSize: isMobileViewport ? 13 : 14,
+              display: "grid",
+              gridTemplateColumns: "auto minmax(0, 1fr)",
+              alignItems: "center",
+              gap: 10,
             }}
-          />
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: isMobileViewport ? 6 : 8,
-            flexWrap: "wrap",
-            overflowX: "visible",
-            marginTop: isMobileViewport ? 8 : 14,
-            paddingBottom: 0,
-          }}
-        >
-          {categories.map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setActiveCategory(category)}
+          >
+            <h1
               style={{
-                border:
-                  activeCategory === category
-                    ? "1px solid #4CAF50"
-                    : "1px solid #eee",
-                background:
-                  activeCategory === category ? "#f0fff4" : "#fafafa",
-                color: activeCategory === category ? "#2e7d32" : "#333",
-                borderRadius: 999,
-                padding: isMobileViewport ? "5px 9px" : "7px 12px",
-                cursor: "pointer",
-                fontSize: isMobileViewport ? 12 : 13,
-                lineHeight: 1.2,
+                margin: 0,
+                color: "#1f2d1f",
+                fontSize: 15,
+                fontWeight: 800,
                 whiteSpace: "nowrap",
               }}
             >
-              {categoryLabel(category)}
-            </button>
-          ))}
-        </div>
+              系统植物索引库
+            </h1>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索植物"
+              style={{
+                width: "100%",
+                minWidth: 0,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid #e5e7eb",
+                padding: "0 10px",
+                fontSize: 13,
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+        ) : (
+          <>
+            <div>
+              <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
+                植物百科
+              </div>
+
+              <h1 style={{ margin: 0, fontSize: 28 }}>
+                系统植物索引库
+              </h1>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="输入搜索植物"
+                style={{
+                  width: "100%",
+                  height: 44,
+                  borderRadius: 12,
+                  border: "1px solid #e5e7eb",
+                  padding: "0 14px",
+                  fontSize: 14,
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        {!isMobileViewport ? (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              overflowX: "visible",
+              marginTop: 14,
+              paddingBottom: 0,
+            }}
+          >
+            {categories.map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => setActiveCategory(category)}
+                style={{
+                  border:
+                    activeCategory === category
+                      ? "1px solid #4CAF50"
+                      : "1px solid #eee",
+                  background:
+                    activeCategory === category ? "#f0fff4" : "#fafafa",
+                  color: activeCategory === category ? "#2e7d32" : "#333",
+                  borderRadius: 999,
+                  padding: "7px 12px",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {categoryLabel(category)}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <div
           style={{

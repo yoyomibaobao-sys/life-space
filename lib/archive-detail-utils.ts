@@ -74,10 +74,16 @@ export function buildMediaList(
   archiveTitle: string
 ): LightboxImage[] {
   return (media || [])
-    .map((item: any) => item?.display_url || item?.url || item?.file_url)
-    .filter(Boolean)
-    .map((url: string, index: number) => ({
-      url,
+    .map((item: any) => ({
+      id: item?.id,
+      recordId: item?.record_id,
+      url: item?.display_url || item?.url || item?.file_url,
+    }))
+    .filter((item) => Boolean(item.url))
+    .map((item, index: number) => ({
+      id: item.id,
+      recordId: item.recordId,
+      url: item.url,
       alt: `${archiveTitle} 图片 ${index + 1}`,
     }));
 }

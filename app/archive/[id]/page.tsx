@@ -31,7 +31,13 @@ import type {
 } from "@/lib/archive-detail-types";
 import type { PlantSpeciesOption } from "@/lib/archive-page-types";
 import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
-import { buildMediaList, formatDate, getDisplayName } from "@/lib/archive-detail-utils";
+import {
+  buildMediaList,
+  formatDate,
+  formatDateTime,
+  getDayNumber,
+  getDisplayName,
+} from "@/lib/archive-detail-utils";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -71,6 +77,7 @@ function Content({ id }: { id: string }) {
   const [isProjectFollowed, setIsProjectFollowed] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxRecord, setLightboxRecord] = useState<RecordItem | null>(null);
   const [deleteMediaTarget, setDeleteMediaTarget] = useState<{
     recordId: string;
     mediaId: string;
@@ -515,6 +522,12 @@ saveRecentArchiveBrowse({
   const mobileEncyclopediaHref = encyclopediaHref
     ? `${encyclopediaHref}?fromArchive=${encodeURIComponent(activeArchive.id)}`
     : null;
+  const lightboxMetaText = lightboxRecord
+    ? `${formatDateTime(lightboxRecord.record_time)} · 第 ${getDayNumber(
+        startTime || lightboxRecord.record_time,
+        lightboxRecord.record_time,
+      )} 天`
+    : "";
   const mobilePlantSearchKeyword = mobileArchiveName.trim().toLowerCase();
   const mobilePlantSearchResults = (
     mobilePlantSearchKeyword
@@ -909,9 +922,10 @@ saveRecentArchiveBrowse({
     showToast("已取消关注该项目");
   }
 
-  function openLightbox(media: MediaItem[], index: number) {
+  function openLightbox(media: MediaItem[], index: number, record: RecordItem) {
     const images = buildMediaList(media, activeArchive.title || "项目");
     if (!images.length) return;
+    setLightboxRecord(record);
     setLightboxImages(images);
     setLightboxIndex(index);
   }
@@ -1204,11 +1218,45 @@ saveRecentArchiveBrowse({
     showToast(deleted ? "图片已替换" : "新图片已添加，旧图片删除失败");
   }
 
+  async function handleDeleteLightboxImage(image: LightboxImage, currentIndex: number) {
+    if (!image.id || !lightboxRecord?.id) {
+      showToast("无法定位当前图片");
+      return lightboxImages.length;
+    }
+
+    const deleted = await deleteMediaFromRecord(lightboxRecord.id, image.id, null);
+    if (!deleted) return lightboxImages.length;
+
+    const nextImages = lightboxImages.filter((item) => item.id !== image.id);
+    setLightboxImages(nextImages);
+
+    if (nextImages.length === 0) {
+      setLightboxRecord(null);
+      setLightboxIndex(0);
+      return 0;
+    }
+
+    setLightboxIndex(Math.min(currentIndex, nextImages.length - 1));
+    return nextImages.length;
+  }
+
   function handleRecordNoteSaved(recordId: string, nextText: string) {
     setRecords((prev) =>
       prev.map((record) =>
         record.id === recordId ? { ...record, note: nextText } : record
       )
+    );
+  }
+
+  function handleRecordUpdated(recordId: string, patch: Partial<RecordItem>) {
+    setRecords((prev) =>
+      prev.map((record) =>
+        record.id === recordId ? { ...record, ...patch } : record
+      )
+    );
+
+    setLightboxRecord((prev) =>
+      prev?.id === recordId ? { ...prev, ...patch } : prev
     );
   }
 
@@ -1363,6 +1411,13 @@ saveRecentArchiveBrowse({
 
         {!isMobileViewport || mobileDetailTab === "records" ? (
         <>
+        {isMobileViewport ? (
+          <MobileArchiveRecordTop
+            title={activeArchive.title || "未命名项目"}
+            systemName={archiveDisplayName || ""}
+            href={mobileEncyclopediaHref}
+          />
+        ) : null}
         <section id="archive-records" style={{ position: "relative", paddingLeft: 22, scrollMarginTop: 76 }}>
           <div
             style={{
@@ -1402,8 +1457,7 @@ saveRecentArchiveBrowse({
                 onRemoveTag={(recordId, tag) => updateRecordTagState(recordId, tag, "remove")}
                 onAddTag={handleAddTag}
                 onNoteSaved={handleRecordNoteSaved}
-                archiveDisplayName={archiveDisplayName}
-                archiveDisplayHref={mobileEncyclopediaHref}
+                onRecordUpdated={handleRecordUpdated}
                 currentUserId={me ?? null}
                 onCommentCountChange={handleCommentCountChange}
                 onAddMedia={handleAddMediaToRecord}
@@ -1441,9 +1495,13 @@ saveRecentArchiveBrowse({
           index={lightboxIndex}
           onChange={setLightboxIndex}
           isMobileViewport={isMobileViewport}
+          metaText={lightboxMetaText}
+          note={lightboxRecord?.note || ""}
+          onDeleteCurrentImage={handleDeleteLightboxImage}
           onClose={() => {
             setLightboxImages([]);
             setLightboxIndex(0);
+            setLightboxRecord(null);
           }}
         />
       ) : null}
@@ -1475,6 +1533,34 @@ saveRecentArchiveBrowse({
         danger
       />
     </>
+  );
+}
+
+function MobileArchiveRecordTop({
+  title,
+  systemName,
+  href,
+}: {
+  title: string;
+  systemName: string;
+  href: string | null;
+}) {
+  return (
+    <div style={mobileRecordTopStyle}>
+      <span style={mobileRecordTopTitleStyle}>{title}</span>
+      {systemName ? (
+        <>
+          <span style={mobileRecordTopDotStyle}>·</span>
+          {href ? (
+            <Link href={href} style={mobileRecordTopLinkStyle}>
+              {systemName}
+            </Link>
+          ) : (
+            <span style={mobileRecordTopSystemStyle}>{systemName}</span>
+          )}
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -1828,6 +1914,45 @@ function normalizeArchiveCategory(value?: string | null): ArchiveCategory {
 
   return "other";
 }
+
+const mobileRecordTopStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  minWidth: 0,
+  margin: "0 0 10px",
+  color: "#253325",
+  fontSize: 14,
+  lineHeight: 1.35,
+};
+
+const mobileRecordTopTitleStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontWeight: 800,
+};
+
+const mobileRecordTopDotStyle: CSSProperties = {
+  color: "#9aa596",
+  flexShrink: 0,
+};
+
+const mobileRecordTopSystemStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: "#5f6f5b",
+};
+
+const mobileRecordTopLinkStyle: CSSProperties = {
+  ...mobileRecordTopSystemStyle,
+  color: "#2f6a31",
+  textDecoration: "none",
+  fontWeight: 700,
+};
 
 const archiveDetailTabWrapStyle: CSSProperties = {
   display: "grid",
