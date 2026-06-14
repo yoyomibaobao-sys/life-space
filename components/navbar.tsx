@@ -6,6 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 
+type MobileArchiveTitleInfo = {
+  title: string;
+  systemName: string;
+  href: string | null;
+} | null;
+
 export default function Navbar() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [username, setUsername] = useState("");
@@ -17,6 +23,9 @@ export default function Navbar() {
   const router = useRouter();
   const [isCompact, setIsCompact] = useState(false);
   const [mobileTitle, setMobileTitle] = useState("有时·耕作");
+  const [mobileArchiveTitleInfo, setMobileArchiveTitleInfo] =
+    useState<MobileArchiveTitleInfo>(null);
+  const [mobileMeMenuOpen, setMobileMeMenuOpen] = useState(false);
 
   useEffect(() => {
     function updateCompact() {
@@ -80,25 +89,42 @@ export default function Navbar() {
   useEffect(() => {
     let cancelled = false;
     const archiveDetailPath = getArchiveDetailPath(pathname);
+    setMobileMeMenuOpen(false);
 
     async function loadMobileTitle() {
       if (!archiveDetailPath) {
+        setMobileArchiveTitleInfo(null);
         setMobileTitle(getMobilePageTitle(pathname));
         return;
       }
 
+      setMobileArchiveTitleInfo(null);
       setMobileTitle("项目");
       const archiveId = archiveDetailPath.split("/").pop();
       if (!archiveId) return;
 
       const { data } = await supabase
         .from("archives")
-        .select("title")
+        .select("title, category, species_id, species_name_snapshot, system_name")
         .eq("id", archiveId)
         .maybeSingle();
 
       if (!cancelled) {
-        setMobileTitle(String(data?.title || "项目"));
+        const title = String(data?.title || "项目");
+        const systemName =
+          data?.category === "plant"
+            ? String(data?.species_name_snapshot || "")
+            : String(data?.system_name || "");
+
+        setMobileTitle(title);
+        setMobileArchiveTitleInfo({
+          title,
+          systemName,
+          href:
+            data?.category === "plant" && data?.species_id
+              ? `/plant/${data.species_id}?fromArchive=${encodeURIComponent(archiveId)}`
+              : null,
+        });
       }
     }
 
@@ -170,8 +196,40 @@ export default function Navbar() {
     return (
       <>
         <nav style={mobileTopNavStyle}>
-          <div style={mobilePageTitleStyle} title={mobileTitle}>
-            {mobileTitle}
+          <div
+            style={mobilePageTitleStyle}
+            title={
+              mobileArchiveTitleInfo?.systemName
+                ? `${mobileArchiveTitleInfo.title} · ${mobileArchiveTitleInfo.systemName}`
+                : mobileTitle
+            }
+          >
+            {mobileArchiveTitleInfo ? (
+              <>
+                <span style={mobileArchiveTitleTextStyle}>
+                  {mobileArchiveTitleInfo.title}
+                </span>
+                {mobileArchiveTitleInfo.systemName ? (
+                  <>
+                    <span style={mobileArchiveTitleDotStyle}> · </span>
+                    {mobileArchiveTitleInfo.href ? (
+                      <Link
+                        href={mobileArchiveTitleInfo.href}
+                        style={mobileArchiveTitleLinkStyle}
+                      >
+                        {mobileArchiveTitleInfo.systemName}
+                      </Link>
+                    ) : (
+                      <span style={mobileArchiveTitleSystemStyle}>
+                        {mobileArchiveTitleInfo.systemName}
+                      </span>
+                    )}
+                  </>
+                ) : null}
+              </>
+            ) : (
+              mobileTitle
+            )}
           </div>
 
           <div style={mobileTopActionGroupStyle}>
@@ -216,13 +274,27 @@ export default function Navbar() {
                 </Link>
               </>
             ) : user && isMobileMePath(pathname) ? (
-              <button
-                type="button"
-                onClick={handleLogout}
-                style={mobileLogoutButtonStyle}
-              >
-                退出
-              </button>
+              <div style={mobileMeMenuWrapStyle}>
+                <button
+                  type="button"
+                  onClick={() => setMobileMeMenuOpen((open) => !open)}
+                  aria-label="更多账号操作"
+                  style={mobileMeMoreButtonStyle}
+                >
+                  ⋯
+                </button>
+                {mobileMeMenuOpen ? (
+                  <div style={mobileMeMenuStyle}>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      style={mobileMeLogoutItemStyle}
+                    >
+                      退出登录
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ) : user && shouldShowMobileCreateAction(pathname) ? (
               <Link
                 href={getMobileCreateHref(pathname, true)}
@@ -542,6 +614,29 @@ const mobilePageTitleStyle: CSSProperties = {
   lineHeight: 1.2,
 };
 
+const mobileArchiveTitleTextStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  verticalAlign: "bottom",
+};
+
+const mobileArchiveTitleDotStyle: CSSProperties = {
+  color: "#8a9685",
+  fontWeight: 600,
+};
+
+const mobileArchiveTitleSystemStyle: CSSProperties = {
+  color: "#53694d",
+  fontWeight: 700,
+};
+
+const mobileArchiveTitleLinkStyle: CSSProperties = {
+  ...mobileArchiveTitleSystemStyle,
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+};
+
 const mobileTopActionGroupStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -613,6 +708,54 @@ const mobileLogoutButtonStyle: CSSProperties = {
   cursor: "pointer",
   whiteSpace: "nowrap",
   flexShrink: 0,
+};
+
+const mobileMeMenuWrapStyle: CSSProperties = {
+  position: "relative",
+  display: "inline-flex",
+  flexShrink: 0,
+};
+
+const mobileMeMoreButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 999,
+  border: "1px solid #dfe8da",
+  background: "#fff",
+  color: "#52634e",
+  fontSize: 20,
+  lineHeight: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+};
+
+const mobileMeMenuStyle: CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 8px)",
+  right: 0,
+  zIndex: 140,
+  width: 112,
+  border: "1px solid #e6ebdf",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 14px 30px rgba(39, 58, 34, 0.16)",
+  padding: 5,
+};
+
+const mobileMeLogoutItemStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 34,
+  border: "none",
+  borderRadius: 9,
+  background: "transparent",
+  color: "#b23a2d",
+  fontSize: 13,
+  fontWeight: 800,
+  textAlign: "left",
+  padding: "0 9px",
+  cursor: "pointer",
 };
 
 const mobileLoginActionStyle: CSSProperties = {

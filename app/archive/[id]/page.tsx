@@ -2,7 +2,7 @@
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
 import { use, useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { showToast } from "@/components/Toast";
@@ -68,6 +68,7 @@ export default function ArchiveDetail({
 type MobileArchiveEditableField = "title" | "category" | "name" | "source" | "note";
 
 function Content({ id }: { id: string }) {
+  const router = useRouter();
   const [archive, setArchive] = useState<ArchiveDetailArchive | null>(null);
   const [species, setSpecies] = useState<PlantSpeciesLite | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
@@ -103,6 +104,8 @@ function Content({ id }: { id: string }) {
   const [mobileSelectedSpeciesId, setMobileSelectedSpeciesId] = useState("");
   const [mobilePlantSuggestionsOpen, setMobilePlantSuggestionsOpen] = useState(false);
   const [mobileSystemSuggestionsOpen, setMobileSystemSuggestionsOpen] = useState(false);
+  const [deleteArchiveDialogOpen, setDeleteArchiveDialogOpen] = useState(false);
+  const [isDeletingArchive, setIsDeletingArchive] = useState(false);
 
   const searchParams = useSearchParams();
   const modeParam = searchParams.get("mode");
@@ -680,6 +683,73 @@ saveRecentArchiveBrowse({
     setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
 
     showToast(nextValue ? "项目和记录已公开" : "项目和记录仅自己可见");
+  }
+
+  async function updateArchiveStatus(nextStatus: "active" | "ended") {
+    if (!isOwner) return;
+
+    const isEnding = nextStatus === "ended";
+    if (isEnding && !confirm("确认将这个项目标记为已结束吗？之后仍可查看，也可以恢复。")) {
+      return;
+    }
+
+    const { error } = await supabase.rpc(
+      isEnding ? "mark_archive_ended" : "restore_archive_active",
+      { p_archive_id: activeArchive.id }
+    );
+
+    if (error) {
+      showToast(isEnding ? "标记结束失败" : "恢复失败");
+      return;
+    }
+
+    setArchive((prev) => (prev ? { ...prev, status: nextStatus } : prev));
+    showToast(isEnding ? "已标记为结束" : "已恢复为进行中");
+  }
+
+  async function confirmDeleteArchive() {
+    if (!isOwner || isDeletingArchive) return;
+
+    setIsDeletingArchive(true);
+
+    const { data: recordRows } = await supabase
+      .from("records")
+      .select("id")
+      .eq("archive_id", activeArchive.id);
+    const recordIds = (recordRows || []).map((record) => record.id).filter(Boolean);
+    let mediaItems: MediaItem[] = [];
+
+    if (recordIds.length > 0) {
+      const { data: mediaRows } = await supabase
+        .from("media")
+        .select("id, url, storage_path, thumb_path, size_mb, size_bytes, user_id")
+        .in("record_id", recordIds);
+      mediaItems = (mediaRows || []) as MediaItem[];
+      await removeMediaFilesFromStorage(mediaItems);
+    }
+
+    const deletedBytes = sumMediaSizeBytes(mediaItems);
+    const ownerId = activeArchive.user_id || mediaItems.find((media) => media.user_id)?.user_id;
+    const { error } = await supabase
+      .from("archives")
+      .delete()
+      .eq("id", activeArchive.id)
+      .eq("user_id", activeArchive.user_id);
+
+    setIsDeletingArchive(false);
+
+    if (error) {
+      showToast("删除项目失败");
+      return;
+    }
+
+    if (deletedBytes > 0) {
+      await subtractStorageUsed(ownerId, deletedBytes);
+    }
+
+    setDeleteArchiveDialogOpen(false);
+    showToast("项目已删除");
+    router.replace("/archive");
   }
 
   function beginMobileArchiveEdit(field: MobileArchiveEditableField) {
@@ -1392,6 +1462,11 @@ saveRecentArchiveBrowse({
             onSaveNote={saveMobileArchiveNote}
             onPlantSuggestionsOpenChange={setMobilePlantSuggestionsOpen}
             onSystemSuggestionsOpenChange={setMobileSystemSuggestionsOpen}
+            onToggleArchiveStatus={() =>
+              void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
+            }
+            onToggleArchiveVisibility={() => void toggleArchiveVisibility()}
+            onDeleteArchive={() => setDeleteArchiveDialogOpen(true)}
           />
         ) : null}
 
@@ -1411,24 +1486,26 @@ saveRecentArchiveBrowse({
 
         {!isMobileViewport || mobileDetailTab === "records" ? (
         <>
-        {isMobileViewport ? (
-          <MobileArchiveRecordTop
-            title={activeArchive.title || "未命名项目"}
-            systemName={archiveDisplayName || ""}
-            href={mobileEncyclopediaHref}
-          />
-        ) : null}
-        <section id="archive-records" style={{ position: "relative", paddingLeft: 22, scrollMarginTop: 76 }}>
-          <div
-            style={{
-              position: "absolute",
-              left: 9,
-              top: 0,
-              bottom: 0,
-              width: 2,
-              background: "#e8eee5",
-            }}
-          />
+        <section
+          id="archive-records"
+          style={
+            isMobileViewport
+              ? mobileArchiveRecordListStyle
+              : { position: "relative", paddingLeft: 22, scrollMarginTop: 76 }
+          }
+        >
+          {!isMobileViewport ? (
+            <div
+              style={{
+                position: "absolute",
+                left: 9,
+                top: 0,
+                bottom: 0,
+                width: 2,
+                background: "#e8eee5",
+              }}
+            />
+          ) : null}
 
           {records.map((item, index) => {
             const sameTagLinks = (item.display_tags || [])
@@ -1519,6 +1596,18 @@ saveRecentArchiveBrowse({
         danger
       />
 
+      <ConfirmDialog
+        open={deleteArchiveDialogOpen}
+        title="删除项目"
+        message={`确定删除“${activeArchive.title || "这个项目"}”吗？项目内的记录会一起删除，删除后无法恢复。`}
+        confirmText={isDeletingArchive ? "删除中..." : "删除项目"}
+        cancelText="取消"
+        onClose={() => {
+          if (!isDeletingArchive) setDeleteArchiveDialogOpen(false);
+        }}
+        onConfirm={confirmDeleteArchive}
+        danger
+      />
 
       <ConfirmDialog
         open={Boolean(deleteMediaTarget)}
@@ -1598,6 +1687,9 @@ function MobileArchiveProfile({
   onSaveNote,
   onPlantSuggestionsOpenChange,
   onSystemSuggestionsOpenChange,
+  onToggleArchiveStatus,
+  onToggleArchiveVisibility,
+  onDeleteArchive,
 }: {
   archive: ArchiveDetailArchive;
   archiveDisplayName: string;
@@ -1632,6 +1724,9 @@ function MobileArchiveProfile({
   onSaveNote: () => void;
   onPlantSuggestionsOpenChange: (open: boolean) => void;
   onSystemSuggestionsOpenChange: (open: boolean) => void;
+  onToggleArchiveStatus: () => void;
+  onToggleArchiveVisibility: () => void;
+  onDeleteArchive: () => void;
 }) {
   const createdAtText = formatDate(archive.created_at) || "未填写";
   const nameLabel = category === "plant" ? "系统植物名 *" : "系统名 *";
@@ -1828,6 +1923,32 @@ function MobileArchiveProfile({
       <MobileArchiveField label="创建时间" value={createdAtText} />
 
       {error ? <div style={mobileArchiveErrorStyle}>{error}</div> : null}
+
+      {isOwner ? (
+        <div style={mobileArchiveActionPanelStyle}>
+          <button
+            type="button"
+            onClick={onToggleArchiveStatus}
+            style={mobileArchiveActionButtonStyle}
+          >
+            {archive.status === "ended" ? "恢复" : "结束"}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleArchiveVisibility}
+            style={mobileArchiveActionButtonStyle}
+          >
+            {archive.is_public ? "设为私密" : "设为公开"}
+          </button>
+          <button
+            type="button"
+            onClick={onDeleteArchive}
+            style={mobileArchiveDangerButtonStyle}
+          >
+            删除项目
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1988,6 +2109,12 @@ const mobileArchiveProfileStyle: CSSProperties = {
   background: "#fff",
   padding: 14,
   marginBottom: 14,
+};
+
+const mobileArchiveRecordListStyle: CSSProperties = {
+  position: "relative",
+  paddingLeft: 0,
+  scrollMarginTop: 64,
 };
 
 const mobileArchiveProfileHeaderStyle: CSSProperties = {
@@ -2161,4 +2288,31 @@ const mobileArchiveErrorStyle: CSSProperties = {
   marginTop: 8,
   color: "#b94a48",
   fontSize: 13,
+};
+
+const mobileArchiveActionPanelStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 7,
+  marginTop: 10,
+  paddingTop: 10,
+  borderTop: "1px solid #eef2ea",
+};
+
+const mobileArchiveActionButtonStyle: CSSProperties = {
+  minHeight: 34,
+  border: "1px solid #dfe8da",
+  borderRadius: 10,
+  background: "#fbfcfa",
+  color: "#40583a",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const mobileArchiveDangerButtonStyle: CSSProperties = {
+  ...mobileArchiveActionButtonStyle,
+  border: "1px solid #ead2ce",
+  background: "#fff8f6",
+  color: "#b23a2d",
 };

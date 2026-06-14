@@ -31,16 +31,22 @@ const rowStyle = {
   flexWrap: "wrap" as const,
 };
 
-function pillStyle(active: boolean) {
+const mobileRowStyle = {
+  ...rowStyle,
+  gap: 5,
+};
+
+function pillStyle(active: boolean, compact = false) {
   return {
     border: active ? "1px solid #3f7d3d" : "1px solid #cfe3c8",
     background: active ? "#3f7d3d" : "#f8fbf5",
     color: active ? "#fff" : "#335033",
     borderRadius: 999,
-    padding: "7px 14px",
-    fontSize: 15,
+    padding: compact ? "5px 9px" : "7px 14px",
+    fontSize: compact ? 13 : 15,
     fontWeight: 700,
     cursor: "pointer",
+    lineHeight: compact ? 1.15 : 1.3,
   };
 }
 
@@ -76,10 +82,10 @@ export default function ArchiveFiltersPanel({
   return (
     <section
       style={{
-        marginBottom: visibleGroupTagCount > 0 ? 8 : 18,
-        padding: "12px 14px",
+        marginBottom: mobileMode ? (visibleGroupTagCount > 0 ? 6 : 10) : visibleGroupTagCount > 0 ? 8 : 18,
+        padding: mobileMode ? "7px 8px" : "12px 14px",
         border: "1px solid #edf0e8",
-        borderRadius: 16,
+        borderRadius: mobileMode ? 12 : 16,
         background: "#fff",
       }}
     >
@@ -113,11 +119,11 @@ export default function ArchiveFiltersPanel({
       ) : null}
 
       {currentGroup ? (
-      <div style={rowStyle}>
+      <div style={mobileMode ? mobileRowStyle : rowStyle}>
         <button
           type="button"
           onClick={() => onSelectCategory(currentGroup.category)}
-          style={pillStyle(!activeSubTag)}
+          style={pillStyle(!activeSubTag, mobileMode)}
           title="点击显示当前大类下全部项目"
         >
           子分类：
@@ -131,6 +137,7 @@ export default function ArchiveFiltersPanel({
             onSelect={() => onSelectSubTag(tag.category, tag.id)}
             onRename={() => onRenameSubTag(tag)}
             onDelete={() => onDeleteSubTag(tag)}
+            compact={mobileMode}
           />
         ))}
 
@@ -142,9 +149,10 @@ export default function ArchiveFiltersPanel({
             background: "#fbfdf9",
             color: "#4CAF50",
             borderRadius: 999,
-            padding: "5px 10px",
+            padding: mobileMode ? "4px 8px" : "5px 10px",
             cursor: "pointer",
-            fontSize: 14,
+            fontSize: mobileMode ? 13 : 14,
+            lineHeight: mobileMode ? 1.15 : 1.3,
           }}
           title="新增子分类"
         >

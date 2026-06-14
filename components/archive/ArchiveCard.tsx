@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -599,6 +599,7 @@ function MobileArchiveCard({
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
   onDeleteArchive: (item: ArchiveItem) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const statusText = getMobileArchiveStatusText(item, ended);
   const updateText = formatArchiveDate(item.latest_record_time || item.last_record_time || item.created_at) || "暂无";
   const ongoingDays = getOngoingDays(item.created_at);
@@ -673,6 +674,18 @@ function MobileArchiveCard({
             {systemName ? <span style={mobileCardSystemNameStyle}>{systemName}</span> : null}
           </div>
           {statusText ? <span style={mobileCardStatusBadgeStyle}>{statusText}</span> : null}
+          <button
+            type="button"
+            data-no-card-nav="true"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuOpen((open) => !open);
+            }}
+            aria-label="更多项目操作"
+            style={mobileCardMoreButtonStyle}
+          >
+            ⋯
+          </button>
         </div>
         <div
           data-no-card-nav="true"
@@ -698,44 +711,52 @@ function MobileArchiveCard({
           {activityText}
         </div>
         <div style={mobileCardBottomRowStyle}>
-          <button
-            type="button"
-            data-no-card-nav="true"
-            onClick={(event) => {
-              event.stopPropagation();
-              onTogglePublic(item);
-            }}
-            style={mobileCardVisibilityButtonStyle(item.is_public)}
-            title={item.is_public ? "设为仅自己可见" : "公开"}
-          >
+          <span style={mobileCardVisibilityBadgeStyle(item.is_public)}>
             {visibilityText}
-          </button>
+          </span>
           <div style={mobileCardStatsStyle} title={attentionText}>
             {attentionText}
           </div>
-          <button
-            type="button"
-            data-no-card-nav="true"
-            onClick={(event) => {
-              event.stopPropagation();
-              onUpdateArchiveStatus(item, ended ? "active" : "ended");
-            }}
-            style={mobileCardQuietButtonStyle}
-          >
-            {ended ? "恢复" : "结束"}
-          </button>
-          <button
-            type="button"
-            data-no-card-nav="true"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDeleteArchive(item);
-            }}
-            style={{ ...mobileCardQuietButtonStyle, color: "#c85f5a" }}
-          >
-            删除
-          </button>
         </div>
+
+        {menuOpen ? (
+          <div
+            data-no-card-nav="true"
+            onClick={(event) => event.stopPropagation()}
+            style={mobileCardMenuStyle}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onUpdateArchiveStatus(item, ended ? "active" : "ended");
+              }}
+              style={mobileCardMenuItemStyle}
+            >
+              {ended ? "恢复" : "结束"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onTogglePublic(item);
+              }}
+              style={mobileCardMenuItemStyle}
+            >
+              {item.is_public ? "设为私密" : "设为公开"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onDeleteArchive(item);
+              }}
+              style={mobileCardDangerMenuItemStyle}
+            >
+              删除项目
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -818,6 +839,22 @@ const mobileCardStatusBadgeStyle: CSSProperties = {
   padding: "4px 7px",
 };
 
+const mobileCardMoreButtonStyle: CSSProperties = {
+  flexShrink: 0,
+  width: 30,
+  height: 30,
+  border: "1px solid #edf0e8",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#667066",
+  fontSize: 19,
+  lineHeight: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+};
+
 const mobileCardMetaStyle: CSSProperties = {
   color: "#60705b",
   fontSize: 12,
@@ -853,30 +890,46 @@ const mobileCardBottomRowStyle: CSSProperties = {
   minWidth: 0,
 };
 
-function mobileCardVisibilityButtonStyle(isPublic?: boolean | null): CSSProperties {
+function mobileCardVisibilityBadgeStyle(isPublic?: boolean | null): CSSProperties {
   return {
     flexShrink: 0,
-    border: isPublic ? "1px solid #b7dfbb" : "1px solid #ddd",
-    borderRadius: 999,
-    background: isPublic ? "#f1fff1" : "#fff",
-    color: isPublic ? "#2f8f2f" : "#777",
-    padding: "2px 6px",
-    fontSize: 11,
+    color: isPublic ? "#43763e" : "#7f887a",
+    fontSize: 12,
     fontWeight: 700,
     lineHeight: 1.2,
     whiteSpace: "nowrap",
-    cursor: "pointer",
   };
 }
 
-const mobileCardQuietButtonStyle: CSSProperties = {
-  flexShrink: 0,
+const mobileCardMenuStyle: CSSProperties = {
+  position: "absolute",
+  top: 42,
+  right: 8,
+  zIndex: 20,
+  width: 132,
+  border: "1px solid #e6ebdf",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 16px 34px rgba(39, 58, 34, 0.16)",
+  padding: 5,
+};
+
+const mobileCardMenuItemStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 34,
   border: "none",
+  borderRadius: 9,
   background: "transparent",
-  color: "#8a8f84",
-  padding: "2px 1px",
-  fontSize: 11,
-  lineHeight: 1.2,
+  color: "#40583a",
+  padding: "0 10px",
+  textAlign: "left",
+  fontSize: 13,
+  fontWeight: 700,
   whiteSpace: "nowrap",
   cursor: "pointer",
+};
+
+const mobileCardDangerMenuItemStyle: CSSProperties = {
+  ...mobileCardMenuItemStyle,
+  color: "#c85f5a",
 };

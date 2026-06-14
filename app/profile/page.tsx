@@ -210,13 +210,21 @@ export default function ProfilePage() {
 
   const privateArchiveCount = Math.max(0, Number(stats?.archiveCount || 0) - Number(stats?.publicArchiveCount || 0));
   const planHint = getPlanHint(stats?.planNames || [], Number(stats?.planCount || 0));
-  const topGridColumns = viewportWidth < 820 ? "1fr" : "minmax(280px, 0.95fr) minmax(420px, 1.05fr)";
-  const formGridColumns = viewportWidth < 560 ? "1fr" : "repeat(2, minmax(0, 1fr))";
-  const statsGridColumns = viewportWidth < 640
+  const isMobileViewport = viewportWidth < 760;
+  const topGridColumns = isMobileViewport ? "minmax(0, 1fr)" : viewportWidth < 820 ? "1fr" : "minmax(280px, 0.95fr) minmax(420px, 1.05fr)";
+  const formGridColumns = viewportWidth < 560 ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))";
+  const statsGridColumns = isMobileViewport
     ? "1fr"
     : viewportWidth < 900
       ? "repeat(2, minmax(0, 1fr))"
       : "repeat(3, minmax(0, 1fr))";
+  const pageStyle = isMobileViewport ? mobileProfileMainStyle : profileMainStyle;
+  const shellStyle = isMobileViewport ? mobileProfileShellStyle : profileShellStyle;
+  const compactPanelStyle = isMobileViewport ? { ...panelStyle, ...mobilePanelStyle } : panelStyle;
+  const fieldInputStyle = isMobileViewport ? mobileInputStyle : inputStyle;
+  const primaryActionStyle = isMobileViewport ? mobilePrimaryButtonStyle : primaryButtonStyle;
+  const secondaryActionStyle = isMobileViewport ? mobileSecondaryLinkStyle : secondaryLinkStyle;
+  const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
 
   async function refreshStats(targetUserId: string) {
     const data = await loadUserProfileData(supabase, targetUserId);
@@ -484,11 +492,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "16px 14px 32px" }}>
-      <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 18, padding: 18, boxShadow: "0 10px 24px rgba(32,56,24,0.05)" }}>
+    <main style={pageStyle}>
+      <section style={shellStyle}>
         <div>
           <div style={{ fontSize: 13, color: "#6b7b66" }}>我的资料</div>
-          <h1 style={{ margin: "4px 0 0", fontSize: 24, color: "#1f2a1f" }}>用户信息页</h1>
+          <h1 style={{ margin: "4px 0 0", fontSize: isMobileViewport ? 21 : 24, color: "#1f2a1f" }}>用户信息页</h1>
         </div>
 
         {errorMsg ? (
@@ -497,17 +505,17 @@ export default function ProfilePage() {
           </div>
         ) : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: topGridColumns, gap: 14, marginTop: 14, alignItems: "start" }}>
-          <section style={panelStyle}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: topGridColumns, gap: isMobileViewport ? 10 : 14, marginTop: isMobileViewport ? 10 : 14, alignItems: "start" }}>
+          <section style={compactPanelStyle}>
+            <div style={{ display: "flex", alignItems: "center", gap: isMobileViewport ? 10 : 12, minWidth: 0 }}>
               {profile.avatar_url ? (
-                <img src={String(profile.avatar_url)} alt="" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "1px solid #e4ebe0" }} />
+                <img src={String(profile.avatar_url)} alt="" style={isMobileViewport ? mobileAvatarStyle : { width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "1px solid #e4ebe0" }} />
               ) : (
-                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#eef5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🌱</div>
+                <div style={isMobileViewport ? mobileAvatarFallbackStyle : { width: 72, height: 72, borderRadius: "50%", background: "#eef5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🌱</div>
               )}
 
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 19, fontWeight: 700, color: "#1f2a1f" }}>{profile.username || "未设置用户名"}</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: isMobileViewport ? 17 : 19, fontWeight: 700, color: "#1f2a1f" }}>{profile.username || "未设置用户名"}</div>
                 <div style={{ marginTop: 3, fontSize: 13, color: "#6f7b69", wordBreak: "break-all" }}>{user.email}</div>
                 <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
                   所在地区：{locationPreview}
@@ -517,7 +525,7 @@ export default function ProfilePage() {
 
             <div style={{ marginTop: 12 }}>
               <label style={fieldLabelStyle}>更换头像</label>
-              <input type="file" accept="image/*" onChange={handleUpload} />
+              <input type="file" accept="image/*" onChange={handleUpload} style={isMobileViewport ? mobileFileInputStyle : undefined} />
               <div style={{ marginTop: 4, fontSize: 12, color: "#7b8676" }}>
                 建议上传正方形图片，3MB 以内。{uploading ? "上传中..." : ""}
               </div>
@@ -531,16 +539,16 @@ export default function ProfilePage() {
             </div>
           </section>
 
-          <section style={panelStyle}>
+          <section style={compactPanelStyle}>
             <div style={sectionTitleStyle}>基础信息</div>
             <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns }}>
               <div>
                 <label style={fieldLabelStyle}>用户名</label>
-                <input value={username} onChange={(e) => setUsername(e.target.value)} style={inputStyle} placeholder="输入你的用户名" />
+                <input value={username} onChange={(e) => setUsername(e.target.value)} style={fieldInputStyle} placeholder="输入你的用户名" />
               </div>
               <div>
                 <label style={fieldLabelStyle}>国家 / 地区</label>
-                <select value={countryCode} onChange={(e) => { setCountryCode(e.target.value); setRegionName(""); }} style={inputStyle}>
+                <select value={countryCode} onChange={(e) => { setCountryCode(e.target.value); setRegionName(""); }} style={fieldInputStyle}>
                   <option value="">请选择</option>
                   {countryOptions.map((item) => (
                     <option key={item.code} value={item.code}>{item.name}</option>
@@ -550,25 +558,25 @@ export default function ProfilePage() {
               {showCustomCountryInput ? (
                 <div>
                   <label style={fieldLabelStyle}>自定义国家 / 地区</label>
-                  <input value={customCountryName} onChange={(e) => setCustomCountryName(e.target.value)} style={inputStyle} placeholder="例如：巴西" />
+                  <input value={customCountryName} onChange={(e) => setCustomCountryName(e.target.value)} style={fieldInputStyle} placeholder="例如：巴西" />
                 </div>
               ) : null}
               <div>
                 <label style={fieldLabelStyle}>省 / 州 / 地域</label>
                 {useRegionSelect ? (
-                  <select value={regionName} onChange={(e) => setRegionName(e.target.value)} style={inputStyle}>
+                  <select value={regionName} onChange={(e) => setRegionName(e.target.value)} style={fieldInputStyle}>
                     <option value="">请选择</option>
                     {regionOptions.map((item) => (
                       <option key={item.value} value={item.value}>{item.label}</option>
                     ))}
                   </select>
                 ) : (
-                  <input value={regionName} onChange={(e) => setRegionName(e.target.value)} style={inputStyle} placeholder="例如：浙江 / California" />
+                  <input value={regionName} onChange={(e) => setRegionName(e.target.value)} style={fieldInputStyle} placeholder="例如：浙江 / California" />
                 )}
               </div>
               <div>
                 <label style={fieldLabelStyle}>城市</label>
-                <input value={cityName} onChange={(e) => setCityName(e.target.value)} style={inputStyle} placeholder="例如：宁波 / Tokyo" />
+                <input value={cityName} onChange={(e) => setCityName(e.target.value)} style={fieldInputStyle} placeholder="例如：宁波 / Tokyo" />
               </div>
             </div>
 
@@ -576,19 +584,19 @@ export default function ProfilePage() {
               显示为：<span style={{ fontWeight: 700, color: "#243123" }}>{locationPreview}</span>
             </div>
 
-            <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" onClick={handleSave} disabled={saving} style={primaryButtonStyle}>{saving ? "保存中..." : "保存资料"}</button>
-              <Link href={`/user/${user.id}/profile`} style={secondaryLinkStyle}>查看公开资料页</Link>
-              <Link href="/archive" style={secondaryLinkStyle}>进入我的空间</Link>
-              <Link href="/membership" style={secondaryLinkStyle}>会员与续费</Link>
+            <div style={isMobileViewport ? mobileProfileActionRowStyle : { marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? "保存中..." : "保存资料"}</button>
+              <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>查看公开资料页</Link>
+              <Link href="/archive" style={secondaryActionStyle}>进入我的空间</Link>
+              <Link href="/membership" style={secondaryActionStyle}>会员与续费</Link>
               {isAdmin ? (
-                <Link href="/admin/memberships" style={adminLinkStyle}>会员管理</Link>
+                <Link href="/admin/memberships" style={isMobileViewport ? { ...mobileSecondaryLinkStyle, border: "1px solid #c9d8be", background: "#edf6e8", color: "#2f5a27" } : adminLinkStyle}>会员管理</Link>
               ) : null}
             </div>
           </section>
         </div>
 
-        <section style={membershipSectionStyle}>
+        <section style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>我的会员</div>
@@ -655,7 +663,7 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        <section style={paymentHistorySectionStyle}>
+        <section style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>付款记录</div>
@@ -717,7 +725,7 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        <section style={statsSectionStyle}>
+        <section style={isMobileViewport ? { ...statsSectionStyle, ...sectionCompactStyle } : statsSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>我的空间</div>
@@ -778,7 +786,7 @@ export default function ProfilePage() {
                     </div>
         </section>
 
-        <section style={plantInfoSectionStyle}>
+        <section style={isMobileViewport ? { ...plantInfoSectionStyle, ...sectionCompactStyle } : plantInfoSectionStyle}>
           <div style={plantInfoHeaderStyle}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>植物资料</div>
@@ -804,7 +812,7 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        <section style={marketInfoSectionStyle}>
+        <section style={isMobileViewport ? { ...marketInfoSectionStyle, ...sectionCompactStyle } : marketInfoSectionStyle}>
           <div style={marketInfoHeaderStyle}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>集市信息</div>
@@ -833,7 +841,7 @@ export default function ProfilePage() {
             </Link>
           </div>
         </section>
-        <section style={dangerSectionStyle}>
+        <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#9a5b55" }}>危险操作</div>
             <h2 style={dangerTitleStyle}>注销账号</h2>
@@ -944,11 +952,51 @@ function StatActionCard({
   );
 }
 
+const profileMainStyle: CSSProperties = {
+  maxWidth: 1040,
+  margin: "0 auto",
+  padding: "16px 14px 32px",
+};
+
+const mobileProfileMainStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  margin: "0 auto",
+  padding: "8px 8px 84px",
+  boxSizing: "border-box",
+  overflowX: "hidden",
+};
+
+const profileShellStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e7efe3",
+  borderRadius: 18,
+  padding: 18,
+  boxShadow: "0 10px 24px rgba(32,56,24,0.05)",
+};
+
+const mobileProfileShellStyle: CSSProperties = {
+  ...profileShellStyle,
+  width: "100%",
+  maxWidth: "100%",
+  borderRadius: 14,
+  padding: 10,
+  boxSizing: "border-box",
+  boxShadow: "0 6px 16px rgba(32,56,24,0.04)",
+};
+
 const panelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e8efe4",
   borderRadius: 16,
   padding: 14,
+};
+
+const mobilePanelStyle: CSSProperties = {
+  borderRadius: 13,
+  padding: 10,
+  minWidth: 0,
+  boxSizing: "border-box",
 };
 
 
@@ -976,6 +1024,13 @@ const membershipSectionStyle: CSSProperties = {
   padding: 14,
 };
 
+const mobileProfileSectionStyle: CSSProperties = {
+  marginTop: 10,
+  borderRadius: 13,
+  padding: 10,
+  minWidth: 0,
+  boxSizing: "border-box",
+};
 
 const paymentHistorySectionStyle: CSSProperties = {
   marginTop: 14,
@@ -1219,6 +1274,14 @@ const inputStyle: CSSProperties = {
   boxSizing: "border-box",
 };
 
+const mobileInputStyle: CSSProperties = {
+  ...inputStyle,
+  minWidth: 0,
+  padding: "8px 10px",
+  borderRadius: 9,
+  fontSize: 13,
+};
+
 const formGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -1249,6 +1312,14 @@ const primaryButtonStyle: CSSProperties = {
   fontWeight: 600,
 };
 
+const mobilePrimaryButtonStyle: CSSProperties = {
+  ...primaryButtonStyle,
+  minHeight: 36,
+  padding: "0 12px",
+  borderRadius: 10,
+  fontSize: 13,
+};
+
 const secondaryLinkStyle: CSSProperties = {
   textDecoration: "none",
   border: "1px solid #d7e2d2",
@@ -1258,6 +1329,50 @@ const secondaryLinkStyle: CSSProperties = {
   padding: "9px 13px",
   fontSize: 14,
   fontWeight: 600,
+};
+
+const mobileSecondaryLinkStyle: CSSProperties = {
+  ...secondaryLinkStyle,
+  minHeight: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "0 10px",
+  borderRadius: 10,
+  fontSize: 13,
+  boxSizing: "border-box",
+};
+
+const mobileProfileActionRowStyle: CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 7,
+  flexWrap: "wrap",
+};
+
+const mobileAvatarStyle: CSSProperties = {
+  width: 58,
+  height: 58,
+  borderRadius: "50%",
+  objectFit: "cover",
+  border: "1px solid #e4ebe0",
+  flexShrink: 0,
+};
+
+const mobileAvatarFallbackStyle: CSSProperties = {
+  ...mobileAvatarStyle,
+  background: "#eef5e9",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 23,
+};
+
+const mobileFileInputStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  fontSize: 12,
+  color: "#5e6959",
 };
 
 const adminLinkStyle: CSSProperties = {

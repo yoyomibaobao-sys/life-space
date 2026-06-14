@@ -235,15 +235,76 @@ export default function ArchiveLightbox({
     return (
       <div
         onTouchStart={(event) => {
+          const target = event.target as HTMLElement | null;
+          if (target?.closest("button")) return;
+
+          if (event.touches.length >= 2) {
+            pinchStartDistance.current = getTouchDistance(event.touches);
+            pinchStartScale.current = scale;
+            panStartPoint.current = null;
+            mobileTouchStart.current = null;
+            mobileTouchCurrent.current = null;
+            mobileTouchMoved.current = true;
+            setMobileMenuOpen(false);
+            return;
+          }
+
           const touch = event.touches[0];
           if (!touch) return;
           mobileTouchStart.current = { x: touch.clientX, y: touch.clientY };
           mobileTouchCurrent.current = { x: touch.clientX, y: touch.clientY };
           mobileTouchMoved.current = false;
+          interactedRef.current = false;
+          suppressClickRef.current = false;
+
+          if (scale > 1.02) {
+            panStartPoint.current = { x: touch.clientX, y: touch.clientY };
+            panStartOffset.current = offset;
+          } else {
+            panStartPoint.current = null;
+            panStartOffset.current = { x: 0, y: 0 };
+          }
         }}
         onTouchMove={(event) => {
+          if (event.touches.length >= 2) {
+            event.preventDefault();
+            const currentDistance = getTouchDistance(event.touches);
+            if (pinchStartDistance.current && currentDistance) {
+              const ratio = currentDistance / pinchStartDistance.current;
+              const nextScale = clampScale(pinchStartScale.current * ratio);
+              setScale(nextScale);
+              setOffset((prev) => clampOffset(prev, nextScale));
+            }
+            mobileTouchMoved.current = true;
+            interactedRef.current = true;
+            suppressClickRef.current = true;
+            setMobileMenuOpen(false);
+            return;
+          }
+
           const touch = event.touches[0];
           if (!touch || !mobileTouchStart.current) return;
+
+          if (scale > 1.02 && panStartPoint.current) {
+            event.preventDefault();
+            const dx = touch.clientX - panStartPoint.current.x;
+            const dy = touch.clientY - panStartPoint.current.y;
+
+            if (Math.max(Math.abs(dx), Math.abs(dy)) > 3) {
+              mobileTouchMoved.current = true;
+              interactedRef.current = true;
+              suppressClickRef.current = true;
+            }
+
+            setOffset(
+              clampOffset({
+                x: panStartOffset.current.x + dx,
+                y: panStartOffset.current.y + dy,
+              })
+            );
+            return;
+          }
+
           mobileTouchCurrent.current = { x: touch.clientX, y: touch.clientY };
 
           const dx = touch.clientX - mobileTouchStart.current.x;
@@ -252,12 +313,24 @@ export default function ArchiveLightbox({
             mobileTouchMoved.current = true;
           }
         }}
-        onTouchEnd={() => {
+        onTouchEnd={(event) => {
+          if (event.touches.length > 0) return;
+
+          if (pinchStartDistance.current) {
+            pinchStartDistance.current = null;
+            pinchStartScale.current = scale;
+            panStartPoint.current = null;
+            mobileTouchStart.current = null;
+            mobileTouchCurrent.current = null;
+            return;
+          }
+
           const start = mobileTouchStart.current;
           const currentTouch = mobileTouchCurrent.current;
 
           mobileTouchStart.current = null;
           mobileTouchCurrent.current = null;
+          panStartPoint.current = null;
 
           if (!start || !currentTouch) return;
 
@@ -266,6 +339,14 @@ export default function ArchiveLightbox({
           const absX = Math.abs(dx);
           const absY = Math.abs(dy);
           const maxDistance = Math.max(absX, absY);
+
+          if (scale > 1.02) {
+            if (maxDistance < 8) {
+              setMobileToolbarVisible((visible) => !visible);
+              setMobileMenuOpen(false);
+            }
+            return;
+          }
 
           if (maxDistance < 8) {
             setMobileToolbarVisible((visible) => !visible);
@@ -303,12 +384,25 @@ export default function ArchiveLightbox({
             height: "100dvh",
             objectFit: "contain",
             display: "block",
+            transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
+            transition: interactedRef.current ? "none" : "transform 0.14s ease",
+            touchAction: "none",
           }}
         />
 
         {mobileToolbarVisible ? (
           <>
             <div style={mobileTopToolbarStyle}>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  requestClose();
+                }}
+                style={mobileLightboxBackButtonStyle}
+              >
+                返回
+              </button>
               <div style={mobileMetaTextStyle}>{metaText}</div>
               <button
                 type="button"
@@ -629,6 +723,21 @@ const mobileLightboxMoreButtonStyle = {
   color: "#fff",
   fontSize: 24,
   lineHeight: 1,
+  cursor: "pointer",
+} as const;
+
+const mobileLightboxBackButtonStyle = {
+  position: "absolute",
+  top: "calc(9px + env(safe-area-inset-top))",
+  left: 12,
+  height: 34,
+  minWidth: 52,
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.08)",
+  color: "rgba(255,255,255,0.88)",
+  fontSize: 13,
+  fontWeight: 700,
   cursor: "pointer",
 } as const;
 

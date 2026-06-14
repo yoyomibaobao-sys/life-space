@@ -953,16 +953,18 @@ export default function ArchivePage() {
         </section>
       ) : null}
 
-      <div
-        style={{
-          fontSize: 14,
-          color: "#6f7b6a",
-          marginBottom: isMobileViewport ? 12 : 18,
-        }}
-      >
-        我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
-        {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
-      </div>
+      {!isMobileViewport ? (
+        <div
+          style={{
+            fontSize: 14,
+            color: "#6f7b6a",
+            marginBottom: 18,
+          }}
+        >
+          我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
+          {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
+        </div>
+      ) : null}
 
       {isMobileViewport ? (
         <section style={systemTabWrapStyle} aria-label="项目一级大类">
@@ -982,7 +984,7 @@ export default function ArchivePage() {
                 }
                 style={systemTabButtonStyle(active)}
               >
-                {tab.label}
+                {tab.value === null ? `${tab.label}（${archiveCount}）` : tab.label}
               </button>
             );
           })}
@@ -1046,6 +1048,7 @@ export default function ArchivePage() {
         activeGroupTag={activeGroupTag}
         activeSubTag={activeSubTag}
         visibleGroupTags={visibleGroupTags}
+        mobileMode={isMobileViewport}
         onReset={() =>
           updateFilterWithoutJump(() => {
             setActiveGroupTag(null);
