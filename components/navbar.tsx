@@ -324,12 +324,12 @@ function MobileBottomNav({
     {
       label: "发现",
       href: "/discover",
-      activePaths: ["/discover", "/market"],
+      activePaths: ["/discover"],
     },
     {
-      label: "关注",
-      href: user ? "/follow" : "/login",
-      activePaths: ["/follow"],
+      label: "集市",
+      href: "/market",
+      activePaths: ["/market"],
     },
     {
       label: "空间",
