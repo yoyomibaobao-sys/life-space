@@ -40,6 +40,7 @@ export default function ArchiveGroupPanel({
           gap: mobileMode ? 5 : 8,
         }}
       >
+        {mobileMode ? <div style={mobileFilterLabelStyle}>分组</div> : null}
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
@@ -57,7 +58,7 @@ export default function ArchiveGroupPanel({
           }}
           title="点击显示当前分类下全部项目"
         >
-          分组：
+          {mobileMode ? "全部分组" : "分组："}
         </button>
 
         {visibleGroupTags.map((tag) => (
@@ -140,9 +141,13 @@ export default function ArchiveGroupPanel({
         style={{
           marginBottom: mobileMode ? 10 : 18,
           display: "flex",
+          flexWrap: mobileMode ? "wrap" : undefined,
+          alignItems: mobileMode ? "center" : undefined,
+          gap: mobileMode ? 5 : undefined,
           justifyContent: "flex-start",
         }}
       >
+        {mobileMode ? <div style={mobileFilterLabelStyle}>分组</div> : null}
         <button
           type="button"
           onClick={onCreateGroupTag}
@@ -165,3 +170,12 @@ export default function ArchiveGroupPanel({
 
   return null;
 }
+
+const mobileFilterLabelStyle = {
+  flex: "0 0 100%",
+  margin: "0 2px 0",
+  color: "#7a8675",
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.2,
+};

@@ -988,27 +988,30 @@ export default function ArchivePage() {
       ) : null}
 
       {isMobileViewport ? (
-        <section style={systemTabWrapStyle} aria-label="项目一级大类">
-          {archiveSystemTabs.map((tab) => {
-            const active = activeCategory === tab.value && !activeSubTag && !activeGroupTag;
+        <section style={mobileMainFilterSectionStyle} aria-label="项目主分类">
+          <div style={mobileFilterLabelStyle}>主分类</div>
+          <div style={systemTabWrapStyle}>
+            {archiveSystemTabs.map((tab) => {
+              const active = activeCategory === tab.value && !activeSubTag && !activeGroupTag;
 
-            return (
-              <button
-                key={tab.label}
-                type="button"
-                onClick={() =>
-                  updateFilterWithoutJump(() => {
-                    setActiveCategory(tab.value);
-                    setActiveSubTag(null);
-                    setActiveGroupTag(null);
-                  })
-                }
-                style={systemTabButtonStyle(active)}
-              >
-                {`${tab.label}（${tab.value === null ? archiveCount : archiveCategoryCounts[tab.value]}）`}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={tab.label}
+                  type="button"
+                  onClick={() =>
+                    updateFilterWithoutJump(() => {
+                      setActiveCategory(tab.value);
+                      setActiveSubTag(null);
+                      setActiveGroupTag(null);
+                    })
+                  }
+                  style={systemTabButtonStyle(active)}
+                >
+                  {`${tab.label}（${tab.value === null ? archiveCount : archiveCategoryCounts[tab.value]}）`}
+                </button>
+              );
+            })}
+          </div>
         </section>
       ) : null}
 
@@ -1312,11 +1315,22 @@ export default function ArchivePage() {
   );
 }
 
+const mobileMainFilterSectionStyle: CSSProperties = {
+  marginBottom: 12,
+};
+
+const mobileFilterLabelStyle: CSSProperties = {
+  margin: "0 2px 5px",
+  color: "#7a8675",
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.2,
+};
+
 const systemTabWrapStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
   gap: 6,
-  marginBottom: 14,
   padding: 4,
   border: "1px solid #e2ecd9",
   borderRadius: 16,

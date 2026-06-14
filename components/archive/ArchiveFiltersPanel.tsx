@@ -119,47 +119,58 @@ export default function ArchiveFiltersPanel({
       ) : null}
 
       {currentGroup ? (
-      <div style={mobileMode ? mobileRowStyle : rowStyle}>
-        <button
-          type="button"
-          onClick={() => onSelectCategory(currentGroup.category)}
-          style={pillStyle(!activeSubTag, mobileMode)}
-          title="点击显示当前大类下全部项目"
-        >
-          子分类：
-        </button>
+      <>
+        {mobileMode ? <div style={mobileFilterLabelStyle}>子分类</div> : null}
+        <div style={mobileMode ? mobileRowStyle : rowStyle}>
+          <button
+            type="button"
+            onClick={() => onSelectCategory(currentGroup.category)}
+            style={pillStyle(!activeSubTag, mobileMode)}
+            title="点击显示当前大类下全部项目"
+          >
+            {mobileMode ? "全部子分类" : "子分类："}
+          </button>
 
-        {currentGroup.tags.map((tag) => (
-          <ArchiveSubTagChip
-            key={tag.id}
-            tag={tag}
-            active={activeSubTag === tag.id}
-            onSelect={() => onSelectSubTag(tag.category, tag.id)}
-            onRename={() => onRenameSubTag(tag)}
-            onDelete={() => onDeleteSubTag(tag)}
-            compact={mobileMode}
-          />
-        ))}
+          {currentGroup.tags.map((tag) => (
+            <ArchiveSubTagChip
+              key={tag.id}
+              tag={tag}
+              active={activeSubTag === tag.id}
+              onSelect={() => onSelectSubTag(tag.category, tag.id)}
+              onRename={() => onRenameSubTag(tag)}
+              onDelete={() => onDeleteSubTag(tag)}
+              compact={mobileMode}
+            />
+          ))}
 
-        <button
-          type="button"
-          onClick={() => onCreateSubTag(currentGroup.category)}
-          style={{
-            border: "1px dashed #cbdcc2",
-            background: "#fbfdf9",
-            color: "#4CAF50",
-            borderRadius: 999,
-            padding: mobileMode ? "4px 8px" : "5px 10px",
-            cursor: "pointer",
-            fontSize: mobileMode ? 13 : 14,
-            lineHeight: mobileMode ? 1.15 : 1.3,
-          }}
-          title="新增子分类"
-        >
-          ＋
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => onCreateSubTag(currentGroup.category)}
+            style={{
+              border: "1px dashed #cbdcc2",
+              background: "#fbfdf9",
+              color: "#4CAF50",
+              borderRadius: 999,
+              padding: mobileMode ? "4px 8px" : "5px 10px",
+              cursor: "pointer",
+              fontSize: mobileMode ? 13 : 14,
+              lineHeight: mobileMode ? 1.15 : 1.3,
+            }}
+            title="新增子分类"
+          >
+            ＋
+          </button>
+        </div>
+      </>
       ) : null}
     </section>
   );
 }
+
+const mobileFilterLabelStyle = {
+  margin: "0 2px 5px",
+  color: "#7a8675",
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.2,
+};

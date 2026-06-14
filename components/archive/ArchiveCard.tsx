@@ -181,6 +181,7 @@ export default function ArchiveCard({
     (!hasLatestRecord ? item.display_cover_image_url || item.cover_image_url || "" : "");
   const cardImageAlt = item.latest_record_primary_image_url || item.latest_record_primary_thumb_url ? "最新记录图片" : item.title || "项目封面";
   const systemName = getArchiveSystemName(item);
+  const mobileSystemName = getMobileArchiveSystemName(item);
   const latestRecordPreview = getLatestRecordPreview(item);
   const updateDate = formatArchiveDate(item.latest_record_time || item.last_record_time || item.created_at);
   const ongoingDays = getOngoingDays(item.created_at);
@@ -196,7 +197,7 @@ export default function ArchiveCard({
         ended={ended}
         imageUrl={cardImageUrl}
         imageAlt={cardImageAlt}
-        systemName={systemName}
+        systemName={mobileSystemName}
         subTags={subTags}
         groupTags={groupTags}
         onNavigate={onNavigate}
@@ -611,15 +612,15 @@ function MobileArchiveCard({
     .filter(Boolean)
     .join(" · ");
   const visibilityText = item.is_public ? "公开" : "私密";
-  const mobileStatusLineText = [
+  const mobileStatusMainText = [
+    visibilityText,
     `浏览 ${item.view_count || 0}`,
     typeof item.follower_count !== "undefined" ? `关注 ${item.follower_count || 0}` : "",
     helpStatusText,
-    visibilityText,
-    ended ? "已结束" : "",
   ]
     .filter(Boolean)
     .join(" · ");
+  const mobileEndedText = ended ? "已结束" : "";
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
@@ -714,8 +715,11 @@ function MobileArchiveCard({
         </div>
         <div style={mobileCardBottomRowStyle}>
           <span style={mobileCardFourthLineStyle}>
-            {mobileStatusLineText}
+            {mobileStatusMainText}
           </span>
+          {mobileEndedText ? (
+            <span style={mobileCardEndedStatusStyle}>{mobileEndedText}</span>
+          ) : null}
         </div>
 
         {menuOpen ? (
@@ -767,6 +771,14 @@ function getMobileArchiveHelpStatusText(item: ArchiveItem) {
   return "";
 }
 
+function getMobileArchiveSystemName(item: ArchiveItem) {
+  if (item.category === "plant") {
+    return item.species_display_name || item.species_name_snapshot || "未填写";
+  }
+
+  return item.system_name?.trim() || "未填写";
+}
+
 const mobileCardImageWrapStyle: CSSProperties = {
   position: "relative",
   width: 94,
@@ -793,7 +805,7 @@ const mobileCardBodyStyle: CSSProperties = {
   minWidth: 0,
   display: "flex",
   flexDirection: "column",
-  gap: 3,
+  gap: 4,
 };
 
 const mobileCardTitleRowStyle: CSSProperties = {
@@ -809,7 +821,7 @@ const mobileCardMainTitleStyle: CSSProperties = {
   color: "#1f2d1f",
   fontSize: 15,
   fontWeight: 800,
-  lineHeight: 1.25,
+  lineHeight: 1.3,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -856,7 +868,7 @@ const mobileCardMoreButtonStyle: CSSProperties = {
 const mobileCardMetaStyle: CSSProperties = {
   color: "#60705b",
   fontSize: 12,
-  lineHeight: 1.25,
+  lineHeight: 1.35,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -865,28 +877,39 @@ const mobileCardMetaStyle: CSSProperties = {
 const mobileCardSelectRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 5,
+  gap: 6,
   minWidth: 0,
   overflow: "visible",
 };
 
 const mobileCardBottomRowStyle: CSSProperties = {
   display: "flex",
-  alignItems: "center",
-  gap: 5,
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  columnGap: 8,
+  rowGap: 2,
+  flexWrap: "wrap",
   minWidth: 0,
 };
 
 const mobileCardFourthLineStyle: CSSProperties = {
-  flex: 1,
+  flex: "1 1 150px",
   minWidth: 0,
   color: "#7f887a",
   fontSize: 12,
   fontWeight: 600,
-  lineHeight: 1.25,
+  lineHeight: 1.35,
+  whiteSpace: "normal",
+};
+
+const mobileCardEndedStatusStyle: CSSProperties = {
+  flex: "0 0 auto",
+  marginLeft: "auto",
+  color: "#767f73",
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.35,
   whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
 };
 
 const mobileCardMenuStyle: CSSProperties = {
