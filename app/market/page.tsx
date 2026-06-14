@@ -42,12 +42,13 @@ type MarketPostDisplayRow = MarketPostRow & {
   display_cover_thumb_url?: string | null;
 };
 
-const MOBILE_MARKET_TABS: Array<{ value: MarketPostType; label: string }> = [
+const MOBILE_MARKET_TABS: Array<{ value: "all" | MarketPostType; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "offer", label: "出让" },
   { value: "exchange", label: "交换" },
+  { value: "gift", label: "赠送" },
   { value: "wanted", label: "求购" },
 ];
-
-const MOBILE_EXCHANGE_POST_TYPES: MarketPostType[] = ["offer", "exchange", "gift"];
 
 async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
   const pairs = await resolveMediaDisplayPairs(
@@ -95,18 +96,6 @@ export default function MarketPage() {
   }, []);
 
   useEffect(() => {
-    if (!isMobileViewport) return;
-
-    if (!MOBILE_MARKET_TABS.some((tab) => tab.value === typeFilter)) {
-      setTypeFilter("exchange");
-    }
-
-    if (categoryFilter !== "all") {
-      setCategoryFilter("all");
-    }
-  }, [isMobileViewport, typeFilter, categoryFilter]);
-
-  useEffect(() => {
     async function loadMarketPosts() {
       setLoading(true);
 
@@ -137,17 +126,11 @@ export default function MarketPage() {
           .order("created_at", { ascending: false })
           .limit(80);
 
-        if (isMobileViewport) {
-          if (typeFilter === "wanted") {
-            query = query.eq("post_type", "wanted");
-          } else {
-            query = query.in("post_type", MOBILE_EXCHANGE_POST_TYPES);
-          }
-        } else if (typeFilter !== "all") {
+        if (typeFilter !== "all") {
           query = query.eq("post_type", typeFilter);
         }
 
-        if (!isMobileViewport && categoryFilter !== "all") {
+        if (categoryFilter !== "all") {
           query = query.eq("item_category", categoryFilter);
         }
 
@@ -220,7 +203,7 @@ export default function MarketPage() {
     }
 
     void loadMarketPosts();
-  }, [typeFilter, categoryFilter, isMobileViewport]);
+  }, [typeFilter, categoryFilter]);
 
   const hasFilter =
     typeFilter !== "all" ||
@@ -351,10 +334,12 @@ export default function MarketPage() {
         {isMobileViewport ? (
           <MobileMarketFilters
             typeFilter={typeFilter}
+            categoryFilter={categoryFilter}
             locationFilter={locationFilter}
             contentFilter={contentFilter}
             locationOptions={locationOptions}
             onTypeChange={setTypeFilter}
+            onCategoryChange={setCategoryFilter}
             onLocationChange={setLocationFilter}
             onContentChange={setContentFilter}
           />
@@ -521,27 +506,30 @@ export default function MarketPage() {
 
 function MobileMarketFilters({
   typeFilter,
+  categoryFilter,
   locationFilter,
   contentFilter,
   locationOptions,
   onTypeChange,
+  onCategoryChange,
   onLocationChange,
   onContentChange,
 }: {
   typeFilter: "all" | MarketPostType;
+  categoryFilter: "all" | MarketItemCategory;
   locationFilter: string;
   contentFilter: string;
   locationOptions: string[];
   onTypeChange: (value: "all" | MarketPostType) => void;
+  onCategoryChange: (value: "all" | MarketItemCategory) => void;
   onLocationChange: (value: string) => void;
   onContentChange: (value: string) => void;
 }) {
   return (
     <section style={mobileFilterPanelStyle}>
-      <div style={mobileMarketTabsStyle} aria-label="交换或求购">
+      <div style={mobileMarketTabsStyle} aria-label="集市类型">
         {MOBILE_MARKET_TABS.map((tab) => {
-          const active =
-            tab.value === "wanted" ? typeFilter === "wanted" : typeFilter !== "wanted";
+          const active = typeFilter === tab.value;
 
           return (
             <button
@@ -558,7 +546,23 @@ function MobileMarketFilters({
 
       <div style={mobileFilterTopGridStyle}>
         <label style={mobileFilterFieldStyle}>
-          <span style={mobileFilterLabelStyle}>地区搜索</span>
+          <span style={mobileFilterLabelStyle}>类别</span>
+          <select
+            value={categoryFilter}
+            onChange={(event) => onCategoryChange(event.target.value as "all" | MarketItemCategory)}
+            style={mobileFilterControlStyle}
+          >
+            <option value="all">全部</option>
+            {MARKET_ITEM_CATEGORY_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label style={mobileFilterFieldStyle}>
+          <span style={mobileFilterLabelStyle}>地区</span>
           <input
             value={locationFilter}
             onChange={(event) => onLocationChange(event.target.value)}
@@ -569,7 +573,7 @@ function MobileMarketFilters({
         </label>
 
         <label style={mobileFilterContentFieldStyle}>
-          <span style={mobileFilterLabelStyle}>记录内容搜索</span>
+          <span style={mobileFilterLabelStyle}>内容</span>
           <input
             value={contentFilter}
             onChange={(event) => onContentChange(event.target.value)}
@@ -700,8 +704,8 @@ const mobileFilterPanelStyle: CSSProperties = {
 
 const mobileMarketTabsStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 6,
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: 5,
 };
 
 function mobileMarketTabButtonStyle(active: boolean): CSSProperties {
@@ -719,7 +723,7 @@ function mobileMarketTabButtonStyle(active: boolean): CSSProperties {
 
 const mobileFilterTopGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))",
   gap: 8,
   alignItems: "end",
 };
