@@ -516,30 +516,6 @@ export default function DiscoverPage() {
         compactMobile={isMobileViewport}
       />
 
-      <Link
-        href="/discover/search"
-        className="mobile-app-flex-only"
-        style={{
-          display: "none",
-          width: "100%",
-          minHeight: 38,
-          alignItems: "center",
-          gap: 10,
-          margin: "-4px 0 14px",
-          border: "1px solid #e1e8dd",
-          borderRadius: 999,
-          background: "#fff",
-          color: "#7a8577",
-          padding: "0 14px",
-          fontSize: 14,
-          textAlign: "left",
-          textDecoration: "none",
-        }}
-      >
-        <span aria-hidden="true">🔍</span>
-        <span>搜索</span>
-      </Link>
-
       {filterMode === "help" ? (
         <DiscoverHelpList items={helpStreamItems} />
       ) : (

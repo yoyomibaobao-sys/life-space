@@ -48,8 +48,8 @@ type MobileProfileModule = "info" | "membership" | "space" | "account";
 
 const mobileProfileModules: Array<{ value: MobileProfileModule; label: string }> = [
   { value: "info", label: "用户信息" },
-  { value: "membership", label: "我的会员及付款记录" },
-  { value: "space", label: "我的空间" },
+  { value: "membership", label: "会员及付款" },
+  { value: "space", label: "痕迹" },
   { value: "account", label: "帐号操作" },
 ];
 
@@ -758,14 +758,16 @@ export default function ProfilePage() {
 
         {showSpaceModule ? (
         <section style={isMobileViewport ? { ...statsSectionStyle, ...sectionCompactStyle } : statsSectionStyle}>
+          {!isMobileViewport ? (
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>我的空间</div>
               <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>空间、关注与互动</h2>
             </div>
           </div>
+          ) : null}
 
-          <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns }}>
+          <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: isMobileViewport ? 0 : 14 }}>
             {isMobileViewport ? (
               <>
                 <ProjectStatsCard
@@ -776,37 +778,30 @@ export default function ProfilePage() {
                 />
                 <StatLinkCard
                   href="/profile/recent"
-                  label="最近浏览"
+                  label="最近看过的项目"
                   value="进入"
-                  hint="最近看过的项目"
+                  hint=""
                   compact
                 />
                 <StatLinkCard
                   href="/profile/followers"
-                  label="粉丝"
+                  label="谁在关注我"
                   value={String(stats.followerCount)}
-                  hint="谁在关注我"
+                  hint=""
                   compact
                 />
                 <StatLinkCard
                   href="/profile/flowers"
-                  label="花朵来源"
+                  label="收到的花朵"
                   value={String(stats.receivedFlowerCount)}
-                  hint="查看谁给我送花"
+                  hint=""
                   compact
                 />
                 <StatLinkCard
                   href="/profile/flowers?tab=sent"
-                  label="花朵送给谁"
+                  label="我送出的花"
                   value={String(stats.sentFlowerCount || 0)}
-                  hint="查看我送出的花"
-                  compact
-                />
-                <StatLinkCard
-                  href="/notifications"
-                  label="通知"
-                  value="进入"
-                  hint="关注、送花和互动提醒"
+                  hint=""
                   compact
                 />
               </>
@@ -1053,11 +1048,23 @@ function StatLinkCard({
   hint: string;
   compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <Link href={href} style={{ ...compactStatCardStyle, textDecoration: "none" }}>
+        <div style={compactStatLineStyle}>
+          <span>{label}</span>
+          <strong style={compactStatValueStyle}>{value}</strong>
+        </div>
+        {hint ? <div style={compactStatHintStyle}>{hint}</div> : null}
+      </Link>
+    );
+  }
+
   return (
-    <Link href={href} style={{ ...(compact ? compactStatCardStyle : statCardBaseStyle), textDecoration: "none" }}>
-      <div style={{ fontSize: compact ? 13 : 14, color: "#6d7968" }}>{label}</div>
-      <div style={{ marginTop: compact ? 3 : 6, fontSize: compact ? 18 : 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
-      <div style={{ marginTop: compact ? 3 : 6, fontSize: compact ? 12 : 13, color: "#7b8676", lineHeight: compact ? 1.25 : 1.35 }}>{hint}</div>
+    <Link href={href} style={{ ...statCardBaseStyle, textDecoration: "none" }}>
+      <div style={{ fontSize: 14, color: "#6d7968" }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
+      <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
     </Link>
   );
 }
@@ -1126,26 +1133,27 @@ const mobileProfileShellStyle: CSSProperties = {
 };
 
 const mobileProfileTabsStyle: CSSProperties = {
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
   gap: 6,
-  overflowX: "auto",
-  WebkitOverflowScrolling: "touch",
+  overflowX: "visible",
   margin: "0 0 10px",
   padding: "2px 0 3px",
 };
 
 function mobileProfileTabButtonStyle(active: boolean): CSSProperties {
   return {
-    flex: "0 0 auto",
-    minHeight: 32,
+    minWidth: 0,
+    minHeight: 40,
     border: active ? "1px solid #9bc98f" : "1px solid #dfe8da",
     borderRadius: 999,
     background: active ? "#edf8e9" : "#fff",
     color: active ? "#2f6a31" : "#52634e",
-    padding: "0 10px",
+    padding: "0 6px",
     fontSize: 13,
     fontWeight: 800,
-    whiteSpace: "nowrap",
+    whiteSpace: "normal",
+    lineHeight: 1.15,
     cursor: "pointer",
   };
 }
@@ -1566,9 +1574,33 @@ const statCardBaseStyle: CSSProperties = {
 
 const compactStatCardStyle: CSSProperties = {
   ...statCardBaseStyle,
-  minHeight: 70,
+  minHeight: 44,
   borderRadius: 12,
   padding: "9px 10px",
+};
+
+const compactStatLineStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: 8,
+  color: "#40513d",
+  fontSize: 13,
+  lineHeight: 1.25,
+};
+
+const compactStatValueStyle: CSSProperties = {
+  color: "#22301f",
+  fontSize: 15,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const compactStatHintStyle: CSSProperties = {
+  marginTop: 4,
+  color: "#7b8676",
+  fontSize: 12,
+  lineHeight: 1.25,
 };
 
 const mobileProjectStatsCardStyle: CSSProperties = {

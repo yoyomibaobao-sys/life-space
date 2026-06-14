@@ -1313,20 +1313,20 @@ export default function ArchivePage() {
 }
 
 const systemTabWrapStyle: CSSProperties = {
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
   gap: 6,
   marginBottom: 14,
   padding: 4,
   border: "1px solid #e2ecd9",
   borderRadius: 16,
   background: "#fff",
-  overflowX: "auto",
-  WebkitOverflowScrolling: "touch",
+  overflowX: "visible",
 };
 
 function systemTabButtonStyle(active: boolean): CSSProperties {
   return {
-    flex: "0 0 auto",
+    minWidth: 0,
     minHeight: 38,
     border: "none",
     borderRadius: 12,
@@ -1334,9 +1334,10 @@ function systemTabButtonStyle(active: boolean): CSSProperties {
     color: active ? "#2f6a31" : "#61705d",
     fontSize: 13,
     fontWeight: active ? 800 : 700,
-    whiteSpace: "nowrap",
-    lineHeight: 1.2,
-    padding: "6px 10px",
+    whiteSpace: "normal",
+    wordBreak: "keep-all",
+    lineHeight: 1.15,
+    padding: "6px 4px",
     cursor: "pointer",
   };
 }

@@ -14,12 +14,15 @@ export function DiscoverFilterBar({
   return (
     <div
       style={{
-        display: "flex",
-        gap: compactMobile ? 4 : 8,
+        display: compactMobile ? "grid" : "flex",
+        gridTemplateColumns: compactMobile
+          ? "repeat(5, minmax(0, 1fr))"
+          : undefined,
+        gap: compactMobile ? 6 : 8,
         marginBottom: compactMobile ? 10 : 14,
-        overflowX: "auto",
+        overflowX: compactMobile ? "visible" : "auto",
         paddingBottom: compactMobile ? 0 : 2,
-        WebkitOverflowScrolling: "touch",
+        WebkitOverflowScrolling: compactMobile ? undefined : "touch",
       }}
     >
       {options.map((option) => {
@@ -32,11 +35,13 @@ export function DiscoverFilterBar({
             type="button"
             onClick={() => onChange(option.value)}
             style={{
-              flex: "0 0 auto",
+              flex: compactMobile ? undefined : "0 0 auto",
+              minWidth: 0,
+              minHeight: compactMobile ? 38 : undefined,
               padding: compactMobile
                 ? isHelpFilter
-                  ? "6px 9px"
-                  : "6px 8px"
+                  ? "7px 6px"
+                  : "7px 6px"
                 : isHelpFilter
                 ? "8px 14px"
                 : "8px 13px",
@@ -57,8 +62,10 @@ export function DiscoverFilterBar({
                 : "#fff",
               color: isHelpFilter ? "#a65f45" : active ? "#2e7d32" : "#314131",
               cursor: "pointer",
-              whiteSpace: "nowrap",
-              fontSize: compactMobile ? 12 : 13,
+              whiteSpace: compactMobile ? "normal" : "nowrap",
+              wordBreak: "keep-all",
+              lineHeight: compactMobile ? 1.15 : undefined,
+              fontSize: 13,
               fontWeight: isHelpFilter || active ? 600 : 400,
             }}
           >
