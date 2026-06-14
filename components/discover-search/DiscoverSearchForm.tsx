@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { SearchCategory, SearchFilters } from "@/lib/discover-search-types";
 import { commonSearchTags } from "@/lib/discover-search-types";
 import {
@@ -21,6 +21,7 @@ export default function DiscoverSearchForm({
   onSubmit,
   onReset,
 }: Props) {
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const hasCustomTag =
     filters.tag.trim() && !commonSearchTags.includes(filters.tag.trim() as (typeof commonSearchTags)[number]);
 
@@ -30,6 +31,118 @@ export default function DiscoverSearchForm({
 
   function patch(next: Partial<SearchFilters>) {
     onFiltersChange({ ...filters, ...next });
+  }
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
+
+  if (isMobileViewport) {
+    return (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        style={mobileFormStyle}
+      >
+        <div style={mobileGridStyle}>
+          <label style={fieldLabelStyle}>
+            地区搜索
+            <input
+              value={filters.locationQuery || ""}
+              onChange={(event) =>
+                patch({
+                  locationQuery: event.target.value,
+                  countryCode: "",
+                  countryName: "",
+                  region: "",
+                  city: "",
+                })
+              }
+              placeholder="国家 / 地域 / 城市"
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={fieldLabelStyle}>
+            内容搜索
+            <input
+              value={filters.textQuery || ""}
+              onChange={(event) =>
+                patch({
+                  textQuery: event.target.value,
+                  name: "",
+                  content: "",
+                  speciesId: null,
+                })
+              }
+              placeholder="项目名 / 记录内容 / 相关文字"
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={fieldLabelStyle}>
+            类别
+            <select
+              value={filters.category}
+              onChange={(event) => patch({ category: event.target.value as SearchCategory })}
+              style={inputStyle}
+            >
+              <option value="all">全部</option>
+              <option value="plant">种植</option>
+              <option value="system">农法设施</option>
+              <option value="insect_fish">虫鱼生态</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+
+          <label style={fieldLabelStyle}>
+            标签
+            <select
+              value={filters.tag}
+              onChange={(event) => patch({ tag: event.target.value })}
+              style={inputStyle}
+            >
+              <option value="">全部标签</option>
+              {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
+              {commonSearchTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={mobileActionsStyle}>
+          <label style={mobileHelpOnlyStyle}>
+            <input
+              type="checkbox"
+              checked={filters.helpOnly}
+              onChange={(event) => patch({ helpOnly: event.target.checked })}
+            />
+            只看求助
+          </label>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={onReset} style={secondaryButtonStyle}>
+              重置
+            </button>
+            <button type="submit" style={primaryButtonStyle}>
+              搜索
+            </button>
+          </div>
+        </div>
+      </form>
+    );
   }
 
   return (
@@ -208,6 +321,38 @@ const inputStyle: CSSProperties = {
   color: "#1f2d1f",
   boxSizing: "border-box",
   fontSize: 13,
+};
+
+const mobileFormStyle: CSSProperties = {
+  padding: 10,
+  border: "1px solid #e5ece2",
+  borderRadius: 14,
+  background: "#fbfdf9",
+  marginBottom: 12,
+  boxShadow: "0 1px 8px rgba(0,0,0,0.025)",
+};
+
+const mobileGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+};
+
+const mobileActionsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginTop: 10,
+};
+
+const mobileHelpOnlyStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 13,
+  color: "#374737",
+  cursor: "pointer",
 };
 
 const secondaryButtonStyle: CSSProperties = {

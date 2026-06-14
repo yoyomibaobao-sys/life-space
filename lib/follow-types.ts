@@ -74,6 +74,23 @@ export type FollowProjectCard = {
   coverUrl: string | null;
 };
 
+export type FollowUserPublicArchiveCard = {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  title: string;
+  displaySystemName: string;
+  categoryLabel: string;
+  categoryIcon: string;
+  latestRecordTime: string | null;
+  recordCount: number;
+  durationDays: number;
+  viewCount: number;
+  statusLabel: string;
+  statusKind: "help" | "resolved" | "ended" | "normal";
+  coverUrl: string | null;
+};
+
 export type FollowUserCard = {
   id: string;
   username: string;
@@ -81,6 +98,7 @@ export type FollowUserCard = {
   latestRecordTime: string | null;
   publicArchiveCount: number;
   recentArchiveTitles: string[];
+  publicArchives?: FollowUserPublicArchiveCard[];
 };
 
 export type FollowPageData = {

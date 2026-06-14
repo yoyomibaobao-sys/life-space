@@ -178,6 +178,7 @@ export function ProjectCardRows({
   noteMaxLength,
   enableTagLinks = false,
   showUsername = false,
+  mobileFourLine = false,
 }: {
   record: FeedItem;
   imageHeight: number;
@@ -185,6 +186,7 @@ export function ProjectCardRows({
   noteMaxLength: number;
   enableTagLinks?: boolean;
   showUsername?: boolean;
+  mobileFourLine?: boolean;
 }) {
   const isHelp = record.status_tag === "help";
   const isResolved = record.status_tag === "resolved";
@@ -207,6 +209,137 @@ export function ProjectCardRows({
     archiveViewCount !== null ? `浏览 ${archiveViewCount} 次` : null,
     `${commentCount} 评论`,
   ].filter((item): item is string => Boolean(item));
+
+  if (mobileFourLine) {
+    const statusBadges = (
+      <>
+        {isHelp && <HelpBadge />}
+        {isResolved && <ResolvedBadge />}
+        {lifecycleStatus === "ended" && <EndedBadge />}
+      </>
+    );
+
+    return (
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: imageHeight,
+          display: "grid",
+          gridTemplateRows: "auto auto minmax(0, 1fr) auto",
+          gap: 3,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            lineHeight: 1.25,
+          }}
+        >
+          <CategoryBadge category={record.archive_category} />
+          <span
+            style={{
+              fontSize: titleFontSize,
+              fontWeight: 700,
+              color: "#1f2d1f",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+            }}
+            title={archiveUserTitle}
+          >
+            {archiveUserTitle}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            minWidth: 0,
+            color: "#5f7f58",
+            fontSize: 12,
+            lineHeight: 1.25,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {archiveSystemName ? (
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+            >
+              {archiveSystemName}
+            </span>
+          ) : null}
+          {tags.map((tag) => (
+            <RecordTagPill
+              key={tag}
+              record={record}
+              tag={tag}
+              enableLink={enableTagLinks}
+            />
+          ))}
+        </div>
+
+        <div
+          style={{
+            color: record.note ? "#3f4f3f" : "#9aa59a",
+            fontSize: 12,
+            lineHeight: 1.3,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            wordBreak: "break-word",
+          }}
+        >
+          {record.note ? shortText(record.note, noteMaxLength) : "没有文字"}
+          {updateText ? <span style={{ color: "#9aa59a" }}>　更新 {updateText}</span> : null}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            minWidth: 0,
+            fontSize: 11,
+            color: "#8a998a",
+            lineHeight: 1.25,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          }}
+        >
+          {(isHelp || isResolved || lifecycleStatus === "ended") ? (
+            <span style={{ display: "inline-flex", gap: 4, flexShrink: 0 }}>
+              {statusBadges}
+            </span>
+          ) : null}
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+            }}
+          >
+            {statParts.slice(0, 3).join(" · ")}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

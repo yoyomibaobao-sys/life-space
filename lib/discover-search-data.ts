@@ -7,7 +7,10 @@ import {
 } from "@/lib/discover-search-types";
 import { compareArchiveDisplayOrder } from "@/lib/discover-utils";
 import { sanitizeOrSearchText } from "@/lib/discover-search-utils";
-import { findUserIdsByRegionFilters } from "@/lib/region-shared";
+import {
+  findUserIdsByRegionFilters,
+  makeRegionSearchText,
+} from "@/lib/region-shared";
 
 type IdRow = { id?: string | null; plant_id?: string | null; species_id?: string | null; record_id?: string | null };
 
@@ -67,19 +70,54 @@ export async function findRecordIdsByTagTerm(tagTerm: string) {
   return Array.from(ids);
 }
 
+async function findUserIdsByRegionKeyword(keyword: string) {
+  const term = sanitizeOrSearchText(keyword).toLowerCase();
+  if (!term) return [] as string[];
+
+  const { data, error } = await supabase
+    .from("public_profiles")
+    .select("id, country_code, country_name, region_name, city_name")
+    .limit(500);
+
+  if (error) {
+    console.error("discover location search error:", error);
+    return [];
+  }
+
+  return (data || [])
+    .filter((row) =>
+      makeRegionSearchText({
+        countryCode: row.country_code,
+        countryName: row.country_name,
+        regionName: row.region_name,
+        cityName: row.city_name,
+      }).includes(term)
+    )
+    .map((row) => String(row.id));
+}
+
 export async function fetchDiscoverSearchResults(filters: SearchFilters) {
-  const nameTerm = sanitizeOrSearchText(filters.name);
+  const textTerm = sanitizeOrSearchText(filters.textQuery || "");
+  const nameTerm = sanitizeOrSearchText(textTerm ? "" : filters.name);
   const tagTerm = sanitizeOrSearchText(filters.tag);
-  const contentTerm = sanitizeOrSearchText(filters.content);
+  const contentTerm = sanitizeOrSearchText(textTerm ? "" : filters.content);
 
   const [matchedSpeciesIds, matchedTagRecordIds] = await Promise.all([
-    nameTerm ? findSpeciesIdsByNameTerm(nameTerm) : Promise.resolve<string[]>([]),
+    nameTerm || textTerm
+      ? findSpeciesIdsByNameTerm(nameTerm || textTerm)
+      : Promise.resolve<string[]>([]),
     tagTerm ? findRecordIdsByTagTerm(tagTerm) : Promise.resolve<string[]>([]),
   ]);
 
   let userFilterIds: string[] | null = null;
 
-  if (filters.countryCode || filters.countryName || filters.region || filters.city) {
+  if (filters.locationQuery?.trim()) {
+    userFilterIds = await findUserIdsByRegionKeyword(filters.locationQuery);
+
+    if (userFilterIds.length === 0) {
+      return [] as FeedItem[];
+    }
+  } else if (filters.countryCode || filters.countryName || filters.region || filters.city) {
     userFilterIds = await findUserIdsByRegionFilters(supabase, {
       countryCode: filters.countryCode,
       countryName: filters.countryName,
@@ -125,6 +163,21 @@ export async function fetchDiscoverSearchResults(filters: SearchFilters) {
     }
 
     query = query.or(nameFilters.join(","));
+  }
+
+  if (textTerm) {
+    const textFilters = [
+      `archive_title.ilike.%${textTerm}%`,
+      `species_name_snapshot.ilike.%${textTerm}%`,
+      `system_name.ilike.%${textTerm}%`,
+      `note.ilike.%${textTerm}%`,
+    ];
+
+    if (matchedSpeciesIds.length > 0) {
+      textFilters.push(`species_id.in.(${matchedSpeciesIds.join(",")})`);
+    }
+
+    query = query.or(textFilters.join(","));
   }
 
   if (tagTerm) query = query.in("record_id", matchedTagRecordIds);

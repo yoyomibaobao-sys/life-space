@@ -3,10 +3,19 @@ import type { FeedItem, UserSection } from "@/lib/discover-types";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { DefaultUserAvatar, ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
 
-function DiscoverUserRecordCard({ record, index }: { record: FeedItem; index: number }) {
+function DiscoverUserRecordCard({
+  record,
+  index,
+  compactMobile = false,
+}: {
+  record: FeedItem;
+  index: number;
+  compactMobile?: boolean;
+}) {
   const isHelp = record.status_tag === "help";
   const isResolved = record.status_tag === "resolved";
   const displayImageUrl = getFeedItemDisplayImageUrl(record);
+  const imageSize = compactMobile ? 74 : 62;
 
   return (
     <a
@@ -38,8 +47,8 @@ function DiscoverUserRecordCard({ record, index }: { record: FeedItem; index: nu
             alt={record.archive_title || "record image"}
             loading="lazy"
             style={{
-              width: 62,
-              height: 62,
+              width: imageSize,
+              height: imageSize,
               objectFit: "cover",
               borderRadius: 11,
               flexShrink: 0,
@@ -49,8 +58,8 @@ function DiscoverUserRecordCard({ record, index }: { record: FeedItem; index: nu
         ) : (
           <div
             style={{
-              width: 62,
-              height: 62,
+              width: imageSize,
+              height: imageSize,
               borderRadius: 11,
               flexShrink: 0,
               background: record.archive_category === "plant" ? "#f4f9f1" : "#fff9e8",
@@ -71,10 +80,11 @@ function DiscoverUserRecordCard({ record, index }: { record: FeedItem; index: nu
 
         <ProjectCardRows
           record={record}
-          imageHeight={62}
+          imageHeight={imageSize}
           titleFontSize={15}
           noteMaxLength={88}
           enableTagLinks
+          mobileFourLine={compactMobile}
         />
       </div>
     </a>
@@ -86,11 +96,13 @@ function DiscoverUserSectionCard({
   isExpanded,
   onToggle,
   onGoUser,
+  compactMobile = false,
 }: {
   section: UserSection;
   isExpanded: boolean;
   onToggle: (userId: string) => void;
   onGoUser: (userId: string) => void;
+  compactMobile?: boolean;
 }) {
   const visibleRecords = isExpanded ? section.records : section.records.slice(0, 2);
   const hiddenCount = Math.max(section.records.length - 2, 0);
@@ -178,7 +190,12 @@ function DiscoverUserSectionCard({
 
       <div style={{ padding: "2px 10px 6px 10px" }}>
         {visibleRecords.map((record, index) => (
-          <DiscoverUserRecordCard key={record.record_id} record={record} index={index} />
+          <DiscoverUserRecordCard
+            key={record.record_id}
+            record={record}
+            index={index}
+            compactMobile={compactMobile}
+          />
         ))}
 
         {isExpanded && hasMoreProjectsInSpace && (
@@ -252,11 +269,13 @@ export function DiscoverUserSections({
   expandedUserIds,
   onToggle,
   onGoUser,
+  compactMobile = false,
 }: {
   sections: UserSection[];
   expandedUserIds: string[];
   onToggle: (userId: string) => void;
   onGoUser: (userId: string) => void;
+  compactMobile?: boolean;
 }) {
   return (
     <>
@@ -267,6 +286,7 @@ export function DiscoverUserSections({
           isExpanded={expandedUserIds.includes(section.user_id)}
           onToggle={onToggle}
           onGoUser={onGoUser}
+          compactMobile={compactMobile}
         />
       ))}
     </>

@@ -21,10 +21,12 @@ export function parseSearchFiltersFromUrl(search: string): SearchFilters {
     countryName: params.get("countryName") || "",
     region: params.get("region") || "",
     city: params.get("city") || "",
+    locationQuery: params.get("location") || "",
     category: parseSearchCategory(params.get("category")),
     name: params.get("name") || "",
     tag: params.get("tag") || "",
     content: params.get("content") || "",
+    textQuery: params.get("q") || "",
     helpOnly: params.get("help") === "1",
     speciesId: params.get("species"),
   };
@@ -36,10 +38,12 @@ export function buildDiscoverSearchUrl(filters: SearchFilters, extraParams?: Rec
   if (filters.countryName) params.set("countryName", filters.countryName);
   if (filters.region) params.set("region", filters.region);
   if (filters.city) params.set("city", filters.city);
+  if (filters.locationQuery?.trim()) params.set("location", filters.locationQuery.trim());
   if (filters.category && filters.category !== "all") params.set("category", filters.category);
   if (filters.name.trim()) params.set("name", filters.name.trim());
   if (filters.tag.trim()) params.set("tag", filters.tag.trim());
   if (filters.content.trim()) params.set("content", filters.content.trim());
+  if (filters.textQuery?.trim()) params.set("q", filters.textQuery.trim());
   if (filters.helpOnly) params.set("help", "1");
   if (filters.speciesId) params.set("species", filters.speciesId);
 

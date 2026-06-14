@@ -184,7 +184,38 @@ export default function Navbar() {
               🔔
             </Link>
 
-            {user && isMobileMePath(pathname) ? (
+            {isMobileDiscoverIndexPath(pathname) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const tab = new URLSearchParams(window.location.search).get("tab");
+                  if (tab === "following") {
+                    window.dispatchEvent(new Event("mobile-discover-follow-search-request"));
+                    return;
+                  }
+
+                  router.push("/discover/search");
+                }}
+                style={mobileSearchButtonStyle}
+              >
+                搜索
+              </button>
+            ) : isMobileMarketPath(pathname) ? (
+              <>
+                <Link
+                  href={user ? "/market/mine" : "/login"}
+                  style={mobileMarketMineButtonStyle}
+                >
+                  我的发布
+                </Link>
+                <Link
+                  href={user ? "/market/new" : "/login"}
+                  style={mobileMarketPublishButtonStyle}
+                >
+                  发布信息
+                </Link>
+              </>
+            ) : user && isMobileMePath(pathname) ? (
               <button
                 type="button"
                 onClick={handleLogout}
@@ -417,9 +448,19 @@ function isMobileMePath(pathname: string) {
   return pathname === "/profile" || pathname.startsWith("/profile/");
 }
 
+function isMobileDiscoverIndexPath(pathname: string) {
+  return pathname === "/discover";
+}
+
+function isMobileMarketPath(pathname: string) {
+  return pathname === "/market";
+}
+
 function shouldShowMobileCreateAction(pathname: string) {
   if (pathname === "/plant" || pathname.startsWith("/plant/")) return false;
   if (isMobileMePath(pathname)) return false;
+  if (isMobileDiscoverIndexPath(pathname)) return false;
+  if (isMobileMarketPath(pathname)) return false;
   return true;
 }
 
@@ -540,6 +581,23 @@ const mobileCreateButtonStyle: CSSProperties = {
   padding: "0 11px",
   whiteSpace: "nowrap",
   flexShrink: 0,
+};
+
+const mobileSearchButtonStyle: CSSProperties = {
+  ...mobileCreateButtonStyle,
+  border: "1px solid #dfe8da",
+  background: "#fff",
+  color: "#40583a",
+};
+
+const mobileMarketMineButtonStyle: CSSProperties = {
+  ...mobileSearchButtonStyle,
+  padding: "0 9px",
+};
+
+const mobileMarketPublishButtonStyle: CSSProperties = {
+  ...mobileCreateButtonStyle,
+  padding: "0 9px",
 };
 
 const mobileLogoutButtonStyle: CSSProperties = {

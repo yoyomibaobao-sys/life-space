@@ -73,6 +73,19 @@ export default function MarketPage() {
   const [categoryFilter, setCategoryFilter] =
     useState<"all" | MarketItemCategory>("all");
   const [locationFilter, setLocationFilter] = useState("");
+  const [contentFilter, setContentFilter] = useState("");
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
 
   useEffect(() => {
     async function loadMarketPosts() {
@@ -187,7 +200,8 @@ export default function MarketPage() {
   const hasFilter =
     typeFilter !== "all" ||
     categoryFilter !== "all" ||
-    locationFilter.trim() !== "";
+    locationFilter.trim() !== "" ||
+    contentFilter.trim() !== "";
 
   const marketBlocked = membership?.can_create_market_post === false;
 
@@ -221,12 +235,14 @@ export default function MarketPage() {
   }, [items, profiles]);
 
   const visibleItems = useMemo(() => {
-    const keyword = locationFilter.trim().toLowerCase();
+    const locationKeyword = locationFilter.trim().toLowerCase();
+    const contentKeyword = contentFilter.trim().toLowerCase();
 
-    if (!keyword) return items;
+    if (!locationKeyword && !contentKeyword) return items;
 
     return items.filter((item) => {
       const profile = profiles.get(item.user_id);
+      const archive = item.archive_id ? archives.get(item.archive_id) : null;
 
       const searchableLocationText = [
         item.location_text,
@@ -238,10 +254,24 @@ export default function MarketPage() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
+      const searchableContentText = [
+        item.title,
+        item.description,
+        profile?.username,
+        archive?.title,
+        archive?.system_name,
+        archive?.species_name_snapshot,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 
-      return searchableLocationText.includes(keyword);
+      return (
+        (!locationKeyword || searchableLocationText.includes(locationKeyword)) &&
+        (!contentKeyword || searchableContentText.includes(contentKeyword))
+      );
     });
-  }, [items, profiles, locationFilter]);
+  }, [items, profiles, archives, locationFilter, contentFilter]);
 
   return (
     <main style={pageStyle}>
@@ -287,6 +317,19 @@ export default function MarketPage() {
           </div>
         </header>
 
+        {isMobileViewport ? (
+          <MobileMarketFilters
+            typeFilter={typeFilter}
+            categoryFilter={categoryFilter}
+            locationFilter={locationFilter}
+            contentFilter={contentFilter}
+            locationOptions={locationOptions}
+            onTypeChange={setTypeFilter}
+            onCategoryChange={setCategoryFilter}
+            onLocationChange={setLocationFilter}
+            onContentChange={setContentFilter}
+          />
+        ) : (
         <section style={filterPanelStyle}>
           <div style={filterGroupStyle}>
             <span style={filterLabelStyle}>类型</span>
@@ -349,6 +392,7 @@ export default function MarketPage() {
             </datalist>
           </div>
         </section>
+        )}
 
         {loading ? (
           <section style={emptyStyle}>加载中...</section>
@@ -446,6 +490,90 @@ export default function MarketPage() {
   );
 }
 
+function MobileMarketFilters({
+  typeFilter,
+  categoryFilter,
+  locationFilter,
+  contentFilter,
+  locationOptions,
+  onTypeChange,
+  onCategoryChange,
+  onLocationChange,
+  onContentChange,
+}: {
+  typeFilter: "all" | MarketPostType;
+  categoryFilter: "all" | MarketItemCategory;
+  locationFilter: string;
+  contentFilter: string;
+  locationOptions: string[];
+  onTypeChange: (value: "all" | MarketPostType) => void;
+  onCategoryChange: (value: "all" | MarketItemCategory) => void;
+  onLocationChange: (value: string) => void;
+  onContentChange: (value: string) => void;
+}) {
+  return (
+    <section style={mobileFilterPanelStyle}>
+      <div style={mobileFilterTopGridStyle}>
+        <label style={mobileFilterFieldStyle}>
+          <span style={mobileFilterLabelStyle}>类型</span>
+          <select
+            value={typeFilter}
+            onChange={(event) => onTypeChange(event.target.value as "all" | MarketPostType)}
+            style={mobileFilterControlStyle}
+          >
+            <option value="all">全部</option>
+            {MARKET_POST_TYPE_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label style={mobileFilterFieldStyle}>
+          <span style={mobileFilterLabelStyle}>类别</span>
+          <select
+            value={categoryFilter}
+            onChange={(event) => onCategoryChange(event.target.value as "all" | MarketItemCategory)}
+            style={mobileFilterControlStyle}
+          >
+            <option value="all">全部</option>
+            {MARKET_ITEM_CATEGORY_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label style={mobileFilterFieldStyle}>
+          <span style={mobileFilterLabelStyle}>地区搜索</span>
+          <input
+            value={locationFilter}
+            onChange={(event) => onLocationChange(event.target.value)}
+            placeholder="地区"
+            list="market-location-options"
+            style={mobileFilterControlStyle}
+          />
+        </label>
+      </div>
+
+      <input
+        value={contentFilter}
+        onChange={(event) => onContentChange(event.target.value)}
+        placeholder="记录内容搜索"
+        style={mobileContentSearchStyle}
+      />
+
+      <datalist id="market-location-options">
+        {locationOptions.map((location) => (
+          <option key={location} value={location} />
+        ))}
+      </datalist>
+    </section>
+  );
+}
+
 function buildLocationText(profile?: ProfileBrief | null) {
   if (!profile) return "";
 
@@ -531,6 +659,61 @@ const filterPanelStyle: CSSProperties = {
   display: "grid",
   gap: 10,
   marginBottom: 12,
+};
+
+const mobileFilterPanelStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4ece0",
+  borderRadius: 14,
+  padding: 8,
+  display: "grid",
+  gap: 8,
+  marginBottom: 10,
+};
+
+const mobileFilterTopGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "0.82fr 0.82fr minmax(0, 1.18fr)",
+  gap: 6,
+  alignItems: "end",
+};
+
+const mobileFilterFieldStyle: CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 3,
+};
+
+const mobileFilterLabelStyle: CSSProperties = {
+  color: "#7b8676",
+  fontSize: 11,
+  fontWeight: 700,
+};
+
+const mobileFilterControlStyle: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  height: 32,
+  border: "1px solid #dfe8da",
+  borderRadius: 10,
+  background: "#fff",
+  color: "#40583a",
+  padding: "0 8px",
+  fontSize: 12,
+  boxSizing: "border-box",
+};
+
+const mobileContentSearchStyle: CSSProperties = {
+  width: "100%",
+  height: 34,
+  border: "1px solid #dfe8da",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#40583a",
+  padding: "0 11px",
+  fontSize: 13,
+  boxSizing: "border-box",
+  outline: "none",
 };
 
 const filterGroupStyle: CSSProperties = {

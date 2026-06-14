@@ -8,10 +8,12 @@ export type SearchFilters = {
   countryName: string;
   region: string;
   city: string;
+  locationQuery: string;
   category: SearchCategory;
   name: string;
   tag: string;
   content: string;
+  textQuery: string;
   helpOnly: boolean;
   speciesId?: string | null;
 };
@@ -25,10 +27,12 @@ export const emptySearchFilters: SearchFilters = {
   countryName: "",
   region: "",
   city: "",
+  locationQuery: "",
   category: "all",
   name: "",
   tag: "",
   content: "",
+  textQuery: "",
   helpOnly: false,
   speciesId: null,
 };
