@@ -481,7 +481,6 @@ export default function DiscoverPage() {
           loading={followLoading}
           tab={followTab}
           keyword={followKeyword}
-          projectStatus={followProjectStatus}
           projectCards={filteredFollowProjectCards}
           projectCount={followProjectCards.length}
           userCount={followUserCards.length}
@@ -492,7 +491,6 @@ export default function DiscoverPage() {
           searchInputRef={followSearchInputRef}
           onTabChange={setFollowTab}
           onKeywordChange={setFollowKeyword}
-          onProjectStatusChange={setFollowProjectStatus}
           onSelectedUserChange={setSelectedFollowUserId}
           onCloseSearch={() => {
             setFollowSearchOpen(false);
@@ -613,7 +611,7 @@ function MobileDiscoverTabs({
         onClick={() => onChange("following")}
         style={mobileDiscoverTabButtonStyle(active === "following")}
       >
-        关注
+        我的关注
       </button>
     </nav>
   );
@@ -623,7 +621,6 @@ function MobileFollowingPanel({
   loading,
   tab,
   keyword,
-  projectStatus,
   projectCards,
   projectCount,
   userCount,
@@ -634,7 +631,6 @@ function MobileFollowingPanel({
   searchInputRef,
   onTabChange,
   onKeywordChange,
-  onProjectStatusChange,
   onSelectedUserChange,
   onCloseSearch,
   onOpenArchive,
@@ -645,7 +641,6 @@ function MobileFollowingPanel({
   loading: boolean;
   tab: TabKey;
   keyword: string;
-  projectStatus: ProjectStatusFilter;
   projectCards: FollowProjectCard[];
   projectCount: number;
   userCount: number;
@@ -656,7 +651,6 @@ function MobileFollowingPanel({
   searchInputRef: RefObject<HTMLInputElement | null>;
   onTabChange: (tab: TabKey) => void;
   onKeywordChange: (value: string) => void;
-  onProjectStatusChange: (value: ProjectStatusFilter) => void;
   onSelectedUserChange: (userId: string | null) => void;
   onCloseSearch: () => void;
   onOpenArchive: (archiveId: string) => void;
@@ -705,17 +699,11 @@ function MobileFollowingPanel({
       {loading ? (
         <div style={mobileFollowingLoadingStyle}>正在加载关注内容...</div>
       ) : tab === "projects" ? (
-        <>
-          <MobileProjectStatusFilter
-            value={projectStatus}
-            onChange={onProjectStatusChange}
-          />
-          <FollowProjectList
-            items={projectCards}
-            onOpenArchive={onOpenArchive}
-            onUnfollow={onUnfollowProject}
-          />
-        </>
+        <FollowProjectList
+          items={projectCards}
+          onOpenArchive={onOpenArchive}
+          onUnfollow={onUnfollowProject}
+        />
       ) : (
         <MobileFollowUserArchives
           users={userCards}
@@ -727,30 +715,6 @@ function MobileFollowingPanel({
         />
       )}
     </section>
-  );
-}
-
-function MobileProjectStatusFilter({
-  value,
-  onChange,
-}: {
-  value: ProjectStatusFilter;
-  onChange: (value: ProjectStatusFilter) => void;
-}) {
-  return (
-    <div style={mobileProjectStatusFilterStyle}>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value as ProjectStatusFilter)}
-        style={mobileProjectStatusSelectStyle}
-        aria-label="关注项目状态"
-      >
-        <option value="all">全部状态</option>
-        <option value="open">求助中</option>
-        <option value="resolved">已解决</option>
-        <option value="ended">已结束</option>
-      </select>
-    </div>
   );
 }
 
@@ -934,22 +898,6 @@ const mobileFollowSearchCloseStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
   cursor: "pointer",
-};
-
-const mobileProjectStatusFilterStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  marginBottom: 8,
-};
-
-const mobileProjectStatusSelectStyle: CSSProperties = {
-  height: 30,
-  border: "1px solid #dfe7d8",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#52604f",
-  padding: "0 9px",
-  fontSize: 12,
 };
 
 const mobileFollowUserRailStyle: CSSProperties = {
