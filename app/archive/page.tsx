@@ -989,8 +989,8 @@ export default function ArchivePage() {
 
       {isMobileViewport ? (
         <section style={mobileMainFilterSectionStyle} aria-label="项目主分类">
-          <div style={mobileFilterLabelStyle}>主分类</div>
           <div style={systemTabWrapStyle}>
+            <span style={mobileInlineFilterLabelStyle}>主分类</span>
             {archiveSystemTabs.map((tab) => {
               const active = activeCategory === tab.value && !activeSubTag && !activeGroupTag;
 
@@ -1319,17 +1319,20 @@ const mobileMainFilterSectionStyle: CSSProperties = {
   marginBottom: 12,
 };
 
-const mobileFilterLabelStyle: CSSProperties = {
-  margin: "0 2px 5px",
+const mobileInlineFilterLabelStyle: CSSProperties = {
+  alignSelf: "center",
+  justifySelf: "start",
   color: "#7a8675",
   fontSize: 12,
   fontWeight: 800,
   lineHeight: 1.2,
+  paddingLeft: 4,
+  whiteSpace: "nowrap",
 };
 
 const systemTabWrapStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gridTemplateColumns: "auto repeat(5, minmax(0, 1fr))",
   gap: 6,
   padding: 4,
   border: "1px solid #e2ecd9",
