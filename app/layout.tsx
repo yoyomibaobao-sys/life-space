@@ -1,4 +1,5 @@
 import Navbar from "@/components/navbar";
+import StatusBarTheme from "@/components/StatusBarTheme";
 import Toast from "@/components/Toast";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -32,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <StatusBarTheme />
         <Navbar />
         <main className="app-main">{children}</main>
         <Toast />

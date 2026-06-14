@@ -146,12 +146,13 @@ export default function ArchiveRecordCard({
       style={{
         position: "relative",
         marginBottom: 14,
-        paddingLeft: 10,
+        paddingLeft: isMobileViewport ? 0 : 10,
         scrollMarginTop: 120,
       }}
     >
       <div
         style={{
+          display: isMobileViewport ? "none" : "block",
           position: "absolute",
           left: -13,
           top: 8,

@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { LightboxImage } from "@/lib/archive-detail-types";
 import { getTouchDistance } from "@/lib/archive-detail-utils";
+import {
+  APP_STATUS_BAR_DARK,
+  APP_STATUS_BAR_LIGHT,
+  setAppStatusBarTheme,
+} from "@/components/StatusBarTheme";
 
 type PanOffset = {
   x: number;
@@ -72,12 +77,7 @@ export default function ArchiveLightbox({
   useEffect(() => {
     if (!isMobileViewport || typeof window === "undefined") return;
 
-    const themeMeta = document.querySelector<HTMLMetaElement>("meta[name='theme-color']");
-    const previousThemeColor = themeMeta?.getAttribute("content") || "";
-
-    if (themeMeta) {
-      themeMeta.setAttribute("content", "#000000");
-    }
+    setAppStatusBarTheme(APP_STATUS_BAR_DARK);
 
     window.history.pushState({ __archiveLightbox: true }, "");
     pushedMobileHistoryRef.current = true;
@@ -90,9 +90,7 @@ export default function ArchiveLightbox({
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
-      if (themeMeta) {
-        themeMeta.setAttribute("content", previousThemeColor || "#fbfcf7");
-      }
+      setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
     };
     // Run once for this mobile lightbox mount so the Android back key exits it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
