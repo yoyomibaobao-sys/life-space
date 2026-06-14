@@ -3,6 +3,7 @@ import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 export type UserProfileStats = {
   archiveCount: number;
   publicArchiveCount: number;
+  endedArchiveCount: number;
   followingCount: number;
   followerCount: number;
   projectFollowCount: number;
@@ -19,6 +20,7 @@ export type UserProfileArchiveItem = {
   title: string | null;
   system_name: string | null;
   category: string | null;
+  status?: string | null;
   last_record_time: string | null;
   record_count: number | null;
   view_count: number | null;
@@ -95,7 +97,7 @@ async function loadUserProfileDataWithProfile(
     profileQuery,
     supabase
       .from("archives")
-      .select("id, title, system_name, category, last_record_time, record_count, view_count, is_public")
+      .select("id, title, system_name, category, status, last_record_time, record_count, view_count, is_public")
       .eq("user_id", userId)
       .order("last_record_time", { ascending: false }),
     supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
@@ -113,6 +115,7 @@ async function loadUserProfileDataWithProfile(
 
   const archives = (archivesResult.data || []) as Array<UserProfileArchiveItem & { is_public?: boolean | null }>;
   const publicArchives = archives.filter((item) => item.is_public);
+  const endedArchives = archives.filter((item) => item.status === "ended");
   const plans = (plansResult.data || []) as UserPlantPlanRow[];
   const planNames = plans
     .map((item) => item.plant_species?.common_name || item.plant_species?.scientific_name || "")
@@ -124,6 +127,7 @@ async function loadUserProfileDataWithProfile(
     stats: {
       archiveCount: archives.length,
       publicArchiveCount: publicArchives.length,
+      endedArchiveCount: endedArchives.length,
       followingCount: followingResult.count || 0,
       followerCount: followerResult.count || 0,
       projectFollowCount: archiveFollowsResult.count || 0,

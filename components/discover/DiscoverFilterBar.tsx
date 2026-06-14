@@ -4,19 +4,22 @@ export function DiscoverFilterBar({
   options,
   activeMode,
   onChange,
+  compactMobile = false,
 }: {
   options: FilterOption[];
   activeMode: FilterMode;
   onChange: (mode: FilterMode) => void;
+  compactMobile?: boolean;
 }) {
   return (
     <div
       style={{
         display: "flex",
-        gap: 8,
-        marginBottom: 14,
+        gap: compactMobile ? 4 : 8,
+        marginBottom: compactMobile ? 10 : 14,
         overflowX: "auto",
-        paddingBottom: 2,
+        paddingBottom: compactMobile ? 0 : 2,
+        WebkitOverflowScrolling: "touch",
       }}
     >
       {options.map((option) => {
@@ -29,7 +32,14 @@ export function DiscoverFilterBar({
             type="button"
             onClick={() => onChange(option.value)}
             style={{
-              padding: isHelpFilter ? "8px 14px" : "8px 13px",
+              flex: "0 0 auto",
+              padding: compactMobile
+                ? isHelpFilter
+                  ? "6px 9px"
+                  : "6px 8px"
+                : isHelpFilter
+                ? "8px 14px"
+                : "8px 13px",
               borderRadius: 999,
               border: isHelpFilter
                 ? active
@@ -48,7 +58,7 @@ export function DiscoverFilterBar({
               color: isHelpFilter ? "#a65f45" : active ? "#2e7d32" : "#314131",
               cursor: "pointer",
               whiteSpace: "nowrap",
-              fontSize: 13,
+              fontSize: compactMobile ? 12 : 13,
               fontWeight: isHelpFilter || active ? 600 : 400,
             }}
           >

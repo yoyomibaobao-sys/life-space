@@ -44,6 +44,15 @@ type MembershipPaymentRow = {
   service_ends_at: string | null;
 };
 
+type MobileProfileModule = "info" | "membership" | "space" | "account";
+
+const mobileProfileModules: Array<{ value: MobileProfileModule; label: string }> = [
+  { value: "info", label: "用户信息" },
+  { value: "membership", label: "我的会员及付款记录" },
+  { value: "space", label: "我的空间" },
+  { value: "account", label: "帐号操作" },
+];
+
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
   const value = Number(amount || 0);
   if (!Number.isFinite(value)) return `${currency || ""} ${amount || ""}`.trim();
@@ -87,6 +96,8 @@ export default function ProfilePage() {
   const [deleteAccountError, setDeleteAccountError] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [viewportWidth, setViewportWidth] = useState(1200);
+  const [mobileProfileModule, setMobileProfileModule] =
+    useState<MobileProfileModule>("info");
 
   useEffect(() => {
     const updateViewportWidth = () => setViewportWidth(window.innerWidth);
@@ -209,6 +220,7 @@ export default function ProfilePage() {
     : "暂无";
 
   const privateArchiveCount = Math.max(0, Number(stats?.archiveCount || 0) - Number(stats?.publicArchiveCount || 0));
+  const endedArchiveCount = Number(stats?.endedArchiveCount || 0);
   const planHint = getPlanHint(stats?.planNames || [], Number(stats?.planCount || 0));
   const isMobileViewport = viewportWidth < 760;
   const topGridColumns = isMobileViewport ? "minmax(0, 1fr)" : viewportWidth < 820 ? "1fr" : "minmax(280px, 0.95fr) minmax(420px, 1.05fr)";
@@ -225,6 +237,10 @@ export default function ProfilePage() {
   const primaryActionStyle = isMobileViewport ? mobilePrimaryButtonStyle : primaryButtonStyle;
   const secondaryActionStyle = isMobileViewport ? mobileSecondaryLinkStyle : secondaryLinkStyle;
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
+  const showInfoModule = !isMobileViewport || mobileProfileModule === "info";
+  const showMembershipModule = !isMobileViewport || mobileProfileModule === "membership";
+  const showSpaceModule = !isMobileViewport || mobileProfileModule === "space";
+  const showAccountModule = !isMobileViewport || mobileProfileModule === "account";
 
   async function refreshStats(targetUserId: string) {
     const data = await loadUserProfileData(supabase, targetUserId);
@@ -494,10 +510,12 @@ export default function ProfilePage() {
   return (
     <main style={pageStyle}>
       <section style={shellStyle}>
-        <div>
-          <div style={{ fontSize: 13, color: "#6b7b66" }}>我的资料</div>
-          <h1 style={{ margin: "4px 0 0", fontSize: isMobileViewport ? 21 : 24, color: "#1f2a1f" }}>用户信息页</h1>
-        </div>
+        {!isMobileViewport ? (
+          <div>
+            <div style={{ fontSize: 13, color: "#6b7b66" }}>我的资料</div>
+            <h1 style={{ margin: "4px 0 0", fontSize: 24, color: "#1f2a1f" }}>用户信息页</h1>
+          </div>
+        ) : null}
 
         {errorMsg ? (
           <div style={{ marginTop: 16, background: "#fff2f0", border: "1px solid #ffd6cf", color: "#c23a2b", padding: "10px 12px", borderRadius: 12, fontSize: 14 }}>
@@ -505,6 +523,14 @@ export default function ProfilePage() {
           </div>
         ) : null}
 
+        {isMobileViewport ? (
+          <MobileProfileModuleTabs
+            active={mobileProfileModule}
+            onChange={setMobileProfileModule}
+          />
+        ) : null}
+
+        {showInfoModule ? (
         <div style={{ display: "grid", gridTemplateColumns: topGridColumns, gap: isMobileViewport ? 10 : 14, marginTop: isMobileViewport ? 10 : 14, alignItems: "start" }}>
           <section style={compactPanelStyle}>
             <div style={{ display: "flex", alignItems: "center", gap: isMobileViewport ? 10 : 12, minWidth: 0 }}>
@@ -595,7 +621,10 @@ export default function ProfilePage() {
             </div>
           </section>
         </div>
+        ) : null}
 
+        {showMembershipModule ? (
+        <>
         <section style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
@@ -724,7 +753,10 @@ export default function ProfilePage() {
             )}
           </div>
         </section>
+        </>
+        ) : null}
 
+        {showSpaceModule ? (
         <section style={isMobileViewport ? { ...statsSectionStyle, ...sectionCompactStyle } : statsSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
@@ -734,59 +766,108 @@ export default function ProfilePage() {
           </div>
 
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns }}>
-              <StatLinkCard
-                href="/archive"
-                label="我的项目"
-                value={String(stats.archiveCount)}
-                hint={`公开 ${stats.publicArchiveCount} · 仅自己可见 ${privateArchiveCount}`}
-              />
-              <StatLinkCard
-  href="/profile/recent"
-  label="最近浏览"
-  value="进入"
-  hint="最近看过的项目"
-/>
-              <StatLinkCard
-  href="/follow?tab=projects"
-  label="我关注的项目"
-  value={String(stats.projectFollowCount)}
-  hint="我关注的项目"
-/>
-              <StatLinkCard
-                href="/follow?tab=users"
-                label="我关注的用户"
-                value={String(stats.followingCount)}
-                hint="我在关注谁"
-              />
-              <StatLinkCard
-  href="/profile/followers"
-  label="粉丝"
-  value={String(stats.followerCount)}
-  hint="谁在关注我"
-/>
-              <StatLinkCard
-                href="/profile/flowers"
-                label="花朵来源"
-                value={String(stats.receivedFlowerCount)}
-                hint="查看谁给我送花"
-              />
-              <StatLinkCard
-                href="/profile/flowers?tab=sent"
-                label="花朵送给谁"
-                value={String(stats.sentFlowerCount || 0)}
-                hint="查看我送出的花"
-              />
-
-  <StatLinkCard
-  href="/notifications"
-  label="通知"
-  value="进入"
-  hint="关注、送花和互动提醒"
-/>
-                    </div>
+            {isMobileViewport ? (
+              <>
+                <ProjectStatsCard
+                  archiveCount={stats.archiveCount}
+                  publicArchiveCount={stats.publicArchiveCount}
+                  privateArchiveCount={privateArchiveCount}
+                  endedArchiveCount={endedArchiveCount}
+                />
+                <StatLinkCard
+                  href="/profile/recent"
+                  label="最近浏览"
+                  value="进入"
+                  hint="最近看过的项目"
+                  compact
+                />
+                <StatLinkCard
+                  href="/profile/followers"
+                  label="粉丝"
+                  value={String(stats.followerCount)}
+                  hint="谁在关注我"
+                  compact
+                />
+                <StatLinkCard
+                  href="/profile/flowers"
+                  label="花朵来源"
+                  value={String(stats.receivedFlowerCount)}
+                  hint="查看谁给我送花"
+                  compact
+                />
+                <StatLinkCard
+                  href="/profile/flowers?tab=sent"
+                  label="花朵送给谁"
+                  value={String(stats.sentFlowerCount || 0)}
+                  hint="查看我送出的花"
+                  compact
+                />
+                <StatLinkCard
+                  href="/notifications"
+                  label="通知"
+                  value="进入"
+                  hint="关注、送花和互动提醒"
+                  compact
+                />
+              </>
+            ) : (
+              <>
+                <StatLinkCard
+                  href="/archive"
+                  label="我的项目"
+                  value={String(stats.archiveCount)}
+                  hint={`公开 ${stats.publicArchiveCount} · 仅自己可见 ${privateArchiveCount}`}
+                />
+                <StatLinkCard
+                  href="/profile/recent"
+                  label="最近浏览"
+                  value="进入"
+                  hint="最近看过的项目"
+                />
+                <StatLinkCard
+                  href="/follow?tab=projects"
+                  label="我关注的项目"
+                  value={String(stats.projectFollowCount)}
+                  hint="我关注的项目"
+                />
+                <StatLinkCard
+                  href="/follow?tab=users"
+                  label="我关注的用户"
+                  value={String(stats.followingCount)}
+                  hint="我在关注谁"
+                />
+                <StatLinkCard
+                  href="/profile/followers"
+                  label="粉丝"
+                  value={String(stats.followerCount)}
+                  hint="谁在关注我"
+                />
+                <StatLinkCard
+                  href="/profile/flowers"
+                  label="花朵来源"
+                  value={String(stats.receivedFlowerCount)}
+                  hint="查看谁给我送花"
+                />
+                <StatLinkCard
+                  href="/profile/flowers?tab=sent"
+                  label="花朵送给谁"
+                  value={String(stats.sentFlowerCount || 0)}
+                  hint="查看我送出的花"
+                />
+                <StatLinkCard
+                  href="/notifications"
+                  label="通知"
+                  value="进入"
+                  hint="关注、送花和互动提醒"
+                />
+              </>
+            )}
+          </div>
         </section>
+        ) : null}
 
-        <section style={isMobileViewport ? { ...plantInfoSectionStyle, ...sectionCompactStyle } : plantInfoSectionStyle}>
+        {!isMobileViewport ? (
+        <section style={plantInfoSectionStyle}>
           <div style={plantInfoHeaderStyle}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>植物资料</div>
@@ -811,8 +892,10 @@ export default function ProfilePage() {
             </Link>
           </div>
         </section>
+        ) : null}
 
-        <section style={isMobileViewport ? { ...marketInfoSectionStyle, ...sectionCompactStyle } : marketInfoSectionStyle}>
+        {!isMobileViewport ? (
+        <section style={marketInfoSectionStyle}>
           <div style={marketInfoHeaderStyle}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>集市信息</div>
@@ -841,6 +924,9 @@ export default function ProfilePage() {
             </Link>
           </div>
         </section>
+        ) : null}
+
+        {showAccountModule ? (
         <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#9a5b55" }}>危险操作</div>
@@ -857,6 +943,7 @@ export default function ProfilePage() {
             注销账号
           </button>
         </section>
+        ) : null}
       </section>
       <ConfirmDialog
         open={deleteDialogOpen}
@@ -912,12 +999,65 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatLinkCard({ href, label, value, hint }: { href: string; label: string; value: string; hint: string }) {
+function MobileProfileModuleTabs({
+  active,
+  onChange,
+}: {
+  active: MobileProfileModule;
+  onChange: (value: MobileProfileModule) => void;
+}) {
   return (
-    <Link href={href} style={{ ...statCardBaseStyle, textDecoration: "none" }}>
-      <div style={{ fontSize: 14, color: "#6d7968" }}>{label}</div>
-      <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
-      <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
+    <nav style={mobileProfileTabsStyle} aria-label="我的页面模块">
+      {mobileProfileModules.map((item) => (
+        <button
+          key={item.value}
+          type="button"
+          onClick={() => onChange(item.value)}
+          style={mobileProfileTabButtonStyle(active === item.value)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function ProjectStatsCard({
+  archiveCount,
+  publicArchiveCount,
+  privateArchiveCount,
+  endedArchiveCount,
+}: {
+  archiveCount: number;
+  publicArchiveCount: number;
+  privateArchiveCount: number;
+  endedArchiveCount: number;
+}) {
+  return (
+    <div style={mobileProjectStatsCardStyle}>
+      我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount} · 已结束 {endedArchiveCount}
+    </div>
+  );
+}
+
+function StatLinkCard({
+  href,
+  label,
+  value,
+  hint,
+  compact = false,
+}: {
+  href: string;
+  label: string;
+  value: string;
+  hint: string;
+  compact?: boolean;
+}) {
+  return (
+    <Link href={href} style={{ ...(compact ? compactStatCardStyle : statCardBaseStyle), textDecoration: "none" }}>
+      <div style={{ fontSize: compact ? 13 : 14, color: "#6d7968" }}>{label}</div>
+      <div style={{ marginTop: compact ? 3 : 6, fontSize: compact ? 18 : 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
+      <div style={{ marginTop: compact ? 3 : 6, fontSize: compact ? 12 : 13, color: "#7b8676", lineHeight: compact ? 1.25 : 1.35 }}>{hint}</div>
     </Link>
   );
 }
@@ -984,6 +1124,31 @@ const mobileProfileShellStyle: CSSProperties = {
   boxSizing: "border-box",
   boxShadow: "0 6px 16px rgba(32,56,24,0.04)",
 };
+
+const mobileProfileTabsStyle: CSSProperties = {
+  display: "flex",
+  gap: 6,
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
+  margin: "0 0 10px",
+  padding: "2px 0 3px",
+};
+
+function mobileProfileTabButtonStyle(active: boolean): CSSProperties {
+  return {
+    flex: "0 0 auto",
+    minHeight: 32,
+    border: active ? "1px solid #9bc98f" : "1px solid #dfe8da",
+    borderRadius: 999,
+    background: active ? "#edf8e9" : "#fff",
+    color: active ? "#2f6a31" : "#52634e",
+    padding: "0 10px",
+    fontSize: 13,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  };
+}
 
 const panelStyle: CSSProperties = {
   background: "#fff",
@@ -1397,6 +1562,22 @@ const statCardBaseStyle: CSSProperties = {
   color: "inherit",
   minHeight: 104,
   boxSizing: "border-box",
+};
+
+const compactStatCardStyle: CSSProperties = {
+  ...statCardBaseStyle,
+  minHeight: 70,
+  borderRadius: 12,
+  padding: "9px 10px",
+};
+
+const mobileProjectStatsCardStyle: CSSProperties = {
+  ...compactStatCardStyle,
+  minHeight: 0,
+  color: "#22301f",
+  fontSize: 13,
+  fontWeight: 800,
+  lineHeight: 1.45,
 };
 
 const statActionCardStyle: CSSProperties = {

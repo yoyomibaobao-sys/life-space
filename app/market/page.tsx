@@ -278,11 +278,17 @@ export default function MarketPage() {
       <div style={shellStyle}>
         <header style={headerStyle}>
           <div>
-            <div style={marketIntroStyle}>交换与求购</div>
-            <div style={marketSubIntroStyle}>基于真实记录的信息发布，交易、支付、物流请双方自行确认</div>
+            {isMobileViewport ? (
+              <div style={mobileMarketIntroStyle}>交换与求购 · 本地需求</div>
+            ) : (
+              <>
+                <div style={marketIntroStyle}>交换与求购</div>
+                <div style={marketSubIntroStyle}>基于真实记录的信息发布，交易、支付、物流请双方自行确认</div>
+              </>
+            )}
           </div>
 
-          <div style={headerActionStyle}>
+          <div style={isMobileViewport ? hiddenMobileHeaderActionStyle : headerActionStyle}>
             {currentUserId ? (
               <>
                 <Link href="/market/mine" style={mineButtonStyle}>
@@ -556,14 +562,17 @@ function MobileMarketFilters({
             style={mobileFilterControlStyle}
           />
         </label>
-      </div>
 
-      <input
-        value={contentFilter}
-        onChange={(event) => onContentChange(event.target.value)}
-        placeholder="记录内容搜索"
-        style={mobileContentSearchStyle}
-      />
+        <label style={mobileFilterContentFieldStyle}>
+          <span style={mobileFilterLabelStyle}>记录内容搜索</span>
+          <input
+            value={contentFilter}
+            onChange={(event) => onContentChange(event.target.value)}
+            placeholder="内容"
+            style={mobileFilterControlStyle}
+          />
+        </label>
+      </div>
 
       <datalist id="market-location-options">
         {locationOptions.map((location) => (
@@ -615,6 +624,14 @@ const marketIntroStyle: CSSProperties = {
   fontWeight: 700,
 };
 
+const mobileMarketIntroStyle: CSSProperties = {
+  color: "#1f2a1f",
+  fontSize: 15,
+  fontWeight: 800,
+  lineHeight: 1.25,
+  whiteSpace: "nowrap",
+};
+
 const marketSubIntroStyle: CSSProperties = {
   marginTop: 3,
   color: "#7b8676",
@@ -661,27 +678,39 @@ const filterPanelStyle: CSSProperties = {
   marginBottom: 12,
 };
 
+const hiddenMobileHeaderActionStyle: CSSProperties = {
+  display: "none",
+};
+
 const mobileFilterPanelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e4ece0",
   borderRadius: 14,
-  padding: 8,
-  display: "grid",
-  gap: 8,
+  padding: 6,
+  display: "block",
   marginBottom: 10,
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
 };
 
 const mobileFilterTopGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "0.82fr 0.82fr minmax(0, 1.18fr)",
-  gap: 6,
+  display: "flex",
+  gap: 5,
   alignItems: "end",
+  minWidth: 520,
 };
 
 const mobileFilterFieldStyle: CSSProperties = {
-  minWidth: 0,
+  width: 108,
+  flex: "0 0 108px",
   display: "grid",
-  gap: 3,
+  gap: 2,
+};
+
+const mobileFilterContentFieldStyle: CSSProperties = {
+  ...mobileFilterFieldStyle,
+  width: 142,
+  flexBasis: 142,
 };
 
 const mobileFilterLabelStyle: CSSProperties = {
@@ -693,9 +722,9 @@ const mobileFilterLabelStyle: CSSProperties = {
 const mobileFilterControlStyle: CSSProperties = {
   width: "100%",
   minWidth: 0,
-  height: 32,
+  height: 30,
   border: "1px solid #dfe8da",
-  borderRadius: 10,
+  borderRadius: 9,
   background: "#fff",
   color: "#40583a",
   padding: "0 8px",

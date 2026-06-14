@@ -616,7 +616,8 @@ function MobileArchiveCard({
   ]
     .filter(Boolean)
     .join(" · ");
-  const visibilityText = item.is_public ? "已公开" : "仅自己可见";
+  const visibilityText = item.is_public ? "公开" : "私密";
+  const mobileStatusLineText = [statusText, visibilityText].filter(Boolean).join(" · ");
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
@@ -673,7 +674,6 @@ function MobileArchiveCard({
             {systemName ? <span style={mobileCardTitleDividerStyle}> · </span> : null}
             {systemName ? <span style={mobileCardSystemNameStyle}>{systemName}</span> : null}
           </div>
-          {statusText ? <span style={mobileCardStatusBadgeStyle}>{statusText}</span> : null}
           <button
             type="button"
             data-no-card-nav="true"
@@ -711,8 +711,8 @@ function MobileArchiveCard({
           {activityText}
         </div>
         <div style={mobileCardBottomRowStyle}>
-          <span style={mobileCardVisibilityBadgeStyle(item.is_public)}>
-            {visibilityText}
+          <span style={mobileCardStatusLineStyle(item.is_public)}>
+            {mobileStatusLineText}
           </span>
           <div style={mobileCardStatsStyle} title={attentionText}>
             {attentionText}
@@ -890,14 +890,17 @@ const mobileCardBottomRowStyle: CSSProperties = {
   minWidth: 0,
 };
 
-function mobileCardVisibilityBadgeStyle(isPublic?: boolean | null): CSSProperties {
+function mobileCardStatusLineStyle(isPublic?: boolean | null): CSSProperties {
   return {
-    flexShrink: 0,
+    flex: "0 1 auto",
+    minWidth: 0,
     color: isPublic ? "#43763e" : "#7f887a",
     fontSize: 12,
     fontWeight: 700,
     lineHeight: 1.2,
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   };
 }
 

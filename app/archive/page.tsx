@@ -859,6 +859,27 @@ export default function ArchivePage() {
   const publicArchiveCount = archives.filter((item) => item.is_public).length;
   const privateArchiveCount = archiveCount - publicArchiveCount;
   const endedArchiveCount = archives.filter((item) => item.status === "ended").length;
+  const archiveCategoryCounts = useMemo(() => {
+    const counts: Record<ArchiveCategory, number> = {
+      plant: 0,
+      system: 0,
+      insect_fish: 0,
+      other: 0,
+    };
+
+    archives.forEach((item) => {
+      const category =
+        item.category === "plant" ||
+        item.category === "system" ||
+        item.category === "insect_fish" ||
+        item.category === "other"
+          ? item.category
+          : "other";
+      counts[category] += 1;
+    });
+
+    return counts;
+  }, [archives]);
   const contentBlocked = membership?.can_create_content === false;
 
   const plantSubTags = subTags.filter((tag) => tag.category === "plant");
@@ -984,7 +1005,7 @@ export default function ArchivePage() {
                 }
                 style={systemTabButtonStyle(active)}
               >
-                {tab.value === null ? `${tab.label}（${archiveCount}）` : tab.label}
+                {`${tab.label}（${tab.value === null ? archiveCount : archiveCategoryCounts[tab.value]}）`}
               </button>
             );
           })}
@@ -1292,19 +1313,20 @@ export default function ArchivePage() {
 }
 
 const systemTabWrapStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  display: "flex",
   gap: 6,
   marginBottom: 14,
   padding: 4,
   border: "1px solid #e2ecd9",
   borderRadius: 16,
   background: "#fff",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
 };
 
 function systemTabButtonStyle(active: boolean): CSSProperties {
   return {
-    minWidth: 0,
+    flex: "0 0 auto",
     minHeight: 38,
     border: "none",
     borderRadius: 12,
@@ -1312,9 +1334,9 @@ function systemTabButtonStyle(active: boolean): CSSProperties {
     color: active ? "#2f6a31" : "#61705d",
     fontSize: 13,
     fontWeight: active ? 800 : 700,
-    whiteSpace: "normal",
+    whiteSpace: "nowrap",
     lineHeight: 1.2,
-    padding: "6px 3px",
+    padding: "6px 10px",
     cursor: "pointer",
   };
 }

@@ -26,6 +26,7 @@ export default function Navbar() {
   const [mobileArchiveTitleInfo, setMobileArchiveTitleInfo] =
     useState<MobileArchiveTitleInfo>(null);
   const [mobileMeMenuOpen, setMobileMeMenuOpen] = useState(false);
+  const [mobilePlantMenuOpen, setMobilePlantMenuOpen] = useState(false);
 
   useEffect(() => {
     function updateCompact() {
@@ -90,6 +91,7 @@ export default function Navbar() {
     let cancelled = false;
     const archiveDetailPath = getArchiveDetailPath(pathname);
     setMobileMeMenuOpen(false);
+    setMobilePlantMenuOpen(false);
 
     async function loadMobileTitle() {
       if (!archiveDetailPath) {
@@ -273,6 +275,32 @@ export default function Navbar() {
                   发布信息
                 </Link>
               </>
+            ) : isMobilePlantPath(pathname) ? (
+              <div style={mobilePlantMenuWrapStyle}>
+                <button
+                  type="button"
+                  onClick={() => setMobilePlantMenuOpen((open) => !open)}
+                  style={mobilePlantButtonStyle}
+                >
+                  我的植物
+                </button>
+                {mobilePlantMenuOpen ? (
+                  <div style={mobilePlantMenuStyle}>
+                    <Link
+                      href={user ? "/archive/interests" : "/login"}
+                      style={mobilePlantMenuItemStyle}
+                    >
+                      我收藏的植物
+                    </Link>
+                    <Link
+                      href={user ? "/archive/plans" : "/login"}
+                      style={mobilePlantMenuItemStyle}
+                    >
+                      种植计划
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
             ) : user && isMobileMePath(pathname) ? (
               <div style={mobileMeMenuWrapStyle}>
                 <button
@@ -528,6 +556,10 @@ function isMobileMarketPath(pathname: string) {
   return pathname === "/market";
 }
 
+function isMobilePlantPath(pathname: string) {
+  return pathname === "/plant" || pathname.startsWith("/plant/");
+}
+
 function shouldShowMobileCreateAction(pathname: string) {
   if (pathname === "/plant" || pathname.startsWith("/plant/")) return false;
   if (isMobileMePath(pathname)) return false;
@@ -693,6 +725,43 @@ const mobileMarketMineButtonStyle: CSSProperties = {
 const mobileMarketPublishButtonStyle: CSSProperties = {
   ...mobileCreateButtonStyle,
   padding: "0 9px",
+};
+
+const mobilePlantMenuWrapStyle: CSSProperties = {
+  position: "relative",
+  display: "inline-flex",
+  flexShrink: 0,
+};
+
+const mobilePlantButtonStyle: CSSProperties = {
+  ...mobileSearchButtonStyle,
+  padding: "0 10px",
+};
+
+const mobilePlantMenuStyle: CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 8px)",
+  right: 0,
+  zIndex: 140,
+  width: 132,
+  border: "1px solid #e6ebdf",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 14px 30px rgba(39, 58, 34, 0.16)",
+  padding: 5,
+};
+
+const mobilePlantMenuItemStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  minHeight: 34,
+  borderRadius: 9,
+  color: "#40583a",
+  textDecoration: "none",
+  fontSize: 13,
+  fontWeight: 800,
+  padding: "0 9px",
+  whiteSpace: "nowrap",
 };
 
 const mobileLogoutButtonStyle: CSSProperties = {

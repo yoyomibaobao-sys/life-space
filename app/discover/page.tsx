@@ -513,6 +513,7 @@ export default function DiscoverPage() {
         options={visibleFilterOptions}
         activeMode={filterMode}
         onChange={changeFilter}
+        compactMobile={isMobileViewport}
       />
 
       <Link
