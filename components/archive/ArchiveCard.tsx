@@ -612,8 +612,7 @@ function MobileArchiveCard({
     .filter(Boolean)
     .join(" · ");
   const visibilityText = item.is_public ? "公开" : "私密";
-  const mobileStatusMainText = [
-    visibilityText,
+  const mobileStatusDetailText = [
     `浏览 ${item.view_count || 0}`,
     typeof item.follower_count !== "undefined" ? `关注 ${item.follower_count || 0}` : "",
     helpStatusText,
@@ -715,7 +714,8 @@ function MobileArchiveCard({
         </div>
         <div style={mobileCardBottomRowStyle}>
           <span style={mobileCardFourthLineStyle}>
-            {mobileStatusMainText}
+            <span style={mobileVisibilityTextStyle(item.is_public)}>{visibilityText}</span>
+            {mobileStatusDetailText ? ` · ${mobileStatusDetailText}` : ""}
           </span>
           {mobileEndedText ? (
             <span style={mobileCardEndedStatusStyle}>{mobileEndedText}</span>
@@ -901,6 +901,13 @@ const mobileCardFourthLineStyle: CSSProperties = {
   lineHeight: 1.35,
   whiteSpace: "normal",
 };
+
+function mobileVisibilityTextStyle(isPublic?: boolean | null): CSSProperties {
+  return {
+    color: isPublic ? "#2f8f2f" : "#888",
+    fontWeight: 700,
+  };
+}
 
 const mobileCardEndedStatusStyle: CSSProperties = {
   flex: "0 0 auto",
