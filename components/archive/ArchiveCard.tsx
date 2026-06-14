@@ -600,7 +600,7 @@ function MobileArchiveCard({
   onDeleteArchive: (item: ArchiveItem) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const statusText = getMobileArchiveStatusText(item, ended);
+  const helpStatusText = getMobileArchiveHelpStatusText(item);
   const updateText = formatArchiveDate(item.latest_record_time || item.last_record_time || item.created_at) || "暂无";
   const ongoingDays = getOngoingDays(item.created_at);
   const activityText = [
@@ -610,14 +610,16 @@ function MobileArchiveCard({
   ]
     .filter(Boolean)
     .join(" · ");
-  const attentionText = [
+  const visibilityText = item.is_public ? "公开" : "私密";
+  const mobileStatusLineText = [
     `浏览 ${item.view_count || 0}`,
     typeof item.follower_count !== "undefined" ? `关注 ${item.follower_count || 0}` : "",
+    helpStatusText,
+    visibilityText,
+    ended ? "已结束" : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  const visibilityText = item.is_public ? "公开" : "私密";
-  const mobileStatusLineText = [statusText, visibilityText].filter(Boolean).join(" · ");
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
@@ -711,12 +713,9 @@ function MobileArchiveCard({
           {activityText}
         </div>
         <div style={mobileCardBottomRowStyle}>
-          <span style={mobileCardStatusLineStyle(item.is_public)}>
+          <span style={mobileCardFourthLineStyle}>
             {mobileStatusLineText}
           </span>
-          <div style={mobileCardStatsStyle} title={attentionText}>
-            {attentionText}
-          </div>
         </div>
 
         {menuOpen ? (
@@ -762,8 +761,7 @@ function MobileArchiveCard({
   );
 }
 
-function getMobileArchiveStatusText(item: ArchiveItem, ended: boolean) {
-  if (ended) return "已结束";
+function getMobileArchiveHelpStatusText(item: ArchiveItem) {
   if (item.help_status === "open") return "求助中";
   if (item.help_status === "resolved") return "求助已解决";
   return "";
@@ -872,17 +870,6 @@ const mobileCardSelectRowStyle: CSSProperties = {
   overflow: "visible",
 };
 
-const mobileCardStatsStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  color: "#8a9588",
-  fontSize: 12,
-  lineHeight: 1.25,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const mobileCardBottomRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -890,19 +877,17 @@ const mobileCardBottomRowStyle: CSSProperties = {
   minWidth: 0,
 };
 
-function mobileCardStatusLineStyle(isPublic?: boolean | null): CSSProperties {
-  return {
-    flex: "0 1 auto",
-    minWidth: 0,
-    color: isPublic ? "#43763e" : "#7f887a",
-    fontSize: 12,
-    fontWeight: 700,
-    lineHeight: 1.2,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  };
-}
+const mobileCardFourthLineStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  color: "#7f887a",
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: 1.25,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
 
 const mobileCardMenuStyle: CSSProperties = {
   position: "absolute",
