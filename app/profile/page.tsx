@@ -44,14 +44,19 @@ type MembershipPaymentRow = {
   service_ends_at: string | null;
 };
 
-type MobileProfileModule = "info" | "membership" | "space" | "account";
+type MobileProfileModule = "info" | "membership" | "adminMembership" | "space" | "account";
 
-const mobileProfileModules: Array<{ value: MobileProfileModule; label: string }> = [
+const baseMobileProfileModules: Array<{ value: MobileProfileModule; label: string }> = [
   { value: "info", label: "用户信息" },
   { value: "membership", label: "会员及付款" },
   { value: "space", label: "痕迹" },
   { value: "account", label: "帐号操作" },
 ];
+
+const adminMembershipProfileModule: { value: MobileProfileModule; label: string } = {
+  value: "adminMembership",
+  label: "会员管理",
+};
 
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
   const value = Number(amount || 0);
@@ -223,6 +228,10 @@ export default function ProfilePage() {
   const endedArchiveCount = Number(stats?.endedArchiveCount || 0);
   const planHint = getPlanHint(stats?.planNames || [], Number(stats?.planCount || 0));
   const isMobileViewport = viewportWidth < 760;
+  const visibleMobileProfileModules = useMemo(
+    () => (isAdmin ? [...baseMobileProfileModules, adminMembershipProfileModule] : baseMobileProfileModules),
+    [isAdmin]
+  );
   const topGridColumns = isMobileViewport ? "minmax(0, 1fr)" : viewportWidth < 820 ? "1fr" : "minmax(280px, 0.95fr) minmax(420px, 1.05fr)";
   const formGridColumns = viewportWidth < 560 ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))";
   const statsGridColumns = isMobileViewport
@@ -239,8 +248,15 @@ export default function ProfilePage() {
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
   const showInfoModule = !isMobileViewport || mobileProfileModule === "info";
   const showMembershipModule = !isMobileViewport || mobileProfileModule === "membership";
+  const showAdminMembershipModule = isMobileViewport && isAdmin && mobileProfileModule === "adminMembership";
   const showSpaceModule = !isMobileViewport || mobileProfileModule === "space";
   const showAccountModule = !isMobileViewport || mobileProfileModule === "account";
+
+  useEffect(() => {
+    if (!isAdmin && mobileProfileModule === "adminMembership") {
+      setMobileProfileModule("info");
+    }
+  }, [isAdmin, mobileProfileModule]);
 
   async function refreshStats(targetUserId: string) {
     const data = await loadUserProfileData(supabase, targetUserId);
@@ -526,6 +542,7 @@ export default function ProfilePage() {
         {isMobileViewport ? (
           <MobileProfileModuleTabs
             active={mobileProfileModule}
+            modules={visibleMobileProfileModules}
             onChange={setMobileProfileModule}
           />
         ) : null}
@@ -615,7 +632,7 @@ export default function ProfilePage() {
               <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>查看公开资料页</Link>
               <Link href="/archive" style={secondaryActionStyle}>进入我的空间</Link>
               <Link href="/membership" style={secondaryActionStyle}>会员与续费</Link>
-              {isAdmin ? (
+              {isAdmin && !isMobileViewport ? (
                 <Link href="/admin/memberships" style={isMobileViewport ? { ...mobileSecondaryLinkStyle, border: "1px solid #c9d8be", background: "#edf6e8", color: "#2f5a27" } : adminLinkStyle}>会员管理</Link>
               ) : null}
             </div>
@@ -754,6 +771,15 @@ export default function ProfilePage() {
           </div>
         </section>
         </>
+        ) : null}
+
+        {showAdminMembershipModule ? (
+        <section style={{ ...statsSectionStyle, ...sectionCompactStyle }}>
+          <Link href="/admin/memberships" style={mobileAdminMembershipEntryStyle}>
+            <span>会员管理</span>
+            <small style={mobileAdminMembershipHintStyle}>查看会员状态、付款记录和管理员操作</small>
+          </Link>
+        </section>
         ) : null}
 
         {showSpaceModule ? (
@@ -996,14 +1022,22 @@ function MetaItem({ label, value }: { label: string; value: string }) {
 
 function MobileProfileModuleTabs({
   active,
+  modules,
   onChange,
 }: {
   active: MobileProfileModule;
+  modules: Array<{ value: MobileProfileModule; label: string }>;
   onChange: (value: MobileProfileModule) => void;
 }) {
   return (
-    <nav style={mobileProfileTabsStyle} aria-label="我的页面模块">
-      {mobileProfileModules.map((item) => (
+    <nav
+      style={{
+        ...mobileProfileTabsStyle,
+        gridTemplateColumns: `repeat(${modules.length}, minmax(0, 1fr))`,
+      }}
+      aria-label="我的页面模块"
+    >
+      {modules.map((item) => (
         <button
           key={item.value}
           type="button"
@@ -1514,6 +1548,27 @@ const mobileSecondaryLinkStyle: CSSProperties = {
   borderRadius: 10,
   fontSize: 13,
   boxSizing: "border-box",
+};
+
+const mobileAdminMembershipEntryStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  border: "1px solid #c9d8be",
+  borderRadius: 13,
+  background: "#f3faef",
+  color: "#2f5a27",
+  padding: "12px 13px",
+  textDecoration: "none",
+  fontSize: 15,
+  fontWeight: 800,
+};
+
+const mobileAdminMembershipHintStyle: CSSProperties = {
+  color: "#62765b",
+  fontSize: 12,
+  fontWeight: 500,
+  lineHeight: 1.45,
 };
 
 const mobileProfileActionRowStyle: CSSProperties = {

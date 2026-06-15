@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import {
   formatMembershipDate,
@@ -121,6 +122,23 @@ const PAYMENT_STATUS_LABELS: Record<PaymentStatusKey, string> = {
   refunded: "已退款",
   canceled: "已取消",
 };
+
+const DELETE_MEMBERSHIP_MESSAGE =
+  "确定要删除该会员吗？本次操作会先将该会员移入黑名单 / 已删除会员状态，不会删除账号、用户资料和付款记录。";
+
+function getAdminMembershipStatusLabel(status?: string | null) {
+  if (status === "canceled") return "已删除";
+  return getMembershipStatusLabel(status);
+}
+
+function canDeleteMembership(row: AdminMembershipRow | null, currentUserId: string) {
+  if (!row) return false;
+  if (!row.plan) return false;
+  if (row.user_id === currentUserId) return false;
+  if (row.status === "canceled") return false;
+  if (row.plan === "admin") return false;
+  return true;
+}
 
 function getDefaultPaymentAmount(plan: PaymentPlanKey, currency: PaymentCurrency) {
   if (plan === "basic") return currency === "CNY" ? 18 : 3;
@@ -281,13 +299,17 @@ function logSupabaseError(label: string, error: unknown) {
 }
 
 export default function AdminMembershipsPage() {
+  const [currentUserId, setCurrentUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(1200);
   const [keyword, setKeyword] = useState("");
   const [rows, setRows] = useState<AdminMembershipRow[]>([]);
   const [selected, setSelected] = useState<AdminMembershipRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminMembershipRow | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
   const [plan, setPlan] = useState<PlanKey>("basic");
   const [paidUntilDate, setPaidUntilDate] = useState("");
   const [storageLimitBytes, setStorageLimitBytes] = useState("1000000000");
@@ -308,6 +330,23 @@ export default function AdminMembershipsPage() {
   const [paymentStatusSavingId, setPaymentStatusSavingId] = useState<string | null>(null);
   const paymentSubmittingRef = useRef(false);
   const paymentStatusSubmittingRef = useRef(false);
+
+  const isMobileViewport = viewportWidth < 760;
+  const currentPageStyle = isMobileViewport ? mobilePageStyle : pageStyle;
+  const currentHeaderStyle = isMobileViewport ? mobileHeaderStyle : headerStyle;
+  const currentCardStyle = isMobileViewport ? mobileCardStyle : cardStyle;
+  const currentLayoutStyle = isMobileViewport ? mobileLayoutStyle : layoutStyle;
+  const currentDetailStyle = isMobileViewport ? mobileDetailStyle : detailStyle;
+  const currentSummaryGridStyle = isMobileViewport ? mobileSummaryGridStyle : summaryGridStyle;
+  const currentPresetGridStyle = isMobileViewport ? mobilePresetGridStyle : presetGridStyle;
+  const currentFormGridStyle = isMobileViewport ? mobileFormGridStyle : formGridStyle;
+
+  useEffect(() => {
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    updateViewportWidth();
+    window.addEventListener("resize", updateViewportWidth);
+    return () => window.removeEventListener("resize", updateViewportWidth);
+  }, []);
 
   async function loadRows(searchKeyword = keyword) {
     setLoading(true);
@@ -372,6 +411,7 @@ export default function AdminMembershipsPage() {
       }
 
       if (!user) {
+        setCurrentUserId("");
         setUserEmail("");
         setIsAdmin(false);
         setChecking(false);
@@ -379,6 +419,7 @@ export default function AdminMembershipsPage() {
         return;
       }
 
+      setCurrentUserId(user.id);
       setUserEmail(user.email || "");
 
       const { data: adminData, error: adminError } = await supabase.rpc("is_app_admin", {
@@ -561,6 +602,60 @@ export default function AdminMembershipsPage() {
     setSaving(false);
   }
 
+  function openDeleteMembershipDialog(row: AdminMembershipRow) {
+    if (row.user_id === currentUserId) {
+      showToast("不能删除当前管理员自己");
+      return;
+    }
+
+    if (row.status === "canceled") return;
+
+    if (row.plan === "admin") {
+      showToast("管理员账号不能通过删除会员按钮处理");
+      return;
+    }
+
+    setDeleteTarget(row);
+  }
+
+  function closeDeleteMembershipDialog() {
+    if (deleteSaving) return;
+    setDeleteTarget(null);
+  }
+
+  async function handleDeleteMembership() {
+    if (!deleteTarget || deleteSaving) return;
+
+    setDeleteSaving(true);
+    setErrorMsg("");
+
+    try {
+      const response = await fetch("/api/admin/memberships/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: deleteTarget.user_id }),
+      });
+
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        const message = result?.error || "删除会员失败";
+        setErrorMsg(message);
+        showToast(message);
+        return;
+      }
+
+      showToast("会员已移入已删除状态");
+      setDeleteTarget(null);
+      await loadRows(keyword);
+    } catch {
+      setErrorMsg("删除会员失败，请稍后再试");
+      showToast("删除会员失败，请稍后再试");
+    } finally {
+      setDeleteSaving(false);
+    }
+  }
+
   async function handleCreatePayment() {
     if (!selected || paymentSaving || paymentSubmittingRef.current) return;
 
@@ -728,12 +823,12 @@ export default function AdminMembershipsPage() {
   }
 
   if (checking) {
-    return <main style={pageStyle}>正在确认管理员权限...</main>;
+    return <main style={currentPageStyle}>正在确认管理员权限...</main>;
   }
 
   if (!userEmail) {
     return (
-      <main style={pageStyle}>
+      <main style={currentPageStyle}>
         <section style={noticeCardStyle}>
           <h1 style={titleStyle}>管理员会员管理</h1>
           <p style={mutedTextStyle}>请先登录管理员账号。</p>
@@ -745,7 +840,7 @@ export default function AdminMembershipsPage() {
 
   if (!isAdmin) {
     return (
-      <main style={pageStyle}>
+      <main style={currentPageStyle}>
         <section style={noticeCardStyle}>
           <h1 style={titleStyle}>没有管理员权限</h1>
           <p style={mutedTextStyle}>当前账号：{userEmail}</p>
@@ -756,11 +851,11 @@ export default function AdminMembershipsPage() {
   }
 
   return (
-    <main style={pageStyle}>
-      <section style={headerStyle}>
+    <main style={currentPageStyle}>
+      <section style={currentHeaderStyle}>
         <div>
           <div style={eyebrowStyle}>后台管理</div>
-          <h1 style={titleStyle}>会员手动开通</h1>
+          <h1 style={titleStyle}>会员管理</h1>
           <p style={mutedTextStyle}>
             当前用于人工开通年费、大空间或商家版。真实支付接入前，可先用这里处理测试账号和人工付款用户。
           </p>
@@ -768,7 +863,7 @@ export default function AdminMembershipsPage() {
         <Link href="/membership" style={secondaryButtonStyle}>查看会员说明页</Link>
       </section>
 
-      <section style={cardStyle}>
+      <section style={currentCardStyle}>
         <form onSubmit={handleSearch} style={searchRowStyle}>
           <input
             value={keyword}
@@ -794,7 +889,7 @@ export default function AdminMembershipsPage() {
 
         {errorMsg ? <p style={errorStyle}>{errorMsg}</p> : null}
 
-        <div style={layoutStyle}>
+        <div style={currentLayoutStyle}>
           <div style={listStyle}>
             {loading ? (
               <div style={emptyStyle}>正在读取用户...</div>
@@ -804,27 +899,51 @@ export default function AdminMembershipsPage() {
               rows.map((row) => {
                 const active = selected?.user_id === row.user_id;
                 return (
-                  <button
+                  <article
                     key={row.user_id}
-                    type="button"
                     style={userItemStyle(active)}
                     onClick={() => setSelected(row)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelected(row);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div style={userTitleRowStyle}>
                       <strong style={userNameStyle}>{row.username || "未设置用户名"}</strong>
-                      <span style={pillStyle}>{getMembershipStatusLabel(row.status)}</span>
+                      <span style={pillStyle}>{getAdminMembershipStatusLabel(row.status)}</span>
                     </div>
                     <div style={smallTextStyle}>{row.email || row.user_id}</div>
                     <div style={smallTextStyle}>
                       {getMembershipPlanLabel(row.plan)} · 容量 {formatStorageBytes(row.storage_used || 0)} / {formatStorageBytes(row.storage_limit_bytes || 0)} · 集市 {Number(row.active_market_post_count || 0)} / {Number(row.market_post_limit || 0)}
                     </div>
-                  </button>
+                    <div style={memberRowActionStyle}>
+                      {canDeleteMembership(row, currentUserId) ? (
+                        <button
+                          type="button"
+                          style={dangerMiniButtonStyle}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openDeleteMembershipDialog(row);
+                          }}
+                          disabled={deleteSaving}
+                        >
+                          删除会员
+                        </button>
+                      ) : row.status === "canceled" ? (
+                        <span style={deletedHintStyle}>已删除</span>
+                      ) : null}
+                    </div>
+                  </article>
                 );
               })
             )}
           </div>
 
-          <aside style={detailStyle}>
+          <aside style={currentDetailStyle}>
             {selected ? (
               <>
                 <div style={detailTopStyle}>
@@ -833,10 +952,10 @@ export default function AdminMembershipsPage() {
                     <h2 style={sectionTitleStyle}>{selected.username || selected.email || "未设置用户名"}</h2>
                     <p style={smallTextStyle}>{selected.user_id}</p>
                   </div>
-                  <span style={pillStyle}>{getMembershipStatusLabel(selected.status)}</span>
+                  <span style={pillStyle}>{getAdminMembershipStatusLabel(selected.status)}</span>
                 </div>
 
-                <div style={summaryGridStyle}>
+                <div style={currentSummaryGridStyle}>
                   <InfoItem label="当前方案" value={getMembershipPlanLabel(selected.plan)} />
                   <InfoItem label="试用到期" value={formatMembershipDate(selected.trial_ends_at)} />
                   <InfoItem label="付费到期" value={formatMembershipDate(selected.paid_until)} />
@@ -848,7 +967,7 @@ export default function AdminMembershipsPage() {
                   <InfoItem label="基础额度" value={`${Number(selected.base_market_post_limit || 0)} 条`} />
                 </div>
 
-                <div style={presetGridStyle}>
+                <div style={currentPresetGridStyle}>
                   {PLAN_PRESETS.map((preset) => (
                     <button
                       key={preset.key}
@@ -862,7 +981,7 @@ export default function AdminMembershipsPage() {
                   ))}
                 </div>
 
-                <div style={formGridStyle}>
+                <div style={currentFormGridStyle}>
                   <label style={labelStyle}>
                     会员方案
                     <select
@@ -916,6 +1035,11 @@ export default function AdminMembershipsPage() {
                   <button type="button" style={secondaryButtonStyle} onClick={() => void loadRows(keyword)} disabled={saving}>
                     重新读取
                   </button>
+                  {canDeleteMembership(selected, currentUserId) ? (
+                    <button type="button" style={dangerButtonStyle} onClick={() => openDeleteMembershipDialog(selected)} disabled={deleteSaving}>
+                      删除会员
+                    </button>
+                  ) : null}
                 </div>
 
                 <div style={dividerStyle} />
@@ -929,7 +1053,7 @@ export default function AdminMembershipsPage() {
                     </div>
                   </div>
 
-                  <div style={formGridStyle}>
+                  <div style={currentFormGridStyle}>
                     <label style={labelStyle}>
                       付款方案
                       <select
@@ -1116,6 +1240,25 @@ export default function AdminMembershipsPage() {
           </aside>
         </div>
       </section>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="删除会员"
+        message={DELETE_MEMBERSHIP_MESSAGE}
+        confirmText={deleteSaving ? "删除中..." : "确认删除会员"}
+        cancelText="取消"
+        danger
+        confirmDisabled={deleteSaving}
+        cancelDisabled={deleteSaving}
+        onClose={closeDeleteMembershipDialog}
+        onConfirm={handleDeleteMembership}
+      >
+        {deleteTarget ? (
+          <div style={deleteTargetBoxStyle}>
+            <strong>{deleteTarget.username || deleteTarget.email || deleteTarget.user_id}</strong>
+            <span>{deleteTarget.email || deleteTarget.user_id}</span>
+          </div>
+        ) : null}
+      </ConfirmDialog>
     </main>
   );
 }
@@ -1135,6 +1278,11 @@ const pageStyle: CSSProperties = {
   padding: "34px 18px 72px",
 };
 
+const mobilePageStyle: CSSProperties = {
+  ...pageStyle,
+  padding: "18px 12px 84px",
+};
+
 const headerStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -1142,6 +1290,12 @@ const headerStyle: CSSProperties = {
   alignItems: "flex-start",
   marginBottom: 20,
   flexWrap: "wrap",
+};
+
+const mobileHeaderStyle: CSSProperties = {
+  ...headerStyle,
+  gap: 10,
+  marginBottom: 12,
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -1174,6 +1328,13 @@ const cardStyle: CSSProperties = {
   boxShadow: "0 14px 35px rgba(73, 60, 36, 0.08)",
 };
 
+const mobileCardStyle: CSSProperties = {
+  ...cardStyle,
+  borderRadius: 16,
+  padding: 12,
+  boxShadow: "0 8px 22px rgba(73, 60, 36, 0.06)",
+};
+
 const noticeCardStyle: CSSProperties = {
   ...cardStyle,
   maxWidth: 680,
@@ -1192,6 +1353,12 @@ const layoutStyle: CSSProperties = {
   gap: 16,
 };
 
+const mobileLayoutStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: 12,
+};
+
 const listStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -1205,6 +1372,12 @@ const detailStyle: CSSProperties = {
   padding: 16,
   background: "#fffaf0",
   minWidth: 0,
+};
+
+const mobileDetailStyle: CSSProperties = {
+  ...detailStyle,
+  borderRadius: 15,
+  padding: 12,
 };
 
 const detailTopStyle: CSSProperties = {
@@ -1277,6 +1450,12 @@ const summaryGridStyle: CSSProperties = {
   marginBottom: 16,
 };
 
+const mobileSummaryGridStyle: CSSProperties = {
+  ...summaryGridStyle,
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: 8,
+};
+
 const infoItemStyle: CSSProperties = {
   border: "1px solid #eadfcd",
   borderRadius: 14,
@@ -1304,6 +1483,12 @@ const presetGridStyle: CSSProperties = {
   marginBottom: 16,
 };
 
+const mobilePresetGridStyle: CSSProperties = {
+  ...presetGridStyle,
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: 8,
+};
+
 const presetButtonStyle = (active: boolean): CSSProperties => ({
   textAlign: "left",
   border: active ? "1px solid #759457" : "1px solid #e4dac7",
@@ -1323,6 +1508,12 @@ const formGridStyle: CSSProperties = {
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 12,
   marginBottom: 16,
+};
+
+const mobileFormGridStyle: CSSProperties = {
+  ...formGridStyle,
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: 10,
 };
 
 const labelStyle: CSSProperties = {
@@ -1408,6 +1599,14 @@ const paymentActionRowStyle: CSSProperties = {
   marginTop: 10,
 };
 
+const memberRowActionStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  gap: 8,
+  marginTop: 10,
+};
+
 const miniButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -1420,6 +1619,46 @@ const miniButtonStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
   cursor: "pointer",
+};
+
+const dangerMiniButtonStyle: CSSProperties = {
+  ...miniButtonStyle,
+  border: "1px solid #e0b4ad",
+  background: "#fff8f7",
+  color: "#a3473f",
+};
+
+const dangerButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid #d99d96",
+  borderRadius: 999,
+  padding: "9px 15px",
+  background: "#fff8f7",
+  color: "#a3473f",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const deletedHintStyle: CSSProperties = {
+  color: "#8d554f",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const deleteTargetBoxStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  border: "1px solid #eed5cf",
+  borderRadius: 12,
+  background: "#fff8f6",
+  color: "#5b332f",
+  padding: "10px 12px",
+  fontSize: 13,
+  wordBreak: "break-all",
 };
 
 const primaryButtonStyle: CSSProperties = {
