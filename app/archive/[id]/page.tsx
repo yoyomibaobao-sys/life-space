@@ -616,10 +616,47 @@ saveRecentArchiveBrowse({
   }
 
   async function setRecordHelpStatus(recordId: string, nextStatus: "help" | "resolved" | null) {
+    const targetRecord = records.find((record) => record.id === recordId);
+    const shouldPublishForHelp =
+      nextStatus === "help" &&
+      (!activeArchive.is_public || targetRecord?.visibility !== "public");
+
+    if (shouldPublishForHelp) {
+      const confirmed = confirm(
+        "求助需要公开这条记录和相关图片。你的其他记录不会公开。确认后，这条记录会进入公开发现和求助流。"
+      );
+
+      if (!confirmed) return;
+
+      if (!activeArchive.is_public) {
+        const { error: archiveError } = await supabase
+          .from("archives")
+          .update({ is_public: true })
+          .eq("id", activeArchive.id)
+          .eq("user_id", activeArchive.user_id);
+
+        if (archiveError) {
+          showToast("公开项目壳失败，暂不能发起求助");
+          return;
+        }
+
+        setArchive((prev) => (prev ? { ...prev, is_public: true } : prev));
+      }
+    }
+
+    const recordPatch: { status_tag: "help" | "resolved" | null; visibility?: "public" } = {
+      status_tag: nextStatus,
+    };
+
+    if (shouldPublishForHelp) {
+      recordPatch.visibility = "public";
+    }
+
     const { error } = await supabase
       .from("records")
-      .update({ status_tag: nextStatus })
-      .eq("id", recordId);
+      .update(recordPatch)
+      .eq("id", recordId)
+      .eq("archive_id", activeArchive.id);
 
     if (error) {
       showToast("更新求助状态失败");
@@ -627,7 +664,9 @@ saveRecentArchiveBrowse({
     }
 
     const nextRecords = records.map((record) =>
-      record.id === recordId ? { ...record, status_tag: nextStatus } : record
+      record.id === recordId
+        ? { ...record, status_tag: nextStatus, ...(recordPatch.visibility ? { visibility: "public" } : {}) }
+        : record
     );
 
     setRecords(nextRecords);
@@ -663,26 +702,28 @@ saveRecentArchiveBrowse({
       return;
     }
 
-    const { error: recordsError } = await supabase
-      .from("records")
-      .update({ visibility: nextRecordVisibility })
-      .eq("archive_id", activeArchive.id);
+    if (!nextValue) {
+      const { error: recordsError } = await supabase
+        .from("records")
+        .update({ visibility: nextRecordVisibility })
+        .eq("archive_id", activeArchive.id);
 
-    if (recordsError) {
-      showToast("记录同步失败");
-      return;
+      if (recordsError) {
+        showToast("记录同步失败");
+        return;
+      }
+
+      setRecords((prev) =>
+        prev.map((record) => ({
+          ...record,
+          visibility: nextRecordVisibility,
+        }))
+      );
     }
-
-    setRecords((prev) =>
-      prev.map((record) => ({
-        ...record,
-        visibility: nextRecordVisibility,
-      }))
-    );
 
     setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
 
-    showToast(nextValue ? "项目和记录已公开" : "项目和记录仅自己可见");
+    showToast(nextValue ? "项目壳已公开，旧记录不会自动公开" : "项目和记录仅自己可见");
   }
 
   async function updateArchiveStatus(nextStatus: "active" | "ended") {
@@ -1474,6 +1515,9 @@ saveRecentArchiveBrowse({
           <ArchiveAddRecordSection
             archiveId={activeArchive.id}
             archiveIsPublic={activeArchive.is_public}
+            archiveDefaultRecordVisibility={
+              activeArchive.default_record_visibility === "public" ? "public" : "private"
+            }
             mobileMode={isMobileViewport}
             open={!isMobileViewport || mobileAddRecordOpen}
             onClose={() => setMobileAddRecordOpen(false)}
@@ -1938,7 +1982,7 @@ function MobileArchiveProfile({
             onClick={onToggleArchiveVisibility}
             style={mobileArchiveActionButtonStyle}
           >
-            {archive.is_public ? "设为私密" : "设为公开"}
+            {archive.is_public ? "设为私密" : "设为公开发现"}
           </button>
           <button
             type="button"

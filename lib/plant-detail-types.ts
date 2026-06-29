@@ -11,14 +11,31 @@ export type PlantCardItem = {
   hint?: string | null;
 };
 
-export type PlantRecordItem = {
-  record_id: string;
+export type PlantRelatedArchiveItem = {
   archive_id: string;
+  user_id?: string | null;
   archive_title?: string | null;
-  note?: string | null;
-  primary_image_url?: string | null;
-  primary_thumb_url?: string | null;
-  display_primary_image_url?: string | null;
+  system_name?: string | null;
+  species_id?: string | null;
+  species_name_snapshot?: string | null;
+  archive_is_public?: boolean | null;
+  is_own_archive?: boolean | null;
+  archive_status?: string | null;
+  ended_at?: string | null;
+  archive_help_status?: string | null;
+  cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_path?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+  public_record_count?: number | null;
+  last_public_record_time?: string | null;
+  last_public_record_note?: string | null;
+  last_public_record_image_url?: string | null;
+  last_public_record_image_path?: string | null;
+  last_public_record_thumb_path?: string | null;
+  display_cover_image_url?: string | null;
+  display_last_public_record_image_url?: string | null;
 };
 
 

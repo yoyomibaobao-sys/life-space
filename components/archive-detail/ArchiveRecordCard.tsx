@@ -481,7 +481,7 @@ function DesktopAndMobileRecordActions({
               background: "#fff",
             }}
           >
-            <option value="public">已公开</option>
+            <option value="public">公开发现</option>
             <option value="private">仅自己可见</option>
           </select>
         ) : (
@@ -882,7 +882,7 @@ function MobileRecordMoreMenu({
   const nextVisibility =
     visibility === "public"
       ? { label: "设为私密", value: "private" }
-      : { label: "设为公开", value: "public" };
+      : { label: "设为公开发现", value: "public" };
 
   return (
     <div style={mobileRecordMenuStyle}>
@@ -961,7 +961,7 @@ function MobileRecordMetaRow({
 }) {
   const tags = Array.isArray(item.display_tags) ? item.display_tags : [];
   const visibility =
-    item.visibility === "private" || !archive.is_public ? "私密" : "已公开";
+    item.visibility === "private" || !archive.is_public ? "仅自己可见" : "公开发现";
 
   return (
     <div style={mobileRecordMetaWrapStyle}>

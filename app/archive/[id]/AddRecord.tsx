@@ -24,6 +24,7 @@ type RecordVisibility = "public" | "private";
 type Props = {
   archiveId: string;
   archiveIsPublic: boolean;
+  archiveDefaultRecordVisibility?: RecordVisibility;
   placeholder?: string;
   onRecordCreated?: () => void | Promise<void>;
   mobileMode?: boolean;
@@ -42,6 +43,7 @@ function buildFileKey(file: File, index: number) {
 export default function AddRecord({
   archiveId,
   archiveIsPublic,
+  archiveDefaultRecordVisibility = "private",
   placeholder,
   onRecordCreated,
   mobileMode = false,
@@ -53,7 +55,9 @@ export default function AddRecord({
   const [customTime, setCustomTime] = useState("");
   const [mergeMode, setMergeMode] = useState(true);
   const [recordVisibility, setRecordVisibility] =
-    useState<RecordVisibility>("public");
+    useState<RecordVisibility>(
+      archiveDefaultRecordVisibility === "public" ? "public" : "private"
+    );
   const [isHelpRecord, setIsHelpRecord] = useState(false);
   const [loading, setLoading] = useState(false);
   const [membership, setMembership] = useState<MyMembership | null>(null);
@@ -75,6 +79,10 @@ export default function AddRecord({
   // 图片会在上传前压缩，因此这里不再用“原图大小”提前拦截。
   // 真正的容量检查在 uploadMedia 内按压缩后的大小调用 reserveStorageBytes。
   const uploadWouldExceedStorage = false;
+
+  useEffect(() => {
+    setRecordVisibility(archiveDefaultRecordVisibility === "public" ? "public" : "private");
+  }, [archiveDefaultRecordVisibility]);
 
   useEffect(() => {
     async function loadMembership() {
@@ -359,11 +367,46 @@ export default function AddRecord({
         return;
       }
 
-      const finalVisibility: RecordVisibility = archiveIsPublic
+      let finalVisibility: RecordVisibility = archiveIsPublic
         ? recordVisibility
         : "private";
       const finalStatusTag = isHelpRecord ? "help" : null;
       let uploadedBytes = 0;
+      let archiveHelpStateUpdated = false;
+
+      if (finalStatusTag === "help" && finalVisibility !== "public") {
+        const confirmed = confirm(
+          "求助需要公开这条记录和相关图片。你的其他记录不会公开。确认后，这条记录会进入公开发现和求助流。"
+        );
+
+        if (!confirmed) {
+          setLoading(false);
+          return;
+        }
+
+        const { error: archiveError } = await supabase
+          .from("archives")
+          .update({ is_public: true, help_status: "open", help_updated_at: new Date().toISOString() })
+          .eq("id", archiveId)
+          .eq("user_id", user.id);
+
+        if (archiveError) {
+          showToast("公开项目壳失败，暂不能发起求助");
+          setLoading(false);
+          return;
+        }
+
+        finalVisibility = "public";
+        archiveHelpStateUpdated = true;
+      }
+
+      if (finalStatusTag === "help" && !archiveHelpStateUpdated) {
+        await supabase
+          .from("archives")
+          .update({ help_status: "open", help_updated_at: new Date().toISOString() })
+          .eq("id", archiveId)
+          .eq("user_id", user.id);
+      }
 
       if (files.length > 0) {
         if (mergeMode) {
@@ -457,7 +500,7 @@ export default function AddRecord({
       setText("");
       setFiles([]);
       setCustomTime("");
-      setRecordVisibility("public");
+      setRecordVisibility(archiveDefaultRecordVisibility === "public" ? "public" : "private");
       setIsHelpRecord(false);
 
       await onRecordCreated?.();
@@ -487,7 +530,7 @@ export default function AddRecord({
         >
           <span>{getCreateContentBlockedText(membership)}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            查看会员与续费
+            查看云空间
           </Link>
         </div>
       ) : null}
@@ -507,7 +550,7 @@ export default function AddRecord({
         >
           <span>{membershipNotice}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            查看会员与续费
+            查看云空间
           </Link>
         </div>
       ) : null}
@@ -541,7 +584,7 @@ export default function AddRecord({
           }
           style={{ marginTop: "10px", marginLeft: 8, padding: "6px" }}
         >
-          <option value="public">公开记录</option>
+          <option value="public">公开发现</option>
           <option value="private">仅自己可见</option>
         </select>
       ) : (
@@ -720,7 +763,7 @@ export default function AddRecord({
                 <br />
                 空间不足，无法上传。{" "}
                 <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                  查看会员与续费
+                  查看云空间
                 </Link>
                 。
               </>

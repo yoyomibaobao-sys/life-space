@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 export default function ArchiveAddRecordSection({
   archiveId,
   archiveIsPublic,
+  archiveDefaultRecordVisibility = "private",
   onRecordCreated,
   mobileMode = false,
   open = true,
@@ -13,12 +14,16 @@ export default function ArchiveAddRecordSection({
 }: {
   archiveId: string;
   archiveIsPublic: boolean;
+  archiveDefaultRecordVisibility?: "public" | "private" | string | null;
   onRecordCreated?: () => void | Promise<void>;
   mobileMode?: boolean;
   open?: boolean;
   onClose?: () => void;
 }) {
   if (mobileMode && !open) return null;
+
+  const normalizedDefaultVisibility =
+    archiveDefaultRecordVisibility === "public" ? "public" : "private";
 
   if (mobileMode) {
     return (
@@ -36,6 +41,7 @@ export default function ArchiveAddRecordSection({
           <AddRecord
             archiveId={archiveId}
             archiveIsPublic={archiveIsPublic}
+            archiveDefaultRecordVisibility={normalizedDefaultVisibility}
             placeholder="记录今天的变化"
             mobileMode
             onRecordCreated={onRecordCreated}
@@ -62,6 +68,7 @@ export default function ArchiveAddRecordSection({
       <AddRecord
         archiveId={archiveId}
         archiveIsPublic={archiveIsPublic}
+        archiveDefaultRecordVisibility={normalizedDefaultVisibility}
         placeholder="记录今天的变化"
         onRecordCreated={onRecordCreated}
       />

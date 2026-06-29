@@ -519,7 +519,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
           <span style={{ fontSize: 12, color: "#9a6232" }}>
             使用权已到期，
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-              查看会员与续费
+              查看云空间
             </Link>
           </span>
         ) : !compactMobile ? (
@@ -795,7 +795,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                 <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
                   使用权已到期，请{" "}
                   <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-                    查看会员与续费
+                    查看云空间
                   </Link>
                   。
                 </div>

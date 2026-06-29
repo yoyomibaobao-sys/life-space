@@ -67,9 +67,9 @@ export default function MembershipPage() {
         (typeof daysRemaining === "number" && daysRemaining <= 14))
   );
   const renewalNoticeText = membership?.can_create_content === false
-    ? "使用权已到期"
+    ? "云空间已到期"
     : typeof daysRemaining === "number" && daysRemaining <= 14
-      ? `使用权还有 ${daysRemaining} 天到期`
+      ? `云空间还有 ${daysRemaining} 天到期`
       : "";
   const storageLimitText = useMemo(() => {
     if (!membership?.storage_limit_bytes) return "暂无";
@@ -83,10 +83,10 @@ export default function MembershipPage() {
   return (
     <main style={pageStyle}>
       <section style={heroStyle}>
-        <div style={eyebrowStyle}>年度使用权</div>
-        <h1 style={titleStyle}>年度使用权</h1>
+        <div style={eyebrowStyle}>云空间</div>
+        <h1 style={titleStyle}>云空间</h1>
         <p style={subtitleStyle}>
-          试用结束后，已有内容仍可查看、导出和删除。继续新增记录、上传照片或发布集市信息，需要年度使用权。
+          本地离线记录免费。云空间用于同步、备份、多设备使用、公开发现和求助；上传云空间不等于公开，已有记录不会自动公开。
         </p>
       </section>
 
@@ -101,15 +101,15 @@ export default function MembershipPage() {
           </div>
 
           <div style={statusGridStyle}>
-            <InfoItem label="当前方案" value={membership ? getMembershipPlanLabel(membership.plan) : "暂无"} hint={membership ? getMembershipStatusLabel(membership.status) : "暂无"} />
+            <InfoItem label="当前云空间" value={membership ? getMembershipPlanLabel(membership.plan) : "暂无"} hint={membership ? getMembershipStatusLabel(membership.status) : "暂无"} />
             <InfoItem label="有效期至" value={formatMembershipDate(endDate)} hint="到期前可继续使用对应权限" />
-            <InfoItem label="云端容量" value={storageLimitText} hint="主要用于照片与媒体文件" />
+            <InfoItem label="云空间容量" value={storageLimitText} hint="主要用于云端照片与媒体文件" />
             <InfoItem label="集市发布" value={marketQuotaText} hint="同时在线发布数量" />
           </div>
 
           {shouldShowRenewalNotice ? (
             <div style={renewalNoticeStyle}>
-              <strong>续费提醒：</strong>{renewalNoticeText}
+              <strong>云空间提醒：</strong>{renewalNoticeText}
               <div style={{ marginTop: 8 }}>
                 付款时请备注注册邮箱；有问题可联系管理员邮箱：
                 <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
@@ -132,15 +132,15 @@ export default function MembershipPage() {
         <section style={statusCardStyle}>
           <div>
             <div style={sectionLabelStyle}>尚未登录</div>
-            <h2 style={sectionTitleStyle}>注册后开始免费试用</h2>
+            <h2 style={sectionTitleStyle}>注册后可继续本地离线</h2>
             <p style={mutedTextStyle}>
-              注册后可创建项目、添加记录和上传照片，免费试用 6 个月。
+              注册是推荐路径，但注册不等于上传云端。本地离线免费；开通云空间后再同步、备份和公开发现。
             </p>
           </div>
 
           <div style={actionRowStyle}>
             <Link href="/register" style={primaryButtonStyle}>
-              注册试用
+              注册账号
             </Link>
             <Link href="/login" style={secondaryButtonStyle}>
               已有账号登录
@@ -151,38 +151,48 @@ export default function MembershipPage() {
 
       <section style={plansGridStyle}>
         <PlanCard
-          title="免费试用"
-          price="6 个月"
-          description="适合先体验项目、记录、照片和集市基础发布。"
+          title="本地离线"
+          price="免费"
+          description="只保存在这台设备，不上传云端，不进入发现页。"
           items={[
-            "注册后自动开始试用",
-            "云端容量 300MB",
-            "集市同时在线 3 条",
-            "可创建项目、添加记录和上传照片",
+            "注册是推荐路径，但不是本地记录硬门槛",
+            "App 私有本地存储和图片缓存",
+            "不默认写入系统相册",
+            "换设备、卸载或清理数据后可能丢失",
           ]}
         />
         <PlanCard
-          title="基础年费"
-          price="¥18 / 年 · US$3 / year"
-          description="适合长期记录。"
+          title="云空间"
+          price="¥48 / 年"
+          description="适合同步、备份、多设备使用和公开发现。"
           items={[
-            "国内用户：¥18 / 年",
-            "海外用户：US$3 / year",
-            "基础云端容量 1GB",
-            "集市同时在线 10 条",
-            "可继续新增项目、记录和照片",
-            "不续费仍可查看、导出和删除已有内容",
+            "云端私密空间和多设备同步",
+            "记录可设为仅自己可见，也可公开发现",
+            "已有本地记录开通后默认同步为云空间私密",
+            "公开发现、求助和评论互动",
+            "基础导出",
           ]}
           featured
+        />
+        <PlanCard
+          title="海外云空间"
+          price="US$6 / year"
+          description="适合海外用户使用同一套云空间能力。"
+          items={[
+            "云端私密空间",
+            "多设备同步和云端备份",
+            "公开发现、求助和评论互动",
+            "已有记录不会自动公开",
+          ]}
         />
         <PlanCard
           title="集市加量包"
           price="后续开放"
           description="适合某段时间集中交换、赠送、转让或求购的用户。当前先作为预留说明，暂未开放自动购买。"
           items={[
-            "基础年费用户可后续加购",
+            "云空间用户可后续加购",
             "只增加集市同时在线数量",
-            "不增加云端图片空间",
+            "不增加云空间图片容量",
             "长期大量发布可联系管理员单独评估",
           ]}
         />
@@ -191,16 +201,16 @@ export default function MembershipPage() {
       <section style={paymentCardStyle}>
         <div>
           <div style={sectionLabelStyle}>付款方式</div>
-          <h2 style={noteTitleStyle}>当前采用人工确认开通</h2>
+          <h2 style={noteTitleStyle}>当前采用人工确认开通云空间</h2>
           <p style={mutedTextStyle}>
-            自动在线支付暂未接入。付款时请备注注册邮箱；管理员确认后会手动开通对应会员期限。
+            自动在线支付暂未接入。付款时请备注注册邮箱；管理员确认后会手动开通对应云空间期限。
           </p>
         </div>
 
         <div style={paymentGridStyle}>
           <div style={paymentItemStyle}>
             <div style={paymentTitleStyle}>国内用户</div>
-            <div style={paymentPriceStyle}>¥18 / 年</div>
+            <div style={paymentPriceStyle}>¥48 / 年</div>
             <p style={paymentDescStyle}>
               支持微信或支付宝人工付款。请先发送邮件至 {" "}
               <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
@@ -212,16 +222,16 @@ export default function MembershipPage() {
 
           <div style={paymentItemStyle}>
             <div style={paymentTitleStyle}>海外用户</div>
-            <div style={paymentPriceStyle}>US$3 / year</div>
+            <div style={paymentPriceStyle}>US$6 / year</div>
             <p style={paymentDescStyle}>
               可通过 PayPal 付款：{" "}
               <a
-                href="https://paypal.me/ying0chen/3"
+                href="https://paypal.me/ying0chen/6"
                 target="_blank"
                 rel="noreferrer"
                 style={inlineLinkStyle}
               >
-                paypal.me/ying0chen/3
+                paypal.me/ying0chen/6
               </a>
               。付款时请备注注册邮箱；如果付款后未及时开通，请发送邮件至 {" "}
               <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
@@ -247,11 +257,11 @@ export default function MembershipPage() {
       <section style={noteCardStyle}>
         <h2 style={noteTitleStyle}>使用规则</h2>
         <ul style={ruleListStyle}>
-          <li>未注册用户只浏览公开内容。</li>
-          <li>注册后开始免费试用，试用期内可新增项目、记录、照片和少量集市发布。</li>
-          <li>试用期满或年费到期后，仍可查看、导出和删除已有内容。</li>
-          <li>继续新增记录、上传照片或发布集市信息，需要开通年度使用权。</li>
-          <li>当前为人工确认付款并手动开通；后续可再接入自动支付或应用商店内购。</li>
+          <li>本地离线免费，数据只保存在当前设备的 App 私有存储中。</li>
+          <li>注册不等于上传云端；开通云空间后才同步、备份和多设备使用。</li>
+          <li>上传云空间不等于公开，记录可设为仅自己可见或公开发现。</li>
+          <li>已有本地记录开通后默认同步为云空间私密，不会自动公开。</li>
+          <li>当前为人工确认付款并手动开通云空间；后续可再接入自动支付或应用商店内购。</li>
         </ul>
       </section>
     </main>

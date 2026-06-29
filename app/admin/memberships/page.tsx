@@ -65,7 +65,7 @@ type PlanPreset = {
 const PLAN_PRESETS: PlanPreset[] = [
   {
     key: "trial",
-    label: "免费试用",
+    label: "本地离线",
     storageLimitBytes: 300_000_000,
     baseMarketPostLimit: 3,
     paidMonths: null,
@@ -73,7 +73,7 @@ const PLAN_PRESETS: PlanPreset[] = [
   },
   {
     key: "basic",
-    label: "基础年费",
+    label: "云空间",
     storageLimitBytes: 1_000_000_000,
     baseMarketPostLimit: 10,
     paidMonths: 12,
@@ -860,7 +860,7 @@ export default function AdminMembershipsPage() {
             当前用于人工开通年费、大空间或商家版。真实支付接入前，可先用这里处理测试账号和人工付款用户。
           </p>
         </div>
-        <Link href="/membership" style={secondaryButtonStyle}>查看会员说明页</Link>
+        <Link href="/membership" style={secondaryButtonStyle}>查看云空间说明页</Link>
       </section>
 
       <section style={currentCardStyle}>
@@ -1131,7 +1131,7 @@ export default function AdminMembershipsPage() {
                         style={inputStyle}
                         inputMode="numeric"
                       />
-                      <span style={hintStyle}>通常基础年费填 12；系统会从当前到期日或今天起自动延长。</span>
+                      <span style={hintStyle}>通常云空间填 12；系统会从当前到期日或今天起自动延长。</span>
                     </label>
 
                     <label style={labelStyle}>

@@ -1,5 +1,6 @@
 import Navbar from "@/components/navbar";
 import StatusBarTheme from "@/components/StatusBarTheme";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 import Toast from "@/components/Toast";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -34,6 +35,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <StatusBarTheme />
+        <AnalyticsTracker />
         <Navbar />
         <main className="app-main">{children}</main>
         <Toast />

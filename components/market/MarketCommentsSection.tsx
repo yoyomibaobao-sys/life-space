@@ -154,7 +154,7 @@ export default function MarketCommentsSection({
     }
 
     if (membershipLoading) {
-      showToast("会员状态读取中");
+      showToast("云空间状态读取中");
       return;
     }
 
@@ -303,12 +303,12 @@ export default function MarketCommentsSection({
               </div>
             </>
         ) : membershipLoading && currentUserId ? (
-          <div style={closedNoticeStyle}>会员状态读取中...</div>
+          <div style={closedNoticeStyle}>云空间状态读取中...</div>
         ) : membershipBlocked ? (
           <div style={closedNoticeStyle}>
             使用权已到期，请{" "}
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-              查看会员与续费
+              查看云空间
             </Link>
             。
           </div>

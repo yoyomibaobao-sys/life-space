@@ -48,7 +48,7 @@ type MobileProfileModule = "info" | "membership" | "adminMembership" | "space" |
 
 const baseMobileProfileModules: Array<{ value: MobileProfileModule; label: string }> = [
   { value: "info", label: "用户信息" },
-  { value: "membership", label: "会员及付款" },
+  { value: "membership", label: "云空间与付款" },
   { value: "space", label: "痕迹" },
   { value: "account", label: "帐号操作" },
 ];
@@ -154,7 +154,7 @@ export default function ProfilePage() {
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
         setMembership(null);
-        setMembershipError("暂时无法读取试用与额度信息");
+        setMembershipError("暂时无法读取云空间与额度信息");
       } else {
         setMembership(normalizeMembershipRpcResult(membershipResult.data));
         setMembershipError("");
@@ -631,7 +631,7 @@ export default function ProfilePage() {
               <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? "保存中..." : "保存资料"}</button>
               <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>查看公开资料页</Link>
               <Link href="/archive" style={secondaryActionStyle}>进入我的空间</Link>
-              <Link href="/membership" style={secondaryActionStyle}>会员与续费</Link>
+              <Link href="/membership" style={secondaryActionStyle}>云空间</Link>
               {isAdmin && !isMobileViewport ? (
                 <Link href="/admin/memberships" style={isMobileViewport ? { ...mobileSecondaryLinkStyle, border: "1px solid #c9d8be", background: "#edf6e8", color: "#2f5a27" } : adminLinkStyle}>会员管理</Link>
               ) : null}
@@ -645,8 +645,8 @@ export default function ProfilePage() {
         <section style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的会员</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>当前会员与额度</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的云空间</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>当前云空间与额度</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 {membershipStatusText}
               </p>
@@ -666,7 +666,7 @@ export default function ProfilePage() {
                 {exporting ? "正在打包记录和图片..." : "导出我的记录"}
               </button>
               <Link href="/membership" style={secondaryLinkStyle}>
-                查看会员与续费
+                查看云空间
               </Link>
             </div>
             {exporting ? (
@@ -680,7 +680,7 @@ export default function ProfilePage() {
             <div style={membershipNoticeStyle}>
               <div>{membershipNoticeText}</div>
               <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                查看会员与续费
+                查看云空间
               </Link>
             </div>
           ) : null}
@@ -689,7 +689,7 @@ export default function ProfilePage() {
             <InfoCard
               label="当前方案"
               value={membership ? getMembershipPlanLabel(membership.plan) : "暂无"}
-              hint={membership ? getMembershipStatusLabel(membership.status) : "试用记录生成后显示"}
+              hint={membership ? getMembershipStatusLabel(membership.status) : "云空间记录生成后显示"}
             />
             <InfoCard
               label="有效期至"
@@ -713,7 +713,7 @@ export default function ProfilePage() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>付款记录</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>我的会员付款</h2>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>我的云空间付款</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 这里只显示管理员已确认的最近付款记录；已取消或退款的记录不会显示。若已付款但未显示，请联系管理员邮箱：yoyomibaobao@gmail.com。
               </p>
