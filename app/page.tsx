@@ -10,10 +10,15 @@ const copy = {
     brand: "有时·耕作",
     poem: "记录种植、养护、农法设施和生态观察。",
     spirit: "按项目整理，按时间记录。",
-    trialNote: "注册后可创建项目；未注册可浏览公开内容。",
+    trialNote:
+      "本地离线可免费记录；注册是推荐路径，如果暂时无法注册，也可以先本地使用，稍后绑定账号。",
+    cloudNote:
+      "云空间用于同步、备份、多设备使用、公开发现和求助。上传云空间不等于公开，已有记录不会自动公开。",
     register: "注册",
     login: "登录",
+    local: "先本地使用",
     discover: "浏览发现",
+    apk: "下载 Android APK",
     cards: [
       {
         title: "种植",
@@ -184,6 +189,18 @@ export default function Home() {
             {t.trialNote}
           </p>
 
+          <p
+            style={{
+              maxWidth: 680,
+              margin: "8px auto 0",
+              color: "#6f7b69",
+              fontSize: 13,
+              lineHeight: 1.7,
+            }}
+          >
+            {t.cloudNote}
+          </p>
+
           <div
             style={{
               display: "flex",
@@ -229,6 +246,24 @@ export default function Home() {
             </Link>
 
             <Link
+              href="/local"
+              style={{
+                minWidth: 140,
+                padding: "12px 22px",
+                borderRadius: 999,
+                background: "#fff",
+                color: "#6a7a60",
+                textDecoration: "none",
+                fontSize: 16,
+                fontWeight: 500,
+                border: "1px solid #e0e8dc",
+                boxSizing: "border-box",
+              }}
+            >
+              {t.local}
+            </Link>
+
+            <Link
               href="/discover"
               style={{
                 minWidth: 200,
@@ -244,6 +279,24 @@ export default function Home() {
               }}
             >
               {t.discover}
+            </Link>
+
+            <Link
+              href="/api/download/android"
+              style={{
+                minWidth: 180,
+                padding: "12px 22px",
+                borderRadius: 999,
+                background: "#f8fbf5",
+                color: "#496b3f",
+                textDecoration: "none",
+                fontSize: 16,
+                fontWeight: 500,
+                border: "1px solid #d9e6d0",
+                boxSizing: "border-box",
+              }}
+            >
+              {t.apk}
             </Link>
           </div>
         </section>

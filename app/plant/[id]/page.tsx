@@ -5,14 +5,15 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import PlantRelatedArchives from "@/components/plant-detail/PlantRelatedArchives";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
-import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import type {
   ActionMessage,
   PlantAliasRow,
   PlantCareGuideRow,
   PlantParametersRow,
-  PlantRecordItem,
+  PlantRelatedArchiveItem,
   PlantSpeciesI18nRow,
   PlantSpeciesRow,
 } from "@/lib/plant-detail-types";
@@ -25,6 +26,31 @@ type PlantGrowthCycleRow = {
   flowering_days?: number | null;
   harvest_days?: number | null;
 };
+
+type RelatedArchiveSourceRow = {
+  id: string;
+  user_id?: string | null;
+  title?: string | null;
+  system_name?: string | null;
+  species_id?: string | null;
+  species_name_snapshot?: string | null;
+  is_public?: boolean | null;
+  status?: string | null;
+  ended_at?: string | null;
+  help_status?: string | null;
+  cover_image_url?: string | null;
+  created_at?: string | null;
+};
+
+type RelatedArchiveRecordRow = {
+  id?: string | null;
+  archive_id?: string | null;
+  note?: string | null;
+  record_time?: string | null;
+  primary_image_url?: string | null;
+};
+
+const RELATED_ARCHIVE_LIMIT = 24;
 
 const categoryLabels: Record<string, string> = {
   vegetable: "蔬菜 / 蔬果",
@@ -172,6 +198,119 @@ function uniqueTextList(items: unknown[]) {
       seen.add(key);
       return true;
     });
+}
+
+function buildPlantNameTerms(
+  plant: PlantSpeciesRow | null,
+  i18nRows: PlantSpeciesI18nRow[],
+  aliasRows: PlantAliasRow[]
+) {
+  return uniqueTextList([
+    plant?.common_name,
+    plant?.scientific_name,
+    ...i18nRows.map((item) => item.common_name),
+    ...aliasRows.map((item) => item.alias_name),
+  ]).slice(0, 8);
+}
+
+function sanitizeArchiveMatchTerm(value: string) {
+  return value.replace(/[,%()]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function buildArchiveMatchFilter(plantId: string, terms: string[]) {
+  const filters = [`species_id.eq.${plantId}`];
+
+  terms
+    .map(sanitizeArchiveMatchTerm)
+    .filter((term) => term.length >= 2)
+    .slice(0, 6)
+    .forEach((term) => {
+      filters.push(`species_name_snapshot.ilike.%${term}%`);
+      filters.push(`system_name.ilike.%${term}%`);
+    });
+
+  return filters.join(",");
+}
+
+async function buildArchiveItemsFromRows(
+  rows: RelatedArchiveSourceRow[],
+  currentUserId?: string | null
+) {
+  const archiveIds = uniqueTextList(rows.map((row) => row.id));
+  const publicRecordCountMap = new Map<string, number>();
+  const latestPublicRecordMap = new Map<string, RelatedArchiveRecordRow>();
+
+  if (archiveIds.length > 0) {
+    const { data: recordRows, error } = await supabase
+      .from("records")
+      .select("id, archive_id, note, record_time, primary_image_url")
+      .in("archive_id", archiveIds)
+      .eq("visibility", "public")
+      .order("record_time", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false, nullsFirst: false });
+
+    if (error) {
+      console.error("load related archive public records error:", error);
+    } else {
+      ((recordRows || []) as RelatedArchiveRecordRow[]).forEach((record) => {
+        if (!record.archive_id) return;
+
+        publicRecordCountMap.set(
+          record.archive_id,
+          (publicRecordCountMap.get(record.archive_id) || 0) + 1
+        );
+
+        if (!latestPublicRecordMap.has(record.archive_id)) {
+          latestPublicRecordMap.set(record.archive_id, record);
+        }
+      });
+    }
+  }
+
+  return rows.map((row) => {
+    const latestRecord = latestPublicRecordMap.get(row.id);
+
+    return {
+      archive_id: row.id,
+      user_id: row.user_id,
+      archive_title: row.title,
+      system_name: row.system_name,
+      species_id: row.species_id,
+      species_name_snapshot: row.species_name_snapshot,
+      archive_is_public: row.is_public,
+      is_own_archive: Boolean(currentUserId && row.user_id === currentUserId),
+      archive_status: row.status,
+      ended_at: row.ended_at,
+      archive_help_status: row.help_status,
+      cover_image_url: row.cover_image_url,
+      public_record_count: publicRecordCountMap.get(row.id) || 0,
+      last_public_record_time: latestRecord?.record_time || null,
+      last_public_record_note: latestRecord?.note || null,
+      last_public_record_image_url: latestRecord?.primary_image_url || null,
+    } satisfies PlantRelatedArchiveItem;
+  });
+}
+
+function mergeRelatedArchiveItems(items: PlantRelatedArchiveItem[]) {
+  const itemMap = new Map<string, PlantRelatedArchiveItem>();
+
+  items.forEach((item) => {
+    const previous = itemMap.get(item.archive_id);
+
+    if (!previous) {
+      itemMap.set(item.archive_id, item);
+      return;
+    }
+
+    itemMap.set(item.archive_id, {
+      ...item,
+      ...previous,
+      archive_is_public: previous.archive_is_public ?? item.archive_is_public ?? null,
+      is_own_archive: Boolean(previous.is_own_archive || item.is_own_archive),
+    });
+  });
+
+  return Array.from(itemMap.values()).slice(0, RELATED_ARCHIVE_LIMIT);
 }
 
 function guideTitle(plant: PlantSpeciesRow | null | undefined) {
@@ -476,7 +615,7 @@ export default function PlantDetailPage() {
 const [parameters, setParameters] = useState<PlantParametersRow | null>(null);
 const [growthCycle, setGrowthCycle] = useState<PlantGrowthCycleRow | null>(null);
 const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
-const [relatedRecords, setRelatedRecords] = useState<PlantRecordItem[]>([]);
+const [relatedArchives, setRelatedArchives] = useState<PlantRelatedArchiveItem[]>([]);
   const [interestAdded, setInterestAdded] = useState(false);
   const [planAdded, setPlanAdded] = useState(false);
   const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
@@ -531,77 +670,101 @@ const [
           .eq("language_code", "zh")
           .maybeSingle(),
         supabase
-          .from("discovery_feed_view")
+          .from("plant_related_archives_view")
           .select("*")
           .eq("species_id", id)
-          .limit(6),
+          .limit(RELATED_ARCHIVE_LIMIT),
       ]);
 
-      setPlant((plantData || null) as PlantSpeciesRow | null);
-      setI18n((i18nData || []) as PlantSpeciesI18nRow[]);
-      setAliases((aliasData || []) as PlantAliasRow[]);
+      const plantRow = (plantData || null) as PlantSpeciesRow | null;
+      const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
+      const aliasRows = (aliasData || []) as PlantAliasRow[];
+
+      setPlant(plantRow);
+      setI18n(i18nRows);
+      setAliases(aliasRows);
 setParameters((parameterData || null) as PlantParametersRow | null);
 setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
 setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
-      const relatedRows = (relatedData || []) as PlantRecordItem[];
-      const relatedRecordIds = relatedRows.map((record) => record.record_id).filter(Boolean);
-      const primaryImagePairs = await resolveMediaDisplayPairs(
-        supabase,
-        relatedRows.map((record) => ({ url: record.primary_image_url }))
-      );
-      const relatedMediaPreviewMap = new Map<string, string>();
-
-      if (relatedRecordIds.length > 0) {
-        const { data: mediaRows } = await supabase
-          .from("media")
-          .select("record_id, url, thumb_url, storage_path, thumb_path, created_at")
-          .in("record_id", relatedRecordIds)
-          .eq("type", "image")
-          .order("created_at", { ascending: true });
-
-        const displayMediaRows = await attachMediaDisplayUrls(
-          supabase,
-          (mediaRows || []) as Array<{
-            record_id?: string | null;
-            url?: string | null;
-            thumb_url?: string | null;
-            storage_path?: string | null;
-            thumb_path?: string | null;
-          }>
-        );
-
-        displayMediaRows.forEach((media) => {
-          if (!media.record_id) return;
-          const record = relatedRows.find((item) => item.record_id === media.record_id);
-          const isPrimaryMedia =
-            !record?.primary_image_url ||
-            (media.url && record.primary_image_url === media.url);
-          const imageUrl = media.display_thumb_url || media.display_url || media.thumb_url || media.url;
-
-          if (imageUrl && (isPrimaryMedia || !relatedMediaPreviewMap.has(media.record_id))) {
-            relatedMediaPreviewMap.set(media.record_id, imageUrl);
-          }
-        });
-      }
-
-      setRelatedRecords(
-        relatedRows.map((record, index) => ({
-          ...record,
-          primary_thumb_url:
-            relatedMediaPreviewMap.get(record.record_id) ||
-            primaryImagePairs[index]?.display_thumb_url ||
-            null,
-          display_primary_image_url:
-            relatedMediaPreviewMap.get(record.record_id) ||
-            primaryImagePairs[index]?.display_url ||
-            record.primary_image_url ||
-            null,
-        }))
-      );
 
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      const plantNameTerms = buildPlantNameTerms(plantRow, i18nRows, aliasRows);
+      const archiveMatchFilter = buildArchiveMatchFilter(id, plantNameTerms);
+      const archiveSelect =
+        "id, user_id, title, system_name, species_id, species_name_snapshot, is_public, status, ended_at, help_status, cover_image_url, created_at";
+
+      const [{ data: publicArchiveRows }, { data: ownArchiveRows }] = await Promise.all([
+        supabase
+          .from("archives")
+          .select(archiveSelect)
+          .eq("is_public", true)
+          .or(archiveMatchFilter)
+          .order("last_record_time", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false, nullsFirst: false })
+          .limit(RELATED_ARCHIVE_LIMIT),
+        user
+          ? supabase
+              .from("archives")
+              .select(archiveSelect)
+              .eq("user_id", user.id)
+              .or(archiveMatchFilter)
+              .order("last_record_time", { ascending: false, nullsFirst: false })
+              .order("created_at", { ascending: false, nullsFirst: false })
+              .limit(RELATED_ARCHIVE_LIMIT)
+          : Promise.resolve({ data: [] as RelatedArchiveSourceRow[] }),
+      ]);
+
+      const relatedRows = mergeRelatedArchiveItems([
+        ...((relatedData || []) as PlantRelatedArchiveItem[]).map((archive) => ({
+          ...archive,
+          archive_is_public: true,
+          is_own_archive: Boolean(user?.id && archive.user_id === user.id),
+        })),
+        ...(await buildArchiveItemsFromRows(
+          (publicArchiveRows || []) as RelatedArchiveSourceRow[],
+          user?.id || null
+        )),
+        ...(await buildArchiveItemsFromRows(
+          (ownArchiveRows || []) as RelatedArchiveSourceRow[],
+          user?.id || null
+        )),
+      ]);
+
+      const coverImagePairs = await resolveMediaDisplayPairs(
+        supabase,
+        relatedRows.map((archive) => ({
+          url: archive.cover_image_url,
+          path: archive.cover_image_path,
+          thumb_path: archive.cover_thumb_path,
+        }))
+      );
+      const lastRecordImagePairs = await resolveMediaDisplayPairs(
+        supabase,
+        relatedRows.map((archive) => ({
+          url: archive.last_public_record_image_url,
+          path: archive.last_public_record_image_path,
+          thumb_path: archive.last_public_record_thumb_path,
+        }))
+      );
+
+      setRelatedArchives(
+        relatedRows.map((archive, index) => ({
+          ...archive,
+          display_cover_image_url:
+            coverImagePairs[index]?.display_thumb_url ||
+            coverImagePairs[index]?.display_url ||
+            archive.cover_image_url ||
+            null,
+          display_last_public_record_image_url:
+            lastRecordImagePairs[index]?.display_thumb_url ||
+            lastRecordImagePairs[index]?.display_url ||
+            archive.last_public_record_image_url ||
+            null,
+        }))
+      );
 
       if (user) {
         const [{ data: interestData }, { data: planData }] = await Promise.all([
@@ -1240,92 +1403,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
         </Section>
       )}
 
-      <section style={{ marginTop: 16 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 10,
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: 18 }}>相关公开记录</h2>
-          <Link
-            href={`/discover/search?species=${plant.id}`}
-            style={{ fontSize: 13, color: "#4CAF50", textDecoration: "none" }}
-          >
-            查看更多 →
-          </Link>
-        </div>
-
-        {relatedRecords.length === 0 ? (
-          <div
-            style={{
-              padding: 18,
-              border: "1px solid #eee",
-              borderRadius: 14,
-              color: "#888",
-              background: "#fff",
-            }}
-          >
-            还没有相关公开记录
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {relatedRecords.map((record) => {
-              const imageUrl =
-                record.display_primary_image_url ||
-                record.primary_thumb_url ||
-                record.primary_image_url;
-
-              return (
-              <Link
-                key={record.record_id}
-                href={`/archive/${record.archive_id}?mode=viewer`}
-                style={{
-                  display: "block",
-                  padding: 14,
-                  border: "1px solid #eee",
-                  borderRadius: 14,
-                  background: "#fff",
-                  color: "inherit",
-                  textDecoration: "none",
-                }}
-              >
-                {imageUrl && (
-                  <img
-                    src={imageUrl}
-                    alt=""
-                    style={{
-                      width: "100%",
-                      maxHeight: 180,
-                      objectFit: "cover",
-                      borderRadius: 10,
-                      marginBottom: 10,
-                    }}
-                  />
-                )}
-                <div style={{ fontWeight: 600 }}>{record.archive_title || "种植记录"}</div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    color: "#555",
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
-                >
-                  {record.note || "没有文字"}
-                </div>
-              </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      <PlantRelatedArchives archives={relatedArchives} />
     </main>
   );
 }

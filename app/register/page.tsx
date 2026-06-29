@@ -4,6 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
+import { trackAnalyticsEvent } from "@/lib/analytics-events";
 
 function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -74,6 +75,8 @@ export default function RegisterPage() {
         return;
       }
 
+      void trackAnalyticsEvent("register");
+
       if (data.session) {
         router.replace("/archive");
         return;
@@ -81,7 +84,7 @@ export default function RegisterPage() {
 
       router.push(`/check-email?email=${encodeURIComponent(cleanEmail)}&type=signup`);
     } catch {
-      setMessage("网络异常");
+      setMessage("当前网络不稳定，暂时无法注册。你可以先本地记录，稍后再登录绑定账号。");
     } finally {
       setLoading(false);
     }
@@ -104,7 +107,7 @@ export default function RegisterPage() {
             lineHeight: 1.7,
           }}
         >
-          注册后可创建项目、添加记录和上传照片。
+          注册后可以继续本地离线使用。开通云空间后，记录可同步、备份、多设备使用；上传云空间不等于公开。
         </div>
 
         <form onSubmit={handleRegister}>
@@ -141,9 +144,28 @@ export default function RegisterPage() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? "处理中..." : "注册"}
+          {loading ? "处理中..." : "注册"}
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={() => router.push("/local")}
+          style={{
+            width: "100%",
+            marginTop: 12,
+            padding: 12,
+            border: "1px solid #dfe8da",
+            background: "#f6faf3",
+            borderRadius: 6,
+            fontSize: 14,
+            color: "#496b3f",
+            cursor: "pointer",
+            fontWeight: 500,
+          }}
+        >
+          先本地使用
+        </button>
 
         <button
           type="button"

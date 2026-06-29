@@ -22,6 +22,9 @@ import {
 import type { PlantSpeciesOption } from "@/lib/archive-page-types";
 import type { PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
 
+const DEFAULT_ARCHIVE_IS_PUBLIC = false;
+const DEFAULT_RECORD_VISIBILITY = "private";
+
 export default function NewArchivePage() {
   return (
     <Suspense
@@ -351,7 +354,8 @@ function NewArchiveContent() {
           source: source.trim() || null,
           note: note.trim() || null,
           user_id: user.id,
-          is_public: true,
+          is_public: DEFAULT_ARCHIVE_IS_PUBLIC,
+          default_record_visibility: DEFAULT_RECORD_VISIBILITY,
         },
       ])
       .select("id")
@@ -418,7 +422,7 @@ function NewArchiveContent() {
         >
           <span>{getCreateContentBlockedText(membership)}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            查看会员与续费
+            查看云空间
           </Link>
         </div>
       ) : null}
@@ -829,7 +833,7 @@ function NewArchiveContent() {
             lineHeight: 1.6,
           }}
         >
-          默认公开，可改为仅自己可见
+          可见性由你的记录模式决定。当前默认仅自己可见；选择公开发现后，新项目和新记录可默认公开，已有记录不会自动公开。
         </div>
 
         <button

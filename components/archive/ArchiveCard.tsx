@@ -466,7 +466,7 @@ export default function ArchiveCard({
               cursor: "pointer",
             }}
           >
-            {item.is_public ? "已公开" : "仅自己可见"}
+            {item.is_public ? "公开发现" : "仅自己可见"}
           </button>
 
           <ArchiveCategoryDropdown
@@ -746,7 +746,7 @@ function MobileArchiveCard({
               }}
               style={mobileCardMenuItemStyle}
             >
-              {item.is_public ? "设为私密" : "设为公开"}
+              {item.is_public ? "设为私密" : "设为公开发现"}
             </button>
             <button
               type="button"

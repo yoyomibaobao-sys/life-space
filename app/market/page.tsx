@@ -324,7 +324,7 @@ export default function MarketPage() {
                 </Link>
 
                 <Link href="/register" style={publishButtonStyle}>
-                  注册试用
+                  注册账号
                 </Link>
               </>
             )}

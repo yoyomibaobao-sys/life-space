@@ -89,6 +89,7 @@ export type ArchiveDetailArchive = {
   created_at?: string | null;
   last_record_time?: string | null;
   is_public: boolean;
+  default_record_visibility?: "private" | "public" | string | null;
   record_count?: number | null;
   status?: string | null;
   species_id?: string | null;

@@ -133,7 +133,7 @@ export default function ArchiveDetailHeader({
                 cursor: "pointer",
               }}
             >
-              {archive.is_public ? "已公开" : "仅自己可见"}
+              {archive.is_public ? "公开发现" : "仅自己可见"}
             </button>
           ) : (
             <button

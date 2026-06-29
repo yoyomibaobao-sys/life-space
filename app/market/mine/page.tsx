@@ -155,7 +155,7 @@ export default function MyMarketPostsPage() {
 
           {marketBlocked ? (
             <Link href="/membership" style={quotaLinkStyle}>
-              查看年度使用权
+              查看云空间
             </Link>
           ) : null}
         </section>

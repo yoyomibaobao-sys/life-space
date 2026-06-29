@@ -697,20 +697,22 @@ export default function ArchivePage() {
       return;
     }
 
-    const { error: recordsError } = await supabase
-      .from("records")
-      .update({ visibility: nextRecordVisibility })
-      .eq("archive_id", item.id);
+    if (!newValue) {
+      const { error: recordsError } = await supabase
+        .from("records")
+        .update({ visibility: nextRecordVisibility })
+        .eq("archive_id", item.id);
 
-    if (recordsError) {
-      showToast("记录同步失败");
-      return;
+      if (recordsError) {
+        showToast("记录同步失败");
+        return;
+      }
     }
 
     setArchives((prev) =>
       prev.map((archive) => (archive.id === item.id ? { ...archive, is_public: newValue } : archive))
     );
-    showToast(newValue ? "项目和记录已公开" : "项目和记录仅自己可见");
+    showToast(newValue ? "项目壳已公开，旧记录不会自动公开" : "项目和记录仅自己可见");
   }
 
   async function updateArchiveCategory(item: ArchiveItem, value: string) {

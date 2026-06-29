@@ -592,7 +592,7 @@ function getMobilePageTitle(pathname: string) {
   if (pathname.startsWith("/plant")) return "百科";
   if (pathname.startsWith("/profile")) return "我";
   if (pathname.startsWith("/notifications")) return "通知";
-  if (pathname.startsWith("/membership")) return "会员";
+  if (pathname.startsWith("/membership")) return "云空间";
   if (pathname.startsWith("/archive/new")) return "新建项目";
   if (pathname.startsWith("/market")) return "集市";
   if (pathname.startsWith("/login")) return "登录";

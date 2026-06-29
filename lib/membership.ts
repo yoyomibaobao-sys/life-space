@@ -24,9 +24,9 @@ export function normalizeMembershipRpcResult(data: unknown): MyMembership | null
 export function getMembershipPlanLabel(plan?: string | null) {
   switch (plan) {
     case "trial":
-      return "免费试用";
+      return "本地离线";
     case "basic":
-      return "基础年费";
+      return "云空间";
     case "large":
       return "大空间";
     case "seller":
@@ -41,7 +41,7 @@ export function getMembershipPlanLabel(plan?: string | null) {
 export function getMembershipStatusLabel(status?: string | null) {
   switch (status) {
     case "trialing":
-      return "试用中";
+      return "可用";
     case "active":
       return "使用中";
     case "past_due":
@@ -81,7 +81,7 @@ export function getMembershipEndDate(membership?: MyMembership | null) {
 }
 
 export function getMembershipSummary(membership?: MyMembership | null) {
-  if (!membership) return "暂未读取到试用信息";
+  if (!membership) return "暂未读取到云空间信息";
 
   const label = getMembershipPlanLabel(membership.plan);
   const status = getMembershipStatusLabel(membership.status);
@@ -109,7 +109,7 @@ export function canCreateMembershipMarketPost(membership?: MyMembership | null) 
 
 export function getCreateContentBlockedText(membership?: MyMembership | null) {
   if (!membership) {
-    return "试用状态无法确认";
+    return "云空间状态无法确认";
   }
 
   if (membership.can_create_content === false) {
@@ -157,7 +157,7 @@ export function getMarketPostQuotaHint(membership?: MyMembership | null) {
     return getCreateMarketPostBlockedText(membership);
   }
 
-  return `${getMarketPostQuotaLabel(membership)}。试用 3 条，基础年费 10 条。`;
+  return `${getMarketPostQuotaLabel(membership)}。本地离线不发布集市；云空间基础额度 10 条。`;
 }
 
 
@@ -208,5 +208,5 @@ export function getStorageLimitExceededText(_params: {
   limitBytes?: number | null;
   uploadBytes?: number | null;
 }) {
-  return "空间不足，无法上传";
+  return "存储空间不足，请删除部分图片或升级云空间容量。";
 }
