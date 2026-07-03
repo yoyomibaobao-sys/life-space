@@ -150,7 +150,7 @@ export default function RegisterPage() {
 
         <button
           type="button"
-          onClick={() => router.push("/local")}
+          onClick={() => router.push("/local/archive")}
           style={{
             width: "100%",
             marginTop: 12,
