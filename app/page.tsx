@@ -16,7 +16,7 @@ const copy = {
       "云空间用于同步、备份、多设备使用、公开发现和求助。上传云空间不等于公开，已有记录不会自动公开。",
     register: "注册",
     login: "登录",
-    local: "先本地使用",
+    local: "本地离线记录",
     discover: "浏览发现",
     apk: "下载 Android APK",
     cards: [

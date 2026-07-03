@@ -27,8 +27,23 @@ export default function LocalModePage() {
         <h1 style={{ margin: "0 0 14px", fontSize: 28 }}>先本地使用</h1>
         <p style={{ margin: 0, lineHeight: 1.9, color: "#4f5d4a" }}>
           本地离线模式指 App 私有存储中的项目、记录和图片缓存，不会默认写入系统相册，也不会上传云端或进入发现页。
-          真正的离线记录、图片缓存和后续同步会在 App 内逐步完成；当前网页端仍建议注册 / 登录后使用云端档案。
+          你可以先在本机建立项目和记录；后续同步到云空间的结构已预留，但本轮不会自动同步。
         </p>
+
+        <ul
+          style={{
+            margin: "18px 0 0",
+            padding: "0 0 0 18px",
+            color: "#4f5d4a",
+            lineHeight: 1.85,
+            fontSize: 14,
+          }}
+        >
+          <li>免费使用，不需要先开通云空间。</li>
+          <li>只保存在这台设备，不支持多设备同步。</li>
+          <li>不上传云端，不进入发现页，不支持公开、求助、评论和集市。</li>
+          <li>换设备、卸载 App、清理浏览器数据后，本地数据可能丢失。</li>
+        </ul>
 
         <div
           style={{
@@ -46,6 +61,9 @@ export default function LocalModePage() {
         </div>
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 24 }}>
+          <Link href="/local/archive" style={primaryLinkStyle}>
+            进入本地记录
+          </Link>
           <Link href="/register" style={primaryLinkStyle}>
             注册账号
           </Link>

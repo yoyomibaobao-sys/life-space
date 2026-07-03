@@ -207,7 +207,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={() => router.push("/local")}
+            onClick={() => router.push("/local/archive")}
             disabled={loading}
             style={{
               width: "100%",
