@@ -39,6 +39,20 @@ function formatDate(value?: string | null) {
   });
 }
 
+function getDayNumber(startValue?: string | null, currentValue?: string | null) {
+  if (!startValue || !currentValue) return 1;
+
+  const start = new Date(startValue);
+  const current = new Date(currentValue);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(current.getTime())) return 1;
+
+  const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const currentDate = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  return Math.max(1, Math.floor((currentDate.getTime() - startDate.getTime()) / dayMs) + 1);
+}
+
 function fileListToArray(files: FileList | null) {
   return Array.from(files || []).filter((file) => file.type.startsWith("image/"));
 }
@@ -54,8 +68,11 @@ export default function LocalArchiveDetailPage() {
   const [note, setNote] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const [addRecordOpen, setAddRecordOpen] = useState(false);
+  const [recordMenuOpenId, setRecordMenuOpenId] = useState<string | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<LocalRecordWithImages | null>(null);
   const [deleteArchiveOpen, setDeleteArchiveOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   const selectedSizeLabel = useMemo(() => {
     const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -83,6 +100,17 @@ export default function LocalArchiveDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [archiveId]);
 
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
+
   function appendFiles(files: FileList | null) {
     const images = fileListToArray(files);
     if (images.length === 0) return;
@@ -102,6 +130,7 @@ export default function LocalArchiveDetailPage() {
       });
       setNote("");
       setSelectedFiles([]);
+      setAddRecordOpen(false);
       showToast("本地记录已保存");
       await loadDetail();
     } catch (err) {
@@ -118,6 +147,7 @@ export default function LocalArchiveDetailPage() {
       await deleteLocalRecord(recordToDelete.id);
       showToast("本地记录已删除");
       setRecordToDelete(null);
+      setRecordMenuOpenId(null);
       await loadDetail();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "删除本地记录失败");
@@ -154,6 +184,9 @@ export default function LocalArchiveDetailPage() {
   }
 
   const { archive, records } = detail;
+  const startTime = records.length
+    ? records[records.length - 1]?.record_time || archive.created_at
+    : archive.created_at;
 
   return (
     <main style={pageStyle}>
@@ -161,86 +194,115 @@ export default function LocalArchiveDetailPage() {
         <Link href="/local/archive" style={backLinkStyle}>
           返回本地项目
         </Link>
-        <div style={headerMetaStyle}>
-          <span>{getArchiveCategoryIcon(archive.category)}</span>
-          <span>{getArchiveCategoryLabel(archive.category)}</span>
-          <span>本地离线</span>
-          <span>不同步</span>
+        <div style={headerTopRowStyle}>
+          <div style={headerMetaStyle}>
+            <span>{getArchiveCategoryIcon(archive.category)}</span>
+            <span>{getArchiveCategoryLabel(archive.category)}</span>
+            <span style={localBadgeStyle}>本地离线</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddRecordOpen((open) => !open)}
+            style={headerAddButtonStyle}
+          >
+            {addRecordOpen ? "收起" : "+ 添加记录"}
+          </button>
         </div>
         <h1 style={titleStyle}>{archive.title || "未命名项目"}</h1>
-        <div style={systemNameStyle}>{archive.system_name || "未填写对象"}</div>
-        {archive.note ? <p style={archiveNoteStyle}>{archive.note}</p> : null}
+        <div style={systemNameStyle}>
+          {archive.system_name || "未填写植物 / 对象"}
+        </div>
+        {archive.note ? (
+          <p style={archiveNoteStyle}>位置 / 备注：{archive.note}</p>
+        ) : null}
+        <div style={projectSummaryStyle}>
+          <span>{records.length} 条记录</span>
+          <span>
+            {records.reduce((sum, record) => sum + record.images.length, 0)} 张图片
+          </span>
+          <span>只保存在这台设备</span>
+        </div>
+        <div style={localHintStyle}>
+          本地离线，不上传云端；暂不支持公开发现、求助、评论和集市。
+        </div>
       </section>
 
-      <section style={noticeStyle}>
-        这里的项目、记录和图片只保存在 App 私有本地缓存中。不会默认写入系统相册，不会上传云端，也不会进入发现页。
-      </section>
-
-      <section style={panelStyle}>
-        <h2 style={sectionTitleStyle}>添加本地记录</h2>
-        <form onSubmit={handleAddRecord} style={recordFormStyle}>
-          <textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="记录今天的观察、浇水、修剪、采收或其他变化"
-            rows={4}
-            style={textareaStyle}
-          />
-
-          <div style={imageActionRowStyle}>
-            <label style={imagePickerStyle}>
-              拍照
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={(event) => {
-                  appendFiles(event.target.files);
-                  event.target.value = "";
-                }}
-                style={{ display: "none" }}
-              />
-            </label>
-            <label style={imagePickerStyle}>
-              从相册选择
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(event) => {
-                  appendFiles(event.target.files);
-                  event.target.value = "";
-                }}
-                style={{ display: "none" }}
-              />
-            </label>
-            {selectedFiles.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setSelectedFiles([])}
-                style={clearFilesButtonStyle}
-              >
-                清空图片
-              </button>
-            ) : null}
-          </div>
-
-          {selectedFiles.length > 0 ? (
-            <div style={selectedFilesStyle}>
-              已选择 {selectedFiles.length} 张图片
-              {selectedSizeLabel ? ` · 原始大小 ${selectedSizeLabel}` : ""}
-              <br />
-              保存时会生成 App 内部缓存副本，默认不写入系统相册。
-            </div>
-          ) : null}
-
-          <div style={submitRowStyle}>
-            <button type="submit" disabled={saving} style={submitButtonStyle}>
-              {saving ? "保存中..." : "保存本地记录"}
+      {addRecordOpen ? (
+        <section style={addRecordPanelStyle}>
+          <div style={addRecordHeaderStyle}>
+            <h2 style={sectionTitleStyle}>添加记录</h2>
+            <button
+              type="button"
+              onClick={() => setAddRecordOpen(false)}
+              style={addRecordCancelStyle}
+            >
+              取消
             </button>
           </div>
-        </form>
-      </section>
+          <form onSubmit={handleAddRecord} style={recordFormStyle}>
+            <textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="记录今天的变化"
+              rows={4}
+              style={textareaStyle}
+            />
+
+            <div style={imageActionRowStyle}>
+              <label style={imagePickerStyle}>
+                拍照
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(event) => {
+                    appendFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                  style={{ display: "none" }}
+                />
+              </label>
+              <label style={imagePickerStyle}>
+                选择照片
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) => {
+                    appendFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                  style={{ display: "none" }}
+                />
+              </label>
+              {selectedFiles.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedFiles([])}
+                  style={clearFilesButtonStyle}
+                >
+                  清空图片
+                </button>
+              ) : null}
+            </div>
+
+            {selectedFiles.length > 0 ? (
+              <div style={selectedFilesStyle}>
+                已选择 {selectedFiles.length} 张图片
+                {selectedSizeLabel ? ` · 原始大小 ${selectedSizeLabel}` : ""}
+                <br />
+                保存时会生成 App 内部缓存副本，默认不写入系统相册。
+              </div>
+            ) : null}
+
+            <div style={submitRowStyle}>
+              <button type="submit" disabled={saving} style={submitButtonStyle}>
+                {saving ? "保存中..." : "保存记录"}
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
 
       <section style={recordsSectionStyle}>
         <div style={recordsHeaderStyle}>
@@ -249,29 +311,69 @@ export default function LocalArchiveDetailPage() {
         </div>
 
         {records.length === 0 ? (
-          <div style={emptyRecordsStyle}>还没有本地记录。</div>
+          <div style={emptyRecordsStyle}>
+            <div>还没有本地记录。</div>
+            <button
+              type="button"
+              onClick={() => setAddRecordOpen(true)}
+              style={emptyAddButtonStyle}
+            >
+              添加第一条记录
+            </button>
+          </div>
         ) : (
-          <div style={{ display: "grid", gap: 12 }}>
-            {records.map((record) => (
+          <div style={timelineListStyle}>
+            {records.map((record, index) => (
               <article key={record.id} style={recordCardStyle}>
                 <div style={recordMetaStyle}>
-                  <span>{formatDate(record.record_time)}</span>
-                  <button
-                    type="button"
-                    onClick={() => setRecordToDelete(record)}
-                    style={deleteRecordButtonStyle}
-                  >
-                    删除
-                  </button>
+                  <span>
+                    {index === 0 ? "最新进展 · " : ""}
+                    第 {getDayNumber(startTime, record.record_time)} 天 ·{" "}
+                    {formatDate(record.record_time)}
+                  </span>
+                  <div style={recordMenuWrapStyle}>
+                    <button
+                      type="button"
+                      aria-label="更多本地记录操作"
+                      onClick={() =>
+                        setRecordMenuOpenId((current) =>
+                          current === record.id ? null : record.id
+                        )
+                      }
+                      style={recordMoreButtonStyle}
+                    >
+                      ⋯
+                    </button>
+                    {recordMenuOpenId === record.id ? (
+                      <div style={recordMenuStyle}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRecordToDelete(record);
+                            setRecordMenuOpenId(null);
+                          }}
+                          style={recordMenuDangerItemStyle}
+                        >
+                          删除本地记录
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 {record.images.length > 0 ? (
                   <div style={imageGridStyle}>
-                    {record.images.map((image) => (
+                    {record.images.map((image, imageIndex) => (
                       <LocalBlobImage
                         key={image.id}
                         blob={image.blob}
-                        style={recordImageStyle}
+                        style={
+                          record.images.length === 1
+                            ? recordSingleImageStyle
+                            : imageIndex === 0
+                              ? recordLeadImageStyle
+                              : recordImageStyle
+                        }
                       />
                     ))}
                   </div>
@@ -282,11 +384,25 @@ export default function LocalArchiveDetailPage() {
                 ) : (
                   <p style={recordEmptyNoteStyle}>这条记录只有图片。</p>
                 )}
+                <div style={recordFooterStyle}>
+                  <span>本地记录</span>
+                  <span>只保存在这台设备</span>
+                </div>
               </article>
             ))}
           </div>
         )}
       </section>
+
+      {isMobileViewport && !addRecordOpen ? (
+        <button
+          type="button"
+          onClick={() => setAddRecordOpen(true)}
+          style={mobileFloatingAddButtonStyle}
+        >
+          + 记录
+        </button>
+      ) : null}
 
       <section style={dangerPanelStyle}>
         <div>
@@ -347,13 +463,41 @@ const backLinkStyle = {
   marginBottom: 10,
 } satisfies CSSProperties;
 
+const headerTopRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
 const headerMetaStyle = {
   display: "flex",
+  alignItems: "center",
   gap: 8,
   flexWrap: "wrap",
   color: "#78906e",
   fontSize: 13,
   fontWeight: 700,
+} satisfies CSSProperties;
+
+const localBadgeStyle = {
+  padding: "4px 8px",
+  borderRadius: 999,
+  border: "1px solid #d9e6d0",
+  background: "#f6faf3",
+  color: "#4e6b45",
+} satisfies CSSProperties;
+
+const headerAddButtonStyle = {
+  height: 36,
+  padding: "0 14px",
+  borderRadius: 999,
+  border: "1px solid #bcd8b5",
+  background: "#3f7d3d",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 800,
 } satisfies CSSProperties;
 
 const titleStyle = {
@@ -373,6 +517,23 @@ const archiveNoteStyle = {
   fontSize: 14,
   lineHeight: 1.7,
   whiteSpace: "pre-line",
+} satisfies CSSProperties;
+
+const projectSummaryStyle = {
+  marginTop: 10,
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  color: "#6f7b69",
+  fontSize: 13,
+  lineHeight: 1.5,
+} satisfies CSSProperties;
+
+const localHintStyle = {
+  marginTop: 8,
+  color: "#8a9584",
+  fontSize: 12,
+  lineHeight: 1.6,
 } satisfies CSSProperties;
 
 const noticeStyle = {
@@ -395,6 +556,30 @@ const panelStyle = {
   border: "1px solid #e2eadc",
   background: "#fff",
   boxShadow: "0 8px 22px rgba(42, 66, 34, 0.05)",
+} satisfies CSSProperties;
+
+const addRecordPanelStyle = {
+  ...panelStyle,
+  borderRadius: 20,
+  border: "1px solid #dfe9d7",
+  boxShadow: "0 12px 30px rgba(42, 66, 34, 0.08)",
+} satisfies CSSProperties;
+
+const addRecordHeaderStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+} satisfies CSSProperties;
+
+const addRecordCancelStyle = {
+  border: "1px solid #dfe7d9",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#5f6f5b",
+  fontSize: 13,
+  fontWeight: 700,
+  padding: "7px 12px",
 } satisfies CSSProperties;
 
 const sectionTitleStyle = {
@@ -503,13 +688,36 @@ const emptyRecordsStyle = {
   background: "#f8fbf4",
   color: "#697663",
   fontSize: 14,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const emptyAddButtonStyle = {
+  height: 34,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #cfe0c8",
+  background: "#fff",
+  color: "#2f5d2b",
+  fontSize: 13,
+  fontWeight: 700,
+} satisfies CSSProperties;
+
+const timelineListStyle = {
+  display: "grid",
+  gap: 12,
 } satisfies CSSProperties;
 
 const recordCardStyle = {
+  position: "relative",
   border: "1px solid #e5ecdf",
-  borderRadius: 16,
+  borderRadius: 14,
   background: "#fff",
-  padding: 12,
+  padding: 10,
+  boxShadow: "0 3px 14px rgba(0,0,0,0.025)",
 } satisfies CSSProperties;
 
 const recordMetaStyle = {
@@ -519,15 +727,48 @@ const recordMetaStyle = {
   gap: 12,
   color: "#7c8975",
   fontSize: 12,
-  marginBottom: 10,
+  marginBottom: 8,
 } satisfies CSSProperties;
 
-const deleteRecordButtonStyle = {
+const recordMenuWrapStyle = {
+  position: "relative",
+  flexShrink: 0,
+} satisfies CSSProperties;
+
+const recordMoreButtonStyle = {
+  width: 30,
+  height: 28,
+  borderRadius: 999,
+  border: "1px solid #e4eadf",
+  background: "#fff",
+  color: "#6c7a63",
+  fontSize: 18,
+  lineHeight: 1,
+  fontWeight: 800,
+} satisfies CSSProperties;
+
+const recordMenuStyle = {
+  position: "absolute",
+  top: 32,
+  right: 0,
+  zIndex: 10,
+  minWidth: 136,
+  padding: 6,
+  borderRadius: 12,
+  border: "1px solid #eadede",
+  background: "#fff",
+  boxShadow: "0 12px 26px rgba(40, 50, 35, 0.12)",
+} satisfies CSSProperties;
+
+const recordMenuDangerItemStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: 9,
   border: "none",
   background: "transparent",
   color: "#a44848",
   fontSize: 13,
-  padding: "4px 0",
+  textAlign: "left",
 } satisfies CSSProperties;
 
 const imageGridStyle = {
@@ -537,12 +778,32 @@ const imageGridStyle = {
   marginBottom: 10,
 } satisfies CSSProperties;
 
+const recordSingleImageStyle = {
+  width: "100%",
+  aspectRatio: "4 / 3",
+  objectFit: "cover",
+  borderRadius: 12,
+  background: "#eef4e8",
+  display: "block",
+} satisfies CSSProperties;
+
+const recordLeadImageStyle = {
+  width: "100%",
+  gridColumn: "1 / -1",
+  aspectRatio: "4 / 3",
+  objectFit: "cover",
+  borderRadius: 12,
+  background: "#eef4e8",
+  display: "block",
+} satisfies CSSProperties;
+
 const recordImageStyle = {
   width: "100%",
   aspectRatio: "1 / 1",
   objectFit: "cover",
   borderRadius: 12,
   background: "#eef4e8",
+  display: "block",
 } satisfies CSSProperties;
 
 const recordNoteStyle = {
@@ -557,6 +818,31 @@ const recordEmptyNoteStyle = {
   margin: 0,
   color: "#8a9584",
   fontSize: 14,
+} satisfies CSSProperties;
+
+const recordFooterStyle = {
+  marginTop: 8,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  color: "#8a9584",
+  fontSize: 12,
+} satisfies CSSProperties;
+
+const mobileFloatingAddButtonStyle = {
+  position: "fixed",
+  right: 16,
+  bottom: "calc(78px + env(safe-area-inset-bottom))",
+  zIndex: 60,
+  height: 42,
+  padding: "0 16px",
+  borderRadius: 999,
+  border: "1px solid #bcd8b5",
+  background: "#3f7d3d",
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 800,
+  boxShadow: "0 12px 28px rgba(49, 90, 45, 0.22)",
 } satisfies CSSProperties;
 
 const dangerPanelStyle = {
