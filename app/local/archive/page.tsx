@@ -61,7 +61,7 @@ export default function LocalArchivePage() {
           <div style={eyebrowStyle}>本地离线</div>
           <h1 style={titleStyle}>本地项目</h1>
           <p style={subtitleStyle}>
-            数据和图片只保存在当前 App / 浏览器的私有本地存储中，不上传云端，不进入发现页。
+            数据和图片只保存在当前设备，不上传云端，不进入发现页。
           </p>
         </div>
         <Link href="/local/archive/new" style={primaryActionStyle}>
@@ -109,16 +109,17 @@ export default function LocalArchivePage() {
               <div style={{ minWidth: 0 }}>
                 <div style={cardMetaStyle}>
                   <span>{getArchiveCategoryLabel(archive.category)}</span>
-                  <span>本地</span>
+                  <span style={localPillStyle}>本地离线</span>
                 </div>
                 <h2 style={cardTitleStyle}>{archive.title || "未命名项目"}</h2>
                 <div style={systemNameStyle}>
-                  {archive.system_name || "未填写对象"}
+                  {archive.system_name || "未填写植物 / 对象"}
                 </div>
                 <p style={noteStyle}>
                   {archive.latest_record_note || archive.note || "暂无记录内容"}
                 </p>
                 <div style={cardFooterStyle}>
+                  <span>只在本机</span>
                   <span>{archive.record_count} 条记录</span>
                   <span>{archive.image_count} 张图片</span>
                   <span>最近 {formatDate(archive.latest_record_time || archive.updated_at)}</span>
@@ -140,8 +141,8 @@ const pageStyle = {
 } satisfies CSSProperties;
 
 const headerStyle = {
-  maxWidth: 980,
-  margin: "0 auto 14px",
+  maxWidth: 760,
+  margin: "0 auto 10px",
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "space-between",
@@ -199,19 +200,15 @@ const secondaryActionStyle = {
 } satisfies CSSProperties;
 
 const noticeStyle = {
-  maxWidth: 980,
-  margin: "0 auto 16px",
-  padding: "10px 12px",
-  borderRadius: 14,
-  border: "1px solid #dfe9d8",
-  background: "#f6faf3",
-  color: "#5f7058",
-  fontSize: 13,
-  lineHeight: 1.7,
+  maxWidth: 760,
+  margin: "0 auto 12px",
+  color: "#8a9584",
+  fontSize: 12,
+  lineHeight: 1.6,
 } satisfies CSSProperties;
 
 const emptyStyle = {
-  maxWidth: 980,
+  maxWidth: 760,
   margin: "0 auto",
   padding: 24,
   borderRadius: 18,
@@ -220,20 +217,20 @@ const emptyStyle = {
 } satisfies CSSProperties;
 
 const gridStyle = {
-  maxWidth: 980,
+  maxWidth: 760,
   margin: "0 auto",
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 12,
+  gridTemplateColumns: "1fr",
+  gap: 10,
 } satisfies CSSProperties;
 
 const cardStyle = {
   display: "grid",
-  gridTemplateColumns: "92px minmax(0, 1fr)",
-  gap: 12,
-  minHeight: 126,
-  padding: 12,
-  borderRadius: 16,
+  gridTemplateColumns: "104px minmax(0, 1fr)",
+  gap: 10,
+  minHeight: 124,
+  padding: 10,
+  borderRadius: 14,
   border: "1px solid #e2eadc",
   background: "#fff",
   boxShadow: "0 8px 22px rgba(42, 66, 34, 0.05)",
@@ -242,17 +239,17 @@ const cardStyle = {
 } satisfies CSSProperties;
 
 const coverStyle = {
-  width: 92,
-  height: 102,
+  width: 104,
+  height: 104,
   objectFit: "cover",
-  borderRadius: 12,
+  borderRadius: 11,
   background: "#f1f5eb",
 } satisfies CSSProperties;
 
 const coverPlaceholderStyle = {
-  width: 92,
-  height: 102,
-  borderRadius: 12,
+  width: 104,
+  height: 104,
+  borderRadius: 11,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -268,6 +265,14 @@ const cardMetaStyle = {
   color: "#78906e",
   fontSize: 12,
   fontWeight: 700,
+} satisfies CSSProperties;
+
+const localPillStyle = {
+  padding: "3px 7px",
+  borderRadius: 999,
+  border: "1px solid #d9e6d0",
+  background: "#f6faf3",
+  color: "#4f6e45",
 } satisfies CSSProperties;
 
 const cardTitleStyle = {

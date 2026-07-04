@@ -57,7 +57,7 @@ export default function NewLocalArchivePage() {
         <div style={eyebrowStyle}>只保存在本机</div>
         <h1 style={titleStyle}>新建本地项目</h1>
         <p style={subtitleStyle}>
-          本地项目不写入 Supabase，不进入发现页，也不支持公开、求助、评论和集市。
+          本地项目只保存在这台设备，不进入发现页，也不支持公开、求助、评论和集市。
         </p>
 
         <form onSubmit={handleSubmit} style={formStyle}>
@@ -93,7 +93,7 @@ export default function NewLocalArchivePage() {
 
           <label style={fieldStyle}>
             <span style={labelStyle}>
-              {category === "plant" ? "植物 / 作物名" : getArchiveNamePlaceholder(category)}
+              {category === "plant" ? "植物名称" : getArchiveNamePlaceholder(category)}
             </span>
             <input
               value={systemName}
@@ -108,11 +108,15 @@ export default function NewLocalArchivePage() {
           </label>
 
           <label style={fieldStyle}>
-            <span style={labelStyle}>备注</span>
+            <span style={labelStyle}>位置备注</span>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder={getArchiveCategoryDescription(category)}
+              placeholder={
+                category === "plant"
+                  ? "例如：南阳台、东侧花盆、院子里的种植床"
+                  : getArchiveCategoryDescription(category)
+              }
               rows={4}
               style={textareaStyle}
             />
