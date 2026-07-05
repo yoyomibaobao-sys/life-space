@@ -1,16 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
-import LocalBlobImage from "@/components/local/LocalBlobImage";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { showToast } from "@/components/Toast";
+import ArchiveCategoryTabs from "@/components/archive-ui/ArchiveCategoryTabs";
+import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
+import { supabase } from "@/lib/supabase";
 import {
-  listLocalArchiveSummaries,
+  listVisibleLocalArchiveSummaries,
+  markUnownedLocalArchivesForOwner,
+  type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
 } from "@/lib/local-offline-db";
 import {
-  getArchiveCategoryIcon,
-  getArchiveCategoryLabel,
+  type ArchiveCategory,
 } from "@/lib/archive-categories";
+
+type CategoryFilter = "all" | ArchiveCategory;
 
 function formatDate(value?: string | null) {
   if (!value) return "暂无记录";
@@ -27,17 +34,53 @@ function formatDate(value?: string | null) {
 
 export default function LocalArchivePage() {
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
+  const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [unownedCount, setUnownedCount] = useState(0);
+  const [hiddenOwnedByOtherCount, setHiddenOwnedByOtherCount] = useState(0);
+  const [ownershipPromptDismissed, setOwnershipPromptDismissed] = useState(false);
+  const [markingOwner, setMarkingOwner] = useState(false);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<ArchiveCategory, number> = {
+      plant: 0,
+      system: 0,
+      insect_fish: 0,
+      other: 0,
+    };
+
+    archives.forEach((archive) => {
+      counts[archive.category] += 1;
+    });
+
+    return counts;
+  }, [archives]);
+
+  const filteredArchives = useMemo(
+    () =>
+      activeCategory === "all"
+        ? archives
+        : archives.filter((archive) => archive.category === activeCategory),
+    [activeCategory, archives]
+  );
 
   useEffect(() => {
     let active = true;
 
     async function load() {
       try {
-        const rows = await listLocalArchiveSummaries();
+        const { data } = await supabase.auth.getUser();
+        const nextOwnerContext = data.user
+          ? { userId: data.user.id, email: data.user.email || null }
+          : null;
+        const result = await listVisibleLocalArchiveSummaries(nextOwnerContext);
         if (!active) return;
-        setArchives(rows);
+        setOwnerContext(nextOwnerContext);
+        setArchives(result.archives);
+        setUnownedCount(result.unownedCount);
+        setHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
         setError("");
       } catch (err) {
         if (!active) return;
@@ -53,6 +96,31 @@ export default function LocalArchivePage() {
       active = false;
     };
   }, []);
+
+  async function refreshArchives(context: LocalArchiveOwnerContext | null = ownerContext) {
+    const result = await listVisibleLocalArchiveSummaries(context);
+    setArchives(result.archives);
+    setUnownedCount(result.unownedCount);
+    setHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
+  }
+
+  async function markUnownedArchivesAsMine() {
+    if (!ownerContext?.userId || markingOwner) return;
+
+    setMarkingOwner(true);
+    try {
+      const markedCount = await markUnownedLocalArchivesForOwner({
+        userId: ownerContext.userId,
+        email: ownerContext.email || null,
+      });
+      await refreshArchives(ownerContext);
+      showToast(markedCount > 0 ? "已标记为我的本地项目" : "没有需要标记的本地项目");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "标记本地项目失败");
+    } finally {
+      setMarkingOwner(false);
+    }
+  }
 
   return (
     <main style={pageStyle}>
@@ -70,7 +138,49 @@ export default function LocalArchivePage() {
       </section>
 
       <section style={noticeStyle}>
-        本地记录暂不支持公开发现、求助、评论和集市。后续同步到云空间时，会先按私密项目处理。
+        本地项目只在本机使用，不上传云端，也不会进入公共页面。这里的子分类和分组只保存在本机，
+        不会自动创建或影响云空间分类。
+      </section>
+
+      {ownerContext?.userId && unownedCount > 0 && !ownershipPromptDismissed ? (
+        <section style={ownershipNoticeStyle}>
+          <span>
+            发现本机有未归属的本地离线项目。这些内容仍只保存在这台设备，不会自动上传云端。
+          </span>
+          <div style={ownershipActionRowStyle}>
+            <button
+              type="button"
+              onClick={markUnownedArchivesAsMine}
+              disabled={markingOwner}
+              style={ownershipPrimaryButtonStyle}
+            >
+              {markingOwner ? "标记中..." : "标记为我的本地项目"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOwnershipPromptDismissed(true)}
+              style={ownershipSecondaryButtonStyle}
+            >
+              暂不处理
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {hiddenOwnedByOtherCount > 0 ? (
+        <section style={otherOwnerNoticeStyle}>
+          这台设备上有已归属其他账号的本地离线项目。
+        </section>
+      ) : null}
+
+      <section style={filterPanelStyle}>
+        <ArchiveCategoryTabs
+          activeCategory={activeCategory === "all" ? null : activeCategory}
+          counts={categoryCounts}
+          totalCount={archives.length}
+          onSelect={(category) => setActiveCategory(category || "all")}
+          mobileMode
+        />
       </section>
 
       {loading ? (
@@ -81,52 +191,26 @@ export default function LocalArchivePage() {
         <section style={emptyStyle}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>还没有本地项目</div>
           <div style={{ color: "#6f7b69", fontSize: 14 }}>
-            可以先在本机记录，等之后再选择是否同步到云空间。
+            可以先在本机记录，数据只保存在当前设备。
           </div>
           <Link href="/local/archive/new" style={secondaryActionStyle}>
             创建第一个本地项目
           </Link>
         </section>
+      ) : filteredArchives.length === 0 ? (
+        <section style={emptyStyle}>
+          当前主分类下还没有本地项目。
+        </section>
       ) : (
         <section style={gridStyle}>
-          {archives.map((archive) => (
-            <Link
-              key={archive.id}
-              href={`/local/archive/${archive.id}`}
-              style={cardStyle}
-            >
-              {archive.cover_image ? (
-                <LocalBlobImage
-                  blob={archive.cover_image.blob}
-                  style={coverStyle}
-                />
-              ) : (
-                <div style={coverPlaceholderStyle}>
-                  {getArchiveCategoryIcon(archive.category)}
-                </div>
-              )}
-
-              <div style={{ minWidth: 0 }}>
-                <div style={cardMetaStyle}>
-                  <span>{getArchiveCategoryLabel(archive.category)}</span>
-                  <span style={localPillStyle}>本地离线</span>
-                </div>
-                <h2 style={cardTitleStyle}>{archive.title || "未命名项目"}</h2>
-                <div style={systemNameStyle}>
-                  {archive.system_name || "未填写植物 / 对象"}
-                </div>
-                <p style={noteStyle}>
-                  {archive.latest_record_note || archive.note || "暂无记录内容"}
-                </p>
-                <div style={cardFooterStyle}>
-                  <span>只在本机</span>
-                  <span>{archive.record_count} 条记录</span>
-                  <span>{archive.image_count} 张图片</span>
-                  <span>最近 {formatDate(archive.latest_record_time || archive.updated_at)}</span>
-                </div>
-              </div>
-            </Link>
-          ))}
+          {filteredArchives.map((archive) => {
+            return (
+              <ArchiveProjectCard
+                key={archive.id}
+                project={localArchiveToProjectView(archive, ownerContext)}
+              />
+            );
+          })}
         </section>
       )}
     </main>
@@ -141,7 +225,7 @@ const pageStyle = {
 } satisfies CSSProperties;
 
 const headerStyle = {
-  maxWidth: 760,
+  maxWidth: 1080,
   margin: "0 auto 10px",
   display: "flex",
   alignItems: "flex-end",
@@ -200,15 +284,98 @@ const secondaryActionStyle = {
 } satisfies CSSProperties;
 
 const noticeStyle = {
-  maxWidth: 760,
+  maxWidth: 1080,
   margin: "0 auto 12px",
   color: "#8a9584",
   fontSize: 12,
   lineHeight: 1.6,
 } satisfies CSSProperties;
 
+const ownershipNoticeStyle = {
+  maxWidth: 1080,
+  margin: "0 auto 12px",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #dfead7",
+  background: "#f7fbf2",
+  color: "#54624d",
+  fontSize: 13,
+  lineHeight: 1.55,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const otherOwnerNoticeStyle = {
+  maxWidth: 1080,
+  margin: "0 auto 12px",
+  color: "#87917e",
+  fontSize: 12,
+  lineHeight: 1.5,
+} satisfies CSSProperties;
+
+const ownershipActionRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const ownershipPrimaryButtonStyle = {
+  minHeight: 32,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #b7d2af",
+  background: "#eef7e8",
+  color: "#2f5f2d",
+  fontSize: 13,
+  fontWeight: 700,
+} satisfies CSSProperties;
+
+const ownershipSecondaryButtonStyle = {
+  minHeight: 32,
+  padding: "0 10px",
+  borderRadius: 999,
+  border: "1px solid #dde5d7",
+  background: "#fff",
+  color: "#66735f",
+  fontSize: 13,
+  fontWeight: 700,
+} satisfies CSSProperties;
+
+const filterPanelStyle = {
+  maxWidth: 1080,
+  margin: "0 auto 12px",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const filterLabelStyle = {
+  color: "#7b8874",
+  fontSize: 13,
+  fontWeight: 800,
+} satisfies CSSProperties;
+
+function filterButtonStyle(active: boolean): CSSProperties {
+  return {
+    minHeight: 32,
+    padding: "5px 10px",
+    borderRadius: 999,
+    border: active ? "1px solid #9fc796" : "1px solid #dfe7d9",
+    background: active ? "#f0f8ed" : "#fff",
+    color: active ? "#2f6a2c" : "#54634f",
+    fontSize: 13,
+    fontWeight: active ? 800 : 600,
+    lineHeight: 1.25,
+  };
+}
+
 const emptyStyle = {
-  maxWidth: 760,
+  maxWidth: 1080,
   margin: "0 auto",
   padding: 24,
   borderRadius: 18,
@@ -217,7 +384,7 @@ const emptyStyle = {
 } satisfies CSSProperties;
 
 const gridStyle = {
-  maxWidth: 760,
+  maxWidth: 1080,
   margin: "0 auto",
   display: "grid",
   gridTemplateColumns: "1fr",
@@ -286,6 +453,13 @@ const systemNameStyle = {
   color: "#64745d",
   fontSize: 13,
   lineHeight: 1.5,
+} satisfies CSSProperties;
+
+const categoryLineStyle = {
+  marginTop: 3,
+  color: "#7d8a76",
+  fontSize: 12,
+  lineHeight: 1.45,
 } satisfies CSSProperties;
 
 const noteStyle = {

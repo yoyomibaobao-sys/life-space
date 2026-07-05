@@ -1,13 +1,20 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 
 const DB_NAME = "life-space-local-offline";
-const DB_VERSION = 1;
+const DB_VERSION = 4;
 const ARCHIVE_STORE = "archives";
 const RECORD_STORE = "records";
 const IMAGE_STORE = "images";
 const MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
 const MAX_LOCAL_IMAGE_EDGE = 1600;
 const LOCAL_IMAGE_QUALITY = 0.82;
+const DEFAULT_LOCAL_ARCHIVE_CATEGORY: ArchiveCategory = "plant";
+const LOCAL_ARCHIVE_CATEGORIES: ArchiveCategory[] = [
+  "plant",
+  "system",
+  "insect_fish",
+  "other",
+];
 
 export type LocalSyncStatus = "local-only" | "pending-cloud-sync" | "synced";
 
@@ -22,7 +29,18 @@ export type LocalArchive = {
   id: string;
   title: string;
   category: ArchiveCategory;
+  main_category: ArchiveCategory;
+  // Local-only classification labels. They are never written to Supabase
+  // sub_tags/group_tags; future sync must ask before mapping or copying them.
+  subcategory?: string | null;
+  group_name?: string | null;
+  plant_id?: string | null;
+  plant_slug?: string | null;
   system_name?: string | null;
+  species_name?: string | null;
+  local_owner_user_id?: string | null;
+  local_owner_email?: string | null;
+  local_owner_marked_at?: string | null;
   note?: string | null;
   status: "active" | "ended";
   created_at: string;
@@ -76,6 +94,19 @@ export type LocalArchiveDetail = {
   records: LocalRecordWithImages[];
 };
 
+export type LocalArchiveOwnerContext = {
+  userId?: string | null;
+  email?: string | null;
+};
+
+export type LocalArchiveVisibilityResult = {
+  archives: LocalArchiveSummary[];
+  totalCount: number;
+  unownedCount: number;
+  ownedByCurrentCount: number;
+  hiddenOwnedByOtherCount: number;
+};
+
 export function assertLocalOfflineAvailable() {
   if (typeof window === "undefined" || !("indexedDB" in window)) {
     throw new Error("当前浏览器不支持本地离线存储。");
@@ -93,6 +124,54 @@ function createId(prefix: string) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function normalizeLocalArchiveCategory(value?: string | null): ArchiveCategory {
+  return LOCAL_ARCHIVE_CATEGORIES.includes(value as ArchiveCategory)
+    ? (value as ArchiveCategory)
+    : DEFAULT_LOCAL_ARCHIVE_CATEGORY;
+}
+
+function normalizeOptionalText(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
+function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
+  const category = normalizeLocalArchiveCategory(
+    archive.category || archive.main_category
+  );
+
+  return {
+    ...archive,
+    category,
+    main_category: normalizeLocalArchiveCategory(
+      archive.main_category || category
+    ),
+    subcategory: normalizeOptionalText(archive.subcategory),
+    group_name: normalizeOptionalText(archive.group_name),
+    plant_id: normalizeOptionalText(archive.plant_id),
+    plant_slug: normalizeOptionalText(archive.plant_slug),
+    system_name: normalizeOptionalText(archive.system_name),
+    species_name: normalizeOptionalText(archive.species_name),
+    local_owner_user_id: normalizeOptionalText(archive.local_owner_user_id),
+    local_owner_email: normalizeOptionalText(archive.local_owner_email),
+    local_owner_marked_at: normalizeOptionalText(archive.local_owner_marked_at),
+  };
+}
+
+function getOwnerUserId(ownerContext?: LocalArchiveOwnerContext | null) {
+  return normalizeOptionalText(ownerContext?.userId);
+}
+
+export function isLocalArchiveVisibleToOwner(
+  archive: LocalArchive,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const ownerUserId = normalizeOptionalText(archive.local_owner_user_id);
+  if (!ownerUserId) return true;
+
+  return ownerUserId === getOwnerUserId(ownerContext);
 }
 
 function localSyncMeta(extra?: Partial<LocalSyncMeta>): LocalSyncMeta {
@@ -135,7 +214,54 @@ function openLocalDb() {
         const store = db.createObjectStore(ARCHIVE_STORE, { keyPath: "id" });
         store.createIndex("updated_at", "updated_at");
         store.createIndex("category", "category");
+        store.createIndex("main_category", "main_category");
+        store.createIndex("subcategory", "subcategory");
+        store.createIndex("group_name", "group_name");
+        store.createIndex("plant_id", "plant_id");
+        store.createIndex("plant_slug", "plant_slug");
+        store.createIndex("local_owner_user_id", "local_owner_user_id");
+        store.createIndex("local_owner_email", "local_owner_email");
         store.createIndex("sync_status", "sync.status");
+      } else {
+        const store = request.transaction?.objectStore(ARCHIVE_STORE);
+
+        if (store) {
+          if (!store.indexNames.contains("category")) {
+            store.createIndex("category", "category");
+          }
+          if (!store.indexNames.contains("main_category")) {
+            store.createIndex("main_category", "main_category");
+          }
+          if (!store.indexNames.contains("subcategory")) {
+            store.createIndex("subcategory", "subcategory");
+          }
+          if (!store.indexNames.contains("group_name")) {
+            store.createIndex("group_name", "group_name");
+          }
+          if (!store.indexNames.contains("plant_id")) {
+            store.createIndex("plant_id", "plant_id");
+          }
+          if (!store.indexNames.contains("plant_slug")) {
+            store.createIndex("plant_slug", "plant_slug");
+          }
+          if (!store.indexNames.contains("local_owner_user_id")) {
+            store.createIndex("local_owner_user_id", "local_owner_user_id");
+          }
+          if (!store.indexNames.contains("local_owner_email")) {
+            store.createIndex("local_owner_email", "local_owner_email");
+          }
+
+          const cursorRequest = store.openCursor();
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+
+            const archive = cursor.value as LocalArchive;
+            const normalized = normalizeLocalArchive(archive);
+            const updateRequest = cursor.update(normalized);
+            updateRequest.onsuccess = () => cursor.continue();
+          };
+        }
       }
 
       if (!db.objectStoreNames.contains(RECORD_STORE)) {
@@ -255,7 +381,7 @@ export async function listLocalArchiveSummaries() {
   updateLocalUsageHints(archives.length, records.length);
 
   return archives
-    .map((archive) => buildSummary(archive, records, images))
+    .map((archive) => buildSummary(normalizeLocalArchive(archive), records, images))
     .sort(
       (a, b) =>
         new Date(b.updated_at || b.created_at).getTime() -
@@ -263,19 +389,127 @@ export async function listLocalArchiveSummaries() {
     );
 }
 
+export async function listVisibleLocalArchiveSummaries(
+  ownerContext?: LocalArchiveOwnerContext | null
+): Promise<LocalArchiveVisibilityResult> {
+  const [archives, records, images] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const currentUserId = getOwnerUserId(ownerContext);
+
+  updateLocalUsageHints(archives.length, records.length);
+
+  const summaries = archives.map((archive) =>
+    buildSummary(normalizeLocalArchive(archive), records, images)
+  );
+  const visible = summaries.filter((archive) =>
+    isLocalArchiveVisibleToOwner(archive, ownerContext)
+  );
+
+  return {
+    archives: visible.sort(
+      (a, b) =>
+        new Date(b.updated_at || b.created_at).getTime() -
+        new Date(a.updated_at || a.created_at).getTime()
+    ),
+    totalCount: summaries.length,
+    unownedCount: summaries.filter((archive) => !archive.local_owner_user_id).length,
+    ownedByCurrentCount: currentUserId
+      ? summaries.filter((archive) => archive.local_owner_user_id === currentUserId).length
+      : 0,
+    hiddenOwnedByOtherCount: summaries.filter(
+      (archive) =>
+        Boolean(archive.local_owner_user_id) &&
+        archive.local_owner_user_id !== currentUserId
+    ).length,
+  };
+}
+
+export async function markUnownedLocalArchivesForOwner(ownerContext: {
+  userId: string;
+  email?: string | null;
+}) {
+  const userId = normalizeOptionalText(ownerContext.userId);
+  if (!userId) throw new Error("请先登录后再标记本地项目归属");
+
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+  let markedCount = 0;
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const cursorRequest = transaction.objectStore(ARCHIVE_STORE).openCursor();
+
+    await new Promise<void>((resolve, reject) => {
+      cursorRequest.onerror = () =>
+        reject(cursorRequest.error || new Error("读取本地项目失败"));
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (!cursor) {
+          resolve();
+          return;
+        }
+
+        const archive = normalizeLocalArchive(cursor.value as LocalArchive);
+        if (!archive.local_owner_user_id) {
+          markedCount += 1;
+          const updateRequest = cursor.update({
+            ...archive,
+            local_owner_user_id: userId,
+            local_owner_email: normalizeOptionalText(ownerContext.email),
+            local_owner_marked_at: timestamp,
+          } satisfies LocalArchive);
+          updateRequest.onerror = () =>
+            reject(updateRequest.error || new Error("标记本地项目失败"));
+          updateRequest.onsuccess = () => cursor.continue();
+          return;
+        }
+
+        cursor.continue();
+      };
+    });
+
+    await done;
+    return markedCount;
+  } finally {
+    db.close();
+  }
+}
+
 export async function createLocalArchive(input: {
   title: string;
   category: ArchiveCategory;
+  subcategory?: string | null;
+  group_name?: string | null;
+  plant_id?: string | null;
+  plant_slug?: string | null;
   system_name?: string | null;
+  species_name?: string | null;
+  local_owner_user_id?: string | null;
+  local_owner_email?: string | null;
+  local_owner_marked_at?: string | null;
   note?: string | null;
 }) {
   const timestamp = nowIso();
+  const category = normalizeLocalArchiveCategory(input.category);
   const archive: LocalArchive = {
     id: createId("local_archive"),
     title: input.title.trim(),
-    category: input.category,
-    system_name: input.system_name?.trim() || null,
-    note: input.note?.trim() || null,
+    category,
+    main_category: category,
+    subcategory: normalizeOptionalText(input.subcategory),
+    group_name: normalizeOptionalText(input.group_name),
+    plant_id: normalizeOptionalText(input.plant_id),
+    plant_slug: normalizeOptionalText(input.plant_slug),
+    system_name: normalizeOptionalText(input.system_name),
+    species_name: normalizeOptionalText(input.species_name),
+    local_owner_user_id: normalizeOptionalText(input.local_owner_user_id),
+    local_owner_email: normalizeOptionalText(input.local_owner_email),
+    local_owner_marked_at: normalizeOptionalText(input.local_owner_marked_at),
+    note: normalizeOptionalText(input.note),
     status: "active",
     created_at: timestamp,
     updated_at: timestamp,
@@ -296,7 +530,10 @@ export async function createLocalArchive(input: {
   }
 }
 
-export async function getLocalArchiveDetail(archiveId: string) {
+export async function getLocalArchiveDetail(
+  archiveId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
   const [archive, records, images] = await Promise.all([
     getRowById<LocalArchive>(ARCHIVE_STORE, archiveId),
     getAllRows<LocalRecord>(RECORD_STORE),
@@ -304,10 +541,12 @@ export async function getLocalArchiveDetail(archiveId: string) {
   ]);
 
   if (!archive) return null;
+  const normalizedArchive = normalizeLocalArchive(archive);
+  if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) return null;
 
   const imageMap = new Map<string, LocalImage[]>();
   images
-    .filter((image) => image.archive_id === archiveId)
+      .filter((image) => image.archive_id === archiveId)
     .forEach((image) => {
       const list = imageMap.get(image.record_id) || [];
       list.push(image);
@@ -328,7 +567,7 @@ export async function getLocalArchiveDetail(archiveId: string) {
       ),
     }));
 
-  return { archive, records: detailRecords } satisfies LocalArchiveDetail;
+  return { archive: normalizedArchive, records: detailRecords } satisfies LocalArchiveDetail;
 }
 
 function ensureLocalImageFile(file: File) {
@@ -484,9 +723,10 @@ export async function createLocalRecord(input: {
       await requestToPromise(imageStore.add(image));
     }
 
-    archive.updated_at = timestamp;
-    archive.sync = localSyncMeta();
-    await requestToPromise(archiveStore.put(archive));
+    const normalizedArchive = normalizeLocalArchive(archive);
+    normalizedArchive.updated_at = timestamp;
+    normalizedArchive.sync = localSyncMeta();
+    await requestToPromise(archiveStore.put(normalizedArchive));
     await done;
     await refreshLocalUsageHints();
 
@@ -521,8 +761,9 @@ export async function deleteLocalRecord(recordId: string) {
       archiveStore.get(record.archive_id)
     );
     if (archive) {
-      archive.updated_at = nowIso();
-      await requestToPromise(archiveStore.put(archive));
+      const normalizedArchive = normalizeLocalArchive(archive);
+      normalizedArchive.updated_at = nowIso();
+      await requestToPromise(archiveStore.put(normalizedArchive));
     }
 
     await done;

@@ -11,7 +11,15 @@ import {
 } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
-import LocalBlobImage from "@/components/local/LocalBlobImage";
+import ArchiveDetailHeaderView from "@/components/archive-ui/ArchiveDetailHeaderView";
+import ArchiveLocalRecordCard from "@/components/archive-ui/ArchiveLocalRecordCard";
+import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
+import ArchiveTimeline from "@/components/archive-ui/ArchiveTimeline";
+import { supabase } from "@/lib/supabase";
+import type {
+  ArchiveProjectView,
+  ArchiveRecordView,
+} from "@/components/archive-ui/types";
 import {
   createLocalRecord,
   deleteLocalArchive,
@@ -85,7 +93,11 @@ export default function LocalArchiveDetailPage() {
 
     setLoading(true);
     try {
-      const nextDetail = await getLocalArchiveDetail(archiveId);
+      const { data } = await supabase.auth.getUser();
+      const ownerContext = data.user
+        ? { userId: data.user.id, email: data.user.email || null }
+        : null;
+      const nextDetail = await getLocalArchiveDetail(archiveId, ownerContext);
       setDetail(nextDetail);
       setError(nextDetail ? "" : "没有找到这个本地项目");
     } catch (err) {
@@ -187,6 +199,21 @@ export default function LocalArchiveDetailPage() {
   const startTime = records.length
     ? records[records.length - 1]?.record_time || archive.created_at
     : archive.created_at;
+  const projectView: ArchiveProjectView = {
+    id: archive.id,
+    mode: "local",
+    title: archive.title || "未命名项目",
+    category: archive.category,
+    plantId: archive.plant_id,
+    plantSlug: archive.plant_slug,
+    categoryLabel: getArchiveCategoryLabel(archive.category),
+    categoryIcon: getArchiveCategoryIcon(archive.category),
+    systemName: archive.system_name || archive.species_name || "未填写",
+    subcategoryLabel: archive.subcategory,
+    groupLabel: archive.group_name,
+    badges: ["本地离线", "本地分类", "未同步"],
+    footerItems: ["只保存在这台设备", "本地分类独立于云空间"],
+  };
 
   return (
     <main style={pageStyle}>
@@ -194,51 +221,35 @@ export default function LocalArchiveDetailPage() {
         <Link href="/local/archive" style={backLinkStyle}>
           返回本地项目
         </Link>
-        <div style={headerTopRowStyle}>
-          <div style={headerMetaStyle}>
-            <span>{getArchiveCategoryIcon(archive.category)}</span>
-            <span>{getArchiveCategoryLabel(archive.category)}</span>
-            <span style={localBadgeStyle}>本地离线</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAddRecordOpen((open) => !open)}
-            style={headerAddButtonStyle}
-          >
-            {addRecordOpen ? "收起" : "+ 添加记录"}
-          </button>
-        </div>
-        <h1 style={titleStyle}>{archive.title || "未命名项目"}</h1>
-        <div style={systemNameStyle}>
-          {archive.system_name || "未填写植物 / 对象"}
-        </div>
-        {archive.note ? (
-          <p style={archiveNoteStyle}>位置 / 备注：{archive.note}</p>
-        ) : null}
-        <div style={projectSummaryStyle}>
-          <span>{records.length} 条记录</span>
-          <span>
-            {records.reduce((sum, record) => sum + record.images.length, 0)} 张图片
-          </span>
-          <span>只保存在这台设备</span>
-        </div>
-        <div style={localHintStyle}>
-          本地离线，不上传云端；暂不支持公开发现、求助、评论和集市。
-        </div>
+        <ArchiveDetailHeaderView
+          project={projectView}
+          eyebrow="本地项目记录"
+          latestUpdateText={
+            archive.note ? `位置 / 备注：${archive.note}` : undefined
+          }
+          recordCountText={`${records.length} 条记录 · ${records.reduce(
+            (sum, record) => sum + record.images.length,
+            0
+          )} 张图片`}
+          hint="本地离线，不上传云端；子分类和分组只保存在本机，未来同步也需要重新确认云端分类。"
+          actionSlot={
+            <button
+              type="button"
+              onClick={() => setAddRecordOpen((open) => !open)}
+              style={headerAddButtonStyle}
+            >
+              {addRecordOpen ? "收起" : "+ 添加记录"}
+            </button>
+          }
+        />
       </section>
 
       {addRecordOpen ? (
-        <section style={addRecordPanelStyle}>
-          <div style={addRecordHeaderStyle}>
-            <h2 style={sectionTitleStyle}>添加记录</h2>
-            <button
-              type="button"
-              onClick={() => setAddRecordOpen(false)}
-              style={addRecordCancelStyle}
-            >
-              取消
-            </button>
-          </div>
+        <ArchiveRecordComposer
+          mobileMode={isMobileViewport}
+          open={addRecordOpen}
+          onClose={() => setAddRecordOpen(false)}
+        >
           <form onSubmit={handleAddRecord} style={recordFormStyle}>
             <textarea
               value={note}
@@ -301,7 +312,7 @@ export default function LocalArchiveDetailPage() {
               </button>
             </div>
           </form>
-        </section>
+        </ArchiveRecordComposer>
       ) : null}
 
       <section style={recordsSectionStyle}>
@@ -322,75 +333,48 @@ export default function LocalArchiveDetailPage() {
             </button>
           </div>
         ) : (
-          <div style={timelineListStyle}>
-            {records.map((record, index) => (
-              <article key={record.id} style={recordCardStyle}>
-                <div style={recordMetaStyle}>
-                  <span>
-                    {index === 0 ? "最新进展 · " : ""}
-                    第 {getDayNumber(startTime, record.record_time)} 天 ·{" "}
-                    {formatDate(record.record_time)}
-                  </span>
-                  <div style={recordMenuWrapStyle}>
-                    <button
-                      type="button"
-                      aria-label="更多本地记录操作"
-                      onClick={() =>
-                        setRecordMenuOpenId((current) =>
-                          current === record.id ? null : record.id
-                        )
-                      }
-                      style={recordMoreButtonStyle}
-                    >
-                      ⋯
-                    </button>
-                    {recordMenuOpenId === record.id ? (
-                      <div style={recordMenuStyle}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRecordToDelete(record);
-                            setRecordMenuOpenId(null);
-                          }}
-                          style={recordMenuDangerItemStyle}
-                        >
-                          删除本地记录
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                {record.images.length > 0 ? (
-                  <div style={imageGridStyle}>
-                    {record.images.map((image, imageIndex) => (
-                      <LocalBlobImage
-                        key={image.id}
-                        blob={image.blob}
-                        style={
-                          record.images.length === 1
-                            ? recordSingleImageStyle
-                            : imageIndex === 0
-                              ? recordLeadImageStyle
-                              : recordImageStyle
+          <ArchiveTimeline mobileMode={isMobileViewport}>
+            <div style={timelineListStyle}>
+              {records.map((record, index) => (
+                <ArchiveLocalRecordCard
+                  key={record.id}
+                  record={toLocalRecordView(record, index, startTime)}
+                  mobileMode={isMobileViewport}
+                  latest={index === 0}
+                  actionSlot={
+                    <div style={recordMenuWrapStyle}>
+                      <button
+                        type="button"
+                        aria-label="更多本地记录操作"
+                        onClick={() =>
+                          setRecordMenuOpenId((current) =>
+                            current === record.id ? null : record.id
+                          )
                         }
-                      />
-                    ))}
-                  </div>
-                ) : null}
-
-                {record.note ? (
-                  <p style={recordNoteStyle}>{record.note}</p>
-                ) : (
-                  <p style={recordEmptyNoteStyle}>这条记录只有图片。</p>
-                )}
-                <div style={recordFooterStyle}>
-                  <span>本地记录</span>
-                  <span>只保存在这台设备</span>
-                </div>
-              </article>
-            ))}
-          </div>
+                        style={recordMoreButtonStyle}
+                      >
+                        ⋯
+                      </button>
+                      {recordMenuOpenId === record.id ? (
+                        <div style={recordMenuStyle}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRecordToDelete(record);
+                              setRecordMenuOpenId(null);
+                            }}
+                            style={recordMenuDangerItemStyle}
+                          >
+                            删除本地记录
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  }
+                />
+              ))}
+            </div>
+          </ArchiveTimeline>
         )}
       </section>
 
@@ -441,6 +425,29 @@ export default function LocalArchiveDetailPage() {
       />
     </main>
   );
+}
+
+function toLocalRecordView(
+  record: LocalRecordWithImages,
+  index: number,
+  startTime?: string | null
+): ArchiveRecordView {
+  return {
+    id: record.id,
+    metaText: `${index === 0 ? "最新进展 · " : ""}第 ${getDayNumber(
+      startTime,
+      record.record_time
+    )} 天 · ${formatDate(record.record_time)}`,
+    note: record.note,
+    media: record.images.map((image) => ({
+      id: image.id,
+      kind: "blob",
+      blob: image.blob,
+      alt: image.name || "本地记录图片",
+    })),
+    footerItems: ["本地记录", "只保存在这台设备"],
+    emptyNoteText: "这条记录只有图片。",
+  };
 }
 
 const pageStyle = {
@@ -509,6 +516,25 @@ const titleStyle = {
 const systemNameStyle = {
   color: "#5e6f58",
   fontSize: 15,
+} satisfies CSSProperties;
+
+const classificationRowStyle = {
+  marginTop: 8,
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const classificationChipStyle = {
+  padding: "3px 8px",
+  borderRadius: 999,
+  border: "1px solid #dde8d7",
+  background: "#f7fbf4",
+  color: "#5e7258",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
 } satisfies CSSProperties;
 
 const archiveNoteStyle = {

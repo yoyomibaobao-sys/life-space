@@ -11,6 +11,7 @@ import ArchiveDetailHeader from "@/components/archive-detail/ArchiveDetailHeader
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
+import ArchiveTimeline from "@/components/archive-ui/ArchiveTimeline";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   archiveCategoryOptions,
@@ -1530,27 +1531,7 @@ saveRecentArchiveBrowse({
 
         {!isMobileViewport || mobileDetailTab === "records" ? (
         <>
-        <section
-          id="archive-records"
-          style={
-            isMobileViewport
-              ? mobileArchiveRecordListStyle
-              : { position: "relative", paddingLeft: 22, scrollMarginTop: 76 }
-          }
-        >
-          {!isMobileViewport ? (
-            <div
-              style={{
-                position: "absolute",
-                left: 9,
-                top: 0,
-                bottom: 0,
-                width: 2,
-                background: "#e8eee5",
-              }}
-            />
-          ) : null}
-
+        <ArchiveTimeline id="archive-records" mobileMode={isMobileViewport}>
           {records.map((item, index) => {
             const sameTagLinks = (item.display_tags || [])
               .map((tag) => ({
@@ -1605,7 +1586,7 @@ saveRecentArchiveBrowse({
               {mode === "owner" ? "还没有记录，添加第一条记录" : "还没有公开记录"}
             </div>
           ) : null}
-        </section>
+        </ArchiveTimeline>
         </>
         ) : null}
       </main>

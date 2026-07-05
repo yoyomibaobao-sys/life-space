@@ -16,6 +16,8 @@ import ArchiveCategoryDropdown from "@/components/archive/ArchiveCategoryDropdow
 import ArchiveGroupDropdown from "@/components/archive/ArchiveGroupDropdown";
 import ArchivePlantNameEditor from "@/components/archive/ArchivePlantNameEditor";
 import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
+import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import type { ArchiveProjectView } from "@/components/archive-ui/types";
 
 type Props = {
   item: ArchiveItem;
@@ -623,145 +625,100 @@ function MobileArchiveCard({
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
+  const projectView: ArchiveProjectView = {
+    id: item.id,
+    mode: "cloud",
+    title: item.title || "未命名项目",
+    category: item.category,
+    plantId: item.species_id,
+    categoryLabel: getArchiveCategoryLabel(item.category),
+    categoryIcon: getArchiveCategoryIcon(item.category),
+    systemName,
+    cover: imageUrl ? { kind: "url", url: imageUrl, alt: imageAlt } : null,
+    latestText: activityText,
+    visibilityLabel: visibilityText,
+    visibilityTone: item.is_public ? "public" : "private",
+    activityText: mobileStatusDetailText,
+    statusLabel: mobileEndedText,
+    ended,
+  };
+  const selectControls = (
+    <>
+      <ArchiveCategoryDropdown
+        value={item.sub_tag_id || item.category}
+        subTags={subTags}
+        compact
+        onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
+      />
+      {item.sub_tag_id && availableGroupTags.length > 0 ? (
+        <ArchiveGroupDropdown
+          value={item.group_tag_id || ""}
+          groupTags={availableGroupTags}
+          compact
+          onChange={(nextValue) => onUpdateArchiveGroupTag(item, nextValue)}
+        />
+      ) : null}
+    </>
+  );
+  const actionSlot = (
+    <div data-no-card-nav="true" onClick={(event) => event.stopPropagation()} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          setMenuOpen((open) => !open);
+        }}
+        aria-label="更多项目操作"
+        style={mobileCardMoreButtonStyle}
+      >
+        ⋯
+      </button>
 
-  return (
-    <div
-      onClick={(event) => {
-        if (shouldIgnoreCardNavigation(event.target)) return;
-        onNavigate(item.id);
-      }}
-      style={{
-        position: "relative",
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        cursor: "pointer",
-        border: "1px solid #e4e6df",
-        borderRadius: 14,
-        padding: 8,
-        marginBottom: 10,
-        minHeight: 110,
-        boxSizing: "border-box",
-        background: ended ? "#fafafa" : "#fff",
-        opacity: ended ? 0.82 : 1,
-        boxShadow: ended ? "none" : "0 6px 18px rgba(44, 74, 38, 0.045)",
-      }}
-    >
-      <div style={mobileCardImageWrapStyle}>
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={imageAlt}
-            loading="lazy"
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              borderRadius: 11,
-            }}
-          />
-        ) : (
-          <div style={mobileCardPlaceholderStyle}>
-            <span>{getArchiveCategoryIcon(item.category)}</span>
-          </div>
-        )}
-      </div>
-
-      <div style={mobileCardBodyStyle}>
-        <div style={mobileCardTitleRowStyle}>
-          <div style={mobileCardMainTitleStyle} title={`${item.title || "未命名项目"} · ${systemName}`}>
-            <span>{item.title || "未命名项目"}</span>
-            {systemName ? <span style={mobileCardTitleDividerStyle}> · </span> : null}
-            {systemName ? <span style={mobileCardSystemNameStyle}>{systemName}</span> : null}
-          </div>
+      {menuOpen ? (
+        <div style={mobileCardMenuStyle}>
           <button
             type="button"
-            data-no-card-nav="true"
-            onClick={(event) => {
-              event.stopPropagation();
-              setMenuOpen((open) => !open);
+            onClick={() => {
+              setMenuOpen(false);
+              onUpdateArchiveStatus(item, ended ? "active" : "ended");
             }}
-            aria-label="更多项目操作"
-            style={mobileCardMoreButtonStyle}
+            style={mobileCardMenuItemStyle}
           >
-            ⋯
+            {ended ? "恢复" : "结束"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onTogglePublic(item);
+            }}
+            style={mobileCardMenuItemStyle}
+          >
+            {item.is_public ? "设为私密" : "设为公开发现"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onDeleteArchive(item);
+            }}
+            style={mobileCardDangerMenuItemStyle}
+          >
+            删除项目
           </button>
         </div>
-        <div
-          data-no-card-nav="true"
-          onClick={(event) => event.stopPropagation()}
-          style={mobileCardSelectRowStyle}
-        >
-          <ArchiveCategoryDropdown
-            value={item.sub_tag_id || item.category}
-            subTags={subTags}
-            compact
-            onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
-          />
-          {item.sub_tag_id && availableGroupTags.length > 0 ? (
-            <ArchiveGroupDropdown
-              value={item.group_tag_id || ""}
-              groupTags={availableGroupTags}
-              compact
-              onChange={(nextValue) => onUpdateArchiveGroupTag(item, nextValue)}
-            />
-          ) : null}
-        </div>
-        <div style={mobileCardMetaStyle} title={activityText}>
-          {activityText}
-        </div>
-        <div style={mobileCardBottomRowStyle}>
-          <span style={mobileCardFourthLineStyle}>
-            <span style={mobileVisibilityTextStyle(item.is_public)}>{visibilityText}</span>
-            {mobileStatusDetailText ? ` · ${mobileStatusDetailText}` : ""}
-          </span>
-          {mobileEndedText ? (
-            <span style={mobileCardEndedStatusStyle}>{mobileEndedText}</span>
-          ) : null}
-        </div>
-
-        {menuOpen ? (
-          <div
-            data-no-card-nav="true"
-            onClick={(event) => event.stopPropagation()}
-            style={mobileCardMenuStyle}
-          >
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                onUpdateArchiveStatus(item, ended ? "active" : "ended");
-              }}
-              style={mobileCardMenuItemStyle}
-            >
-              {ended ? "恢复" : "结束"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                onTogglePublic(item);
-              }}
-              style={mobileCardMenuItemStyle}
-            >
-              {item.is_public ? "设为私密" : "设为公开发现"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                onDeleteArchive(item);
-              }}
-              style={mobileCardDangerMenuItemStyle}
-            >
-              删除项目
-            </button>
-          </div>
-        ) : null}
-      </div>
+      ) : null}
     </div>
+  );
+
+  return (
+    <ArchiveProjectCard
+      project={projectView}
+      onClick={() => onNavigate(item.id)}
+      selectControls={selectControls}
+      actionSlot={actionSlot}
+      mobileMode
+    />
   );
 }
 

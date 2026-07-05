@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { showToast } from "@/components/Toast";
 import {
@@ -12,13 +12,39 @@ import {
 } from "@/lib/archive-categories";
 import { createLocalArchive } from "@/lib/local-offline-db";
 
+function getInitialSearchParam(...names: string[]) {
+  if (typeof window === "undefined") return "";
+
+  const params = new URLSearchParams(window.location.search);
+  for (const name of names) {
+    const value = params.get(name);
+    if (value) return value;
+  }
+
+  return "";
+}
+
 export default function NewLocalArchivePage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory>("plant");
+  const [subcategory, setSubcategory] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const [plantId, setPlantId] = useState("");
+  const [plantSlug, setPlantSlug] = useState("");
   const [systemName, setSystemName] = useState("");
+  const [speciesName, setSpeciesName] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setPlantId(getInitialSearchParam("plant_id"));
+    setPlantSlug(getInitialSearchParam("plant_slug"));
+    setSpeciesName(getInitialSearchParam("species_name", "plant_name", "name"));
+    setSystemName((current) =>
+      current || getInitialSearchParam("system_name", "plant_name", "name")
+    );
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,7 +61,12 @@ export default function NewLocalArchivePage() {
       const archive = await createLocalArchive({
         title: cleanTitle,
         category,
+        subcategory,
+        group_name: groupName,
+        plant_id: plantId,
+        plant_slug: plantSlug,
         system_name: systemName,
+        species_name: speciesName || (category === "plant" ? systemName : ""),
         note,
       });
 
@@ -57,7 +88,7 @@ export default function NewLocalArchivePage() {
         <div style={eyebrowStyle}>只保存在本机</div>
         <h1 style={titleStyle}>新建本地项目</h1>
         <p style={subtitleStyle}>
-          本地项目只保存在这台设备，不进入发现页，也不支持公开、求助、评论和集市。
+          本地项目只保存在这台设备，不上传云端，也不会进入公共页面。
         </p>
 
         <form onSubmit={handleSubmit} style={formStyle}>
@@ -92,8 +123,38 @@ export default function NewLocalArchivePage() {
           </div>
 
           <label style={fieldStyle}>
+            <span style={labelStyle}>子分类</span>
+            <input
+              value={subcategory}
+              onChange={(event) => setSubcategory(event.target.value)}
+              placeholder={
+                category === "plant"
+                  ? "例如：蔬菜、香草、果树、花卉"
+                  : "例如：育苗、堆肥、鱼缸、昆虫观察"
+              }
+              style={inputStyle}
+            />
+            <span style={helperTextStyle}>
+              可选，只保存到本机 IndexedDB；不会自动创建云空间子分类。
+            </span>
+          </label>
+
+          <label style={fieldStyle}>
+            <span style={labelStyle}>分组</span>
+            <input
+              value={groupName}
+              onChange={(event) => setGroupName(event.target.value)}
+              placeholder="例如：南阳台、春播、试验区"
+              style={inputStyle}
+            />
+            <span style={helperTextStyle}>
+              可选，只作为本地离线分组；不会自动创建云空间分组。
+            </span>
+          </label>
+
+          <label style={fieldStyle}>
             <span style={labelStyle}>
-              {category === "plant" ? "植物名称" : getArchiveNamePlaceholder(category)}
+              {category === "plant" ? "系统名 / 植物名称" : getArchiveNamePlaceholder(category)}
             </span>
             <input
               value={systemName}
@@ -105,7 +166,19 @@ export default function NewLocalArchivePage() {
               }
               style={inputStyle}
             />
+            <span style={helperTextStyle}>
+              本地只保存这个名称快照
+              {plantId || plantSlug ? "和百科标识" : ""}，不缓存百科正文、图片或相关项目。
+            </span>
           </label>
+
+          {plantId || plantSlug ? (
+            <section style={plantLinkHintStyle}>
+              已记录线上植物百科关联线索：
+              {plantId ? ` plant_id=${plantId}` : ""}
+              {plantSlug ? ` plant_slug=${plantSlug}` : ""}。本地离线页仍不会缓存百科内容。
+            </section>
+          ) : null}
 
           <label style={fieldStyle}>
             <span style={labelStyle}>位置备注</span>
@@ -123,7 +196,8 @@ export default function NewLocalArchivePage() {
           </label>
 
           <section style={noticeStyle}>
-            图片会在添加记录时保存为 App 内部缓存副本，不会默认写入系统相册。删除本地记录会删除 App 内缓存，不影响用户相册里的原图。
+            本地分类和分组只属于这台设备。以后如果同步到云空间，也需要重新确认云端子分类和分组，
+            不会自动复制。图片会在添加记录时保存为 App 内部缓存副本，不会默认写入系统相册。
           </section>
 
           <div style={actionRowStyle}>
@@ -201,6 +275,12 @@ const labelStyle = {
   fontWeight: 700,
 } satisfies CSSProperties;
 
+const helperTextStyle = {
+  color: "#7d8a76",
+  fontSize: 12,
+  lineHeight: 1.5,
+} satisfies CSSProperties;
+
 const inputStyle = {
   width: "100%",
   height: 44,
@@ -253,6 +333,16 @@ const noticeStyle = {
   color: "#5f6d58",
   fontSize: 13,
   lineHeight: 1.7,
+} satisfies CSSProperties;
+
+const plantLinkHintStyle = {
+  padding: 10,
+  borderRadius: 12,
+  border: "1px solid #e1eadb",
+  background: "#fbfdf8",
+  color: "#6b7a63",
+  fontSize: 12,
+  lineHeight: 1.6,
 } satisfies CSSProperties;
 
 const actionRowStyle = {
