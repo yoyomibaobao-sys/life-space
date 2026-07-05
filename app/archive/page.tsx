@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ArchiveCategoryTabs from "@/components/archive-ui/ArchiveCategoryTabs";
+import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveCard from "@/components/archive/ArchiveCard";
 import ArchiveFiltersPanel from "@/components/archive/ArchiveFiltersPanel";
 import ArchiveGroupPanel from "@/components/archive/ArchiveGroupPanel";
@@ -39,6 +43,12 @@ import {
   subtractStorageUsed,
   sumMediaSizeBytes,
 } from "@/lib/storage-usage";
+import {
+  listVisibleLocalArchiveSummaries,
+  markUnownedLocalArchivesForOwner,
+  type LocalArchiveOwnerContext,
+  type LocalArchiveSummary,
+} from "@/lib/local-offline-db";
 
 type LatestArchiveRecord = {
   id: string;
@@ -50,13 +60,6 @@ type LatestArchiveRecord = {
   media_count?: number | null;
 };
 
-const archiveSystemTabs: Array<{ value: ArchiveCategory | null; label: string }> = [
-  { value: null, label: "全部" },
-  { value: "plant", label: "种植" },
-  { value: "system", label: "农法设施" },
-  { value: "insect_fish", label: "虫鱼生态" },
-  { value: "other", label: "其他" },
-];
 
 export default function ArchivePage() {
   const router = useRouter();
@@ -87,6 +90,15 @@ export default function ArchivePage() {
   const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
+  const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
+  const [localArchives, setLocalArchives] = useState<LocalArchiveSummary[]>([]);
+  const [localLoading, setLocalLoading] = useState(true);
+  const [localError, setLocalError] = useState("");
+  const [localUnownedCount, setLocalUnownedCount] = useState(0);
+  const [localHiddenOwnedByOtherCount, setLocalHiddenOwnedByOtherCount] = useState(0);
+  const [localOwnershipPromptDismissed, setLocalOwnershipPromptDismissed] = useState(false);
+  const [markingLocalOwner, setMarkingLocalOwner] = useState(false);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -115,6 +127,21 @@ export default function ArchivePage() {
     });
   }
 
+  async function loadLocalArchives(ownerContext: LocalArchiveOwnerContext | null = currentOwnerContext) {
+    setLocalLoading(true);
+    try {
+      const result = await listVisibleLocalArchiveSummaries(ownerContext);
+      setLocalArchives(result.archives);
+      setLocalUnownedCount(result.unownedCount);
+      setLocalHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
+      setLocalError("");
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "读取本地离线项目失败");
+    } finally {
+      setLocalLoading(false);
+    }
+  }
+
   async function loadData() {
     if (loadingRef.current) return;
     loadingRef.current = true;
@@ -125,8 +152,17 @@ export default function ArchivePage() {
       } = await supabase.auth.getSession();
 
       const user = session?.user;
+      const ownerContext = user
+        ? { userId: user.id, email: user.email || null }
+        : null;
+      setCurrentOwnerContext(ownerContext);
+
       if (!user) {
-        router.push("/login");
+        setArchives([]);
+        setGroupTags([]);
+        setSubTags([]);
+        setSpeciesList([]);
+        setMembership(null);
         return;
       }
 
@@ -820,6 +856,24 @@ export default function ArchivePage() {
     await loadData();
   }
 
+  async function markLocalArchivesAsMine() {
+    if (!currentOwnerContext?.userId || markingLocalOwner) return;
+
+    setMarkingLocalOwner(true);
+    try {
+      const markedCount = await markUnownedLocalArchivesForOwner({
+        userId: currentOwnerContext.userId,
+        email: currentOwnerContext.email || null,
+      });
+      await loadLocalArchives(currentOwnerContext);
+      showToast(markedCount > 0 ? "已标记为我的本地项目" : "没有需要标记的本地项目");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "标记本地项目失败");
+    } finally {
+      setMarkingLocalOwner(false);
+    }
+  }
+
   function renameArchiveTitle(item: ArchiveItem) {
     const name = prompt("修改名称", item.title || "");
     if (!name?.trim()) return;
@@ -836,13 +890,18 @@ export default function ArchivePage() {
       try {
         const { data } = await supabase.auth.getUser();
         const user = data.user;
-        if (!user) {
-          router.push("/login");
-          return;
+        const ownerContext = user
+          ? { userId: user.id, email: user.email || null }
+          : null;
+        const sourceParam = new URLSearchParams(window.location.search).get("source");
+
+        if (sourceParam === "local" || sourceParam === "cloud") {
+          setActiveSource(sourceParam);
         }
 
         if (!isMounted) return;
-        await loadData();
+        setCurrentOwnerContext(ownerContext);
+        await Promise.all([loadData(), loadLocalArchives(ownerContext)]);
       } catch (error) {
         console.error("loadData error:", error);
       } finally {
@@ -882,6 +941,39 @@ export default function ArchivePage() {
 
     return counts;
   }, [archives]);
+  const localArchiveCategoryCounts = useMemo(() => {
+    const counts: Record<ArchiveCategory, number> = {
+      plant: 0,
+      system: 0,
+      insect_fish: 0,
+      other: 0,
+    };
+
+    localArchives.forEach((item) => {
+      counts[item.category] += 1;
+    });
+
+    return counts;
+  }, [localArchives]);
+  const visibleCategoryCounts = useMemo(() => {
+    const counts: Record<ArchiveCategory, number> = {
+      plant: 0,
+      system: 0,
+      insect_fish: 0,
+      other: 0,
+    };
+
+    (Object.keys(counts) as ArchiveCategory[]).forEach((category) => {
+      counts[category] =
+        (activeSource === "local" ? 0 : archiveCategoryCounts[category]) +
+        (activeSource === "cloud" ? 0 : localArchiveCategoryCounts[category]);
+    });
+
+    return counts;
+  }, [activeSource, archiveCategoryCounts, localArchiveCategoryCounts]);
+  const sourceTotalCount =
+    (activeSource === "local" ? 0 : archiveCount) +
+    (activeSource === "cloud" ? 0 : localArchives.length);
   const contentBlocked = membership?.can_create_content === false;
 
   const plantSubTags = subTags.filter((tag) => tag.category === "plant");
@@ -938,8 +1030,59 @@ export default function ArchivePage() {
     groupTagNameMap,
   ]);
 
+  const filteredLocalArchives = useMemo(() => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    const filtered = localArchives.filter((item) => {
+      if (activeSubTag || activeGroupTag) return false;
+      if (activeCategory && item.category !== activeCategory) return false;
+      if (!keyword) return true;
+
+      return [
+        item.title,
+        item.system_name,
+        item.species_name,
+        item.subcategory,
+        item.group_name,
+        item.note,
+        item.latest_record_note,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword);
+    });
+    const sorted = [...filtered];
+
+    if (sortMode === "name") {
+      const collator = new Intl.Collator("zh-CN");
+      return sorted.sort((a, b) => collator.compare(a.title || "", b.title || ""));
+    }
+
+    if (sortMode === "updated") {
+      return sorted.sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at).getTime() -
+          new Date(a.updated_at || a.created_at).getTime()
+      );
+    }
+
+    return sorted.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [
+    localArchives,
+    activeCategory,
+    activeSubTag,
+    activeGroupTag,
+    searchKeyword,
+    sortMode,
+  ]);
+
   const activeArchives = filteredArchives.filter((item) => item.status !== "ended");
   const endedArchives = filteredArchives.filter((item) => item.status === "ended");
+  const showCloudArchives = activeSource !== "local";
+  const showLocalArchives = activeSource !== "cloud";
 
   if (!ready) return null;
 
@@ -984,40 +1127,55 @@ export default function ArchivePage() {
             marginBottom: 18,
           }}
         >
-          我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
+          我的项目 {archiveCount + localArchives.length} 个 · 云空间 {archiveCount} · 本地离线 {localArchives.length} · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
           {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
         </div>
       ) : null}
 
-      {isMobileViewport ? (
-        <section style={mobileMainFilterSectionStyle} aria-label="项目主分类">
-          <div style={systemTabWrapStyle}>
-            <span style={mobileInlineFilterLabelStyle}>主分类</span>
-            {archiveSystemTabs.map((tab) => {
-              const active = activeCategory === tab.value && !activeSubTag && !activeGroupTag;
+      <section style={sourceSwitchStyle}>
+        {[
+          { value: "all" as const, label: "全部", count: archiveCount + localArchives.length },
+          { value: "cloud" as const, label: "云空间", count: archiveCount },
+          { value: "local" as const, label: "本地离线", count: localArchives.length },
+        ].map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() =>
+              updateFilterWithoutJump(() => {
+                setActiveSource(item.value);
+                if (item.value === "local") {
+                  setActiveSubTag(null);
+                  setActiveGroupTag(null);
+                }
+              })
+            }
+            style={sourceButtonStyle(activeSource === item.value)}
+          >
+            {item.label} {item.count}
+          </button>
+        ))}
+      </section>
 
-              return (
-                <button
-                  key={tab.label}
-                  type="button"
-                  onClick={() =>
-                    updateFilterWithoutJump(() => {
-                      setActiveCategory(tab.value);
-                      setActiveSubTag(null);
-                      setActiveGroupTag(null);
-                    })
-                  }
-                  style={systemTabButtonStyle(active)}
-                >
-                  {`${tab.label}（${tab.value === null ? archiveCount : archiveCategoryCounts[tab.value]}）`}
-                </button>
-              );
-            })}
-          </div>
+      {isMobileViewport || activeSource === "local" || !currentOwnerContext?.userId ? (
+        <section style={mobileMainFilterSectionStyle}>
+          <ArchiveCategoryTabs
+            activeCategory={!activeSubTag && !activeGroupTag ? activeCategory : null}
+            counts={visibleCategoryCounts}
+            totalCount={sourceTotalCount}
+            mobileMode
+            onSelect={(category) =>
+              updateFilterWithoutJump(() => {
+                setActiveCategory(category);
+                setActiveSubTag(null);
+                setActiveGroupTag(null);
+              })
+            }
+          />
         </section>
       ) : null}
 
-      {!isMobileViewport || archiveCount === 0 ? (
+      {currentOwnerContext?.userId && activeSource !== "local" && (!isMobileViewport || archiveCount === 0) ? (
         <ArchiveToolbar
           onCreateArchive={(category) => {
             if (contentBlocked) {
@@ -1033,7 +1191,7 @@ export default function ArchivePage() {
         />
       ) : null}
 
-      {!isMobileViewport || activeCategory ? (
+      {currentOwnerContext?.userId && activeSource !== "local" && (!isMobileViewport || activeCategory) ? (
         <ArchiveFiltersPanel
           activeCategory={activeCategory}
           activeSubTag={activeSubTag}
@@ -1070,25 +1228,27 @@ export default function ArchivePage() {
         />
       ) : null}
 
-      <ArchiveGroupPanel
-        activeGroupTag={activeGroupTag}
-        activeSubTag={activeSubTag}
-        visibleGroupTags={visibleGroupTags}
-        mobileMode={isMobileViewport}
-        onReset={() =>
-          updateFilterWithoutJump(() => {
-            setActiveGroupTag(null);
-          })
-        }
-        onToggleGroupTag={(id) =>
-          updateFilterWithoutJump(() => {
-            setActiveGroupTag(activeGroupTag === id ? null : id);
-          })
-        }
-        onRenameGroupTag={renameGroupTag}
-        onDeleteGroupTag={deleteGroupTag}
-        onCreateGroupTag={createGroupTag}
-      />
+      {currentOwnerContext?.userId && activeSource !== "local" ? (
+        <ArchiveGroupPanel
+          activeGroupTag={activeGroupTag}
+          activeSubTag={activeSubTag}
+          visibleGroupTags={visibleGroupTags}
+          mobileMode={isMobileViewport}
+          onReset={() =>
+            updateFilterWithoutJump(() => {
+              setActiveGroupTag(null);
+            })
+          }
+          onToggleGroupTag={(id) =>
+            updateFilterWithoutJump(() => {
+              setActiveGroupTag(activeGroupTag === id ? null : id);
+            })
+          }
+          onRenameGroupTag={renameGroupTag}
+          onDeleteGroupTag={deleteGroupTag}
+          onCreateGroupTag={createGroupTag}
+        />
+      ) : null}
 
       <section
         style={{
@@ -1145,8 +1305,13 @@ export default function ArchivePage() {
         </label>
       </section>
 
+      {showCloudArchives ? (
       <section>
-        {activeArchives.length === 0 && endedArchives.length === 0 ? (
+        {!currentOwnerContext?.userId ? (
+          <div style={emptyPanelStyle}>
+            登录后可查看云空间项目；本地离线项目仍可在这台设备上查看。
+          </div>
+        ) : activeArchives.length === 0 && endedArchives.length === 0 ? (
           <div
             style={{
               border: "1px dashed #d9e6d0",
@@ -1222,8 +1387,9 @@ export default function ArchivePage() {
           ))
         )}
       </section>
+      ) : null}
 
-      {endedArchives.length > 0 && (
+      {showCloudArchives && currentOwnerContext?.userId && endedArchives.length > 0 && (
         <section style={{ marginTop: activeArchives.length > 0 ? 26 : 0 }}>
           <div
             style={{
@@ -1300,6 +1466,75 @@ export default function ArchivePage() {
           ))}
         </section>
       )}
+
+      {showLocalArchives ? (
+        <section style={localSectionStyle}>
+          <div style={localSectionHeaderStyle}>
+            <div>
+              <h2 style={localSectionTitleStyle}>本地离线</h2>
+              <p style={localSectionTextStyle}>
+                只保存在这台设备，不上传云端，不进入发现页；本地子分类和分组独立于云空间。
+              </p>
+            </div>
+            <Link href="/local/archive/new" style={localCreateLinkStyle}>
+              新建本地项目
+            </Link>
+          </div>
+
+          {currentOwnerContext?.userId && localUnownedCount > 0 && !localOwnershipPromptDismissed ? (
+            <div style={localOwnershipNoticeStyle}>
+              <span>
+                发现本机有未归属的本地离线项目。这些内容仍只保存在这台设备，不会自动上传云端。
+              </span>
+              <div style={localOwnershipActionRowStyle}>
+                <button
+                  type="button"
+                  onClick={markLocalArchivesAsMine}
+                  disabled={markingLocalOwner}
+                  style={localOwnershipPrimaryButtonStyle}
+                >
+                  {markingLocalOwner ? "标记中..." : "标记为我的本地项目"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocalOwnershipPromptDismissed(true)}
+                  style={localOwnershipSecondaryButtonStyle}
+                >
+                  暂不处理
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {localHiddenOwnedByOtherCount > 0 ? (
+            <div style={localOtherOwnerNoticeStyle}>
+              这台设备上有已归属其他账号的本地离线项目。
+            </div>
+          ) : null}
+
+          {localLoading ? (
+            <div style={emptyPanelStyle}>正在读取本地离线项目...</div>
+          ) : localError ? (
+            <div style={emptyPanelStyle}>{localError}</div>
+          ) : localArchives.length === 0 ? (
+            <div style={emptyPanelStyle}>
+              还没有可查看的本地离线项目。
+            </div>
+          ) : filteredLocalArchives.length === 0 ? (
+            <div style={emptyPanelStyle}>
+              当前筛选下没有本地离线项目。
+            </div>
+          ) : (
+            filteredLocalArchives.map((archive) => (
+              <ArchiveProjectCard
+                key={archive.id}
+                project={localArchiveToProjectView(archive, currentOwnerContext)}
+                mobileMode={isMobileViewport}
+              />
+            ))
+          )}
+        </section>
+      ) : null}
       <ConfirmDialog
         open={Boolean(deleteArchiveTarget)}
         title="删除项目"
@@ -1312,7 +1547,6 @@ export default function ArchivePage() {
         }}
         onConfirm={confirmDeleteArchive}
       />
-
     </main>
   );
 }
@@ -1321,42 +1555,131 @@ const mobileMainFilterSectionStyle: CSSProperties = {
   marginBottom: 12,
 };
 
-const mobileInlineFilterLabelStyle: CSSProperties = {
-  alignSelf: "center",
-  justifySelf: "start",
-  color: "#7a8675",
-  fontSize: 12,
-  fontWeight: 800,
-  lineHeight: 1.2,
-  paddingLeft: 4,
-  whiteSpace: "nowrap",
+const sourceSwitchStyle: CSSProperties = {
+  margin: "0 0 12px",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
 };
 
-const systemTabWrapStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "auto repeat(5, minmax(0, 1fr))",
-  gap: 6,
-  padding: 4,
-  border: "1px solid #e2ecd9",
-  borderRadius: 16,
-  background: "#fff",
-  overflowX: "visible",
-};
-
-function systemTabButtonStyle(active: boolean): CSSProperties {
+function sourceButtonStyle(active: boolean): CSSProperties {
   return {
-    minWidth: 0,
-    minHeight: 38,
-    border: "none",
-    borderRadius: 12,
-    background: active ? "#e3f1dd" : "transparent",
-    color: active ? "#2f6a31" : "#61705d",
+    minHeight: 34,
+    padding: "0 12px",
+    borderRadius: 999,
+    border: active ? "1px solid #9fc796" : "1px solid #dfe7d9",
+    background: active ? "#eef7e8" : "#fff",
+    color: active ? "#2f6a2c" : "#5d6957",
     fontSize: 13,
     fontWeight: active ? 800 : 700,
-    whiteSpace: "normal",
-    wordBreak: "keep-all",
-    lineHeight: 1.15,
-    padding: "6px 4px",
     cursor: "pointer",
   };
 }
+
+const emptyPanelStyle: CSSProperties = {
+  border: "1px dashed #d9e6d0",
+  borderRadius: 18,
+  padding: 22,
+  textAlign: "center",
+  color: "#7a857a",
+  background: "#fcfdfb",
+};
+
+const localSectionStyle: CSSProperties = {
+  marginTop: 18,
+};
+
+const localSectionHeaderStyle: CSSProperties = {
+  marginBottom: 10,
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const localSectionTitleStyle: CSSProperties = {
+  margin: 0,
+  color: "#253325",
+  fontSize: 18,
+  fontWeight: 800,
+};
+
+const localSectionTextStyle: CSSProperties = {
+  margin: "3px 0 0",
+  color: "#7b8874",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const localCreateLinkStyle: CSSProperties = {
+  minHeight: 34,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #b7d2af",
+  background: "#eef7e8",
+  color: "#2f5f2d",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const localOwnershipNoticeStyle: CSSProperties = {
+  margin: "0 0 10px",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #dfead7",
+  background: "#f7fbf2",
+  color: "#54624d",
+  fontSize: 13,
+  lineHeight: 1.55,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const localOwnershipActionRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const localOwnershipPrimaryButtonStyle: CSSProperties = {
+  minHeight: 32,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #b7d2af",
+  background: "#eef7e8",
+  color: "#2f5f2d",
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const localOwnershipSecondaryButtonStyle: CSSProperties = {
+  minHeight: 32,
+  padding: "0 10px",
+  borderRadius: 999,
+  border: "1px solid #dde5d7",
+  background: "#fff",
+  color: "#66735f",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const localOtherOwnerNoticeStyle: CSSProperties = {
+  margin: "0 0 10px",
+  color: "#87917e",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+type ArchiveSourceFilter = "all" | "cloud" | "local";
