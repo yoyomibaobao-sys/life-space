@@ -1,18 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import ArchiveCategoryTabs from "@/components/archive-ui/ArchiveCategoryTabs";
+import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveCard from "@/components/archive/ArchiveCard";
 import ArchiveFiltersPanel from "@/components/archive/ArchiveFiltersPanel";
 import ArchiveGroupPanel from "@/components/archive/ArchiveGroupPanel";
-import ArchiveToolbar from "@/components/archive/ArchiveToolbar";
 import {
   archiveCategoryOptions,
   getArchiveCategoryLabel,
@@ -1033,8 +1031,9 @@ export default function ArchivePage() {
   const filteredLocalArchives = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
     const filtered = localArchives.filter((item) => {
-      if (activeSubTag || activeGroupTag) return false;
       if (activeCategory && item.category !== activeCategory) return false;
+      if (activeSubTag && item.subcategory !== activeSubTag) return false;
+      if (activeGroupTag && item.group_name !== activeGroupTag) return false;
       if (!keyword) return true;
 
       return [
@@ -1083,6 +1082,281 @@ export default function ArchivePage() {
   const endedArchives = filteredArchives.filter((item) => item.status === "ended");
   const showCloudArchives = activeSource !== "local";
   const showLocalArchives = activeSource !== "cloud";
+  const localSubTags = useMemo(() => {
+    if (!activeCategory) return [];
+
+    return Array.from(
+      new Set(
+        localArchives
+          .filter((archive) => archive.category === activeCategory && archive.subcategory)
+          .map((archive) => archive.subcategory as string)
+      )
+    ).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }, [activeCategory, localArchives]);
+  const localGroupTags = useMemo(() => {
+    if (!activeCategory || !activeSubTag) return [];
+
+    return Array.from(
+      new Set(
+        localArchives
+          .filter(
+            (archive) =>
+              archive.category === activeCategory &&
+              archive.subcategory === activeSubTag &&
+              archive.group_name
+          )
+          .map((archive) => archive.group_name as string)
+      )
+    ).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }, [activeCategory, activeSubTag, localArchives]);
+
+  function handleSelectSource(nextSource: ArchiveSourceFilter) {
+    updateFilterWithoutJump(() => {
+      setActiveSource(nextSource);
+      setActiveSubTag(null);
+      setActiveGroupTag(null);
+    });
+  }
+
+  function handleCreateFromWorkspace(category: ArchiveCategory) {
+    if (activeSource === "local" || (!currentOwnerContext?.userId && activeSource !== "cloud")) {
+      router.push(`/local/archive/new?category=${category}`);
+      return;
+    }
+
+    if (!currentOwnerContext?.userId) {
+      router.push("/login");
+      return;
+    }
+
+    if (contentBlocked) {
+      showToast(getCreateContentBlockedText(membership));
+      return;
+    }
+
+    router.push(`/archive/new?category=${category}`);
+  }
+
+  const createDisabled =
+    activeSource !== "local" &&
+    Boolean(currentOwnerContext?.userId) &&
+    contentBlocked;
+
+  const createDisabledText = createDisabled
+    ? getCreateContentBlockedText(membership)
+    : undefined;
+
+  const workspaceFiltersSlot =
+    activeSource === "cloud" ? (
+      <>
+        <ArchiveFiltersPanel
+          activeCategory={activeCategory}
+          activeSubTag={activeSubTag}
+          visibleGroupTagCount={visibleGroupTags.length}
+          plantSubTags={plantSubTags}
+          methodFacilitySubTags={methodFacilitySubTags}
+          insectFishSubTags={insectFishSubTags}
+          otherSubTags={otherSubTags}
+          mobileMode={isMobileViewport}
+          onReset={() =>
+            updateFilterWithoutJump(() => {
+              setActiveCategory(null);
+              setActiveSubTag(null);
+              setActiveGroupTag(null);
+            })
+          }
+          onSelectCategory={(category) =>
+            updateFilterWithoutJump(() => {
+              setActiveCategory(category);
+              setActiveSubTag(null);
+              setActiveGroupTag(null);
+            })
+          }
+          onSelectSubTag={(category, id) =>
+            updateFilterWithoutJump(() => {
+              setActiveCategory(category);
+              setActiveSubTag(id);
+              setActiveGroupTag(null);
+            })
+          }
+          onRenameSubTag={renameSubTag}
+          onDeleteSubTag={deleteSubTag}
+          onCreateSubTag={createSubTag}
+        />
+        <ArchiveGroupPanel
+          activeGroupTag={activeGroupTag}
+          activeSubTag={activeSubTag}
+          visibleGroupTags={visibleGroupTags}
+          mobileMode={isMobileViewport}
+          onReset={() =>
+            updateFilterWithoutJump(() => {
+              setActiveGroupTag(null);
+            })
+          }
+          onToggleGroupTag={(id) =>
+            updateFilterWithoutJump(() => {
+              setActiveGroupTag(activeGroupTag === id ? null : id);
+            })
+          }
+          onRenameGroupTag={renameGroupTag}
+          onDeleteGroupTag={deleteGroupTag}
+          onCreateGroupTag={createGroupTag}
+        />
+      </>
+    ) : activeSource === "local" ? (
+      <LocalArchiveFilters
+        activeCategory={activeCategory}
+        activeSubTag={activeSubTag}
+        activeGroupTag={activeGroupTag}
+        subTags={localSubTags}
+        groupTags={localGroupTags}
+        onReset={() =>
+          updateFilterWithoutJump(() => {
+            setActiveCategory(null);
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectCategory={(category) =>
+          updateFilterWithoutJump(() => {
+            setActiveCategory(category);
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectSubTag={(name) =>
+          updateFilterWithoutJump(() => {
+            setActiveSubTag(name);
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectGroup={(name) =>
+          updateFilterWithoutJump(() => {
+            setActiveGroupTag(name ? (activeGroupTag === name ? null : name) : null);
+          })
+        }
+      />
+    ) : (
+      <MainCategoryFilters
+        activeCategory={activeCategory}
+        onReset={() =>
+          updateFilterWithoutJump(() => {
+            setActiveCategory(null);
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectCategory={(category) =>
+          updateFilterWithoutJump(() => {
+            setActiveCategory(category);
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          })
+        }
+      />
+    );
+
+  const workspaceNoticeSlot = (
+    <>
+      {activeSource === "local" ? (
+        <div style={localOtherOwnerNoticeStyle}>
+          本地子分类和分组只保存在这台设备，不会自动创建或影响云空间分类。
+        </div>
+      ) : null}
+      {showLocalArchives && currentOwnerContext?.userId && localUnownedCount > 0 && !localOwnershipPromptDismissed ? (
+        <div style={localOwnershipNoticeStyle}>
+          <span>
+            发现本机有未归属的本地离线项目。这些内容仍只保存在这台设备，不会自动上传云端。
+          </span>
+          <div style={localOwnershipActionRowStyle}>
+            <button
+              type="button"
+              onClick={markLocalArchivesAsMine}
+              disabled={markingLocalOwner}
+              style={localOwnershipPrimaryButtonStyle}
+            >
+              {markingLocalOwner ? "标记中..." : "标记为我的本地项目"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocalOwnershipPromptDismissed(true)}
+              style={localOwnershipSecondaryButtonStyle}
+            >
+              暂不处理
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {showLocalArchives && localHiddenOwnedByOtherCount > 0 ? (
+        <div style={localOtherOwnerNoticeStyle}>
+          这台设备上有已归属其他账号的本地离线项目。
+        </div>
+      ) : null}
+    </>
+  );
+
+  function renderCloudArchiveCard(item: ArchiveItem, ended = false) {
+    return (
+      <ArchiveCard
+        key={item.id}
+        item={item}
+        ended={ended}
+        mobileMode={isMobileViewport}
+        subTags={subTags}
+        groupTags={groupTags}
+        editingPlantArchiveId={editingPlantArchiveId}
+        editingSpeciesId={editingSpeciesId}
+        editingPendingSpeciesName={editingPendingSpeciesName}
+        editingPlantSearch={editingPlantSearch}
+        plantSuggestionsOpen={plantSuggestionsOpen}
+        plantSearchResults={plantSearchResults}
+        hasExactPlantMatch={hasExactPlantMatch}
+        editingSystemArchiveId={editingSystemArchiveId}
+        editingSystemSearch={editingSystemSearch}
+        editingSystemName={editingSystemName}
+        systemSuggestionsOpen={systemSuggestionsOpen}
+        systemNameOptions={getSystemNameOptions(item.category)}
+        hasExactSystemNameMatch={hasExactSystemNameMatch(item.category)}
+        onNavigate={(id) => router.push(`/archive/${id}`)}
+        shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
+        onRenameTitle={renameArchiveTitle}
+        onBeginEditPlant={beginEditPlant}
+        onPlantSearchChange={(value) => {
+          setEditingPlantSearch(value);
+          setEditingPendingSpeciesName("");
+          setEditingSpeciesId("");
+          setPlantSuggestionsOpen(true);
+        }}
+        onSelectPlantSpecies={(species) => {
+          setEditingSpeciesId(species.id);
+          setEditingPendingSpeciesName("");
+          setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "未命名植物");
+          setPlantSuggestionsOpen(false);
+        }}
+        onSubmitPendingSpecies={() => submitPendingSpeciesName()}
+        onSavePlantSelection={savePlantSelection}
+        onCancelPlantEditing={cancelPlantEditing}
+        onBeginEditSystem={beginEditSystem}
+        onSystemSearchChange={(value) => {
+          setEditingSystemSearch(value);
+          setEditingSystemName("");
+          setSystemSuggestionsOpen(true);
+        }}
+        onSelectSystemName={(name) => {
+          setEditingSystemName(name);
+          setEditingSystemSearch(name);
+          setSystemSuggestionsOpen(false);
+        }}
+        onSaveSystemSelection={saveSystemSelection}
+        onCancelSystemEditing={cancelSystemEditing}
+        onUpdateArchiveStatus={updateArchiveStatus}
+        onTogglePublic={toggleArchivePublic}
+        onUpdateArchiveCategory={updateArchiveCategory}
+        onUpdateArchiveGroupTag={updateArchiveGroupTag}
+        onDeleteArchive={deleteArchive}
+      />
+    );
+  }
 
   if (!ready) return null;
 
@@ -1119,411 +1393,63 @@ export default function ArchivePage() {
         </section>
       ) : null}
 
-      {!isMobileViewport ? (
-        <div
-          style={{
-            fontSize: 14,
-            color: "#6f7b6a",
-            marginBottom: 18,
-          }}
-        >
-          我的项目 {archiveCount + localArchives.length} 个 · 云空间 {archiveCount} · 本地离线 {localArchives.length} · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
-          {endedArchiveCount > 0 ? ` · 已结束 ${endedArchiveCount}` : ""}
-        </div>
-      ) : null}
-
-      <section style={sourceSwitchStyle}>
-        {[
-          { value: "all" as const, label: "全部", count: archiveCount + localArchives.length },
-          { value: "cloud" as const, label: "云空间", count: archiveCount },
-          { value: "local" as const, label: "本地离线", count: localArchives.length },
-        ].map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() =>
-              updateFilterWithoutJump(() => {
-                setActiveSource(item.value);
-                if (item.value === "local") {
-                  setActiveSubTag(null);
-                  setActiveGroupTag(null);
-                }
-              })
-            }
-            style={sourceButtonStyle(activeSource === item.value)}
-          >
-            {item.label} {item.count}
-          </button>
-        ))}
-      </section>
-
-      {isMobileViewport || activeSource === "local" || !currentOwnerContext?.userId ? (
-        <section style={mobileMainFilterSectionStyle}>
-          <ArchiveCategoryTabs
-            activeCategory={!activeSubTag && !activeGroupTag ? activeCategory : null}
-            counts={visibleCategoryCounts}
-            totalCount={sourceTotalCount}
-            mobileMode
-            onSelect={(category) =>
-              updateFilterWithoutJump(() => {
-                setActiveCategory(category);
-                setActiveSubTag(null);
-                setActiveGroupTag(null);
-              })
-            }
-          />
-        </section>
-      ) : null}
-
-      {currentOwnerContext?.userId && activeSource !== "local" && (!isMobileViewport || archiveCount === 0) ? (
-        <ArchiveToolbar
-          onCreateArchive={(category) => {
-            if (contentBlocked) {
-              showToast(getCreateContentBlockedText(membership));
-              return;
-            }
-
-            router.push(`/archive/new?category=${category}`);
-          }}
-          createDisabled={contentBlocked}
-          createDisabledTitle={contentBlocked ? getCreateContentBlockedText(membership) : undefined}
-          createDisabledHref={contentBlocked ? "/membership" : undefined}
-        />
-      ) : null}
-
-      {currentOwnerContext?.userId && activeSource !== "local" && (!isMobileViewport || activeCategory) ? (
-        <ArchiveFiltersPanel
-          activeCategory={activeCategory}
-          activeSubTag={activeSubTag}
-          visibleGroupTagCount={visibleGroupTags.length}
-          plantSubTags={plantSubTags}
-          methodFacilitySubTags={methodFacilitySubTags}
-          insectFishSubTags={insectFishSubTags}
-          otherSubTags={otherSubTags}
-          mobileMode={isMobileViewport}
-          onReset={() =>
-            updateFilterWithoutJump(() => {
-              setActiveCategory(null);
-              setActiveSubTag(null);
-              setActiveGroupTag(null);
-            })
-          }
-          onSelectCategory={(category) =>
-            updateFilterWithoutJump(() => {
-              setActiveCategory(category);
-              setActiveSubTag(null);
-              setActiveGroupTag(null);
-            })
-          }
-          onSelectSubTag={(category, id) =>
-            updateFilterWithoutJump(() => {
-              setActiveCategory(category);
-              setActiveSubTag(id);
-              setActiveGroupTag(null);
-            })
-          }
-          onRenameSubTag={renameSubTag}
-          onDeleteSubTag={deleteSubTag}
-          onCreateSubTag={createSubTag}
-        />
-      ) : null}
-
-      {currentOwnerContext?.userId && activeSource !== "local" ? (
-        <ArchiveGroupPanel
-          activeGroupTag={activeGroupTag}
-          activeSubTag={activeSubTag}
-          visibleGroupTags={visibleGroupTags}
-          mobileMode={isMobileViewport}
-          onReset={() =>
-            updateFilterWithoutJump(() => {
-              setActiveGroupTag(null);
-            })
-          }
-          onToggleGroupTag={(id) =>
-            updateFilterWithoutJump(() => {
-              setActiveGroupTag(activeGroupTag === id ? null : id);
-            })
-          }
-          onRenameGroupTag={renameGroupTag}
-          onDeleteGroupTag={deleteGroupTag}
-          onCreateGroupTag={createGroupTag}
-        />
-      ) : null}
-
-      <section
-        style={{
-          margin: "0 0 16px",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
+      <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
+        statsText={
+          !isMobileViewport ? (
+            <>
+              我的项目 {archiveCount + localArchives.length} 个 · 云空间 {archiveCount} · 本地离线 {localArchives.length} · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
+              {endedArchiveCount > 0 ? " · 已结束 " + endedArchiveCount : ""}
+            </>
+          ) : undefined
+        }
+        sourceOptions={[
+          { value: "all", label: "全部", count: archiveCount + localArchives.length },
+          { value: "cloud", label: "云空间", count: archiveCount },
+          { value: "local", label: "本地离线", count: localArchives.length },
+        ]}
+        activeSource={activeSource}
+        onSelectSource={handleSelectSource}
+        onCreateArchive={handleCreateFromWorkspace}
+        createDisabled={createDisabled}
+        createDisabledTitle={createDisabledText}
+        createDisabledHref={createDisabled ? "/membership" : undefined}
+        filtersSlot={workspaceFiltersSlot}
+        noticeSlot={workspaceNoticeSlot}
       >
-        <input
-          value={searchKeyword}
-          onChange={(event) => setSearchKeyword(event.target.value)}
-          placeholder="搜索项目、记录或标签"
-          style={{
-            flex: "1 1 260px",
-            minWidth: 0,
-            border: "1px solid #dfe7d9",
-            borderRadius: 999,
-            padding: "10px 14px",
-            fontSize: 14,
-            outline: "none",
-            background: "#fff",
-          }}
-        />
-
-        <label
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            color: "#777",
-            fontSize: 14,
-          }}
-        >
-          排序：
-          <select
-            value={sortMode}
-            onChange={(event) => setSortMode(event.target.value as SortMode)}
-            style={{
-              border: "1px solid #dfe7d9",
-              borderRadius: 999,
-              padding: "9px 12px",
-              fontSize: 14,
-              background: "#fff",
-              color: "#3d4a3d",
-              cursor: "pointer",
-            }}
-          >
-            <option value="updated">最近更新</option>
-            <option value="created">新建顺序</option>
-            <option value="name">按名字</option>
-          </select>
-        </label>
-      </section>
-
-      {showCloudArchives ? (
-      <section>
-        {!currentOwnerContext?.userId ? (
-          <div style={emptyPanelStyle}>
-            登录后可查看云空间项目；本地离线项目仍可在这台设备上查看。
-          </div>
-        ) : activeArchives.length === 0 && endedArchives.length === 0 ? (
-          <div
-            style={{
-              border: "1px dashed #d9e6d0",
-              borderRadius: 18,
-              padding: 26,
-              textAlign: "center",
-              color: "#7a857a",
-              background: "#fcfdfb",
-            }}
-          >
-            {archiveCount === 0 ? "还没有项目，请先新建项目" : "没有找到项目"}
-          </div>
-        ) : (
-          activeArchives.map((item) => (
-            <ArchiveCard
-              key={item.id}
-              item={item}
-              ended={false}
-              mobileMode={isMobileViewport}
-              subTags={subTags}
-              groupTags={groupTags}
-              editingPlantArchiveId={editingPlantArchiveId}
-              editingSpeciesId={editingSpeciesId}
-              editingPendingSpeciesName={editingPendingSpeciesName}
-              editingPlantSearch={editingPlantSearch}
-              plantSuggestionsOpen={plantSuggestionsOpen}
-              plantSearchResults={plantSearchResults}
-              hasExactPlantMatch={hasExactPlantMatch}
-              editingSystemArchiveId={editingSystemArchiveId}
-              editingSystemSearch={editingSystemSearch}
-              editingSystemName={editingSystemName}
-              systemSuggestionsOpen={systemSuggestionsOpen}
-              systemNameOptions={getSystemNameOptions(item.category)}
-              hasExactSystemNameMatch={hasExactSystemNameMatch(item.category)}
-              onNavigate={(id) => router.push(`/archive/${id}`)}
-              shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
-              onRenameTitle={renameArchiveTitle}
-              onBeginEditPlant={beginEditPlant}
-              onPlantSearchChange={(value) => {
-                setEditingPlantSearch(value);
-                setEditingPendingSpeciesName("");
-                setEditingSpeciesId("");
-                setPlantSuggestionsOpen(true);
-              }}
-              onSelectPlantSpecies={(species) => {
-                setEditingSpeciesId(species.id);
-                setEditingPendingSpeciesName("");
-                setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "未命名植物");
-                setPlantSuggestionsOpen(false);
-              }}
-              onSubmitPendingSpecies={() => submitPendingSpeciesName()}
-              onSavePlantSelection={savePlantSelection}
-              onCancelPlantEditing={cancelPlantEditing}
-              onBeginEditSystem={beginEditSystem}
-              onSystemSearchChange={(value) => {
-                setEditingSystemSearch(value);
-                setEditingSystemName("");
-                setSystemSuggestionsOpen(true);
-              }}
-              onSelectSystemName={(name) => {
-                setEditingSystemName(name);
-                setEditingSystemSearch(name);
-                setSystemSuggestionsOpen(false);
-              }}
-              onSaveSystemSelection={saveSystemSelection}
-              onCancelSystemEditing={cancelSystemEditing}
-              onUpdateArchiveStatus={updateArchiveStatus}
-              onTogglePublic={toggleArchivePublic}
-              onUpdateArchiveCategory={updateArchiveCategory}
-              onUpdateArchiveGroupTag={updateArchiveGroupTag}
-              onDeleteArchive={deleteArchive}
-            />
-          ))
-        )}
-      </section>
-      ) : null}
-
-      {showCloudArchives && currentOwnerContext?.userId && endedArchives.length > 0 && (
-        <section style={{ marginTop: activeArchives.length > 0 ? 26 : 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 10,
-              color: "#777",
-            }}
-          >
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>已结束</h2>
-            <span style={{ fontSize: 13 }}>这些项目已经告一段落，仍然保存在你的空间里。</span>
-          </div>
-
-          {endedArchives.map((item) => (
-            <ArchiveCard
-              key={item.id}
-              item={item}
-              ended
-              mobileMode={isMobileViewport}
-              subTags={subTags}
-              groupTags={groupTags}
-              editingPlantArchiveId={editingPlantArchiveId}
-              editingSpeciesId={editingSpeciesId}
-              editingPendingSpeciesName={editingPendingSpeciesName}
-              editingPlantSearch={editingPlantSearch}
-              plantSuggestionsOpen={plantSuggestionsOpen}
-              plantSearchResults={plantSearchResults}
-              hasExactPlantMatch={hasExactPlantMatch}
-              editingSystemArchiveId={editingSystemArchiveId}
-              editingSystemSearch={editingSystemSearch}
-              editingSystemName={editingSystemName}
-              systemSuggestionsOpen={systemSuggestionsOpen}
-              systemNameOptions={getSystemNameOptions(item.category)}
-              hasExactSystemNameMatch={hasExactSystemNameMatch(item.category)}
-              onNavigate={(id) => router.push(`/archive/${id}`)}
-              shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
-              onRenameTitle={renameArchiveTitle}
-              onBeginEditPlant={beginEditPlant}
-              onPlantSearchChange={(value) => {
-                setEditingPlantSearch(value);
-                setEditingPendingSpeciesName("");
-                setEditingSpeciesId("");
-                setPlantSuggestionsOpen(true);
-              }}
-              onSelectPlantSpecies={(species) => {
-                setEditingSpeciesId(species.id);
-                setEditingPendingSpeciesName("");
-                setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "未命名植物");
-                setPlantSuggestionsOpen(false);
-              }}
-              onSubmitPendingSpecies={() => submitPendingSpeciesName()}
-              onSavePlantSelection={savePlantSelection}
-              onCancelPlantEditing={cancelPlantEditing}
-              onBeginEditSystem={beginEditSystem}
-              onSystemSearchChange={(value) => {
-                setEditingSystemSearch(value);
-                setEditingSystemName("");
-                setSystemSuggestionsOpen(true);
-              }}
-              onSelectSystemName={(name) => {
-                setEditingSystemName(name);
-                setEditingSystemSearch(name);
-                setSystemSuggestionsOpen(false);
-              }}
-              onSaveSystemSelection={saveSystemSelection}
-              onCancelSystemEditing={cancelSystemEditing}
-              onUpdateArchiveStatus={updateArchiveStatus}
-              onTogglePublic={toggleArchivePublic}
-              onUpdateArchiveCategory={updateArchiveCategory}
-              onUpdateArchiveGroupTag={updateArchiveGroupTag}
-              onDeleteArchive={deleteArchive}
-            />
-          ))}
-        </section>
-      )}
-
-      {showLocalArchives ? (
-        <section style={localSectionStyle}>
-          <div style={localSectionHeaderStyle}>
-            <div>
-              <h2 style={localSectionTitleStyle}>本地离线</h2>
-              <p style={localSectionTextStyle}>
-                只保存在这台设备，不上传云端，不进入发现页；本地子分类和分组独立于云空间。
-              </p>
+        {showCloudArchives ? (
+          !currentOwnerContext?.userId ? (
+            <div style={emptyPanelStyle}>
+              登录后可查看云空间项目；本地离线项目仍可在这台设备上查看。
             </div>
-            <Link href="/local/archive/new" style={localCreateLinkStyle}>
-              新建本地项目
-            </Link>
-          </div>
-
-          {currentOwnerContext?.userId && localUnownedCount > 0 && !localOwnershipPromptDismissed ? (
-            <div style={localOwnershipNoticeStyle}>
-              <span>
-                发现本机有未归属的本地离线项目。这些内容仍只保存在这台设备，不会自动上传云端。
-              </span>
-              <div style={localOwnershipActionRowStyle}>
-                <button
-                  type="button"
-                  onClick={markLocalArchivesAsMine}
-                  disabled={markingLocalOwner}
-                  style={localOwnershipPrimaryButtonStyle}
-                >
-                  {markingLocalOwner ? "标记中..." : "标记为我的本地项目"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLocalOwnershipPromptDismissed(true)}
-                  style={localOwnershipSecondaryButtonStyle}
-                >
-                  暂不处理
-                </button>
-              </div>
+          ) : activeArchives.length === 0 && endedArchives.length === 0 ? (
+            <div style={emptyPanelStyle}>
+              {archiveCount === 0 ? "还没有云空间项目，请先新建项目" : "没有找到云空间项目"}
             </div>
-          ) : null}
+          ) : (
+            <>
+              {activeArchives.map((item) => renderCloudArchiveCard(item, false))}
+              {endedArchives.length > 0 ? (
+                <section style={{ marginTop: activeArchives.length > 0 ? 26 : 0 }}>
+                  <div style={endedSectionHeaderStyle}>
+                    <h2 style={endedSectionTitleStyle}>已结束</h2>
+                    <span style={endedSectionTextStyle}>这些项目已经告一段落，仍然保存在你的空间里。</span>
+                  </div>
+                  {endedArchives.map((item) => renderCloudArchiveCard(item, true))}
+                </section>
+              ) : null}
+            </>
+          )
+        ) : null}
 
-          {localHiddenOwnedByOtherCount > 0 ? (
-            <div style={localOtherOwnerNoticeStyle}>
-              这台设备上有已归属其他账号的本地离线项目。
-            </div>
-          ) : null}
-
-          {localLoading ? (
+        {showLocalArchives ? (
+          localLoading ? (
             <div style={emptyPanelStyle}>正在读取本地离线项目...</div>
           ) : localError ? (
             <div style={emptyPanelStyle}>{localError}</div>
           ) : localArchives.length === 0 ? (
-            <div style={emptyPanelStyle}>
-              还没有可查看的本地离线项目。
-            </div>
+            <div style={emptyPanelStyle}>还没有可查看的本地离线项目。</div>
           ) : filteredLocalArchives.length === 0 ? (
-            <div style={emptyPanelStyle}>
-              当前筛选下没有本地离线项目。
-            </div>
+            <div style={emptyPanelStyle}>当前筛选下没有本地离线项目。</div>
           ) : (
             filteredLocalArchives.map((archive) => (
               <ArchiveProjectCard
@@ -1532,9 +1458,9 @@ export default function ArchivePage() {
                 mobileMode={isMobileViewport}
               />
             ))
-          )}
-        </section>
-      ) : null}
+          )
+        ) : null}
+      </ArchiveWorkspaceTemplate>
       <ConfirmDialog
         open={Boolean(deleteArchiveTarget)}
         title="删除项目"
@@ -1551,31 +1477,171 @@ export default function ArchivePage() {
   );
 }
 
-const mobileMainFilterSectionStyle: CSSProperties = {
+function MainCategoryFilters({
+  activeCategory,
+  onReset,
+  onSelectCategory,
+}: {
+  activeCategory: ArchiveCategory | null;
+  onReset: () => void;
+  onSelectCategory: (category: ArchiveCategory) => void;
+}) {
+  return (
+    <section style={workspaceFilterPanelStyle}>
+      <div style={workspaceChipRowStyle}>
+        <button type="button" onClick={onReset} style={workspacePillStyle(!activeCategory)}>
+          全部
+        </button>
+        {archiveCategoryOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onSelectCategory(option.value)}
+            style={workspacePillStyle(activeCategory === option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LocalArchiveFilters({
+  activeCategory,
+  activeSubTag,
+  activeGroupTag,
+  subTags,
+  groupTags,
+  onReset,
+  onSelectCategory,
+  onSelectSubTag,
+  onSelectGroup,
+}: {
+  activeCategory: ArchiveCategory | null;
+  activeSubTag: string | null;
+  activeGroupTag: string | null;
+  subTags: string[];
+  groupTags: string[];
+  onReset: () => void;
+  onSelectCategory: (category: ArchiveCategory) => void;
+  onSelectSubTag: (name: string) => void;
+  onSelectGroup: (name: string) => void;
+}) {
+  return (
+    <>
+      <MainCategoryFilters
+        activeCategory={activeCategory}
+        onReset={onReset}
+        onSelectCategory={onSelectCategory}
+      />
+
+      {activeCategory ? (
+        <section style={workspaceFilterPanelStyle}>
+          <div style={workspaceFilterLabelStyle}>本地子分类</div>
+          <div style={workspaceChipRowStyle}>
+            <button
+              type="button"
+              onClick={() => onSelectCategory(activeCategory)}
+              style={workspacePillStyle(!activeSubTag)}
+            >
+              全部子分类
+            </button>
+            {subTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => onSelectSubTag(tag)}
+                style={workspacePillStyle(activeSubTag === tag)}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {activeCategory && activeSubTag ? (
+        <section style={workspaceFilterPanelStyle}>
+          <div style={workspaceFilterLabelStyle}>本地分组</div>
+          <div style={workspaceChipRowStyle}>
+            <button
+              type="button"
+              onClick={() => onSelectGroup("")}
+              style={workspacePillStyle(!activeGroupTag)}
+            >
+              全部分组
+            </button>
+            {groupTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => onSelectGroup(tag)}
+                style={workspacePillStyle(activeGroupTag === tag)}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+const workspaceFilterPanelStyle: CSSProperties = {
   marginBottom: 12,
+  padding: "12px 14px",
+  border: "1px solid #edf0e8",
+  borderRadius: 16,
+  background: "#fff",
 };
 
-const sourceSwitchStyle: CSSProperties = {
-  margin: "0 0 12px",
+const workspaceChipRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,
   flexWrap: "wrap",
 };
 
-function sourceButtonStyle(active: boolean): CSSProperties {
+const workspaceFilterLabelStyle: CSSProperties = {
+  marginBottom: 8,
+  color: "#7a8675",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+function workspacePillStyle(active: boolean): CSSProperties {
   return {
-    minHeight: 34,
-    padding: "0 12px",
+    border: active ? "1px solid #3f7d3d" : "1px solid #cfe3c8",
+    background: active ? "#3f7d3d" : "#f8fbf5",
+    color: active ? "#fff" : "#335033",
     borderRadius: 999,
-    border: active ? "1px solid #9fc796" : "1px solid #dfe7d9",
-    background: active ? "#eef7e8" : "#fff",
-    color: active ? "#2f6a2c" : "#5d6957",
-    fontSize: 13,
-    fontWeight: active ? 800 : 700,
+    padding: "7px 14px",
+    fontSize: 15,
+    fontWeight: 700,
     cursor: "pointer",
+    lineHeight: 1.3,
   };
 }
+
+const endedSectionHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 10,
+  color: "#777",
+};
+
+const endedSectionTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 18,
+  fontWeight: 600,
+};
+
+const endedSectionTextStyle: CSSProperties = {
+  fontSize: 13,
+};
 
 const emptyPanelStyle: CSSProperties = {
   border: "1px dashed #d9e6d0",
@@ -1584,48 +1650,6 @@ const emptyPanelStyle: CSSProperties = {
   textAlign: "center",
   color: "#7a857a",
   background: "#fcfdfb",
-};
-
-const localSectionStyle: CSSProperties = {
-  marginTop: 18,
-};
-
-const localSectionHeaderStyle: CSSProperties = {
-  marginBottom: 10,
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: 12,
-  flexWrap: "wrap",
-};
-
-const localSectionTitleStyle: CSSProperties = {
-  margin: 0,
-  color: "#253325",
-  fontSize: 18,
-  fontWeight: 800,
-};
-
-const localSectionTextStyle: CSSProperties = {
-  margin: "3px 0 0",
-  color: "#7b8874",
-  fontSize: 13,
-  lineHeight: 1.5,
-};
-
-const localCreateLinkStyle: CSSProperties = {
-  minHeight: 34,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid #b7d2af",
-  background: "#eef7e8",
-  color: "#2f5f2d",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  textDecoration: "none",
-  fontSize: 13,
-  fontWeight: 800,
 };
 
 const localOwnershipNoticeStyle: CSSProperties = {

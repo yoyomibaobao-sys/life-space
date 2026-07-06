@@ -12,6 +12,12 @@ import {
 } from "@/lib/archive-categories";
 import { createLocalArchive } from "@/lib/local-offline-db";
 
+function normalizeInitialCategory(value: string): ArchiveCategory | null {
+  return archiveCategoryOptions.some((option) => option.value === value)
+    ? (value as ArchiveCategory)
+    : null;
+}
+
 function getInitialSearchParam(...names: string[]) {
   if (typeof window === "undefined") return "";
 
@@ -38,6 +44,8 @@ export default function NewLocalArchivePage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    const initialCategory = normalizeInitialCategory(getInitialSearchParam("category"));
+    if (initialCategory) setCategory(initialCategory);
     setPlantId(getInitialSearchParam("plant_id"));
     setPlantSlug(getInitialSearchParam("plant_slug"));
     setSpeciesName(getInitialSearchParam("species_name", "plant_name", "name"));
@@ -82,7 +90,7 @@ export default function NewLocalArchivePage() {
   return (
     <main style={pageStyle}>
       <section style={panelStyle}>
-        <Link href="/local/archive" style={backLinkStyle}>
+        <Link href="/archive?source=local" style={backLinkStyle}>
           返回本地项目
         </Link>
         <div style={eyebrowStyle}>只保存在本机</div>
@@ -201,7 +209,7 @@ export default function NewLocalArchivePage() {
           </section>
 
           <div style={actionRowStyle}>
-            <Link href="/local/archive" style={cancelButtonStyle}>
+            <Link href="/archive?source=local" style={cancelButtonStyle}>
               取消
             </Link>
             <button type="submit" disabled={saving} style={submitButtonStyle}>

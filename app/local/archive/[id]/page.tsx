@@ -172,7 +172,7 @@ export default function LocalArchiveDetailPage() {
     try {
       await deleteLocalArchive(archiveId);
       showToast("本地项目已删除");
-      router.push("/local/archive");
+      router.push("/archive?source=local");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "删除本地项目失败");
     }
@@ -187,7 +187,7 @@ export default function LocalArchiveDetailPage() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={{ margin: 0 }}>{error || "本地项目不存在"}</p>
-          <Link href="/local/archive" style={backButtonStyle}>
+          <Link href="/archive?source=local" style={backButtonStyle}>
             返回本地项目
           </Link>
         </section>
@@ -218,7 +218,7 @@ export default function LocalArchiveDetailPage() {
   return (
     <main style={pageStyle}>
       <section style={headerStyle}>
-        <Link href="/local/archive" style={backLinkStyle}>
+        <Link href="/archive?source=local" style={backLinkStyle}>
           返回本地项目
         </Link>
         <ArchiveDetailHeaderView
