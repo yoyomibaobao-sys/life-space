@@ -402,18 +402,20 @@ export default function ArchiveLightbox({
                 返回
               </button>
               <div style={mobileMetaTextStyle}>{metaText}</div>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setMobileMenuOpen((open) => !open);
-                }}
-                aria-label="图片更多操作"
-                style={mobileLightboxMoreButtonStyle}
-              >
-                ⋯
-              </button>
-              {mobileMenuOpen ? (
+              {onDeleteCurrentImage ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMobileMenuOpen((open) => !open);
+                  }}
+                  aria-label="图片更多操作"
+                  style={mobileLightboxMoreButtonStyle}
+                >
+                  ⋯
+                </button>
+              ) : null}
+              {mobileMenuOpen && onDeleteCurrentImage ? (
                 <div style={mobileLightboxMenuStyle}>
                   <button
                     type="button"

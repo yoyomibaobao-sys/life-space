@@ -76,6 +76,8 @@ function Content({ id }: { id: string }) {
   const [me, setMe] = useState<string | null | undefined>(undefined);
   const [username, setUsername] = useState("用户");
   const [sameTagCounts, setSameTagCounts] = useState<Record<string, number>>({});
+  const [archiveSubcategoryLabel, setArchiveSubcategoryLabel] = useState<string | null>(null);
+  const [archiveGroupLabel, setArchiveGroupLabel] = useState<string | null>(null);
   const [isProjectFollowed, setIsProjectFollowed] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -106,6 +108,7 @@ function Content({ id }: { id: string }) {
   const [mobilePlantSuggestionsOpen, setMobilePlantSuggestionsOpen] = useState(false);
   const [mobileSystemSuggestionsOpen, setMobileSystemSuggestionsOpen] = useState(false);
   const [deleteArchiveDialogOpen, setDeleteArchiveDialogOpen] = useState(false);
+  const [archiveStatusConfirmOpen, setArchiveStatusConfirmOpen] = useState(false);
   const [isDeletingArchive, setIsDeletingArchive] = useState(false);
 
   const searchParams = useSearchParams();
@@ -136,6 +139,26 @@ function Content({ id }: { id: string }) {
 
       const isOwnerView = currentUserId === archiveData.user_id;
       setArchive(archiveData as ArchiveDetailArchive);
+      setArchiveSubcategoryLabel(null);
+      setArchiveGroupLabel(null);
+
+      if (archiveData.sub_tag_id) {
+        const { data: subTagData } = await supabase
+          .from("sub_tags")
+          .select("name")
+          .eq("id", archiveData.sub_tag_id)
+          .maybeSingle();
+        setArchiveSubcategoryLabel(subTagData?.name || null);
+      }
+
+      if (archiveData.group_tag_id) {
+        const { data: groupTagData } = await supabase
+          .from("group_tags")
+          .select("name")
+          .eq("id", archiveData.group_tag_id)
+          .maybeSingle();
+        setArchiveGroupLabel(groupTagData?.name || null);
+      }
 
       if (!archiveData.is_public && !isOwnerView) {
         setRecords([]);
@@ -279,8 +302,6 @@ saveRecentArchiveBrowse({
   }, [id, reloadKey]);
 
   useEffect(() => {
-    if (!isMobileViewport) return;
-
     async function loadMobileSpeciesList() {
       const [{ data: speciesData }, { data: aliasData }] = await Promise.all([
         supabase
@@ -326,7 +347,7 @@ saveRecentArchiveBrowse({
     }
 
     void loadMobileSpeciesList();
-  }, [isMobileViewport]);
+  }, []);
 
   useEffect(() => {
     async function loadSameTagCounts() {
@@ -538,7 +559,8 @@ saveRecentArchiveBrowse({
       ? mobileSpeciesList.filter((item) => item.search_text?.includes(mobilePlantSearchKeyword))
       : mobileSpeciesList
   ).slice(0, 8);
-  const mobileSystemNameOptions = isNonPlantArchiveCategory(mobileArchiveCategory)
+  const mobileSystemNameOptions =
+    mobileArchiveCategory === "system" || mobileArchiveCategory === "insect_fish"
     ? getDefaultSystemNames(mobileArchiveCategory)
         .filter((name) =>
           mobileArchiveName.trim()
@@ -547,6 +569,27 @@ saveRecentArchiveBrowse({
         )
         .slice(0, 8)
     : [];
+  const archiveSystemNameUsesCandidates =
+    activeArchive.category === "plant" ||
+    activeArchive.category === "system" ||
+    activeArchive.category === "insect_fish";
+  const archiveProfileSystemNameCandidates =
+    activeArchive.category === "plant"
+      ? mobileSpeciesList.map((item) => ({
+          id: item.id,
+          label: item.display_name || item.common_name || item.scientific_name || "未命名植物",
+          description: [
+            item.scientific_name,
+            Array.isArray(item.aliases) && item.aliases.length
+              ? `别名：${item.aliases.slice(0, 4).join("、")}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }))
+      : activeArchive.category === "system" || activeArchive.category === "insect_fish"
+        ? getDefaultSystemNames(activeArchive.category).map((name) => ({ label: name }))
+        : [];
 
   if (!isOwner && !activeArchive.is_public) {
     return <ArchivePrivateState />;
@@ -727,14 +770,10 @@ saveRecentArchiveBrowse({
     showToast(nextValue ? "项目壳已公开，旧记录不会自动公开" : "项目和记录仅自己可见");
   }
 
-  async function updateArchiveStatus(nextStatus: "active" | "ended") {
+  async function applyArchiveStatus(nextStatus: "active" | "ended") {
     if (!isOwner) return;
 
     const isEnding = nextStatus === "ended";
-    if (isEnding && !confirm("确认将这个项目标记为已结束吗？之后仍可查看，也可以恢复。")) {
-      return;
-    }
-
     const { error } = await supabase.rpc(
       isEnding ? "mark_archive_ended" : "restore_archive_active",
       { p_archive_id: activeArchive.id }
@@ -747,6 +786,15 @@ saveRecentArchiveBrowse({
 
     setArchive((prev) => (prev ? { ...prev, status: nextStatus } : prev));
     showToast(isEnding ? "已标记为结束" : "已恢复为进行中");
+  }
+
+  async function updateArchiveStatus(nextStatus: "active" | "ended") {
+    if (nextStatus === "ended") {
+      setArchiveStatusConfirmOpen(true);
+      return;
+    }
+
+    await applyArchiveStatus(nextStatus);
   }
 
   async function confirmDeleteArchive() {
@@ -929,6 +977,63 @@ saveRecentArchiveBrowse({
     });
   }
 
+  async function saveArchiveSystemNameSelection(selection: {
+    name: string;
+    candidateId?: string | null;
+    isNewCandidate?: boolean;
+  }) {
+    const nextName = selection.name.trim();
+
+    if (!nextName) {
+      const emptyText = activeArchive.category === "plant" ? "系统植物名不能为空" : "系统名不能为空";
+      showToast(emptyText);
+      throw new Error(emptyText);
+    }
+
+    setMobileArchiveName(nextName);
+
+    if (activeArchive.category === "plant") {
+      const selectedSpecies = selection.candidateId
+        ? mobileSpeciesList.find((item) => item.id === selection.candidateId)
+        : null;
+
+      if (selectedSpecies) {
+        await saveMobileArchiveSpecies(selectedSpecies);
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        await supabase.from("plant_species_pending").insert([
+          {
+            user_id: user.id,
+            submitted_name: nextName,
+            language_code: "zh",
+            status: "pending",
+          },
+        ]);
+      }
+
+      const saved = await saveMobileArchivePatch(
+        "name",
+        {
+          species_id: null,
+          species_name_snapshot: nextName,
+          system_name: null,
+        },
+        "系统植物名已更新"
+      );
+
+      if (saved) setSpecies(null);
+      return;
+    }
+
+    await saveMobileArchivePatch("name", { system_name: nextName }, "系统名已更新");
+  }
+
   async function saveMobileArchiveSource() {
     const nextSource = mobileArchiveSource.trim();
     const currentSource = activeArchive.source || "";
@@ -965,8 +1070,10 @@ saveRecentArchiveBrowse({
       return;
     }
 
-    setMobileArchiveError("请从系统植物中点选");
-    showToast("请从系统植物中点选");
+    void saveArchiveSystemNameSelection({
+      name: mobileArchiveName,
+      isNewCandidate: true,
+    });
   }
 
   async function toggleProjectFollow() {
@@ -1459,12 +1566,37 @@ saveRecentArchiveBrowse({
               username={username}
               archiveDisplayName={archiveDisplayName}
               archiveCategoryLabel={archiveCategoryLabel}
+              archiveSubcategoryLabel={archiveSubcategoryLabel}
+              archiveGroupLabel={archiveGroupLabel}
               latestUpdate={latestUpdate}
               recordCount={activeArchive.record_count || records.length || 0}
               encyclopediaHref={encyclopediaHref}
               isProjectFollowed={isProjectFollowed}
+              systemNameCandidates={archiveProfileSystemNameCandidates}
+              systemNameMode={archiveSystemNameUsesCandidates ? "candidate" : "text"}
               onToggleArchiveVisibility={toggleArchiveVisibility}
               onToggleProjectFollow={toggleProjectFollow}
+              onToggleArchiveStatus={() =>
+                void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
+              }
+              onDeleteArchive={() => setDeleteArchiveDialogOpen(true)}
+              onSaveTitle={async (nextTitle) => {
+                setMobileArchiveTitle(nextTitle);
+                await saveMobileArchivePatch("title", { title: nextTitle });
+              }}
+              onSaveCategory={async (nextCategory) => {
+                setMobileArchiveCategory(nextCategory);
+                await saveMobileArchiveCategory(nextCategory);
+              }}
+              onSaveSystemName={saveArchiveSystemNameSelection}
+              onSaveSource={async (nextSource) => {
+                setMobileArchiveSource(nextSource);
+                await saveMobileArchivePatch("source", { source: nextSource || null });
+              }}
+              onSaveNote={async (nextNote) => {
+                setMobileArchiveNote(nextNote);
+                await saveMobileArchivePatch("note", { note: nextNote || null });
+              }}
             />
           </div>
         ) : null}
@@ -1499,7 +1631,17 @@ saveRecentArchiveBrowse({
             onSaveCategory={saveMobileArchiveCategory}
             onSaveNameBlur={handleMobileArchiveNameBlur}
             onSelectSpecies={saveMobileArchiveSpecies}
-            onSaveSystemName={saveMobileArchiveSystemName}
+            onSaveSystemName={(value) => {
+              if (activeArchive.category === "other") {
+                void saveMobileArchiveSystemName(value);
+                return;
+              }
+
+              void saveArchiveSystemNameSelection({
+                name: value || mobileArchiveName,
+                isNewCandidate: true,
+              });
+            }}
             onSaveSource={saveMobileArchiveSource}
             onSaveNote={saveMobileArchiveNote}
             onPlantSuggestionsOpenChange={setMobilePlantSuggestionsOpen}
@@ -1632,6 +1774,19 @@ saveRecentArchiveBrowse({
         }}
         onConfirm={confirmDeleteArchive}
         danger
+      />
+
+      <ConfirmDialog
+        open={archiveStatusConfirmOpen}
+        title="结束项目"
+        message="确认将这个项目标记为已结束吗？之后仍可查看，也可以恢复。"
+        confirmText="确认结束"
+        cancelText="取消"
+        onClose={() => setArchiveStatusConfirmOpen(false)}
+        onConfirm={() => {
+          setArchiveStatusConfirmOpen(false);
+          void applyArchiveStatus("ended");
+        }}
       />
 
       <ConfirmDialog
@@ -1857,6 +2012,16 @@ function MobileArchiveProfile({
                     没有找到匹配植物
                   </div>
                 )}
+
+                {archiveName.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => onSaveSystemName(archiveName)}
+                    style={mobileArchiveSuggestionNewButtonStyle}
+                  >
+                    使用“{archiveName.trim()}”作为新的系统名
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

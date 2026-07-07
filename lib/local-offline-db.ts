@@ -1,10 +1,11 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 
 const DB_NAME = "life-space-local-offline";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const ARCHIVE_STORE = "archives";
 const RECORD_STORE = "records";
 const IMAGE_STORE = "images";
+const TAXONOMY_STORE = "taxonomy";
 const MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
 const MAX_LOCAL_IMAGE_EDGE = 1600;
 const LOCAL_IMAGE_QUALITY = 0.82;
@@ -38,6 +39,7 @@ export type LocalArchive = {
   plant_slug?: string | null;
   system_name?: string | null;
   species_name?: string | null;
+  source?: string | null;
   local_owner_user_id?: string | null;
   local_owner_email?: string | null;
   local_owner_marked_at?: string | null;
@@ -83,6 +85,21 @@ export type LocalArchiveSummary = LocalArchive & {
   latest_record_time?: string | null;
   latest_record_note?: string | null;
   cover_image?: LocalImage | null;
+};
+
+export type LocalTaxonomyKind = "subcategory" | "group";
+
+export type LocalTaxonomyItem = {
+  id: string;
+  kind: LocalTaxonomyKind;
+  label: string;
+  category?: ArchiveCategory | null;
+  subcategory?: string | null;
+  local_owner_user_id?: string | null;
+  local_owner_email?: string | null;
+  created_at: string;
+  updated_at: string;
+  local_only: true;
 };
 
 export type LocalRecordWithImages = LocalRecord & {
@@ -154,9 +171,23 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
     plant_slug: normalizeOptionalText(archive.plant_slug),
     system_name: normalizeOptionalText(archive.system_name),
     species_name: normalizeOptionalText(archive.species_name),
+    source: normalizeOptionalText(archive.source),
     local_owner_user_id: normalizeOptionalText(archive.local_owner_user_id),
     local_owner_email: normalizeOptionalText(archive.local_owner_email),
     local_owner_marked_at: normalizeOptionalText(archive.local_owner_marked_at),
+  };
+}
+
+function normalizeLocalTaxonomyItem(item: LocalTaxonomyItem): LocalTaxonomyItem {
+  return {
+    ...item,
+    kind: item.kind === "group" ? "group" : "subcategory",
+    label: normalizeOptionalText(item.label) || "",
+    category: item.category ? normalizeLocalArchiveCategory(item.category) : null,
+    subcategory: normalizeOptionalText(item.subcategory),
+    local_owner_user_id: normalizeOptionalText(item.local_owner_user_id),
+    local_owner_email: normalizeOptionalText(item.local_owner_email),
+    local_only: true,
   };
 }
 
@@ -169,6 +200,16 @@ export function isLocalArchiveVisibleToOwner(
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
   const ownerUserId = normalizeOptionalText(archive.local_owner_user_id);
+  if (!ownerUserId) return true;
+
+  return ownerUserId === getOwnerUserId(ownerContext);
+}
+
+function isLocalTaxonomyVisibleToOwner(
+  item: LocalTaxonomyItem,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const ownerUserId = normalizeOptionalText(item.local_owner_user_id);
   if (!ownerUserId) return true;
 
   return ownerUserId === getOwnerUserId(ownerContext);
@@ -277,6 +318,31 @@ function openLocalDb() {
         store.createIndex("record_id", "record_id");
         store.createIndex("created_at", "created_at");
         store.createIndex("sync_status", "sync.status");
+      }
+
+      if (!db.objectStoreNames.contains(TAXONOMY_STORE)) {
+        const store = db.createObjectStore(TAXONOMY_STORE, { keyPath: "id" });
+        store.createIndex("kind", "kind");
+        store.createIndex("category", "category");
+        store.createIndex("subcategory", "subcategory");
+        store.createIndex("local_owner_user_id", "local_owner_user_id");
+      } else {
+        const store = request.transaction?.objectStore(TAXONOMY_STORE);
+
+        if (store) {
+          if (!store.indexNames.contains("kind")) {
+            store.createIndex("kind", "kind");
+          }
+          if (!store.indexNames.contains("category")) {
+            store.createIndex("category", "category");
+          }
+          if (!store.indexNames.contains("subcategory")) {
+            store.createIndex("subcategory", "subcategory");
+          }
+          if (!store.indexNames.contains("local_owner_user_id")) {
+            store.createIndex("local_owner_user_id", "local_owner_user_id");
+          }
+        }
       }
     };
 
@@ -427,6 +493,426 @@ export async function listVisibleLocalArchiveSummaries(
   };
 }
 
+function localTaxonomyKey(item: Pick<LocalTaxonomyItem, "kind" | "label"> & {
+  category?: ArchiveCategory | null;
+  subcategory?: string | null;
+}) {
+  return [
+    item.kind,
+    item.category || "",
+    item.subcategory || "",
+    normalizeOptionalText(item.label) || "",
+  ].join("::");
+}
+
+export async function listVisibleLocalTaxonomyItems(
+  ownerContext?: LocalArchiveOwnerContext | null
+): Promise<LocalTaxonomyItem[]> {
+  const [taxonomyRows, archiveRows] = await Promise.all([
+    getAllRows<LocalTaxonomyItem>(TAXONOMY_STORE),
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+  ]);
+  const timestamp = nowIso();
+  const visibleItems = taxonomyRows
+    .map(normalizeLocalTaxonomyItem)
+    .filter((item) => item.label && isLocalTaxonomyVisibleToOwner(item, ownerContext));
+  const visibleArchives = archiveRows
+    .map(normalizeLocalArchive)
+    .filter((archive) => isLocalArchiveVisibleToOwner(archive, ownerContext));
+  const merged = new Map<string, LocalTaxonomyItem>();
+
+  for (const item of visibleItems) {
+    merged.set(localTaxonomyKey(item), item);
+  }
+
+  for (const archive of visibleArchives) {
+    if (archive.subcategory) {
+      const item: LocalTaxonomyItem = {
+        id: `derived_subcategory_${archive.category}_${archive.subcategory}`,
+        kind: "subcategory",
+        label: archive.subcategory,
+        category: archive.category,
+        subcategory: null,
+        local_owner_user_id: archive.local_owner_user_id || null,
+        local_owner_email: archive.local_owner_email || null,
+        created_at: archive.created_at || timestamp,
+        updated_at: archive.updated_at || archive.created_at || timestamp,
+        local_only: true,
+      };
+      if (!merged.has(localTaxonomyKey(item))) {
+        merged.set(localTaxonomyKey(item), item);
+      }
+    }
+
+    if (archive.group_name) {
+      const item: LocalTaxonomyItem = {
+        id: `derived_group_${archive.category}_${archive.subcategory || "none"}_${archive.group_name}`,
+        kind: "group",
+        label: archive.group_name,
+        category: archive.category,
+        subcategory: archive.subcategory || null,
+        local_owner_user_id: archive.local_owner_user_id || null,
+        local_owner_email: archive.local_owner_email || null,
+        created_at: archive.created_at || timestamp,
+        updated_at: archive.updated_at || archive.created_at || timestamp,
+        local_only: true,
+      };
+      if (!merged.has(localTaxonomyKey(item))) {
+        merged.set(localTaxonomyKey(item), item);
+      }
+    }
+  }
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const categoryCompare = String(a.category || "").localeCompare(String(b.category || ""), "zh-CN");
+    if (categoryCompare !== 0) return categoryCompare;
+    const kindCompare = a.kind.localeCompare(b.kind);
+    if (kindCompare !== 0) return kindCompare;
+    return a.label.localeCompare(b.label, "zh-CN");
+  });
+}
+
+export async function createLocalTaxonomyItem(
+  input: {
+    kind: LocalTaxonomyKind;
+    label: string;
+    category?: ArchiveCategory | null;
+    subcategory?: string | null;
+  },
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const label = normalizeOptionalText(input.label);
+  if (!label) throw new Error("请填写本地分类名称");
+
+  const timestamp = nowIso();
+  const item: LocalTaxonomyItem = {
+    id: createId(`local_${input.kind}`),
+    kind: input.kind === "group" ? "group" : "subcategory",
+    label,
+    category: input.category ? normalizeLocalArchiveCategory(input.category) : null,
+    subcategory: normalizeOptionalText(input.subcategory),
+    local_owner_user_id: getOwnerUserId(ownerContext),
+    local_owner_email: normalizeOptionalText(ownerContext?.email),
+    created_at: timestamp,
+    updated_at: timestamp,
+    local_only: true,
+  };
+  const existingItems = await getAllRows<LocalTaxonomyItem>(TAXONOMY_STORE);
+  const existing = existingItems
+    .map(normalizeLocalTaxonomyItem)
+    .find(
+      (row) =>
+        isLocalTaxonomyVisibleToOwner(row, ownerContext) &&
+        localTaxonomyKey(row) === localTaxonomyKey(item)
+    );
+  if (existing) return existing;
+
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(TAXONOMY_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    await requestToPromise(transaction.objectStore(TAXONOMY_STORE).add(item));
+    await done;
+    return item;
+  } finally {
+    db.close();
+  }
+}
+
+export async function deleteLocalTaxonomyItem(
+  input: {
+    kind: LocalTaxonomyKind;
+    label: string;
+    category?: ArchiveCategory | null;
+    subcategory?: string | null;
+  },
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const label = normalizeOptionalText(input.label);
+  if (!label) return;
+
+  const category = input.category ? normalizeLocalArchiveCategory(input.category) : null;
+  const subcategory = normalizeOptionalText(input.subcategory);
+  const [taxonomyRows, archiveRows] = await Promise.all([
+    getAllRows<LocalTaxonomyItem>(TAXONOMY_STORE),
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+  ]);
+  const matchingTaxonomyIds = taxonomyRows
+    .map(normalizeLocalTaxonomyItem)
+    .filter(
+      (item) =>
+        item.kind === input.kind &&
+        item.label === label &&
+        (category ? item.category === category : true) &&
+        (input.kind === "group" && subcategory ? item.subcategory === subcategory : true) &&
+        isLocalTaxonomyVisibleToOwner(item, ownerContext)
+    )
+    .map((item) => item.id);
+  const matchingArchives = archiveRows
+    .map(normalizeLocalArchive)
+    .filter((archive) => {
+      if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) return false;
+      if (category && archive.category !== category) return false;
+      if (input.kind === "subcategory") return archive.subcategory === label;
+      if (subcategory && archive.subcategory !== subcategory) return false;
+      return archive.group_name === label;
+    });
+
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction([TAXONOMY_STORE, ARCHIVE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    const taxonomyStore = transaction.objectStore(TAXONOMY_STORE);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const timestamp = nowIso();
+
+    for (const id of matchingTaxonomyIds) {
+      await requestToPromise(taxonomyStore.delete(id));
+    }
+
+    for (const archive of matchingArchives) {
+      const nextArchive: LocalArchive =
+        input.kind === "subcategory"
+          ? { ...archive, subcategory: null, group_name: null, updated_at: timestamp }
+          : { ...archive, group_name: null, updated_at: timestamp };
+      await requestToPromise(archiveStore.put(nextArchive));
+    }
+
+    await done;
+  } finally {
+    db.close();
+  }
+}
+
+export async function renameLocalTaxonomyItem(
+  input: {
+    kind: LocalTaxonomyKind;
+    oldLabel: string;
+    newLabel: string;
+    category?: ArchiveCategory | null;
+    subcategory?: string | null;
+  },
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const oldLabel = normalizeOptionalText(input.oldLabel);
+  const newLabel = normalizeOptionalText(input.newLabel);
+  if (!oldLabel || !newLabel || oldLabel === newLabel) return;
+
+  const category = input.category ? normalizeLocalArchiveCategory(input.category) : null;
+  const subcategory = normalizeOptionalText(input.subcategory);
+  const [taxonomyRows, archiveRows] = await Promise.all([
+    getAllRows<LocalTaxonomyItem>(TAXONOMY_STORE),
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+  ]);
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction([TAXONOMY_STORE, ARCHIVE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    const taxonomyStore = transaction.objectStore(TAXONOMY_STORE);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const timestamp = nowIso();
+
+    for (const rawItem of taxonomyRows) {
+      const item = normalizeLocalTaxonomyItem(rawItem);
+      if (!isLocalTaxonomyVisibleToOwner(item, ownerContext)) continue;
+      if (category && item.category !== category) continue;
+
+      if (input.kind === "subcategory") {
+        if (item.kind === "subcategory" && item.label === oldLabel) {
+          await requestToPromise(
+            taxonomyStore.put({ ...item, label: newLabel, updated_at: timestamp })
+          );
+        }
+        if (item.kind === "group" && item.subcategory === oldLabel) {
+          await requestToPromise(
+            taxonomyStore.put({ ...item, subcategory: newLabel, updated_at: timestamp })
+          );
+        }
+      } else if (
+        item.kind === "group" &&
+        item.label === oldLabel &&
+        (!subcategory || item.subcategory === subcategory)
+      ) {
+        await requestToPromise(
+          taxonomyStore.put({ ...item, label: newLabel, updated_at: timestamp })
+        );
+      }
+    }
+
+    for (const rawArchive of archiveRows) {
+      const archive = normalizeLocalArchive(rawArchive);
+      if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) continue;
+      if (category && archive.category !== category) continue;
+
+      if (input.kind === "subcategory" && archive.subcategory === oldLabel) {
+        await requestToPromise(
+          archiveStore.put({ ...archive, subcategory: newLabel, updated_at: timestamp })
+        );
+      }
+      if (
+        input.kind === "group" &&
+        archive.group_name === oldLabel &&
+        (!subcategory || archive.subcategory === subcategory)
+      ) {
+        await requestToPromise(
+          archiveStore.put({ ...archive, group_name: newLabel, updated_at: timestamp })
+        );
+      }
+    }
+
+    await done;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalArchiveFields(
+  archiveId: string,
+  updates: {
+    title?: string | null;
+    category?: ArchiveCategory | null;
+    subcategory?: string | null;
+    group_name?: string | null;
+    system_name?: string | null;
+    species_name?: string | null;
+    source?: string | null;
+    note?: string | null;
+  },
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const nextArchive: LocalArchive = {
+      ...normalizedArchive,
+      title:
+        updates.title === undefined
+          ? normalizedArchive.title
+          : normalizeOptionalText(updates.title) || normalizedArchive.title,
+      category:
+        updates.category === undefined || updates.category === null
+          ? normalizedArchive.category
+          : normalizeLocalArchiveCategory(updates.category),
+      main_category:
+        updates.category === undefined || updates.category === null
+          ? normalizedArchive.main_category
+          : normalizeLocalArchiveCategory(updates.category),
+      subcategory:
+        updates.subcategory === undefined
+          ? normalizedArchive.subcategory
+          : normalizeOptionalText(updates.subcategory),
+      group_name:
+        updates.group_name === undefined
+          ? normalizedArchive.group_name
+          : normalizeOptionalText(updates.group_name),
+      system_name:
+        updates.system_name === undefined
+          ? normalizedArchive.system_name
+          : normalizeOptionalText(updates.system_name),
+      species_name:
+        updates.species_name === undefined
+          ? normalizedArchive.species_name
+          : normalizeOptionalText(updates.species_name),
+      source:
+        updates.source === undefined
+          ? normalizedArchive.source
+          : normalizeOptionalText(updates.source),
+      note:
+        updates.note === undefined
+          ? normalizedArchive.note
+          : normalizeOptionalText(updates.note),
+      updated_at: nowIso(),
+    };
+
+    await requestToPromise(archiveStore.put(nextArchive));
+    await done;
+    await refreshLocalUsageHints();
+    return nextArchive;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalRecordFields(
+  recordId: string,
+  updates: {
+    note?: string | null;
+    record_time?: string | null;
+  }
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction([RECORD_STORE, ARCHIVE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const record = await requestToPromise<LocalRecord | undefined>(
+      recordStore.get(recordId)
+    );
+
+    if (!record) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地记录不存在。");
+    }
+
+    const timestamp = nowIso();
+    const nextRecord: LocalRecord = {
+      ...record,
+      note:
+        updates.note === undefined
+          ? record.note
+          : normalizeOptionalText(updates.note) || "",
+      record_time:
+        updates.record_time === undefined
+          ? record.record_time
+          : normalizeOptionalText(updates.record_time) || record.record_time,
+      updated_at: timestamp,
+    };
+
+    await requestToPromise(recordStore.put(nextRecord));
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(record.archive_id)
+    );
+    if (archive) {
+      await requestToPromise(
+        archiveStore.put({
+          ...normalizeLocalArchive(archive),
+          updated_at: timestamp,
+        })
+      );
+    }
+
+    await done;
+    await refreshLocalUsageHints();
+    return nextRecord;
+  } finally {
+    db.close();
+  }
+}
+
 export async function markUnownedLocalArchivesForOwner(ownerContext: {
   userId: string;
   email?: string | null;
@@ -439,7 +925,7 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
   let markedCount = 0;
 
   try {
-    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const transaction = db.transaction([ARCHIVE_STORE, TAXONOMY_STORE], "readwrite");
     const done = transactionDone(transaction);
     const cursorRequest = transaction.objectStore(ARCHIVE_STORE).openCursor();
 
@@ -472,6 +958,35 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
       };
     });
 
+    const taxonomyCursorRequest = transaction.objectStore(TAXONOMY_STORE).openCursor();
+    await new Promise<void>((resolve, reject) => {
+      taxonomyCursorRequest.onerror = () =>
+        reject(taxonomyCursorRequest.error || new Error("读取本地分类失败"));
+      taxonomyCursorRequest.onsuccess = () => {
+        const cursor = taxonomyCursorRequest.result;
+        if (!cursor) {
+          resolve();
+          return;
+        }
+
+        const item = normalizeLocalTaxonomyItem(cursor.value as LocalTaxonomyItem);
+        if (!item.local_owner_user_id) {
+          const updateRequest = cursor.update({
+            ...item,
+            local_owner_user_id: userId,
+            local_owner_email: normalizeOptionalText(ownerContext.email),
+            updated_at: timestamp,
+          } satisfies LocalTaxonomyItem);
+          updateRequest.onerror = () =>
+            reject(updateRequest.error || new Error("标记本地分类失败"));
+          updateRequest.onsuccess = () => cursor.continue();
+          return;
+        }
+
+        cursor.continue();
+      };
+    });
+
     await done;
     return markedCount;
   } finally {
@@ -488,6 +1003,7 @@ export async function createLocalArchive(input: {
   plant_slug?: string | null;
   system_name?: string | null;
   species_name?: string | null;
+  source?: string | null;
   local_owner_user_id?: string | null;
   local_owner_email?: string | null;
   local_owner_marked_at?: string | null;
@@ -506,6 +1022,7 @@ export async function createLocalArchive(input: {
     plant_slug: normalizeOptionalText(input.plant_slug),
     system_name: normalizeOptionalText(input.system_name),
     species_name: normalizeOptionalText(input.species_name),
+    source: normalizeOptionalText(input.source),
     local_owner_user_id: normalizeOptionalText(input.local_owner_user_id),
     local_owner_email: normalizeOptionalText(input.local_owner_email),
     local_owner_marked_at: normalizeOptionalText(input.local_owner_marked_at),
@@ -659,6 +1176,7 @@ export async function createLocalRecord(input: {
   archive_id: string;
   note: string;
   image_files?: File[];
+  record_time?: string;
 }) {
   const note = input.note.trim();
   const files = input.image_files || [];
@@ -668,11 +1186,15 @@ export async function createLocalRecord(input: {
   }
 
   const timestamp = nowIso();
+  const recordTime =
+    input.record_time && !Number.isNaN(new Date(input.record_time).getTime())
+      ? new Date(input.record_time).toISOString()
+      : timestamp;
   const record: LocalRecord = {
     id: createId("local_record"),
     archive_id: input.archive_id,
     note,
-    record_time: timestamp,
+    record_time: recordTime,
     created_at: timestamp,
     updated_at: timestamp,
     local_only: true,

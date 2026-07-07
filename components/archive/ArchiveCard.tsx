@@ -382,7 +382,7 @@ export default function ArchiveCard({
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
-                title="点击可修改系统植物名"
+                title="点击可修改系统名"
               >
                 {systemName}
               </span>
@@ -603,21 +603,17 @@ function MobileArchiveCard({
   onDeleteArchive: (item: ArchiveItem) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const helpStatusText = getMobileArchiveHelpStatusText(item);
-  const updateText = formatArchiveDate(item.latest_record_time || item.last_record_time || item.created_at) || "暂无";
   const ongoingDays = getOngoingDays(item.created_at);
-  const activityText = [
+  const mobilePrimaryStatsText = [
     `记录 ${item.record_count || 0}`,
-    ongoingDays ? `${ongoingDays} 天` : "",
-    `最近更新 ${updateText}`,
+    ongoingDays ? `已持续 ${ongoingDays} 天` : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  const visibilityText = item.is_public ? "公开" : "私密";
+  const visibilityText = item.is_public ? "公开发现" : "仅自己可见";
   const mobileStatusDetailText = [
     `浏览 ${item.view_count || 0}`,
     typeof item.follower_count !== "undefined" ? `关注 ${item.follower_count || 0}` : "",
-    helpStatusText,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -635,10 +631,12 @@ function MobileArchiveCard({
     categoryIcon: getArchiveCategoryIcon(item.category),
     systemName,
     cover: imageUrl ? { kind: "url", url: imageUrl, alt: imageAlt } : null,
-    latestText: activityText,
+    latestText: null,
     visibilityLabel: visibilityText,
     visibilityTone: item.is_public ? "public" : "private",
-    activityText: mobileStatusDetailText,
+    activityText: mobilePrimaryStatsText,
+    mobilePrimaryStatsText,
+    mobileSecondaryStatsText: mobileStatusDetailText,
     statusLabel: mobileEndedText,
     ended,
   };
@@ -720,12 +718,6 @@ function MobileArchiveCard({
       mobileMode
     />
   );
-}
-
-function getMobileArchiveHelpStatusText(item: ArchiveItem) {
-  if (item.help_status === "open") return "求助中";
-  if (item.help_status === "resolved") return "求助已解决";
-  return "";
 }
 
 function getMobileArchiveSystemName(item: ArchiveItem) {

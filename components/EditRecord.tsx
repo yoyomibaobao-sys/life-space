@@ -11,6 +11,7 @@ export default function EditRecord({
   placeholder = "点击添加内容",
   compact = false,
   onSaved,
+  onSaveOverride,
 }: {
   id: string;
   initialText: string;
@@ -18,6 +19,7 @@ export default function EditRecord({
   placeholder?: string;
   compact?: boolean;
   onSaved?: (nextText: string) => void;
+  onSaveOverride?: (nextText: string) => Promise<void> | void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(initialText);
@@ -60,12 +62,23 @@ export default function EditRecord({
     setError("");
     const nextText = text.trim();
 
-    const { error: saveError } = await supabase
-      .from("records")
-      .update({
-        note: nextText,
-      })
-      .eq("id", id);
+    let saveError: unknown = null;
+
+    if (onSaveOverride) {
+      try {
+        await onSaveOverride(nextText);
+      } catch (err) {
+        saveError = err;
+      }
+    } else {
+      const result = await supabase
+        .from("records")
+        .update({
+          note: nextText,
+        })
+        .eq("id", id);
+      saveError = result.error;
+    }
 
     setLoading(false);
 
@@ -78,7 +91,9 @@ export default function EditRecord({
     onSaved?.(nextText);
     setEditing(false);
 
-    router.refresh();
+    if (!onSaveOverride) {
+      router.refresh();
+    }
   }
 
   function cancel() {

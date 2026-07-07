@@ -1,16 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { showToast } from "@/components/Toast";
+import ArchiveNewProjectFormShell, {
+  archiveNewProjectInputStyle,
+} from "@/components/archive-ui/ArchiveNewProjectFormShell";
 import {
   archiveCategoryOptions,
-  getArchiveCategoryDescription,
-  getArchiveNamePlaceholder,
+  getDefaultSystemNames,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
-import { createLocalArchive } from "@/lib/local-offline-db";
+import {
+  createLocalArchive,
+} from "@/lib/local-offline-db";
 
 function normalizeInitialCategory(value: string): ArchiveCategory | null {
   return archiveCategoryOptions.some((option) => option.value === value)
@@ -34,12 +37,12 @@ export default function NewLocalArchivePage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory>("plant");
-  const [subcategory, setSubcategory] = useState("");
-  const [groupName, setGroupName] = useState("");
   const [plantId, setPlantId] = useState("");
   const [plantSlug, setPlantSlug] = useState("");
   const [systemName, setSystemName] = useState("");
-  const [speciesName, setSpeciesName] = useState("");
+  const [systemSearch, setSystemSearch] = useState("");
+  const [systemSuggestionsOpen, setSystemSuggestionsOpen] = useState(false);
+  const [source, setSource] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -48,11 +51,21 @@ export default function NewLocalArchivePage() {
     if (initialCategory) setCategory(initialCategory);
     setPlantId(getInitialSearchParam("plant_id"));
     setPlantSlug(getInitialSearchParam("plant_slug"));
-    setSpeciesName(getInitialSearchParam("species_name", "plant_name", "name"));
-    setSystemName((current) =>
-      current || getInitialSearchParam("system_name", "plant_name", "name")
-    );
+    const initialSystemName = getInitialSearchParam("system_name", "plant_name", "name");
+    setSystemName((current) => current || initialSystemName);
+    setSystemSearch((current) => current || initialSystemName);
   }, []);
+
+  const usesCandidateSystemName =
+    category === "plant" || category === "system" || category === "insect_fish";
+  const systemOptions =
+    category === "system" || category === "insect_fish"
+      ? getDefaultSystemNames(category).filter((name) =>
+          systemSearch.trim()
+            ? name.toLowerCase().includes(systemSearch.trim().toLowerCase())
+            : true
+        )
+      : [];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,17 +77,24 @@ export default function NewLocalArchivePage() {
       return;
     }
 
+    const cleanSystemName = (usesCandidateSystemName ? systemName || systemSearch : systemName).trim();
+    if (!cleanSystemName) {
+      showToast("请填写系统名");
+      return;
+    }
+
     setSaving(true);
     try {
       const archive = await createLocalArchive({
         title: cleanTitle,
         category,
-        subcategory,
-        group_name: groupName,
+        subcategory: null,
+        group_name: null,
         plant_id: plantId,
         plant_slug: plantSlug,
-        system_name: systemName,
-        species_name: speciesName || (category === "plant" ? systemName : ""),
+        system_name: cleanSystemName,
+        species_name: category === "plant" ? cleanSystemName : "",
+        source: source.trim() || null,
         note,
       });
 
@@ -88,137 +108,104 @@ export default function NewLocalArchivePage() {
   }
 
   return (
-    <main style={pageStyle}>
-      <section style={panelStyle}>
-        <Link href="/archive?source=local" style={backLinkStyle}>
-          返回本地项目
-        </Link>
-        <div style={eyebrowStyle}>只保存在本机</div>
-        <h1 style={titleStyle}>新建本地项目</h1>
-        <p style={subtitleStyle}>
-          本地项目只保存在这台设备，不上传云端，也不会进入公共页面。
-        </p>
-
-        <form onSubmit={handleSubmit} style={formStyle}>
-          <label style={fieldStyle}>
-            <span style={labelStyle}>项目名</span>
+    <ArchiveNewProjectFormShell
+      backHref="/archive?source=local"
+      backLabel="返回我的空间"
+      eyebrow="本地离线"
+      title="新建项目"
+      subtitle="表单结构与云空间一致，只是保存到这台设备的 App 私有本地存储。"
+      category={category}
+      onCategoryChange={setCategory}
+      projectTitle={title}
+      onProjectTitleChange={setTitle}
+      systemControl={
+        usesCandidateSystemName ? (
+          <>
             <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="例如：阳台番茄"
-              style={inputStyle}
-            />
-          </label>
-
-          <div style={fieldStyle}>
-            <span style={labelStyle}>主分类</span>
-            <div style={categoryGridStyle}>
-              {archiveCategoryOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setCategory(option.value)}
-                  style={{
-                    ...categoryButtonStyle,
-                    ...(category === option.value ? categoryButtonActiveStyle : {}),
-                  }}
-                >
-                  <strong>{option.label}</strong>
-                  <span>{option.description}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <label style={fieldStyle}>
-            <span style={labelStyle}>子分类</span>
-            <input
-              value={subcategory}
-              onChange={(event) => setSubcategory(event.target.value)}
+              value={systemSearch}
+              onChange={(event) => {
+                setSystemSearch(event.target.value);
+                setSystemName("");
+                setSystemSuggestionsOpen(true);
+              }}
+              onFocus={() => setSystemSuggestionsOpen(true)}
               placeholder={
                 category === "plant"
-                  ? "例如：蔬菜、香草、果树、花卉"
-                  : "例如：育苗、堆肥、鱼缸、昆虫观察"
+                  ? "输入后选择候选，或使用当前输入"
+                  : `输入后点选，例如：${systemOptions[0] || "补光灯"}`
               }
-              style={inputStyle}
+              style={archiveNewProjectInputStyle}
             />
-            <span style={helperTextStyle}>
-              可选，只保存到本机 IndexedDB；不会自动创建云空间子分类。
-            </span>
-          </label>
+            {systemSuggestionsOpen ? (
+              <div style={localSuggestionPanelStyle}>
+                {systemOptions.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => {
+                      setSystemName(name);
+                      setSystemSearch(name);
+                      setSystemSuggestionsOpen(false);
+                    }}
+                    style={localSuggestionButtonStyle(systemName === name)}
+                  >
+                    {name}
+                  </button>
+                ))}
 
-          <label style={fieldStyle}>
-            <span style={labelStyle}>分组</span>
-            <input
-              value={groupName}
-              onChange={(event) => setGroupName(event.target.value)}
-              placeholder="例如：南阳台、春播、试验区"
-              style={inputStyle}
-            />
-            <span style={helperTextStyle}>
-              可选，只作为本地离线分组；不会自动创建云空间分组。
-            </span>
-          </label>
+                {systemSearch.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name = systemSearch.trim();
+                      setSystemName(name);
+                      setSystemSearch(name);
+                      setSystemSuggestionsOpen(false);
+                    }}
+                    style={localSuggestionNewButtonStyle}
+                  >
+                    使用“{systemSearch.trim()}”作为新的系统名
+                  </button>
+                ) : (
+                  <div style={localSuggestionEmptyStyle}>输入关键词后搜索系统名候选。</div>
+                )}
 
-          <label style={fieldStyle}>
-            <span style={labelStyle}>
-              {category === "plant" ? "系统名 / 植物名称" : getArchiveNamePlaceholder(category)}
-            </span>
-            <input
-              value={systemName}
-              onChange={(event) => setSystemName(event.target.value)}
-              placeholder={
-                category === "plant"
-                  ? "例如：番茄、迷迭香、月季"
-                  : `填写${getArchiveNamePlaceholder(category)}名称`
-              }
-              style={inputStyle}
-            />
-            <span style={helperTextStyle}>
-              本地只保存这个名称快照
-              {plantId || plantSlug ? "和百科标识" : ""}，不缓存百科正文、图片或相关项目。
-            </span>
-          </label>
-
-          {plantId || plantSlug ? (
-            <section style={plantLinkHintStyle}>
-              已记录线上植物百科关联线索：
-              {plantId ? ` plant_id=${plantId}` : ""}
-              {plantSlug ? ` plant_slug=${plantSlug}` : ""}。本地离线页仍不会缓存百科内容。
-            </section>
-          ) : null}
-
-          <label style={fieldStyle}>
-            <span style={labelStyle}>位置备注</span>
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder={
-                category === "plant"
-                  ? "例如：南阳台、东侧花盆、院子里的种植床"
-                  : getArchiveCategoryDescription(category)
-              }
-              rows={4}
-              style={textareaStyle}
-            />
-          </label>
-
-          <section style={noticeStyle}>
-            本地分类和分组只属于这台设备。以后如果同步到云空间，也需要重新确认云端子分类和分组，
-            不会自动复制。图片会在添加记录时保存为 App 内部缓存副本，不会默认写入系统相册。
-          </section>
-
-          <div style={actionRowStyle}>
-            <Link href="/archive?source=local" style={cancelButtonStyle}>
-              取消
-            </Link>
-            <button type="submit" disabled={saving} style={submitButtonStyle}>
-              {saving ? "保存中..." : "创建本地项目"}
-            </button>
-          </div>
-        </form>
-      </section>
-    </main>
+                {!systemOptions.length && systemSearch.trim() ? (
+                  <div style={localSuggestionEmptyStyle}>没有找到匹配候选，可使用当前输入。</div>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <input
+            value={systemName}
+            onChange={(event) => setSystemName(event.target.value)}
+            placeholder="其他种类没有预设系统名，直接输入"
+            style={archiveNewProjectInputStyle}
+          />
+        )
+      }
+      sourceControl={
+        <input
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+          placeholder="可选，例如：市场购买、朋友分享、育苗记录"
+          style={archiveNewProjectInputStyle}
+        />
+      }
+      note={note}
+      onNoteChange={setNote}
+      notice={
+        <>
+          只保存在这台设备，不上传云端。子分类和分组可在项目列表或项目档案中继续整理，本地分类 / 分组仍独立于云空间。
+          {plantId || plantSlug ? " 已保存百科关联线索，但不会缓存百科正文、图片、相关项目或大家的经验。" : ""}
+        </>
+      }
+      submitText="创建项目"
+      loadingText="保存中..."
+      submitting={saving}
+      onSubmit={handleSubmit}
+    />
   );
 }
 
@@ -351,6 +338,49 @@ const plantLinkHintStyle = {
   color: "#6b7a63",
   fontSize: 12,
   lineHeight: 1.6,
+} satisfies CSSProperties;
+
+const localSuggestionPanelStyle = {
+  marginTop: 8,
+  border: "1px solid #e5eadf",
+  borderRadius: 12,
+  background: "#fff",
+  maxHeight: 230,
+  overflow: "auto",
+  padding: 8,
+  display: "grid",
+  gap: 6,
+} satisfies CSSProperties;
+
+function localSuggestionButtonStyle(active = false): CSSProperties {
+  return {
+    textAlign: "left",
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: active ? "1px solid #4CAF50" : "1px solid transparent",
+    background: active ? "#f0fff4" : "#fafafa",
+    color: "#263326",
+    cursor: "pointer",
+    fontSize: 13,
+  };
+}
+
+const localSuggestionNewButtonStyle = {
+  textAlign: "left",
+  padding: "8px 10px",
+  borderRadius: 8,
+  border: "1px dashed #4CAF50",
+  background: "#fff",
+  color: "#3f7d3d",
+  cursor: "pointer",
+  fontSize: 13,
+  fontWeight: 800,
+} satisfies CSSProperties;
+
+const localSuggestionEmptyStyle = {
+  color: "#7d8a76",
+  fontSize: 12,
+  padding: 4,
 } satisfies CSSProperties;
 
 const actionRowStyle = {

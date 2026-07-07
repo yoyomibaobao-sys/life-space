@@ -5,6 +5,12 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { showToast } from "@/components/Toast";
+import ArchiveNewProjectFormShell, {
+  archiveNewProjectHelperTextStyle,
+  archiveNewProjectInputStyle,
+  archiveNewProjectSuggestionButtonStyle,
+  archiveNewProjectSuggestionPanelStyle,
+} from "@/components/archive-ui/ArchiveNewProjectFormShell";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -14,8 +20,6 @@ import {
 import {
   type ArchiveCategory,
   archiveCategoryOptions,
-  getArchiveCategoryDescription,
-  getArchiveCategoryLabel,
   getDefaultSystemNames,
   isNonPlantArchiveCategory,
 } from "@/lib/archive-categories";
@@ -78,12 +82,10 @@ function NewArchiveContent() {
   )
     ? (preselectedCategory as ArchiveCategory)
     : null;
-  const [categoryPickerOpen, setCategoryPickerOpen] = useState(!validPreselectedCategory);
 
   useEffect(() => {
     if (!validPreselectedCategory || preselectedSpeciesId) return;
     switchCategory(validPreselectedCategory);
-    setCategoryPickerOpen(false);
   }, [validPreselectedCategory, preselectedSpeciesId]);
 
   useEffect(() => {
@@ -148,7 +150,6 @@ function NewArchiveContent() {
             "";
 
           setCategory("plant");
-          setCategoryPickerOpen(false);
           setSpeciesId(selected.id);
           setPendingSpeciesName(null);
           setSpeciesSearch(selectedName);
@@ -182,7 +183,6 @@ function NewArchiveContent() {
       } else {
         setMembership(normalizeMembershipRpcResult(data));
       }
-
       setMembershipLoading(false);
     }
 
@@ -299,15 +299,15 @@ function NewArchiveContent() {
       return;
     }
 
-    if (category === "plant" && !speciesId && !pendingSpeciesName) {
-      showToast("请选择植物名称，或新增一个候选植物");
+    const cleanSystemName =
+      category === "plant" ? speciesSearch.trim() : systemName.trim() || systemSearch.trim();
+
+    if (!cleanSystemName) {
+      showToast("请填写系统名");
       return;
     }
 
-    if (category !== "plant" && !systemName.trim()) {
-      showToast(`请选择或添加${getArchiveCategoryLabel(category)}具体名称`);
-      return;
-    }
+    const cleanObjectName = source.trim();
 
     setLoading(true);
 
@@ -321,11 +321,11 @@ function NewArchiveContent() {
       return;
     }
 
-    if (category === "plant" && pendingSpeciesName) {
+    if (category === "plant" && !speciesId && !pendingSpeciesName) {
       await supabase.from("plant_species_pending").insert([
         {
           user_id: user.id,
-          submitted_name: pendingSpeciesName,
+          submitted_name: cleanSystemName,
           language_code: "zh",
           status: "pending",
         },
@@ -339,7 +339,7 @@ function NewArchiveContent() {
           selectedSpecies?.display_name ||
           selectedSpecies?.common_name ||
           selectedSpecies?.scientific_name ||
-          null
+          cleanSystemName
         : null;
 
     const { data: createdArchive, error } = await supabase
@@ -350,8 +350,8 @@ function NewArchiveContent() {
           category,
           species_id: category === "plant" ? speciesId : null,
           species_name_snapshot: speciesNameSnapshot,
-          system_name: category === "plant" ? null : systemName.trim(),
-          source: source.trim() || null,
+          system_name: category === "plant" ? null : cleanSystemName,
+          source: cleanObjectName || null,
           note: note.trim() || null,
           user_id: user.id,
           is_public: DEFAULT_ARCHIVE_IS_PUBLIC,
@@ -397,322 +397,116 @@ function NewArchiveContent() {
   }
 
   return (
-    <main
-      style={{
-        padding: "26px 20px",
-        maxWidth: 480,
-        margin: "0 auto",
-        color: "#263326",
+    <ArchiveNewProjectFormShell
+      backHref="/archive"
+      backLabel="返回我的空间"
+      eyebrow="云空间"
+      title="新建项目"
+      subtitle="表单结构与本地离线一致；保存后进入云空间，可用于多设备、公开发现、求助和集市等云端能力。"
+      category={category}
+      onCategoryChange={(nextCategory) => {
+        switchCategory(nextCategory);
       }}
-    >
-      <h2 style={{ margin: "0 0 20px", color: "#1f2d1f" }}>新建项目</h2>
-
-      {contentBlocked ? (
-        <div
-          style={{
-            marginBottom: 18,
-            padding: "12px 14px",
-            borderRadius: 14,
-            border: "1px solid #ead9b8",
-            background: "#fff8ea",
-            color: "#7a5c24",
-            fontSize: 13,
-            lineHeight: 1.7,
-          }}
-        >
-          <span>{getCreateContentBlockedText(membership)}</span>{" "}
-          <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            查看云空间
-          </Link>
-        </div>
-      ) : null}
-
-      <form onSubmit={handleCreate}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>项目名称 *</div>
-
-          <input
-            placeholder="例如：阳台迷迭香"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            style={{
-              padding: "10px",
-              width: "100%",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              fontSize: 14,
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>项目大类 *</div>
-
-          <div
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              background: "#f6f9f3",
-              border: "1px solid #e5ecde",
-              color: "#65725f",
-              fontSize: 12,
-              lineHeight: 1.7,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <span>
-                已选择：
-                <strong style={{ color: "#2f6d2f" }}>
-                  {getArchiveCategoryLabel(category)}
-                </strong>
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setCategoryPickerOpen((open) => !open)}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: "#3f7d3d",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  padding: 0,
-                }}
-              >
-                {categoryPickerOpen ? "收起选择" : "重新选择"}
-              </button>
-            </div>
-
-            <div style={{ marginTop: 6 }}>{getArchiveCategoryDescription(category)}</div>
-            <div style={{ marginTop: 4, color: "#7f8c78" }}>
-              之后可调整分类和分组。
-            </div>
-          </div>
-
-          {categoryPickerOpen ? (
-            <div
-              style={{
-                marginTop: 10,
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 10,
-              }}
-            >
-              {archiveCategoryOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    switchCategory(option.value);
-                    setCategoryPickerOpen(false);
-                  }}
-                  style={{
-                    padding: "10px",
-                    borderRadius: 999,
-                    border:
-                      category === option.value
-                        ? "1px solid #3f7d3d"
-                        : "1px solid #ddd",
-                    background: category === option.value ? "#3f7d3d" : "#fff",
-                    color: category === option.value ? "#fff" : "#333",
-                    cursor: "pointer",
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {category === "plant" && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>植物名称 *</div>
-
-            <div style={{ position: "relative" }}>
-              <input
-                placeholder="输入名称，点选对应条目"
-                value={speciesSearch}
-                onChange={(e) => {
-                  setSpeciesSearch(e.target.value);
-                  setSpeciesId(null);
-                  setPendingSpeciesName(null);
-                  setPlantSuggestionsOpen(true);
-                }}
-                style={{
-                  padding: "10px",
-                  width: "100%",
-                  border: "1px solid #ddd",
-                  borderRadius: "8px",
-                  fontSize: 14,
-                  color: "#263326",
-                  background: "#fff",
-                  boxSizing: "border-box",
-                }}
-              />
-
-              {plantSuggestionsOpen && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    border: "1px solid #eee",
-                    borderRadius: 12,
-                    background: "#fff",
-                    maxHeight: 250,
-                    overflow: "auto",
-                    padding: 8,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                  }}
-                >
-                  {getPlantSearchResults().map((species) => (
-                    <button
-                      key={species.id}
-                      type="button"
-                      onClick={() => {
-                        const name =
-                          species.display_name ||
-                          species.common_name ||
-                          species.scientific_name ||
-                          "未命名植物";
-
-                        setSpeciesId(species.id);
-                        setPendingSpeciesName(null);
-                        setSpeciesSearch(name);
-                        setPlantSuggestionsOpen(false);
-                      }}
-                      style={{
-                        textAlign: "left",
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        border:
-                          speciesId === species.id
-                            ? "1px solid #4CAF50"
-                            : "1px solid transparent",
-                        background:
-                          speciesId === species.id ? "#f0fff4" : "#fafafa",
-                        color: "#263326",
-                        cursor: "pointer",
-                        fontSize: 13,
-                      }}
-                    >
-                      <strong style={{ color: "#263326" }}>
-                        {species.display_name ||
-                          species.common_name ||
-                          species.scientific_name ||
-                          "未命名植物"}
-                      </strong>
-                      {species.scientific_name && (
-                        <span style={{ color: "#888", marginLeft: 6 }}>
-                          {species.scientific_name}
-                        </span>
-                      )}
-                      {Array.isArray(species.aliases) &&
-                        species.aliases.length > 0 && (
-                          <div style={{ color: "#999", marginTop: 2 }}>
-                            别名：{species.aliases.slice(0, 4).join("、")}
-                          </div>
-                        )}
-                    </button>
-                  ))}
-
-                  {getPlantSearchResults().length === 0 && (
-                    <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
-                      没有找到匹配植物
-                    </div>
-                  )}
-
-                  {speciesSearch.trim() && !hasExactPlantMatch() && (
-                    <button
-                      type="button"
-                      onClick={submitPendingSpeciesName}
-                      style={{
-                        textAlign: "left",
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        border: "1px dashed #4CAF50",
-                        background: "#fff",
-                        color: "#4CAF50",
-                        cursor: "pointer",
-                        fontSize: 13,
-                      }}
-                    >
-                      + 新增候选植物：{speciesSearch.trim()}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {pendingSpeciesName && (
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: "#666",
-                  lineHeight: 1.6,
-                }}
-              >
-                当前使用候选植物：
-                <strong>{pendingSpeciesName}</strong>
-              </div>
-            )}
-          </div>
-        )}
-
-        {category !== "plant" && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>具体名称 *</div>
-
+      projectTitle={title}
+      onProjectTitleChange={setTitle}
+      systemControl={
+        category === "plant" ? (
+          <>
             <input
-              placeholder={
-                category === "other"
-                  ? "输入具体名称"
-                  : `输入后点选，例如：${systemOptions[0] || "补光灯"}`
-              }
+              placeholder="输入后点选系统植物，或新增候选名"
+              value={speciesSearch}
+              onChange={(event) => {
+                setSpeciesSearch(event.target.value);
+                setSpeciesId(null);
+                setPendingSpeciesName(null);
+                setPlantSuggestionsOpen(true);
+              }}
+              onFocus={() => setPlantSuggestionsOpen(true)}
+              style={archiveNewProjectInputStyle}
+            />
+            {plantSuggestionsOpen ? (
+              <div style={archiveNewProjectSuggestionPanelStyle}>
+                {getPlantSearchResults().map((species) => (
+                  <button
+                    key={species.id}
+                    type="button"
+                    onClick={() => {
+                      const name =
+                        species.display_name ||
+                        species.common_name ||
+                        species.scientific_name ||
+                        "未命名植物";
+
+                      setSpeciesId(species.id);
+                      setPendingSpeciesName(null);
+                      setSpeciesSearch(name);
+                      setPlantSuggestionsOpen(false);
+                    }}
+                    style={archiveNewProjectSuggestionButtonStyle(speciesId === species.id)}
+                  >
+                    <strong>{species.display_name || species.common_name || species.scientific_name || "未命名植物"}</strong>
+                    {species.scientific_name ? (
+                      <span style={{ color: "#888", marginLeft: 6 }}>{species.scientific_name}</span>
+                    ) : null}
+                    {Array.isArray(species.aliases) && species.aliases.length > 0 ? (
+                      <div style={{ color: "#999", marginTop: 2 }}>
+                        别名：{species.aliases.slice(0, 4).join("、")}
+                      </div>
+                    ) : null}
+                  </button>
+                ))}
+
+                {getPlantSearchResults().length === 0 ? (
+                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>没有找到匹配植物</div>
+                ) : null}
+
+                {speciesSearch.trim() && !hasExactPlantMatch() ? (
+                  <button
+                    type="button"
+                    onClick={submitPendingSpeciesName}
+                    style={{
+                      ...archiveNewProjectSuggestionButtonStyle(false),
+                      border: "1px dashed #4CAF50",
+                      background: "#fff",
+                      color: "#4CAF50",
+                    }}
+                  >
+                    + 新增候选植物：{speciesSearch.trim()}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {pendingSpeciesName ? (
+              <span style={archiveNewProjectHelperTextStyle}>
+                当前使用候选植物：<strong>{pendingSpeciesName}</strong>
+              </span>
+            ) : null}
+          </>
+        ) : category === "other" ? (
+          <input
+            placeholder="其他种类没有预设系统名，直接输入"
+            value={systemName}
+            onChange={(event) => {
+              setSystemName(event.target.value);
+              setSystemSearch(event.target.value);
+            }}
+            style={archiveNewProjectInputStyle}
+          />
+        ) : (
+          <>
+            <input
+              placeholder={`输入后点选，例如：${systemOptions[0] || "补光灯"}`}
               value={systemSearch}
-              onChange={(e) => {
-                setSystemSearch(e.target.value);
+              onChange={(event) => {
+                setSystemSearch(event.target.value);
                 setSystemName("");
                 setSystemSuggestionsOpen(true);
               }}
               onFocus={() => setSystemSuggestionsOpen(true)}
-              style={{
-                padding: "10px",
-                width: "100%",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                fontSize: 14,
-                boxSizing: "border-box",
-              }}
+              style={archiveNewProjectInputStyle}
             />
-
-            {systemSuggestionsOpen && (
-              <div
-                style={{
-                  marginTop: 8,
-                  border: "1px solid #eee",
-                  borderRadius: 12,
-                  background: "#fff",
-                  maxHeight: 220,
-                  overflow: "auto",
-                  padding: 8,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
+            {systemSuggestionsOpen ? (
+              <div style={archiveNewProjectSuggestionPanelStyle}>
                 {systemOptions.map((name) => (
                   <button
                     key={name}
@@ -722,31 +516,17 @@ function NewArchiveContent() {
                       setSystemSearch(name);
                       setSystemSuggestionsOpen(false);
                     }}
-                    style={{
-                      textAlign: "left",
-                      padding: "8px 10px",
-                      borderRadius: 8,
-                      border:
-                        systemName === name
-                          ? "1px solid #4CAF50"
-                          : "1px solid transparent",
-                      background: systemName === name ? "#f0fff4" : "#fafafa",
-                      color: "#263326",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
+                    style={archiveNewProjectSuggestionButtonStyle(systemName === name)}
                   >
                     {name}
                   </button>
                 ))}
 
-                {systemOptions.length === 0 && category !== "other" && (
-                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
-                    没有找到匹配名称
-                  </div>
-                )}
+                {systemOptions.length === 0 ? (
+                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>没有找到匹配名称</div>
+                ) : null}
 
-                {systemSearch.trim() && !hasExactSystemNameMatch() && (
+                {systemSearch.trim() && !hasExactSystemNameMatch() ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -756,103 +536,47 @@ function NewArchiveContent() {
                       setSystemSuggestionsOpen(false);
                     }}
                     style={{
-                      textAlign: "left",
-                      padding: "8px 10px",
-                      borderRadius: 8,
+                      ...archiveNewProjectSuggestionButtonStyle(false),
                       border: "1px dashed #4CAF50",
                       background: "#fff",
                       color: "#4CAF50",
-                      cursor: "pointer",
-                      fontSize: 13,
                     }}
                   >
-                    + 新增为具体名称：{systemSearch.trim()}
+                    + 新增为系统名：{systemSearch.trim()}
                   </button>
-                )}
+                ) : null}
 
-                {!systemSearch.trim() && category === "other" && (
-                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>
-                    其他不设预设名称，直接输入即可。
-                  </div>
-                )}
               </div>
-            )}
-          </div>
-        )}
-
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, marginBottom: 4 }}>来源（选填）</div>
-
-          <input
-            placeholder="例如：市场购买 / 朋友分享"
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            style={{
-              padding: "8px",
-              width: "100%",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              fontSize: 13,
-              color: "#263326",
-              background: "#fff",
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, marginBottom: 4 }}>备注（选填）</div>
-
-          <textarea
-            placeholder="记录背景"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            style={{
-              padding: "8px",
-              width: "100%",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              fontSize: 13,
-              color: "#263326",
-              background: "#fff",
-              minHeight: 60,
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
-
-        <div
-          style={{
-            marginBottom: 16,
-            padding: "10px 12px",
-            borderRadius: 10,
-            background: "#f7f7f7",
-            border: "1px solid #eee",
-            fontSize: 12,
-            color: "#666",
-            lineHeight: 1.6,
-          }}
-        >
-          可见性由你的记录模式决定。当前默认仅自己可见；选择公开发现后，新项目和新记录可默认公开，已有记录不会自动公开。
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading || membershipLoading || contentBlocked}
-          style={{
-            width: "100%",
-            padding: "12px",
-            background: loading || membershipLoading || contentBlocked ? "#999" : "#4CAF50",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            fontSize: 14,
-            cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
-          }}
-        >
-          {loading ? "创建中..." : "创建项目"}
-        </button>
-      </form>
-    </main>
+            ) : null}
+          </>
+        )
+      }
+      sourceControl={
+        <input
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+          placeholder="可选，例如：市场购买、朋友分享、育苗记录"
+          style={archiveNewProjectInputStyle}
+        />
+      }
+      note={note}
+      onNoteChange={setNote}
+      notice="保存到云空间。当前默认仅自己可见；后续可在项目或记录中切换公开发现。子分类和分组可在项目列表或项目档案中继续整理。"
+      submitText="创建项目"
+      loadingText="创建中..."
+      submitting={loading}
+      disabled={membershipLoading || contentBlocked}
+      disabledNotice={
+        contentBlocked ? (
+          <>
+            <span>{getCreateContentBlockedText(membership)}</span>{" "}
+            <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+              查看云空间
+            </Link>
+          </>
+        ) : null
+      }
+      onSubmit={handleCreate}
+    />
   );
 }

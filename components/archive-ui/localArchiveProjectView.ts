@@ -9,9 +9,9 @@ import type {
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 
 function formatLocalDate(value?: string | null) {
-  if (!value) return "暂无记录";
+  if (!value) return "暂无";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无记录";
+  if (Number.isNaN(date.getTime())) return "暂无";
 
   return date.toLocaleString("zh-CN", {
     month: "numeric",
@@ -19,6 +19,20 @@ function formatLocalDate(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function getOngoingDays(createdAt?: string | null) {
+  if (!createdAt) return null;
+
+  const startedAt = new Date(createdAt);
+  if (Number.isNaN(startedAt.getTime())) return null;
+
+  const startDate = new Date(startedAt.getFullYear(), startedAt.getMonth(), startedAt.getDate()).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  return Math.max(1, Math.floor((today - startDate) / dayMs) + 1);
 }
 
 export function getLocalArchiveOwnerLabel(
@@ -35,6 +49,9 @@ export function localArchiveToProjectView(
   ownerContext?: LocalArchiveOwnerContext | null
 ): ArchiveProjectView {
   const ownerLabel = getLocalArchiveOwnerLabel(archive, ownerContext);
+  const ongoingDays = getOngoingDays(archive.created_at);
+  const updateDate = formatLocalDate(archive.latest_record_time || archive.updated_at);
+  const latestSummary = archive.latest_record_note || archive.note || "暂无记录内容";
 
   return {
     id: archive.id,
@@ -47,7 +64,7 @@ export function localArchiveToProjectView(
     categoryLabel: getArchiveCategoryLabel(archive.category),
     categoryIcon: getArchiveCategoryIcon(archive.category),
     systemName: archive.system_name || archive.species_name || "未填写",
-    // These labels are local IndexedDB labels only, not Supabase sub_tags/group_tags.
+    // Local labels come from IndexedDB only and are not Supabase sub_tags/group_tags.
     subcategoryLabel: archive.subcategory,
     groupLabel: archive.group_name,
     cover: archive.cover_image
@@ -57,17 +74,23 @@ export function localArchiveToProjectView(
           alt: archive.title || "本地项目封面",
         }
       : null,
-    latestText: archive.latest_record_note || archive.note || "暂无记录内容",
+    latestText: `${latestSummary} · 更新 ${updateDate}`,
     visibilityLabel: "本地离线",
     visibilityTone: "neutral",
-    activityText: `${archive.record_count} 条记录 · ${archive.image_count} 张图片`,
-    footerItems: [
-      "只保存在这台设备",
-      "本地分类独立于云空间",
-      ownerLabel,
-      "未同步",
-      `最近 ${formatLocalDate(archive.latest_record_time || archive.updated_at)}`,
-    ],
-    badges: ["本地离线", "本地分类", ownerLabel, "未同步"],
+    mobilePrimaryStatsText: [
+      `记录 ${archive.record_count || 0}`,
+      ongoingDays ? `已持续 ${ongoingDays} 天` : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    mobileSecondaryStatsText: "浏览 0 · 关注 0",
+    activityText: [
+      `记录 ${archive.record_count || 0}`,
+      ongoingDays ? `已持续 ${ongoingDays} 天` : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    footerItems: ownerLabel === "未归属账号" ? ["未归属账号"] : [],
+    badges: ["未同步"],
   };
 }

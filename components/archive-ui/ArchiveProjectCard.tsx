@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import LocalBlobImage from "@/components/local/LocalBlobImage";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 
@@ -10,7 +10,10 @@ type Props = {
   onClick?: () => void;
   selectControls?: ReactNode;
   actionSlot?: ReactNode;
+  actionRailSlot?: ReactNode;
   mobileMode?: boolean;
+  onEditTitle?: (project: ArchiveProjectView) => void;
+  onEditSystemName?: (project: ArchiveProjectView) => void;
 };
 
 export default function ArchiveProjectCard({
@@ -18,61 +21,147 @@ export default function ArchiveProjectCard({
   onClick,
   selectControls,
   actionSlot,
+  actionRailSlot,
   mobileMode = true,
+  onEditTitle,
+  onEditSystemName,
 }: Props) {
-  const content = (
+  function handleInlineEdit(
+    event: MouseEvent<HTMLButtonElement>,
+    callback?: (project: ArchiveProjectView) => void
+  ) {
+    if (!callback) return;
+    event.preventDefault();
+    event.stopPropagation();
+    callback(project);
+  }
+
+  const titleContent = (
+    <div style={mobileMode ? mobileTitleTextStyle : titleStyle} title={`${project.title} · ${project.systemName}`}>
+      {onEditTitle ? (
+        <button
+          type="button"
+          data-no-card-nav="true"
+          onClick={(event) => handleInlineEdit(event, onEditTitle)}
+          onDoubleClick={(event) => handleInlineEdit(event, onEditTitle)}
+          style={inlineEditButtonStyle(titleTextStyle)}
+          title="点击可修改项目名"
+        >
+          {project.title}
+        </button>
+      ) : (
+        <span>{project.title}</span>
+      )}
+      {project.systemName ? <span style={dividerStyle}> · </span> : null}
+      {project.systemName ? (
+        onEditSystemName ? (
+          <button
+            type="button"
+            data-no-card-nav="true"
+            onClick={(event) => handleInlineEdit(event, onEditSystemName)}
+            onDoubleClick={(event) => handleInlineEdit(event, onEditSystemName)}
+            style={inlineEditButtonStyle(systemNameStyle)}
+            title="点击可修改系统名"
+          >
+            {project.systemName}
+          </button>
+        ) : (
+          <span style={systemNameStyle}>{project.systemName}</span>
+        )
+      ) : null}
+    </div>
+  );
+  const mobileCategoryText = [
+    project.categoryLabel,
+    project.subcategoryLabel,
+    project.groupLabel,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+  const mobilePrimaryStatsText = project.mobilePrimaryStatsText || project.activityText || "";
+  const mobileSecondaryStatsText = project.mobileSecondaryStatsText || "";
+
+  const content = mobileMode ? (
+    <>
+      <ArchiveProjectCover project={project} mobileMode />
+
+      <div style={mobileBodyStyle}>
+        <div style={mobileTitleRowStyle}>
+          {titleContent}
+          {actionSlot}
+        </div>
+
+        <div style={mobileStatusCategoryRowStyle}>
+          {project.visibilityLabel ? (
+            <span style={visibilityBadgeStyle(project.visibilityTone)}>
+              {project.visibilityLabel}
+            </span>
+          ) : null}
+          {selectControls ? (
+            <div
+              data-no-card-nav="true"
+              onClick={(event) => event.stopPropagation()}
+              style={mobileSelectRowStyle}
+            >
+              {selectControls}
+            </div>
+          ) : mobileCategoryText ? (
+            <span style={mobileCategoryTextStyle}>{mobileCategoryText}</span>
+          ) : null}
+        </div>
+
+        {mobilePrimaryStatsText ? (
+          <div style={mobileStatsLineStyle}>{mobilePrimaryStatsText}</div>
+        ) : null}
+        {mobileSecondaryStatsText ? (
+          <div style={mobileStatsLineStyle}>{mobileSecondaryStatsText}</div>
+        ) : null}
+      </div>
+    </>
+  ) : (
     <>
       <ArchiveProjectCover project={project} mobileMode={mobileMode} />
 
       <div style={bodyStyle}>
         <div style={titleRowStyle}>
-          <div style={titleStyle} title={`${project.title} · ${project.systemName}`}>
-            <span>{project.title}</span>
-            {project.systemName ? <span style={dividerStyle}> · </span> : null}
-            {project.systemName ? <span style={systemNameStyle}>{project.systemName}</span> : null}
-          </div>
+          <span style={categoryPillStyle(project.category)}>{project.categoryLabel}</span>
+          {titleContent}
           {actionSlot}
         </div>
 
-        <div style={metaRowStyle}>
-          <span>{project.categoryIcon}</span>
-          <span>{project.categoryLabel}</span>
-          {project.subcategoryLabel ? <span>{project.subcategoryLabel}</span> : null}
-          {project.groupLabel ? <span>{project.groupLabel}</span> : null}
-          {project.badges?.map((badge) => (
-            <span key={badge} style={badgeStyle}>
-              {badge}
-            </span>
-          ))}
-        </div>
-
-        {selectControls ? (
-          <div
-            data-no-card-nav="true"
-            onClick={(event) => event.stopPropagation()}
-            style={selectRowStyle}
-          >
-            {selectControls}
+        <div style={statusActionRowStyle}>
+          <div style={statusBadgeRowStyle}>
+            {project.visibilityLabel ? (
+              <span style={visibilityBadgeStyle(project.visibilityTone)}>
+                {project.visibilityLabel}
+              </span>
+            ) : null}
+            {project.badges?.map((badge) => (
+              <span key={badge} style={badgeStyle}>
+                {badge}
+              </span>
+            ))}
           </div>
-        ) : null}
+
+          {selectControls ? (
+            <div
+              data-no-card-nav="true"
+              onClick={(event) => event.stopPropagation()}
+              style={selectRowStyle}
+            >
+              {selectControls}
+            </div>
+          ) : null}
+        </div>
 
         {project.latestText ? (
           <div style={latestTextStyle} title={project.latestText}>
-            {project.latestText}
+            最新：{project.latestText}
           </div>
         ) : null}
 
         <div style={bottomRowStyle}>
-          <span style={statusLineStyle}>
-            {project.visibilityLabel ? (
-              <span style={visibilityTextStyle(project.visibilityTone)}>
-                {project.visibilityLabel}
-              </span>
-            ) : null}
-            {project.activityText
-              ? `${project.visibilityLabel ? " · " : ""}${project.activityText}`
-              : ""}
-          </span>
+          <span style={statusLineStyle}>{project.activityText || ""}</span>
           {project.statusLabel ? (
             <span style={endedStyle}>{project.statusLabel}</span>
           ) : null}
@@ -86,6 +175,16 @@ export default function ArchiveProjectCard({
           </div>
         ) : null}
       </div>
+
+      {actionRailSlot ? (
+        <div
+          data-no-card-nav="true"
+          onClick={(event) => event.stopPropagation()}
+          style={actionRailStyle}
+        >
+          {actionRailSlot}
+        </div>
+      ) : null}
     </>
   );
 
@@ -122,7 +221,14 @@ function ArchiveProjectCover({
   const style = coverStyle(mobileMode);
 
   if (project.cover?.kind === "url" && project.cover.url) {
-    return <img src={project.cover.url} alt={project.cover.alt || project.title} loading="lazy" style={style} />;
+    return (
+      <img
+        src={project.cover.url}
+        alt={project.cover.alt || project.title}
+        loading="lazy"
+        style={style}
+      />
+    );
   }
 
   if (project.cover?.kind === "blob") {
@@ -140,7 +246,7 @@ function projectCardStyle(ended: boolean, mobileMode: boolean): CSSProperties {
   return {
     position: "relative",
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: mobileMode ? 10 : 12,
     border: "1px solid #e4e6df",
     borderRadius: 14,
@@ -161,6 +267,7 @@ function coverStyle(mobileMode: boolean): CSSProperties {
     width: mobileMode ? 94 : 104,
     height: mobileMode ? 94 : 104,
     flexShrink: 0,
+    alignSelf: "flex-start",
     borderRadius: 11,
     objectFit: "cover",
     background: "#f4f7f1",
@@ -183,15 +290,106 @@ const bodyStyle: CSSProperties = {
   minWidth: 0,
   display: "flex",
   flexDirection: "column",
-  gap: 4,
+  gap: 5,
 };
 
-const titleRowStyle: CSSProperties = {
+const mobileBodyStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+};
+
+const mobileTitleRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 6,
   minWidth: 0,
 };
+
+const mobileTitleTextStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  color: "#1f2d1f",
+  fontSize: 15,
+  fontWeight: 800,
+  lineHeight: 1.3,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileStatusCategoryRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  minWidth: 0,
+  overflow: "visible",
+};
+
+const mobileSelectRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  minWidth: 0,
+  overflow: "visible",
+};
+
+const mobileCategoryTextStyle: CSSProperties = {
+  minWidth: 0,
+  color: "#667066",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileStatsLineStyle: CSSProperties = {
+  minWidth: 0,
+  color: "#7f887a",
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: 1.35,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const actionRailStyle: CSSProperties = {
+  minWidth: 46,
+  marginLeft: 4,
+  paddingLeft: 8,
+  borderLeft: "1px solid #f0f0ec",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "flex-end",
+  alignItems: "flex-end",
+  gap: 8,
+  alignSelf: "stretch",
+};
+
+const titleRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  minWidth: 0,
+};
+
+function categoryPillStyle(category: string): CSSProperties {
+  return {
+    flexShrink: 0,
+    fontSize: 12,
+    color: category === "plant" ? "#4b7244" : "#6c6c7a",
+    background: category === "plant" ? "#edf6e9" : "#f1f1f5",
+    borderRadius: 999,
+    padding: "2px 7px",
+    lineHeight: 1.3,
+    whiteSpace: "nowrap",
+  };
+}
 
 const titleStyle: CSSProperties = {
   flex: 1,
@@ -205,6 +403,29 @@ const titleStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const titleTextStyle: CSSProperties = {
+  color: "#1f2d1f",
+  fontWeight: 800,
+};
+
+function inlineEditButtonStyle(extra?: CSSProperties): CSSProperties {
+  return {
+    border: "none",
+    background: "transparent",
+    color: "inherit",
+    font: "inherit",
+    padding: 0,
+    margin: 0,
+    cursor: "pointer",
+    maxWidth: "100%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    verticalAlign: "baseline",
+    ...extra,
+  };
+}
+
 const dividerStyle: CSSProperties = {
   color: "#9aa493",
   fontWeight: 500,
@@ -215,17 +436,35 @@ const systemNameStyle: CSSProperties = {
   fontWeight: 700,
 };
 
-const metaRowStyle: CSSProperties = {
+const statusActionRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 6,
   flexWrap: "wrap",
   minWidth: 0,
-  color: "#7c8975",
-  fontSize: 12,
-  fontWeight: 700,
-  lineHeight: 1.35,
 };
+
+const statusBadgeRowStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  flexWrap: "wrap",
+  minWidth: 0,
+};
+
+function visibilityBadgeStyle(tone?: "public" | "private" | "neutral"): CSSProperties {
+  return {
+    borderRadius: 999,
+    border: tone === "public" ? "1px solid #b7dfbb" : "1px solid #ddd",
+    background: tone === "public" ? "#f1fff1" : "#fff",
+    color: tone === "public" ? "#2f8f2f" : tone === "private" ? "#888" : "#697663",
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1,
+    padding: "4px 7px",
+    whiteSpace: "nowrap",
+  };
+}
 
 const badgeStyle: CSSProperties = {
   borderRadius: 999,
@@ -236,6 +475,7 @@ const badgeStyle: CSSProperties = {
   fontWeight: 800,
   lineHeight: 1,
   padding: "4px 7px",
+  whiteSpace: "nowrap",
 };
 
 const selectRowStyle: CSSProperties = {
@@ -275,13 +515,6 @@ const statusLineStyle: CSSProperties = {
   whiteSpace: "normal",
 };
 
-function visibilityTextStyle(tone?: "public" | "private" | "neutral"): CSSProperties {
-  return {
-    color: tone === "public" ? "#2f8f2f" : tone === "private" ? "#888" : "#697663",
-    fontWeight: 700,
-  };
-}
-
 const endedStyle: CSSProperties = {
   flex: "0 0 auto",
   marginLeft: "auto",
@@ -293,10 +526,11 @@ const endedStyle: CSSProperties = {
 };
 
 const footerStyle: CSSProperties = {
-  marginTop: 2,
+  marginTop: 1,
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  color: "#87927f",
-  fontSize: 12,
+  color: "#929b8d",
+  fontSize: 11,
+  lineHeight: 1.3,
 };

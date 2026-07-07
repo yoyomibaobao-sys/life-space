@@ -8,9 +8,12 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
+import ArchiveTaxonomyPanel, {
+  type ArchiveTaxonomyChip,
+} from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import ArchiveCard from "@/components/archive/ArchiveCard";
-import ArchiveFiltersPanel from "@/components/archive/ArchiveFiltersPanel";
-import ArchiveGroupPanel from "@/components/archive/ArchiveGroupPanel";
+import ArchiveCategoryDropdown from "@/components/archive/ArchiveCategoryDropdown";
+import ArchiveGroupDropdown from "@/components/archive/ArchiveGroupDropdown";
 import {
   archiveCategoryOptions,
   getArchiveCategoryLabel,
@@ -42,10 +45,17 @@ import {
   sumMediaSizeBytes,
 } from "@/lib/storage-usage";
 import {
+  createLocalTaxonomyItem,
+  deleteLocalArchive,
+  deleteLocalTaxonomyItem,
+  renameLocalTaxonomyItem,
+  updateLocalArchiveFields,
+  listVisibleLocalTaxonomyItems,
   listVisibleLocalArchiveSummaries,
   markUnownedLocalArchivesForOwner,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
+  type LocalTaxonomyItem,
 } from "@/lib/local-offline-db";
 
 type LatestArchiveRecord = {
@@ -91,12 +101,14 @@ export default function ArchivePage() {
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
   const [localArchives, setLocalArchives] = useState<LocalArchiveSummary[]>([]);
+  const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
   const [localError, setLocalError] = useState("");
   const [localUnownedCount, setLocalUnownedCount] = useState(0);
   const [localHiddenOwnedByOtherCount, setLocalHiddenOwnedByOtherCount] = useState(0);
   const [localOwnershipPromptDismissed, setLocalOwnershipPromptDismissed] = useState(false);
   const [markingLocalOwner, setMarkingLocalOwner] = useState(false);
+  const [localProjectMenuOpenId, setLocalProjectMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -128,8 +140,12 @@ export default function ArchivePage() {
   async function loadLocalArchives(ownerContext: LocalArchiveOwnerContext | null = currentOwnerContext) {
     setLocalLoading(true);
     try {
-      const result = await listVisibleLocalArchiveSummaries(ownerContext);
+      const [result, taxonomyItems] = await Promise.all([
+        listVisibleLocalArchiveSummaries(ownerContext),
+        listVisibleLocalTaxonomyItems(ownerContext),
+      ]);
       setLocalArchives(result.archives);
+      setLocalTaxonomyItems(taxonomyItems);
       setLocalUnownedCount(result.unownedCount);
       setLocalHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
       setLocalError("");
@@ -974,15 +990,19 @@ export default function ArchivePage() {
     (activeSource === "cloud" ? 0 : localArchives.length);
   const contentBlocked = membership?.can_create_content === false;
 
-  const plantSubTags = subTags.filter((tag) => tag.category === "plant");
-  const methodFacilitySubTags = subTags.filter((tag) => tag.category === "system");
-  const insectFishSubTags = subTags.filter((tag) => tag.category === "insect_fish");
-  const otherSubTags = subTags.filter((tag) => tag.category === "other");
-
+  const cloudSubcategoryChips: ArchiveTaxonomyChip[] = activeCategory
+    ? subTags
+        .filter((tag) => tag.category === activeCategory)
+        .map((tag) => ({ id: tag.id, label: tag.name }))
+    : [];
   const currentSubTag = subTags.find((tag) => tag.id === activeSubTag) || null;
   const visibleGroupTags = activeSubTag && currentSubTag
     ? groupTags.filter((tag) => tag.sub_tag_id === activeSubTag)
     : [];
+  const cloudGroupChips: ArchiveTaxonomyChip[] = visibleGroupTags.map((tag) => ({
+    id: tag.id,
+    label: tag.name,
+  }));
 
   const subTagNameMap = new Map(subTags.map((tag) => [tag.id, tag.name]));
   const groupTagNameMap = new Map(groupTags.map((tag) => [tag.id, tag.name]));
@@ -1082,33 +1102,59 @@ export default function ArchivePage() {
   const endedArchives = filteredArchives.filter((item) => item.status === "ended");
   const showCloudArchives = activeSource !== "local";
   const showLocalArchives = activeSource !== "cloud";
-  const localSubTags = useMemo(() => {
+  const localSubTags = useMemo<ArchiveTaxonomyChip[]>(() => {
     if (!activeCategory) return [];
 
-    return Array.from(
-      new Set(
-        localArchives
-          .filter((archive) => archive.category === activeCategory && archive.subcategory)
-          .map((archive) => archive.subcategory as string)
+    return localTaxonomyItems
+      .filter(
+        (item) =>
+          item.kind === "subcategory" &&
+          item.category === activeCategory &&
+          item.label
       )
-    ).sort((a, b) => a.localeCompare(b, "zh-CN"));
-  }, [activeCategory, localArchives]);
-  const localGroupTags = useMemo(() => {
+      .map((item) => ({ id: item.label, label: item.label }))
+      .filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index)
+      .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+  }, [activeCategory, localTaxonomyItems]);
+  const localGroupTags = useMemo<ArchiveTaxonomyChip[]>(() => {
     if (!activeCategory || !activeSubTag) return [];
 
-    return Array.from(
-      new Set(
-        localArchives
-          .filter(
-            (archive) =>
-              archive.category === activeCategory &&
-              archive.subcategory === activeSubTag &&
-              archive.group_name
-          )
-          .map((archive) => archive.group_name as string)
+    return localTaxonomyItems
+      .filter(
+        (item) =>
+          item.kind === "group" &&
+          item.category === activeCategory &&
+          item.subcategory === activeSubTag &&
+          item.label
       )
-    ).sort((a, b) => a.localeCompare(b, "zh-CN"));
-  }, [activeCategory, activeSubTag, localArchives]);
+      .map((item) => ({ id: item.label, label: item.label }))
+      .filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index)
+      .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+  }, [activeCategory, activeSubTag, localTaxonomyItems]);
+  const localSubTagItems = useMemo<SubTagItem[]>(
+    () =>
+      localTaxonomyItems
+        .filter((item) => item.kind === "subcategory" && item.category && item.label)
+        .map((item) => ({
+          id: item.label,
+          name: item.label,
+          category: item.category as ArchiveCategory,
+        }))
+        .filter((item, index, list) => list.findIndex((other) => other.id === item.id && other.category === item.category) === index),
+    [localTaxonomyItems]
+  );
+  const localGroupTagItems = useMemo<GroupTagItem[]>(
+    () =>
+      localTaxonomyItems
+        .filter((item) => item.kind === "group" && item.category && item.subcategory && item.label)
+        .map((item) => ({
+          id: item.label,
+          name: item.label,
+          sub_tag_id: item.subcategory || "",
+        }))
+        .filter((item, index, list) => list.findIndex((other) => other.id === item.id && other.sub_tag_id === item.sub_tag_id) === index),
+    [localTaxonomyItems]
+  );
 
   function handleSelectSource(nextSource: ArchiveSourceFilter) {
     updateFilterWithoutJump(() => {
@@ -1137,6 +1183,251 @@ export default function ArchivePage() {
     router.push(`/archive/new?category=${category}`);
   }
 
+  async function createLocalSubcategory(category: ArchiveCategory) {
+    const name = prompt(`新增${getArchiveCategoryLabel(category)}本地子分类`);
+    if (!name?.trim()) return;
+
+    try {
+      await createLocalTaxonomyItem(
+        { kind: "subcategory", category, label: name },
+        currentOwnerContext
+      );
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地子分类已添加");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "新增本地子分类失败");
+    }
+  }
+
+  async function deleteLocalSubcategory(chip: ArchiveTaxonomyChip) {
+    if (!activeCategory) return;
+    if (!confirm("删除后，该本地子分类下的本地项目会回到当前大类，确认？")) return;
+
+    try {
+      await deleteLocalTaxonomyItem(
+        { kind: "subcategory", category: activeCategory, label: chip.label },
+        currentOwnerContext
+      );
+      updateFilterWithoutJump(() => {
+        if (activeSubTag === chip.id) {
+          setActiveSubTag(null);
+          setActiveGroupTag(null);
+        }
+      });
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地子分类已删除");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "删除本地子分类失败");
+    }
+  }
+
+  async function renameLocalSubcategory(chip: ArchiveTaxonomyChip) {
+    if (!activeCategory) return;
+    const name = prompt("修改本地子分类名称", chip.label);
+    const cleanName = name?.trim();
+    if (!cleanName || cleanName === chip.label) return;
+
+    try {
+      await renameLocalTaxonomyItem(
+        {
+          kind: "subcategory",
+          category: activeCategory,
+          oldLabel: chip.label,
+          newLabel: cleanName,
+        },
+        currentOwnerContext
+      );
+      updateFilterWithoutJump(() => {
+        if (activeSubTag === chip.id) {
+          setActiveSubTag(cleanName);
+          setActiveGroupTag(null);
+        }
+      });
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地子分类已修改");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "修改本地子分类失败");
+    }
+  }
+
+  async function createLocalGroup() {
+    if (!activeCategory || !activeSubTag) return;
+    const name = prompt("新增本地分组");
+    if (!name?.trim()) return;
+
+    try {
+      await createLocalTaxonomyItem(
+        {
+          kind: "group",
+          category: activeCategory,
+          subcategory: activeSubTag,
+          label: name,
+        },
+        currentOwnerContext
+      );
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地分组已添加");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "新增本地分组失败");
+    }
+  }
+
+  async function deleteLocalGroup(chip: ArchiveTaxonomyChip) {
+    if (!activeCategory || !activeSubTag) return;
+    if (!confirm("删除该本地分组？")) return;
+
+    try {
+      await deleteLocalTaxonomyItem(
+        {
+          kind: "group",
+          category: activeCategory,
+          subcategory: activeSubTag,
+          label: chip.label,
+        },
+        currentOwnerContext
+      );
+      updateFilterWithoutJump(() => {
+        if (activeGroupTag === chip.id) setActiveGroupTag(null);
+      });
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地分组已删除");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "删除本地分组失败");
+    }
+  }
+
+  async function renameLocalGroup(chip: ArchiveTaxonomyChip) {
+    if (!activeCategory || !activeSubTag) return;
+    const name = prompt("修改本地分组名称", chip.label);
+    const cleanName = name?.trim();
+    if (!cleanName || cleanName === chip.label) return;
+
+    try {
+      await renameLocalTaxonomyItem(
+        {
+          kind: "group",
+          category: activeCategory,
+          subcategory: activeSubTag,
+          oldLabel: chip.label,
+          newLabel: cleanName,
+        },
+        currentOwnerContext
+      );
+      updateFilterWithoutJump(() => {
+        if (activeGroupTag === chip.id) setActiveGroupTag(cleanName);
+      });
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地分组已修改");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "修改本地分组失败");
+    }
+  }
+
+  async function renameLocalArchiveTitle(archive: LocalArchiveSummary) {
+    const name = prompt("修改本地项目名称", archive.title || "");
+    const cleanName = name?.trim();
+    if (!cleanName || cleanName === archive.title) return;
+
+    try {
+      await updateLocalArchiveFields(
+        archive.id,
+        { title: cleanName },
+        currentOwnerContext
+      );
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地项目名已修改");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "修改本地项目名失败");
+    }
+  }
+
+  async function renameLocalArchiveSystemName(archive: LocalArchiveSummary) {
+    showToast("请在项目档案中修改系统名");
+    router.push(`/local/archive/${archive.id}`);
+  }
+
+  async function updateLocalArchiveCategoryValue(archive: LocalArchiveSummary, value: string) {
+    const categoryOption = archiveCategoryOptions.find((option) => option.value === value);
+    const subcategoryOption = localSubTagItems.find((item) => item.id === value);
+    if (!categoryOption && !subcategoryOption) return;
+
+    try {
+      await updateLocalArchiveFields(
+        archive.id,
+        categoryOption
+          ? {
+              category: categoryOption.value,
+              subcategory: null,
+              group_name: null,
+            }
+          : {
+              category: subcategoryOption?.category,
+              subcategory: subcategoryOption?.name || null,
+              group_name: null,
+            },
+        currentOwnerContext
+      );
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地项目分类已更新");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "更新本地项目分类失败");
+    }
+  }
+
+  async function updateLocalArchiveGroupValue(archive: LocalArchiveSummary, value: string) {
+    try {
+      await updateLocalArchiveFields(
+        archive.id,
+        { group_name: value || null },
+        currentOwnerContext
+      );
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地项目分组已更新");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "更新本地项目分组失败");
+    }
+  }
+
+  async function editLocalArchiveCategoryAndGroup(archive: LocalArchiveSummary) {
+    const nextSubcategory = prompt("编辑本地子分类（留空则清空）", archive.subcategory || "");
+    if (nextSubcategory === null) return;
+    const nextGroup = prompt("编辑本地分组（留空则清空）", archive.group_name || "");
+    if (nextGroup === null) return;
+
+    try {
+      await updateLocalArchiveFields(
+        archive.id,
+        {
+          subcategory: nextSubcategory.trim() || null,
+          group_name: nextGroup.trim() || null,
+        },
+        currentOwnerContext
+      );
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地项目分类已更新");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "更新本地项目分类失败");
+    }
+  }
+
+  async function deleteLocalArchiveFromList(archive: LocalArchiveSummary) {
+    if (
+      !confirm(
+        "确定要删除这个本地项目吗？项目下的本地记录和 App 内图片缓存会一起删除，不会影响系统相册。"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteLocalArchive(archive.id);
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地项目已删除");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "删除本地项目失败");
+    }
+  }
+
   const createDisabled =
     activeSource !== "local" &&
     Boolean(currentOwnerContext?.userId) &&
@@ -1148,68 +1439,13 @@ export default function ArchivePage() {
 
   const workspaceFiltersSlot =
     activeSource === "cloud" ? (
-      <>
-        <ArchiveFiltersPanel
-          activeCategory={activeCategory}
-          activeSubTag={activeSubTag}
-          visibleGroupTagCount={visibleGroupTags.length}
-          plantSubTags={plantSubTags}
-          methodFacilitySubTags={methodFacilitySubTags}
-          insectFishSubTags={insectFishSubTags}
-          otherSubTags={otherSubTags}
-          mobileMode={isMobileViewport}
-          onReset={() =>
-            updateFilterWithoutJump(() => {
-              setActiveCategory(null);
-              setActiveSubTag(null);
-              setActiveGroupTag(null);
-            })
-          }
-          onSelectCategory={(category) =>
-            updateFilterWithoutJump(() => {
-              setActiveCategory(category);
-              setActiveSubTag(null);
-              setActiveGroupTag(null);
-            })
-          }
-          onSelectSubTag={(category, id) =>
-            updateFilterWithoutJump(() => {
-              setActiveCategory(category);
-              setActiveSubTag(id);
-              setActiveGroupTag(null);
-            })
-          }
-          onRenameSubTag={renameSubTag}
-          onDeleteSubTag={deleteSubTag}
-          onCreateSubTag={createSubTag}
-        />
-        <ArchiveGroupPanel
-          activeGroupTag={activeGroupTag}
-          activeSubTag={activeSubTag}
-          visibleGroupTags={visibleGroupTags}
-          mobileMode={isMobileViewport}
-          onReset={() =>
-            updateFilterWithoutJump(() => {
-              setActiveGroupTag(null);
-            })
-          }
-          onToggleGroupTag={(id) =>
-            updateFilterWithoutJump(() => {
-              setActiveGroupTag(activeGroupTag === id ? null : id);
-            })
-          }
-          onRenameGroupTag={renameGroupTag}
-          onDeleteGroupTag={deleteGroupTag}
-          onCreateGroupTag={createGroupTag}
-        />
-      </>
-    ) : activeSource === "local" ? (
-      <LocalArchiveFilters
+      <ArchiveTaxonomyPanel
         activeCategory={activeCategory}
-        activeSubTag={activeSubTag}
-        activeGroupTag={activeGroupTag}
-        subTags={localSubTags}
-        groupTags={localGroupTags}
+        activeSubcategoryId={activeSubTag}
+        activeGroupId={activeGroupTag}
+        subcategories={cloudSubcategoryChips}
+        groups={cloudGroupChips}
+        mobileMode={isMobileViewport}
         onReset={() =>
           updateFilterWithoutJump(() => {
             setActiveCategory(null);
@@ -1224,21 +1460,110 @@ export default function ArchivePage() {
             setActiveGroupTag(null);
           })
         }
-        onSelectSubTag={(name) =>
+        onResetSubcategory={() =>
           updateFilterWithoutJump(() => {
-            setActiveSubTag(name);
+            setActiveSubTag(null);
             setActiveGroupTag(null);
           })
         }
-        onSelectGroup={(name) =>
+        onSelectSubcategory={(chip) =>
           updateFilterWithoutJump(() => {
-            setActiveGroupTag(name ? (activeGroupTag === name ? null : name) : null);
+            const tag = subTags.find((item) => item.id === chip.id);
+            if (tag) setActiveCategory(tag.category);
+            setActiveSubTag(chip.id);
+            setActiveGroupTag(null);
           })
         }
+        onRenameSubcategory={(chip) => {
+          const tag = subTags.find((item) => item.id === chip.id);
+          if (tag) renameSubTag(tag);
+        }}
+        onDeleteSubcategory={(chip) => {
+          const tag = subTags.find((item) => item.id === chip.id);
+          if (tag) deleteSubTag(tag);
+        }}
+        onCreateSubcategory={createSubTag}
+        onResetGroup={() =>
+          updateFilterWithoutJump(() => {
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectGroup={(chip) =>
+          updateFilterWithoutJump(() => {
+            setActiveGroupTag(activeGroupTag === chip.id ? null : chip.id);
+          })
+        }
+        onRenameGroup={(chip) => {
+          const tag = groupTags.find((item) => item.id === chip.id);
+          if (tag) renameGroupTag(tag);
+        }}
+        onDeleteGroup={(chip) => {
+          const tag = groupTags.find((item) => item.id === chip.id);
+          if (tag) deleteGroupTag(tag);
+        }}
+        onCreateGroup={createGroupTag}
+      />
+    ) : activeSource === "local" ? (
+      <ArchiveTaxonomyPanel
+        activeCategory={activeCategory}
+        activeSubcategoryId={activeSubTag}
+        activeGroupId={activeGroupTag}
+        subcategories={localSubTags}
+        groups={localGroupTags}
+        mobileMode={isMobileViewport}
+        onReset={() =>
+          updateFilterWithoutJump(() => {
+            setActiveCategory(null);
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectCategory={(category) =>
+          updateFilterWithoutJump(() => {
+            setActiveCategory(category);
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          })
+        }
+        onResetSubcategory={() =>
+          updateFilterWithoutJump(() => {
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectSubcategory={(chip) =>
+          updateFilterWithoutJump(() => {
+            setActiveSubTag(chip.id);
+            setActiveGroupTag(null);
+          })
+        }
+        onRenameSubcategory={renameLocalSubcategory}
+        onDeleteSubcategory={deleteLocalSubcategory}
+        onCreateSubcategory={createLocalSubcategory}
+        onResetGroup={() =>
+          updateFilterWithoutJump(() => {
+            setActiveGroupTag(null);
+          })
+        }
+        onSelectGroup={(chip) =>
+          updateFilterWithoutJump(() => {
+            setActiveGroupTag(activeGroupTag === chip.id ? null : chip.id);
+          })
+        }
+        onRenameGroup={renameLocalGroup}
+        onDeleteGroup={deleteLocalGroup}
+        onCreateGroup={createLocalGroup}
       />
     ) : (
-      <MainCategoryFilters
+      <ArchiveTaxonomyPanel
         activeCategory={activeCategory}
+        activeSubcategoryId={null}
+        activeGroupId={null}
+        subcategories={[]}
+        groups={[]}
+        mobileMode={isMobileViewport}
+        showSubcategoryRow={false}
+        showGroupRow={false}
         onReset={() =>
           updateFilterWithoutJump(() => {
             setActiveCategory(null);
@@ -1253,6 +1578,10 @@ export default function ArchivePage() {
             setActiveGroupTag(null);
           })
         }
+        onResetSubcategory={() => undefined}
+        onSelectSubcategory={() => undefined}
+        onResetGroup={() => undefined}
+        onSelectGroup={() => undefined}
       />
     );
 
@@ -1451,13 +1780,144 @@ export default function ArchivePage() {
           ) : filteredLocalArchives.length === 0 ? (
             <div style={emptyPanelStyle}>当前筛选下没有本地离线项目。</div>
           ) : (
-            filteredLocalArchives.map((archive) => (
-              <ArchiveProjectCard
-                key={archive.id}
-                project={localArchiveToProjectView(archive, currentOwnerContext)}
-                mobileMode={isMobileViewport}
-              />
-            ))
+            filteredLocalArchives.map((archive) => {
+              const project = localArchiveToProjectView(archive, currentOwnerContext);
+              const availableLocalGroups = archive.subcategory
+                ? localGroupTagItems.filter((tag) => tag.sub_tag_id === archive.subcategory)
+                : [];
+
+              return (
+                <ArchiveProjectCard
+                  key={archive.id}
+                  project={{ ...project, href: undefined }}
+                  mobileMode={isMobileViewport}
+                  selectControls={
+                    <>
+                      <ArchiveCategoryDropdown
+                        value={archive.subcategory || archive.category}
+                        subTags={localSubTagItems}
+                        compact
+                        onChange={(nextValue) => updateLocalArchiveCategoryValue(archive, nextValue)}
+                      />
+                      {archive.subcategory && availableLocalGroups.length > 0 ? (
+                        <ArchiveGroupDropdown
+                          value={archive.group_name || ""}
+                          groupTags={availableLocalGroups}
+                          compact
+                          onChange={(nextValue) => updateLocalArchiveGroupValue(archive, nextValue)}
+                        />
+                      ) : null}
+                    </>
+                  }
+                  actionSlot={
+                    isMobileViewport ? (
+                      <div
+                        data-no-card-nav="true"
+                        onClick={(event) => event.stopPropagation()}
+                        style={localProjectMenuWrapStyle}
+                      >
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setLocalProjectMenuOpenId((id) => (id === archive.id ? null : archive.id));
+                          }}
+                          aria-label="更多本地项目操作"
+                          style={localProjectMoreButtonStyle}
+                        >
+                          ⋯
+                        </button>
+                        {localProjectMenuOpenId === archive.id ? (
+                          <div style={localProjectMenuStyle}>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setLocalProjectMenuOpenId(null);
+                                renameLocalArchiveTitle(archive);
+                              }}
+                              style={localProjectMenuItemStyle}
+                            >
+                              编辑名称
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setLocalProjectMenuOpenId(null);
+                                renameLocalArchiveSystemName(archive);
+                              }}
+                              style={localProjectMenuItemStyle}
+                            >
+                              编辑系统名
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setLocalProjectMenuOpenId(null);
+                                editLocalArchiveCategoryAndGroup(archive);
+                              }}
+                              style={localProjectMenuItemStyle}
+                            >
+                              编辑分类 / 分组
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setLocalProjectMenuOpenId(null);
+                                deleteLocalArchiveFromList(archive);
+                              }}
+                              style={localProjectDangerMenuItemStyle}
+                            >
+                              删除本地项目
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : undefined
+                  }
+                  actionRailSlot={
+                    !isMobileViewport ? (
+                    <>
+                      <span style={localProjectRailStatusStyle}>未同步</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          renameLocalArchiveTitle(archive);
+                        }}
+                        style={localProjectRailButtonStyle}
+                      >
+                        编辑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          deleteLocalArchiveFromList(archive);
+                        }}
+                        style={localProjectRailDangerButtonStyle}
+                      >
+                        删除
+                      </button>
+                    </>
+                    ) : undefined
+                  }
+                  onClick={() => router.push(`/local/archive/${archive.id}`)}
+                  onEditTitle={() => renameLocalArchiveTitle(archive)}
+                  onEditSystemName={() => renameLocalArchiveSystemName(archive)}
+                />
+              );
+            })
           )
         ) : null}
       </ArchiveWorkspaceTemplate>
@@ -1704,6 +2164,82 @@ const localOtherOwnerNoticeStyle: CSSProperties = {
   color: "#87917e",
   fontSize: 12,
   lineHeight: 1.5,
+};
+
+const localProjectRailStatusStyle: CSSProperties = {
+  color: "#5f7a55",
+  fontSize: 11,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const localProjectMenuWrapStyle: CSSProperties = {
+  position: "relative",
+  flexShrink: 0,
+};
+
+const localProjectMoreButtonStyle: CSSProperties = {
+  flexShrink: 0,
+  width: 30,
+  height: 30,
+  border: "1px solid #edf0e8",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#667066",
+  fontSize: 19,
+  lineHeight: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+};
+
+const localProjectMenuStyle: CSSProperties = {
+  position: "absolute",
+  top: 42,
+  right: 0,
+  zIndex: 80,
+  width: 148,
+  border: "1px solid #e6ebdf",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 16px 34px rgba(39, 58, 34, 0.16)",
+  padding: 5,
+};
+
+const localProjectMenuItemStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 34,
+  border: "none",
+  borderRadius: 9,
+  background: "transparent",
+  color: "#40583a",
+  padding: "0 10px",
+  textAlign: "left",
+  fontSize: 13,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+};
+
+const localProjectDangerMenuItemStyle: CSSProperties = {
+  ...localProjectMenuItemStyle,
+  color: "#c85f5a",
+};
+
+const localProjectRailButtonStyle: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#8a8f84",
+  cursor: "pointer",
+  fontSize: 12,
+  padding: 0,
+  whiteSpace: "nowrap",
+};
+
+const localProjectRailDangerButtonStyle: CSSProperties = {
+  ...localProjectRailButtonStyle,
+  color: "#d66",
 };
 
 type ArchiveSourceFilter = "all" | "cloud" | "local";

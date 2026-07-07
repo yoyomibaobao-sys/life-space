@@ -33,6 +33,8 @@ export type ArchiveProjectView = {
   cover?: ArchiveProjectCoverView;
   latestText?: string | null;
   activityText?: string | null;
+  mobilePrimaryStatsText?: string | null;
+  mobileSecondaryStatsText?: string | null;
   footerItems?: string[];
   badges?: string[];
   statusLabel?: string | null;

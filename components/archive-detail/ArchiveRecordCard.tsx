@@ -6,6 +6,7 @@ import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
 import TagList from "@/components/TagList";
 import ArchiveCommentsSection from "@/components/archive-detail/ArchiveCommentsSection";
+import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import ArchiveStatusBadge from "@/components/archive-detail/ArchiveStatusBadge";
 import { showToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
@@ -29,6 +30,7 @@ type ArchiveRecordCardProps = {
   item: RecordItem;
   index: number;
   mode: ArchiveMode;
+  variant?: "cloud" | "local";
   startTime?: string | null;
   isHighlighted: boolean;
   sameTagLinks: Array<{ tag: string; count: number; href: string }>;
@@ -50,8 +52,11 @@ type ArchiveRecordCardProps = {
   onRemoveTag: (recordId: string, tag: string) => void;
   onAddTag: (recordId: string, tag: string) => Promise<void>;
   onAddMedia?: (recordId: string, files: File[]) => Promise<unknown>;
-  onNoteSaved?: (recordId: string, nextText: string) => void;
-  onRecordUpdated?: (recordId: string, patch: Partial<RecordItem>) => void;
+  onNoteSaved?: (recordId: string, nextText: string) => void | Promise<void>;
+  onRecordUpdated?: (
+    recordId: string,
+    patch: Partial<RecordItem>,
+  ) => void | Promise<void>;
   currentUserId?: string | null;
   onCommentCountChange?: (recordId: string, count: number) => void;
   onRecordDeleted?: (recordId: string) => void;
@@ -63,6 +68,7 @@ export default function ArchiveRecordCard({
   item,
   index,
   mode,
+  variant = "cloud",
   startTime,
   isHighlighted,
   sameTagLinks,
@@ -81,6 +87,7 @@ export default function ArchiveRecordCard({
   onRecordDeleted,
   isMobileViewport = false,
 }: ArchiveRecordCardProps) {
+  const isLocalMode = variant === "local";
   const mediaList = buildMediaList(item.media, archive.title || "项目");
   const isPlantArchive = archive.category === "plant";
   const isHelpRecord = item.status_tag === "help";
@@ -118,6 +125,21 @@ export default function ArchiveRecordCard({
     }
   }
 
+  async function saveRecordPatch(patch: Partial<RecordItem>) {
+    if (isLocalMode) {
+      await onRecordUpdated?.(item.id, patch);
+      if (typeof patch.note === "string") {
+        await onNoteSaved?.(item.id, patch.note);
+      }
+      return;
+    }
+
+    if (typeof patch.note === "string") {
+      onNoteSaved?.(item.id, patch.note);
+    }
+    onRecordUpdated?.(item.id, patch);
+  }
+
   async function handleReplaceMediaFiles(fileList: FileList | null) {
     const nextFiles = Array.from(fileList || []).slice(0, 1);
     if (
@@ -140,90 +162,40 @@ export default function ArchiveRecordCard({
     }
   }
 
+  const recordMetaText =
+    archive && startTime ? (
+      <>
+        {index === 0 ? "最新进展 · " : ""}第{" "}
+        {getDayNumber(startTime, item.record_time)} 天 ·{" "}
+        {formatDateTime(item.record_time)}
+      </>
+    ) : null;
+  const recordTone = isHelpRecord
+    ? "help"
+    : isResolvedRecord
+      ? "resolved"
+      : isHighlighted
+        ? "highlighted"
+        : "default";
+
   return (
-    <article
+    <ArchiveRecordCardShell
       id={`record-${item.id}`}
-      style={{
-        position: "relative",
-        marginBottom: 14,
-        paddingLeft: isMobileViewport ? 0 : 10,
-        scrollMarginTop: 120,
-      }}
-    >
-      <div
-        style={{
-          display: isMobileViewport ? "none" : "block",
-          position: "absolute",
-          left: -13,
-          top: 8,
-          width: 11,
-          height: 11,
-          borderRadius: "50%",
-          background: index === 0 ? "#4CAF50" : "#9fc59a",
-          boxShadow: "0 0 0 4px #f8fbf6",
-        }}
-      />
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 6,
-        }}
-      >
-        {archive && startTime ? (
-          <div
-            style={{
-              fontSize: 12,
-              color: "#8a9588",
-              minWidth: 0,
-            }}
-          >
-            {index === 0 ? "最新进展 · " : ""}第{" "}
-            {getDayNumber(startTime, item.record_time)} 天 ·{" "}
-            {formatDateTime(item.record_time)}
-          </div>
-        ) : (
-          <span />
-        )}
-
-        {!isMobileViewport && statusBadge ? (
+      mobileMode={isMobileViewport}
+      latest={index === 0}
+      metaText={recordMetaText}
+      tone={recordTone}
+      statusSlot={
+        !isMobileViewport && statusBadge ? (
           <ArchiveStatusBadge kind={statusBadge.kind}>
             {statusBadge.label}
           </ArchiveStatusBadge>
-        ) : null}
-      </div>
-
-      <div
-        style={{
-          background: isHelpRecord
-            ? "#fffaf5"
-            : isResolvedRecord
-              ? "#fbfffb"
-              : "#fff",
-          padding: isMobileViewport ? 10 : 12,
-          borderRadius: isMobileViewport ? 14 : 16,
-          border: isHelpRecord
-            ? "1px solid #edc6a9"
-            : isResolvedRecord
-              ? "1px solid #cfe4d4"
-              : isHighlighted
-                ? "1px solid #b6ddb4"
-                : "1px solid #ebefea",
-          boxShadow: isHelpRecord
-            ? "0 0 0 3px rgba(166, 95, 69, 0.08)"
-            : isResolvedRecord
-              ? "0 0 0 3px rgba(77, 124, 91, 0.08)"
-              : isHighlighted
-                ? "0 0 0 4px rgba(79, 143, 70, 0.08)"
-                : "0 3px 14px rgba(0,0,0,0.025)",
-        }}
-      >
+        ) : null
+      }
+    >
         {isMobileViewport ? (
           <>
-            {mode === "owner" ? (
+            {mode === "owner" && !isLocalMode ? (
               <MobileRecordFileInputs
                 chooseInputRef={chooseInputRef}
                 cameraInputRef={cameraInputRef}
@@ -252,7 +224,17 @@ export default function ArchiveRecordCard({
                   readOnly={mode !== "owner"}
                   compact
                   placeholder="添加文字"
-                  onSaved={(nextText) => onNoteSaved?.(item.id, nextText)}
+                  onSaveOverride={
+                    isLocalMode
+                      ? async (nextText) =>
+                          saveRecordPatch({ note: nextText })
+                      : undefined
+                  }
+                  onSaved={
+                    isLocalMode
+                      ? undefined
+                      : (nextText) => onNoteSaved?.(item.id, nextText)
+                  }
                 />
               </div>
               {mode === "owner" ? (
@@ -270,7 +252,20 @@ export default function ArchiveRecordCard({
                     ⋯
                   </button>
 
-                  {menuOpen ? (
+                  {menuOpen && isLocalMode ? (
+                    <MobileRecordLocalMenu
+                      onEdit={() => {
+                        setMenuOpen(false);
+                        setEditPanelOpen(true);
+                      }}
+                      onDelete={() => {
+                        setMenuOpen(false);
+                        onRecordDeleted?.(item.id);
+                      }}
+                    />
+                  ) : null}
+
+                  {menuOpen && !isLocalMode ? (
                     <MobileRecordMoreMenu
                       archive={archive}
                       item={item}
@@ -312,46 +307,59 @@ export default function ArchiveRecordCard({
               ) : null}
             </div>
 
-            <MobileRecordMetaRow
-              item={item}
-              archive={archive}
-              isPlantArchive={isPlantArchive}
-              statusBadge={statusBadge}
-              canEdit={mode === "owner"}
-              tagEditorOpen={tagEditorOpen}
-              onToggleTagEditor={() => setTagEditorOpen((value) => !value)}
-              onRemoveTag={onRemoveTag}
-              onAddTag={async (newTag) => {
-                await onAddTag(item.id, newTag);
-                setTagEditorOpen(false);
-              }}
-            />
+            {isLocalMode ? (
+              <MobileLocalRecordMetaRow />
+            ) : (
+              <>
+                <MobileRecordMetaRow
+                  item={item}
+                  archive={archive}
+                  isPlantArchive={isPlantArchive}
+                  statusBadge={statusBadge}
+                  canEdit={mode === "owner"}
+                  tagEditorOpen={tagEditorOpen}
+                  onToggleTagEditor={() => setTagEditorOpen((value) => !value)}
+                  onRemoveTag={onRemoveTag}
+                  onAddTag={async (newTag) => {
+                    await onAddTag(item.id, newTag);
+                    setTagEditorOpen(false);
+                  }}
+                />
 
-            <ArchiveCommentsSection
-              recordId={item.id}
-              recordOwnerId={archive.user_id}
-              recordStatusTag={item.status_tag}
-              currentUserId={currentUserId}
-              initialCommentCount={item.comment_count}
-              showStatusHint={false}
-              compactMobile
-              onCommentCountChange={(count) =>
-                onCommentCountChange?.(item.id, count)
-              }
-            />
+                <ArchiveCommentsSection
+                  recordId={item.id}
+                  recordOwnerId={archive.user_id}
+                  recordStatusTag={item.status_tag}
+                  currentUserId={currentUserId}
+                  initialCommentCount={item.comment_count}
+                  showStatusHint={false}
+                  compactMobile
+                  onCommentCountChange={(count) =>
+                    onCommentCountChange?.(item.id, count)
+                  }
+                />
+              </>
+            )}
 
             {editPanelOpen ? (
               <MobileRecordEditPanel
                 item={item}
                 onClose={() => setEditPanelOpen(false)}
                 onSaved={(patch) => {
-                  onRecordUpdated?.(item.id, patch);
-                  if (typeof patch.note === "string") {
-                    onNoteSaved?.(item.id, patch.note);
+                  if (!isLocalMode) {
+                    void saveRecordPatch(patch);
                   }
                   setEditPanelOpen(false);
                 }}
                 onRecordDeleted={onRecordDeleted}
+                onSaveOverride={
+                  isLocalMode
+                    ? async (patch) => saveRecordPatch(patch)
+                    : undefined
+                }
+                onDeleteRequest={
+                  isLocalMode ? () => onRecordDeleted?.(item.id) : undefined
+                }
               />
             ) : null}
           </>
@@ -362,6 +370,7 @@ export default function ArchiveRecordCard({
                 mediaList={mediaList}
                 mediaItems={item.media || []}
                 mode={mode}
+                canDeleteMedia={!isLocalMode && mode === "owner"}
                 recordId={item.id}
                 onOpen={(mediaIndex) =>
                   onOpenLightbox(item.media || [], mediaIndex, item)
@@ -376,10 +385,24 @@ export default function ArchiveRecordCard({
                 id={item.id}
                 initialText={item.note || ""}
                 readOnly={mode !== "owner"}
+                onSaveOverride={
+                  isLocalMode
+                    ? async (nextText) => saveRecordPatch({ note: nextText })
+                    : undefined
+                }
+                onSaved={
+                  isLocalMode
+                    ? undefined
+                    : (nextText) => onNoteSaved?.(item.id, nextText)
+                }
               />
             </div>
 
-            {mode === "owner" ? (
+            {mode === "owner" && isLocalMode ? (
+              <DesktopLocalRecordActions
+                onDelete={() => onRecordDeleted?.(item.id)}
+              />
+            ) : mode === "owner" ? (
               <DesktopAndMobileRecordActions
                 archive={archive}
                 item={item}
@@ -394,7 +417,7 @@ export default function ArchiveRecordCard({
               />
             ) : null}
 
-            {isPlantArchive ? (
+            {!isLocalMode && isPlantArchive ? (
               <DesktopRecordTags
                 item={item}
                 mode={mode}
@@ -403,25 +426,26 @@ export default function ArchiveRecordCard({
               />
             ) : null}
 
-            <ArchiveCommentsSection
-              recordId={item.id}
-              recordOwnerId={archive.user_id}
-              recordStatusTag={item.status_tag}
-              currentUserId={currentUserId}
-              initialCommentCount={item.comment_count}
-              showStatusHint
-              onCommentCountChange={(count) =>
-                onCommentCountChange?.(item.id, count)
-              }
-            />
+            {!isLocalMode ? (
+              <ArchiveCommentsSection
+                recordId={item.id}
+                recordOwnerId={archive.user_id}
+                recordStatusTag={item.status_tag}
+                currentUserId={currentUserId}
+                initialCommentCount={item.comment_count}
+                showStatusHint
+                onCommentCountChange={(count) =>
+                  onCommentCountChange?.(item.id, count)
+                }
+              />
+            ) : null}
 
-            {isPlantArchive && sameTagLinks.length > 0 ? (
+            {!isLocalMode && isPlantArchive && sameTagLinks.length > 0 ? (
               <DesktopSameTagLinks sameTagLinks={sameTagLinks} />
             ) : null}
           </>
         )}
-      </div>
-    </article>
+    </ArchiveRecordCardShell>
   );
 }
 
@@ -573,6 +597,32 @@ function DesktopAndMobileRecordActions({
         style={{ marginLeft: "auto" }}
         onDeleted={onRecordDeleted}
       />
+    </div>
+  );
+}
+
+function DesktopLocalRecordActions({ onDelete }: { onDelete: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        alignItems: "center",
+        marginBottom: 10,
+      }}
+    >
+      <ArchiveStatusBadge>本地离线</ArchiveStatusBadge>
+      <button
+        type="button"
+        onClick={onDelete}
+        style={{
+          ...smallActionButtonStyle("#fff7f7", "#a44848", "#e4caca"),
+          marginLeft: "auto",
+        }}
+      >
+        删除本地记录
+      </button>
     </div>
   );
 }
@@ -763,6 +813,7 @@ function DesktopRecordMediaGrid({
   mediaList,
   mediaItems,
   mode,
+  canDeleteMedia,
   recordId,
   onOpen,
   onDeleteMedia,
@@ -770,6 +821,7 @@ function DesktopRecordMediaGrid({
   mediaList: Array<{ url: string; alt: string }>;
   mediaItems: MediaItem[];
   mode: ArchiveMode;
+  canDeleteMedia: boolean;
   recordId: string;
   onOpen: (mediaIndex: number) => void;
   onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
@@ -815,7 +867,7 @@ function DesktopRecordMediaGrid({
               }}
             />
 
-            {mode === "owner" ? (
+            {mode === "owner" && canDeleteMedia ? (
               <button
                 type="button"
                 onClick={async (event) => {
@@ -938,6 +990,39 @@ function MobileRecordMoreMenu({
   );
 }
 
+function MobileRecordLocalMenu({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div style={mobileRecordMenuStyle}>
+      <button type="button" onClick={onEdit} style={mobileRecordMenuItemStyle}>
+        编辑文字
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        style={mobileRecordMenuDangerItemStyle}
+      >
+        删除本地记录
+      </button>
+    </div>
+  );
+}
+
+function MobileLocalRecordMetaRow() {
+  return (
+    <div style={mobileRecordMetaWrapStyle}>
+      <div style={mobileRecordMetaRowStyle}>
+        <span style={mobileRecordMetaTextStyle}>本地离线</span>
+      </div>
+    </div>
+  );
+}
+
 function MobileRecordMetaRow({
   item,
   archive,
@@ -1032,11 +1117,15 @@ function MobileRecordEditPanel({
   onClose,
   onSaved,
   onRecordDeleted,
+  onSaveOverride,
+  onDeleteRequest,
 }: {
   item: RecordItem;
   onClose: () => void;
   onSaved: (patch: Partial<RecordItem>) => void;
   onRecordDeleted?: (recordId: string) => void;
+  onSaveOverride?: (patch: Partial<RecordItem>) => Promise<void> | void;
+  onDeleteRequest?: () => void;
 }) {
   const [note, setNote] = useState(item.note || "");
   const [timeValue, setTimeValue] = useState(toDateTimeLocalValue(item.record_time));
@@ -1062,10 +1151,20 @@ function MobileRecordEditPanel({
     };
 
     setSaving(true);
-    const { error } = await supabase
-      .from("records")
-      .update(patch)
-      .eq("id", item.id);
+    let error: unknown = null;
+    if (onSaveOverride) {
+      try {
+        await onSaveOverride(patch);
+      } catch (err) {
+        error = err;
+      }
+    } else {
+      const result = await supabase
+        .from("records")
+        .update(patch)
+        .eq("id", item.id);
+      error = result.error;
+    }
     setSaving(false);
 
     if (error) {
@@ -1140,11 +1239,21 @@ function MobileRecordEditPanel({
         </button>
 
         <div style={mobileEditDeleteWrapStyle}>
-          <DeleteRecordButton
-            id={item.id}
-            onDeleted={onRecordDeleted}
-            style={mobileEditDeleteButtonStyle}
-          />
+          {onDeleteRequest ? (
+            <button
+              type="button"
+              onClick={onDeleteRequest}
+              style={mobileEditDeleteButtonStyle}
+            >
+              删除本地记录
+            </button>
+          ) : (
+            <DeleteRecordButton
+              id={item.id}
+              onDeleted={onRecordDeleted}
+              style={mobileEditDeleteButtonStyle}
+            />
+          )}
         </div>
       </section>
     </div>
@@ -1244,6 +1353,11 @@ const mobileRecordMenuLinkStyle = {
   alignItems: "center",
   textDecoration: "none",
   boxSizing: "border-box",
+} as const;
+
+const mobileRecordMenuDangerItemStyle = {
+  ...mobileRecordMenuItemStyle,
+  color: "#a44848",
 } as const;
 
 const mobileRecordSubMenuItemStyle = {
