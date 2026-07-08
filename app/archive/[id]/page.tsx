@@ -20,6 +20,10 @@ import {
   isNonPlantArchiveCategory,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import {
+  getSystemNameCandidates,
+  type SystemNameCandidate,
+} from "@/lib/system-name-candidates";
 import type {
   ArchiveDetailArchive,
   ArchiveMode,
@@ -78,6 +82,8 @@ function Content({ id }: { id: string }) {
   const [sameTagCounts, setSameTagCounts] = useState<Record<string, number>>({});
   const [archiveSubcategoryLabel, setArchiveSubcategoryLabel] = useState<string | null>(null);
   const [archiveGroupLabel, setArchiveGroupLabel] = useState<string | null>(null);
+  const [archiveProfileSystemNameCandidateList, setArchiveProfileSystemNameCandidates] =
+    useState<SystemNameCandidate[]>([]);
   const [isProjectFollowed, setIsProjectFollowed] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -350,6 +356,35 @@ saveRecentArchiveBrowse({
   }, []);
 
   useEffect(() => {
+    async function loadArchiveSystemNameCandidates() {
+      if (!archive?.category) {
+        setArchiveProfileSystemNameCandidates([]);
+        return;
+      }
+
+      const candidates = await getSystemNameCandidates({
+        category: archive.category,
+        currentValue: getDisplayName(archive, species),
+        mode: "cloud",
+        supabase,
+        userId: archive.user_id,
+        includeUserArchives: true,
+        limit: 200,
+      });
+      setArchiveProfileSystemNameCandidates(candidates);
+    }
+
+    void loadArchiveSystemNameCandidates();
+  }, [
+    archive?.category,
+    archive?.system_name,
+    archive?.species_id,
+    archive?.species_name_snapshot,
+    archive?.user_id,
+    species,
+  ]);
+
+  useEffect(() => {
     async function loadSameTagCounts() {
       const visibleTags = Array.from(
         new Set<string>(
@@ -573,23 +608,6 @@ saveRecentArchiveBrowse({
     activeArchive.category === "plant" ||
     activeArchive.category === "system" ||
     activeArchive.category === "insect_fish";
-  const archiveProfileSystemNameCandidates =
-    activeArchive.category === "plant"
-      ? mobileSpeciesList.map((item) => ({
-          id: item.id,
-          label: item.display_name || item.common_name || item.scientific_name || "未命名植物",
-          description: [
-            item.scientific_name,
-            Array.isArray(item.aliases) && item.aliases.length
-              ? `别名：${item.aliases.slice(0, 4).join("、")}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        }))
-      : activeArchive.category === "system" || activeArchive.category === "insect_fish"
-        ? getDefaultSystemNames(activeArchive.category).map((name) => ({ label: name }))
-        : [];
 
   if (!isOwner && !activeArchive.is_public) {
     return <ArchivePrivateState />;
@@ -1572,7 +1590,7 @@ saveRecentArchiveBrowse({
               recordCount={activeArchive.record_count || records.length || 0}
               encyclopediaHref={encyclopediaHref}
               isProjectFollowed={isProjectFollowed}
-              systemNameCandidates={archiveProfileSystemNameCandidates}
+              systemNameCandidates={archiveProfileSystemNameCandidateList}
               systemNameMode={archiveSystemNameUsesCandidates ? "candidate" : "text"}
               onToggleArchiveVisibility={toggleArchiveVisibility}
               onToggleProjectFollow={toggleProjectFollow}

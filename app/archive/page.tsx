@@ -12,13 +12,12 @@ import ArchiveTaxonomyPanel, {
   type ArchiveTaxonomyChip,
 } from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import ArchiveCard from "@/components/archive/ArchiveCard";
+import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
 import ArchiveCategoryDropdown from "@/components/archive/ArchiveCategoryDropdown";
 import ArchiveGroupDropdown from "@/components/archive/ArchiveGroupDropdown";
 import {
   archiveCategoryOptions,
   getArchiveCategoryLabel,
-  getDefaultSystemNames,
-  isNonPlantArchiveCategory,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type {
@@ -34,6 +33,13 @@ import {
   buildArchiveSearchText,
   getArchiveSortTime,
 } from "@/lib/archive-page-utils";
+import {
+  dedupeSystemNameCandidates,
+  getSystemNameCandidateLabels,
+  getSystemNameCandidates,
+  hasExactSystemNameCandidate,
+  type SystemNameCandidate,
+} from "@/lib/system-name-candidates";
 import {
   getCreateContentBlockedText,
   normalizeMembershipRpcResult,
@@ -69,6 +75,13 @@ type LatestArchiveRecord = {
   media_count?: number | null;
 };
 
+const emptySystemNameCandidateMap: Record<ArchiveCategory, SystemNameCandidate[]> = {
+  plant: [],
+  system: [],
+  insect_fish: [],
+  other: [],
+};
+
 
 export default function ArchivePage() {
   const router = useRouter();
@@ -89,9 +102,13 @@ export default function ArchivePage() {
   const [editingSystemName, setEditingSystemName] = useState("");
   const [editingLocalSystemArchiveId, setEditingLocalSystemArchiveId] = useState<string | null>(null);
   const [editingLocalSystemName, setEditingLocalSystemName] = useState("");
+  const [editingLocalSystemSearch, setEditingLocalSystemSearch] = useState("");
   const [savingLocalSystemArchiveId, setSavingLocalSystemArchiveId] = useState<string | null>(null);
   const [plantSuggestionsOpen, setPlantSuggestionsOpen] = useState(false);
   const [systemSuggestionsOpen, setSystemSuggestionsOpen] = useState(false);
+  const [localSystemSuggestionsOpen, setLocalSystemSuggestionsOpen] = useState(false);
+  const [systemNameCandidateMap, setSystemNameCandidateMap] =
+    useState<Record<ArchiveCategory, SystemNameCandidate[]>>(emptySystemNameCandidateMap);
 
   const [activeCategory, setActiveCategory] = useState<ArchiveCategory | null>(null);
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
@@ -411,30 +428,56 @@ export default function ArchivePage() {
     setPlantSuggestionsOpen(false);
   }
 
+  function getSystemNameCandidateOptions(
+    category: ArchiveCategory | null,
+    keyword = "",
+    currentValue?: string | null,
+    limit = 8
+  ) {
+    if (!category) return [];
+
+    const candidates = dedupeSystemNameCandidates(
+      systemNameCandidateMap[category] || [],
+      currentValue
+    );
+    const normalizedKeyword = keyword.trim().toLowerCase();
+
+    return candidates
+      .filter((candidate) => {
+        if (!normalizedKeyword) return true;
+        return String(candidate.searchText || candidate.label)
+          .toLowerCase()
+          .includes(normalizedKeyword);
+      })
+      .slice(0, limit);
+  }
+
+  function toPlantSpeciesOption(candidate: SystemNameCandidate): PlantSpeciesOption {
+    return {
+      id: candidate.plantId || candidate.id || candidate.label,
+      common_name: candidate.label,
+      scientific_name: candidate.description || null,
+      slug: candidate.plantSlug || null,
+      category: null,
+      is_active: true,
+      aliases: candidate.aliases || [],
+      display_name: candidate.label,
+      search_text: candidate.searchText || candidate.label.toLowerCase(),
+    };
+  }
+
   const plantSearchResults = useMemo(() => {
-    const keyword = editingPlantSearch.trim().toLowerCase();
-    if (!keyword) return speciesList.slice(0, 8);
-    return speciesList.filter((species) => species.search_text.includes(keyword)).slice(0, 8);
-  }, [editingPlantSearch, speciesList]);
+    return getSystemNameCandidateOptions("plant", editingPlantSearch, null, 8).map(
+      toPlantSpeciesOption
+    );
+  }, [editingPlantSearch, systemNameCandidateMap]);
 
   const hasExactPlantMatch = useMemo(() => {
-    const keyword = editingPlantSearch.trim().toLowerCase();
-    if (!keyword) return false;
-
-    return speciesList.some((species) => {
-      const names = [
-        species.display_name,
-        species.common_name,
-        species.scientific_name,
-        species.slug,
-        ...(Array.isArray(species.aliases) ? species.aliases : []),
-      ];
-
-      return names
-        .filter(Boolean)
-        .some((name) => String(name).trim().toLowerCase() === keyword);
-    });
-  }, [editingPlantSearch, speciesList]);
+    return hasExactSystemNameCandidate(
+      getSystemNameCandidateOptions("plant", "", null, 300),
+      editingPlantSearch
+    );
+  }, [editingPlantSearch, systemNameCandidateMap]);
 
   async function savePlantSelection(item: ArchiveItem) {
     const pendingName = editingPendingSpeciesName.trim();
@@ -538,37 +581,26 @@ export default function ArchivePage() {
   }
 
   function getSystemNameOptions(category: ArchiveCategory | null, keyword = editingSystemSearch) {
-    if (!isNonPlantArchiveCategory(category)) return [];
-
-    const normalizedKeyword = keyword.trim().toLowerCase();
-    const names = new Set<string>();
-    getDefaultSystemNames(category).forEach((name) => names.add(name));
-    archives.forEach((archive) => {
-      if (archive.category === category && archive.system_name) {
-        names.add(archive.system_name);
-      }
-    });
-
-    const allNames = Array.from(names);
-    if (!normalizedKeyword) return allNames.slice(0, 6);
-    return allNames.filter((name) => name.toLowerCase().includes(normalizedKeyword)).slice(0, 6);
+    return getSystemNameCandidateLabels(
+      getSystemNameCandidateOptions(
+        category,
+        keyword,
+        editingSystemName || editingSystemSearch,
+        6
+      )
+    );
   }
 
   function hasExactSystemNameMatch(category: ArchiveCategory | null) {
-    if (!isNonPlantArchiveCategory(category)) return false;
-
-    const keyword = editingSystemSearch.trim().toLowerCase();
-    if (!keyword) return false;
-
-    const names = new Set<string>();
-    getDefaultSystemNames(category).forEach((name) => names.add(name));
-    archives.forEach((archive) => {
-      if (archive.category === category && archive.system_name) {
-        names.add(archive.system_name);
-      }
-    });
-
-    return Array.from(names).some((name) => name.trim().toLowerCase() === keyword);
+    return hasExactSystemNameCandidate(
+      getSystemNameCandidateOptions(
+        category,
+        "",
+        editingSystemName || editingSystemSearch,
+        300
+      ),
+      editingSystemSearch
+    );
   }
 
   async function saveSystemSelection(item: ArchiveItem) {
@@ -951,6 +983,47 @@ export default function ArchivePage() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadSystemNameCandidateMap() {
+      const categories: ArchiveCategory[] = ["plant", "system", "insect_fish", "other"];
+      const entries = await Promise.all(
+        categories.map(async (category) => {
+          const candidates = await getSystemNameCandidates({
+            category,
+            mode: "cloud",
+            supabase,
+            userId: currentOwnerContext?.userId || null,
+            cloudExistingNames: archives
+              .filter((archive) => archive.category === category)
+              .map((archive) => archive.system_name || archive.species_display_name || archive.species_name_snapshot),
+            localExistingNames: localArchives
+              .filter((archive) => archive.category === category)
+              .map((archive) => archive.system_name || archive.species_name),
+            plantSpeciesRows: category === "plant" ? speciesList : undefined,
+            limit: 300,
+          });
+
+          return [category, candidates] as const;
+        })
+      );
+
+      if (!isCancelled) {
+        setSystemNameCandidateMap({
+          ...emptySystemNameCandidateMap,
+          ...(Object.fromEntries(entries) as Record<ArchiveCategory, SystemNameCandidate[]>),
+        });
+      }
+    }
+
+    void loadSystemNameCandidateMap();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [archives, currentOwnerContext?.userId, localArchives, speciesList]);
 
   const archiveCount = archives.length;
   const publicArchiveCount = archives.filter((item) => item.is_public).length;
@@ -1364,13 +1437,18 @@ export default function ArchivePage() {
   }
 
   async function renameLocalArchiveSystemName(archive: LocalArchiveSummary) {
+    const systemName = archive.system_name || archive.species_name || "";
     setEditingLocalSystemArchiveId(archive.id);
-    setEditingLocalSystemName(archive.system_name || archive.species_name || "");
+    setEditingLocalSystemName(systemName);
+    setEditingLocalSystemSearch(systemName);
+    setLocalSystemSuggestionsOpen(false);
   }
 
   function cancelLocalArchiveSystemNameEditing() {
     setEditingLocalSystemArchiveId(null);
     setEditingLocalSystemName("");
+    setEditingLocalSystemSearch("");
+    setLocalSystemSuggestionsOpen(false);
   }
 
   async function saveLocalArchiveSystemName(archive: LocalArchiveSummary) {
@@ -1849,45 +1927,40 @@ export default function ArchivePage() {
                         onClick={(event) => event.stopPropagation()}
                         style={localInlineEditWrapStyle}
                       >
-                        <input
-                          value={editingLocalSystemName}
-                          onChange={(event) => setEditingLocalSystemName(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              void saveLocalArchiveSystemName(archive);
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              cancelLocalArchiveSystemNameEditing();
-                            }
+                        <ArchiveSystemNameEditor
+                          value={editingLocalSystemSearch}
+                          selectedValue={editingLocalSystemName}
+                          options={getSystemNameCandidateLabels(
+                            getSystemNameCandidateOptions(
+                              archive.category,
+                              editingLocalSystemSearch,
+                              archive.system_name || archive.species_name,
+                              8
+                            )
+                          )}
+                          suggestionsOpen={localSystemSuggestionsOpen}
+                          hasExactMatch={hasExactSystemNameCandidate(
+                            getSystemNameCandidateOptions(
+                              archive.category,
+                              "",
+                              archive.system_name || archive.species_name,
+                              300
+                            ),
+                            editingLocalSystemSearch
+                          )}
+                          onChange={(value) => {
+                            setEditingLocalSystemSearch(value);
+                            setEditingLocalSystemName("");
+                            setLocalSystemSuggestionsOpen(true);
                           }}
-                          autoFocus
-                          style={localInlineEditInputStyle}
+                          onSelect={(name) => {
+                            setEditingLocalSystemName(name);
+                            setEditingLocalSystemSearch(name);
+                            setLocalSystemSuggestionsOpen(false);
+                          }}
+                          onSave={() => void saveLocalArchiveSystemName(archive)}
+                          onCancel={cancelLocalArchiveSystemNameEditing}
                         />
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void saveLocalArchiveSystemName(archive);
-                          }}
-                          disabled={savingLocalSystemArchiveId === archive.id}
-                          style={localInlineEditButtonStyle}
-                        >
-                          保存
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            cancelLocalArchiveSystemNameEditing();
-                          }}
-                          style={localInlineEditCancelStyle}
-                        >
-                          取消
-                        </button>
                       </span>
                     ) : undefined
                   }

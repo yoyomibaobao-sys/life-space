@@ -20,11 +20,12 @@ import {
 import {
   type ArchiveCategory,
   archiveCategoryOptions,
-  getDefaultSystemNames,
-  isNonPlantArchiveCategory,
 } from "@/lib/archive-categories";
-import type { PlantSpeciesOption } from "@/lib/archive-page-types";
-import type { PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+import {
+  getSystemNameCandidates,
+  hasExactSystemNameCandidate,
+  type SystemNameCandidate,
+} from "@/lib/system-name-candidates";
 
 const DEFAULT_ARCHIVE_IS_PUBLIC = false;
 const DEFAULT_RECORD_VISIBILITY = "private";
@@ -53,7 +54,7 @@ function NewArchiveContent() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory>("plant");
 
-  const [speciesList, setSpeciesList] = useState<PlantSpeciesOption[]>([]);
+  const [systemCandidates, setSystemCandidates] = useState<SystemNameCandidate[]>([]);
   const [speciesId, setSpeciesId] = useState<string | null>(null);
   const [pendingSpeciesName, setPendingSpeciesName] = useState<string | null>(
     null
@@ -89,79 +90,31 @@ function NewArchiveContent() {
   }, [validPreselectedCategory, preselectedSpeciesId]);
 
   useEffect(() => {
-    async function loadSpecies() {
-      const [{ data: speciesData }, { data: aliasData }] = await Promise.all([
-        supabase
-          .from("plant_species")
-          .select("id, common_name, scientific_name, slug, is_active")
-          .eq("is_active", true)
-          .order("common_name", { ascending: true }),
-
-        supabase
-          .from("plant_species_aliases")
-          .select("species_id, alias_name, normalized_name"),
-      ]);
-
-      const aliasesBySpecies = new Map<string, string[]>();
-
-      ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
-        const list = aliasesBySpecies.get(alias.species_id) || [];
-        if (alias.alias_name) list.push(alias.alias_name);
-        if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {
-          list.push(alias.normalized_name);
-        }
-        aliasesBySpecies.set(alias.species_id, list);
+    async function loadCandidates() {
+      const candidates = await getSystemNameCandidates({
+        category,
+        supabase,
+        currentValue: category === "plant" ? speciesSearch : systemName || systemSearch,
+        limit: 200,
       });
+      setSystemCandidates(candidates);
 
-      const list: PlantSpeciesOption[] = ((speciesData || []) as PlantSpeciesOption[]).map((species) => {
-        const aliases = Array.from(
-          new Set(aliasesBySpecies.get(species.id) || [])
-        );
-        const displayName =
-          species.common_name || species.scientific_name || "未命名植物";
-
-        return {
-          ...species,
-          aliases,
-          display_name: displayName,
-          search_text: [
-            displayName,
-            species.common_name,
-            species.scientific_name,
-            species.slug,
-            ...aliases,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase(),
-        };
-      });
-
-      setSpeciesList(list);
-
-      if (preselectedSpeciesId) {
-        const selected = list.find((s) => s.id === preselectedSpeciesId);
+      if (category === "plant" && preselectedSpeciesId) {
+        const selected = candidates.find((item) => item.plantId === preselectedSpeciesId || item.id === preselectedSpeciesId);
 
         if (selected) {
-          const selectedName =
-            selected.display_name ||
-            selected.common_name ||
-            selected.scientific_name ||
-            "";
-
-          setCategory("plant");
-          setSpeciesId(selected.id);
+          setSpeciesId(selected.plantId || selected.id || null);
           setPendingSpeciesName(null);
-          setSpeciesSearch(selectedName);
+          setSpeciesSearch(selected.label);
           setTitle((current) =>
-            current || (selectedName ? `我的${selectedName}` : "")
+            current || (selected.label ? `我的${selected.label}` : "")
           );
         }
       }
     }
 
-    loadSpecies();
-  }, [preselectedSpeciesId]);
+    void loadCandidates();
+  }, [category, preselectedSpeciesId]);
 
   useEffect(() => {
     async function loadMembership() {
@@ -192,19 +145,15 @@ function NewArchiveContent() {
   const contentBlocked = membership?.can_create_content === false;
 
   const systemOptions = useMemo(() => {
-    if (!isNonPlantArchiveCategory(category)) return [];
-
     const keyword = systemSearch.trim().toLowerCase();
-    const presetNames = getDefaultSystemNames(category);
-
-    if (!keyword) {
-      return presetNames.slice(0, 10);
-    }
-
-    return presetNames
-      .filter((name) => name.toLowerCase().includes(keyword))
+    return systemCandidates
+      .filter((candidate) =>
+        keyword
+          ? String(candidate.searchText || candidate.label).toLowerCase().includes(keyword)
+          : true
+      )
       .slice(0, 10);
-  }, [category, systemSearch]);
+  }, [systemCandidates, systemSearch]);
 
   function resetPlantSelection() {
     setSpeciesId(null);
@@ -234,31 +183,18 @@ function NewArchiveContent() {
     const keyword = speciesSearch.trim().toLowerCase();
 
     if (!keyword) {
-      return speciesList.slice(0, 10);
+      return systemCandidates.slice(0, 10);
     }
 
-    return speciesList
-      .filter((species) => species.search_text?.includes(keyword))
+    return systemCandidates
+      .filter((candidate) =>
+        String(candidate.searchText || candidate.label).toLowerCase().includes(keyword)
+      )
       .slice(0, 10);
   }
 
   function hasExactPlantMatch() {
-    const keyword = speciesSearch.trim().toLowerCase();
-    if (!keyword) return false;
-
-    return speciesList.some((species) => {
-      const names = [
-        species.display_name,
-        species.common_name,
-        species.scientific_name,
-        species.slug,
-        ...(Array.isArray(species.aliases) ? species.aliases : []),
-      ];
-
-      return names
-        .filter(Boolean)
-        .some((name) => String(name).trim().toLowerCase() === keyword);
-    });
+    return hasExactSystemNameCandidate(systemCandidates, speciesSearch);
   }
 
   function submitPendingSpeciesName() {
@@ -276,12 +212,7 @@ function NewArchiveContent() {
   }
 
   function hasExactSystemNameMatch() {
-    const keyword = systemSearch.trim().toLowerCase();
-    if (!keyword || !isNonPlantArchiveCategory(category)) return false;
-
-    return getDefaultSystemNames(category).some(
-      (name) => name.trim().toLowerCase() === keyword
-    );
+    return hasExactSystemNameCandidate(systemCandidates, systemSearch);
   }
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -332,13 +263,11 @@ function NewArchiveContent() {
       ]);
     }
 
-    const selectedSpecies = speciesList.find((s) => s.id === speciesId);
+    const selectedSpecies = systemCandidates.find((s) => s.plantId === speciesId || s.id === speciesId);
     const speciesNameSnapshot =
       category === "plant"
         ? pendingSpeciesName ||
-          selectedSpecies?.display_name ||
-          selectedSpecies?.common_name ||
-          selectedSpecies?.scientific_name ||
+          selectedSpecies?.label ||
           cleanSystemName
         : null;
 
@@ -428,30 +357,21 @@ function NewArchiveContent() {
               <div style={archiveNewProjectSuggestionPanelStyle}>
                 {getPlantSearchResults().map((species) => (
                   <button
-                    key={species.id}
+                    key={species.id || species.label}
                     type="button"
                     onClick={() => {
-                      const name =
-                        species.display_name ||
-                        species.common_name ||
-                        species.scientific_name ||
-                        "未命名植物";
+                      const name = species.label || "未命名植物";
 
-                      setSpeciesId(species.id);
+                      setSpeciesId(species.plantId || species.id || null);
                       setPendingSpeciesName(null);
                       setSpeciesSearch(name);
                       setPlantSuggestionsOpen(false);
                     }}
-                    style={archiveNewProjectSuggestionButtonStyle(speciesId === species.id)}
+                    style={archiveNewProjectSuggestionButtonStyle(speciesId === (species.plantId || species.id))}
                   >
-                    <strong>{species.display_name || species.common_name || species.scientific_name || "未命名植物"}</strong>
-                    {species.scientific_name ? (
-                      <span style={{ color: "#888", marginLeft: 6 }}>{species.scientific_name}</span>
-                    ) : null}
-                    {Array.isArray(species.aliases) && species.aliases.length > 0 ? (
-                      <div style={{ color: "#999", marginTop: 2 }}>
-                        别名：{species.aliases.slice(0, 4).join("、")}
-                      </div>
+                    <strong>{species.label || "未命名植物"}</strong>
+                    {species.description ? (
+                      <span style={{ color: "#888", marginLeft: 6 }}>{species.description}</span>
                     ) : null}
                   </button>
                 ))}
@@ -495,7 +415,7 @@ function NewArchiveContent() {
         ) : (
           <>
             <input
-              placeholder={`输入后点选，例如：${systemOptions[0] || "补光灯"}`}
+              placeholder={`输入后点选，例如：${systemOptions[0]?.label || "补光灯"}`}
               value={systemSearch}
               onChange={(event) => {
                 setSystemSearch(event.target.value);
@@ -507,18 +427,18 @@ function NewArchiveContent() {
             />
             {systemSuggestionsOpen ? (
               <div style={archiveNewProjectSuggestionPanelStyle}>
-                {systemOptions.map((name) => (
+                {systemOptions.map((candidate) => (
                   <button
-                    key={name}
+                    key={`${candidate.source}-${candidate.id || candidate.label}`}
                     type="button"
                     onClick={() => {
-                      setSystemName(name);
-                      setSystemSearch(name);
+                      setSystemName(candidate.label);
+                      setSystemSearch(candidate.label);
                       setSystemSuggestionsOpen(false);
                     }}
-                    style={archiveNewProjectSuggestionButtonStyle(systemName === name)}
+                    style={archiveNewProjectSuggestionButtonStyle(systemName === candidate.label)}
                   >
-                    {name}
+                    {candidate.label}
                   </button>
                 ))}
 

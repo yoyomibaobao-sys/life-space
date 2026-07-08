@@ -29,8 +29,11 @@ import type {
   LightboxImage,
   RecordItem,
 } from "@/lib/archive-detail-types";
-import type { PlantSpeciesOption } from "@/lib/archive-page-types";
-import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+import type { MediaItem } from "@/lib/domain-types";
+import {
+  getSystemNameCandidates,
+  type SystemNameCandidate,
+} from "@/lib/system-name-candidates";
 import type {
   ArchiveProjectView,
 } from "@/components/archive-ui/types";
@@ -49,7 +52,6 @@ import {
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
-  getDefaultSystemNames,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 
@@ -130,7 +132,7 @@ export default function LocalArchiveDetailPage() {
   const [transferredCloudArchiveId, setTransferredCloudArchiveId] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
-  const [plantCandidates, setPlantCandidates] = useState<PlantSpeciesOption[]>([]);
+  const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
   const localRecordObjectUrlsRef = useRef<string[]>([]);
 
   const selectedSizeLabel = useMemo(() => {
@@ -183,58 +185,24 @@ export default function LocalArchiveDetailPage() {
   }, []);
 
   useEffect(() => {
-    async function loadPlantCandidates() {
-      const [{ data: speciesData, error: speciesError }, { data: aliasData }] = await Promise.all([
-        supabase
-          .from("plant_species")
-          .select("id, common_name, scientific_name, slug, category, is_active")
-          .eq("is_active", true)
-          .order("common_name", { ascending: true }),
-        supabase.from("plant_species_aliases").select("species_id, alias_name, normalized_name"),
-      ]);
-
-      if (speciesError) {
-        console.warn("load local archive plant candidates failed:", speciesError.message);
-        setPlantCandidates([]);
+    async function loadCandidates() {
+      if (!detail?.archive.category) {
+        setSystemNameCandidates([]);
         return;
       }
 
-      const aliasesBySpecies = new Map<string, string[]>();
-      ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
-        const list = aliasesBySpecies.get(alias.species_id) || [];
-        if (alias.alias_name) list.push(alias.alias_name);
-        if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {
-          list.push(alias.normalized_name);
-        }
-        aliasesBySpecies.set(alias.species_id, list);
+      const candidates = await getSystemNameCandidates({
+        category: detail.archive.category,
+        currentValue: detail.archive.system_name || detail.archive.species_name,
+        mode: "local",
+        supabase,
+        limit: 200,
       });
-
-      setPlantCandidates(
-        ((speciesData || []) as PlantSpeciesOption[]).map((item) => {
-          const aliases = Array.from(new Set(aliasesBySpecies.get(item.id) || []));
-          const displayName = item.common_name || item.scientific_name || "未命名植物";
-
-          return {
-            ...item,
-            aliases,
-            display_name: displayName,
-            search_text: [
-              displayName,
-              item.common_name,
-              item.scientific_name,
-              item.slug,
-              ...aliases,
-            ]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase(),
-          };
-        })
-      );
+      setSystemNameCandidates(candidates);
     }
 
-    void loadPlantCandidates();
-  }, []);
+    void loadCandidates();
+  }, [detail?.archive.category, detail?.archive.system_name, detail?.archive.species_name]);
 
   function revokeLocalRecordUrls() {
     localRecordObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -653,22 +621,7 @@ export default function LocalArchiveDetailPage() {
     archive.category === "system" ||
     archive.category === "insect_fish";
   const localSystemNameCandidates =
-    archive.category === "plant"
-      ? plantCandidates.map((item) => ({
-          id: item.id,
-          label: item.display_name || item.common_name || item.scientific_name || "未命名植物",
-          description: [
-            item.scientific_name,
-            Array.isArray(item.aliases) && item.aliases.length
-              ? `别名：${item.aliases.slice(0, 4).join("、")}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        }))
-      : archive.category === "system" || archive.category === "insect_fish"
-        ? getDefaultSystemNames(archive.category).map((name) => ({ label: name }))
-        : [];
+    localSystemNameUsesCandidates ? systemNameCandidates : [];
 
   return (
     <main style={pageStyle}>
