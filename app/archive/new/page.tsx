@@ -11,6 +11,7 @@ import ArchiveNewProjectFormShell, {
   archiveNewProjectSuggestionButtonStyle,
   archiveNewProjectSuggestionPanelStyle,
 } from "@/components/archive-ui/ArchiveNewProjectFormShell";
+import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -341,61 +342,45 @@ function NewArchiveContent() {
       systemControl={
         category === "plant" ? (
           <>
-            <input
-              placeholder="输入后点选系统植物，或新增候选名"
+            <SystemNameSelector
               value={speciesSearch}
-              onChange={(event) => {
-                setSpeciesSearch(event.target.value);
+              onChange={(value) => {
+                setSpeciesSearch(value);
                 setSpeciesId(null);
                 setPendingSpeciesName(null);
                 setPlantSuggestionsOpen(true);
               }}
-              onFocus={() => setPlantSuggestionsOpen(true)}
-              style={archiveNewProjectInputStyle}
+              candidates={getPlantSearchResults()}
+              selectedValue={speciesId || pendingSpeciesName || ""}
+              suggestionsOpen={plantSuggestionsOpen}
+              onSuggestionsOpenChange={setPlantSuggestionsOpen}
+              hasExactMatch={hasExactPlantMatch()}
+              onSelect={(species) => {
+                const name = species.label || "未命名植物";
+                setSpeciesId(species.plantId || species.id || null);
+                setPendingSpeciesName(null);
+                setSpeciesSearch(name);
+                setPlantSuggestionsOpen(false);
+              }}
+              onUseCustom={() => submitPendingSpeciesName()}
+              placeholder="输入后点选系统植物，或新增候选名"
+              inputStyle={archiveNewProjectInputStyle}
+              panelStyle={archiveNewProjectSuggestionPanelStyle}
+              optionStyle={(candidate, selected) =>
+                archiveNewProjectSuggestionButtonStyle(
+                  selected || speciesId === (candidate.plantId || candidate.id)
+                )
+              }
+              customOptionStyle={{
+                ...archiveNewProjectSuggestionButtonStyle(false),
+                border: "1px dashed #4CAF50",
+                background: "#fff",
+                color: "#4CAF50",
+              }}
+              emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
+              emptyText="没有找到匹配植物"
+              customActionLabel={(inputValue) => `+ 新增候选植物：${inputValue}`}
             />
-            {plantSuggestionsOpen ? (
-              <div style={archiveNewProjectSuggestionPanelStyle}>
-                {getPlantSearchResults().map((species) => (
-                  <button
-                    key={species.id || species.label}
-                    type="button"
-                    onClick={() => {
-                      const name = species.label || "未命名植物";
-
-                      setSpeciesId(species.plantId || species.id || null);
-                      setPendingSpeciesName(null);
-                      setSpeciesSearch(name);
-                      setPlantSuggestionsOpen(false);
-                    }}
-                    style={archiveNewProjectSuggestionButtonStyle(speciesId === (species.plantId || species.id))}
-                  >
-                    <strong>{species.label || "未命名植物"}</strong>
-                    {species.description ? (
-                      <span style={{ color: "#888", marginLeft: 6 }}>{species.description}</span>
-                    ) : null}
-                  </button>
-                ))}
-
-                {getPlantSearchResults().length === 0 ? (
-                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>没有找到匹配植物</div>
-                ) : null}
-
-                {speciesSearch.trim() && !hasExactPlantMatch() ? (
-                  <button
-                    type="button"
-                    onClick={submitPendingSpeciesName}
-                    style={{
-                      ...archiveNewProjectSuggestionButtonStyle(false),
-                      border: "1px dashed #4CAF50",
-                      background: "#fff",
-                      color: "#4CAF50",
-                    }}
-                  >
-                    + 新增候选植物：{speciesSearch.trim()}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
             {pendingSpeciesName ? (
               <span style={archiveNewProjectHelperTextStyle}>
                 当前使用候选植物：<strong>{pendingSpeciesName}</strong>
@@ -414,60 +399,39 @@ function NewArchiveContent() {
           />
         ) : (
           <>
-            <input
-              placeholder={`输入后点选，例如：${systemOptions[0]?.label || "补光灯"}`}
+            <SystemNameSelector
               value={systemSearch}
-              onChange={(event) => {
-                setSystemSearch(event.target.value);
+              onChange={(value) => {
+                setSystemSearch(value);
                 setSystemName("");
                 setSystemSuggestionsOpen(true);
               }}
-              onFocus={() => setSystemSuggestionsOpen(true)}
-              style={archiveNewProjectInputStyle}
+              candidates={systemOptions}
+              selectedValue={systemName}
+              suggestionsOpen={systemSuggestionsOpen}
+              onSuggestionsOpenChange={setSystemSuggestionsOpen}
+              hasExactMatch={hasExactSystemNameMatch()}
+              onSelect={(candidate) => {
+                setSystemName(candidate.label);
+                setSystemSearch(candidate.label);
+                setSystemSuggestionsOpen(false);
+              }}
+              placeholder={`输入后点选，例如：${systemOptions[0]?.label || "补光灯"}`}
+              inputStyle={archiveNewProjectInputStyle}
+              panelStyle={archiveNewProjectSuggestionPanelStyle}
+              optionStyle={(candidate, selected) =>
+                archiveNewProjectSuggestionButtonStyle(selected || systemName === candidate.label)
+              }
+              customOptionStyle={{
+                ...archiveNewProjectSuggestionButtonStyle(false),
+                border: "1px dashed #4CAF50",
+                background: "#fff",
+                color: "#4CAF50",
+              }}
+              emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
+              emptyText="没有找到匹配名称"
+              customActionLabel={(inputValue) => `+ 新增为系统名：${inputValue}`}
             />
-            {systemSuggestionsOpen ? (
-              <div style={archiveNewProjectSuggestionPanelStyle}>
-                {systemOptions.map((candidate) => (
-                  <button
-                    key={`${candidate.source}-${candidate.id || candidate.label}`}
-                    type="button"
-                    onClick={() => {
-                      setSystemName(candidate.label);
-                      setSystemSearch(candidate.label);
-                      setSystemSuggestionsOpen(false);
-                    }}
-                    style={archiveNewProjectSuggestionButtonStyle(systemName === candidate.label)}
-                  >
-                    {candidate.label}
-                  </button>
-                ))}
-
-                {systemOptions.length === 0 ? (
-                  <div style={{ color: "#999", fontSize: 13, padding: 8 }}>没有找到匹配名称</div>
-                ) : null}
-
-                {systemSearch.trim() && !hasExactSystemNameMatch() ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const name = systemSearch.trim();
-                      setSystemName(name);
-                      setSystemSearch(name);
-                      setSystemSuggestionsOpen(false);
-                    }}
-                    style={{
-                      ...archiveNewProjectSuggestionButtonStyle(false),
-                      border: "1px dashed #4CAF50",
-                      background: "#fff",
-                      color: "#4CAF50",
-                    }}
-                  >
-                    + 新增为系统名：{systemSearch.trim()}
-                  </button>
-                ) : null}
-
-              </div>
-            ) : null}
           </>
         )
       }

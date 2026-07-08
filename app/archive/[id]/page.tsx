@@ -11,6 +11,7 @@ import ArchiveDetailHeader from "@/components/archive-detail/ArchiveDetailHeader
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
+import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import ArchiveTimeline from "@/components/archive-ui/ArchiveTimeline";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
@@ -1988,107 +1989,68 @@ function MobileArchiveProfile({
         valueHref={archive.category === "plant" && !canEdit ? encyclopediaHref : null}
       >
         {category === "plant" ? (
-          <div style={mobileArchiveSuggestionWrapStyle}>
-            <input
-              value={archiveName}
-              onFocus={() => onPlantSuggestionsOpenChange(true)}
-              onChange={(event) => {
-                onArchiveNameChange(event.target.value);
-                onPlantSuggestionsOpenChange(true);
-              }}
-              onBlur={onSaveNameBlur}
-              autoFocus
-              placeholder="输入后从系统植物中点选"
-              style={mobileArchiveInputStyle}
-            />
-
-            {plantSuggestionsOpen ? (
-              <div
-                onMouseDown={(event) => event.preventDefault()}
-                style={mobileArchiveSuggestionListStyle}
-              >
-                {plantSearchResults.length > 0 ? (
-                  plantSearchResults.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => onSelectSpecies(item)}
-                      style={mobileArchiveSuggestionButtonStyle(selectedSpeciesId === item.id)}
-                    >
-                      <strong>
-                        {item.display_name || item.common_name || item.scientific_name || "未命名植物"}
-                      </strong>
-                      {item.scientific_name ? (
-                        <span style={{ color: "#7b8578", marginLeft: 6 }}>
-                          {item.scientific_name}
-                        </span>
-                      ) : null}
-                    </button>
-                  ))
-                ) : (
-                  <div style={mobileArchiveSuggestionEmptyStyle}>
-                    没有找到匹配植物
-                  </div>
-                )}
-
-                {archiveName.trim() ? (
-                  <button
-                    type="button"
-                    onClick={() => onSaveSystemName(archiveName)}
-                    style={mobileArchiveSuggestionNewButtonStyle}
-                  >
-                    使用“{archiveName.trim()}”作为新的系统名
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <SystemNameSelector
+            value={archiveName}
+            onChange={(value) => {
+              onArchiveNameChange(value);
+              onPlantSuggestionsOpenChange(true);
+            }}
+            candidates={plantSearchResults.map((item) => ({
+              id: item.id,
+              label: item.display_name || item.common_name || item.scientific_name || "未命名植物",
+              description: item.scientific_name || "",
+            }))}
+            selectedValue={selectedSpeciesId}
+            suggestionsOpen={plantSuggestionsOpen}
+            onSuggestionsOpenChange={onPlantSuggestionsOpenChange}
+            onSelect={(candidate) => {
+              const selected = plantSearchResults.find((item) => item.id === candidate.id);
+              if (selected) onSelectSpecies(selected);
+            }}
+            onUseCustom={(value) => onSaveSystemName(value)}
+            onBlur={onSaveNameBlur}
+            autoFocus
+            placeholder="输入后从系统植物中点选"
+            containerStyle={mobileArchiveSuggestionWrapStyle}
+            inputStyle={mobileArchiveInputStyle}
+            panelStyle={mobileArchiveSuggestionListStyle}
+            optionStyle={(candidate) =>
+              mobileArchiveSuggestionButtonStyle(selectedSpeciesId === candidate.id)
+            }
+            customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
+            emptyStyle={mobileArchiveSuggestionEmptyStyle}
+            emptyText="没有找到匹配植物"
+            customActionLabel={(inputValue) => `使用“${inputValue}”作为新的系统名`}
+          />
         ) : (
-          <div style={mobileArchiveSuggestionWrapStyle}>
-            <input
-              value={archiveName}
-              onFocus={() => onSystemSuggestionsOpenChange(true)}
-              onChange={(event) => {
-                onArchiveNameChange(event.target.value);
-                onSystemSuggestionsOpenChange(true);
-              }}
-              onBlur={() => onSaveSystemName()}
-              autoFocus
-              placeholder="输入具体名称"
-              style={mobileArchiveInputStyle}
-            />
-
-            {systemSuggestionsOpen ? (
-              <div
-                onMouseDown={(event) => event.preventDefault()}
-                style={mobileArchiveSuggestionListStyle}
-              >
-                {systemNameOptions.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => {
-                      onArchiveNameChange(name);
-                      onSaveSystemName(name);
-                    }}
-                    style={mobileArchiveSuggestionButtonStyle(name === archiveName)}
-                  >
-                    {name}
-                  </button>
-                ))}
-
-                {archiveName.trim() ? (
-                  <button
-                    type="button"
-                    onClick={() => onSaveSystemName(archiveName)}
-                    style={mobileArchiveSuggestionNewButtonStyle}
-                  >
-                    + 新增为具体名称：{archiveName.trim()}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <SystemNameSelector
+            value={archiveName}
+            onChange={(value) => {
+              onArchiveNameChange(value);
+              onSystemSuggestionsOpenChange(true);
+            }}
+            candidates={systemNameOptions.map((label) => ({ label }))}
+            selectedValue={archiveName}
+            suggestionsOpen={systemSuggestionsOpen}
+            onSuggestionsOpenChange={onSystemSuggestionsOpenChange}
+            onSelect={(candidate) => {
+              onArchiveNameChange(candidate.label);
+              onSaveSystemName(candidate.label);
+            }}
+            onUseCustom={(value) => onSaveSystemName(value)}
+            onBlur={() => onSaveSystemName()}
+            autoFocus
+            placeholder="输入具体名称"
+            containerStyle={mobileArchiveSuggestionWrapStyle}
+            inputStyle={mobileArchiveInputStyle}
+            panelStyle={mobileArchiveSuggestionListStyle}
+            optionStyle={(candidate) =>
+              mobileArchiveSuggestionButtonStyle(candidate.label === archiveName)
+            }
+            customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
+            emptyStyle={mobileArchiveSuggestionEmptyStyle}
+            customActionLabel={(inputValue) => `+ 新增为具体名称：${inputValue}`}
+          />
         )}
       </MobileArchiveEditableField>
 

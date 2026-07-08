@@ -1,5 +1,6 @@
 "use client";
 
+import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import type { PlantSpeciesOption } from "@/lib/archive-page-types";
 
 type Props = {
@@ -39,103 +40,51 @@ export default function ArchivePlantNameEditor({
         flexWrap: "wrap",
       }}
     >
-      <div style={{ position: "relative" }}>
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="输入关键词后点选"
-          style={{
-            fontSize: 12,
-            padding: "4px 6px",
-            borderRadius: 6,
-            border: "1px solid #ddd",
-            minWidth: 180,
-          }}
-        />
-
-        {suggestionsOpen && (
-          <div
-            style={{
-              position: "absolute",
-              top: 30,
-              left: 0,
-              width: 280,
-              maxHeight: 210,
-              overflow: "auto",
-              background: "#fff",
-              border: "1px solid #e5e5e5",
-              borderRadius: 10,
-              padding: 8,
-              boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
-              zIndex: 1000,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            {results.map((species) => (
-              <button
-                key={species.id}
-                type="button"
-                onClick={() => onSelectSpecies(species)}
-                style={{
-                  textAlign: "left",
-                  fontSize: 12,
-                  padding: "6px 8px",
-                  borderRadius: 8,
-                  border:
-                    selectedSpeciesId === species.id
-                      ? "1px solid #4CAF50"
-                      : "1px solid transparent",
-                  background:
-                    selectedSpeciesId === species.id ? "#f0fff4" : "#fafafa",
-                  cursor: "pointer",
-                  color: "#222",
-                }}
-              >
-                <strong style={{ color: "#222" }}>
-                  {species.display_name || species.common_name || species.scientific_name || "未命名植物"}
-                </strong>
-                {species.scientific_name && (
-                  <span style={{ color: "#888", marginLeft: 6 }}>
-                    {species.scientific_name}
-                  </span>
-                )}
-                {Array.isArray(species.aliases) && species.aliases.length > 0 && (
-                  <div style={{ color: "#999", marginTop: 2 }}>
-                    别名：{species.aliases.slice(0, 4).join("、")}
-                  </div>
-                )}
-              </button>
-            ))}
-
-            {results.length === 0 && (
-              <div style={{ fontSize: 12, color: "#999", padding: 6 }}>
-                没有找到匹配植物
-              </div>
-            )}
-
-            {value.trim() && !hasExactMatch && (
-              <button
-                type="button"
-                onClick={onSubmitPending}
-                style={{
-                  textAlign: "left",
-                  fontSize: 12,
-                  padding: "6px 8px",
-                  borderRadius: 8,
-                  border: "1px dashed #4CAF50",
-                  background: "#fff",
-                  color: "#4CAF50",
-                  cursor: "pointer",
-                }}
-              >
-                + 新增候选植物：{value.trim()}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <SystemNameSelector
+        value={value}
+        onChange={onChange}
+        candidates={results.map((species) => ({
+          id: species.id,
+          label: species.display_name || species.common_name || species.scientific_name || "未命名植物",
+          description: [
+            species.scientific_name,
+            Array.isArray(species.aliases) && species.aliases.length > 0
+              ? `别名：${species.aliases.slice(0, 4).join("、")}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }))}
+        selectedValue={selectedSpeciesId}
+        suggestionsOpen={suggestionsOpen}
+        hasExactMatch={hasExactMatch}
+        onSelect={(candidate) => {
+          const selected = results.find((species) => species.id === candidate.id);
+          if (selected) onSelectSpecies(selected);
+        }}
+        onUseCustom={onSubmitPending}
+        placeholder="输入关键词后点选"
+        inputStyle={{
+          fontSize: 12,
+          padding: "4px 6px",
+          borderRadius: 6,
+          border: "1px solid #ddd",
+          minWidth: 180,
+        }}
+        panelStyle={{
+          width: 280,
+          maxHeight: 210,
+        }}
+        optionStyle={(candidate) => ({
+          border:
+            selectedSpeciesId === candidate.id
+              ? "1px solid #4CAF50"
+              : "1px solid transparent",
+          background: selectedSpeciesId === candidate.id ? "#f0fff4" : "#fafafa",
+        })}
+        emptyText="没有找到匹配植物"
+        customActionLabel={(inputValue) => `+ 新增候选植物：${inputValue}`}
+      />
 
       {pendingName && <span style={{ fontSize: 12, color: "#666" }}>候选：{pendingName}</span>}
 

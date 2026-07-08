@@ -6,6 +6,7 @@ import { showToast } from "@/components/Toast";
 import ArchiveNewProjectFormShell, {
   archiveNewProjectInputStyle,
 } from "@/components/archive-ui/ArchiveNewProjectFormShell";
+import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import { supabase } from "@/lib/supabase";
 import {
   archiveCategoryOptions,
@@ -150,67 +151,49 @@ export default function NewLocalArchivePage() {
       systemControl={
         usesCandidateSystemName ? (
           <div style={localSystemControlWrapStyle}>
-            <input
+            <SystemNameSelector
               value={systemSearch}
-              onChange={(event) => {
-                setSystemSearch(event.target.value);
+              onChange={(value) => {
+                setSystemSearch(value);
                 setSystemName("");
                 setSystemSuggestionsOpen(true);
               }}
-              onFocus={() => setSystemSuggestionsOpen(true)}
+              candidates={systemOptions}
+              selectedValue={systemName}
+              suggestionsOpen={systemSuggestionsOpen}
+              onSuggestionsOpenChange={setSystemSuggestionsOpen}
+              onSelect={(option) => {
+                setSystemName(option.label);
+                setSystemSearch(option.label);
+                setPlantId(option.plantId || option.id || "");
+                setPlantSlug(option.plantSlug || "");
+                setSystemSuggestionsOpen(false);
+              }}
+              onUseCustom={(name) => {
+                setSystemName(name);
+                setSystemSearch(name);
+                if (category !== "plant") {
+                  setPlantId("");
+                  setPlantSlug("");
+                }
+                setSystemSuggestionsOpen(false);
+              }}
               placeholder={
                 category === "plant"
                   ? "输入后选择候选，或使用当前输入"
                   : `输入后点选，例如：${systemOptions[0]?.label || "补光灯"}`
               }
-              style={archiveNewProjectInputStyle}
+              inputStyle={archiveNewProjectInputStyle}
+              panelStyle={localSuggestionPanelStyle}
+              optionStyle={(option, selected) =>
+                localSuggestionButtonStyle(selected || systemName === option.label)
+              }
+              customOptionStyle={localSuggestionNewButtonStyle}
+              emptyStyle={localSuggestionEmptyStyle}
+              idleText="输入关键词后搜索系统名候选。"
+              emptyText="没有找到匹配候选，可使用当前输入。"
+              customActionLabel={(inputValue) => `使用“${inputValue}”作为新的系统名`}
             />
-            {systemSuggestionsOpen ? (
-              <div style={localSuggestionPanelStyle}>
-                {systemOptions.map((option) => (
-                  <button
-                    key={option.id || option.label}
-                    type="button"
-                    onClick={() => {
-                      setSystemName(option.label);
-                      setSystemSearch(option.label);
-                      setPlantId(option.plantId || option.id || "");
-                      setPlantSlug(option.plantSlug || "");
-                      setSystemSuggestionsOpen(false);
-                    }}
-                    style={localSuggestionButtonStyle(systemName === option.label)}
-                  >
-                    <strong>{option.label}</strong>
-                    {option.description ? <span>{option.description}</span> : null}
-                  </button>
-                ))}
-
-                {systemSearch.trim() ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const name = systemSearch.trim();
-                      setSystemName(name);
-                      setSystemSearch(name);
-                      if (category !== "plant") {
-                        setPlantId("");
-                        setPlantSlug("");
-                      }
-                      setSystemSuggestionsOpen(false);
-                    }}
-                    style={localSuggestionNewButtonStyle}
-                  >
-                    使用“{systemSearch.trim()}”作为新的系统名
-                  </button>
-                ) : (
-                  <div style={localSuggestionEmptyStyle}>输入关键词后搜索系统名候选。</div>
-                )}
-
-                {!systemOptions.length && systemSearch.trim() ? (
-                  <div style={localSuggestionEmptyStyle}>没有找到匹配候选，可使用当前输入。</div>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         ) : (
           <input

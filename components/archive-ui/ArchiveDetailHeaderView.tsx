@@ -6,6 +6,7 @@ import {
   archiveCategoryOptions,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 
 export type ArchiveProfileEditableField =
@@ -268,11 +269,30 @@ export default function ArchiveDetailHeaderView({
     if (field === "systemName") {
       return (
         <div style={cellEditorStyle}>
-          <input
+          <SystemNameSelector
             value={textDraft}
             onChange={(event) => {
-              setTextDraft(event.target.value);
+              setTextDraft(event);
               setSelectedSystemCandidate(null);
+            }}
+            candidates={systemNameMode === "candidate" ? filteredSystemCandidates : []}
+            suggestionsOpen={systemNameMode === "candidate"}
+            selectedValue={selectedSystemCandidate?.label || ""}
+            hasExactMatch={hasExactSystemCandidate}
+            onSelect={(candidate) => {
+              const nextCandidate = {
+                id: candidate.id,
+                label: candidate.label,
+                description: candidate.description,
+              };
+              setSelectedSystemCandidate(nextCandidate);
+              setTextDraft(candidate.label);
+              void saveField({ field: "systemName", candidate: nextCandidate });
+            }}
+            onUseCustom={(value) => {
+              setSelectedSystemCandidate(null);
+              setTextDraft(value);
+              void saveField({ field: "systemName", candidate: null, value });
             }}
             onBlur={() => {
               if (!cancelEditRef.current) void saveField();
@@ -280,58 +300,19 @@ export default function ArchiveDetailHeaderView({
             onKeyDown={handleTextKeyDown}
             autoFocus
             placeholder={
-              systemNameMode === "text" ? "输入系统名" : "输入关键词搜索系统名候选"
+                systemNameMode === "text" ? "输入系统名" : "输入关键词搜索系统名候选"
             }
-            style={profileInputStyle}
+            inputStyle={profileInputStyle}
+            panelStyle={candidatePanelStyle}
+            optionStyle={(candidate, selected) => candidateButtonStyle(selected)}
+            customOptionStyle={candidateNewButtonStyle}
+            emptyStyle={candidateEmptyStyle}
+            idleText="输入关键词后搜索系统名候选"
+            emptyText="没有找到匹配候选，可使用当前输入。"
+            customActionLabel={(inputValue) => `使用“${inputValue}”作为新的系统名`}
           />
           {systemNameMode === "text" && profileEditor?.systemNameHint ? (
             <span style={profileFloatingHintStyle}>{profileEditor.systemNameHint}</span>
-          ) : null}
-
-          {systemNameMode === "candidate" ? (
-            <div style={candidatePanelStyle} onMouseDown={(event) => event.preventDefault()}>
-              {filteredSystemCandidates.map((candidate) => (
-                <button
-                  key={candidate.id || candidate.label}
-                  type="button"
-                  onClick={() => {
-                    setSelectedSystemCandidate(candidate);
-                    setTextDraft(candidate.label);
-                    void saveField({ field: "systemName", candidate });
-                  }}
-                  style={candidateButtonStyle(
-                    selectedSystemCandidate?.id
-                      ? selectedSystemCandidate.id === candidate.id
-                      : selectedSystemCandidate?.label === candidate.label
-                  )}
-                >
-                  <strong>{candidate.label}</strong>
-                  {candidate.description ? (
-                    <span style={candidateDescriptionStyle}>{candidate.description}</span>
-                  ) : null}
-                </button>
-              ))}
-
-              {textDraft.trim() && !hasExactSystemCandidate ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedSystemCandidate(null);
-                    void saveField({ field: "systemName", candidate: null, value: textDraft });
-                  }}
-                  style={candidateNewButtonStyle}
-                >
-                  使用“{textDraft.trim()}”作为新的系统名
-                </button>
-              ) : null}
-
-              {!filteredSystemCandidates.length && !textDraft.trim() ? (
-                <div style={candidateEmptyStyle}>输入关键词后搜索系统名候选</div>
-              ) : null}
-              {!filteredSystemCandidates.length && textDraft.trim() ? (
-                <div style={candidateEmptyStyle}>没有找到匹配候选，可使用当前输入。</div>
-              ) : null}
-            </div>
           ) : null}
 
         </div>
