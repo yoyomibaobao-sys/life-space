@@ -48,7 +48,6 @@ export function localArchiveToProjectView(
   archive: LocalArchiveSummary,
   ownerContext?: LocalArchiveOwnerContext | null
 ): ArchiveProjectView {
-  const ownerLabel = getLocalArchiveOwnerLabel(archive, ownerContext);
   const ongoingDays = getOngoingDays(archive.created_at);
   const updateDate = formatLocalDate(archive.latest_record_time || archive.updated_at);
   const latestSummary = archive.latest_record_note || archive.note || "暂无记录内容";
@@ -90,7 +89,7 @@ export function localArchiveToProjectView(
     ]
       .filter(Boolean)
       .join(" · "),
-    footerItems: ownerLabel === "未归属账号" ? ["未归属账号"] : [],
-    badges: ["未同步"],
+    footerItems: [],
+    badges: [],
   };
 }

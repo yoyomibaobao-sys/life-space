@@ -1,7 +1,7 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 
 const DB_NAME = "life-space-local-offline";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const ARCHIVE_STORE = "archives";
 const RECORD_STORE = "records";
 const IMAGE_STORE = "images";
@@ -23,8 +23,12 @@ export type LocalSyncMeta = {
   status: LocalSyncStatus;
   cloud_archive_id?: string | null;
   cloud_record_id?: string | null;
+  cloud_media_id?: string | null;
+  cloud_media_url?: string | null;
   last_sync_at?: string | null;
 };
+
+export type LocalCloudMigrationStatus = "migrating" | "failed" | "migrated";
 
 export type LocalArchive = {
   id: string;
@@ -43,6 +47,12 @@ export type LocalArchive = {
   local_owner_user_id?: string | null;
   local_owner_email?: string | null;
   local_owner_marked_at?: string | null;
+  migration_status?: LocalCloudMigrationStatus | null;
+  migration_cloud_archive_id?: string | null;
+  migration_started_at?: string | null;
+  migration_error?: string | null;
+  migration_visibility?: "private" | "public" | null;
+  migrated_at?: string | null;
   note?: string | null;
   status: "active" | "ended";
   created_at: string;
@@ -154,6 +164,17 @@ function normalizeOptionalText(value?: string | null) {
   return trimmed || null;
 }
 
+function normalizeLocalSyncMeta(sync?: Partial<LocalSyncMeta> | null): LocalSyncMeta {
+  return {
+    status: sync?.status || "local-only",
+    cloud_archive_id: normalizeOptionalText(sync?.cloud_archive_id),
+    cloud_record_id: normalizeOptionalText(sync?.cloud_record_id),
+    cloud_media_id: normalizeOptionalText(sync?.cloud_media_id),
+    cloud_media_url: normalizeOptionalText(sync?.cloud_media_url),
+    last_sync_at: normalizeOptionalText(sync?.last_sync_at),
+  };
+}
+
 function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
   const category = normalizeLocalArchiveCategory(
     archive.category || archive.main_category
@@ -175,6 +196,18 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
     local_owner_user_id: normalizeOptionalText(archive.local_owner_user_id),
     local_owner_email: normalizeOptionalText(archive.local_owner_email),
     local_owner_marked_at: normalizeOptionalText(archive.local_owner_marked_at),
+    migration_status: archive.migration_status || null,
+    migration_cloud_archive_id: normalizeOptionalText(
+      archive.migration_cloud_archive_id
+    ),
+    migration_started_at: normalizeOptionalText(archive.migration_started_at),
+    migration_error: normalizeOptionalText(archive.migration_error),
+    migration_visibility:
+      archive.migration_visibility === "public" ? "public" :
+      archive.migration_visibility === "private" ? "private" :
+      null,
+    migrated_at: normalizeOptionalText(archive.migrated_at),
+    sync: normalizeLocalSyncMeta(archive.sync),
   };
 }
 
@@ -220,6 +253,8 @@ function localSyncMeta(extra?: Partial<LocalSyncMeta>): LocalSyncMeta {
     status: "local-only",
     cloud_archive_id: null,
     cloud_record_id: null,
+    cloud_media_id: null,
+    cloud_media_url: null,
     last_sync_at: null,
     ...extra,
   };
@@ -262,6 +297,7 @@ function openLocalDb() {
         store.createIndex("plant_slug", "plant_slug");
         store.createIndex("local_owner_user_id", "local_owner_user_id");
         store.createIndex("local_owner_email", "local_owner_email");
+        store.createIndex("migration_status", "migration_status");
         store.createIndex("sync_status", "sync.status");
       } else {
         const store = request.transaction?.objectStore(ARCHIVE_STORE);
@@ -290,6 +326,9 @@ function openLocalDb() {
           }
           if (!store.indexNames.contains("local_owner_email")) {
             store.createIndex("local_owner_email", "local_owner_email");
+          }
+          if (!store.indexNames.contains("migration_status")) {
+            store.createIndex("migration_status", "migration_status");
           }
 
           const cursorRequest = store.openCursor();
@@ -854,6 +893,83 @@ export async function updateLocalArchiveFields(
   }
 }
 
+export async function updateLocalArchiveMigrationState(
+  archiveId: string,
+  updates: {
+    migration_status?: LocalCloudMigrationStatus | null;
+    migration_cloud_archive_id?: string | null;
+    migration_started_at?: string | null;
+    migration_error?: string | null;
+    migration_visibility?: "private" | "public" | null;
+    migrated_at?: string | null;
+    sync?: Partial<LocalSyncMeta>;
+  },
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const nextArchive: LocalArchive = {
+      ...normalizedArchive,
+      migration_status:
+        updates.migration_status === undefined
+          ? normalizedArchive.migration_status || null
+          : updates.migration_status,
+      migration_cloud_archive_id:
+        updates.migration_cloud_archive_id === undefined
+          ? normalizedArchive.migration_cloud_archive_id || null
+          : normalizeOptionalText(updates.migration_cloud_archive_id),
+      migration_started_at:
+        updates.migration_started_at === undefined
+          ? normalizedArchive.migration_started_at || null
+          : normalizeOptionalText(updates.migration_started_at),
+      migration_error:
+        updates.migration_error === undefined
+          ? normalizedArchive.migration_error || null
+          : normalizeOptionalText(updates.migration_error),
+      migration_visibility:
+        updates.migration_visibility === undefined
+          ? normalizedArchive.migration_visibility || null
+          : updates.migration_visibility,
+      migrated_at:
+        updates.migrated_at === undefined
+          ? normalizedArchive.migrated_at || null
+          : normalizeOptionalText(updates.migrated_at),
+      sync: updates.sync
+        ? normalizeLocalSyncMeta({ ...normalizedArchive.sync, ...updates.sync })
+        : normalizeLocalSyncMeta(normalizedArchive.sync),
+      updated_at: nowIso(),
+    };
+
+    await requestToPromise(archiveStore.put(nextArchive));
+    await done;
+    await refreshLocalUsageHints();
+    return nextArchive;
+  } finally {
+    db.close();
+  }
+}
+
 export async function updateLocalRecordFields(
   recordId: string,
   updates: {
@@ -908,6 +1024,137 @@ export async function updateLocalRecordFields(
     await done;
     await refreshLocalUsageHints();
     return nextRecord;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalRecordSyncMeta(
+  recordId: string,
+  syncUpdates: Partial<LocalSyncMeta>
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(RECORD_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const record = await requestToPromise<LocalRecord | undefined>(
+      recordStore.get(recordId)
+    );
+
+    if (!record) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地记录不存在。");
+    }
+
+    const nextRecord: LocalRecord = {
+      ...record,
+      sync: normalizeLocalSyncMeta({ ...record.sync, ...syncUpdates }),
+      updated_at: nowIso(),
+    };
+
+    await requestToPromise(recordStore.put(nextRecord));
+    await done;
+    return nextRecord;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalImageSyncMeta(
+  imageId: string,
+  syncUpdates: Partial<LocalSyncMeta>
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    const image = await requestToPromise<LocalImage | undefined>(
+      imageStore.get(imageId)
+    );
+
+    if (!image) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地图片缓存不存在。");
+    }
+
+    const nextImage: LocalImage = {
+      ...image,
+      sync: normalizeLocalSyncMeta({ ...image.sync, ...syncUpdates }),
+    };
+
+    await requestToPromise(imageStore.put(nextImage));
+    await done;
+    return nextImage;
+  } finally {
+    db.close();
+  }
+}
+
+export async function completeLocalArchiveCloudTransfer(
+  archiveId: string,
+  cloudArchiveId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const [records, images] = await Promise.all([
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+
+  try {
+    const transaction = db.transaction(
+      [ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE],
+      "readwrite"
+    );
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限移除这个本地项目。");
+    }
+
+    for (const image of images.filter((item) => item.archive_id === archiveId)) {
+      await requestToPromise(
+        imageStore.put({
+          ...image,
+          sync: normalizeLocalSyncMeta({
+            ...image.sync,
+            status: "synced",
+            cloud_archive_id: cloudArchiveId,
+            last_sync_at: timestamp,
+          }),
+        } satisfies LocalImage)
+      );
+    }
+
+    for (const record of records.filter((item) => item.archive_id === archiveId)) {
+      await requestToPromise(recordStore.delete(record.id));
+    }
+
+    await requestToPromise(archiveStore.delete(archiveId));
+    await done;
+    await refreshLocalUsageHints();
   } finally {
     db.close();
   }
@@ -994,6 +1241,60 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
   }
 }
 
+export async function markLocalArchiveForOwner(
+  archiveId: string,
+  ownerContext: {
+    userId: string;
+    email?: string | null;
+  }
+) {
+  const userId = normalizeOptionalText(ownerContext.userId);
+  if (!userId) throw new Error("请先登录后再标记本地项目归属");
+
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (
+      normalizedArchive.local_owner_user_id &&
+      normalizedArchive.local_owner_user_id !== userId
+    ) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个本地项目已归属其他账号。");
+    }
+
+    await requestToPromise(
+      archiveStore.put({
+        ...normalizedArchive,
+        local_owner_user_id: userId,
+        local_owner_email: normalizeOptionalText(ownerContext.email),
+        local_owner_marked_at: normalizedArchive.local_owner_marked_at || timestamp,
+        updated_at: timestamp,
+      } satisfies LocalArchive)
+    );
+
+    await done;
+    await refreshLocalUsageHints();
+  } finally {
+    db.close();
+  }
+}
+
 export async function createLocalArchive(input: {
   title: string;
   category: ArchiveCategory;
@@ -1026,6 +1327,12 @@ export async function createLocalArchive(input: {
     local_owner_user_id: normalizeOptionalText(input.local_owner_user_id),
     local_owner_email: normalizeOptionalText(input.local_owner_email),
     local_owner_marked_at: normalizeOptionalText(input.local_owner_marked_at),
+    migration_status: null,
+    migration_cloud_archive_id: null,
+    migration_started_at: null,
+    migration_error: null,
+    migration_visibility: null,
+    migrated_at: null,
     note: normalizeOptionalText(input.note),
     status: "active",
     created_at: timestamp,

@@ -20,12 +20,17 @@ import ArchiveDetailHeaderView, {
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import ArchiveTimeline from "@/components/archive-ui/ArchiveTimeline";
 import { supabase } from "@/lib/supabase";
+import {
+  syncLocalArchiveToCloud,
+  type LocalToCloudVisibility,
+} from "@/lib/local-to-cloud-sync";
 import type {
   ArchiveDetailArchive,
   LightboxImage,
   RecordItem,
 } from "@/lib/archive-detail-types";
-import type { MediaItem } from "@/lib/domain-types";
+import type { PlantSpeciesOption } from "@/lib/archive-page-types";
+import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
 import type {
   ArchiveProjectView,
 } from "@/components/archive-ui/types";
@@ -34,6 +39,7 @@ import {
   deleteLocalArchive,
   deleteLocalRecord,
   getLocalArchiveDetail,
+  markLocalArchiveForOwner,
   updateLocalArchiveFields,
   updateLocalRecordFields,
   type LocalArchiveOwnerContext,
@@ -89,15 +95,6 @@ function getOngoingDays(createdAt?: string | null) {
   return Math.max(1, Math.floor((today - startDate) / dayMs) + 1);
 }
 
-function getLocalOwnerLabel(
-  archive: LocalArchiveDetail["archive"],
-  ownerContext?: LocalArchiveOwnerContext | null
-) {
-  if (!archive.local_owner_user_id) return "未归属账号";
-  if (archive.local_owner_user_id === ownerContext?.userId) return "已归属当前账号";
-  return "已归属其他账号";
-}
-
 function fileListToArray(files: FileList | null) {
   return Array.from(files || []).filter((file) => file.type.startsWith("image/"));
 }
@@ -123,8 +120,17 @@ export default function LocalArchiveDetailPage() {
   const [localLightboxRecord, setLocalLightboxRecord] =
     useState<RecordItem | null>(null);
   const [deleteArchiveOpen, setDeleteArchiveOpen] = useState(false);
+  const [transferPromptOpen, setTransferPromptOpen] = useState(false);
+  const [transferVisibility, setTransferVisibility] =
+    useState<LocalToCloudVisibility>("private");
+  const [transferRunning, setTransferRunning] = useState(false);
+  const [transferError, setTransferError] = useState("");
+  const [transferErrorDetail, setTransferErrorDetail] = useState("");
+  const [showTransferErrorReason, setShowTransferErrorReason] = useState(false);
+  const [transferredCloudArchiveId, setTransferredCloudArchiveId] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
+  const [plantCandidates, setPlantCandidates] = useState<PlantSpeciesOption[]>([]);
   const localRecordObjectUrlsRef = useRef<string[]>([]);
 
   const selectedSizeLabel = useMemo(() => {
@@ -174,6 +180,60 @@ export default function LocalArchiveDetailPage() {
     return () => {
       revokeLocalRecordUrls();
     };
+  }, []);
+
+  useEffect(() => {
+    async function loadPlantCandidates() {
+      const [{ data: speciesData, error: speciesError }, { data: aliasData }] = await Promise.all([
+        supabase
+          .from("plant_species")
+          .select("id, common_name, scientific_name, slug, category, is_active")
+          .eq("is_active", true)
+          .order("common_name", { ascending: true }),
+        supabase.from("plant_species_aliases").select("species_id, alias_name, normalized_name"),
+      ]);
+
+      if (speciesError) {
+        console.warn("load local archive plant candidates failed:", speciesError.message);
+        setPlantCandidates([]);
+        return;
+      }
+
+      const aliasesBySpecies = new Map<string, string[]>();
+      ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
+        const list = aliasesBySpecies.get(alias.species_id) || [];
+        if (alias.alias_name) list.push(alias.alias_name);
+        if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {
+          list.push(alias.normalized_name);
+        }
+        aliasesBySpecies.set(alias.species_id, list);
+      });
+
+      setPlantCandidates(
+        ((speciesData || []) as PlantSpeciesOption[]).map((item) => {
+          const aliases = Array.from(new Set(aliasesBySpecies.get(item.id) || []));
+          const displayName = item.common_name || item.scientific_name || "未命名植物";
+
+          return {
+            ...item,
+            aliases,
+            display_name: displayName,
+            search_text: [
+              displayName,
+              item.common_name,
+              item.scientific_name,
+              item.slug,
+              ...aliases,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase(),
+          };
+        })
+      );
+    }
+
+    void loadPlantCandidates();
   }, []);
 
   function revokeLocalRecordUrls() {
@@ -309,6 +369,105 @@ export default function LocalArchiveDetailPage() {
     }
   }
 
+  async function markCurrentLocalArchiveAsMine() {
+    if (!archiveId || !ownerContext?.userId) {
+      showToast("请先登录后再标记本地项目归属");
+      return;
+    }
+
+    try {
+      await markLocalArchiveForOwner(archiveId, {
+        userId: ownerContext.userId,
+        email: ownerContext.email || null,
+      });
+      showToast("已标记为我的本地项目");
+      await loadDetail();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "标记本地项目失败");
+    }
+  }
+
+  function openTransferPrompt() {
+    if (!detail) return;
+
+    setTransferError("");
+    setTransferErrorDetail("");
+    setShowTransferErrorReason(false);
+
+    if (!ownerContext?.userId) {
+      setTransferError("请先登录，再转到云空间。");
+      setTransferPromptOpen(false);
+      return;
+    }
+
+    if (!detail.archive.title?.trim()) {
+      setTransferError("项目名称不能为空。");
+      setTransferPromptOpen(false);
+      return;
+    }
+
+    if (!(detail.archive.system_name || detail.archive.species_name)?.trim()) {
+      setTransferError("系统名不能为空。");
+      setTransferPromptOpen(false);
+      return;
+    }
+
+    if (detail.archive.migration_status === "migrating") {
+      setTransferError("这个本地项目正在转到云空间，请稍后再试。");
+      setTransferPromptOpen(false);
+      return;
+    }
+
+    setTransferVisibility(detail.archive.migration_visibility || "private");
+    setTransferPromptOpen(true);
+  }
+
+  async function confirmTransferToCloud() {
+    if (!archiveId || !ownerContext?.userId || transferRunning) {
+      if (!ownerContext?.userId) {
+        setTransferError("请先登录，再转到云空间。");
+      }
+      return;
+    }
+
+    setTransferRunning(true);
+    setTransferError("");
+    setTransferErrorDetail("");
+    setShowTransferErrorReason(false);
+
+    try {
+      const result = await syncLocalArchiveToCloud({
+        localArchiveId: archiveId,
+        ownerContext,
+        visibility: transferVisibility,
+      });
+
+      if (result.success) {
+        setTransferPromptOpen(false);
+        setTransferredCloudArchiveId(result.cloudArchiveId);
+        setDetail(null);
+        setLocalRecordItems([]);
+        revokeLocalRecordUrls();
+        showToast("已转到云空间");
+        return;
+      }
+
+      setTransferError(
+        "转到云空间未完成，请稍后重试。"
+      );
+      setTransferErrorDetail(result.error);
+      await loadDetail();
+    } catch (err) {
+      setTransferError("转到云空间未完成，请稍后重试。");
+      setTransferErrorDetail(
+        err instanceof Error ? err.message : "转到云空间失败，请稍后重试。"
+      );
+      await loadDetail();
+    } finally {
+      setTransferRunning(false);
+    }
+  }
+
   async function updateLocalArchiveProfile(
     updates: Parameters<typeof updateLocalArchiveFields>[1],
     successMessage: string
@@ -316,9 +475,16 @@ export default function LocalArchiveDetailPage() {
     if (!archiveId) return;
 
     try {
-      await updateLocalArchiveFields(archiveId, updates, ownerContext);
+      const nextArchive = await updateLocalArchiveFields(archiveId, updates, ownerContext);
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              archive: nextArchive,
+            }
+          : current
+      );
       showToast(successMessage);
-      await loadDetail();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "更新本地项目失败");
     }
@@ -371,6 +537,24 @@ export default function LocalArchiveDetailPage() {
     return <main style={pageStyle}>正在读取本地项目...</main>;
   }
 
+  if (transferredCloudArchiveId) {
+    return (
+      <main style={pageStyle}>
+        <section style={transferSuccessPanelStyle}>
+          <h1 style={transferSuccessTitleStyle}>已转到云空间</h1>
+          <div style={transferSuccessActionsStyle}>
+            <Link
+              href={`/archive/${transferredCloudArchiveId}`}
+              style={transferPrimaryLinkStyle}
+            >
+              查看云端项目
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   if (error || !detail) {
     return (
       <main style={pageStyle}>
@@ -390,7 +574,6 @@ export default function LocalArchiveDetailPage() {
     : archive.created_at;
   const latestUpdate = records[0]?.record_time || archive.updated_at || archive.created_at;
   const ongoingDays = getOngoingDays(archive.created_at);
-  const ownerLabel = getLocalOwnerLabel(archive, ownerContext);
   const localSystemNameLabel = archive.category === "plant" ? "系统植物名 *" : "系统名 *";
   const projectView: ArchiveProjectView = {
     id: archive.id,
@@ -470,9 +653,22 @@ export default function LocalArchiveDetailPage() {
     archive.category === "system" ||
     archive.category === "insect_fish";
   const localSystemNameCandidates =
-    archive.category === "system" || archive.category === "insect_fish"
-      ? getDefaultSystemNames(archive.category).map((name) => ({ label: name }))
-      : [];
+    archive.category === "plant"
+      ? plantCandidates.map((item) => ({
+          id: item.id,
+          label: item.display_name || item.common_name || item.scientific_name || "未命名植物",
+          description: [
+            item.scientific_name,
+            Array.isArray(item.aliases) && item.aliases.length
+              ? `别名：${item.aliases.slice(0, 4).join("、")}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }))
+      : archive.category === "system" || archive.category === "insect_fish"
+        ? getDefaultSystemNames(archive.category).map((name) => ({ label: name }))
+        : [];
 
   return (
     <main style={pageStyle}>
@@ -488,7 +684,38 @@ export default function LocalArchiveDetailPage() {
           }
           recordCountText={`记录 ${records.length}`}
           durationText={ongoingDays ? `已持续 ${ongoingDays} 天` : undefined}
-          hint={`只保存在这台设备，不上传云端。本地分类独立于云空间。${ownerLabel ? ` · ${ownerLabel}` : ""}`}
+          hint="只保存在这台设备，不上传云端。本地分类独立于云空间。"
+          actionSlot={
+            <div style={headerActionSlotStyle}>
+              {!archive.local_owner_user_id && ownerContext?.userId ? (
+                <button
+                  type="button"
+                  onClick={markCurrentLocalArchiveAsMine}
+                  style={markOwnerButtonStyle}
+                >
+                  标记归属
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={openTransferPrompt}
+                disabled={transferRunning || archive.migration_status === "migrating"}
+                style={{
+                  ...transferActionButtonStyle,
+                  opacity:
+                    transferRunning || archive.migration_status === "migrating"
+                      ? 0.55
+                      : 1,
+                  cursor:
+                    transferRunning || archive.migration_status === "migrating"
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                转到云空间
+              </button>
+            </div>
+          }
           profileRows={localProfileRows}
           profileEditor={{
             values: {
@@ -506,12 +733,123 @@ export default function LocalArchiveDetailPage() {
               : "其他种类没有预设系统名，可直接输入。",
           }}
           profileActions={
-            <button type="button" onClick={() => setDeleteArchiveOpen(true)} style={localProfileDangerButtonStyle}>
-              删除本地项目
-            </button>
+            <div style={localProfileActionsStyle}>
+              <button type="button" onClick={() => setDeleteArchiveOpen(true)} style={localProfileDangerButtonStyle}>
+                删除本地项目
+              </button>
+            </div>
           }
         />
       </section>
+
+      {transferError ? (
+        <div style={transferErrorStyle}>
+          <div>{transferError}</div>
+          {transferErrorDetail ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTransferErrorReason((current) => !current)}
+                style={transferReasonButtonStyle}
+              >
+                {showTransferErrorReason ? "收起原因" : "查看原因"}
+              </button>
+              {showTransferErrorReason ? (
+                <div style={transferReasonTextStyle}>{transferErrorDetail}</div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : archive.migration_status === "failed" && archive.migration_error ? (
+        <div style={transferErrorStyle}>
+          <div>转到云空间未完成，请稍后重试。</div>
+          <button
+            type="button"
+            onClick={() => setShowTransferErrorReason((current) => !current)}
+            style={transferReasonButtonStyle}
+          >
+            {showTransferErrorReason ? "收起原因" : "查看原因"}
+          </button>
+          {showTransferErrorReason ? (
+            <div style={transferReasonTextStyle}>{archive.migration_error}</div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {transferPromptOpen ? (
+        <div
+          style={transferOverlayStyle}
+          onClick={() => {
+            if (!transferRunning) setTransferPromptOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="local-to-cloud-title"
+            style={transferDialogStyle}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={transferPanelHeaderStyle}>
+              <h2 id="local-to-cloud-title" style={transferTitleStyle}>
+                转到云空间
+              </h2>
+            </div>
+            <p style={transferTextStyle}>
+              转成功后，本地离线项目会从本地列表移除。
+              <br />
+              手机相册和本地照片不会删除。
+            </p>
+            <div style={transferVisibilityGroupStyle} aria-label="云端可见性">
+              <label style={transferVisibilityOptionStyle}>
+                <input
+                  type="radio"
+                  name="local-to-cloud-visibility"
+                  value="private"
+                  checked={transferVisibility === "private"}
+                  onChange={() => setTransferVisibility("private")}
+                  disabled={transferRunning}
+                />
+                <span>
+                  <strong>仅自己可见</strong>
+                </span>
+              </label>
+              <label style={transferVisibilityOptionStyle}>
+                <input
+                  type="radio"
+                  name="local-to-cloud-visibility"
+                  value="public"
+                  checked={transferVisibility === "public"}
+                  onChange={() => setTransferVisibility("public")}
+                  disabled={transferRunning}
+                />
+                <span>
+                  <strong>公开发现</strong>
+                  <small>公开后别人可以在发现页看到，不会自动发布到集市或求助。</small>
+                </span>
+              </label>
+            </div>
+            <div style={transferActionRowStyle}>
+              <button
+                type="button"
+                onClick={confirmTransferToCloud}
+                disabled={transferRunning}
+                style={transferPrimaryButtonStyle}
+              >
+                {transferRunning ? "正在转到云空间…" : "转到云空间"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransferPromptOpen(false)}
+                disabled={transferRunning}
+                style={transferSecondaryButtonStyle}
+              >
+                取消
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <ArchiveRecordComposer
         mobileMode={isMobileViewport}
@@ -725,6 +1063,249 @@ const localProfileDangerButtonStyle = {
   cursor: "pointer",
 } satisfies CSSProperties;
 
+const localProfileActionsStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const headerActionSlotStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+} satisfies CSSProperties;
+
+const markOwnerButtonStyle = {
+  border: "1px solid #d8e5d1",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#617258",
+  fontSize: 13,
+  fontWeight: 800,
+  padding: "7px 12px",
+  cursor: "pointer",
+} satisfies CSSProperties;
+
+const transferActionButtonStyle = {
+  border: "1px solid #cbdcc4",
+  borderRadius: 999,
+  background: "#f7fbf4",
+  color: "#44633b",
+  fontSize: 13,
+  fontWeight: 800,
+  padding: "7px 12px",
+  cursor: "pointer",
+} satisfies CSSProperties;
+
+const transferOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1000,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 18,
+  background: "rgba(38, 51, 38, 0.28)",
+  boxSizing: "border-box",
+} satisfies CSSProperties;
+
+const transferDialogStyle = {
+  width: "min(440px, 100%)",
+  padding: "18px 20px",
+  borderRadius: 18,
+  border: "1px solid #dbe8d2",
+  background: "#fffdf8",
+  boxShadow: "0 24px 60px rgba(29, 45, 26, 0.22)",
+} satisfies CSSProperties;
+
+const transferPanelHeaderStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 14,
+} satisfies CSSProperties;
+
+const transferEyebrowStyle = {
+  margin: "0 0 4px",
+  color: "#6f7d69",
+  fontSize: 12,
+  fontWeight: 800,
+} satisfies CSSProperties;
+
+const transferTitleStyle = {
+  margin: 0,
+  fontSize: 19,
+  lineHeight: 1.3,
+  color: "#263326",
+} satisfies CSSProperties;
+
+const transferCancelIconStyle = {
+  border: "1px solid #e2e7dd",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#6f786b",
+  fontSize: 13,
+  fontWeight: 700,
+  padding: "6px 10px",
+  cursor: "pointer",
+} satisfies CSSProperties;
+
+const transferTextStyle = {
+  margin: "12px 0 0",
+  color: "#4f5d4a",
+  fontSize: 14,
+  lineHeight: 1.8,
+} satisfies CSSProperties;
+
+const transferVisibilityGroupStyle = {
+  display: "grid",
+  gap: 8,
+  marginTop: 12,
+} satisfies CSSProperties;
+
+const transferVisibilityOptionStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  padding: "10px 12px",
+  borderRadius: 14,
+  border: "1px solid #e2eadc",
+  background: "#fff",
+  color: "#344230",
+  lineHeight: 1.5,
+} satisfies CSSProperties;
+
+const transferActionRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  marginTop: 14,
+  flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const transferPrimaryButtonStyle = {
+  border: "1px solid #4f7d3e",
+  borderRadius: 999,
+  background: "#3f7d3d",
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 800,
+  padding: "9px 16px",
+  cursor: "pointer",
+} satisfies CSSProperties;
+
+const transferSecondaryButtonStyle = {
+  border: "1px solid #dfe7d9",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#5f6f5b",
+  fontSize: 14,
+  fontWeight: 700,
+  padding: "9px 14px",
+  cursor: "pointer",
+} satisfies CSSProperties;
+
+const transferErrorStyle = {
+  maxWidth: 900,
+  margin: "0 auto 12px",
+  padding: "10px 12px",
+  borderRadius: 14,
+  border: "1px solid #efd8c8",
+  background: "#fff7ef",
+  color: "#9a4a14",
+  fontSize: 13,
+  lineHeight: 1.7,
+} satisfies CSSProperties;
+
+const transferReasonButtonStyle = {
+  marginTop: 6,
+  border: 0,
+  background: "transparent",
+  color: "#7a5c24",
+  fontSize: 12,
+  fontWeight: 800,
+  padding: 0,
+  cursor: "pointer",
+} satisfies CSSProperties;
+
+const transferReasonTextStyle = {
+  marginTop: 6,
+  color: "#8a6b36",
+  fontSize: 12,
+  lineHeight: 1.6,
+  wordBreak: "break-word",
+} satisfies CSSProperties;
+
+const transferSuccessPanelStyle = {
+  maxWidth: 720,
+  margin: "34px auto",
+  padding: "24px 26px",
+  borderRadius: 22,
+  border: "1px solid #dfe9d8",
+  background: "#fff",
+  boxShadow: "0 14px 34px rgba(42, 66, 34, 0.08)",
+} satisfies CSSProperties;
+
+const transferSuccessEyebrowStyle = {
+  margin: 0,
+  color: "#5d7c2f",
+  fontSize: 13,
+  fontWeight: 800,
+} satisfies CSSProperties;
+
+const transferSuccessTitleStyle = {
+  margin: "8px 0 6px",
+  fontSize: 24,
+  lineHeight: 1.25,
+  color: "#253221",
+} satisfies CSSProperties;
+
+const transferSuccessTextStyle = {
+  margin: 0,
+  color: "#5f6b5a",
+  fontSize: 14,
+  lineHeight: 1.8,
+} satisfies CSSProperties;
+
+const transferSuccessActionsStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 18,
+} satisfies CSSProperties;
+
+const transferPrimaryLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 40,
+  padding: "0 16px",
+  borderRadius: 999,
+  background: "#3f7d3d",
+  color: "#fff",
+  fontWeight: 800,
+  textDecoration: "none",
+} satisfies CSSProperties;
+
+const transferSecondaryLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 40,
+  padding: "0 14px",
+  borderRadius: 999,
+  border: "1px solid #dfe7d9",
+  color: "#5f6f5b",
+  fontWeight: 700,
+  textDecoration: "none",
+} satisfies CSSProperties;
+
 const headerTopRowStyle = {
   display: "flex",
   alignItems: "center",
@@ -871,8 +1452,7 @@ const sectionTitleStyle = {
 
 const recordFormStyle = {
   marginTop: 0,
-  display: "grid",
-  gap: 10,
+  display: "block",
 } satisfies CSSProperties;
 
 const recordInputStyle = {
@@ -892,15 +1472,16 @@ const recordControlRowStyle = {
   flexWrap: "wrap",
   gap: 8,
   alignItems: "center",
+  marginTop: 10,
 } satisfies CSSProperties;
 
 const recordSelectStyle = {
-  height: 34,
+  height: 32,
   border: "1px solid #dfe5dc",
-  borderRadius: 8,
+  borderRadius: 6,
   background: "#fff",
   color: "#52614f",
-  padding: "0 9px",
+  padding: "0 8px",
   fontSize: 13,
 } satisfies CSSProperties;
 
@@ -914,20 +1495,21 @@ const imageActionRowStyle = {
   gap: 10,
   flexWrap: "wrap",
   alignItems: "center",
+  marginTop: 10,
 } satisfies CSSProperties;
 
 const imagePickerStyle = {
-  height: 38,
+  height: 40,
   padding: "0 14px",
   borderRadius: 999,
-  border: "1px solid #cfe0c8",
-  background: "#f4fbf1",
-  color: "#2f5d2b",
+  border: "1px solid #dfe6dc",
+  background: "#fff",
+  color: "#52614f",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 14,
-  fontWeight: 700,
+  fontSize: 13,
+  fontWeight: 500,
   cursor: "pointer",
 } satisfies CSSProperties;
 
@@ -942,6 +1524,7 @@ const clearFilesButtonStyle = {
 } satisfies CSSProperties;
 
 const selectedFilesStyle = {
+  marginTop: 10,
   padding: 10,
   borderRadius: 12,
   background: "#f7faf3",
@@ -952,17 +1535,18 @@ const selectedFilesStyle = {
 
 const submitRowStyle = {
   display: "flex",
-  justifyContent: "flex-end",
+  justifyContent: "flex-start",
+  marginTop: 12,
 } satisfies CSSProperties;
 
 const submitButtonStyle = {
-  height: 42,
-  padding: "0 18px",
-  borderRadius: 999,
-  border: "1px solid #b7d2b0",
-  background: "#3f7d3d",
-  color: "#fff",
-  fontWeight: 700,
+  height: 40,
+  padding: "0 16px",
+  borderRadius: 8,
+  border: "1px solid #ddd",
+  background: "#fff",
+  color: "#263326",
+  fontWeight: 500,
   fontSize: 14,
 } satisfies CSSProperties;
 

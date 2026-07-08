@@ -463,7 +463,14 @@ export default function ArchiveDetailHeaderView({
                   {editing && row.field ? (
                     renderFieldEditor(row.field)
                   ) : (
-                    <span style={profileValueStyle}>{row.value || "未填写"}</span>
+                    <span
+                      style={{
+                        ...profileValueStyle,
+                        ...(meta ? profileMetaValueStyle : {}),
+                      }}
+                    >
+                      {row.value || "未填写"}
+                    </span>
                   )}
                   {editing && fieldError ? <span style={profileErrorStyle}>{fieldError}</span> : null}
                   {editing && savingField === row.field ? (
@@ -583,11 +590,25 @@ const categoryChipStyle: CSSProperties = {
 };
 
 function visibilityBadgeStyle(tone?: "public" | "private" | "neutral"): CSSProperties {
+  if (tone === "neutral") {
+    return {
+      borderRadius: 999,
+      border: "1px solid #d8ddd4",
+      background: "#f4f5f2",
+      color: "#6d7569",
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1,
+      padding: "5px 8px",
+      whiteSpace: "nowrap",
+    };
+  }
+
   return {
     borderRadius: 999,
     border: tone === "public" ? "1px solid #b7dfbb" : "1px solid #ddd",
-    background: tone === "public" ? "#f1fff1" : tone === "private" ? "#fff" : "#f6faf3",
-    color: tone === "public" ? "#2f8f2f" : tone === "private" ? "#777" : "#4e6b45",
+    background: tone === "public" ? "#f1fff1" : "#fff",
+    color: tone === "public" ? "#2f8f2f" : "#777",
     fontSize: 12,
     fontWeight: 800,
     lineHeight: 1,
@@ -651,6 +672,7 @@ const profileRowFullWidthStyle: CSSProperties = {
 
 const profileRowMetaStyle: CSSProperties = {
   gridColumn: "span 3",
+  gridTemplateColumns: "auto max-content",
   marginTop: 2,
 };
 
@@ -680,6 +702,11 @@ const profileValueStyle: CSSProperties = {
   wordBreak: "break-word",
 };
 
+const profileMetaValueStyle: CSSProperties = {
+  whiteSpace: "nowrap",
+  wordBreak: "normal",
+};
+
 const profileActionsStyle: CSSProperties = {
   marginTop: 10,
   paddingTop: 10,
@@ -695,15 +722,16 @@ const cellEditorStyle: CSSProperties = {
   gap: 4,
   alignContent: "start",
   minWidth: 0,
+  minHeight: 23,
   position: "relative",
 };
 
 const profileInputStyle: CSSProperties = {
   width: "100%",
-  minHeight: 23,
+  height: 23,
   border: "1px solid #cfdcc8",
   borderRadius: 8,
-  padding: "0 8px",
+  padding: "0 7px",
   background: "#fbfdf9",
   color: "#263326",
   outline: "none",
@@ -714,7 +742,6 @@ const profileInputStyle: CSSProperties = {
 const profileInlineTextareaStyle: CSSProperties = {
   ...profileInputStyle,
   height: 23,
-  minHeight: 23,
   padding: "2px 7px",
   resize: "none",
   overflow: "hidden",

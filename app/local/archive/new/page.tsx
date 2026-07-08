@@ -6,6 +6,7 @@ import { showToast } from "@/components/Toast";
 import ArchiveNewProjectFormShell, {
   archiveNewProjectInputStyle,
 } from "@/components/archive-ui/ArchiveNewProjectFormShell";
+import { supabase } from "@/lib/supabase";
 import {
   archiveCategoryOptions,
   getDefaultSystemNames,
@@ -14,6 +15,15 @@ import {
 import {
   createLocalArchive,
 } from "@/lib/local-offline-db";
+import type { PlantSpeciesOption } from "@/lib/archive-page-types";
+import type { PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+
+type LocalSystemOption = {
+  id?: string | null;
+  slug?: string | null;
+  label: string;
+  description?: string;
+};
 
 function normalizeInitialCategory(value: string): ArchiveCategory | null {
   return archiveCategoryOptions.some((option) => option.value === value)
@@ -45,6 +55,7 @@ export default function NewLocalArchivePage() {
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [plantCandidates, setPlantCandidates] = useState<PlantSpeciesOption[]>([]);
 
   useEffect(() => {
     const initialCategory = normalizeInitialCategory(getInitialSearchParam("category"));
@@ -56,16 +67,86 @@ export default function NewLocalArchivePage() {
     setSystemSearch((current) => current || initialSystemName);
   }, []);
 
+  useEffect(() => {
+    async function loadPlantCandidates() {
+      const [{ data: speciesData, error: speciesError }, { data: aliasData }] = await Promise.all([
+        supabase
+          .from("plant_species")
+          .select("id, common_name, scientific_name, slug, category, is_active")
+          .eq("is_active", true)
+          .order("common_name", { ascending: true }),
+        supabase.from("plant_species_aliases").select("species_id, alias_name, normalized_name"),
+      ]);
+
+      if (speciesError) {
+        console.warn("load local new archive plant candidates failed:", speciesError.message);
+        setPlantCandidates([]);
+        return;
+      }
+
+      const aliasesBySpecies = new Map<string, string[]>();
+      ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
+        const list = aliasesBySpecies.get(alias.species_id) || [];
+        if (alias.alias_name) list.push(alias.alias_name);
+        if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {
+          list.push(alias.normalized_name);
+        }
+        aliasesBySpecies.set(alias.species_id, list);
+      });
+
+      setPlantCandidates(
+        ((speciesData || []) as PlantSpeciesOption[]).map((item) => {
+          const aliases = Array.from(new Set(aliasesBySpecies.get(item.id) || []));
+          const displayName = item.common_name || item.scientific_name || "未命名植物";
+
+          return {
+            ...item,
+            aliases,
+            display_name: displayName,
+            search_text: [
+              displayName,
+              item.common_name,
+              item.scientific_name,
+              item.slug,
+              ...aliases,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase(),
+          };
+        })
+      );
+    }
+
+    void loadPlantCandidates();
+  }, []);
+
   const usesCandidateSystemName =
     category === "plant" || category === "system" || category === "insect_fish";
   const systemOptions =
-    category === "system" || category === "insect_fish"
-      ? getDefaultSystemNames(category).filter((name) =>
-          systemSearch.trim()
-            ? name.toLowerCase().includes(systemSearch.trim().toLowerCase())
-            : true
-        )
-      : [];
+    category === "plant"
+      ? plantCandidates
+          .filter((item) =>
+            systemSearch.trim()
+              ? item.search_text?.includes(systemSearch.trim().toLowerCase())
+              : true
+          )
+          .slice(0, 8)
+          .map((item): LocalSystemOption => ({
+            id: item.id,
+            slug: item.slug,
+            label: item.display_name || item.common_name || item.scientific_name || "未命名植物",
+            description: item.scientific_name || "",
+          }))
+      : category === "system" || category === "insect_fish"
+        ? getDefaultSystemNames(category)
+            .filter((name) =>
+              systemSearch.trim()
+                ? name.toLowerCase().includes(systemSearch.trim().toLowerCase())
+                : true
+            )
+            .map((name): LocalSystemOption => ({ label: name }))
+        : [];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,6 +188,15 @@ export default function NewLocalArchivePage() {
     }
   }
 
+  function handleCategoryChange(nextCategory: ArchiveCategory) {
+    setCategory(nextCategory);
+    setSystemSuggestionsOpen(false);
+    if (nextCategory !== "plant") {
+      setPlantId("");
+      setPlantSlug("");
+    }
+  }
+
   return (
     <ArchiveNewProjectFormShell
       backHref="/archive?source=local"
@@ -115,12 +205,12 @@ export default function NewLocalArchivePage() {
       title="新建项目"
       subtitle="表单结构与云空间一致，只是保存到这台设备的 App 私有本地存储。"
       category={category}
-      onCategoryChange={setCategory}
+      onCategoryChange={handleCategoryChange}
       projectTitle={title}
       onProjectTitleChange={setTitle}
       systemControl={
         usesCandidateSystemName ? (
-          <>
+          <div style={localSystemControlWrapStyle}>
             <input
               value={systemSearch}
               onChange={(event) => {
@@ -132,24 +222,27 @@ export default function NewLocalArchivePage() {
               placeholder={
                 category === "plant"
                   ? "输入后选择候选，或使用当前输入"
-                  : `输入后点选，例如：${systemOptions[0] || "补光灯"}`
+                  : `输入后点选，例如：${systemOptions[0]?.label || "补光灯"}`
               }
               style={archiveNewProjectInputStyle}
             />
             {systemSuggestionsOpen ? (
               <div style={localSuggestionPanelStyle}>
-                {systemOptions.map((name) => (
+                {systemOptions.map((option) => (
                   <button
-                    key={name}
+                    key={option.id || option.label}
                     type="button"
                     onClick={() => {
-                      setSystemName(name);
-                      setSystemSearch(name);
+                      setSystemName(option.label);
+                      setSystemSearch(option.label);
+                      setPlantId(option.id || "");
+                      setPlantSlug(option.slug || "");
                       setSystemSuggestionsOpen(false);
                     }}
-                    style={localSuggestionButtonStyle(systemName === name)}
+                    style={localSuggestionButtonStyle(systemName === option.label)}
                   >
-                    {name}
+                    <strong>{option.label}</strong>
+                    {option.description ? <span>{option.description}</span> : null}
                   </button>
                 ))}
 
@@ -160,6 +253,10 @@ export default function NewLocalArchivePage() {
                       const name = systemSearch.trim();
                       setSystemName(name);
                       setSystemSearch(name);
+                      if (category !== "plant") {
+                        setPlantId("");
+                        setPlantSlug("");
+                      }
                       setSystemSuggestionsOpen(false);
                     }}
                     style={localSuggestionNewButtonStyle}
@@ -175,7 +272,7 @@ export default function NewLocalArchivePage() {
                 ) : null}
               </div>
             ) : null}
-          </>
+          </div>
         ) : (
           <input
             value={systemName}
@@ -341,7 +438,11 @@ const plantLinkHintStyle = {
 } satisfies CSSProperties;
 
 const localSuggestionPanelStyle = {
-  marginTop: 8,
+  position: "absolute",
+  top: 50,
+  left: 0,
+  right: 0,
+  zIndex: 40,
   border: "1px solid #e5eadf",
   borderRadius: 12,
   background: "#fff",
@@ -350,6 +451,11 @@ const localSuggestionPanelStyle = {
   padding: 8,
   display: "grid",
   gap: 6,
+  boxShadow: "0 14px 28px rgba(25, 43, 24, 0.14)",
+} satisfies CSSProperties;
+
+const localSystemControlWrapStyle = {
+  position: "relative",
 } satisfies CSSProperties;
 
 function localSuggestionButtonStyle(active = false): CSSProperties {

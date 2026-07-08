@@ -14,6 +14,8 @@ type Props = {
   mobileMode?: boolean;
   onEditTitle?: (project: ArchiveProjectView) => void;
   onEditSystemName?: (project: ArchiveProjectView) => void;
+  titleEditorSlot?: ReactNode;
+  systemNameEditorSlot?: ReactNode;
 };
 
 export default function ArchiveProjectCard({
@@ -25,6 +27,8 @@ export default function ArchiveProjectCard({
   mobileMode = true,
   onEditTitle,
   onEditSystemName,
+  titleEditorSlot,
+  systemNameEditorSlot,
 }: Props) {
   function handleInlineEdit(
     event: MouseEvent<HTMLButtonElement>,
@@ -38,7 +42,11 @@ export default function ArchiveProjectCard({
 
   const titleContent = (
     <div style={mobileMode ? mobileTitleTextStyle : titleStyle} title={`${project.title} · ${project.systemName}`}>
-      {onEditTitle ? (
+      {titleEditorSlot ? (
+        <span data-no-card-nav="true" style={inlineEditorWrapStyle}>
+          {titleEditorSlot}
+        </span>
+      ) : onEditTitle ? (
         <button
           type="button"
           data-no-card-nav="true"
@@ -53,8 +61,12 @@ export default function ArchiveProjectCard({
         <span>{project.title}</span>
       )}
       {project.systemName ? <span style={dividerStyle}> · </span> : null}
-      {project.systemName ? (
-        onEditSystemName ? (
+      {project.systemName || systemNameEditorSlot ? (
+        systemNameEditorSlot ? (
+          <span data-no-card-nav="true" style={inlineEditorWrapStyle}>
+            {systemNameEditorSlot}
+          </span>
+        ) : onEditSystemName ? (
           <button
             type="button"
             data-no-card-nav="true"
@@ -425,6 +437,14 @@ function inlineEditButtonStyle(extra?: CSSProperties): CSSProperties {
     ...extra,
   };
 }
+
+const inlineEditorWrapStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minWidth: 0,
+  maxWidth: "100%",
+  verticalAlign: "baseline",
+};
 
 const dividerStyle: CSSProperties = {
   color: "#9aa493",

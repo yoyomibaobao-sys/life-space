@@ -48,6 +48,7 @@ import {
   createLocalTaxonomyItem,
   deleteLocalArchive,
   deleteLocalTaxonomyItem,
+  markLocalArchiveForOwner,
   renameLocalTaxonomyItem,
   updateLocalArchiveFields,
   listVisibleLocalTaxonomyItems,
@@ -86,6 +87,9 @@ export default function ArchivePage() {
   const [editingSystemArchiveId, setEditingSystemArchiveId] = useState<string | null>(null);
   const [editingSystemSearch, setEditingSystemSearch] = useState("");
   const [editingSystemName, setEditingSystemName] = useState("");
+  const [editingLocalSystemArchiveId, setEditingLocalSystemArchiveId] = useState<string | null>(null);
+  const [editingLocalSystemName, setEditingLocalSystemName] = useState("");
+  const [savingLocalSystemArchiveId, setSavingLocalSystemArchiveId] = useState<string | null>(null);
   const [plantSuggestionsOpen, setPlantSuggestionsOpen] = useState(false);
   const [systemSuggestionsOpen, setSystemSuggestionsOpen] = useState(false);
 
@@ -888,6 +892,24 @@ export default function ArchivePage() {
     }
   }
 
+  async function markSingleLocalArchiveAsMine(archive: LocalArchiveSummary) {
+    if (!currentOwnerContext?.userId) {
+      showToast("请先登录后再标记本地项目归属");
+      return;
+    }
+
+    try {
+      await markLocalArchiveForOwner(archive.id, {
+        userId: currentOwnerContext.userId,
+        email: currentOwnerContext.email || null,
+      });
+      await loadLocalArchives(currentOwnerContext);
+      showToast("已标记为我的本地项目");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "标记本地项目失败");
+    }
+  }
+
   function renameArchiveTitle(item: ArchiveItem) {
     const name = prompt("修改名称", item.title || "");
     if (!name?.trim()) return;
@@ -1342,8 +1364,38 @@ export default function ArchivePage() {
   }
 
   async function renameLocalArchiveSystemName(archive: LocalArchiveSummary) {
-    showToast("请在项目档案中修改系统名");
-    router.push(`/local/archive/${archive.id}`);
+    setEditingLocalSystemArchiveId(archive.id);
+    setEditingLocalSystemName(archive.system_name || archive.species_name || "");
+  }
+
+  function cancelLocalArchiveSystemNameEditing() {
+    setEditingLocalSystemArchiveId(null);
+    setEditingLocalSystemName("");
+  }
+
+  async function saveLocalArchiveSystemName(archive: LocalArchiveSummary) {
+    const cleanName = editingLocalSystemName.trim();
+    if (!cleanName) {
+      showToast("系统名不能为空");
+      return;
+    }
+    if (savingLocalSystemArchiveId) return;
+
+    setSavingLocalSystemArchiveId(archive.id);
+    try {
+      await updateLocalArchiveFields(
+        archive.id,
+        { system_name: cleanName },
+        currentOwnerContext
+      );
+      cancelLocalArchiveSystemNameEditing();
+      await loadLocalArchives(currentOwnerContext);
+      showToast("本地系统名已修改");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "修改本地系统名失败");
+    } finally {
+      setSavingLocalSystemArchiveId(null);
+    }
   }
 
   async function updateLocalArchiveCategoryValue(archive: LocalArchiveSummary, value: string) {
@@ -1791,6 +1843,54 @@ export default function ArchivePage() {
                   key={archive.id}
                   project={{ ...project, href: undefined }}
                   mobileMode={isMobileViewport}
+                  systemNameEditorSlot={
+                    editingLocalSystemArchiveId === archive.id ? (
+                      <span
+                        onClick={(event) => event.stopPropagation()}
+                        style={localInlineEditWrapStyle}
+                      >
+                        <input
+                          value={editingLocalSystemName}
+                          onChange={(event) => setEditingLocalSystemName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void saveLocalArchiveSystemName(archive);
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              cancelLocalArchiveSystemNameEditing();
+                            }
+                          }}
+                          autoFocus
+                          style={localInlineEditInputStyle}
+                        />
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void saveLocalArchiveSystemName(archive);
+                          }}
+                          disabled={savingLocalSystemArchiveId === archive.id}
+                          style={localInlineEditButtonStyle}
+                        >
+                          保存
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            cancelLocalArchiveSystemNameEditing();
+                          }}
+                          style={localInlineEditCancelStyle}
+                        >
+                          取消
+                        </button>
+                      </span>
+                    ) : undefined
+                  }
                   selectControls={
                     <>
                       <ArchiveCategoryDropdown
@@ -1866,6 +1966,20 @@ export default function ArchivePage() {
                             >
                               编辑分类 / 分组
                             </button>
+                            {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  setLocalProjectMenuOpenId(null);
+                                  void markSingleLocalArchiveAsMine(archive);
+                                }}
+                                style={localProjectMenuItemStyle}
+                              >
+                                标记归属
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={(event) => {
@@ -1886,7 +2000,19 @@ export default function ArchivePage() {
                   actionRailSlot={
                     !isMobileViewport ? (
                     <>
-                      <span style={localProjectRailStatusStyle}>未同步</span>
+                      {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void markSingleLocalArchiveAsMine(archive);
+                          }}
+                          style={localProjectRailButtonStyle}
+                        >
+                          标记归属
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={(event) => {
@@ -2166,11 +2292,45 @@ const localOtherOwnerNoticeStyle: CSSProperties = {
   lineHeight: 1.5,
 };
 
-const localProjectRailStatusStyle: CSSProperties = {
-  color: "#5f7a55",
-  fontSize: 11,
+const localInlineEditWrapStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  minWidth: 0,
+  maxWidth: 320,
+};
+
+const localInlineEditInputStyle: CSSProperties = {
+  width: 120,
+  height: 28,
+  border: "1px solid #d9e4d3",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#263326",
+  padding: "0 8px",
+  fontSize: 13,
+  outline: "none",
+};
+
+const localInlineEditButtonStyle: CSSProperties = {
+  border: "1px solid #cbdcc4",
+  borderRadius: 999,
+  background: "#f7fbf4",
+  color: "#44633b",
+  fontSize: 12,
   fontWeight: 800,
-  whiteSpace: "nowrap",
+  padding: "5px 8px",
+  cursor: "pointer",
+};
+
+const localInlineEditCancelStyle: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#7a8376",
+  fontSize: 12,
+  fontWeight: 700,
+  padding: "5px 2px",
+  cursor: "pointer",
 };
 
 const localProjectMenuWrapStyle: CSSProperties = {
