@@ -218,7 +218,10 @@ export default function ArchivePage() {
           .select("id, common_name, scientific_name, slug, category, is_active")
           .eq("is_active", true)
           .order("common_name", { ascending: true }),
-        supabase.from("plant_species_aliases").select("species_id, alias_name, normalized_name"),
+        supabase
+          .from("plant_species_aliases")
+          .select("species_id, alias_name, normalized_name, plant_species!inner(is_active)")
+          .eq("plant_species.is_active", true),
         supabase.from("archive_follows").select("archive_id"),
         supabase.rpc("get_my_membership"),
       ]);

@@ -174,7 +174,8 @@ async function loadPlantSpeciesCandidates(supabase?: SystemNameCandidateSupabase
           .order("common_name", { ascending: true }),
         supabase
           .from("plant_species_aliases")
-          .select("species_id, alias_name, normalized_name"),
+          .select("species_id, alias_name, normalized_name, plant_species!inner(is_active)")
+          .eq("plant_species.is_active", true),
       ]);
 
     if (speciesError || aliasError) {
