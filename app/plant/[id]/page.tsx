@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import PlantRelatedArchives from "@/components/plant-detail/PlantRelatedArchives";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
 import type {
   ActionMessage,
   PlantAliasRow,
@@ -48,6 +49,10 @@ type RelatedArchiveRecordRow = {
   note?: string | null;
   record_time?: string | null;
   primary_image_url?: string | null;
+};
+
+type PlantAliasSearchRow = PlantAliasRow & {
+  relation_type?: string | null;
 };
 
 const RELATED_ARCHIVE_LIMIT = 24;
@@ -203,13 +208,15 @@ function uniqueTextList(items: unknown[]) {
 function buildPlantNameTerms(
   plant: PlantSpeciesRow | null,
   i18nRows: PlantSpeciesI18nRow[],
-  aliasRows: PlantAliasRow[]
+  aliasRows: PlantAliasSearchRow[]
 ) {
   return uniqueTextList([
     plant?.common_name,
     plant?.scientific_name,
     ...i18nRows.map((item) => item.common_name),
-    ...aliasRows.map((item) => item.alias_name),
+    ...aliasRows
+      .filter((item) => isStrongSystemNameAliasRelationType(item.relation_type))
+      .map((item) => item.alias_name),
   ]).slice(0, 8);
 }
 
@@ -658,7 +665,7 @@ const [
           .order("language_code", { ascending: true }),
         supabase
           .from("plant_species_aliases")
-          .select("*")
+          .select("species_id, alias_name, relation_type")
           .eq("species_id", id)
           .order("alias_name", { ascending: true }),
         supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle(),
@@ -678,7 +685,7 @@ const [
 
       const plantRow = (plantData || null) as PlantSpeciesRow | null;
       const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
-      const aliasRows = (aliasData || []) as PlantAliasRow[];
+      const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
 
       setPlant(plantRow);
       setI18n(i18nRows);
