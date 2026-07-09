@@ -127,6 +127,8 @@ export type PlantSpeciesAliasSearchRow = {
   species_id: string;
   alias_name?: string | null;
   normalized_name?: string | null;
+  alias_type?: string | null;
+  relation_type?: string | null;
 };
 
 export type CookieWriteOptions = {

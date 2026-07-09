@@ -38,6 +38,7 @@ import {
   getSystemNameCandidateLabels,
   getSystemNameCandidates,
   hasExactSystemNameCandidate,
+  isStrongSystemNameAliasRelationType,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import {
@@ -220,7 +221,7 @@ export default function ArchivePage() {
           .order("common_name", { ascending: true }),
         supabase
           .from("plant_species_aliases")
-          .select("species_id, alias_name, normalized_name, plant_species!inner(is_active)")
+          .select("species_id, alias_name, normalized_name, alias_type, relation_type, plant_species!inner(is_active)")
           .eq("plant_species.is_active", true),
         supabase.from("archive_follows").select("archive_id"),
         supabase.rpc("get_my_membership"),
@@ -228,6 +229,7 @@ export default function ArchivePage() {
 
       const aliasesBySpecies = new Map<string, string[]>();
       ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
+        if (!isStrongSystemNameAliasRelationType(alias.relation_type)) return;
         const list = aliasesBySpecies.get(alias.species_id) || [];
         if (alias.alias_name) list.push(alias.alias_name);
         if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {

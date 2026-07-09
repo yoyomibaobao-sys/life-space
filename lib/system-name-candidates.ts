@@ -18,6 +18,8 @@ export type SystemNameCandidate = {
   description?: string;
   plantId?: string | null;
   plantSlug?: string | null;
+  aliasType?: string | null;
+  relationType?: string | null;
   aliases?: string[];
   searchText?: string;
 };
@@ -43,6 +45,8 @@ type PlantSpeciesAliasRow = {
   species_id?: string | null;
   alias_name?: string | null;
   normalized_name?: string | null;
+  alias_type?: string | null;
+  relation_type?: string | null;
 };
 
 export type GetSystemNameCandidatesParams = {
@@ -112,6 +116,12 @@ function normalizeCategory(value?: ArchiveCategory | string | null): ArchiveCate
   return "other";
 }
 
+const STRONG_ALIAS_RELATION_TYPES = new Set(["exact", "common_name", "old_scientific_name"]);
+
+export function isStrongSystemNameAliasRelationType(value?: string | null) {
+  return !value || STRONG_ALIAS_RELATION_TYPES.has(value);
+}
+
 function buildPlantCandidatesFromRows(
   speciesRows: PlantSpeciesCandidateRow[] = [],
   aliasRows: PlantSpeciesAliasRow[] = []
@@ -120,6 +130,7 @@ function buildPlantCandidatesFromRows(
 
   aliasRows.forEach((alias) => {
     if (!alias.species_id) return;
+    if (!isStrongSystemNameAliasRelationType(alias.relation_type)) return;
 
     const list = aliasesBySpecies.get(alias.species_id) || [];
     if (alias.alias_name) list.push(alias.alias_name);
@@ -174,18 +185,22 @@ async function loadPlantSpeciesCandidates(supabase?: SystemNameCandidateSupabase
           .order("common_name", { ascending: true }),
         supabase
           .from("plant_species_aliases")
-          .select("species_id, alias_name, normalized_name, plant_species!inner(is_active)")
+          .select("species_id, alias_name, normalized_name, alias_type, relation_type, plant_species!inner(is_active)")
           .eq("plant_species.is_active", true),
       ]);
 
-    if (speciesError || aliasError) {
-      console.warn("load system name plant candidates failed:", speciesError || aliasError);
+    if (speciesError) {
+      console.warn("load system name plant candidates failed:", speciesError);
       return [];
+    }
+
+    if (aliasError) {
+      console.warn("load system name plant aliases failed:", aliasError);
     }
 
     return buildPlantCandidatesFromRows(
       (speciesData || []) as PlantSpeciesCandidateRow[],
-      (aliasData || []) as PlantSpeciesAliasRow[]
+      aliasError ? [] : ((aliasData || []) as PlantSpeciesAliasRow[])
     );
   } catch (error) {
     console.warn("load system name plant candidates failed:", error);
