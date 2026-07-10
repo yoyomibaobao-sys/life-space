@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import PlantRelatedArchives from "@/components/plant-detail/PlantRelatedArchives";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
@@ -241,23 +240,28 @@ function buildArchiveMatchFilter(plantId: string, terms: string[]) {
 
 async function buildArchiveItemsFromRows(
   rows: RelatedArchiveSourceRow[],
-  currentUserId?: string | null
+  currentUserId?: string | null,
+  options: { recordScope?: "public" | "all" } = {}
 ) {
   const archiveIds = uniqueTextList(rows.map((row) => row.id));
   const publicRecordCountMap = new Map<string, number>();
   const latestPublicRecordMap = new Map<string, RelatedArchiveRecordRow>();
 
   if (archiveIds.length > 0) {
-    const { data: recordRows, error } = await supabase
+    const baseRecordQuery = supabase
       .from("records")
       .select("id, archive_id, note, record_time, primary_image_url")
-      .in("archive_id", archiveIds)
-      .eq("visibility", "public")
+      .in("archive_id", archiveIds);
+    const recordQuery =
+      options.recordScope === "all"
+        ? baseRecordQuery
+        : baseRecordQuery.eq("visibility", "public");
+    const { data: recordRows, error } = await recordQuery
       .order("record_time", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false, nullsFirst: false });
 
     if (error) {
-      console.error("load related archive public records error:", error);
+      console.error("load related archive records error:", error);
     } else {
       ((recordRows || []) as RelatedArchiveRecordRow[]).forEach((record) => {
         if (!record.archive_id) return;
@@ -320,21 +324,37 @@ function mergeRelatedArchiveItems(items: PlantRelatedArchiveItem[]) {
   return Array.from(itemMap.values()).slice(0, RELATED_ARCHIVE_LIMIT);
 }
 
-function guideTitle(plant: PlantSpeciesRow | null | undefined) {
-  const category = plant?.category;
-  const subCategory = plant?.sub_category;
+async function hydrateRelatedArchiveImages(archives: PlantRelatedArchiveItem[]) {
+  const coverImagePairs = await resolveMediaDisplayPairs(
+    supabase,
+    archives.map((archive) => ({
+      url: archive.cover_image_url,
+      path: archive.cover_image_path,
+      thumb_path: archive.cover_thumb_path,
+    }))
+  );
+  const lastRecordImagePairs = await resolveMediaDisplayPairs(
+    supabase,
+    archives.map((archive) => ({
+      url: archive.last_public_record_image_url,
+      path: archive.last_public_record_image_path,
+      thumb_path: archive.last_public_record_thumb_path,
+    }))
+  );
 
-  if (category === "flower") {
-    return subCategory === "flowering_tree" || subCategory === "flowering_shrub"
-      ? "观花 / 修剪"
-      : "观花";
-  }
-
-  if (category === "houseplant") return "观叶 / 繁殖";
-  if (category === "succulent") return "繁殖";
-  if (category === "fruit") return "采收 / 修剪";
-
-  return "采收";
+  return archives.map((archive, index) => ({
+    ...archive,
+    display_cover_image_url:
+      coverImagePairs[index]?.display_thumb_url ||
+      coverImagePairs[index]?.display_url ||
+      archive.cover_image_url ||
+      null,
+    display_last_public_record_image_url:
+      lastRecordImagePairs[index]?.display_thumb_url ||
+      lastRecordImagePairs[index]?.display_url ||
+      archive.last_public_record_image_url ||
+      null,
+  }));
 }
 
 function TextBlock({ text }: { text?: string | null }) {
@@ -352,6 +372,79 @@ function TextBlock({ text }: { text?: string | null }) {
       {text}
     </div>
   );
+}
+
+function splitTextSentences(text: string) {
+  const sentences: string[] = [];
+  let current = "";
+
+  for (const char of text.replace(/\r\n/g, "\n")) {
+    if (char === "\n") {
+      if (current.trim()) sentences.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+
+    if ("。！？!?；;".includes(char)) {
+      if (current.trim()) sentences.push(current.trim());
+      current = "";
+    }
+  }
+
+  if (current.trim()) sentences.push(current.trim());
+  return sentences;
+}
+
+function withoutTemperatureValueSentences(
+  text: string | null | undefined,
+  shouldFilter: boolean
+) {
+  if (!hasText(text)) return null;
+
+  const value = String(text).trim();
+  if (!shouldFilter) return value;
+
+  const sentences = splitTextSentences(value).filter(
+    (sentence) => !/[℃°]/.test(sentence)
+  );
+
+  return sentences.length > 0 ? sentences.join("\n") : null;
+}
+
+function textValue(value: unknown) {
+  if (!hasText(value)) return null;
+  return String(value).trim();
+}
+
+function splitGuideItems(...values: Array<unknown>) {
+  return uniqueTextList(
+    values
+      .map((value) => textValue(value))
+      .filter(Boolean)
+      .flatMap((value) => String(value).split(/\n+|。|；|;|^[\s]*[•·-]/gm))
+      .map((value) =>
+        value
+          .trim()
+          .replace(/^[-—–－•·\s]+/, "")
+          .replace(/\s+/g, " ")
+          .trim()
+      )
+      .filter(Boolean)
+  );
+}
+
+function formatShortDate(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
 }
 
 function Card({
@@ -394,6 +487,74 @@ function Card({
       </div>
       <div style={{ fontSize: 17, fontWeight: 700, color: "#2f2f2f" }}>{value}</div>
       {hint && <div style={{ marginTop: 4, color: "#999", fontSize: 12 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function Subsection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  if (!children) return null;
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <h3
+        style={{
+          margin: "0 0 10px",
+          fontSize: 16,
+          fontWeight: 750,
+          color: "#315a2f",
+        }}
+      >
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function GuideList({ items }: { items: string[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 8,
+        color: "#555",
+        fontSize: 15,
+        lineHeight: 1.68,
+      }}
+    >
+      {items.slice(0, 5).map((item) => (
+        <div
+          key={item}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "10px minmax(0, 1fr)",
+            gap: 8,
+            alignItems: "start",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 5,
+              height: 5,
+              marginTop: 10,
+              borderRadius: 999,
+              background: "#7b9474",
+            }}
+          />
+          <span style={{ minWidth: 0, overflowWrap: "break-word" }}>
+            {item}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -448,7 +609,7 @@ function toPositiveDay(value: unknown) {
   return Math.round(numberValue);
 }
 
-function GrowthCycleSection({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
+function GrowthCycleBlock({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
   const rawStages = [
     {
       label: "发芽期",
@@ -472,7 +633,11 @@ function GrowthCycleSection({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
     },
   ].filter((stage) => stage.days !== null);
 
-  if (rawStages.length === 0) return null;
+  if (rawStages.length === 0) {
+    return (
+      <div style={{ color: "#888", fontSize: 15 }}>暂无完整生长周期数据</div>
+    );
+  }
 
   let cursor = 0;
 
@@ -490,123 +655,386 @@ function GrowthCycleSection({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
   });
 
   const totalDays = stages[stages.length - 1]?.end || 0;
-  if (totalDays <= 0) return null;
-const columnWidths = stages.map((stage) => Math.max(96, stage.duration * 4));
-const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-  return (
-    <Section title="生长周期（参考）">
-      <div style={{ display: "grid", gap: 12 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            gap: 8,
-            color: "#555",
-            fontSize: 15,
-          }}
-        >
-          <span>总周期：</span>
-          <strong style={{ color: "#315a2f", fontSize: 18 }}>
-            约 {totalDays} 天
-          </strong>
-        </div>
+  if (totalDays <= 0) {
+    return (
+      <div style={{ color: "#888", fontSize: 15 }}>暂无完整生长周期数据</div>
+    );
+  }
 
-        <div
+  const columnWidths = stages.map((stage) => Math.max(96, stage.duration * 4));
+  const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          gap: 8,
+          color: "#555",
+          fontSize: 15,
+        }}
+      >
+        <span>总周期：</span>
+        <strong style={{ color: "#315a2f", fontSize: 18 }}>
+          约 {totalDays} 天
+        </strong>
+      </div>
+
+      <div
+        style={{
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}
+      >
+        <table
           style={{
-            overflowX: "auto",
-            paddingBottom: 4,
+            width: tableWidth,
+            minWidth: "100%",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            tableLayout: "fixed",
+            border: "1px solid #dce8d5",
+            borderRadius: 16,
+            overflow: "hidden",
+            background: "#fbfdf9",
           }}
         >
-         <table
-  style={{
-    width: tableWidth,
-    minWidth: "100%",
-    borderCollapse: "separate",
-    borderSpacing: 0,
-    tableLayout: "fixed",
-              border: "1px solid #dce8d5",
-              borderRadius: 16,
-              overflow: "hidden",
-              background: "#fbfdf9",
+          <colgroup>
+            {stages.map((stage, index) => (
+              <col
+                key={`${stage.label}-block-col`}
+                style={{
+                  width: columnWidths[index],
+                }}
+              />
+            ))}
+          </colgroup>
+
+          <tbody>
+            <tr>
+              {stages.map((stage, index) => (
+                <td
+                  key={`${stage.label}-block-name`}
+                  style={{
+                    padding: "14px 10px 12px",
+                    textAlign: "center",
+                    background: index % 2 === 0 ? "#eef6e9" : "#f8fbf5",
+                    borderRight:
+                      index === stages.length - 1 ? "none" : "1px solid #dce8d5",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: "#315a2f",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {stage.label}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#5f7f55",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    （{stage.duration}天）
+                  </div>
+                </td>
+              ))}
+            </tr>
+
+            <tr>
+              {stages.map((stage, index) => (
+                <td
+                  key={`${stage.label}-block-range`}
+                  style={{
+                    padding: "9px 10px",
+                    textAlign: "center",
+                    fontSize: 12,
+                    color: "#777",
+                    background: "#fff",
+                    borderTop: "1px solid #dce8d5",
+                    borderRight:
+                      index === stages.length - 1 ? "none" : "1px solid #edf0e9",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {stage.start === 0
+                    ? `第0–${stage.end}天`
+                    : `第${stage.start + 1}–${stage.end}天`}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PlantingGuideSection({
+  parameters,
+  careGuide,
+}: {
+  parameters: PlantParametersRow | null;
+  careGuide: PlantCareGuideRow | null;
+}) {
+  const startItems = splitGuideItems(
+    careGuide?.summary,
+    careGuide?.planting_guide,
+    parameters?.care_note
+  ).slice(0, 5);
+  const careItems = splitGuideItems(careGuide?.care_guide).slice(0, 5);
+  const harvestItems = splitGuideItems(careGuide?.harvest_guide).slice(0, 5);
+  const problemItems = splitGuideItems(careGuide?.common_problem_guide).slice(0, 5);
+  const rotationItems = splitGuideItems(
+    careGuide?.rotation_intercrop_guide,
+    parameters?.good_companions,
+    parameters?.avoid_rotation_with
+  ).slice(0, 5);
+  const hasGuide =
+    startItems.length > 0 ||
+    careItems.length > 0 ||
+    harvestItems.length > 0 ||
+    problemItems.length > 0 ||
+    rotationItems.length > 0;
+
+  if (!hasGuide) return null;
+
+  return (
+    <Section title="种植要点">
+      {startItems.length > 0 && (
+        <Subsection title="开始种">
+          <GuideList items={startItems} />
+        </Subsection>
+      )}
+      {careItems.length > 0 && (
+        <Subsection title="日常养">
+          <GuideList items={careItems} />
+        </Subsection>
+      )}
+      {harvestItems.length > 0 && (
+        <Subsection title="采收判断">
+          <GuideList items={harvestItems} />
+        </Subsection>
+      )}
+      {problemItems.length > 0 && (
+        <Subsection title="常见问题">
+          <GuideList items={problemItems} />
+        </Subsection>
+      )}
+      {rotationItems.length > 0 && (
+        <Subsection title="轮作与伴生">
+          <GuideList items={rotationItems} />
+        </Subsection>
+      )}
+    </Section>
+  );
+}
+
+function PlantArchiveList({
+  archives,
+  emptyText,
+  entryLabel,
+  hrefForArchive,
+  countLabel,
+  showOwner,
+  showVisibility,
+}: {
+  archives: PlantRelatedArchiveItem[];
+  emptyText: string;
+  entryLabel: string;
+  hrefForArchive: (archive: PlantRelatedArchiveItem) => string;
+  countLabel: string;
+  showOwner?: boolean;
+  showVisibility?: boolean;
+}) {
+  if (archives.length === 0) {
+    return (
+      <div
+        style={{
+          padding: 18,
+          border: "1px solid #eee",
+          borderRadius: 14,
+          color: "#888",
+          background: "#fff",
+        }}
+      >
+        {emptyText}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {archives.map((archive) => {
+        const imageUrl =
+          archive.display_cover_image_url ||
+          archive.display_last_public_record_image_url ||
+          archive.cover_image_url ||
+          archive.last_public_record_image_url;
+        const latestDate = formatShortDate(archive.last_public_record_time);
+        const metaParts = [
+          showVisibility ? (archive.archive_is_public ? "公开发现" : "仅自己可见") : null,
+          `${countLabel} ${Number(archive.public_record_count || 0)}`,
+          latestDate ? `最近 ${latestDate}` : "暂无记录",
+        ].filter(Boolean);
+
+        return (
+          <Link
+            key={archive.archive_id}
+            href={hrefForArchive(archive)}
+            style={{
+              display: "grid",
+              gridTemplateColumns: imageUrl ? "96px minmax(0, 1fr)" : "1fr",
+              gap: 12,
+              padding: 14,
+              border: "1px solid #eee",
+              borderRadius: 14,
+              background: "#fff",
+              color: "inherit",
+              textDecoration: "none",
             }}
           >
-      <colgroup>
-  {stages.map((stage, index) => (
-    <col
-      key={`${stage.label}-col`}
-      style={{
-        width: columnWidths[index],
-      }}
-    />
-  ))}
-</colgroup>
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt=""
+                style={{
+                  width: 96,
+                  height: 96,
+                  objectFit: "cover",
+                  borderRadius: 10,
+                  background: "#f4f6f1",
+                }}
+              />
+            ) : null}
 
-            <tbody>
-  <tr>
-    {stages.map((stage, index) => (
-      <td
-        key={`${stage.label}-name`}
-        style={{
-          padding: "14px 10px 12px",
-          textAlign: "center",
-          background: index % 2 === 0 ? "#eef6e9" : "#f8fbf5",
-          borderRight:
-            index === stages.length - 1 ? "none" : "1px solid #dce8d5",
-          whiteSpace: "nowrap",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 700,
-            color: "#315a2f",
-            lineHeight: 1.5,
-          }}
-        >
-          {stage.label}
-        </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div style={{ fontWeight: 700, color: "#263326" }}>
+                  {archive.archive_title || "种植项目"}
+                </div>
+                <span
+                  style={{
+                    flex: "0 0 auto",
+                    color: "#2f6f35",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  {entryLabel}
+                </span>
+              </div>
+              <div style={{ marginTop: 8, color: "#6a7564", fontSize: 13 }}>
+                {metaParts.join(" · ")}
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  color: "#555",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {archive.last_public_record_note || "还没有记录摘要"}
+              </div>
+              {showOwner && archive.username ? (
+                <div style={{ marginTop: 8, color: "#8a9584", fontSize: 12 }}>
+                  来自 {archive.username}
+                </div>
+              ) : null}
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
 
-        <div
-          style={{
-            marginTop: 2,
-            fontSize: 13,
-            fontWeight: 600,
-            color: "#5f7f55",
-            lineHeight: 1.5,
-          }}
-        >
-          （{stage.duration}天）
-        </div>
-      </td>
-    ))}
-  </tr>
+function PlantRecordsSection({
+  parameters,
+  ownArchives,
+  publicArchives,
+  isLoggedIn,
+}: {
+  parameters: PlantParametersRow | null;
+  ownArchives: PlantRelatedArchiveItem[];
+  publicArchives: PlantRelatedArchiveItem[];
+  isLoggedIn: boolean;
+}) {
+  const recordFocus = textValue(parameters?.record_focus);
+  const uniqueOwnArchives = Array.from(
+    new Map(ownArchives.map((archive) => [archive.archive_id, archive])).values()
+  );
+  const uniquePublicArchives = Array.from(
+    new Map(publicArchives.map((archive) => [archive.archive_id, archive])).values()
+  );
 
-  <tr>
-    {stages.map((stage, index) => (
-      <td
-        key={`${stage.label}-range`}
-        style={{
-          padding: "9px 10px",
-          textAlign: "center",
-          fontSize: 12,
-          color: "#777",
-          background: "#fff",
-          borderTop: "1px solid #dce8d5",
-          borderRight:
-            index === stages.length - 1 ? "none" : "1px solid #edf0e9",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {stage.start === 0
-          ? `第0–${stage.end}天`
-          : `第${stage.start + 1}–${stage.end}天`}
-      </td>
-    ))}
-  </tr>
-</tbody>
-          </table>
-        </div>
-      </div>
+  return (
+    <Section title="种植记录">
+      {recordFocus && (
+        <Subsection title="记录重点">
+          <div style={{ color: "#555", fontSize: 15, lineHeight: 1.85 }}>
+            种植时可以重点记录：{recordFocus}
+          </div>
+        </Subsection>
+      )}
+
+      <Subsection title="我的相关项目">
+        {!isLoggedIn ? (
+          <div
+            style={{
+              padding: 18,
+              border: "1px solid #eee",
+              borderRadius: 14,
+              color: "#888",
+              background: "#fff",
+            }}
+          >
+            登录后可查看自己的种植项目。
+          </div>
+        ) : (
+          <PlantArchiveList
+            archives={uniqueOwnArchives}
+            emptyText="你还没有种过它。可以新建一个项目开始记录。"
+            entryLabel="查看项目"
+            hrefForArchive={(archive) => `/archive/${archive.archive_id}`}
+            countLabel="记录"
+            showVisibility
+          />
+        )}
+      </Subsection>
+
+      <Subsection title="大家的公开种植记录">
+        <PlantArchiveList
+          archives={uniquePublicArchives}
+          emptyText="还没有公开种植记录。你可以从自己的项目开始沉淀经验。"
+          entryLabel="查看公开项目"
+          hrefForArchive={(archive) => `/archive/${archive.archive_id}?mode=viewer`}
+          countLabel="公开记录"
+          showOwner
+        />
+      </Subsection>
     </Section>
   );
 }
@@ -623,6 +1051,8 @@ const [parameters, setParameters] = useState<PlantParametersRow | null>(null);
 const [growthCycle, setGrowthCycle] = useState<PlantGrowthCycleRow | null>(null);
 const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
 const [relatedArchives, setRelatedArchives] = useState<PlantRelatedArchiveItem[]>([]);
+const [ownArchives, setOwnArchives] = useState<PlantRelatedArchiveItem[]>([]);
+const [isSignedIn, setIsSignedIn] = useState(false);
   const [interestAdded, setInterestAdded] = useState(false);
   const [planAdded, setPlanAdded] = useState(false);
   const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
@@ -697,6 +1127,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      setIsSignedIn(Boolean(user));
 
       const plantNameTerms = buildPlantNameTerms(plantRow, i18nRows, aliasRows);
       const archiveMatchFilter = buildArchiveMatchFilter(id, plantNameTerms);
@@ -724,7 +1155,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           : Promise.resolve({ data: [] as RelatedArchiveSourceRow[] }),
       ]);
 
-      const relatedRows = mergeRelatedArchiveItems([
+      const publicRelatedRows = mergeRelatedArchiveItems([
         ...((relatedData || []) as PlantRelatedArchiveItem[]).map((archive) => ({
           ...archive,
           archive_is_public: true,
@@ -734,44 +1165,19 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           (publicArchiveRows || []) as RelatedArchiveSourceRow[],
           user?.id || null
         )),
-        ...(await buildArchiveItemsFromRows(
-          (ownArchiveRows || []) as RelatedArchiveSourceRow[],
-          user?.id || null
-        )),
-      ]);
+      ]).filter((archive) => !user?.id || archive.user_id !== user.id);
+      const ownRelatedRows = user
+        ? mergeRelatedArchiveItems(
+            await buildArchiveItemsFromRows(
+              (ownArchiveRows || []) as RelatedArchiveSourceRow[],
+              user.id,
+              { recordScope: "all" }
+            )
+          )
+        : [];
 
-      const coverImagePairs = await resolveMediaDisplayPairs(
-        supabase,
-        relatedRows.map((archive) => ({
-          url: archive.cover_image_url,
-          path: archive.cover_image_path,
-          thumb_path: archive.cover_thumb_path,
-        }))
-      );
-      const lastRecordImagePairs = await resolveMediaDisplayPairs(
-        supabase,
-        relatedRows.map((archive) => ({
-          url: archive.last_public_record_image_url,
-          path: archive.last_public_record_image_path,
-          thumb_path: archive.last_public_record_thumb_path,
-        }))
-      );
-
-      setRelatedArchives(
-        relatedRows.map((archive, index) => ({
-          ...archive,
-          display_cover_image_url:
-            coverImagePairs[index]?.display_thumb_url ||
-            coverImagePairs[index]?.display_url ||
-            archive.cover_image_url ||
-            null,
-          display_last_public_record_image_url:
-            lastRecordImagePairs[index]?.display_thumb_url ||
-            lastRecordImagePairs[index]?.display_url ||
-            archive.last_public_record_image_url ||
-            null,
-        }))
-      );
+      setRelatedArchives(await hydrateRelatedArchiveImages(publicRelatedRows));
+      setOwnArchives(await hydrateRelatedArchiveImages(ownRelatedRows));
 
       if (user) {
         const [{ data: interestData }, { data: planData }] = await Promise.all([
@@ -818,7 +1224,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
   );
 
   const displayName =
-    zh?.common_name || plant?.common_name || plant?.scientific_name || "植物百科";
+    zh?.common_name || plant?.common_name || plant?.scientific_name || "植物索引";
   const fromArchive = searchParams.get("fromArchive");
   const fromRecord = searchParams.get("fromRecord");
   const returnRecordHref = fromArchive
@@ -842,6 +1248,9 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
     { label: "耐旱能力", value: scoreLabel(parameters?.drought_score) },
     { label: "生长速度", value: scoreLabel(parameters?.growth_speed_score) },
     { label: "病虫害风险", value: scoreLabel(parameters?.disease_risk_score) },
+    { label: "盆栽适配", value: scoreLabel(parameters?.container_friendly_score) },
+    { label: "室内适配", value: scoreLabel(parameters?.indoor_friendly_score) },
+    { label: "阳台适配", value: scoreLabel(parameters?.balcony_friendly_score) },
     {
       label: "管理难度",
       value: difficulty
@@ -917,8 +1326,16 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
     },
   ].filter((item) => item.value);
 
+  const climateTimingNote = withoutTemperatureValueSentences(
+    careGuide?.climate_timing_note,
+    temperatureCards.length > 0
+  );
+  const temperatureNote = withoutTemperatureValueSentences(
+    parameters?.temperature_note,
+    temperatureCards.length > 0
+  );
   const hasTemperatureSection =
-    temperatureCards.length > 0 || hasText(parameters?.temperature_note);
+    temperatureCards.length > 0 || hasText(temperatureNote);
 
   const photoperiodType =
     parameters?.photoperiod_type &&
@@ -1058,7 +1475,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
     return (
       <main style={{ padding: "16px", maxWidth: 760, margin: "0 auto" }}>
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          ← 返回植物百科
+          ← 返回索引
         </Link>
         <div
           style={{
@@ -1084,7 +1501,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           </Link>
         ) : null}
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          ← 返回植物百科
+          ← 返回索引
         </Link>
         {!isMobileViewport ? (
           <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
@@ -1102,8 +1519,28 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
         }}
       >
-        <div style={{ fontSize: 13, color: "#4CAF50", marginBottom: 8 }}>
-          植物百科
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              padding: "2px 8px",
+              border: "1px solid #dcebd5",
+              borderRadius: 999,
+              color: "#4d7044",
+              background: "#f7fbf4",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            植物档案
+          </span>
         </div>
 
         <h1 style={{ margin: 0, fontSize: 30 }}>{displayName}</h1>
@@ -1112,7 +1549,11 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           {plant.scientific_name && <div>学名：{plant.scientific_name}</div>}
           {aliasNames.length > 0 && <div>别名：{aliasNames.join("、")}</div>}
           {(zh?.family || plant.family) && <div>科属：{zh?.family || plant.family}</div>}
-          <div>分类：{categoryLabel(plant.category)}</div>
+          <div>
+            分类：{categoryLabel(plant.category)}
+            {plant.sub_category ? ` · ${subCategoryLabel(plant.sub_category)}` : ""}
+          </div>
+          {plant.growth_type && <div>生长型：{plant.growth_type}</div>}
           {en?.common_name && <div>英文名：{en.common_name}</div>}
         </div>
 
@@ -1289,128 +1730,118 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
         )}
       </section>
 
-      {environmentCards.length > 0 && (
-        <Section title="环境与场景">
+      {(environmentCards.length > 0 ||
+        hasText(climateTimingNote) ||
+        hasTemperatureSection) && (
+        <Section title="气候环境">
           {environmentCards.length > 0 && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-                gap: 12,
-                marginTop: 0,
-              }}
-            >
-              {environmentCards.map((item) => (
-                <Card key={item.label} label={item.label} value={item.value} />
-              ))}
-            </div>
+            <Subsection title="环境与场景">
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                  gap: 12,
+                  marginTop: 0,
+                }}
+              >
+                {environmentCards.map((item) => (
+                  <Card key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+            </Subsection>
           )}
 
-        </Section>
-      )}
-
-      {hasText(careGuide?.climate_timing_note) && (
-        <Section title="气候与时机">
-          <TextBlock text={careGuide?.climate_timing_note} />
-        </Section>
-      )}
-      <GrowthCycleSection cycle={growthCycle} />
-
-      {hasText(careGuide?.planting_guide) && (
-        <Section title="种植">
-          <TextBlock text={careGuide?.planting_guide} />
-        </Section>
-      )}
-
-      {hasText(careGuide?.care_guide) && (
-        <Section title="养护">
-          <TextBlock text={careGuide?.care_guide} />
-        </Section>
-      )}
-
-      {hasText(careGuide?.harvest_guide) && (
-        <Section title={guideTitle(plant)}>
-          <TextBlock text={careGuide?.harvest_guide} />
-        </Section>
-      )}
-
-      {hasText(careGuide?.common_problem_guide) && (
-        <Section title="常见问题">
-          <TextBlock text={careGuide?.common_problem_guide} />
-        </Section>
-      )}
-
-      {hasText(careGuide?.rotation_intercrop_guide) && (
-        <Section title="轮作 / 间种 / 伴生">
-          <TextBlock text={careGuide?.rotation_intercrop_guide} />
-        </Section>
-      )}
-
-      {parameterCards.length > 0 && (
-        <Section title="参数卡">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-              gap: 12,
-            }}
-          >
-            {parameterCards.map((item) => (
-              <Card key={item.label} label={item.label} value={item.value} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {hasTemperatureSection && (
-        <Section title="温度节点">
-          {temperatureCards.length > 0 && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: 12,
-              }}
-            >
-              {temperatureCards.map((item) => (
-                <TempCard key={item.label} label={item.label} value={item.value} />
-              ))}
-            </div>
+          {hasText(climateTimingNote) && (
+            <Subsection title="气候与时机">
+              <TextBlock text={climateTimingNote} />
+            </Subsection>
           )}
 
-          {hasText(parameters?.temperature_note) && (
-            <div style={{ marginTop: 12, color: "#555", fontSize: 15, lineHeight: 1.9 }}>
-              {parameters?.temperature_note}
-            </div>
+          {hasTemperatureSection && (
+            <Subsection title="温度节点">
+              {temperatureCards.length > 0 && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {temperatureCards.map((item) => (
+                    <TempCard key={item.label} label={item.label} value={item.value} />
+                  ))}
+                </div>
+              )}
+
+              {hasText(temperatureNote) && (
+                <div style={{ marginTop: 12, color: "#555", fontSize: 15, lineHeight: 1.9 }}>
+                  {temperatureNote}
+                </div>
+              )}
+            </Subsection>
           )}
         </Section>
       )}
 
-      {hasPhotoperiodSection && (
-        <Section title="光周期">
-          {photoperiodCards.length > 0 && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: 12,
-              }}
-            >
-              {photoperiodCards.map((item) => (
-                <Card key={item.label} label={item.label} value={item.value} />
-              ))}
-            </div>
+      {(growthCycle || parameterCards.length > 0 || hasPhotoperiodSection) && (
+        <Section title="生长与参数">
+          <Subsection title="生长周期">
+            <GrowthCycleBlock cycle={growthCycle} />
+          </Subsection>
+
+          {parameterCards.length > 0 && (
+            <Subsection title="参数细项">
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                  gap: 12,
+                }}
+              >
+                {parameterCards.map((item) => (
+                  <Card key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+            </Subsection>
           )}
 
-          {hasText(parameters?.photoperiod_note) && (
-            <div style={{ marginTop: 12, color: "#555", fontSize: 15, lineHeight: 1.9 }}>
-              {parameters?.photoperiod_note}
-            </div>
+          {hasPhotoperiodSection && (
+            <Subsection title="光周期">
+              {photoperiodCards.length > 0 && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {photoperiodCards.map((item) => (
+                    <Card key={item.label} label={item.label} value={item.value} />
+                  ))}
+                </div>
+              )}
+
+              {hasText(parameters?.photoperiod_note) && (
+                <div style={{ marginTop: 12, color: "#555", fontSize: 15, lineHeight: 1.9 }}>
+                  {parameters?.photoperiod_note}
+                </div>
+              )}
+            </Subsection>
           )}
         </Section>
       )}
 
-      <PlantRelatedArchives archives={relatedArchives} />
+      <PlantingGuideSection
+        parameters={parameters}
+        careGuide={careGuide}
+      />
+
+      <PlantRecordsSection
+        parameters={parameters}
+        ownArchives={ownArchives}
+        publicArchives={relatedArchives}
+        isLoggedIn={isSignedIn}
+      />
     </main>
   );
 }

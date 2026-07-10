@@ -41,7 +41,29 @@ export default function PlantDetailHero({
         boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
       }}
     >
-      <div style={{ fontSize: 13, color: "#4CAF50", marginBottom: 8 }}>植物百科</div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            padding: "2px 8px",
+            border: "1px solid #dcebd5",
+            borderRadius: 999,
+            color: "#4d7044",
+            background: "#f7fbf4",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          植物档案
+        </span>
+      </div>
 
       <h1 style={{ margin: 0, fontSize: 30 }}>{displayName}</h1>
 

@@ -427,7 +427,7 @@ export default function PlantIndexPage() {
                 whiteSpace: "nowrap",
               }}
             >
-              系统植物索引库
+              植物索引
             </h1>
             <input
               value={query}
@@ -449,11 +449,11 @@ export default function PlantIndexPage() {
           <>
             <div>
               <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
-                植物百科
+                植物索引
               </div>
 
               <h1 style={{ margin: 0, fontSize: 28 }}>
-                系统植物索引库
+                植物索引
               </h1>
             </div>
 

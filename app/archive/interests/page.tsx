@@ -263,7 +263,7 @@ export default function PlantInterestsPage() {
           </Link>
 
           <Link href={`/plant/${item.species_id}`} style={neutralActionLinkStyle}>
-            查看百科
+            查看植物索引
           </Link>
 
           <button type="button" onClick={() => removeInterest(item.id)} style={dangerActionButtonStyle}>
@@ -291,7 +291,7 @@ export default function PlantInterestsPage() {
         title="我感兴趣的植物"
         description="这里适合轻量保存喜欢、想了解、以后可能会种的植物。明确想种后，再加入种植计划。"
         primaryHref="/plant"
-        primaryLabel="去植物百科选择植物"
+        primaryLabel="去索引选择植物"
         secondaryHref="/archive/plans"
         secondaryLabel="查看种植计划"
       />
@@ -301,7 +301,7 @@ export default function PlantInterestsPage() {
           title="还没有感兴趣的植物"
           description="这里可以先轻轻保存喜欢的植物，不必马上决定要不要种。"
           href="/plant"
-          label="去植物百科看看"
+          label="去索引看看"
         />
       ) : (
         <section style={{ marginTop: 16 }}>

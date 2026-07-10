@@ -56,7 +56,7 @@ export default function ArchiveNewProjectFormShell({
   const systemNameLabel = category === "plant" ? "系统植物名 *" : "系统名 *";
   const systemNameHelper =
     category === "plant"
-      ? "系统植物名用于和百科、项目档案关联，例如：蓝莓 · 薄雾、月季、小麦。"
+      ? "系统植物名用于和植物索引、项目档案关联，例如：蓝莓 · 薄雾、月季、小麦。"
       : category === "other"
         ? "其他种类没有预设系统名，直接输入。"
       : "系统名用于项目档案归类，例如：滴灌架、生态缸、蚯蚓塔。";
