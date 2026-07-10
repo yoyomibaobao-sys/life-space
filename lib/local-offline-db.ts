@@ -137,7 +137,7 @@ export type LocalArchiveVisibilityResult = {
 
 export function assertLocalOfflineAvailable() {
   if (typeof window === "undefined" || !("indexedDB" in window)) {
-    throw new Error("当前浏览器不支持本地离线存储。");
+    throw new Error("当前浏览器无法保存本地数据。");
   }
 }
 
@@ -1185,7 +1185,7 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
 
     await new Promise<void>((resolve, reject) => {
       cursorRequest.onerror = () =>
-        reject(cursorRequest.error || new Error("读取本地项目失败"));
+        reject(cursorRequest.error || new Error("无法读取本地项目"));
       cursorRequest.onsuccess = () => {
         const cursor = cursorRequest.result;
         if (!cursor) {
@@ -1215,7 +1215,7 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
     const taxonomyCursorRequest = transaction.objectStore(TAXONOMY_STORE).openCursor();
     await new Promise<void>((resolve, reject) => {
       taxonomyCursorRequest.onerror = () =>
-        reject(taxonomyCursorRequest.error || new Error("读取本地分类失败"));
+        reject(taxonomyCursorRequest.error || new Error("无法读取本地分类"));
       taxonomyCursorRequest.onsuccess = () => {
         const cursor = taxonomyCursorRequest.result;
         if (!cursor) {

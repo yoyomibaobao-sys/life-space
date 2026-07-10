@@ -24,7 +24,7 @@ export function normalizeMembershipRpcResult(data: unknown): MyMembership | null
 export function getMembershipPlanLabel(plan?: string | null) {
   switch (plan) {
     case "trial":
-      return "本地离线";
+      return "本地离线版";
     case "basic":
       return "云空间";
     case "large":
@@ -157,7 +157,7 @@ export function getMarketPostQuotaHint(membership?: MyMembership | null) {
     return getCreateMarketPostBlockedText(membership);
   }
 
-  return `${getMarketPostQuotaLabel(membership)}。本地离线不发布集市；云空间基础额度 10 条。`;
+  return `${getMarketPostQuotaLabel(membership)}。本地离线版不支持发布集市；云空间基础额度 10 条。`;
 }
 
 

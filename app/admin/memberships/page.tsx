@@ -65,7 +65,7 @@ type PlanPreset = {
 const PLAN_PRESETS: PlanPreset[] = [
   {
     key: "trial",
-    label: "本地离线",
+    label: "本地离线版",
     storageLimitBytes: 300_000_000,
     baseMarketPostLimit: 3,
     paidMonths: null,

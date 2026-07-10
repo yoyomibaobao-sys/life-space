@@ -143,7 +143,7 @@ export default function NewLocalArchivePage() {
       backLabel="返回我的空间"
       eyebrow="本地离线"
       title="新建项目"
-      subtitle="表单结构与云空间一致，只是保存到这台设备的 App 私有本地存储。"
+      subtitle="表单结构与云空间一致，只是保存到本地的 App 私有存储。"
       category={category}
       onCategoryChange={handleCategoryChange}
       projectTitle={title}
@@ -216,7 +216,7 @@ export default function NewLocalArchivePage() {
       onNoteChange={setNote}
       notice={
         <>
-          只保存在这台设备，不上传云端。子分类和分组可在项目列表或项目档案中继续整理，本地分类 / 分组仍独立于云空间。
+          只保存在当前设备，不上传云端。子分类和分组可在项目列表或项目档案中继续整理，本地分类 / 分组仍独立于云空间。
           {plantId || plantSlug ? " 已保存索引关联线索，但不会缓存索引正文、图片、相关项目或大家的经验。" : ""}
         </>
       }

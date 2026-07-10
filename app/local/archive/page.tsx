@@ -20,10 +20,10 @@ export default function LocalArchiveRedirectPage() {
         color: "#263326",
       }}
     >
-      正在进入我的空间的本地离线项目...
+      正在进入我的空间中的本地项目...
       <div style={{ marginTop: 12 }}>
         <Link href="/archive?source=local" style={{ color: "#2f6a31" }}>
-          前往本地离线项目
+          前往本地项目
         </Link>
       </div>
     </main>

@@ -86,7 +86,7 @@ export default function MembershipPage() {
         <div style={eyebrowStyle}>云空间</div>
         <h1 style={titleStyle}>云空间</h1>
         <p style={subtitleStyle}>
-          本地离线记录免费。云空间用于同步、备份、多设备使用、公开发现和求助；上传云空间不等于公开，已有记录不会自动公开。
+          本地记录免费。云空间用于同步、备份、多设备使用、公开发现和求助；上传云空间不等于公开，已有记录不会自动公开。
         </p>
       </section>
 
@@ -132,9 +132,9 @@ export default function MembershipPage() {
         <section style={statusCardStyle}>
           <div>
             <div style={sectionLabelStyle}>尚未登录</div>
-            <h2 style={sectionTitleStyle}>注册后可继续本地离线</h2>
+            <h2 style={sectionTitleStyle}>注册后仍可使用本地项目</h2>
             <p style={mutedTextStyle}>
-              注册是推荐路径，但注册不等于上传云端。本地离线免费；开通云空间后再同步、备份和公开发现。
+              注册是推荐路径，但注册不等于上传云端。本地离线版免费；开通云空间后再同步、备份和公开发现。
             </p>
           </div>
 
@@ -151,12 +151,12 @@ export default function MembershipPage() {
 
       <section style={plansGridStyle}>
         <PlanCard
-          title="本地离线"
+          title="本地离线版"
           price="免费"
           description="只保存在这台设备，不上传云端，不进入发现页。"
           items={[
-            "注册是推荐路径，但不是本地记录硬门槛",
-            "App 私有本地存储和图片缓存",
+            "注册是推荐路径，但不是使用本地记录的前提",
+            "项目、记录和图片保存在 App 私有存储中",
             "不默认写入系统相册",
             "换设备、卸载或清理数据后可能丢失",
           ]}
@@ -257,7 +257,7 @@ export default function MembershipPage() {
       <section style={noteCardStyle}>
         <h2 style={noteTitleStyle}>使用规则</h2>
         <ul style={ruleListStyle}>
-          <li>本地离线免费，数据只保存在当前设备的 App 私有存储中。</li>
+          <li>本地离线版免费，数据只保存在当前设备的 App 私有存储中。</li>
           <li>注册不等于上传云端；开通云空间后才同步、备份和多设备使用。</li>
           <li>上传云空间不等于公开，记录可设为仅自己可见或公开发现。</li>
           <li>已有本地记录开通后默认同步为云空间私密，不会自动公开。</li>

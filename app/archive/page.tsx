@@ -172,7 +172,7 @@ export default function ArchivePage() {
       setLocalHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
       setLocalError("");
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "读取本地离线项目失败");
+      setLocalError(err instanceof Error ? err.message : "无法读取本地项目。");
     } finally {
       setLocalLoading(false);
     }
@@ -1724,13 +1724,13 @@ export default function ArchivePage() {
     <>
       {activeSource === "local" ? (
         <div style={localOtherOwnerNoticeStyle}>
-          本地子分类和分组只保存在这台设备，不会自动创建或影响云空间分类。
+          本地子分类和分组只保存在当前设备，不会自动创建或影响云空间分类。
         </div>
       ) : null}
       {showLocalArchives && currentOwnerContext?.userId && localUnownedCount > 0 && !localOwnershipPromptDismissed ? (
         <div style={localOwnershipNoticeStyle}>
           <span>
-            发现本机有未归属的本地离线项目。这些内容仍只保存在这台设备，不会自动上传云端。
+            发现这台设备上有未归属账号的本地项目。这些内容只保存在当前设备，不会自动上传云端。
           </span>
           <div style={localOwnershipActionRowStyle}>
             <button
@@ -1753,7 +1753,7 @@ export default function ArchivePage() {
       ) : null}
       {showLocalArchives && localHiddenOwnedByOtherCount > 0 ? (
         <div style={localOtherOwnerNoticeStyle}>
-          这台设备上有已归属其他账号的本地离线项目。
+          这台设备上有归属其他账号的本地项目。
         </div>
       ) : null}
     </>
@@ -1861,7 +1861,7 @@ export default function ArchivePage() {
         statsText={
           !isMobileViewport ? (
             <>
-              我的项目 {archiveCount + localArchives.length} 个 · 云空间 {archiveCount} · 本地离线 {localArchives.length} · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
+              我的项目 {archiveCount + localArchives.length} 个 · 云空间 {archiveCount} · 本地 {localArchives.length} · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
               {endedArchiveCount > 0 ? " · 已结束 " + endedArchiveCount : ""}
             </>
           ) : undefined
@@ -1869,7 +1869,7 @@ export default function ArchivePage() {
         sourceOptions={[
           { value: "all", label: "全部", count: archiveCount + localArchives.length },
           { value: "cloud", label: "云空间", count: archiveCount },
-          { value: "local", label: "本地离线", count: localArchives.length },
+          { value: "local", label: "本地", count: localArchives.length },
         ]}
         activeSource={activeSource}
         onSelectSource={handleSelectSource}
@@ -1883,7 +1883,7 @@ export default function ArchivePage() {
         {showCloudArchives ? (
           !currentOwnerContext?.userId ? (
             <div style={emptyPanelStyle}>
-              登录后可查看云空间项目；本地离线项目仍可在这台设备上查看。
+              登录后可查看云空间项目；本地项目仍可在当前设备查看。
             </div>
           ) : activeArchives.length === 0 && endedArchives.length === 0 ? (
             <div style={emptyPanelStyle}>
@@ -1907,13 +1907,13 @@ export default function ArchivePage() {
 
         {showLocalArchives ? (
           localLoading ? (
-            <div style={emptyPanelStyle}>正在读取本地离线项目...</div>
+            <div style={emptyPanelStyle}>正在读取本地项目...</div>
           ) : localError ? (
             <div style={emptyPanelStyle}>{localError}</div>
           ) : localArchives.length === 0 ? (
-            <div style={emptyPanelStyle}>还没有可查看的本地离线项目。</div>
+            <div style={emptyPanelStyle}>还没有可查看的本地项目。</div>
           ) : filteredLocalArchives.length === 0 ? (
-            <div style={emptyPanelStyle}>当前筛选下没有本地离线项目。</div>
+            <div style={emptyPanelStyle}>当前筛选下没有本地项目。</div>
           ) : (
             filteredLocalArchives.map((archive) => {
               const project = localArchiveToProjectView(archive, currentOwnerContext);

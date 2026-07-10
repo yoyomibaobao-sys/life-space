@@ -84,7 +84,7 @@ export default function RegisterPage() {
 
       router.push(`/check-email?email=${encodeURIComponent(cleanEmail)}&type=signup`);
     } catch {
-      setMessage("当前网络不稳定，暂时无法注册。你可以先本地记录，稍后再登录绑定账号。");
+      setMessage("当前网络不稳定，暂时无法注册。你可以先使用本地记录，稍后再登录绑定账号。");
     } finally {
       setLoading(false);
     }
@@ -107,7 +107,7 @@ export default function RegisterPage() {
             lineHeight: 1.7,
           }}
         >
-          注册后可以继续本地离线使用。开通云空间后，记录可同步、备份、多设备使用；上传云空间不等于公开。
+          注册后仍可使用本地项目，注册不会自动上传已有本地内容。开通云空间后，记录可同步、备份和多设备使用；上传云空间不等于公开。
         </div>
 
         <form onSubmit={handleRegister}>

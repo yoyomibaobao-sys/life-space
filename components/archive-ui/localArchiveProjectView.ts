@@ -74,7 +74,7 @@ export function localArchiveToProjectView(
         }
       : null,
     latestText: `${latestSummary} · 更新 ${updateDate}`,
-    visibilityLabel: "本地离线",
+    visibilityLabel: "本地",
     visibilityTone: "neutral",
     mobilePrimaryStatsText: [
       `记录 ${archive.record_count || 0}`,

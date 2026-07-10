@@ -612,7 +612,7 @@ function DesktopLocalRecordActions({ onDelete }: { onDelete: () => void }) {
         marginBottom: 10,
       }}
     >
-      <ArchiveStatusBadge>本地离线</ArchiveStatusBadge>
+      <ArchiveStatusBadge>本地</ArchiveStatusBadge>
       <button
         type="button"
         onClick={onDelete}
@@ -1017,7 +1017,7 @@ function MobileLocalRecordMetaRow() {
   return (
     <div style={mobileRecordMetaWrapStyle}>
       <div style={mobileRecordMetaRowStyle}>
-        <span style={mobileRecordMetaTextStyle}>本地离线</span>
+        <span style={mobileRecordMetaTextStyle}>本地</span>
       </div>
     </div>
   );
