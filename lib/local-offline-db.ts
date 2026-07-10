@@ -54,6 +54,7 @@ export type LocalArchive = {
   migration_visibility?: "private" | "public" | null;
   migrated_at?: string | null;
   note?: string | null;
+  archive_summary?: string | null;
   status: "active" | "ended";
   created_at: string;
   updated_at: string;
@@ -207,6 +208,7 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
       archive.migration_visibility === "private" ? "private" :
       null,
     migrated_at: normalizeOptionalText(archive.migrated_at),
+    archive_summary: normalizeOptionalText(archive.archive_summary),
     sync: normalizeLocalSyncMeta(archive.sync),
   };
 }
@@ -817,6 +819,7 @@ export async function updateLocalArchiveFields(
     species_name?: string | null;
     source?: string | null;
     note?: string | null;
+    archive_summary?: string | null;
   },
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
@@ -881,6 +884,10 @@ export async function updateLocalArchiveFields(
         updates.note === undefined
           ? normalizedArchive.note
           : normalizeOptionalText(updates.note),
+      archive_summary:
+        updates.archive_summary === undefined
+          ? normalizedArchive.archive_summary
+          : normalizeOptionalText(updates.archive_summary),
       updated_at: nowIso(),
     };
 
@@ -1309,6 +1316,7 @@ export async function createLocalArchive(input: {
   local_owner_email?: string | null;
   local_owner_marked_at?: string | null;
   note?: string | null;
+  archive_summary?: string | null;
 }) {
   const timestamp = nowIso();
   const category = normalizeLocalArchiveCategory(input.category);
@@ -1334,6 +1342,7 @@ export async function createLocalArchive(input: {
     migration_visibility: null,
     migrated_at: null,
     note: normalizeOptionalText(input.note),
+    archive_summary: normalizeOptionalText(input.archive_summary),
     status: "active",
     created_at: timestamp,
     updated_at: timestamp,

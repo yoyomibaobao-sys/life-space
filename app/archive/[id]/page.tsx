@@ -72,7 +72,13 @@ export default function ArchiveDetail({
   return <Content id={id} />;
 }
 
-type MobileArchiveEditableField = "title" | "category" | "name" | "source" | "note";
+type MobileArchiveEditableField =
+  | "title"
+  | "category"
+  | "name"
+  | "source"
+  | "note"
+  | "archiveSummary";
 
 function Content({ id }: { id: string }) {
   const router = useRouter();
@@ -108,6 +114,7 @@ function Content({ id }: { id: string }) {
   const [mobileArchiveName, setMobileArchiveName] = useState("");
   const [mobileArchiveSource, setMobileArchiveSource] = useState("");
   const [mobileArchiveNote, setMobileArchiveNote] = useState("");
+  const [mobileArchiveSummary, setMobileArchiveSummary] = useState("");
   const [mobileArchiveSavingField, setMobileArchiveSavingField] =
     useState<MobileArchiveEditableField | null>(null);
   const [mobileArchiveError, setMobileArchiveError] = useState("");
@@ -556,6 +563,7 @@ saveRecentArchiveBrowse({
     setMobileArchiveName(getDisplayName(archive, species) || "");
     setMobileArchiveSource(archive.source || "");
     setMobileArchiveNote(archive.note || "");
+    setMobileArchiveSummary(archive.archive_summary || "");
     setMobileSelectedSpeciesId(archive.species_id || "");
     setMobileArchiveError("");
   }, [archive, species, mobileArchiveEditingField]);
@@ -1080,6 +1088,21 @@ saveRecentArchiveBrowse({
     }
 
     await saveMobileArchivePatch("note", { note: nextNote || null });
+  }
+
+  async function saveMobileArchiveSummary() {
+    const nextSummary = mobileArchiveSummary.trim();
+    const currentSummary = activeArchive.archive_summary || "";
+
+    if (nextSummary === currentSummary) {
+      setMobileArchiveEditingField(null);
+      return;
+    }
+
+    await saveMobileArchivePatch(
+      "archiveSummary",
+      { archive_summary: nextSummary || null },
+    );
   }
 
   function handleMobileArchiveNameBlur() {
@@ -1621,6 +1644,13 @@ saveRecentArchiveBrowse({
                 setMobileArchiveNote(nextNote);
                 await saveMobileArchivePatch("note", { note: nextNote || null });
               }}
+              onSaveArchiveSummary={async (nextSummary) => {
+                setMobileArchiveSummary(nextSummary);
+                await saveMobileArchivePatch(
+                  "archiveSummary",
+                  { archive_summary: nextSummary || null },
+                );
+              }}
             />
           </div>
         ) : null}
@@ -1636,6 +1666,7 @@ saveRecentArchiveBrowse({
             archiveName={mobileArchiveName}
             source={mobileArchiveSource}
             note={mobileArchiveNote}
+            archiveSummary={mobileArchiveSummary}
             editingField={mobileArchiveEditingField}
             savingField={mobileArchiveSavingField}
             error={mobileArchiveError}
@@ -1650,6 +1681,7 @@ saveRecentArchiveBrowse({
             onArchiveNameChange={setMobileArchiveName}
             onSourceChange={setMobileArchiveSource}
             onNoteChange={setMobileArchiveNote}
+            onArchiveSummaryChange={setMobileArchiveSummary}
             onBeginEdit={beginMobileArchiveEdit}
             onSaveTitle={saveMobileArchiveTitle}
             onSaveCategory={saveMobileArchiveCategory}
@@ -1668,6 +1700,7 @@ saveRecentArchiveBrowse({
             }}
             onSaveSource={saveMobileArchiveSource}
             onSaveNote={saveMobileArchiveNote}
+            onSaveArchiveSummary={saveMobileArchiveSummary}
             onPlantSuggestionsOpenChange={setMobilePlantSuggestionsOpen}
             onSystemSuggestionsOpenChange={setMobileSystemSuggestionsOpen}
             onToggleArchiveStatus={() =>
@@ -1867,6 +1900,7 @@ function MobileArchiveProfile({
   archiveName,
   source,
   note,
+  archiveSummary,
   editingField,
   savingField,
   error,
@@ -1881,6 +1915,7 @@ function MobileArchiveProfile({
   onArchiveNameChange,
   onSourceChange,
   onNoteChange,
+  onArchiveSummaryChange,
   onBeginEdit,
   onSaveTitle,
   onSaveCategory,
@@ -1889,6 +1924,7 @@ function MobileArchiveProfile({
   onSaveSystemName,
   onSaveSource,
   onSaveNote,
+  onSaveArchiveSummary,
   onPlantSuggestionsOpenChange,
   onSystemSuggestionsOpenChange,
   onToggleArchiveStatus,
@@ -1904,6 +1940,7 @@ function MobileArchiveProfile({
   archiveName: string;
   source: string;
   note: string;
+  archiveSummary: string;
   editingField: MobileArchiveEditableField | null;
   savingField: MobileArchiveEditableField | null;
   error: string;
@@ -1918,6 +1955,7 @@ function MobileArchiveProfile({
   onArchiveNameChange: (value: string) => void;
   onSourceChange: (value: string) => void;
   onNoteChange: (value: string) => void;
+  onArchiveSummaryChange: (value: string) => void;
   onBeginEdit: (field: MobileArchiveEditableField) => void;
   onSaveTitle: () => void;
   onSaveCategory: (value?: ArchiveCategory) => void;
@@ -1926,6 +1964,7 @@ function MobileArchiveProfile({
   onSaveSystemName: (value?: string) => void;
   onSaveSource: () => void;
   onSaveNote: () => void;
+  onSaveArchiveSummary: () => void;
   onPlantSuggestionsOpenChange: (open: boolean) => void;
   onSystemSuggestionsOpenChange: (open: boolean) => void;
   onToggleArchiveStatus: () => void;
@@ -2091,6 +2130,24 @@ function MobileArchiveProfile({
           autoFocus
           placeholder="未填写"
           rows={4}
+          style={mobileArchiveTextareaStyle}
+        />
+      </MobileArchiveEditableField>
+
+      <MobileArchiveEditableField
+        label="项目摘要"
+        value={archiveSummary || "未填写"}
+        editing={editingField === "archiveSummary"}
+        canEdit={canEdit}
+        onBeginEdit={() => onBeginEdit("archiveSummary")}
+        multiline
+      >
+        <textarea
+          value={archiveSummary}
+          onChange={(event) => onArchiveSummaryChange(event.target.value)}
+          onBlur={onSaveArchiveSummary}
+          autoFocus
+          rows={1}
           style={mobileArchiveTextareaStyle}
         />
       </MobileArchiveEditableField>

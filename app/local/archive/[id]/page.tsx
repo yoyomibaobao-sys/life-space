@@ -497,6 +497,13 @@ export default function LocalArchiveDetailPage() {
       }
     }
 
+    if (change.field === "archiveSummary") {
+      const cleanSummary = change.value.trim();
+      if ((cleanSummary || null) !== (detail.archive.archive_summary || null)) {
+        updates.archive_summary = cleanSummary || null;
+      }
+    }
+
     if (Object.keys(updates).length === 0) return;
     await updateLocalArchiveProfile(updates, "本地项目档案已更新");
   }
@@ -584,6 +591,11 @@ export default function LocalArchiveDetailPage() {
       value: archive.note || "未填写",
       field: "note" as const,
     },
+    {
+      label: "项目摘要",
+      value: archive.archive_summary || "未填写",
+      field: "archiveSummary" as const,
+    },
     { label: "创建时间", value: formatDate(archive.created_at) || "暂无" },
     { label: "最近更新", value: formatDate(latestUpdate) || "暂无" },
     { label: "记录数", value: `${records.length}` },
@@ -605,6 +617,7 @@ export default function LocalArchiveDetailPage() {
     system_name: archive.system_name,
     source: "local",
     note: archive.note,
+    archive_summary: archive.archive_summary,
     help_status: null,
   };
   const localLightboxRecordIndex = localLightboxRecord
@@ -677,6 +690,7 @@ export default function LocalArchiveDetailPage() {
               systemName: archive.system_name || archive.species_name || "",
               source: archive.source || "",
               note: archive.note || "",
+              archiveSummary: archive.archive_summary || "",
             },
             onSaveField: saveLocalArchiveProfileField,
             systemNameMode: localSystemNameUsesCandidates ? "candidate" : "text",

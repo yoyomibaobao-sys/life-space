@@ -36,6 +36,7 @@ export default function ArchiveDetailHeader({
   onSaveSystemName,
   onSaveSource,
   onSaveNote,
+  onSaveArchiveSummary,
 }: {
   mode: ArchiveMode;
   archive: ArchiveDetailArchive;
@@ -59,6 +60,7 @@ export default function ArchiveDetailHeader({
   onSaveSystemName?: (value: ArchiveProfileSystemNameValue) => Promise<void> | void;
   onSaveSource?: (value: string) => Promise<void> | void;
   onSaveNote?: (value: string) => Promise<void> | void;
+  onSaveArchiveSummary?: (value: string) => Promise<void> | void;
 }) {
   const archiveCategory = normalizeArchiveCategory(archive.category);
   const createdAtText = formatDate(archive.created_at) || "暂无";
@@ -95,6 +97,11 @@ export default function ArchiveDetailHeader({
     },
     { label: "来源", value: archive.source || "未填写", field: "source" as const },
     { label: "备注", value: archive.note || "未填写", field: "note" as const },
+    {
+      label: "项目摘要",
+      value: archive.archive_summary || "未填写",
+      field: "archiveSummary" as const,
+    },
     { label: "创建时间", value: createdAtText },
     { label: "最近更新", value: latestUpdateDisplay },
     { label: "记录数", value: `${recordCount}` },
@@ -132,6 +139,12 @@ export default function ArchiveDetailHeader({
     if (change.field === "note") {
       const cleanValue = change.value.trim();
       if (cleanValue !== (archive.note || "")) await onSaveNote?.(cleanValue);
+      return;
+    }
+
+    if (change.field === "archiveSummary") {
+      const cleanValue = change.value.trim();
+      if (cleanValue !== (archive.archive_summary || "")) await onSaveArchiveSummary?.(cleanValue);
     }
   }
 
@@ -209,6 +222,7 @@ export default function ArchiveDetailHeader({
                 systemName: systemNameText,
                 source: archive.source || "",
                 note: archive.note || "",
+                archiveSummary: archive.archive_summary || "",
               },
               onSaveField: saveProfileField,
               systemNameMode,

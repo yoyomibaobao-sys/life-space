@@ -14,7 +14,8 @@ export type ArchiveProfileEditableField =
   | "category"
   | "systemName"
   | "source"
-  | "note";
+  | "note"
+  | "archiveSummary";
 
 export type ArchiveProfileRow = {
   label: string;
@@ -34,6 +35,7 @@ export type ArchiveProfileFormValues = {
   systemName: string;
   source: string;
   note: string;
+  archiveSummary: string;
 };
 
 export type ArchiveProfileSystemNameValue = {
@@ -47,7 +49,8 @@ export type ArchiveProfileFieldSave =
   | { field: "category"; value: ArchiveCategory }
   | { field: "systemName"; value: ArchiveProfileSystemNameValue }
   | { field: "source"; value: string }
-  | { field: "note"; value: string };
+  | { field: "note"; value: string }
+  | { field: "archiveSummary"; value: string };
 
 export type ArchiveProfileEditorConfig = {
   values: ArchiveProfileFormValues;
@@ -139,6 +142,7 @@ export default function ArchiveDetailHeaderView({
     if (field === "systemName") setTextDraft(profileEditor.values.systemName);
     if (field === "source") setTextDraft(profileEditor.values.source);
     if (field === "note") setTextDraft(profileEditor.values.note);
+    if (field === "archiveSummary") setTextDraft(profileEditor.values.archiveSummary);
   }
 
   function cancelFieldEdit() {
@@ -197,6 +201,8 @@ export default function ArchiveDetailHeaderView({
         await profileEditor.onSaveField({ field: "source", value: textDraft.trim() });
       } else if (activeField === "note") {
         await profileEditor.onSaveField({ field: "note", value: textDraft.trim() });
+      } else if (activeField === "archiveSummary") {
+        await profileEditor.onSaveField({ field: "archiveSummary", value: textDraft.trim() });
       }
 
       cancelFieldEdit();
@@ -319,7 +325,7 @@ export default function ArchiveDetailHeaderView({
       );
     }
 
-    if (field === "note") {
+    if (field === "note" || field === "archiveSummary") {
       return (
         <div style={cellEditorStyle}>
           <textarea
@@ -413,7 +419,10 @@ export default function ArchiveDetailHeaderView({
               const editable = Boolean(profileEditor && row.field);
               const editing = editingField === row.field;
               const primary = row.field === "title" || row.field === "category" || row.field === "systemName";
-              const fullWidth = row.field === "source" || row.field === "note";
+              const fullWidth =
+                row.field === "source" ||
+                row.field === "note" ||
+                row.field === "archiveSummary";
               const meta = !row.field;
 
               return (

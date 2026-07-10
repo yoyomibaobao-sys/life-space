@@ -97,6 +97,7 @@ function logArchiveMutationError(
       system_name: payload.system_name,
       source: payload.source,
       note: payload.note ? "[has note]" : null,
+      archive_summary: payload.archive_summary ? "[has summary]" : null,
       user_id: payload.user_id,
       is_public: payload.is_public,
     },
@@ -156,6 +157,7 @@ async function ensureCloudArchive(params: {
     system_name: params.archive.category === "plant" ? null : systemName,
     source: params.archive.source || null,
     note: params.archive.note || null,
+    archive_summary: params.archive.archive_summary || null,
     user_id: params.userId,
     is_public: isPublic,
   };
