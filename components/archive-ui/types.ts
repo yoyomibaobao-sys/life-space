@@ -40,6 +40,8 @@ export type ArchiveProjectView = {
   statusLabel?: string | null;
   visibilityLabel?: string | null;
   visibilityTone?: "public" | "private" | "neutral";
+  storageLabel?: string | null;
+  storageTone?: "cloud" | "device";
   ended?: boolean;
   href?: string;
 };

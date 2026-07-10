@@ -364,25 +364,37 @@ export default function ArchiveDetailHeaderView({
       <div style={topRowStyle}>
         <div style={titleWrapStyle}>
           {eyebrow ? <span style={eyebrowStyle}>{eyebrow}</span> : null}
-          <button
-            type="button"
-            onClick={() => {
-              setProfileOpen((open) => !open);
-              cancelFieldEdit();
-            }}
-            style={titleButtonStyle}
-            aria-expanded={profileOpen}
-          >
-            {project.title}
-          </button>
-          {project.systemName ? <span style={titleDividerStyle}> · </span> : null}
-          {project.systemName && encyclopediaHref ? (
-            <a href={encyclopediaHref} style={systemNameLinkStyle}>
-              {project.systemName}
-            </a>
-          ) : project.systemName ? (
-            <span style={systemNameStyle}>{project.systemName}</span>
-          ) : null}
+          <span style={projectIdentityStyle}>
+            <button
+              type="button"
+              onClick={() => {
+                setProfileOpen((open) => !open);
+                cancelFieldEdit();
+              }}
+              style={titleButtonStyle}
+              aria-expanded={profileOpen}
+            >
+              {project.title}
+            </button>
+            {project.systemName ? <span style={titleDividerStyle}> · </span> : null}
+            {project.systemName && encyclopediaHref ? (
+              <a href={encyclopediaHref} style={systemNameLinkStyle}>
+                {project.systemName}
+              </a>
+            ) : project.systemName ? (
+              <span style={systemNameStyle}>{project.systemName}</span>
+            ) : null}
+            {project.storageLabel ? (
+              <span
+                role="img"
+                aria-label={project.storageTone === "device" ? "本地项目" : "云端项目"}
+                title={project.storageTone === "device" ? "本地项目" : "云端项目"}
+                style={storageIconStyle(project.storageTone)}
+              >
+                <ArchiveStorageIcon tone={project.storageTone} />
+              </span>
+            ) : null}
+          </span>
         </div>
 
         <div style={statusWrapStyle}>
@@ -477,6 +489,28 @@ export default function ArchiveDetailHeaderView({
   );
 }
 
+function ArchiveStorageIcon({ tone }: { tone?: "cloud" | "device" }) {
+  const stroke = tone === "device" ? "#6f7b69" : "#2f6f3a";
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke={stroke}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flexShrink: 0 }}
+    >
+      <path d="M17.5 18H8a5 5 0 1 1 .7-9.95A6 6 0 0 1 20 10.5a3.75 3.75 0 0 1-2.5 7.5Z" />
+      {tone === "device" ? <path d="M4 4l16 16" /> : null}
+    </svg>
+  );
+}
+
 const headerStyle: CSSProperties = {
   border: "1px solid #e4e9df",
   borderRadius: 18,
@@ -508,12 +542,23 @@ const titleButtonStyle: CSSProperties = {
   background: "transparent",
   padding: 0,
   margin: 0,
+  minWidth: 0,
   textAlign: "left",
   cursor: "pointer",
   color: "#1f2d1f",
   fontSize: 21,
   fontWeight: 830,
   lineHeight: 1.2,
+  overflowWrap: "anywhere",
+};
+
+const projectIdentityStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  flexWrap: "nowrap",
+  flex: "0 1 auto",
+  minWidth: 0,
+  maxWidth: "100%",
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -532,11 +577,27 @@ const titleDividerStyle: CSSProperties = {
   fontWeight: 600,
 };
 
+function storageIconStyle(tone?: "cloud" | "device"): CSSProperties {
+  const isDevice = tone === "device";
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    marginLeft: 6,
+    color: isDevice ? "#6f7b69" : "#2f6f3a",
+    lineHeight: 1,
+  };
+}
+
 const systemNameStyle: CSSProperties = {
+  minWidth: 0,
   color: "#53694d",
   fontWeight: 740,
   fontSize: 21,
   lineHeight: 1.2,
+  overflowWrap: "anywhere",
 };
 
 const systemNameLinkStyle: CSSProperties = {

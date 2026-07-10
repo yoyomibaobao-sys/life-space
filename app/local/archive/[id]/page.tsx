@@ -562,8 +562,10 @@ export default function LocalArchiveDetailPage() {
     systemName: archive.system_name || archive.species_name || "未填写",
     subcategoryLabel: archive.subcategory,
     groupLabel: archive.group_name,
-    visibilityLabel: "本地离线",
+    visibilityLabel: null,
     visibilityTone: "neutral",
+    storageLabel: "本机",
+    storageTone: "device",
   };
   const localProfileRows = [
     {
@@ -763,7 +765,7 @@ export default function LocalArchiveDetailPage() {
               </h2>
             </div>
             <p style={transferTextStyle}>
-              转成功后，本地离线项目会从本地列表移除。
+              转成功后，本地项目会从本地列表移除。
               <br />
               手机相册和本地照片不会删除。
             </p>

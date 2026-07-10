@@ -85,6 +85,8 @@ export default function ArchiveDetailHeader({
     footerItems: [`创建于 ${createdAtText}`],
     visibilityLabel: null,
     visibilityTone: archive.is_public ? ("public" as const) : ("private" as const),
+    storageLabel: "云端",
+    storageTone: "cloud" as const,
   };
 
   const profileRows = [
