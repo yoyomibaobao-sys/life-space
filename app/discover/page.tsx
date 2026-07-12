@@ -22,11 +22,12 @@ import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
-import { fetchDiscoveryProjectCandidates } from "@/lib/discover-project-feed";
-import type {
-  DiscoveryProjectCursor,
-  DiscoveryProjectFeedItem,
-} from "@/lib/discover-project-types";
+import {
+  createInitialDiscoveryDiversityState,
+  fetchDiverseDiscoveryProjectBatch,
+  type DiscoveryDiverseProjectFeedState,
+} from "@/lib/discover-diverse-project-feed";
+import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import { type FilterMode, filterOptions } from "@/lib/discover-types";
 import { loadFollowPageData } from "@/lib/follow-data";
 import type {
@@ -145,7 +146,10 @@ async function loadFollowedUserPublicArchives(userCards: FollowUserCard[]) {
 export default function DiscoverPage() {
   const [items, setItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
-  const [cursor, setCursor] = useState<DiscoveryProjectCursor | null>(null);
+  const [diversityState, setDiversityState] =
+    useState<DiscoveryDiverseProjectFeedState>(
+      createInitialDiscoveryDiversityState
+    );
   const [hasMore, setHasMore] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -319,11 +323,11 @@ export default function DiscoverPage() {
   const loadProjectPage = useCallback(
     async ({
       mode,
-      nextCursor,
+      nextDiversityState,
       replace,
     }: {
       mode: FilterMode;
-      nextCursor: DiscoveryProjectCursor | null;
+      nextDiversityState: DiscoveryDiverseProjectFeedState;
       replace: boolean;
     }) => {
       if (!replace && loadingMoreRef.current) return;
@@ -335,6 +339,7 @@ export default function DiscoverPage() {
         setLoadingMore(false);
         setInitialError(false);
         setLoadMoreError(false);
+        setDiversityState(nextDiversityState);
       } else {
         loadingMoreRef.current = true;
         setLoadingMore(true);
@@ -342,11 +347,11 @@ export default function DiscoverPage() {
       }
 
       try {
-        const result = await fetchDiscoveryProjectCandidates({
+        const result = await fetchDiverseDiscoveryProjectBatch({
           category:
             mode === "all" || mode === "help" ? null : mode,
           helpOnly: mode === "help",
-          cursor: nextCursor,
+          state: nextDiversityState,
           limit: DISCOVERY_PROJECT_PAGE_SIZE,
         });
 
@@ -371,7 +376,7 @@ export default function DiscoverPage() {
           );
         }
 
-        setCursor(result.nextCursor);
+        setDiversityState(result.state);
         setHasMore(result.hasMore);
       } catch (error) {
         if (requestSequence !== requestSequenceRef.current) return;
@@ -397,9 +402,14 @@ export default function DiscoverPage() {
 
     setFilterMode(mode);
     setItems([]);
-    setCursor(null);
+    const initialDiversityState = createInitialDiscoveryDiversityState();
+    setDiversityState(initialDiversityState);
     setHasMore(true);
-    void loadProjectPage({ mode, nextCursor: null, replace: true });
+    void loadProjectPage({
+      mode,
+      nextDiversityState: initialDiversityState,
+      replace: true,
+    });
   }
 
   useEffect(() => {
@@ -449,7 +459,11 @@ export default function DiscoverPage() {
   }, []);
 
   useEffect(() => {
-    void loadProjectPage({ mode: "all", nextCursor: null, replace: true });
+    void loadProjectPage({
+      mode: "all",
+      nextDiversityState: createInitialDiscoveryDiversityState(),
+      replace: true,
+    });
   }, [loadProjectPage]);
 
   useEffect(() => {
@@ -461,12 +475,11 @@ export default function DiscoverPage() {
           entries[0].isIntersecting &&
           !loadingMoreRef.current &&
           hasMore &&
-          cursor &&
           items.length > 0
         ) {
           void loadProjectPage({
             mode: filterMode,
-            nextCursor: cursor,
+            nextDiversityState: diversityState,
             replace: false,
           });
         }
@@ -476,7 +489,7 @@ export default function DiscoverPage() {
 
     observer.observe(loaderRef.current);
     return () => observer.disconnect();
-  }, [cursor, filterMode, hasMore, items.length, loadProjectPage]);
+  }, [diversityState, filterMode, hasMore, items.length, loadProjectPage]);
 
   const showMobileFollowing = isMobileViewport && mobileTab === "following";
 
@@ -546,15 +559,14 @@ export default function DiscoverPage() {
             onRetryInitial={() => {
               void loadProjectPage({
                 mode: filterMode,
-                nextCursor: null,
+                nextDiversityState: createInitialDiscoveryDiversityState(),
                 replace: true,
               });
             }}
             onRetryMore={() => {
-              if (!cursor) return;
               void loadProjectPage({
                 mode: filterMode,
-                nextCursor: cursor,
+                nextDiversityState: diversityState,
                 replace: false,
               });
             }}
