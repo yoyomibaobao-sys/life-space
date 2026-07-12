@@ -145,7 +145,7 @@ async function resolveDiscoveryProjectMediaUrls(
   });
 }
 
-async function enrichDiscoveryProjectMedia(
+export async function enrichDiscoveryProjectMedia(
   items: DiscoveryProjectFeedItem[]
 ): Promise<DiscoveryProjectFeedItem[]> {
   const recordIds = Array.from(
