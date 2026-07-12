@@ -1,29 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
-import { DiscoverEmptyState } from "@/components/discover/DiscoverEmptyState";
 import { DiscoverFilterBar } from "@/components/discover/DiscoverFilterBar";
 import { DiscoverHeader } from "@/components/discover/DiscoverHeader";
-import { DiscoverHelpList } from "@/components/discover/DiscoverHelpList";
-import { DiscoverUserSections } from "@/components/discover/DiscoverUserSections";
+import { DiscoverProjectGrid } from "@/components/discover/DiscoverProjectGrid";
 import FollowProjectList from "@/components/follow/FollowProjectList";
 import UserAvatar from "@/components/social/UserAvatar";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
-import { fetchDiscoverFeedRange, mergeDiscoverFeedItems } from "@/lib/discover-feed-shared";
-import {
-  type FeedItem,
-  type FilterMode,
-  RECORD_BATCH_SIZE,
-  filterOptions,
-} from "@/lib/discover-types";
-import { buildUserSections, compareArchiveDisplayOrder } from "@/lib/discover-utils";
+import { fetchDiscoveryProjectCandidates } from "@/lib/discover-project-feed";
+import type {
+  DiscoveryProjectCursor,
+  DiscoveryProjectFeedItem,
+} from "@/lib/discover-project-types";
+import { type FilterMode, filterOptions } from "@/lib/discover-types";
 import { loadFollowPageData } from "@/lib/follow-data";
 import type {
   FollowProjectCard,
@@ -40,6 +44,17 @@ import {
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
 type MobileDiscoverTab = "feed" | "following";
+
+const DISCOVERY_PROJECT_PAGE_SIZE = 40;
+
+function dedupeDiscoveryProjects(items: DiscoveryProjectFeedItem[]) {
+  const seenArchiveIds = new Set<string>();
+  return items.filter((item) => {
+    if (seenArchiveIds.has(item.archive_id)) return false;
+    seenArchiveIds.add(item.archive_id);
+    return true;
+  });
+}
 
 type FollowedUserArchiveRow = {
   id: string;
@@ -128,12 +143,14 @@ async function loadFollowedUserPublicArchives(userCards: FollowUserCard[]) {
 }
 
 export default function DiscoverPage() {
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [cursor, setCursor] = useState<DiscoveryProjectCursor | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const [expandedUserIds, setExpandedUserIds] = useState<string[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [initialError, setInitialError] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileDiscoverTab>("feed");
   const [followLoading, setFollowLoading] = useState(false);
@@ -153,14 +170,10 @@ export default function DiscoverPage() {
   const [userSubmitting, setUserSubmitting] = useState(false);
 
   const loaderRef = useRef<HTMLDivElement | null>(null);
-  const loadingRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const requestSequenceRef = useRef(0);
   const followSearchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const sections = useMemo(() => buildUserSections(items), [items]);
-  const helpStreamItems = useMemo(
-    () => [...items].sort(compareArchiveDisplayOrder),
-    [items]
-  );
   const filteredFollowProjectCards = useMemo(() => {
     const search = followKeyword.trim().toLowerCase();
 
@@ -303,69 +316,90 @@ export default function DiscoverPage() {
     showToast("已取消关注用户");
   }
 
-  async function goUser(userId: string) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const loadProjectPage = useCallback(
+    async ({
+      mode,
+      nextCursor,
+      replace,
+    }: {
+      mode: FilterMode;
+      nextCursor: DiscoveryProjectCursor | null;
+      replace: boolean;
+    }) => {
+      if (!replace && loadingMoreRef.current) return;
 
-    if (user?.id === userId) {
-      window.location.href = "/archive";
-    } else {
-      window.location.href = `/user/${userId}`;
-    }
-  }
+      const requestSequence = ++requestSequenceRef.current;
+      if (replace) {
+        loadingMoreRef.current = false;
+        setInitialLoading(true);
+        setLoadingMore(false);
+        setInitialError(false);
+        setLoadMoreError(false);
+      } else {
+        loadingMoreRef.current = true;
+        setLoadingMore(true);
+        setLoadMoreError(false);
+      }
 
-  function toggleUserSection(userId: string) {
-    setExpandedUserIds((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
-    );
-  }
+      try {
+        const result = await fetchDiscoveryProjectCandidates({
+          category:
+            mode === "all" || mode === "help" ? null : mode,
+          helpOnly: mode === "help",
+          cursor: nextCursor,
+          limit: DISCOVERY_PROJECT_PAGE_SIZE,
+        });
 
-  async function load(pageIndex = 0, mode: FilterMode = filterMode) {
-    if (loadingRef.current) return;
-    if (!hasMore && pageIndex !== 0) return;
+        if (requestSequence !== requestSequenceRef.current) return;
 
-    loadingRef.current = true;
-    setLoading(true);
+        if (result.error) {
+          console.error("discover project feed load failed", {
+            code: result.error.code,
+            message: result.error.message,
+            phase: replace ? "initial" : "more",
+          });
+          if (replace) setInitialError(true);
+          else setLoadMoreError(true);
+          return;
+        }
 
-    const from = pageIndex * RECORD_BATCH_SIZE;
-    const to = from + RECORD_BATCH_SIZE - 1;
+        if (replace) {
+          setItems(dedupeDiscoveryProjects(result.items));
+        } else {
+          setItems((currentItems) =>
+            dedupeDiscoveryProjects([...currentItems, ...result.items])
+          );
+        }
 
-    const { items: nextItems, hasError } = await fetchDiscoverFeedRange({
-      from,
-      to,
-      category: mode,
-    });
-
-    if (hasError) {
-      setLoading(false);
-      loadingRef.current = false;
-      return;
-    }
-
-    if (pageIndex === 0) {
-      setItems(nextItems);
-      setExpandedUserIds([]);
-    } else {
-      setItems((prev) => mergeDiscoverFeedItems(prev, nextItems));
-    }
-
-    setHasMore(nextItems.length >= RECORD_BATCH_SIZE);
-    setLoading(false);
-    loadingRef.current = false;
-  }
+        setCursor(result.nextCursor);
+        setHasMore(result.hasMore);
+      } catch (error) {
+        if (requestSequence !== requestSequenceRef.current) return;
+        console.error("discover project feed request failed", {
+          message: error instanceof Error ? error.message : "Unknown error",
+          phase: replace ? "initial" : "more",
+        });
+        if (replace) setInitialError(true);
+        else setLoadMoreError(true);
+      } finally {
+        if (requestSequence === requestSequenceRef.current) {
+          setInitialLoading(false);
+          setLoadingMore(false);
+          loadingMoreRef.current = false;
+        }
+      }
+    },
+    []
+  );
 
   function changeFilter(mode: FilterMode) {
     if (mode === filterMode) return;
 
     setFilterMode(mode);
     setItems([]);
-    setPage(0);
+    setCursor(null);
     setHasMore(true);
-    setExpandedUserIds([]);
-    load(0, mode);
+    void loadProjectPage({ mode, nextCursor: null, replace: true });
   }
 
   useEffect(() => {
@@ -415,19 +449,8 @@ export default function DiscoverPage() {
   }, []);
 
   useEffect(() => {
-    if (isMobileViewport && filterMode === "help") {
-      changeFilter("all");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMobileViewport, filterMode]);
-
-  useEffect(() => {
-    setItems([]);
-    setPage(0);
-    setHasMore(true);
-    load(0, filterMode);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void loadProjectPage({ mode: "all", nextCursor: null, replace: true });
+  }, [loadProjectPage]);
 
   useEffect(() => {
     if (!loaderRef.current) return;
@@ -436,28 +459,25 @@ export default function DiscoverPage() {
       (entries) => {
         if (
           entries[0].isIntersecting &&
-          !loadingRef.current &&
+          !loadingMoreRef.current &&
           hasMore &&
+          cursor &&
           items.length > 0
         ) {
-          const nextPage = page + 1;
-          setPage(nextPage);
-          load(nextPage, filterMode);
+          void loadProjectPage({
+            mode: filterMode,
+            nextCursor: cursor,
+            replace: false,
+          });
         }
       },
-      { threshold: 0.5 }
+      { rootMargin: "240px 0px", threshold: 0.01 }
     );
 
     observer.observe(loaderRef.current);
     return () => observer.disconnect();
-  }, [page, hasMore, items.length, filterMode]);
+  }, [cursor, filterMode, hasMore, items.length, loadProjectPage]);
 
-  const activeFilterLabel =
-    filterOptions.find((item) => item.value === filterMode)?.label || "全部";
-  const isEmpty = !loading && (filterMode === "help" ? helpStreamItems.length === 0 : sections.length === 0);
-  const visibleFilterOptions = isMobileViewport
-    ? filterOptions.filter((item) => item.value !== "help")
-    : filterOptions;
   const showMobileFollowing = isMobileViewport && mobileTab === "following";
 
   return (
@@ -507,49 +527,38 @@ export default function DiscoverPage() {
         />
       ) : (
         <>
-      <DiscoverFilterBar
-        options={visibleFilterOptions}
-        activeMode={filterMode}
-        onChange={changeFilter}
-        compactMobile={isMobileViewport}
-      />
+          <DiscoverFilterBar
+            options={filterOptions}
+            activeMode={filterMode}
+            onChange={changeFilter}
+            compactMobile={isMobileViewport}
+          />
 
-      {filterMode === "help" ? (
-        <DiscoverHelpList items={helpStreamItems} />
-      ) : (
-        <DiscoverUserSections
-          sections={sections}
-          expandedUserIds={expandedUserIds}
-          onToggle={toggleUserSection}
-          onGoUser={goUser}
-          compactMobile={isMobileViewport}
-        />
-      )}
-
-      {isEmpty ? (
-        <DiscoverEmptyState
-          filterMode={filterMode}
-          activeFilterLabel={activeFilterLabel}
-        />
-      ) : null}
-
-      <div ref={loaderRef} style={{ height: 44, textAlign: "center" }}>
-        {loading ? (
-          <span style={{ color: "#8a998a", fontSize: 13 }}>加载中...</span>
-        ) : hasMore ? (
-          ""
-        ) : filterMode === "help" ? (
-          helpStreamItems.length > 0 ? (
-            <span style={{ color: "#aaa", fontSize: 12 }}>已到底</span>
-          ) : (
-            ""
-          )
-        ) : sections.length > 0 ? (
-          <span style={{ color: "#aaa", fontSize: 12 }}>已到底</span>
-        ) : (
-          ""
-        )}
-      </div>
+          <DiscoverProjectGrid
+            items={items}
+            helpOnly={filterMode === "help"}
+            initialLoading={initialLoading}
+            loadingMore={loadingMore}
+            initialError={initialError}
+            loadMoreError={loadMoreError}
+            hasMore={hasMore}
+            loaderRef={loaderRef}
+            onRetryInitial={() => {
+              void loadProjectPage({
+                mode: filterMode,
+                nextCursor: null,
+                replace: true,
+              });
+            }}
+            onRetryMore={() => {
+              if (!cursor) return;
+              void loadProjectPage({
+                mode: filterMode,
+                nextCursor: cursor,
+                replace: false,
+              });
+            }}
+          />
         </>
       )}
 

@@ -16,7 +16,7 @@ export function DiscoverFilterBar({
       style={{
         display: compactMobile ? "grid" : "flex",
         gridTemplateColumns: compactMobile
-          ? "repeat(5, minmax(0, 1fr))"
+          ? `repeat(${options.length > 5 ? 3 : options.length}, minmax(0, 1fr))`
           : undefined,
         gap: compactMobile ? 6 : 8,
         marginBottom: compactMobile ? 10 : 14,
