@@ -13,12 +13,12 @@ import {
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
+import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchiveDetailHeaderView, {
   type ArchiveProfileFieldSave,
 } from "@/components/archive-ui/ArchiveDetailHeaderView";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
-import ArchiveTimeline from "@/components/archive-ui/ArchiveTimeline";
 import { supabase } from "@/lib/supabase";
 import {
   syncLocalArchiveToCloud,
@@ -26,10 +26,13 @@ import {
 } from "@/lib/local-to-cloud-sync";
 import type {
   ArchiveDetailArchive,
+  ArchiveCycle,
   LightboxImage,
   RecordItem,
 } from "@/lib/archive-detail-types";
 import type { MediaItem } from "@/lib/domain-types";
+import { formatLocalCycleDate, isLocalDateBefore } from "@/lib/archive-cycle-dates";
+import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import {
   getSystemNameCandidates,
   type SystemNameCandidate,
@@ -39,10 +42,14 @@ import type {
 } from "@/components/archive-ui/types";
 import {
   createLocalRecord,
+  createLocalArchiveCycle,
+  deleteLocalArchiveCycle,
   deleteLocalArchive,
   deleteLocalRecord,
+  endLocalArchiveCycle,
   getLocalArchiveDetail,
   markLocalArchiveForOwner,
+  updateLocalArchiveCycleDates,
   updateLocalArchiveFields,
   updateLocalRecordFields,
   type LocalArchiveOwnerContext,
@@ -114,6 +121,9 @@ export default function LocalArchiveDetailPage() {
   const [timeMode, setTimeMode] = useState<"now" | "custom">("now");
   const [customTime, setCustomTime] = useState("");
   const [saving, setSaving] = useState(false);
+  const [cycleBusy, setCycleBusy] = useState(false);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
+  const [endSelectedCycleAfterSave, setEndSelectedCycleAfterSave] = useState(false);
   const [addRecordOpen, setAddRecordOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<LocalRecordWithImages | null>(null);
   const [localRecordItems, setLocalRecordItems] = useState<RecordItem[]>([]);
@@ -134,6 +144,7 @@ export default function LocalArchiveDetailPage() {
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
   const localRecordObjectUrlsRef = useRef<string[]>([]);
+  const cycleTerminology = getArchiveCycleTerminology(detail?.archive.category);
 
   const selectedSizeLabel = useMemo(() => {
     const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -214,6 +225,7 @@ export default function LocalArchiveDetailPage() {
 
     return records.map((record) => ({
       id: record.id,
+      cycle_id: record.cycle_id || null,
       note: record.note,
       record_time: record.record_time,
       visibility: "private",
@@ -286,10 +298,32 @@ export default function LocalArchiveDetailPage() {
       return;
     }
 
+    const activeCycles = [...(detail?.archive.cycles || [])]
+      .filter((cycle) => cycle.status === "active")
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    const defaultCycleId = activeCycles[0]?.id || "";
+    const effectiveCycleId =
+      selectedCycleId === undefined
+        ? defaultCycleId
+        : selectedCycleId === "" || activeCycles.some((cycle) => cycle.id === selectedCycleId)
+          ? selectedCycleId
+          : defaultCycleId;
+    const selectedActiveCycle = activeCycles.find((cycle) => cycle.id === effectiveCycleId) || null;
+    if (
+      endSelectedCycleAfterSave &&
+      selectedActiveCycle &&
+      isLocalDateBefore(recordTime, selectedActiveCycle.started_at)
+    ) {
+      showToast(cycleTerminology.recordDateBeforeStartMessage);
+      return;
+    }
+
     setSaving(true);
     try {
       await createLocalRecord({
         archive_id: archiveId,
+        cycle_id: effectiveCycleId || null,
+        end_cycle_after_record: endSelectedCycleAfterSave && Boolean(effectiveCycleId),
         note,
         image_files: selectedFiles,
         record_time: recordTime.toISOString(),
@@ -298,6 +332,8 @@ export default function LocalArchiveDetailPage() {
       setSelectedFiles([]);
       setTimeMode("now");
       setCustomTime("");
+      setSelectedCycleId(undefined);
+      setEndSelectedCycleAfterSave(false);
       setAddRecordOpen(false);
       showToast("本地记录已保存");
       await loadDetail();
@@ -305,6 +341,81 @@ export default function LocalArchiveDetailPage() {
       showToast(err instanceof Error ? err.message : "保存本地记录失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function startLocalCycle(startedAt: string) {
+    if (!archiveId || cycleBusy) return;
+    setCycleBusy(true);
+    try {
+      const cycle = await createLocalArchiveCycle(archiveId, startedAt, ownerContext);
+      showToast(cycleTerminology.startSuccess(cycle.cycle_no));
+      await loadDetail();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : cycleTerminology.startFailure);
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
+  async function endLocalCycle(cycle: ArchiveCycle, endedAt: string) {
+    if (!archiveId || cycleBusy) return;
+    setCycleBusy(true);
+    try {
+      await endLocalArchiveCycle(archiveId, cycle.id, endedAt, ownerContext);
+      showToast(cycleTerminology.endSuccess(cycle.cycle_no));
+      await loadDetail();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : cycleTerminology.endFailure);
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
+  async function updateLocalCycleDates(
+    cycle: ArchiveCycle,
+    dates: { startedAt: string; endedAt: string | null }
+  ) {
+    if (!archiveId || cycleBusy) return;
+    setCycleBusy(true);
+    try {
+      await updateLocalArchiveCycleDates(
+        archiveId,
+        cycle.id,
+        { started_at: dates.startedAt, ended_at: dates.endedAt },
+        ownerContext
+      );
+      showToast(cycleTerminology.datesUpdated(cycle.cycle_no));
+      await loadDetail();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "调整日期失败，请稍后重试。");
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
+  async function deleteLocalCycle(cycle: ArchiveCycle) {
+    if (!archiveId || cycleBusy) return false;
+    setCycleBusy(true);
+    try {
+      const movedRecordCount = await deleteLocalArchiveCycle(
+        archiveId,
+        cycle.id,
+        ownerContext
+      );
+      if (selectedCycleId === cycle.id) {
+        setSelectedCycleId(undefined);
+        setEndSelectedCycleAfterSave(false);
+      }
+      showToast(cycleTerminology.deleteSuccess(cycle.cycle_no, movedRecordCount));
+      await loadDetail();
+      return true;
+    } catch (err) {
+      console.error("delete local archive cycle failed", err);
+      showToast("删除失败，请稍后重试。");
+      return false;
+    } finally {
+      setCycleBusy(false);
     }
   }
 
@@ -544,6 +655,24 @@ export default function LocalArchiveDetailPage() {
   }
 
   const { archive, records } = detail;
+  const cycles = archive.cycles || [];
+  const activeCycles = cycles
+    .filter((cycle) => cycle.status === "active")
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+  const defaultCycleId = activeCycles[0]?.id || "";
+  const effectiveCycleId =
+    selectedCycleId === undefined
+      ? defaultCycleId
+      : selectedCycleId === "" || activeCycles.some((cycle) => cycle.id === selectedCycleId)
+        ? selectedCycleId
+        : defaultCycleId;
+  const selectedActiveCycle = activeCycles.find((cycle) => cycle.id === effectiveCycleId) || null;
+  const cycleOptions = [...cycles]
+    .sort((a, b) => b.cycle_no - a.cycle_no)
+    .map((cycle) => ({
+      id: cycle.id,
+      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)}（${cycle.status === "active" ? "进行中" : "已结束"} · ${formatLocalCycleDate(cycle.started_at)}）`,
+    }));
   const startTime = records.length
     ? records[records.length - 1]?.record_time || archive.created_at
     : archive.created_at;
@@ -833,6 +962,38 @@ export default function LocalArchiveDetailPage() {
               style={recordInputStyle}
             />
 
+            {activeCycles.length > 0 ? (
+              <label style={recordCycleSelectLabelStyle}>
+                <span>{cycleTerminology.assignLabel}</span>
+                <select
+                  value={effectiveCycleId}
+                  onChange={(event) => {
+                    setSelectedCycleId(event.target.value);
+                    if (!event.target.value) setEndSelectedCycleAfterSave(false);
+                  }}
+                  style={recordSelectStyle}
+                >
+                  {activeCycles.map((cycle) => (
+                    <option key={cycle.id} value={cycle.id}>
+                      {cycleTerminology.cycleLabel(cycle.cycle_no)}（{formatLocalCycleDate(cycle.started_at)}开始）
+                    </option>
+                  ))}
+                  <option value="">{cycleTerminology.unassignedOption}</option>
+                </select>
+              </label>
+            ) : null}
+
+            {selectedActiveCycle ? (
+              <label style={recordEndCycleLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={endSelectedCycleAfterSave}
+                  onChange={(event) => setEndSelectedCycleAfterSave(event.target.checked)}
+                />
+                {cycleTerminology.selectedEndAction}
+              </label>
+            ) : null}
+
             <div style={recordControlRowStyle}>
               <select
                 value={timeMode}
@@ -910,8 +1071,23 @@ export default function LocalArchiveDetailPage() {
           </form>
       </ArchiveRecordComposer>
 
-      <ArchiveTimeline id="archive-records" mobileMode={isMobileViewport}>
-        {localRecordItems.map((record, index) => (
+      <ArchiveCycleTimeline
+        cycles={cycles}
+        records={localRecordItems}
+        category={archive.category}
+        mobileMode={isMobileViewport}
+        canManage
+        busy={cycleBusy}
+        onStartCycle={startLocalCycle}
+        onEndCycle={endLocalCycle}
+        onUpdateCycleDates={updateLocalCycleDates}
+        onDeleteCycle={deleteLocalCycle}
+        emptyState={
+          <div style={emptyRecordsStyle}>
+            <div>还没有本地记录，添加第一条记录</div>
+          </div>
+        }
+        renderRecord={(record, index) => (
             <ArchiveRecordCard
               key={record.id}
               variant="local"
@@ -945,16 +1121,28 @@ export default function LocalArchiveDetailPage() {
                 const target = records.find((item) => item.id === recordId);
                 if (target) setRecordToDelete(target);
               }}
+              cycleOptions={cycleOptions}
+              onCycleChange={async (recordId, cycleId) => {
+                try {
+                  await updateLocalRecordFields(recordId, { cycle_id: cycleId });
+                  showToast(
+                    cycleId
+                      ? cycleTerminology.recordAssignedSuccess
+                      : cycleTerminology.recordUnassignedSuccess
+                  );
+                  await loadDetail();
+                } catch (err) {
+                  showToast(
+                    err instanceof Error
+                      ? err.message
+                      : `${cycleTerminology.adjustLabel}失败，请稍后重试。`
+                  );
+                }
+              }}
               isMobileViewport={isMobileViewport}
             />
-        ))}
-
-        {records.length === 0 ? (
-          <div style={emptyRecordsStyle}>
-            <div>还没有本地记录，添加第一条记录</div>
-          </div>
-        ) : null}
-      </ArchiveTimeline>
+        )}
+      />
 
       {localLightboxImages.length > 0 ? (
         <ArchiveLightbox
@@ -1422,6 +1610,24 @@ const sectionTitleStyle = {
 const recordFormStyle = {
   marginTop: 0,
   display: "block",
+} satisfies CSSProperties;
+
+const recordCycleSelectLabelStyle = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 8,
+  color: "#5b6b58",
+  fontSize: 13,
+} satisfies CSSProperties;
+
+const recordEndCycleLabelStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 8,
+  color: "#5b6b58",
+  fontSize: 13,
 } satisfies CSSProperties;
 
 const recordInputStyle = {

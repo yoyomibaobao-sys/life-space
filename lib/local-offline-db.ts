@@ -1,4 +1,5 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
 
 const DB_NAME = "life-space-local-offline";
 const DB_VERSION = 6;
@@ -30,6 +31,17 @@ export type LocalSyncMeta = {
 
 export type LocalCloudMigrationStatus = "migrating" | "failed" | "migrated";
 
+export type LocalArchiveCycle = {
+  id: string;
+  archive_id: string;
+  cycle_no: number;
+  status: "active" | "ended";
+  started_at: string;
+  ended_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type LocalArchive = {
   id: string;
   title: string;
@@ -55,6 +67,7 @@ export type LocalArchive = {
   migrated_at?: string | null;
   note?: string | null;
   archive_summary?: string | null;
+  cycles?: LocalArchiveCycle[];
   status: "active" | "ended";
   created_at: string;
   updated_at: string;
@@ -65,6 +78,7 @@ export type LocalArchive = {
 export type LocalRecord = {
   id: string;
   archive_id: string;
+  cycle_id?: string | null;
   note: string;
   record_time: string;
   created_at: string;
@@ -160,6 +174,30 @@ function normalizeLocalArchiveCategory(value?: string | null): ArchiveCategory {
     : DEFAULT_LOCAL_ARCHIVE_CATEGORY;
 }
 
+function normalizeLocalArchiveCycle(
+  cycle: LocalArchiveCycle,
+  archiveId: string
+): LocalArchiveCycle | null {
+  const cycleNo = Number(cycle?.cycle_no);
+  if (!cycle?.id || !Number.isInteger(cycleNo) || cycleNo <= 0) return null;
+
+  const status = cycle.status === "ended" ? "ended" : "active";
+  const startedAt = normalizeOptionalText(cycle.started_at) || nowIso();
+  const endedAt = status === "ended" ? normalizeOptionalText(cycle.ended_at) : null;
+  if (status === "ended" && !endedAt) return null;
+
+  return {
+    ...cycle,
+    archive_id: archiveId,
+    cycle_no: cycleNo,
+    status,
+    started_at: startedAt,
+    ended_at: endedAt,
+    created_at: normalizeOptionalText(cycle.created_at) || startedAt,
+    updated_at: normalizeOptionalText(cycle.updated_at) || startedAt,
+  };
+}
+
 function normalizeOptionalText(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed || null;
@@ -209,6 +247,12 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
       null,
     migrated_at: normalizeOptionalText(archive.migrated_at),
     archive_summary: normalizeOptionalText(archive.archive_summary),
+    cycles: Array.isArray(archive.cycles)
+      ? archive.cycles
+          .map((cycle) => normalizeLocalArchiveCycle(cycle, archive.id))
+          .filter((cycle): cycle is LocalArchiveCycle => Boolean(cycle))
+          .sort((a, b) => a.cycle_no - b.cycle_no)
+      : [],
     sync: normalizeLocalSyncMeta(archive.sync),
   };
 }
@@ -982,6 +1026,7 @@ export async function updateLocalRecordFields(
   updates: {
     note?: string | null;
     record_time?: string | null;
+    cycle_id?: string | null;
   }
 ) {
   const db = await openLocalDb();
@@ -1002,6 +1047,24 @@ export async function updateLocalRecordFields(
     }
 
     const timestamp = nowIso();
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(record.archive_id)
+    );
+    const normalizedArchive = archive ? normalizeLocalArchive(archive) : null;
+    const nextCycleId =
+      updates.cycle_id === undefined
+        ? record.cycle_id || null
+        : normalizeOptionalText(updates.cycle_id);
+
+    if (
+      nextCycleId &&
+      !normalizedArchive?.cycles?.some((cycle) => cycle.id === nextCycleId)
+    ) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("选择的周期不属于这个本地项目。");
+    }
+
     const nextRecord: LocalRecord = {
       ...record,
       note:
@@ -1012,17 +1075,15 @@ export async function updateLocalRecordFields(
         updates.record_time === undefined
           ? record.record_time
           : normalizeOptionalText(updates.record_time) || record.record_time,
+      cycle_id: nextCycleId,
       updated_at: timestamp,
     };
 
     await requestToPromise(recordStore.put(nextRecord));
-    const archive = await requestToPromise<LocalArchive | undefined>(
-      archiveStore.get(record.archive_id)
-    );
-    if (archive) {
+    if (normalizedArchive) {
       await requestToPromise(
         archiveStore.put({
-          ...normalizeLocalArchive(archive),
+          ...normalizedArchive,
           updated_at: timestamp,
         })
       );
@@ -1343,6 +1404,7 @@ export async function createLocalArchive(input: {
     migrated_at: null,
     note: normalizeOptionalText(input.note),
     archive_summary: normalizeOptionalText(input.archive_summary),
+    cycles: [],
     status: "active",
     created_at: timestamp,
     updated_at: timestamp,
@@ -1488,8 +1550,289 @@ async function prepareLocalImage(file: File, sortOrder: number) {
   }
 }
 
+export async function createLocalArchiveCycle(
+  archiveId: string,
+  startedAt: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(store.get(archiveId));
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const normalizedStartedAt = normalizeOptionalText(startedAt);
+    if (!normalizedStartedAt || Number.isNaN(new Date(normalizedStartedAt).getTime())) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("请选择有效的开始日期。");
+    }
+
+    const cycles = normalizedArchive.cycles || [];
+    const timestamp = nowIso();
+    const cycle: LocalArchiveCycle = {
+      id: createId("local_cycle"),
+      archive_id: archiveId,
+      cycle_no: cycles.reduce((max, item) => Math.max(max, item.cycle_no), 0) + 1,
+      status: "active",
+      started_at: normalizedStartedAt,
+      ended_at: null,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+
+    await requestToPromise(
+      store.put({
+        ...normalizedArchive,
+        cycles: [...cycles, cycle],
+        updated_at: timestamp,
+      } satisfies LocalArchive)
+    );
+    await done;
+    return cycle;
+  } finally {
+    db.close();
+  }
+}
+
+export async function endLocalArchiveCycle(
+  archiveId: string,
+  cycleId: string,
+  endedAt: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(store.get(archiveId));
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const cycles = normalizedArchive.cycles || [];
+    const target = cycles.find((cycle) => cycle.id === cycleId);
+    if (!target || target.status !== "active") {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个周期已经结束或不存在。");
+    }
+
+    const normalizedEndedAt = normalizeOptionalText(endedAt);
+    if (
+      !normalizedEndedAt ||
+      Number.isNaN(new Date(normalizedEndedAt).getTime()) ||
+      new Date(normalizedEndedAt).getTime() < new Date(target.started_at).getTime()
+    ) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("结束日期不能早于开始日期。");
+    }
+
+    const timestamp = nowIso();
+    const nextCycles = cycles.map((cycle) =>
+      cycle.id === cycleId
+        ? {
+            ...cycle,
+            status: "ended" as const,
+            ended_at: normalizedEndedAt,
+            updated_at: timestamp,
+          }
+        : cycle
+    );
+
+    await requestToPromise(
+      store.put({
+        ...normalizedArchive,
+        cycles: nextCycles,
+        updated_at: timestamp,
+      } satisfies LocalArchive)
+    );
+    await done;
+    return nextCycles.find((cycle) => cycle.id === cycleId) || null;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalArchiveCycleDates(
+  archiveId: string,
+  cycleId: string,
+  dates: { started_at: string; ended_at: string | null },
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(store.get(archiveId));
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const cycles = normalizedArchive.cycles || [];
+    const target = cycles.find((cycle) => cycle.id === cycleId);
+    if (!target) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个周期不存在。");
+    }
+
+    const startedAt = normalizeOptionalText(dates.started_at);
+    const endedAt = target.status === "ended" ? normalizeOptionalText(dates.ended_at) : null;
+    if (!startedAt || Number.isNaN(new Date(startedAt).getTime())) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("请选择有效的开始日期。");
+    }
+    if (
+      target.status === "ended" &&
+      (!endedAt ||
+        Number.isNaN(new Date(endedAt).getTime()) ||
+        new Date(endedAt).getTime() < new Date(startedAt).getTime())
+    ) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("结束日期不能早于开始日期。");
+    }
+
+    const timestamp = nowIso();
+    const nextCycles = cycles.map((cycle) =>
+      cycle.id === cycleId
+        ? {
+            ...cycle,
+            started_at: startedAt,
+            ended_at: target.status === "ended" ? endedAt : null,
+            updated_at: timestamp,
+          }
+        : cycle
+    );
+
+    await requestToPromise(
+      store.put({
+        ...normalizedArchive,
+        cycles: nextCycles,
+        updated_at: timestamp,
+      } satisfies LocalArchive)
+    );
+    await done;
+    return nextCycles.find((cycle) => cycle.id === cycleId) || null;
+  } finally {
+    db.close();
+  }
+}
+
+export async function deleteLocalArchiveCycle(
+  archiveId: string,
+  cycleId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const cycles = normalizedArchive.cycles || [];
+    if (!cycles.some((cycle) => cycle.id === cycleId)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个周期不存在。");
+    }
+
+    const archiveRecords = await requestToPromise<LocalRecord[]>(
+      recordStore.index("archive_id").getAll(archiveId)
+    );
+    const recordsToUngroup = archiveRecords.filter(
+      (record) => record.cycle_id === cycleId
+    );
+
+    for (const record of recordsToUngroup) {
+      await requestToPromise(
+        recordStore.put({
+          ...record,
+          cycle_id: null,
+        } satisfies LocalRecord)
+      );
+    }
+
+    await requestToPromise(
+      archiveStore.put({
+        ...normalizedArchive,
+        cycles: cycles.filter((cycle) => cycle.id !== cycleId),
+        updated_at: nowIso(),
+      } satisfies LocalArchive)
+    );
+
+    await done;
+    await refreshLocalUsageHints();
+    return recordsToUngroup.length;
+  } finally {
+    db.close();
+  }
+}
+
 export async function createLocalRecord(input: {
   archive_id: string;
+  cycle_id?: string | null;
+  end_cycle_after_record?: boolean;
   note: string;
   image_files?: File[];
   record_time?: string;
@@ -1509,6 +1852,7 @@ export async function createLocalRecord(input: {
   const record: LocalRecord = {
     id: createId("local_record"),
     archive_id: input.archive_id,
+    cycle_id: normalizeOptionalText(input.cycle_id),
     note,
     record_time: recordTime,
     created_at: timestamp,
@@ -1556,12 +1900,42 @@ export async function createLocalRecord(input: {
       throw new Error("本地项目不存在。");
     }
 
+    const normalizedArchive = normalizeLocalArchive(archive);
+    const requestedCycle = normalizedArchive.cycles?.find(
+      (cycle) => cycle.id === record.cycle_id && cycle.status === "active"
+    );
+    record.cycle_id = requestedCycle?.id || null;
+
+    if (input.end_cycle_after_record) {
+      if (!requestedCycle) {
+        transaction.abort();
+        await done.catch(() => undefined);
+        throw new Error("所选周期已结束或不存在，请重新选择。");
+      }
+      if (isLocalDateBefore(recordTime, requestedCycle.started_at)) {
+        transaction.abort();
+        await done.catch(() => undefined);
+        throw new Error("记录日期不能早于所选周期开始日期。");
+      }
+
+      const endedAt = toLocalDateEndIso(recordTime);
+      normalizedArchive.cycles = (normalizedArchive.cycles || []).map((cycle) =>
+        cycle.id === requestedCycle.id
+          ? {
+              ...cycle,
+              status: "ended" as const,
+              ended_at: endedAt,
+              updated_at: timestamp,
+            }
+          : cycle
+      );
+    }
+
     await requestToPromise(recordStore.add(record));
     for (const image of images) {
       await requestToPromise(imageStore.add(image));
     }
 
-    const normalizedArchive = normalizeLocalArchive(archive);
     normalizedArchive.updated_at = timestamp;
     normalizedArchive.sync = localSyncMeta();
     await requestToPromise(archiveStore.put(normalizedArchive));

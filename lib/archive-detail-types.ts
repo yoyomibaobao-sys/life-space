@@ -48,6 +48,7 @@ export type RecordTagRow = {
 export type RecordQueryRow = {
   id: string;
   archive_id?: string;
+  cycle_id?: string | null;
   note: string | null;
   record_time: string;
   visibility?: RecordVisibility;
@@ -63,6 +64,7 @@ export type RelatedTagCountRow = {
 
 export type RecordItem = {
   id: string;
+  cycle_id?: string | null;
   note: string | null;
   record_time: string;
   visibility?: RecordVisibility;
@@ -72,6 +74,17 @@ export type RecordItem = {
   display_tags?: string[];
   user_behavior_tags?: string[];
   parsed_actions?: string[];
+};
+
+export type ArchiveCycle = {
+  id: string;
+  archive_id: string;
+  cycle_no: number;
+  status: "active" | "ended";
+  started_at: string;
+  ended_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type LightboxImage = {

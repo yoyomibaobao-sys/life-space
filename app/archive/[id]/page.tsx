@@ -7,12 +7,12 @@ import { supabase } from "@/lib/supabase";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
+import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
 import ArchiveDetailHeader from "@/components/archive-detail/ArchiveDetailHeader";
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
-import ArchiveTimeline from "@/components/archive-ui/ArchiveTimeline";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   archiveCategoryOptions,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/system-name-candidates";
 import type {
   ArchiveDetailArchive,
+  ArchiveCycle,
   ArchiveMode,
   LightboxImage,
   PlantSpeciesLite,
@@ -38,6 +39,8 @@ import type {
 } from "@/lib/archive-detail-types";
 import type { PlantSpeciesOption } from "@/lib/archive-page-types";
 import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+import { formatLocalCycleDate } from "@/lib/archive-cycle-dates";
+import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import {
   buildMediaList,
   formatDate,
@@ -85,6 +88,8 @@ function Content({ id }: { id: string }) {
   const [archive, setArchive] = useState<ArchiveDetailArchive | null>(null);
   const [species, setSpecies] = useState<PlantSpeciesLite | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
+  const [cycles, setCycles] = useState<ArchiveCycle[]>([]);
+  const [cycleBusy, setCycleBusy] = useState(false);
   const [me, setMe] = useState<string | null | undefined>(undefined);
   const [username, setUsername] = useState("用户");
   const [sameTagCounts, setSameTagCounts] = useState<Record<string, number>>({});
@@ -176,6 +181,7 @@ function Content({ id }: { id: string }) {
       }
 
       if (!archiveData.is_public && !isOwnerView) {
+        setCycles([]);
         setRecords([]);
         return;
       }
@@ -236,6 +242,19 @@ saveRecentArchiveBrowse({
         setIsProjectFollowed(Boolean(archiveFollow));
       } else {
         setIsProjectFollowed(false);
+      }
+
+      const { data: cycleRows, error: cycleError } = await supabase
+        .from("archive_cycles")
+        .select("id, archive_id, cycle_no, status, started_at, ended_at, created_at, updated_at")
+        .eq("archive_id", archiveData.id)
+        .order("cycle_no", { ascending: false });
+
+      if (cycleError) {
+        console.warn("load archive cycles failed", cycleError);
+        setCycles([]);
+      } else {
+        setCycles((cycleRows || []) as ArchiveCycle[]);
       }
 
       let recordsQuery = supabase
@@ -587,8 +606,18 @@ saveRecentArchiveBrowse({
   }
 
   const activeArchive = archive;
+  const cycleTerminology = getArchiveCycleTerminology(activeArchive.category);
   const isOwner = me === activeArchive.user_id;
   const mode: ArchiveMode = isOwner ? ((modeParam as ArchiveMode | null) || "owner") : "viewer";
+  const activeCycles = cycles
+    .filter((cycle) => cycle.status === "active")
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+  const cycleOptions = [...cycles]
+    .sort((a, b) => b.cycle_no - a.cycle_no)
+    .map((cycle) => ({
+      id: cycle.id,
+      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)}（${cycle.status === "active" ? "进行中" : "已结束"} · ${formatLocalCycleDate(cycle.started_at)}）`,
+    }));
   const archiveDisplayName = getDisplayName(activeArchive, species);
   const latestUpdate = records[0]?.record_time || activeArchive.last_record_time || activeArchive.created_at;
   const archiveCategoryLabel = getArchiveCategoryLabel(activeArchive.category);
@@ -1526,6 +1555,135 @@ saveRecentArchiveBrowse({
     );
   }
 
+  async function startArchiveCycle(startedAt: string) {
+    if (!isOwner || cycleBusy) return;
+    setCycleBusy(true);
+    try {
+      const nextCycleNo = cycles.reduce((max, cycle) => Math.max(max, cycle.cycle_no), 0) + 1;
+      const { error } = await supabase.from("archive_cycles").insert([
+        {
+          archive_id: activeArchive.id,
+          cycle_no: nextCycleNo,
+          status: "active",
+          started_at: startedAt,
+          ended_at: null,
+        },
+      ]);
+
+      if (error) {
+        console.error("create archive cycle failed", error);
+        setReloadKey((value) => value + 1);
+        showToast(
+          error.code === "23505"
+            ? "周期状态刚刚发生变化，已重新读取，请再试一次。"
+            : cycleTerminology.startFailure
+        );
+        return;
+      }
+
+      showToast(cycleTerminology.startSuccess(nextCycleNo));
+      setReloadKey((value) => value + 1);
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
+  async function endArchiveCycle(cycle: ArchiveCycle, endedAt: string) {
+    if (!isOwner || cycleBusy || cycle.status !== "active") return;
+    if (new Date(endedAt).getTime() < new Date(cycle.started_at).getTime()) {
+      showToast("结束日期不能早于开始日期。");
+      return;
+    }
+
+    setCycleBusy(true);
+    try {
+      const { error } = await supabase
+        .from("archive_cycles")
+        .update({ status: "ended", ended_at: endedAt })
+        .eq("id", cycle.id)
+        .eq("archive_id", activeArchive.id)
+        .eq("status", "active");
+
+      if (error) {
+        console.error("end archive cycle failed", error);
+        showToast(cycleTerminology.endFailure);
+        return;
+      }
+
+      showToast(cycleTerminology.endSuccess(cycle.cycle_no));
+      setReloadKey((value) => value + 1);
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
+  async function updateArchiveCycleDates(
+    cycle: ArchiveCycle,
+    dates: { startedAt: string; endedAt: string | null }
+  ) {
+    if (!isOwner || cycleBusy) return;
+    if (
+      cycle.status === "ended" &&
+      (!dates.endedAt || new Date(dates.endedAt).getTime() < new Date(dates.startedAt).getTime())
+    ) {
+      showToast("结束日期不能早于开始日期。");
+      return;
+    }
+
+    setCycleBusy(true);
+    try {
+      const { error } = await supabase
+        .from("archive_cycles")
+        .update({
+          started_at: dates.startedAt,
+          ended_at: cycle.status === "ended" ? dates.endedAt : null,
+        })
+        .eq("id", cycle.id)
+        .eq("archive_id", activeArchive.id)
+        .eq("status", cycle.status);
+
+      if (error) {
+        console.error("update archive cycle dates failed", error);
+        showToast("调整日期失败，请稍后重试。");
+        return;
+      }
+
+      showToast(cycleTerminology.datesUpdated(cycle.cycle_no));
+      setReloadKey((value) => value + 1);
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
+  async function deleteArchiveCycle(cycle: ArchiveCycle) {
+    if (!isOwner || cycleBusy) return false;
+
+    setCycleBusy(true);
+    try {
+      const { data, error } = await supabase.rpc("delete_archive_cycle", {
+        p_cycle_id: cycle.id,
+      });
+
+      if (error) {
+        console.error("delete archive cycle failed", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        showToast("删除失败，请稍后重试。");
+        return false;
+      }
+
+      const movedRecordCount = Number(data || 0);
+      showToast(cycleTerminology.deleteSuccess(cycle.cycle_no, movedRecordCount));
+      setReloadKey((value) => value + 1);
+      return true;
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
   async function handleRecordVisibilityChange(recordId: string, nextVisibility: string) {
     await supabase.from("records").update({ visibility: nextVisibility }).eq("id", recordId);
 
@@ -1533,6 +1691,32 @@ saveRecentArchiveBrowse({
       prev.map((record) =>
         record.id === recordId ? { ...record, visibility: nextVisibility } : record
       )
+    );
+  }
+
+  async function handleRecordCycleChange(recordId: string, cycleId: string | null) {
+    if (!isOwner) return;
+    const { error } = await supabase
+      .from("records")
+      .update({ cycle_id: cycleId })
+      .eq("id", recordId)
+      .eq("archive_id", activeArchive.id);
+
+    if (error) {
+      console.error("update record cycle failed", error);
+      showToast(`${cycleTerminology.adjustLabel}失败，请稍后重试。`);
+      return;
+    }
+
+    setRecords((current) =>
+      current.map((record) =>
+        record.id === recordId ? { ...record, cycle_id: cycleId } : record
+      )
+    );
+    showToast(
+      cycleId
+        ? cycleTerminology.recordAssignedSuccess
+        : cycleTerminology.recordUnassignedSuccess
     );
   }
 
@@ -1714,7 +1898,9 @@ saveRecentArchiveBrowse({
         {mode === "owner" ? (
           <ArchiveAddRecordSection
             archiveId={activeArchive.id}
+            archiveCategory={activeArchive.category}
             archiveIsPublic={activeArchive.is_public}
+            activeCycles={activeCycles}
             archiveDefaultRecordVisibility={
               activeArchive.default_record_visibility === "public" ? "public" : "private"
             }
@@ -1729,9 +1915,32 @@ saveRecentArchiveBrowse({
         ) : null}
 
         {!isMobileViewport || mobileDetailTab === "records" ? (
-        <>
-        <ArchiveTimeline id="archive-records" mobileMode={isMobileViewport}>
-          {records.map((item, index) => {
+        <ArchiveCycleTimeline
+          cycles={cycles}
+          records={records}
+          category={activeArchive.category}
+          mobileMode={isMobileViewport}
+          canManage={mode === "owner"}
+          busy={cycleBusy}
+          onStartCycle={startArchiveCycle}
+          onEndCycle={endArchiveCycle}
+          onUpdateCycleDates={updateArchiveCycleDates}
+          onDeleteCycle={deleteArchiveCycle}
+          emptyState={
+            <div
+              style={{
+                border: "1px solid #ebefea",
+                borderRadius: 18,
+                background: "#fff",
+                padding: 18,
+                color: "#7d897a",
+                fontSize: 14,
+              }}
+            >
+              {mode === "owner" ? "还没有记录，添加第一条记录" : "还没有公开记录"}
+            </div>
+          }
+          renderRecord={(item, index) => {
             const sameTagLinks = (item.display_tags || [])
               .map((tag) => ({
                 tag,
@@ -1767,26 +1976,12 @@ saveRecentArchiveBrowse({
                   setRecords((prev) => prev.filter((record) => record.id !== recordId));
                   setReloadKey((value) => value + 1);
                 }}
+                cycleOptions={cycleOptions}
+                onCycleChange={handleRecordCycleChange}
               />
             );
-          })}
-
-          {records.length === 0 ? (
-            <div
-              style={{
-                border: "1px solid #ebefea",
-                borderRadius: 18,
-                background: "#fff",
-                padding: 18,
-                color: "#7d897a",
-                fontSize: 14,
-              }}
-            >
-              {mode === "owner" ? "还没有记录，添加第一条记录" : "还没有公开记录"}
-            </div>
-          ) : null}
-        </ArchiveTimeline>
-        </>
+          }}
+        />
         ) : null}
       </main>
 

@@ -24,6 +24,7 @@ import type {
 } from "@/lib/archive-detail-types";
 import type { MediaItem } from "@/lib/domain-types";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
+import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 
 type ArchiveRecordCardProps = {
   archive: ArchiveDetailArchive;
@@ -60,6 +61,8 @@ type ArchiveRecordCardProps = {
   currentUserId?: string | null;
   onCommentCountChange?: (recordId: string, count: number) => void;
   onRecordDeleted?: (recordId: string) => void;
+  cycleOptions?: Array<{ id: string; label: string }>;
+  onCycleChange?: (recordId: string, cycleId: string | null) => void | Promise<void>;
   isMobileViewport?: boolean;
 };
 
@@ -85,9 +88,12 @@ export default function ArchiveRecordCard({
   currentUserId,
   onCommentCountChange,
   onRecordDeleted,
+  cycleOptions = [],
+  onCycleChange,
   isMobileViewport = false,
 }: ArchiveRecordCardProps) {
   const isLocalMode = variant === "local";
+  const cycleTerminology = getArchiveCycleTerminology(archive.category);
   const mediaList = buildMediaList(item.media, archive.title || "项目");
   const isPlantArchive = archive.category === "plant";
   const isHelpRecord = item.status_tag === "help";
@@ -100,6 +106,7 @@ export default function ArchiveRecordCard({
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false);
   const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [cycleSaving, setCycleSaving] = useState(false);
   const [replaceMediaId, setReplaceMediaId] = useState<string | null>(null);
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -159,6 +166,16 @@ export default function ArchiveRecordCard({
       setReplacingMedia(false);
       setReplaceMediaId(null);
       if (replaceInputRef.current) replaceInputRef.current.value = "";
+    }
+  }
+
+  async function handleCycleChange(nextCycleId: string) {
+    if (!onCycleChange || cycleSaving) return;
+    setCycleSaving(true);
+    try {
+      await onCycleChange(item.id, nextCycleId || null);
+    } finally {
+      setCycleSaving(false);
     }
   }
 
@@ -307,6 +324,17 @@ export default function ArchiveRecordCard({
               ) : null}
             </div>
 
+            {mode === "owner" && cycleOptions.length > 0 && onCycleChange ? (
+              <RecordCycleSelector
+                value={item.cycle_id || ""}
+                options={cycleOptions}
+                adjustLabel={cycleTerminology.adjustLabel}
+                unassignedOption={cycleTerminology.unassignedOption}
+                disabled={cycleSaving}
+                onChange={handleCycleChange}
+              />
+            ) : null}
+
             {isLocalMode ? (
               <MobileLocalRecordMetaRow />
             ) : (
@@ -398,6 +426,17 @@ export default function ArchiveRecordCard({
               />
             </div>
 
+            {mode === "owner" && cycleOptions.length > 0 && onCycleChange ? (
+              <RecordCycleSelector
+                value={item.cycle_id || ""}
+                options={cycleOptions}
+                adjustLabel={cycleTerminology.adjustLabel}
+                unassignedOption={cycleTerminology.unassignedOption}
+                disabled={cycleSaving}
+                onChange={handleCycleChange}
+              />
+            ) : null}
+
             {mode === "owner" && isLocalMode ? (
               <DesktopLocalRecordActions
                 onDelete={() => onRecordDeleted?.(item.id)}
@@ -448,6 +487,59 @@ export default function ArchiveRecordCard({
     </ArchiveRecordCardShell>
   );
 }
+
+function RecordCycleSelector({
+  value,
+  options,
+  adjustLabel,
+  unassignedOption,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  options: Array<{ id: string; label: string }>;
+  adjustLabel: string;
+  unassignedOption: string;
+  disabled: boolean;
+  onChange: (cycleId: string) => void | Promise<void>;
+}) {
+  return (
+    <label style={recordCycleSelectorStyle}>
+      <span>{adjustLabel}</span>
+      <select
+        value={options.some((option) => option.id === value) ? value : ""}
+        disabled={disabled}
+        onChange={(event) => void onChange(event.target.value)}
+        style={recordCycleSelectStyle}
+      >
+        <option value="">{unassignedOption}</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const recordCycleSelectorStyle = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 7,
+  marginBottom: 8,
+  color: "#6c7969",
+  fontSize: 12,
+} as const;
+
+const recordCycleSelectStyle = {
+  maxWidth: "100%",
+  padding: "5px 7px",
+  border: "1px solid #dfe6dc",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#42513f",
+  fontSize: 12,
+} as const;
 
 function DesktopAndMobileRecordActions({
   archive,

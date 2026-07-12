@@ -7,6 +7,7 @@ import {
   updateLocalImageSyncMeta,
   updateLocalRecordSyncMeta,
   type LocalArchive,
+  type LocalArchiveCycle,
   type LocalArchiveOwnerContext,
   type LocalImage,
   type LocalRecordWithImages,
@@ -30,6 +31,11 @@ export type LocalToCloudResult =
 
 type CloudRecordRow = {
   id: string;
+};
+
+type CloudCycleRow = {
+  id: string;
+  cycle_no: number;
 };
 
 type SupabaseMutationError = {
@@ -198,12 +204,30 @@ async function ensureCloudRecord(params: {
   userId: string;
   visibility: LocalToCloudVisibility;
   record: LocalRecordWithImages;
+  cycleId?: string | null;
 }) {
   const existingRecordId = cleanText(params.record.sync?.cloud_record_id);
-  if (existingRecordId) return existingRecordId;
+  if (existingRecordId) {
+    const { error } = await supabase
+      .from("records")
+      .update({ cycle_id: params.cycleId || null })
+      .eq("id", existingRecordId)
+      .eq("archive_id", params.archiveId)
+      .eq("user_id", params.userId);
+    if (error) throw new Error("恢复云端记录周期归属失败，请稍后重试。");
+    return existingRecordId;
+  }
 
   const foundRecordId = await findExistingCloudRecord(params);
   if (foundRecordId) {
+    const { error: cycleError } = await supabase
+      .from("records")
+      .update({ cycle_id: params.cycleId || null })
+      .eq("id", foundRecordId)
+      .eq("archive_id", params.archiveId)
+      .eq("user_id", params.userId);
+    if (cycleError) throw new Error("恢复云端记录周期归属失败，请稍后重试。");
+
     await updateLocalRecordSyncMeta(params.record.id, {
       status: "pending-cloud-sync",
       cloud_archive_id: params.archiveId,
@@ -218,6 +242,7 @@ async function ensureCloudRecord(params: {
     .insert([
       {
         archive_id: params.archiveId,
+        cycle_id: params.cycleId || null,
         user_id: params.userId,
         note: params.record.note || "",
         visibility: params.visibility,
@@ -244,6 +269,79 @@ async function ensureCloudRecord(params: {
   });
 
   return data.id as string;
+}
+
+async function ensureCloudCycles(params: {
+  archiveId: string;
+  cycles: LocalArchiveCycle[];
+}) {
+  const cycleIdMap = new Map<string, string>();
+  if (params.cycles.length === 0) return cycleIdMap;
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("archive_cycles")
+    .select("id, cycle_no")
+    .eq("archive_id", params.archiveId);
+
+  if (existingError) {
+    console.error("load migrated archive cycles error:", existingError);
+    throw new Error("读取云端周期失败，请稍后重试。");
+  }
+
+  const cloudByCycleNo = new Map(
+    ((existingRows || []) as CloudCycleRow[]).map((cycle) => [cycle.cycle_no, cycle])
+  );
+
+  for (const cycle of [...params.cycles].sort((a, b) => a.cycle_no - b.cycle_no)) {
+    const payload = {
+      archive_id: params.archiveId,
+      cycle_no: cycle.cycle_no,
+      status: cycle.status,
+      started_at: cycle.started_at,
+      ended_at: cycle.status === "ended" ? cycle.ended_at || cycle.updated_at : null,
+    };
+    let cloudCycle = cloudByCycleNo.get(cycle.cycle_no) || null;
+
+    if (cloudCycle) {
+      const { error } = await supabase
+        .from("archive_cycles")
+        .update(payload)
+        .eq("id", cloudCycle.id)
+        .eq("archive_id", params.archiveId);
+      if (error) {
+        console.error("update migrated archive cycle error:", error);
+        throw new Error(`更新云端第${cycle.cycle_no}个周期失败，请稍后重试。`);
+      }
+    } else {
+      const { data, error } = await supabase
+        .from("archive_cycles")
+        .insert([payload])
+        .select("id, cycle_no")
+        .single();
+
+      if (error || !data?.id) {
+        const { data: racedCycle } = await supabase
+          .from("archive_cycles")
+          .select("id, cycle_no")
+          .eq("archive_id", params.archiveId)
+          .eq("cycle_no", cycle.cycle_no)
+          .maybeSingle();
+        if (!racedCycle?.id) {
+          console.error("create migrated archive cycle error:", error);
+          throw new Error(`创建云端第${cycle.cycle_no}个周期失败，请稍后重试。`);
+        }
+        cloudCycle = racedCycle as CloudCycleRow;
+      } else {
+        cloudCycle = data as CloudCycleRow;
+      }
+
+      cloudByCycleNo.set(cycle.cycle_no, cloudCycle);
+    }
+
+    cycleIdMap.set(cycle.id, cloudCycle.id);
+  }
+
+  return cycleIdMap;
 }
 
 async function findExistingMediaByPath(storagePath: string) {
@@ -518,6 +616,11 @@ export async function syncLocalArchiveToCloud(params: {
       params.ownerContext
     );
 
+    const cycleIdMap = await ensureCloudCycles({
+      archiveId: cloudArchiveId,
+      cycles: archive.cycles || [],
+    });
+
     const sortedRecords = [...detail.records].sort(
       (a, b) =>
         new Date(a.record_time || a.created_at).getTime() -
@@ -525,11 +628,19 @@ export async function syncLocalArchiveToCloud(params: {
     );
 
     for (const record of sortedRecords) {
+      const cloudCycleId = record.cycle_id
+        ? cycleIdMap.get(record.cycle_id)
+        : null;
+      if (record.cycle_id && !cloudCycleId) {
+        throw new Error("记录所属周期迁移失败，请重试。");
+      }
+
       const cloudRecordId = await ensureCloudRecord({
         archiveId: cloudArchiveId,
         userId,
         visibility: params.visibility,
         record,
+        cycleId: cloudCycleId,
       });
 
       for (const image of [...record.images].sort((a, b) => a.sort_order - b.sort_order)) {

@@ -18,13 +18,22 @@ import {
 } from "@/lib/membership";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { releaseStorageBytes, reserveStorageBytes } from "@/lib/storage-usage";
+import type { ArchiveCycle } from "@/lib/archive-detail-types";
+import {
+  formatLocalCycleDate,
+  isLocalDateBefore,
+  toLocalDateEndIso,
+} from "@/lib/archive-cycle-dates";
+import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 
 type RecordVisibility = "public" | "private";
 
 type Props = {
   archiveId: string;
+  archiveCategory?: string | null;
   archiveIsPublic: boolean;
   archiveDefaultRecordVisibility?: RecordVisibility;
+  activeCycles?: ArchiveCycle[];
   placeholder?: string;
   onRecordCreated?: () => void | Promise<void>;
   mobileMode?: boolean;
@@ -42,12 +51,15 @@ function buildFileKey(file: File, index: number) {
 
 export default function AddRecord({
   archiveId,
+  archiveCategory,
   archiveIsPublic,
   archiveDefaultRecordVisibility = "private",
+  activeCycles = [],
   placeholder,
   onRecordCreated,
   mobileMode = false,
 }: Props) {
+  const terminology = getArchiveCycleTerminology(archiveCategory);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<SelectedPreview[]>([]);
@@ -59,6 +71,8 @@ export default function AddRecord({
       archiveDefaultRecordVisibility === "public" ? "public" : "private"
     );
   const [isHelpRecord, setIsHelpRecord] = useState(false);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
+  const [endSelectedCycleAfterSave, setEndSelectedCycleAfterSave] = useState(false);
   const [loading, setLoading] = useState(false);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [storageUsedBytes, setStorageUsedBytes] = useState(0);
@@ -68,6 +82,36 @@ export default function AddRecord({
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
+  const sortedActiveCycles = [...activeCycles].sort(
+    (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+  );
+  const defaultCycleId = sortedActiveCycles[0]?.id || "";
+  const effectiveCycleId =
+    selectedCycleId === undefined
+      ? defaultCycleId
+      : selectedCycleId === "" || sortedActiveCycles.some((cycle) => cycle.id === selectedCycleId)
+        ? selectedCycleId
+        : defaultCycleId;
+  const selectedActiveCycle = sortedActiveCycles.find(
+    (cycle) => cycle.id === effectiveCycleId
+  ) || null;
+  const activeCycleIdsKey = sortedActiveCycles.map((cycle) => cycle.id).join("|");
+
+  useEffect(() => {
+    if (
+      selectedCycleId === undefined ||
+      selectedCycleId === "" ||
+      activeCycleIdsKey.split("|").includes(selectedCycleId)
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSelectedCycleId(undefined);
+      setEndSelectedCycleAfterSave(false);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [activeCycleIdsKey, selectedCycleId]);
 
   const contentBlocked = membership?.can_create_content === false;
   const selectedFileBytes = files.reduce((total, file) => total + file.size, 0);
@@ -153,6 +197,29 @@ export default function AddRecord({
     return new Date().toISOString();
   }
 
+  async function resolveCycleEndRecordTime() {
+    if (timeMode !== "exif" || files.length === 0) {
+      return resolveTime({ timeMode, customTime });
+    }
+
+    const filesToCheck = mergeMode ? files.slice(0, 1) : files;
+    const recordTimes: string[] = [];
+
+    for (const file of filesToCheck) {
+      let exifTime = null;
+      try {
+        const exifData = await exifr.parse(file);
+        if (exifData?.DateTimeOriginal) exifTime = exifData.DateTimeOriginal;
+      } catch {}
+
+      recordTimes.push(resolveTime({ timeMode, customTime, exifTime }));
+    }
+
+    return recordTimes.reduce((latest, value) =>
+      new Date(value).getTime() > new Date(latest).getTime() ? value : latest
+    );
+  }
+
   function appendFiles(nextFiles: File[]) {
     if (nextFiles.length === 0) return;
     setFiles((prev) => [...prev, ...nextFiles]);
@@ -177,6 +244,7 @@ export default function AddRecord({
       .insert([
         {
           archive_id: params.archiveId,
+          cycle_id: effectiveCycleId || null,
           note,
           user_id: params.userId,
           visibility: params.visibility,
@@ -373,6 +441,17 @@ export default function AddRecord({
       const finalStatusTag = isHelpRecord ? "help" : null;
       let uploadedBytes = 0;
       let archiveHelpStateUpdated = false;
+      let createdRecordCount = 0;
+      let cycleEndRecordTime: string | null = null;
+
+      if (endSelectedCycleAfterSave && selectedActiveCycle) {
+        cycleEndRecordTime = await resolveCycleEndRecordTime();
+        if (isLocalDateBefore(cycleEndRecordTime, selectedActiveCycle.started_at)) {
+          showToast(terminology.recordDateBeforeStartMessage);
+          setLoading(false);
+          return;
+        }
+      }
 
       if (finalStatusTag === "help" && finalVisibility !== "public") {
         const confirmed = confirm(
@@ -440,6 +519,7 @@ export default function AddRecord({
             setLoading(false);
             return;
           }
+          createdRecordCount += 1;
 
           for (const file of files) {
             uploadedBytes += await uploadMedia(record.id, user.id, file);
@@ -473,6 +553,7 @@ export default function AddRecord({
             });
 
             if (!record) continue;
+            createdRecordCount += 1;
 
             uploadedBytes += await uploadMedia(record.id, user.id, file);
           }
@@ -483,7 +564,7 @@ export default function AddRecord({
           customTime,
         });
 
-        await createRecord({
+        const record = await createRecord({
           archiveId,
           userId: user.id,
           note: text.trim(),
@@ -491,10 +572,40 @@ export default function AddRecord({
           visibility: finalVisibility,
           statusTag: finalStatusTag,
         });
+        if (!record) {
+          setLoading(false);
+          return;
+        }
+        createdRecordCount += 1;
       }
 
       if (uploadedBytes > 0) {
         await refreshStorageUsed(user.id);
+      }
+
+      let cycleEndFailed = false;
+      if (
+        endSelectedCycleAfterSave &&
+        selectedActiveCycle &&
+        cycleEndRecordTime &&
+        createdRecordCount > 0
+      ) {
+        const { data: endedCycle, error: cycleEndError } = await supabase
+          .from("archive_cycles")
+          .update({
+            status: "ended",
+            ended_at: toLocalDateEndIso(cycleEndRecordTime),
+          })
+          .eq("id", selectedActiveCycle.id)
+          .eq("archive_id", archiveId)
+          .eq("status", "active")
+          .select("id")
+          .maybeSingle();
+
+        cycleEndFailed = Boolean(cycleEndError || !endedCycle);
+        if (cycleEndError) {
+          console.error("end selected archive cycle after record failed", cycleEndError);
+        }
       }
 
       setText("");
@@ -502,9 +613,14 @@ export default function AddRecord({
       setCustomTime("");
       setRecordVisibility(archiveDefaultRecordVisibility === "public" ? "public" : "private");
       setIsHelpRecord(false);
+      setSelectedCycleId(undefined);
+      setEndSelectedCycleAfterSave(false);
 
       await onRecordCreated?.();
       router.refresh();
+      if (cycleEndFailed) {
+        showToast(terminology.endAfterSaveFailureMessage);
+      }
     } catch (err) {
       console.log(err);
       showToast(t.error);
@@ -565,6 +681,38 @@ export default function AddRecord({
           boxSizing: "border-box",
         }}
       />
+
+      {sortedActiveCycles.length > 0 ? (
+        <label style={cycleSelectLabelStyle}>
+          <span>{terminology.assignLabel}</span>
+          <select
+            value={effectiveCycleId}
+            onChange={(event) => {
+              setSelectedCycleId(event.target.value);
+              if (!event.target.value) setEndSelectedCycleAfterSave(false);
+            }}
+            style={cycleSelectStyle}
+          >
+            {sortedActiveCycles.map((cycle) => (
+              <option key={cycle.id} value={cycle.id}>
+                {terminology.cycleLabel(cycle.cycle_no)}（{formatLocalCycleDate(cycle.started_at)}开始）
+              </option>
+            ))}
+            <option value="">{terminology.unassignedOption}</option>
+          </select>
+        </label>
+      ) : null}
+
+      {selectedActiveCycle ? (
+        <label style={endCycleAfterSaveStyle}>
+          <input
+            type="checkbox"
+            checked={endSelectedCycleAfterSave}
+            onChange={(event) => setEndSelectedCycleAfterSave(event.target.checked)}
+          />
+          {terminology.selectedEndAction}
+        </label>
+      ) : null}
 
       <select
         value={timeMode}
@@ -805,3 +953,32 @@ export default function AddRecord({
     </div>
   );
 }
+
+const cycleSelectLabelStyle = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 8,
+  marginTop: 10,
+  color: "#5b6b58",
+  fontSize: 13,
+} as const;
+
+const cycleSelectStyle = {
+  minWidth: 150,
+  maxWidth: "100%",
+  padding: "6px 8px",
+  border: "1px solid #dfe6dc",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#3f513d",
+} as const;
+
+const endCycleAfterSaveStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 8,
+  color: "#5b6b58",
+  fontSize: 13,
+} as const;
