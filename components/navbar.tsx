@@ -27,6 +27,9 @@ export default function Navbar() {
     useState<MobileArchiveTitleInfo>(null);
   const [mobileMeMenuOpen, setMobileMeMenuOpen] = useState(false);
   const [mobilePlantMenuOpen, setMobilePlantMenuOpen] = useState(false);
+  const [desktopDiscoverTab, setDesktopDiscoverTab] = useState<
+    "feed" | "following"
+  >("feed");
 
   useEffect(() => {
     function updateCompact() {
@@ -38,6 +41,32 @@ export default function Navbar() {
 
     return () => window.removeEventListener("resize", updateCompact);
   }, []);
+
+  useEffect(() => {
+    function syncDiscoverTab() {
+      const isFollowing =
+        pathname === "/discover" &&
+        new URLSearchParams(window.location.search).get("tab") === "following";
+      setDesktopDiscoverTab(isFollowing ? "following" : "feed");
+    }
+
+    function handleDiscoverTabChange(event: Event) {
+      const tab = (event as CustomEvent<"feed" | "following">).detail;
+      setDesktopDiscoverTab(tab === "following" ? "following" : "feed");
+    }
+
+    syncDiscoverTab();
+    window.addEventListener("popstate", syncDiscoverTab);
+    window.addEventListener("discover-tab-change", handleDiscoverTabChange);
+
+    return () => {
+      window.removeEventListener("popstate", syncDiscoverTab);
+      window.removeEventListener(
+        "discover-tab-change",
+        handleDiscoverTabChange,
+      );
+    };
+  }, [pathname]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -363,11 +392,33 @@ export default function Navbar() {
         </Link>
 
         <div style={getNavItemsWrapStyle(isCompact)}>
-          <NavItem href="/discover" active={isActive("/discover")}>
+          <NavItem
+            href="/discover"
+            active={isActive("/discover") && desktopDiscoverTab === "feed"}
+            onClick={() => {
+              setDesktopDiscoverTab("feed");
+              window.dispatchEvent(
+                new CustomEvent("discover-tab-change", { detail: "feed" }),
+              );
+            }}
+          >
             发现
           </NavItem>
 
-          <NavItem href="/follow" active={isActive("/follow")}>
+          <NavItem
+            href="/discover?tab=following"
+            active={
+              pathname === "/discover" && desktopDiscoverTab === "following"
+            }
+            onClick={() => {
+              setDesktopDiscoverTab("following");
+              window.dispatchEvent(
+                new CustomEvent("discover-tab-change", {
+                  detail: "following",
+                }),
+              );
+            }}
+          >
             我的关注
           </NavItem>
 
@@ -520,14 +571,16 @@ function MobileBottomNavItem({
 function NavItem({
   href,
   active,
+  onClick,
   children,
 }: {
   href: string;
   active: boolean;
+  onClick?: () => void;
   children: ReactNode;
 }) {
   return (
-    <Link href={href} style={navLinkStyle(active)}>
+    <Link href={href} style={navLinkStyle(active)} onClick={onClick}>
       {children}
     </Link>
   );
