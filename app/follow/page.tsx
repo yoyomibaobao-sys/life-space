@@ -43,13 +43,25 @@ type ArchiveRow = {
   last_record_time: string | null;
   view_count: number | null;
   cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_url?: string | null;
+  cover_thumb_path?: string | null;
 };
 
 type RecordRow = {
+  id: string;
   archive_id: string;
   note: string | null;
   record_time: string | null;
   primary_image_url: string | null;
+};
+
+type MediaRow = {
+  record_id: string | null;
+  url: string | null;
+  thumb_url: string | null;
+  storage_path: string | null;
+  thumb_path: string | null;
 };
 
 type ProfileRow = {
@@ -164,7 +176,7 @@ export default function FollowPage() {
         ? supabase
             .from("archives")
             .select(
-              "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url"
+              "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
             )
             .in("id", archiveIds)
         : Promise.resolve({ data: [] as ArchiveRow[], error: null });
@@ -182,7 +194,7 @@ export default function FollowPage() {
       const recordsPromise = archiveIds.length
         ? supabase
             .from("records")
-            .select("archive_id, note, record_time, primary_image_url")
+            .select("id, archive_id, note, record_time, primary_image_url")
             .in("archive_id", archiveIds)
             .order("record_time", { ascending: false })
         : Promise.resolve({ data: [] as RecordRow[], error: null });
@@ -233,13 +245,52 @@ export default function FollowPage() {
         }
       });
 
+      const latestRecordIds = Array.from(latestRecordMap.values()).map(
+        (record) => record.id
+      );
+      const latestMediaMap = new Map<string, MediaRow>();
+
+      if (latestRecordIds.length > 0) {
+        const { data: mediaRows, error: mediaError } = await supabase
+          .from("media")
+          .select("record_id, url, thumb_url, storage_path, thumb_path, sort_order, created_at")
+          .in("record_id", latestRecordIds)
+          .eq("type", "image")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (mediaError) {
+          console.error("load followed project media error:", mediaError);
+        } else {
+          ((mediaRows || []) as MediaRow[]).forEach((media) => {
+            if (!media.record_id || latestMediaMap.has(media.record_id)) return;
+            latestMediaMap.set(media.record_id, media);
+          });
+        }
+      }
+
       const projectCoverPairs = await resolveMediaDisplayPairs(
         supabase,
         archives.map((archive) => {
           const latestRecord = latestRecordMap.get(archive.id);
-          return {
-            url: archive.cover_image_url || latestRecord?.primary_image_url || null,
-          };
+          const latestMedia = latestRecord
+            ? latestMediaMap.get(latestRecord.id)
+            : null;
+
+          if (archive.cover_image_path || archive.cover_image_url) {
+            return {
+              url: archive.cover_image_url,
+              path: archive.cover_image_path,
+              thumb_url: archive.cover_thumb_url,
+              thumb_path: archive.cover_thumb_path,
+            };
+          }
+
+          return (
+            latestMedia || {
+              url: latestRecord?.primary_image_url || null,
+            }
+          );
         })
       );
 
@@ -274,8 +325,6 @@ export default function FollowPage() {
             coverUrl:
               projectCoverPairs[index]?.display_thumb_url ||
               projectCoverPairs[index]?.display_url ||
-              archive.cover_image_url ||
-              latestRecord?.primary_image_url ||
               null,
           } satisfies FollowProjectCard;
         })

@@ -28,7 +28,7 @@ import type {
   SubTagItem,
 } from "@/lib/archive-page-types";
 import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
-import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   buildArchiveSearchText,
   getArchiveSortTime,
@@ -74,6 +74,16 @@ type LatestArchiveRecord = {
   primary_image_url?: string | null;
   primary_thumb_url?: string | null;
   media_count?: number | null;
+};
+
+type ArchiveMediaRow = {
+  record_id?: string | null;
+  url?: string | null;
+  thumb_url?: string | null;
+  storage_path?: string | null;
+  thumb_path?: string | null;
+  display_url?: string | null;
+  display_thumb_url?: string | null;
 };
 
 const emptySystemNameCandidateMap: Record<ArchiveCategory, SystemNameCandidate[]> = {
@@ -269,13 +279,10 @@ export default function ArchivePage() {
           const archiveId = String(row.archive_id);
           followerCountMap.set(archiveId, (followerCountMap.get(archiveId) || 0) + 1);
         });
+      const archiveItems = (archivesData || []) as ArchiveItem[];
       const latestRecordMap = new Map<string, LatestArchiveRecord>();
-      const archiveCoverPairs = await resolveMediaDisplayPairs(
-        supabase,
-        ((archivesData || []) as ArchiveItem[]).map((item) => ({
-          url: item.cover_image_url,
-        }))
-      );
+      let latestRecords: LatestArchiveRecord[] = [];
+      let mediaRows: ArchiveMediaRow[] = [];
 
       if (archiveIds.length > 0) {
         const { data: latestRecordRows, error: latestRecordError } = await supabase
@@ -288,17 +295,11 @@ export default function ArchivePage() {
         if (latestRecordError) {
           console.error("load latest archive records error:", latestRecordError);
         } else {
-          const latestRecords = (latestRecordRows || []) as LatestArchiveRecord[];
+          latestRecords = (latestRecordRows || []) as LatestArchiveRecord[];
           const latestRecordIds = latestRecords.map((record) => record.id).filter(Boolean);
-          const thumbByRecordId = new Map<string, string>();
-          const primaryImageByRecordId = new Map<string, string>();
-          const primaryImagePairs = await resolveMediaDisplayPairs(
-            supabase,
-            latestRecords.map((record) => ({ url: record.primary_image_url }))
-          );
 
           if (latestRecordIds.length > 0) {
-            const { data: mediaRows, error: mediaError } = await supabase
+            const { data: recordMediaRows, error: mediaError } = await supabase
               .from("media")
               .select("record_id, url, thumb_url, storage_path, thumb_path, sort_order, created_at")
               .in("record_id", latestRecordIds)
@@ -308,81 +309,68 @@ export default function ArchivePage() {
             if (mediaError) {
               console.error("load latest archive record thumbnails error:", mediaError);
             } else {
-              const mediaByRecordId = new Map<string, Array<{
-                record_id?: string | null;
-                url?: string | null;
-                thumb_url?: string | null;
-                storage_path?: string | null;
-                thumb_path?: string | null;
-                display_url?: string | null;
-                display_thumb_url?: string | null;
-              }>>();
-
-              const displayMediaRows = await attachMediaDisplayUrls(
-                supabase,
-                (mediaRows || []) as Array<{
-                  record_id?: string | null;
-                  url?: string | null;
-                  thumb_url?: string | null;
-                  storage_path?: string | null;
-                  thumb_path?: string | null;
-                }>
-              );
-
-              displayMediaRows.forEach((media) => {
-                if (!media.record_id) return;
-                const list = mediaByRecordId.get(media.record_id) || [];
-                list.push(media);
-                mediaByRecordId.set(media.record_id, list);
-              });
-
-              latestRecords.forEach((record) => {
-                const mediaList = mediaByRecordId.get(record.id) || [];
-                const matchedPrimary = mediaList.find(
-                  (media) => media.url && record.primary_image_url && media.url === record.primary_image_url
-                );
-                const firstThumb = mediaList.find((media) => media.display_thumb_url || media.thumb_url);
-                const firstImage = mediaList.find((media) => media.display_url || media.url);
-                const thumbUrl =
-                  matchedPrimary?.display_thumb_url ||
-                  matchedPrimary?.thumb_url ||
-                  firstThumb?.display_thumb_url ||
-                  firstThumb?.thumb_url ||
-                  null;
-                const imageUrl =
-                  matchedPrimary?.display_url ||
-                  matchedPrimary?.url ||
-                  firstImage?.display_url ||
-                  firstImage?.url ||
-                  null;
-                if (thumbUrl) thumbByRecordId.set(record.id, thumbUrl);
-                if (imageUrl) primaryImageByRecordId.set(record.id, imageUrl);
-              });
+              mediaRows = (recordMediaRows || []) as ArchiveMediaRow[];
             }
           }
-
-          latestRecords.forEach((record, index) => {
-            if (!record.archive_id || latestRecordMap.has(record.archive_id)) return;
-            latestRecordMap.set(record.archive_id, {
-              ...record,
-              primary_image_url:
-                primaryImageByRecordId.get(record.id) ||
-                primaryImagePairs[index]?.display_url ||
-                record.primary_image_url ||
-                null,
-              primary_thumb_url: thumbByRecordId.get(record.id) || null,
-            });
-          });
         }
       }
 
-      const enrichedArchives: ArchiveItem[] = ((archivesData || []) as ArchiveItem[]).map((item, index) => {
+      const archiveSourceCount = archiveItems.length;
+      const latestRecordSourceCount = latestRecords.length;
+      const displayPairs = await resolveMediaDisplayPairs(supabase, [
+        ...archiveItems.map((item) => ({
+          url: item.cover_image_url,
+          path: item.cover_image_path,
+          thumb_url: item.cover_thumb_url,
+          thumb_path: item.cover_thumb_path,
+        })),
+        ...latestRecords.map((record) => ({ url: record.primary_image_url })),
+        ...mediaRows,
+      ]);
+      const archiveCoverPairs = displayPairs.slice(0, archiveSourceCount);
+      const latestRecordPairs = displayPairs.slice(
+        archiveSourceCount,
+        archiveSourceCount + latestRecordSourceCount
+      );
+      const displayMediaRows = mediaRows.map((media, index) => ({
+        ...media,
+        ...displayPairs[archiveSourceCount + latestRecordSourceCount + index],
+      }));
+      const mediaByRecordId = new Map<string, ArchiveMediaRow[]>();
+      displayMediaRows.forEach((media) => {
+        if (!media.record_id) return;
+        const list = mediaByRecordId.get(media.record_id) || [];
+        list.push(media);
+        mediaByRecordId.set(media.record_id, list);
+      });
+
+      latestRecords.forEach((record, index) => {
+        if (!record.archive_id || latestRecordMap.has(record.archive_id)) return;
+        const mediaList = mediaByRecordId.get(record.id) || [];
+        const matchedPrimary = mediaList.find(
+          (media) => media.url && record.primary_image_url && media.url === record.primary_image_url
+        );
+        const firstThumb = mediaList.find((media) => media.display_thumb_url);
+        const firstImage = mediaList.find((media) => media.display_url);
+        latestRecordMap.set(record.archive_id, {
+          ...record,
+          primary_image_url:
+            matchedPrimary?.display_url ||
+            firstImage?.display_url ||
+            latestRecordPairs[index]?.display_url ||
+            null,
+          primary_thumb_url:
+            matchedPrimary?.display_thumb_url || firstThumb?.display_thumb_url || null,
+        });
+      });
+
+      const enrichedArchives: ArchiveItem[] = archiveItems.map((item, index) => {
         const latestRecord = latestRecordMap.get(item.id);
 
         return {
           ...item,
           display_cover_image_url:
-            archiveCoverPairs[index]?.display_url || item.cover_image_url || null,
+            archiveCoverPairs[index]?.display_url || null,
           status: item.status || "active",
           latest_record_note: latestRecord?.note || null,
           latest_record_time: latestRecord?.record_time || item.last_record_time || null,

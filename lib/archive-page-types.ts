@@ -13,6 +13,9 @@ export type ArchiveItem = {
   species_name_snapshot?: string | null;
   species_display_name?: string | null;
   cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_url?: string | null;
+  cover_thumb_path?: string | null;
   display_cover_image_url?: string | null;
   created_at?: string | null;
   last_record_time?: string | null;

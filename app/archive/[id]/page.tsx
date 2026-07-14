@@ -1408,7 +1408,6 @@ saveRecentArchiveBrowse({
       }
 
       let uploadedThumbPath: string | null = null;
-      let uploadedThumbUrl: string | null = null;
       let uploadedThumbBytes = 0;
 
       if (thumbFile && thumbName) {
@@ -1421,15 +1420,12 @@ saveRecentArchiveBrowse({
         if (thumbUploadError) {
           console.error("add record thumbnail upload error:", thumbUploadError);
         } else {
-          const { data: thumbUrlData } = supabase.storage.from("media").getPublicUrl(thumbName);
           uploadedThumbPath = thumbName;
-          uploadedThumbUrl = thumbUrlData.publicUrl;
           uploadedThumbBytes = thumbFile.size;
         }
       }
 
       const actualBytes = file.size + uploadedThumbBytes;
-      const { data: urlData } = supabase.storage.from("media").getPublicUrl(fileName);
 
       const { data: mediaRow, error: mediaError } = await supabase
         .from("media")
@@ -1437,12 +1433,12 @@ saveRecentArchiveBrowse({
           {
             record_id: recordId,
             type: "image",
-            url: urlData.publicUrl,
+            url: null,
             user_id: user.id,
             size_mb: actualBytes / (1024 * 1024),
             size_bytes: actualBytes,
             storage_path: fileName,
-            thumb_url: uploadedThumbUrl,
+            thumb_url: null,
             thumb_path: uploadedThumbPath,
             mime_type: file.type || "image/jpeg",
             width: item.compressed.width ?? null,

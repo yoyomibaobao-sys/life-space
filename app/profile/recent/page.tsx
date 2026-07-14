@@ -24,6 +24,9 @@ type RecentArchiveRow = {
   record_count: number | null;
   view_count: number | null;
   cover_image_url: string | null;
+  cover_image_path: string | null;
+  cover_thumb_url: string | null;
+  cover_thumb_path: string | null;
   display_cover_image_url?: string | null;
 };
 
@@ -64,7 +67,7 @@ export default function RecentBrowsePage() {
       const { data, error } = await supabase
         .from("archives")
         .select(
-          "id, user_id, title, category, system_name, species_name_snapshot, is_public, record_count, view_count, cover_image_url"
+          "id, user_id, title, category, system_name, species_name_snapshot, is_public, record_count, view_count, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
         )
         .in("id", ids);
 
@@ -84,14 +87,19 @@ export default function RecentBrowsePage() {
 
       const coverPairs = await resolveMediaDisplayPairs(
         supabase,
-        sortedRows.map((row) => ({ url: row.cover_image_url }))
+        sortedRows.map((row) => ({
+          url: row.cover_image_url,
+          path: row.cover_image_path,
+          thumb_url: row.cover_thumb_url,
+          thumb_path: row.cover_thumb_path,
+        }))
       );
 
       setItems(
         sortedRows.map((row, index) => ({
           ...row,
           display_cover_image_url:
-            coverPairs[index]?.display_url || row.cover_image_url || null,
+            coverPairs[index]?.display_url || null,
         }))
       );
       setLoading(false);
@@ -150,9 +158,9 @@ export default function RecentBrowsePage() {
                   href={`/archive/${item.id}`}
                   style={cardStyle}
                 >
-                  {item.display_cover_image_url || item.cover_image_url ? (
+                  {item.display_cover_image_url ? (
                     <img
-                      src={item.display_cover_image_url || item.cover_image_url || ""}
+                      src={item.display_cover_image_url}
                       alt={title}
                       style={coverStyle}
                     />

@@ -57,9 +57,7 @@ export default function PlantRelatedArchives({
           {uniqueArchives.map((archive) => {
             const imageUrl =
               archive.display_cover_image_url ||
-              archive.display_last_public_record_image_url ||
-              archive.cover_image_url ||
-              archive.last_public_record_image_url;
+              archive.display_last_public_record_image_url;
             const helpLabel = getHelpLabel(archive.archive_help_status);
             const visibilityLabel = archive.is_own_archive
               ? archive.archive_is_public

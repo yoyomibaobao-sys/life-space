@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
-import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   type ArchiveCategory,
   getArchiveCategoryIcon,
@@ -34,11 +34,11 @@ function categoryLabel(category?: string | null) {
 }
 
 function getMediaUrl(media: any) {
-  return media?.display_url || media?.file_url || media?.url || "";
+  return media?.display_url || "";
 }
 
 function getMediaPreviewUrl(media: any) {
-  return media?.display_thumb_url || media?.thumb_url || getMediaUrl(media);
+  return media?.display_thumb_url || getMediaUrl(media);
 }
 
 export default function UserSpacePage() {
@@ -134,19 +134,22 @@ export default function UserSpacePage() {
 
   async function attachRecordMediaDisplayUrls(nextRecords: any[]) {
     const allMedia = nextRecords.flatMap((record) => record.media || []);
-    const primaryPairs = await resolveMediaDisplayPairs(
-      supabase,
-      nextRecords.map((record) => ({ url: record.primary_image_url }))
-    );
+    const primarySourceCount = nextRecords.length;
+    const displayPairs = await resolveMediaDisplayPairs(supabase, [
+      ...nextRecords.map((record) => ({ url: record.primary_image_url })),
+      ...allMedia,
+    ]);
+    const primaryPairs = displayPairs.slice(0, primarySourceCount);
+    const displayMedia = allMedia.map((media, index) => ({
+      ...media,
+      ...displayPairs[primarySourceCount + index],
+    }));
     const recordsWithDisplayPrimary = nextRecords.map((record, index) => ({
       ...record,
       display_primary_image_url:
-        primaryPairs[index]?.display_url || record.primary_image_url || null,
+        primaryPairs[index]?.display_url || null,
     }));
 
-    if (allMedia.length === 0) return recordsWithDisplayPrimary;
-
-    const displayMedia = await attachMediaDisplayUrls(supabase, allMedia);
     let mediaIndex = 0;
 
     return recordsWithDisplayPrimary.map((record) => {
@@ -277,8 +280,8 @@ export default function UserSpacePage() {
         }
       }
 
-      if (record.display_primary_image_url || record.primary_image_url) {
-        map[record.archive_id] = record.display_primary_image_url || record.primary_image_url;
+      if (record.display_primary_image_url) {
+        map[record.archive_id] = record.display_primary_image_url;
       }
     });
 

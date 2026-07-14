@@ -30,7 +30,11 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
-import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import {
+  attachMediaDisplayUrls,
+  getMediaObjectPath,
+  getMediaThumbObjectPath,
+} from "@/lib/media-urls";
 
 type ArchiveOption = {
   id: string;
@@ -57,7 +61,7 @@ type SourceRecordBrief = {
 type SourceMediaOption = {
   id: string;
   record_id: string | null;
-  url: string;
+  url: string | null;
   storage_path?: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
@@ -217,10 +221,13 @@ function NewMarketPostPageContent() {
             console.error("load source record media error:", mediaError);
             setSourceMediaOptions([]);
           } else {
+            const displayMedia = await attachMediaDisplayUrls(
+              supabase,
+              (mediaData || []) as SourceMediaOption[]
+            );
             setSourceMediaOptions(
-              await attachMediaDisplayUrls(
-                supabase,
-                (mediaData || []) as SourceMediaOption[]
+              displayMedia.filter(
+                (media) => media.display_thumb_url || media.display_url
               )
             );
           }
@@ -343,16 +350,11 @@ function NewMarketPostPageContent() {
       return null;
     }
 
-    const { data } = supabase.storage.from("media").getPublicUrl(filePath);
-    const { data: thumbData } = supabase.storage
-      .from("media")
-      .getPublicUrl(thumbPath);
-
     return {
       path: filePath,
-      url: data.publicUrl,
+      url: null,
       thumbPath,
-      thumbUrl: thumbData.publicUrl,
+      thumbUrl: null,
     };
   }
 
@@ -414,10 +416,10 @@ function NewMarketPostPageContent() {
         location_text: safeLocation || null,
         external_url: safeExternalUrl || null,
         external_label: safeExternalLabel || null,
-        cover_image_url: firstSourceMedia?.url || null,
-        cover_image_path: firstSourceMedia?.storage_path || null,
-        cover_thumb_url: firstSourceMedia?.thumb_url || null,
-        cover_thumb_path: firstSourceMedia?.thumb_path || null,
+        cover_image_url: null,
+        cover_image_path: firstSourceMedia ? getMediaObjectPath(firstSourceMedia) : null,
+        cover_thumb_url: null,
+        cover_thumb_path: firstSourceMedia ? getMediaThumbObjectPath(firstSourceMedia) : null,
         status: "active",
       })
       .select("id")
@@ -436,10 +438,10 @@ function NewMarketPostPageContent() {
       const mediaInsertRows = selectedSourceMediaRows.map((item, index) => ({
         market_post_id: postId,
         user_id: user.id,
-        url: item.url,
-        path: item.storage_path || null,
-        thumb_url: item.thumb_url || null,
-        thumb_path: item.thumb_path || null,
+        url: null,
+        path: getMediaObjectPath(item),
+        thumb_url: null,
+        thumb_path: getMediaThumbObjectPath(item),
         source_media_id: item.id,
         source_record_id: sourceRecordId || null,
         sort_order: index,
@@ -486,9 +488,9 @@ function NewMarketPostPageContent() {
       const { error: updateCoverError } = await supabase
         .from("market_posts")
         .update({
-          cover_image_url: cover.url,
+          cover_image_url: null,
           cover_image_path: cover.path,
-          cover_thumb_url: cover.thumbUrl,
+          cover_thumb_url: null,
           cover_thumb_path: cover.thumbPath,
         })
         .eq("id", postId)
@@ -609,7 +611,7 @@ function NewMarketPostPageContent() {
                             style={sourceMediaButtonStyle(active)}
                           >
                             <img
-                              src={media.display_thumb_url || media.thumb_url || media.url}
+                              src={media.display_thumb_url || media.display_url || ""}
                               alt=""
                               style={sourceMediaImageStyle}
                               loading="lazy"

@@ -16,7 +16,7 @@ import {
 
 
 export function getFeedItemDisplayImageUrl(record: FeedItem) {
-  return record.primary_thumb_url || record.primary_image_url || null;
+  return record.primary_thumb_url || null;
 }
 
 export function DefaultUserAvatar({ size = 30 }: { size?: number }) {

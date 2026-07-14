@@ -51,7 +51,7 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
     );
 
     displayMediaRows.forEach((row) => {
-      const thumbUrl = row.display_thumb_url || row.thumb_url;
+      const thumbUrl = row.display_thumb_url;
       if (!row.record_id || !thumbUrl) return;
       const item = nextItems.find((feedItem) => feedItem.record_id === row.record_id);
       const isPrimaryMedia = !item?.primary_image_url || item.primary_image_url === row.url;
@@ -104,7 +104,7 @@ export async function enrichDiscoverFeedItems(nextItems: FeedItem[]) {
   return nextItems.map((item) => ({
     ...item,
     user_location: item.user_location || locationMap.get(item.user_id) || null,
-    primary_thumb_url: recordThumbMap.get(item.record_id) || item.primary_thumb_url || null,
+    primary_thumb_url: recordThumbMap.get(item.record_id) || null,
     archive_created_at: item.archive_created_at || archiveCreatedAtMap.get(item.archive_id) || null,
     archive_follower_count:
       typeof item.archive_follower_count === "number"

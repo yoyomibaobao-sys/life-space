@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -81,6 +82,7 @@ export default function AddRecord({
 
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const filePreviewsRef = useRef<SelectedPreview[]>([]);
   const router = useRouter();
   const sortedActiveCycles = [...activeCycles].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
@@ -125,7 +127,12 @@ export default function AddRecord({
   const uploadWouldExceedStorage = false;
 
   useEffect(() => {
-    setRecordVisibility(archiveDefaultRecordVisibility === "public" ? "public" : "private");
+    const timeoutId = window.setTimeout(() => {
+      setRecordVisibility(
+        archiveDefaultRecordVisibility === "public" ? "public" : "private"
+      );
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [archiveDefaultRecordVisibility]);
 
   useEffect(() => {
@@ -164,18 +171,13 @@ export default function AddRecord({
   }, []);
 
   useEffect(() => {
-    const previews = files.map((file, index) => ({
-      key: buildFileKey(file, index),
-      url: URL.createObjectURL(file),
-      name: file.name,
-    }));
-
-    setFilePreviews(previews);
-
     return () => {
-      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+      filePreviewsRef.current.forEach((preview) =>
+        URL.revokeObjectURL(preview.url)
+      );
+      filePreviewsRef.current = [];
     };
-  }, [files]);
+  }, []);
 
   function resolveTime({
     timeMode,
@@ -222,11 +224,35 @@ export default function AddRecord({
 
   function appendFiles(nextFiles: File[]) {
     if (nextFiles.length === 0) return;
+    const previews = nextFiles.map((file, index) => ({
+      key: buildFileKey(file, files.length + index),
+      url: URL.createObjectURL(file),
+      name: file.name,
+    }));
+    filePreviewsRef.current = [...filePreviewsRef.current, ...previews];
     setFiles((prev) => [...prev, ...nextFiles]);
+    setFilePreviews((prev) => [...prev, ...previews]);
   }
 
   function removeSelectedFile(index: number) {
+    const preview = filePreviewsRef.current[index];
+    if (preview) URL.revokeObjectURL(preview.url);
+    filePreviewsRef.current = filePreviewsRef.current.filter(
+      (_, itemIndex) => itemIndex !== index
+    );
     setFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+    setFilePreviews((prev) =>
+      prev.filter((_, itemIndex) => itemIndex !== index)
+    );
+  }
+
+  function clearSelectedFiles() {
+    filePreviewsRef.current.forEach((preview) =>
+      URL.revokeObjectURL(preview.url)
+    );
+    filePreviewsRef.current = [];
+    setFiles([]);
+    setFilePreviews([]);
   }
 
   async function createRecord(params: {
@@ -315,11 +341,11 @@ export default function AddRecord({
     setStorageUsedBytes(reserveResult.storage_used);
 
     const safeName = uploadFile.name.replace(/[^\w.\-]+/g, "_");
-    const timestamp = Date.now();
-    const fileName = `${userId}/${recordId}/${timestamp}-${safeName}`;
+    const uploadKey = crypto.randomUUID();
+    const fileName = `${userId}/${recordId}/${uploadKey}-${safeName}`;
     const thumbSafeName = thumbFile?.name.replace(/[^\w.\-]+/g, "_") || null;
     const thumbName = thumbFile && thumbSafeName
-      ? `${userId}/${recordId}/thumbs/${timestamp}-${thumbSafeName}`
+      ? `${userId}/${recordId}/thumbs/${uploadKey}-${thumbSafeName}`
       : null;
 
     const { error: uploadError } = await supabase.storage
@@ -336,7 +362,6 @@ export default function AddRecord({
     }
 
     let uploadedThumbPath: string | null = null;
-    let uploadedThumbUrl: string | null = null;
     let uploadedThumbBytes = 0;
 
     if (thumbFile && thumbName) {
@@ -349,30 +374,23 @@ export default function AddRecord({
       if (thumbUploadError) {
         console.error("缩略图上传失败", thumbUploadError);
       } else {
-        const { data: thumbUrlData } = supabase.storage
-          .from("media")
-          .getPublicUrl(thumbName);
         uploadedThumbPath = thumbName;
-        uploadedThumbUrl = thumbUrlData.publicUrl;
         uploadedThumbBytes = thumbBytes;
       }
     }
 
     const actualBytes = uploadBytes + uploadedThumbBytes;
-    const { data: urlData } = supabase.storage
-      .from("media")
-      .getPublicUrl(fileName);
 
     const { error: mediaError } = await supabase.from("media").insert([
       {
         record_id: recordId,
         type: "image",
-        url: urlData.publicUrl,
+        url: null,
         user_id: userId,
         size_mb: actualBytes / (1024 * 1024),
         size_bytes: actualBytes,
         storage_path: fileName,
-        thumb_url: uploadedThumbUrl,
+        thumb_url: null,
         thumb_path: uploadedThumbPath,
         mime_type: uploadFile.type || "image/jpeg",
         width: compressed.width ?? null,
@@ -609,7 +627,7 @@ export default function AddRecord({
       }
 
       setText("");
-      setFiles([]);
+      clearSelectedFiles();
       setCustomTime("");
       setRecordVisibility(archiveDefaultRecordVisibility === "public" ? "public" : "private");
       setIsHelpRecord(false);
@@ -854,13 +872,17 @@ export default function AddRecord({
             }}
           >
             {filePreviews.map((preview, index) => (
-              <div key={preview.key} style={{ position: "relative" }}>
-                <img
+              <div
+                key={preview.key}
+                style={{ position: "relative", aspectRatio: "1 / 1" }}
+              >
+                <Image
                   src={preview.url}
                   alt={preview.name || `待上传图片 ${index + 1}`}
+                  fill
+                  unoptimized
+                  sizes="(max-width: 760px) 25vw, 120px"
                   style={{
-                    width: "100%",
-                    aspectRatio: "1 / 1",
                     objectFit: "cover",
                     borderRadius: 12,
                     border: "1px solid #edf1ea",

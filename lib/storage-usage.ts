@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { MediaItem } from "@/lib/domain-types";
+import { getMediaStoragePathFromUrl } from "@/lib/media-urls";
 
 export type StorageReserveResult = {
   ok: boolean;
@@ -47,20 +48,7 @@ export function sumMediaSizeBytes(
 }
 
 export function getMediaStoragePath(url?: string | null) {
-  if (!url) return null;
-
-  const marker = "/storage/v1/object/public/media/";
-  const markerIndex = url.indexOf(marker);
-  if (markerIndex === -1) return null;
-
-  const rawPath = url.slice(markerIndex + marker.length).split("?")[0];
-  if (!rawPath) return null;
-
-  try {
-    return decodeURIComponent(rawPath);
-  } catch {
-    return rawPath;
-  }
+  return getMediaStoragePathFromUrl(url);
 }
 
 export async function removeMediaFilesFromStorage(

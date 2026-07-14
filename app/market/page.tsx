@@ -63,9 +63,9 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
 
   return rows.map((row, index) => ({
     ...row,
-    display_cover_image_url: pairs[index]?.display_url || row.cover_image_url,
+    display_cover_image_url: pairs[index]?.display_url || null,
     display_cover_thumb_url:
-      pairs[index]?.display_thumb_url || row.cover_thumb_url || row.cover_image_url,
+      pairs[index]?.display_thumb_url || null,
   }));
 }
 
@@ -430,13 +430,11 @@ export default function MarketPage() {
 
               return (
                 <Link key={item.id} href={`/market/${item.id}`} style={cardStyle}>
-                  {item.display_cover_thumb_url || item.display_cover_image_url || item.cover_thumb_url || item.cover_image_url ? (
+                  {item.display_cover_thumb_url || item.display_cover_image_url ? (
                     <img
                       src={
                         item.display_cover_thumb_url ||
                         item.display_cover_image_url ||
-                        item.cover_thumb_url ||
-                        item.cover_image_url ||
                         ""
                       }
                       alt=""

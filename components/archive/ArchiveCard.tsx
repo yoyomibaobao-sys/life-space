@@ -180,7 +180,7 @@ export default function ArchiveCard({
   const cardImageUrl =
     item.latest_record_primary_thumb_url ||
     item.latest_record_primary_image_url ||
-    (!hasLatestRecord ? item.display_cover_image_url || item.cover_image_url || "" : "");
+    (!hasLatestRecord ? item.display_cover_image_url || "" : "");
   const cardImageAlt = item.latest_record_primary_image_url || item.latest_record_primary_thumb_url ? "最新记录图片" : item.title || "项目封面";
   const systemName = getArchiveSystemName(item);
   const mobileSystemName = getMobileArchiveSystemName(item);

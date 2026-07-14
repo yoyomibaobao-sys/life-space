@@ -39,6 +39,8 @@ type RelatedArchiveSourceRow = {
   ended_at?: string | null;
   help_status?: string | null;
   cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_path?: string | null;
   created_at?: string | null;
 };
 
@@ -48,6 +50,14 @@ type RelatedArchiveRecordRow = {
   note?: string | null;
   record_time?: string | null;
   primary_image_url?: string | null;
+};
+
+type RelatedArchiveMediaRow = {
+  record_id?: string | null;
+  url?: string | null;
+  thumb_url?: string | null;
+  storage_path?: string | null;
+  thumb_path?: string | null;
 };
 
 type PlantAliasSearchRow = PlantAliasRow & {
@@ -246,6 +256,7 @@ async function buildArchiveItemsFromRows(
   const archiveIds = uniqueTextList(rows.map((row) => row.id));
   const publicRecordCountMap = new Map<string, number>();
   const latestPublicRecordMap = new Map<string, RelatedArchiveRecordRow>();
+  const latestPublicMediaMap = new Map<string, RelatedArchiveMediaRow>();
 
   if (archiveIds.length > 0) {
     const baseRecordQuery = supabase
@@ -263,7 +274,8 @@ async function buildArchiveItemsFromRows(
     if (error) {
       console.error("load related archive records error:", error);
     } else {
-      ((recordRows || []) as RelatedArchiveRecordRow[]).forEach((record) => {
+      const relatedRecords = (recordRows || []) as RelatedArchiveRecordRow[];
+      relatedRecords.forEach((record) => {
         if (!record.archive_id) return;
 
         publicRecordCountMap.set(
@@ -275,11 +287,37 @@ async function buildArchiveItemsFromRows(
           latestPublicRecordMap.set(record.archive_id, record);
         }
       });
+
+      const latestRecordIds = Array.from(latestPublicRecordMap.values())
+        .map((record) => record.id)
+        .filter((recordId): recordId is string => Boolean(recordId));
+
+      if (latestRecordIds.length > 0) {
+        const { data: mediaRows, error: mediaError } = await supabase
+          .from("media")
+          .select("record_id, url, thumb_url, storage_path, thumb_path, sort_order, created_at")
+          .in("record_id", latestRecordIds)
+          .eq("type", "image")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true });
+
+        if (mediaError) {
+          console.error("load related archive media error:", mediaError);
+        } else {
+          ((mediaRows || []) as RelatedArchiveMediaRow[]).forEach((media) => {
+            if (!media.record_id || latestPublicMediaMap.has(media.record_id)) return;
+            latestPublicMediaMap.set(media.record_id, media);
+          });
+        }
+      }
     }
   }
 
   return rows.map((row) => {
     const latestRecord = latestPublicRecordMap.get(row.id);
+    const latestMedia = latestRecord?.id
+      ? latestPublicMediaMap.get(latestRecord.id)
+      : null;
 
     return {
       archive_id: row.id,
@@ -294,10 +332,15 @@ async function buildArchiveItemsFromRows(
       ended_at: row.ended_at,
       archive_help_status: row.help_status,
       cover_image_url: row.cover_image_url,
+      cover_image_path: row.cover_image_path,
+      cover_thumb_path: row.cover_thumb_path,
       public_record_count: publicRecordCountMap.get(row.id) || 0,
       last_public_record_time: latestRecord?.record_time || null,
       last_public_record_note: latestRecord?.note || null,
-      last_public_record_image_url: latestRecord?.primary_image_url || null,
+      last_public_record_image_url:
+        latestRecord?.primary_image_url || latestMedia?.url || null,
+      last_public_record_image_path: latestMedia?.storage_path || null,
+      last_public_record_thumb_path: latestMedia?.thumb_path || null,
     } satisfies PlantRelatedArchiveItem;
   });
 }
@@ -325,34 +368,31 @@ function mergeRelatedArchiveItems(items: PlantRelatedArchiveItem[]) {
 }
 
 async function hydrateRelatedArchiveImages(archives: PlantRelatedArchiveItem[]) {
-  const coverImagePairs = await resolveMediaDisplayPairs(
-    supabase,
-    archives.map((archive) => ({
+  const archiveCount = archives.length;
+  const displayPairs = await resolveMediaDisplayPairs(supabase, [
+    ...archives.map((archive) => ({
       url: archive.cover_image_url,
       path: archive.cover_image_path,
       thumb_path: archive.cover_thumb_path,
-    }))
-  );
-  const lastRecordImagePairs = await resolveMediaDisplayPairs(
-    supabase,
-    archives.map((archive) => ({
+    })),
+    ...archives.map((archive) => ({
       url: archive.last_public_record_image_url,
       path: archive.last_public_record_image_path,
       thumb_path: archive.last_public_record_thumb_path,
-    }))
-  );
+    })),
+  ]);
+  const coverImagePairs = displayPairs.slice(0, archiveCount);
+  const lastRecordImagePairs = displayPairs.slice(archiveCount);
 
   return archives.map((archive, index) => ({
     ...archive,
     display_cover_image_url:
       coverImagePairs[index]?.display_thumb_url ||
       coverImagePairs[index]?.display_url ||
-      archive.cover_image_url ||
       null,
     display_last_public_record_image_url:
       lastRecordImagePairs[index]?.display_thumb_url ||
       lastRecordImagePairs[index]?.display_url ||
-      archive.last_public_record_image_url ||
       null,
   }));
 }
@@ -878,9 +918,7 @@ function PlantArchiveList({
       {archives.map((archive) => {
         const imageUrl =
           archive.display_cover_image_url ||
-          archive.display_last_public_record_image_url ||
-          archive.cover_image_url ||
-          archive.last_public_record_image_url;
+          archive.display_last_public_record_image_url;
         const latestDate = formatShortDate(archive.last_public_record_time);
         const metaParts = [
           showVisibility ? (archive.archive_is_public ? "公开发现" : "仅自己可见") : null,
@@ -1132,7 +1170,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
       const plantNameTerms = buildPlantNameTerms(plantRow, i18nRows, aliasRows);
       const archiveMatchFilter = buildArchiveMatchFilter(id, plantNameTerms);
       const archiveSelect =
-        "id, user_id, title, system_name, species_id, species_name_snapshot, is_public, status, ended_at, help_status, cover_image_url, created_at";
+        "id, user_id, title, system_name, species_id, species_name_snapshot, is_public, status, ended_at, help_status, cover_image_url, cover_image_path, cover_thumb_path, created_at";
 
       const [{ data: publicArchiveRows }, { data: ownArchiveRows }] = await Promise.all([
         supabase
@@ -1176,8 +1214,14 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           )
         : [];
 
-      setRelatedArchives(await hydrateRelatedArchiveImages(publicRelatedRows));
-      setOwnArchives(await hydrateRelatedArchiveImages(ownRelatedRows));
+      const hydratedRelatedRows = await hydrateRelatedArchiveImages([
+        ...publicRelatedRows,
+        ...ownRelatedRows,
+      ]);
+      setRelatedArchives(
+        hydratedRelatedRows.slice(0, publicRelatedRows.length)
+      );
+      setOwnArchives(hydratedRelatedRows.slice(publicRelatedRows.length));
 
       if (user) {
         const [{ data: interestData }, { data: planData }] = await Promise.all([

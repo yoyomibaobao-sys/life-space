@@ -1,10 +1,6 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import {
-  getMediaFallbackUrl,
-  getMediaObjectPath,
-  getMediaThumbObjectPath,
-} from "@/lib/media-urls";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import type {
   DiscoveryProjectCursor,
   DiscoveryProjectFeedFilters,
@@ -14,7 +10,6 @@ import type {
 
 const DEFAULT_CANDIDATE_LIMIT = 40;
 const MAX_CANDIDATE_LIMIT = 200;
-const MEDIA_SIGNED_URL_EXPIRES_IN = 60 * 60;
 const ISO_TIMESTAMP_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const UUID_PATTERN =
@@ -29,11 +24,6 @@ type DiscoveryProjectMediaRow = {
   sort_order: number | null;
   created_at: string | null;
 };
-
-type DiscoveryProjectMediaSource = Pick<
-  DiscoveryProjectMediaRow,
-  "url" | "thumb_url" | "storage_path" | "thumb_path"
->;
 
 export type DiscoveryProjectFeedResult = {
   items: DiscoveryProjectFeedItem[];
@@ -96,55 +86,6 @@ function buildCursorFilter(cursor: DiscoveryProjectCursor) {
   ].join(",");
 }
 
-async function resolveDiscoveryProjectMediaUrls(
-  sources: DiscoveryProjectMediaSource[]
-) {
-  const paths = Array.from(
-    new Set(
-      sources
-        .flatMap((source) => [
-          getMediaObjectPath(source),
-          getMediaThumbObjectPath(source),
-        ])
-        .filter((path): path is string => Boolean(path))
-    )
-  );
-  const signedUrlMap = new Map<string, string>();
-
-  if (paths.length) {
-    const { data, error } = await supabase.storage
-      .from("media")
-      .createSignedUrls(paths, MEDIA_SIGNED_URL_EXPIRES_IN);
-
-    if (error) {
-      console.warn("discovery project media signing failed:", error.message);
-    } else {
-      (data || []).forEach((row) => {
-        if (row.path && row.signedUrl) {
-          signedUrlMap.set(row.path, row.signedUrl);
-        }
-      });
-    }
-  }
-
-  return sources.map((source) => {
-    const imagePath = getMediaObjectPath(source);
-    const thumbPath = getMediaThumbObjectPath(source);
-    const displayUrl =
-      (imagePath && signedUrlMap.get(imagePath)) ||
-      getMediaFallbackUrl(source, false);
-    const displayThumbUrl =
-      (thumbPath && signedUrlMap.get(thumbPath)) ||
-      getMediaFallbackUrl(source, true) ||
-      displayUrl;
-
-    return {
-      display_url: displayUrl || null,
-      display_thumb_url: displayThumbUrl || null,
-    };
-  });
-}
-
 export async function enrichDiscoveryProjectMedia(
   items: DiscoveryProjectFeedItem[]
 ): Promise<DiscoveryProjectFeedItem[]> {
@@ -198,14 +139,13 @@ export async function enrichDiscoveryProjectMedia(
     );
   });
 
-  const displayPairs = await resolveDiscoveryProjectMediaUrls(sources);
+  const displayPairs = await resolveMediaDisplayPairs(supabase, sources);
 
   return items.map((item, index) => ({
     ...item,
     display_image_url:
       displayPairs[index]?.display_thumb_url ||
       displayPairs[index]?.display_url ||
-      item.latest_public_primary_image_url ||
       null,
   }));
 }

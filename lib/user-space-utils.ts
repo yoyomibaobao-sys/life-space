@@ -14,7 +14,7 @@ export function getMediaUrl(media: {
   display_url?: string | null;
   display_thumb_url?: string | null;
 }) {
-  return media?.display_url || media?.file_url || media?.url || "";
+  return media?.display_url || "";
 }
 
 export function getMediaPreviewUrl(media: {
@@ -26,7 +26,7 @@ export function getMediaPreviewUrl(media: {
   display_url?: string | null;
   display_thumb_url?: string | null;
 }) {
-  return media?.display_thumb_url || media?.thumb_url || getMediaUrl(media);
+  return media?.display_thumb_url || getMediaUrl(media);
 }
 
 export function buildStatsMap(records: UserSpaceRecord[]) {
@@ -75,9 +75,6 @@ export function buildCoverMap(records: UserSpaceRecord[]) {
       }
     }
 
-    if (record.primary_image_url) {
-      map[record.archive_id] = record.primary_image_url;
-    }
   });
 
   return map;

@@ -1,5 +1,14 @@
 const MEDIA_BUCKET = "media";
-const DEFAULT_MEDIA_SIGNED_URL_EXPIRES_IN = 60 * 60;
+export const MEDIA_SIGNED_URL_EXPIRES_IN = 60 * 60;
+
+const MEDIA_OBJECT_URL_MARKERS = [
+  "/storage/v1/object/public/media/",
+  "/storage/v1/object/sign/media/",
+  "/storage/v1/object/authenticated/media/",
+  "/storage/v1/render/image/public/media/",
+  "/storage/v1/render/image/sign/media/",
+  "/storage/v1/render/image/authenticated/media/",
+] as const;
 
 type SignedUrlRow = {
   path?: string | null;
@@ -11,7 +20,7 @@ type StorageBucketClient = {
     path: string,
     expiresIn: number
   ) => Promise<{ data: { signedUrl: string } | null; error: unknown }>;
-  createSignedUrls?: (
+  createSignedUrls: (
     paths: string[],
     expiresIn: number
   ) => Promise<{ data: SignedUrlRow[] | null; error: unknown }>;
@@ -40,26 +49,30 @@ export type MediaDisplayUrls = {
 function cleanPath(value?: string | null) {
   const next = String(value || "").trim();
   if (!next || /^https?:\/\//i.test(next)) return null;
-  return next;
+
+  const clean = next.replace(/^\/+/, "").replace(/^media\//, "");
+  if (!clean || clean.split("/").some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+
+  return clean;
 }
 
-function cleanUrl(value?: string | null) {
-  const next = String(value || "").trim();
-  return /^https?:\/\//i.test(next) ? next : null;
-}
-
-export function getMediaStoragePathFromPublicUrl(url?: string | null) {
+export function getMediaStoragePathFromUrl(url?: string | null) {
   if (!url) return null;
 
   try {
     const parsed = new URL(url);
-    const marker = "/storage/v1/object/public/media/";
-    const markerIndex = parsed.pathname.indexOf(marker);
-    if (markerIndex === -1) return null;
+    const marker = MEDIA_OBJECT_URL_MARKERS.find((item) =>
+      parsed.pathname.includes(item)
+    );
+    if (!marker) return null;
 
+    const markerIndex = parsed.pathname.indexOf(marker);
     const rawPath = parsed.pathname.slice(markerIndex + marker.length);
     if (!rawPath) return null;
-    return decodeURIComponent(rawPath);
+    const decodedPath = decodeURIComponent(rawPath).replace(/^\/+/, "");
+    return cleanPath(decodedPath);
   } catch {
     return null;
   }
@@ -69,35 +82,19 @@ export function getMediaObjectPath(source: MediaUrlSource) {
   return (
     cleanPath(source.storage_path) ||
     cleanPath(source.path) ||
-    getMediaStoragePathFromPublicUrl(source.url) ||
-    getMediaStoragePathFromPublicUrl(source.file_url)
+    getMediaStoragePathFromUrl(source.url) ||
+    getMediaStoragePathFromUrl(source.file_url)
   );
 }
 
 export function getMediaThumbObjectPath(source: MediaUrlSource) {
-  return cleanPath(source.thumb_path) || getMediaStoragePathFromPublicUrl(source.thumb_url);
-}
-
-export function getMediaFallbackUrl(source: MediaUrlSource, preferThumb = false) {
-  if (preferThumb) {
-    return (
-      cleanUrl(source.thumb_url) ||
-      cleanUrl(source.url) ||
-      cleanUrl(source.file_url)
-    );
-  }
-
-  return (
-    cleanUrl(source.url) ||
-    cleanUrl(source.file_url) ||
-    cleanUrl(source.thumb_url)
-  );
+  return cleanPath(source.thumb_path) || getMediaStoragePathFromUrl(source.thumb_url);
 }
 
 export async function createMediaSignedUrl(
   supabase: MediaUrlSupabaseClient,
   path: string | null | undefined,
-  expiresIn = DEFAULT_MEDIA_SIGNED_URL_EXPIRES_IN
+  expiresIn = MEDIA_SIGNED_URL_EXPIRES_IN
 ) {
   const safePath = cleanPath(path);
   if (!safePath) return null;
@@ -113,7 +110,7 @@ export async function createMediaSignedUrl(
 export async function createMediaSignedUrls(
   supabase: MediaUrlSupabaseClient,
   paths: Array<string | null | undefined>,
-  expiresIn = DEFAULT_MEDIA_SIGNED_URL_EXPIRES_IN
+  expiresIn = MEDIA_SIGNED_URL_EXPIRES_IN
 ) {
   const uniquePaths = Array.from(
     new Set(paths.map(cleanPath).filter((path): path is string => Boolean(path)))
@@ -124,24 +121,14 @@ export async function createMediaSignedUrls(
 
   const bucket = supabase.storage.from(MEDIA_BUCKET);
 
-  if (typeof bucket.createSignedUrls === "function") {
-    const { data, error } = await bucket.createSignedUrls(uniquePaths, expiresIn);
-    if (!error && data) {
-      data.forEach((row) => {
-        if (row.path && row.signedUrl) {
-          signedUrlMap.set(row.path, row.signedUrl);
-        }
-      });
-    }
+  const { data, error } = await bucket.createSignedUrls(uniquePaths, expiresIn);
+  if (!error && data) {
+    data.forEach((row) => {
+      if (row.path && row.signedUrl) {
+        signedUrlMap.set(row.path, row.signedUrl);
+      }
+    });
   }
-
-  const missingPaths = uniquePaths.filter((path) => !signedUrlMap.has(path));
-  await Promise.all(
-    missingPaths.map(async (path) => {
-      const signedUrl = await createMediaSignedUrl(supabase, path, expiresIn);
-      if (signedUrl) signedUrlMap.set(path, signedUrl);
-    })
-  );
 
   return signedUrlMap;
 }
@@ -157,7 +144,7 @@ export async function resolveMediaDisplayUrl(
     : getMediaObjectPath(source);
   const signedUrl = await createMediaSignedUrl(supabase, path, options?.expiresIn);
 
-  return signedUrl || getMediaFallbackUrl(source, preferThumb);
+  return signedUrl;
 }
 
 export async function resolveMediaDisplayUrls(
@@ -175,7 +162,7 @@ export async function resolveMediaDisplayUrls(
 
   return sources.map((source, index) => {
     const path = cleanPath(paths[index]);
-    return (path && signedUrlMap.get(path)) || getMediaFallbackUrl(source, preferThumb);
+    return (path && signedUrlMap.get(path)) || null;
   });
 }
 
@@ -194,11 +181,9 @@ export async function resolveMediaDisplayPairs<T extends MediaUrlSource>(
     const imagePath = getMediaObjectPath(source);
     const thumbPath = getMediaThumbObjectPath(source);
     const displayUrl =
-      (imagePath && signedUrlMap.get(imagePath)) ||
-      getMediaFallbackUrl(source, false);
+      (imagePath && signedUrlMap.get(imagePath)) || null;
     const displayThumbUrl =
       (thumbPath && signedUrlMap.get(thumbPath)) ||
-      getMediaFallbackUrl(source, true) ||
       displayUrl;
 
     return {

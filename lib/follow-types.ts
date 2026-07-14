@@ -28,9 +28,13 @@ export type ArchiveRow = {
   last_record_time: string | null;
   view_count: number | null;
   cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_url?: string | null;
+  cover_thumb_path?: string | null;
 };
 
 export type RecordRow = {
+  id: string;
   archive_id: string;
   note: string | null;
   record_time: string | null;

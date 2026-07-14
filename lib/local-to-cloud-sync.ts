@@ -347,7 +347,7 @@ async function ensureCloudCycles(params: {
 async function findExistingMediaByPath(storagePath: string) {
   const { data, error } = await supabase
     .from("media")
-    .select("id, url")
+    .select("id")
     .eq("storage_path", storagePath)
     .limit(1);
 
@@ -356,7 +356,7 @@ async function findExistingMediaByPath(storagePath: string) {
     return null;
   }
 
-  return (data?.[0] as { id: string; url?: string | null } | undefined) || null;
+  return (data?.[0] as { id: string } | undefined) || null;
 }
 
 async function uploadLocalImageToCloud(params: {
@@ -398,7 +398,7 @@ async function uploadLocalImageToCloud(params: {
       cloud_archive_id: params.cloudArchiveId,
       cloud_record_id: params.cloudRecordId,
       cloud_media_id: existingMedia.id,
-      cloud_media_url: existingMedia.url || null,
+      cloud_media_url: null,
       last_sync_at: new Date().toISOString(),
     });
     return;
@@ -418,7 +418,6 @@ async function uploadLocalImageToCloud(params: {
   }
 
   let uploadedThumbPath: string | null = null;
-  let uploadedThumbUrl: string | null = null;
   let uploadedThumbBytes = 0;
   let uploadedMain = false;
 
@@ -447,27 +446,24 @@ async function uploadLocalImageToCloud(params: {
       if (thumbError) {
         console.error("migrate local thumbnail upload error:", thumbError);
       } else {
-        const { data: thumbUrlData } = supabase.storage.from("media").getPublicUrl(thumbName);
         uploadedThumbPath = thumbName;
-        uploadedThumbUrl = thumbUrlData.publicUrl;
         uploadedThumbBytes = thumbFile.size;
       }
     }
 
     const actualBytes = uploadFile.size + uploadedThumbBytes;
-    const { data: urlData } = supabase.storage.from("media").getPublicUrl(fileName);
     const { data: mediaRow, error: mediaError } = await supabase
       .from("media")
       .insert([
         {
           record_id: params.cloudRecordId,
           type: "image",
-          url: urlData.publicUrl,
+          url: null,
           user_id: params.userId,
           size_mb: actualBytes / (1024 * 1024),
           size_bytes: actualBytes,
           storage_path: fileName,
-          thumb_url: uploadedThumbUrl,
+          thumb_url: null,
           thumb_path: uploadedThumbPath,
           mime_type: uploadFile.type || "image/jpeg",
           width: compressed.width ?? params.image.width ?? null,
@@ -477,7 +473,7 @@ async function uploadLocalImageToCloud(params: {
           storage_class: "hot",
         },
       ])
-      .select("id, url")
+      .select("id")
       .single();
 
     if (mediaError || !mediaRow?.id) {
@@ -495,7 +491,7 @@ async function uploadLocalImageToCloud(params: {
       cloud_archive_id: params.cloudArchiveId,
       cloud_record_id: params.cloudRecordId,
       cloud_media_id: mediaRow.id,
-      cloud_media_url: mediaRow.url || urlData.publicUrl,
+      cloud_media_url: null,
       last_sync_at: new Date().toISOString(),
     });
   } catch (error) {

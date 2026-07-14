@@ -35,7 +35,7 @@ type MarketMediaRow = {
   id: string;
   market_post_id: string;
   user_id: string;
-  url: string;
+  url: string | null;
   path: string | null;
   thumb_url?: string | null;
   thumb_path?: string | null;
@@ -267,9 +267,9 @@ export default function EditMarketPostPage() {
     }, -1);
 
     const uploadedRows: {
-      url: string;
+      url: string | null;
       path: string;
-      thumb_url: string;
+      thumb_url: string | null;
       thumb_path: string;
       sort_order: number;
     }[] = [];
@@ -310,15 +310,10 @@ export default function EditMarketPostPage() {
           throw thumbUploadError;
         }
 
-        const { data } = supabase.storage.from("media").getPublicUrl(filePath);
-        const { data: thumbData } = supabase.storage
-          .from("media")
-          .getPublicUrl(thumbPath);
-
         uploadedRows.push({
-          url: data.publicUrl,
+          url: null,
           path: filePath,
-          thumb_url: thumbData.publicUrl,
+          thumb_url: null,
           thumb_path: thumbPath,
           sort_order: currentMaxSort + index + 1,
         });
@@ -344,11 +339,9 @@ export default function EditMarketPostPage() {
         throw insertError;
       }
 
-      if (!item.cover_image_url && uploadedRows[0]) {
+      if (!item.cover_image_path && !item.cover_image_url && uploadedRows[0]) {
         await setCoverFromValue({
-          url: uploadedRows[0].url,
           path: uploadedRows[0].path,
-          thumbUrl: uploadedRows[0].thumb_url,
           thumbPath: uploadedRows[0].thumb_path,
         });
       }
@@ -369,9 +362,7 @@ export default function EditMarketPostPage() {
   }
 
   async function setCoverFromValue(params: {
-    url: string;
     path: string | null;
-    thumbUrl?: string | null;
     thumbPath?: string | null;
   }) {
     if (!user || !item) return;
@@ -385,9 +376,9 @@ export default function EditMarketPostPage() {
     const { error } = await supabase
       .from("market_posts")
       .update({
-        cover_image_url: params.url,
+        cover_image_url: null,
         cover_image_path: params.path,
-        cover_thumb_url: params.thumbUrl || null,
+        cover_thumb_url: null,
         cover_thumb_path: params.thumbPath || null,
       })
       .eq("id", item.id)
@@ -416,9 +407,9 @@ export default function EditMarketPostPage() {
 
     setItem({
       ...item,
-      cover_image_url: params.url,
+      cover_image_url: null,
       cover_image_path: params.path,
-      cover_thumb_url: params.thumbUrl || null,
+      cover_thumb_url: null,
       cover_thumb_path: params.thumbPath || null,
     });
   }
@@ -428,9 +419,7 @@ export default function EditMarketPostPage() {
 
     setWorkingMediaId(media.id);
     await setCoverFromValue({
-      url: media.url,
       path: media.path,
-      thumbUrl: media.thumb_url || null,
       thumbPath: media.thumb_path || null,
     });
     setWorkingMediaId(null);
@@ -475,7 +464,9 @@ export default function EditMarketPostPage() {
     }
 
     const remaining = marketMedia.filter((item) => item.id !== media.id);
-    const deletingCurrentCover = item.cover_image_url === media.url;
+    const deletingCurrentCover = item.cover_image_path
+      ? item.cover_image_path === media.path
+      : Boolean(item.cover_image_url && item.cover_image_url === media.url);
 
     if (deletingCurrentCover) {
       const nextCover = remaining[0] || null;
@@ -483,9 +474,9 @@ export default function EditMarketPostPage() {
       const { error: updateCoverError } = await supabase
         .from("market_posts")
         .update({
-          cover_image_url: nextCover?.url || null,
+          cover_image_url: null,
           cover_image_path: nextCover?.path || null,
-          cover_thumb_url: nextCover?.thumb_url || null,
+          cover_thumb_url: null,
           cover_thumb_path: nextCover?.thumb_path || null,
         })
         .eq("id", item.id)
@@ -496,9 +487,9 @@ export default function EditMarketPostPage() {
       } else {
         setItem({
           ...item,
-          cover_image_url: nextCover?.url || null,
+          cover_image_url: null,
           cover_image_path: nextCover?.path || null,
-          cover_thumb_url: nextCover?.thumb_url || null,
+          cover_thumb_url: null,
           cover_thumb_path: nextCover?.thumb_path || null,
         });
       }
@@ -580,19 +571,34 @@ export default function EditMarketPostPage() {
                     ? item.cover_image_path === media.path
                     : item.cover_image_url === media.url;
                   const isWorking = workingMediaId === media.id;
-                  const mediaImageUrl = media.display_url || media.url;
+                  const mediaImageUrl = media.display_url || null;
                   const mediaThumbUrl =
-                    media.display_thumb_url || media.thumb_url || mediaImageUrl;
+                    media.display_thumb_url || mediaImageUrl;
 
                   return (
                     <article key={media.id} style={mediaManageCardStyle}>
                       <div style={mediaImageWrapStyle}>
-                        <img
-                          src={mediaThumbUrl}
-                          alt=""
-                          style={mediaManageImageStyle}
-                          loading="lazy"
-                        />
+                        {mediaThumbUrl ? (
+                          <img
+                            src={mediaThumbUrl}
+                            alt=""
+                            style={mediaManageImageStyle}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div
+                            aria-label="图片暂不可用"
+                            style={{
+                              ...mediaManageImageStyle,
+                              display: "grid",
+                              placeItems: "center",
+                              color: "#879486",
+                              fontSize: 12,
+                            }}
+                          >
+                            图片暂不可用
+                          </div>
+                        )}
                         {isCover ? (
                           <span style={coverBadgeStyle}>封面</span>
                         ) : null}

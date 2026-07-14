@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import { SimpleZipBuilder } from "@/lib/export-zip";
+import { getMediaStoragePathFromUrl } from "@/lib/media-urls";
 
 type ProfileRow = {
   id: string;
@@ -24,6 +25,7 @@ type ArchiveRow = {
   system_name: string | null;
   species_name_snapshot: string | null;
   cover_image_url: string | null;
+  cover_image_path: string | null;
   is_public: boolean | null;
   status: string | null;
   created_at: string | null;
@@ -107,8 +109,6 @@ function getBearerToken(request: Request) {
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
 }
-
-const textEncoder = new TextEncoder();
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
@@ -213,15 +213,19 @@ async function downloadUrlAsBytes({
   supabase,
   storagePath,
   url,
+  allowPublicUrlFallback = false,
 }: {
   supabase: SupabaseServerClient;
   storagePath?: string | null | undefined;
   url: string | null | undefined;
+  allowPublicUrlFallback?: boolean;
 }) {
-  if (storagePath) {
+  const mediaPath = storagePath || getMediaStoragePathFromUrl(url);
+
+  if (mediaPath) {
     const { data, error } = await supabase.storage
       .from("media")
-      .download(storagePath);
+      .download(mediaPath);
 
     if (!error && data) {
       return {
@@ -229,8 +233,11 @@ async function downloadUrlAsBytes({
         contentType: data.type || null,
       };
     }
+
+    return null;
   }
 
+  if (!allowPublicUrlFallback) return null;
   if (!url) return null;
 
   const storageObject = getStorageObjectFromPublicUrl(url);
@@ -410,7 +417,7 @@ export async function GET(request: Request) {
       .maybeSingle(),
     supabase
       .from("archives")
-      .select("id,title,category,note,system_name,species_name_snapshot,cover_image_url,is_public,status,created_at,ended_at,record_count,last_record_time")
+      .select("id,title,category,note,system_name,species_name_snapshot,cover_image_url,cover_image_path,is_public,status,created_at,ended_at,record_count,last_record_time")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true }),
   ]);
@@ -512,15 +519,29 @@ export async function GET(request: Request) {
           zip.addFile(zipPath, downloaded.bytes);
         } else {
           item.download_failed = true;
-          failedDownloads.push(`${archive.title || archive.id} / ${formatDate(record.record_time || record.created_at)} / ${item.url || item.id}`);
+          failedDownloads.push(`${archive.title || archive.id} / ${formatDate(record.record_time || record.created_at)} / ${item.id}`);
         }
       }
     }
 
-    if (archive.cover_image_url && !mediaRows.some((media) => media.url === archive.cover_image_url)) {
-      const downloaded = await downloadUrlAsBytes({ supabase, url: archive.cover_image_url });
+    if (
+      (archive.cover_image_path || archive.cover_image_url) &&
+      !mediaRows.some(
+        (media) =>
+          (archive.cover_image_path && media.storage_path === archive.cover_image_path) ||
+          (archive.cover_image_url && media.url === archive.cover_image_url)
+      )
+    ) {
+      const downloaded = await downloadUrlAsBytes({
+        supabase,
+        storagePath: archive.cover_image_path,
+        url: archive.cover_image_url,
+      });
       if (downloaded?.bytes) {
-        const ext = inferExtension(archive.cover_image_url, downloaded.contentType);
+        const ext = inferExtension(
+          archive.cover_image_url || archive.cover_image_path,
+          downloaded.contentType
+        );
         const coverPath = uniquePath(`${archiveDir}images/cover.${ext}`, usedPaths);
         zip.addFile(coverPath, downloaded.bytes);
       }
@@ -528,7 +549,11 @@ export async function GET(request: Request) {
   }
 
   if (profile?.avatar_url) {
-    const avatar = await downloadUrlAsBytes({ supabase, url: profile.avatar_url });
+    const avatar = await downloadUrlAsBytes({
+      supabase,
+      url: profile.avatar_url,
+      allowPublicUrlFallback: true,
+    });
     if (avatar?.bytes) {
       const ext = inferExtension(profile.avatar_url, avatar.contentType);
       zip.addFile(`个人资料/avatar.${ext}`, avatar.bytes);

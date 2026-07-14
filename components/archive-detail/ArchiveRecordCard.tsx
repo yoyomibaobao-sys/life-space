@@ -888,7 +888,7 @@ function MobileRecordMediaGrid({
             style={mobileRecordMediaButtonStyle}
           >
             <img
-              src={target?.display_thumb_url || target?.thumb_url || media.url}
+              src={target?.display_thumb_url || media.url}
               alt={media.alt}
               loading="lazy"
               decoding="async"
@@ -945,7 +945,7 @@ function DesktopRecordMediaGrid({
             style={{ position: "relative", cursor: "pointer" }}
           >
             <img
-              src={target?.display_thumb_url || target?.thumb_url || media.url}
+              src={target?.display_thumb_url || media.url}
               alt={media.alt}
               loading="lazy"
               decoding="async"
