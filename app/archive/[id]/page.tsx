@@ -1,6 +1,6 @@
 "use client";
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
-import { use, useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { use, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -62,6 +62,7 @@ import {
   sumMediaSizeBytes,
 } from "@/lib/storage-usage";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { requestCloudDeletion } from "@/lib/cloud-deletion";
 
 export default function ArchiveDetail({
   params,
@@ -106,6 +107,7 @@ function Content({ id }: { id: string }) {
     mediaId: string;
   } | null>(null);
   const [isDeletingMedia, setIsDeletingMedia] = useState(false);
+  const deletingMediaIdsRef = useRef(new Set<string>());
   const [showUnfollowProjectConfirm, setShowUnfollowProjectConfirm] = useState(false);
   const [projectFollowSubmitting, setProjectFollowSubmitting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -1259,43 +1261,35 @@ saveRecentArchiveBrowse({
     mediaId: string,
     successMessage: string | null = "图片已删除",
   ) {
-    const targetRecord = records.find((record) => record.id === recordId);
-    const targetMedia = (targetRecord?.media || []).find(
-      (media) => media.id === mediaId
-    );
-    const deletedBytes = targetMedia ? sumMediaSizeBytes([targetMedia]) : 0;
-    const ownerId = targetMedia?.user_id || activeArchive.user_id || me;
+    if (deletingMediaIdsRef.current.has(mediaId)) return false;
+    deletingMediaIdsRef.current.add(mediaId);
 
-    if (targetMedia) {
-      await removeMediaFilesFromStorage([targetMedia]);
+    try {
+      const deleted = await requestCloudDeletion("media", mediaId);
+
+      if (!deleted) {
+        showToast("删除图片失败");
+        return false;
+      }
+
+      setRecords((prev) =>
+        prev.map((record) =>
+          record.id === recordId
+            ? {
+                ...record,
+                media: (record.media || []).filter(
+                  (media) => media.id !== mediaId
+                ),
+              }
+            : record
+        )
+      );
+
+      if (successMessage) showToast(successMessage);
+      return true;
+    } finally {
+      deletingMediaIdsRef.current.delete(mediaId);
     }
-
-    const { error } = await supabase.from("media").delete().eq("id", mediaId);
-
-    if (error) {
-      showToast("删除图片失败");
-      return false;
-    }
-
-    if (deletedBytes > 0) {
-      await subtractStorageUsed(ownerId, deletedBytes);
-    }
-
-    setRecords((prev) =>
-      prev.map((record) =>
-        record.id === recordId
-          ? {
-              ...record,
-              media: (record.media || []).filter(
-                (media) => media.id !== mediaId
-              ),
-            }
-          : record
-      )
-    );
-
-    if (successMessage) showToast(successMessage);
-    return true;
   }
 
   async function confirmDeleteMedia() {

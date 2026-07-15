@@ -40,6 +40,7 @@ export default function ArchiveLightbox({
   const [offset, setOffset] = useState<PanOffset>({ x: 0, y: 0 });
   const [mobileToolbarVisible, setMobileToolbarVisible] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isDeletingCurrentImage, setIsDeletingCurrentImage] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchCurrentX = useRef<number | null>(null);
   const mobileTouchStart = useRef<PanOffset | null>(null);
@@ -216,16 +217,21 @@ export default function ArchiveLightbox({
   }
 
   async function deleteCurrentMobileImage() {
-    if (!onDeleteCurrentImage) return;
+    if (!onDeleteCurrentImage || isDeletingCurrentImage) return;
 
     const ok = window.confirm("确定删除当前图片吗？");
     if (!ok) return;
 
-    const remaining = await onDeleteCurrentImage(current, index);
-    setMobileMenuOpen(false);
+    setIsDeletingCurrentImage(true);
+    try {
+      const remaining = await onDeleteCurrentImage(current, index);
+      setMobileMenuOpen(false);
 
-    if (remaining <= 0) {
-      requestClose();
+      if (remaining <= 0) {
+        requestClose();
+      }
+    } finally {
+      setIsDeletingCurrentImage(false);
     }
   }
 
@@ -420,9 +426,10 @@ export default function ArchiveLightbox({
                   <button
                     type="button"
                     onClick={() => void deleteCurrentMobileImage()}
+                    disabled={isDeletingCurrentImage}
                     style={mobileLightboxDangerItemStyle}
                   >
-                    删除当前图片
+                    {isDeletingCurrentImage ? "删除中..." : "删除当前图片"}
                   </button>
                 </div>
               ) : null}

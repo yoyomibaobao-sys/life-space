@@ -1,18 +1,12 @@
 "use client";
 
-import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import {
-  removeMediaFilesFromStorage,
-  subtractStorageUsed,
-  sumMediaSizeBytes,
-} from "@/lib/storage-usage";
-import type { MediaItem } from "@/lib/domain-types";
+import { requestCloudDeletion } from "@/lib/cloud-deletion";
 
 export default function DeleteRecordButton({
   id,
@@ -32,37 +26,18 @@ export default function DeleteRecordButton({
     setIsDeleting(true);
 
     try {
-      const { data: mediaItemsRaw } = await supabase
-        .from("media")
-        .select("id, url, storage_path, thumb_path, size_mb, size_bytes, user_id")
-        .eq("record_id", id);
-      const mediaItems = (mediaItemsRaw || []) as MediaItem[];
-      const deletedBytes = sumMediaSizeBytes(mediaItems);
-      const ownerId = mediaItems.find((media) => media.user_id)?.user_id;
+      const deleted = await requestCloudDeletion("records", id);
 
-      await removeMediaFilesFromStorage(mediaItems);
-
-      const { error: recordError } = await supabase
-        .from("records")
-        .delete()
-        .eq("id", id);
-
-      if (recordError) {
-        console.log("删除记录失败:", recordError);
+      if (!deleted) {
         showToast("删除失败");
         return;
-      }
-
-      if (deletedBytes > 0) {
-        await subtractStorageUsed(ownerId, deletedBytes);
       }
 
       showToast("记录已删除");
       setOpen(false);
       onDeleted?.(id);
       router.refresh();
-    } catch (err) {
-      console.log("删除异常:", err);
+    } catch {
       showToast("操作失败");
     } finally {
       setIsDeleting(false);
@@ -72,6 +47,8 @@ export default function DeleteRecordButton({
   return (
     <>
     <button
+      type="button"
+      disabled={isDeleting}
       onClick={(e) => {
         e.stopPropagation();
         setOpen(true);
