@@ -21,7 +21,10 @@ export async function requestCloudDeletion(
       credentials: "same-origin",
     });
 
-    return response.ok;
+    if (!response.ok) return false;
+
+    const result = (await response.json()) as { ok?: unknown } | null;
+    return result?.ok === true;
   } catch {
     return false;
   }

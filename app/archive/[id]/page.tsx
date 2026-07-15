@@ -2041,6 +2041,8 @@ saveRecentArchiveBrowse({
           if (!isDeletingMedia) setDeleteMediaTarget(null);
         }}
         onConfirm={confirmDeleteMedia}
+        confirmDisabled={isDeletingMedia}
+        cancelDisabled={isDeletingMedia}
         danger
       />
     </>

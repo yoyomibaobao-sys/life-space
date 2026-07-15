@@ -75,6 +75,8 @@ export default function DeleteRecordButton({
       cancelText="取消"
       onClose={() => { if (!isDeleting) setOpen(false); }}
       onConfirm={handleDelete}
+      confirmDisabled={isDeleting}
+      cancelDisabled={isDeleting}
       danger
     />
     </>
