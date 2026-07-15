@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/internal/storage-deletion-worker",
-      "schedule": "0 * * * *"
+      "schedule": "17 3 * * *"
     }
   ]
 }
