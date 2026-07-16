@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
-type CloudDeletionKind = "records" | "media";
+type CloudDeletionKind = "records" | "media" | "archives";
 
 export async function requestCloudDeletion(
   kind: CloudDeletionKind,

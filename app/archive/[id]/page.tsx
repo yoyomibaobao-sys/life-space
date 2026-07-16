@@ -56,10 +56,7 @@ import {
 } from "@/lib/membership";
 import {
   releaseStorageBytes,
-  removeMediaFilesFromStorage,
   reserveStorageBytes,
-  subtractStorageUsed,
-  sumMediaSizeBytes,
 } from "@/lib/storage-usage";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { requestCloudDeletion } from "@/lib/cloud-deletion";
@@ -864,45 +861,18 @@ saveRecentArchiveBrowse({
     if (!isOwner || isDeletingArchive) return;
 
     setIsDeletingArchive(true);
-
-    const { data: recordRows } = await supabase
-      .from("records")
-      .select("id")
-      .eq("archive_id", activeArchive.id);
-    const recordIds = (recordRows || []).map((record) => record.id).filter(Boolean);
-    let mediaItems: MediaItem[] = [];
-
-    if (recordIds.length > 0) {
-      const { data: mediaRows } = await supabase
-        .from("media")
-        .select("id, url, storage_path, thumb_path, size_mb, size_bytes, user_id")
-        .in("record_id", recordIds);
-      mediaItems = (mediaRows || []) as MediaItem[];
-      await removeMediaFilesFromStorage(mediaItems);
-    }
-
-    const deletedBytes = sumMediaSizeBytes(mediaItems);
-    const ownerId = activeArchive.user_id || mediaItems.find((media) => media.user_id)?.user_id;
-    const { error } = await supabase
-      .from("archives")
-      .delete()
-      .eq("id", activeArchive.id)
-      .eq("user_id", activeArchive.user_id);
-
+    const deleted = await requestCloudDeletion("archives", activeArchive.id);
     setIsDeletingArchive(false);
 
-    if (error) {
+    if (!deleted) {
       showToast("删除项目失败");
       return;
-    }
-
-    if (deletedBytes > 0) {
-      await subtractStorageUsed(ownerId, deletedBytes);
     }
 
     setDeleteArchiveDialogOpen(false);
     showToast("项目已删除");
     router.replace("/archive");
+    router.refresh();
   }
 
   function beginMobileArchiveEdit(field: MobileArchiveEditableField) {
@@ -2011,6 +1981,8 @@ saveRecentArchiveBrowse({
         message={`确定删除“${activeArchive.title || "这个项目"}”吗？项目内的记录会一起删除，删除后无法恢复。`}
         confirmText={isDeletingArchive ? "删除中..." : "删除项目"}
         cancelText="取消"
+        confirmDisabled={isDeletingArchive}
+        cancelDisabled={isDeletingArchive}
         onClose={() => {
           if (!isDeletingArchive) setDeleteArchiveDialogOpen(false);
         }}

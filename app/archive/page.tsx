@@ -27,7 +27,7 @@ import type {
   SortMode,
   SubTagItem,
 } from "@/lib/archive-page-types";
-import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+import type { PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   buildArchiveSearchText,
@@ -46,11 +46,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
-import {
-  removeMediaFilesFromStorage,
-  subtractStorageUsed,
-  sumMediaSizeBytes,
-} from "@/lib/storage-usage";
+import { requestCloudDeletion } from "@/lib/cloud-deletion";
 import {
   createLocalTaxonomyItem,
   deleteLocalArchive,
@@ -862,41 +858,18 @@ export default function ArchivePage() {
     if (!deleteArchiveTarget || deletingArchiveId) return;
 
     setDeletingArchiveId(deleteArchiveTarget.id);
-
-    const { data: recordRows } = await supabase
-      .from("records")
-      .select("id")
-      .eq("archive_id", deleteArchiveTarget.id);
-    const recordIds = (recordRows || []).map((record) => record.id).filter(Boolean);
-    let mediaItems: MediaItem[] = [];
-
-    if (recordIds.length > 0) {
-      const { data: mediaRows } = await supabase
-        .from("media")
-        .select("id, url, storage_path, thumb_path, size_mb, size_bytes, user_id")
-        .in("record_id", recordIds);
-      mediaItems = (mediaRows || []) as MediaItem[];
-      await removeMediaFilesFromStorage(mediaItems);
-    }
-
-    const deletedBytes = sumMediaSizeBytes(mediaItems);
-    const ownerId = deleteArchiveTarget.user_id || mediaItems.find((media) => media.user_id)?.user_id;
-
-    const { error } = await supabase.from("archives").delete().eq("id", deleteArchiveTarget.id);
+    const deleted = await requestCloudDeletion("archives", deleteArchiveTarget.id);
     setDeletingArchiveId(null);
 
-    if (error) {
+    if (!deleted) {
       showToast("删除项目失败");
       return;
     }
 
-    if (deletedBytes > 0) {
-      await subtractStorageUsed(ownerId, deletedBytes);
-    }
-
+    const deletedArchiveId = deleteArchiveTarget.id;
     setDeleteArchiveTarget(null);
+    setArchives((current) => current.filter((archive) => archive.id !== deletedArchiveId));
     showToast("项目已删除");
-    await loadData();
   }
 
   async function markLocalArchivesAsMine() {
@@ -2120,6 +2093,8 @@ export default function ArchivePage() {
         confirmText={deletingArchiveId ? "删除中..." : "删除"}
         cancelText="取消"
         danger
+        confirmDisabled={Boolean(deletingArchiveId)}
+        cancelDisabled={Boolean(deletingArchiveId)}
         onClose={() => {
           if (!deletingArchiveId) setDeleteArchiveTarget(null);
         }}

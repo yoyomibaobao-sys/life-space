@@ -10,7 +10,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type SafeDeleteKind = "record" | "media";
+type SafeDeleteKind = "record" | "media" | "archive";
 
 type SafeDeleteRpcRow = {
   ok?: boolean | null;
@@ -46,8 +46,17 @@ export async function handleSafeDeleteRequest(
   }
 
   const rpcName =
-    kind === "record" ? "request_delete_record" : "request_delete_media";
-  const parameterName = kind === "record" ? "p_record_id" : "p_media_id";
+    kind === "record"
+      ? "request_delete_record"
+      : kind === "media"
+        ? "request_delete_media"
+        : "request_delete_archive";
+  const parameterName =
+    kind === "record"
+      ? "p_record_id"
+      : kind === "media"
+        ? "p_media_id"
+        : "p_archive_id";
   const rpcResult = await auth.supabase.rpc(rpcName, {
     [parameterName]: id,
   });
