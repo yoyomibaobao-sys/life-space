@@ -246,7 +246,7 @@ export default function ArchiveDetailHeader({
               {archive.is_public ? "设为仅自己可见" : "设为公开发现"}
             </button>
             <button type="button" onClick={onDeleteArchive} style={profileDangerButtonStyle}>
-              删除项目
+              移入回收站
             </button>
           </>
         ) : null

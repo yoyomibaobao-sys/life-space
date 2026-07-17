@@ -45,11 +45,17 @@ type MembershipPaymentRow = {
 };
 
 type MobileProfileModule = "info" | "membership" | "adminMembership" | "space" | "account";
+type MobileProfileNavItem = {
+  label: string;
+  value?: MobileProfileModule;
+  href?: string;
+};
 
-const baseMobileProfileModules: Array<{ value: MobileProfileModule; label: string }> = [
+const baseMobileProfileModules: MobileProfileNavItem[] = [
   { value: "info", label: "用户信息" },
   { value: "membership", label: "云空间与付款" },
   { value: "space", label: "痕迹" },
+  { href: "/profile/trash", label: "回收站" },
   { value: "account", label: "帐号操作" },
 ];
 
@@ -947,6 +953,21 @@ export default function ProfilePage() {
         </section>
         ) : null}
 
+        {!isMobileViewport ? (
+        <section style={trashEntrySectionStyle}>
+          <div>
+            <div style={{ fontSize: 13, color: "#6b7b66" }}>云端内容</div>
+            <h2 style={trashEntryTitleStyle}>回收站</h2>
+            <p style={trashEntryDescStyle}>
+              查看并恢复已移入回收站的项目、记录和照片。
+            </p>
+          </div>
+          <Link href="/profile/trash" style={trashEntryLinkStyle}>
+            查看回收站
+          </Link>
+        </section>
+        ) : null}
+
         {showAccountModule ? (
         <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
@@ -1026,7 +1047,7 @@ function MobileProfileModuleTabs({
   onChange,
 }: {
   active: MobileProfileModule;
-  modules: Array<{ value: MobileProfileModule; label: string }>;
+  modules: MobileProfileNavItem[];
   onChange: (value: MobileProfileModule) => void;
 }) {
   return (
@@ -1037,16 +1058,22 @@ function MobileProfileModuleTabs({
       }}
       aria-label="我的页面模块"
     >
-      {modules.map((item) => (
-        <button
-          key={item.value}
-          type="button"
-          onClick={() => onChange(item.value)}
-          style={mobileProfileTabButtonStyle(active === item.value)}
-        >
-          {item.label}
-        </button>
-      ))}
+      {modules.map((item) =>
+        item.href ? (
+          <Link key={item.href} href={item.href} style={mobileProfileLinkTabStyle}>
+            {item.label}
+          </Link>
+        ) : item.value ? (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => onChange(item.value as MobileProfileModule)}
+            style={mobileProfileTabButtonStyle(active === item.value)}
+          >
+            {item.label}
+          </button>
+        ) : null,
+      )}
     </nav>
   );
 }
@@ -1191,6 +1218,16 @@ function mobileProfileTabButtonStyle(active: boolean): CSSProperties {
     cursor: "pointer",
   };
 }
+
+const mobileProfileLinkTabStyle: CSSProperties = {
+  ...mobileProfileTabButtonStyle(false),
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  textDecoration: "none",
+  boxSizing: "border-box",
+};
 
 const panelStyle: CSSProperties = {
   background: "#fff",
@@ -1398,6 +1435,43 @@ const marketInfoCardHintStyle: CSSProperties = {
   color: "#7b8676",
   fontSize: 13,
   lineHeight: 1.35,
+};
+
+const trashEntrySectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#f8fbf6",
+  border: "1px solid #dce8d7",
+  borderRadius: 18,
+  padding: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+  flexWrap: "wrap",
+};
+
+const trashEntryTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  color: "#263326",
+  fontSize: 20,
+};
+
+const trashEntryDescStyle: CSSProperties = {
+  margin: "6px 0 0",
+  color: "#687565",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+const trashEntryLinkStyle: CSSProperties = {
+  border: "1px solid #bfd5b9",
+  background: "#f2f9ef",
+  color: "#356231",
+  borderRadius: 12,
+  padding: "9px 13px",
+  fontSize: 14,
+  fontWeight: 700,
+  textDecoration: "none",
 };
 
 const dangerSectionStyle: CSSProperties = {

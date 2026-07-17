@@ -23,6 +23,8 @@ export default function ArchiveLightbox({
   metaText = "",
   note = "",
   onDeleteCurrentImage,
+  deleteActionLabel = "删除当前图片",
+  deleteConfirmMessage = "确定删除当前图片吗？",
 }: {
   images: LightboxImage[];
   index: number;
@@ -35,6 +37,8 @@ export default function ArchiveLightbox({
     image: LightboxImage,
     currentIndex: number,
   ) => Promise<number>;
+  deleteActionLabel?: string;
+  deleteConfirmMessage?: string;
 }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState<PanOffset>({ x: 0, y: 0 });
@@ -219,7 +223,7 @@ export default function ArchiveLightbox({
   async function deleteCurrentMobileImage() {
     if (!onDeleteCurrentImage || isDeletingCurrentImage) return;
 
-    const ok = window.confirm("确定删除当前图片吗？");
+    const ok = window.confirm(deleteConfirmMessage);
     if (!ok) return;
 
     setIsDeletingCurrentImage(true);
@@ -429,7 +433,7 @@ export default function ArchiveLightbox({
                     disabled={isDeletingCurrentImage}
                     style={mobileLightboxDangerItemStyle}
                   >
-                    {isDeletingCurrentImage ? "删除中..." : "删除当前图片"}
+                    {isDeletingCurrentImage ? "处理中..." : deleteActionLabel}
                   </button>
                 </div>
               ) : null}

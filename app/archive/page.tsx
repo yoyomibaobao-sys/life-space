@@ -46,7 +46,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
-import { requestCloudDeletion } from "@/lib/cloud-deletion";
+import { requestCloudTrash } from "@/lib/cloud-trash";
 import {
   createLocalTaxonomyItem,
   deleteLocalArchive,
@@ -858,18 +858,18 @@ export default function ArchivePage() {
     if (!deleteArchiveTarget || deletingArchiveId) return;
 
     setDeletingArchiveId(deleteArchiveTarget.id);
-    const deleted = await requestCloudDeletion("archives", deleteArchiveTarget.id);
+    const trashed = await requestCloudTrash("archives", deleteArchiveTarget.id);
     setDeletingArchiveId(null);
 
-    if (!deleted) {
-      showToast("删除项目失败");
+    if (!trashed) {
+      showToast("移入回收站失败");
       return;
     }
 
     const deletedArchiveId = deleteArchiveTarget.id;
     setDeleteArchiveTarget(null);
     setArchives((current) => current.filter((archive) => archive.id !== deletedArchiveId));
-    showToast("项目已删除");
+    showToast("已移入回收站");
   }
 
   async function markLocalArchivesAsMine() {
@@ -2088,9 +2088,9 @@ export default function ArchivePage() {
       </ArchiveWorkspaceTemplate>
       <ConfirmDialog
         open={Boolean(deleteArchiveTarget)}
-        title="删除项目"
-        message={`确定删除“${deleteArchiveTarget?.title || "这个项目"}”吗？项目内的记录会一起删除，删除后无法恢复。`}
-        confirmText={deletingArchiveId ? "删除中..." : "删除"}
+        title="移入回收站"
+        message="项目、记录和照片将移入回收站。与该项目相关的评论、点赞、关注等互动信息将立即删除，无法恢复。"
+        confirmText={deletingArchiveId ? "移入中..." : "移入回收站"}
         cancelText="取消"
         danger
         confirmDisabled={Boolean(deletingArchiveId)}

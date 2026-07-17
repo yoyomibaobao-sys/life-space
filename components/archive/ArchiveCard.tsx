@@ -702,7 +702,7 @@ function MobileArchiveCard({
             }}
             style={mobileCardDangerMenuItemStyle}
           >
-            删除项目
+            移入回收站
           </button>
         </div>
       ) : null}

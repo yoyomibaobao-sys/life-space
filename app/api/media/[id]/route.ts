@@ -1,4 +1,4 @@
-import { handleSafeDeleteRequest } from "@/lib/server/safe-delete-request";
+import { handleMoveToTrashRequest } from "@/lib/server/safe-trash-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,5 +9,5 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
-  return handleSafeDeleteRequest(request, "media", id);
+  return handleMoveToTrashRequest(request, "media", id);
 }

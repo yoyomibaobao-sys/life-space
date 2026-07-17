@@ -59,7 +59,7 @@ import {
   reserveStorageBytes,
 } from "@/lib/storage-usage";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
-import { requestCloudDeletion } from "@/lib/cloud-deletion";
+import { requestCloudTrash } from "@/lib/cloud-trash";
 
 export default function ArchiveDetail({
   params,
@@ -861,16 +861,16 @@ saveRecentArchiveBrowse({
     if (!isOwner || isDeletingArchive) return;
 
     setIsDeletingArchive(true);
-    const deleted = await requestCloudDeletion("archives", activeArchive.id);
+    const trashed = await requestCloudTrash("archives", activeArchive.id);
     setIsDeletingArchive(false);
 
-    if (!deleted) {
-      showToast("删除项目失败");
+    if (!trashed) {
+      showToast("移入回收站失败");
       return;
     }
 
     setDeleteArchiveDialogOpen(false);
-    showToast("项目已删除");
+    showToast("已移入回收站");
     router.replace("/archive");
     router.refresh();
   }
@@ -1229,16 +1229,16 @@ saveRecentArchiveBrowse({
   async function deleteMediaFromRecord(
     recordId: string,
     mediaId: string,
-    successMessage: string | null = "图片已删除",
+    successMessage: string | null = "已移入回收站",
   ) {
     if (deletingMediaIdsRef.current.has(mediaId)) return false;
     deletingMediaIdsRef.current.add(mediaId);
 
     try {
-      const deleted = await requestCloudDeletion("media", mediaId);
+      const trashed = await requestCloudTrash("media", mediaId);
 
-      if (!deleted) {
-        showToast("删除图片失败");
+      if (!trashed) {
+        showToast("移入回收站失败");
         return false;
       }
 
@@ -1469,8 +1469,8 @@ saveRecentArchiveBrowse({
 
     if (!uploadedMedia.length) return;
 
-    const deleted = await deleteMediaFromRecord(recordId, mediaId, null);
-    showToast(deleted ? "图片已替换" : "新图片已添加，旧图片删除失败");
+    const trashed = await deleteMediaFromRecord(recordId, mediaId, null);
+    showToast(trashed ? "图片已替换" : "新图片已添加，旧图片移入回收站失败");
   }
 
   async function handleDeleteLightboxImage(image: LightboxImage, currentIndex: number) {
@@ -1479,8 +1479,10 @@ saveRecentArchiveBrowse({
       return lightboxImages.length;
     }
 
-    const deleted = await deleteMediaFromRecord(lightboxRecord.id, image.id, null);
-    if (!deleted) return lightboxImages.length;
+    const trashed = await deleteMediaFromRecord(lightboxRecord.id, image.id, null);
+    if (!trashed) return lightboxImages.length;
+
+    showToast("已移入回收站");
 
     const nextImages = lightboxImages.filter((item) => item.id !== image.id);
     setLightboxImages(nextImages);
@@ -1954,6 +1956,8 @@ saveRecentArchiveBrowse({
           metaText={lightboxMetaText}
           note={lightboxRecord?.note || ""}
           onDeleteCurrentImage={handleDeleteLightboxImage}
+          deleteActionLabel="移入回收站"
+          deleteConfirmMessage="照片将移入回收站，可以从回收站恢复。"
           onClose={() => {
             setLightboxImages([]);
             setLightboxIndex(0);
@@ -1977,9 +1981,9 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={deleteArchiveDialogOpen}
-        title="删除项目"
-        message={`确定删除“${activeArchive.title || "这个项目"}”吗？项目内的记录会一起删除，删除后无法恢复。`}
-        confirmText={isDeletingArchive ? "删除中..." : "删除项目"}
+        title="移入回收站"
+        message="项目、记录和照片将移入回收站。与该项目相关的评论、点赞、关注等互动信息将立即删除，无法恢复。"
+        confirmText={isDeletingArchive ? "移入中..." : "移入回收站"}
         cancelText="取消"
         confirmDisabled={isDeletingArchive}
         cancelDisabled={isDeletingArchive}
@@ -2005,9 +2009,9 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={Boolean(deleteMediaTarget)}
-        title="删除图片"
-        message="确定删除这张图片吗？删除后无法恢复。"
-        confirmText={isDeletingMedia ? "删除中..." : "删除"}
+        title="移入回收站"
+        message="照片将移入回收站，可以从回收站恢复。"
+        confirmText={isDeletingMedia ? "移入中..." : "移入回收站"}
         cancelText="取消"
         onClose={() => {
           if (!isDeletingMedia) setDeleteMediaTarget(null);
@@ -2336,7 +2340,7 @@ function MobileArchiveProfile({
             onClick={onDeleteArchive}
             style={mobileArchiveDangerButtonStyle}
           >
-            删除项目
+            移入回收站
           </button>
         </div>
       ) : null}

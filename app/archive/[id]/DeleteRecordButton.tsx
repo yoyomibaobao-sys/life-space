@@ -3,10 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { CSSProperties } from "react";
-import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { requestCloudDeletion } from "@/lib/cloud-deletion";
+import { requestCloudTrash } from "@/lib/cloud-trash";
 
 export default function DeleteRecordButton({
   id,
@@ -26,14 +25,14 @@ export default function DeleteRecordButton({
     setIsDeleting(true);
 
     try {
-      const deleted = await requestCloudDeletion("records", id);
+      const trashed = await requestCloudTrash("records", id);
 
-      if (!deleted) {
-        showToast("删除失败");
+      if (!trashed) {
+        showToast("移入回收站失败");
         return;
       }
 
-      showToast("记录已删除");
+      showToast("已移入回收站");
       setOpen(false);
       onDeleted?.(id);
       router.refresh();
@@ -65,13 +64,13 @@ export default function DeleteRecordButton({
         ...style,
       }}
     >
-      {t.delete}
+      移入回收站
     </button>
     <ConfirmDialog
       open={open}
-      title="删除记录"
-      message="确定删除这条记录吗？其中的图片也会一起删除，删除后无法恢复。"
-      confirmText={isDeleting ? "删除中..." : "删除"}
+      title="移入回收站"
+      message="记录和照片将移入回收站。与该记录相关的评论、点赞等互动信息将立即删除，无法恢复。"
+      confirmText={isDeleting ? "移入中..." : "移入回收站"}
       cancelText="取消"
       onClose={() => { if (!isDeleting) setOpen(false); }}
       onConfirm={handleDelete}
