@@ -155,6 +155,15 @@ export async function runStorageDeletionWorker(): Promise<StorageDeletionWorkerS
     if (result.error || result.data !== true) {
       throw new Error("queue_state_update_failed");
     }
+
+    const refreshResult = await supabase.rpc(
+      "refresh_cloud_trash_purges_for_item",
+      { p_item_id: item.item_id }
+    );
+
+    if (refreshResult.error) {
+      throw new Error("queue_state_update_failed");
+    }
   }
 
   async function failItem(
@@ -172,6 +181,17 @@ export async function runStorageDeletionWorker(): Promise<StorageDeletionWorkerS
     incrementErrorCode(errorCodes, errorCode);
 
     if (result.error || result.data !== true) {
+      incrementErrorCode(errorCodes, "queue_state_update_failed");
+      summary.failed += 1;
+      return;
+    }
+
+    const refreshResult = await supabase.rpc(
+      "refresh_cloud_trash_purges_for_item",
+      { p_item_id: item.item_id }
+    );
+
+    if (refreshResult.error) {
       incrementErrorCode(errorCodes, "queue_state_update_failed");
       summary.failed += 1;
       return;
