@@ -136,6 +136,18 @@ test("trash UI uses the approved irreversible confirmation copy", async () => {
   assert.match(page, /回收站中的所有内容将被永久删除，删除后无法恢复。/);
 });
 
+test("trash empty feedback separates more pending from failed entries", async () => {
+  const page = await source("app/profile/trash/page.tsx");
+
+  assert.match(page, /else if \(result\.morePending\)/);
+  assert.match(page, /回收站仍有内容，请再次清空。/);
+  assert.match(page, /else if \(result\.failed > 0\)/);
+  assert.doesNotMatch(
+    page,
+    /result\.failed > 0\s*\|\|\s*result\.morePending|result\.morePending\s*\|\|\s*result\.failed > 0/,
+  );
+});
+
 test("trash polling is low frequency, visibility aware, and conditional", async () => {
   const page = await source("app/profile/trash/page.tsx");
 

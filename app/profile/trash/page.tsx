@@ -218,8 +218,10 @@ export default function CloudTrashPage() {
     setActionKey(null);
     if (result.action === "empty") {
       showToast("回收站已清空。");
-    } else if (result.failed > 0 || result.morePending) {
-      showToast("已完成部分受理，仍有内容未能处理。");
+    } else if (result.morePending) {
+      showToast("已完成本次受理，回收站仍有内容，请再次清空。");
+    } else if (result.failed > 0) {
+      showToast("已完成部分受理，部分内容未能处理，请稍后重试清空。");
     } else {
       showToast("已开始清空，正在后台处理。");
     }
