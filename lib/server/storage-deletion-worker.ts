@@ -38,6 +38,11 @@ export type StorageDeletionWorkerSummary = {
   failed: number;
 };
 
+type StorageDeletionWorkerBatchOptions = {
+  maxBatches?: number;
+  maxDurationMs?: number;
+};
+
 type StorageErrorClassification = {
   code: StorageDeletionErrorCode;
   retryable: boolean;
@@ -331,4 +336,32 @@ export async function runStorageDeletionWorker(): Promise<StorageDeletionWorkerS
   });
 
   return summary;
+}
+
+export async function runStorageDeletionWorkerBatches(
+  options: StorageDeletionWorkerBatchOptions = {}
+): Promise<StorageDeletionWorkerSummary> {
+  const maxBatches = Math.min(Math.max(Math.trunc(options.maxBatches ?? 1), 1), 10);
+  const maxDurationMs = Math.min(
+    Math.max(Math.trunc(options.maxDurationMs ?? 4_000), 500),
+    45_000
+  );
+  const startedAt = Date.now();
+  const total = createEmptySummary();
+
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    if (batch > 0 && Date.now() - startedAt >= maxDurationMs) break;
+
+    const summary = await runStorageDeletionWorker();
+    total.claimed += summary.claimed;
+    total.deleted += summary.deleted;
+    total.notFound += summary.notFound;
+    total.retainedShared += summary.retainedShared;
+    total.retryScheduled += summary.retryScheduled;
+    total.failed += summary.failed;
+
+    if (summary.claimed === 0) break;
+  }
+
+  return total;
 }
