@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   "utf8"
 );
+const uploadHardeningMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260718140000_harden_storage_upload_capacity_refunds.sql",
+    import.meta.url
+  ),
+  "utf8"
+);
 const worker = readFileSync(
   new URL("../lib/server/storage-deletion-worker.ts", import.meta.url),
   "utf8"
@@ -25,7 +32,7 @@ test("purge orchestration is service-role only", () => {
   );
 });
 
-test("legacy permanent delete and arbitrary capacity release are not callable by API roles", () => {
+test("legacy permanent delete RPCs are not callable by API roles", () => {
   for (const name of ["archive", "record", "media"]) {
     assert.match(
       migration,
@@ -35,8 +42,17 @@ test("legacy permanent delete and arbitrary capacity release are not callable by
       )
     );
   }
-  assert.match(
+});
+
+test("upload drain keeps legacy release until reservation hardening is installed", () => {
+  assert.match(migration, /accepting_new_reservations boolean not null default false/i);
+  assert.match(migration, /'upload_maintenance'::text/i);
+  assert.doesNotMatch(
     migration,
+    /revoke all on function public\.release_storage_bytes\(bigint\)/i
+  );
+  assert.match(
+    uploadHardeningMigration,
     /revoke all on function public\.release_storage_bytes\(bigint\)[\s\S]*?from public, anon, authenticated, service_role;/i
   );
 });
@@ -104,6 +120,17 @@ test("job aggregation includes canonical items owned by another job", () => {
   assert.match(
     migration,
     /i\.status = 'failed'[\s\S]*?status = 'pending'[\s\S]*?attempts = 0/i
+  );
+});
+
+test("a retained shared object can be safely reconsidered after its last reference is removed", () => {
+  assert.match(
+    migration,
+    /i\.status = 'retained_shared'[\s\S]*?i\.result_code = 'retained_shared'/i,
+  );
+  assert.match(
+    migration,
+    /i\.capacity_released_at is null[\s\S]*?status = 'pending'[\s\S]*?result_code = null/i,
   );
 });
 

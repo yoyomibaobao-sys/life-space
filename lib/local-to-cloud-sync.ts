@@ -12,7 +12,13 @@ import {
   type LocalImage,
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
-import { releaseStorageBytes, reserveStorageBytes } from "@/lib/storage-usage";
+import {
+  cancelStorageUploadReservation,
+  reconcileMediaUploadCommit,
+  reserveStorageUpload,
+  settleStorageUploadReservation,
+  STORAGE_UPLOAD_MAINTENANCE_MESSAGE,
+} from "@/lib/storage-usage";
 import { supabase } from "@/lib/supabase";
 
 export type LocalToCloudVisibility = "private" | "public";
@@ -344,21 +350,6 @@ async function ensureCloudCycles(params: {
   return cycleIdMap;
 }
 
-async function findExistingMediaByPath(storagePath: string) {
-  const { data, error } = await supabase
-    .from("media")
-    .select("id")
-    .eq("storage_path", storagePath)
-    .limit(1);
-
-  if (error) {
-    console.error("find existing migrated media error:", error);
-    return null;
-  }
-
-  return (data?.[0] as { id: string } | undefined) || null;
-}
-
 async function uploadLocalImageToCloud(params: {
   image: LocalImage;
   cloudRecordId: string;
@@ -386,18 +377,22 @@ async function uploadLocalImageToCloud(params: {
   const thumbnail = await createImageThumbnailFile(uploadFile);
   const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
   const safeName = safeFileName(uploadFile.name);
+  const targetMediaId = crypto.randomUUID();
   const fileName = `${params.userId}/${params.cloudRecordId}/local-${params.image.id}-${safeName}`;
   const thumbName = thumbFile
     ? `${params.userId}/${params.cloudRecordId}/thumbs/local-${params.image.id}-${safeFileName(thumbFile.name)}`
     : null;
 
-  const existingMedia = await findExistingMediaByPath(fileName);
-  if (existingMedia) {
+  const existingMedia = await reconcileMediaUploadCommit({ storagePath: fileName });
+  if (existingMedia.status === "unknown") {
+    throw new Error("无法确认图片云端状态，请稍后重试。");
+  }
+  if (existingMedia.status === "found") {
     await updateLocalImageSyncMeta(params.image.id, {
       status: "synced",
       cloud_archive_id: params.cloudArchiveId,
       cloud_record_id: params.cloudRecordId,
-      cloud_media_id: existingMedia.id,
+      cloud_media_id: existingMedia.mediaId,
       cloud_media_url: null,
       last_sync_at: new Date().toISOString(),
     });
@@ -405,7 +400,15 @@ async function uploadLocalImageToCloud(params: {
   }
 
   const reservedBytes = uploadFile.size + (thumbFile?.size || 0);
-  const reserveResult = await reserveStorageBytes(reservedBytes);
+  const reserveResult = await reserveStorageUpload({
+    targetType: "media",
+    targetId: targetMediaId,
+    targetParentId: params.cloudRecordId,
+    storagePath: fileName,
+    storageBytes: uploadFile.size,
+    thumbPath: thumbName,
+    thumbBytes: thumbFile?.size || 0,
+  });
 
   if (!reserveResult.ok) {
     if (reserveResult.message === "storage_limit_exceeded") {
@@ -414,12 +417,22 @@ async function uploadLocalImageToCloud(params: {
     if (reserveResult.message === "membership_inactive") {
       throw new Error("当前云空间状态暂不能上传图片。");
     }
+    if (reserveResult.message === "upload_maintenance") {
+      throw new Error(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
+    }
     throw new Error("容量检查失败，请稍后重试。");
   }
 
+  const reservation = {
+    reservation_id: reserveResult.reservation_id,
+    reservation_mode: reserveResult.reservation_mode,
+    reserved_bytes: reservedBytes,
+  } as const;
+
   let uploadedThumbPath: string | null = null;
   let uploadedThumbBytes = 0;
-  let uploadedMain = false;
+  let mediaCommitted = false;
+  let cleanupAllowed = true;
 
   try {
     const { error: uploadError } = await supabase.storage
@@ -433,8 +446,6 @@ async function uploadLocalImageToCloud(params: {
       console.error("migrate local media upload error:", uploadError);
       throw new Error("图片上传失败，请稍后重试。");
     }
-    uploadedMain = true;
-
     if (thumbFile && thumbName) {
       const { error: thumbError } = await supabase.storage
         .from("media")
@@ -445,6 +456,7 @@ async function uploadLocalImageToCloud(params: {
 
       if (thumbError) {
         console.error("migrate local thumbnail upload error:", thumbError);
+        await supabase.storage.from("media").remove([thumbName]);
       } else {
         uploadedThumbPath = thumbName;
         uploadedThumbBytes = thumbFile.size;
@@ -456,6 +468,7 @@ async function uploadLocalImageToCloud(params: {
       .from("media")
       .insert([
         {
+          id: targetMediaId,
           record_id: params.cloudRecordId,
           type: "image",
           url: null,
@@ -471,36 +484,54 @@ async function uploadLocalImageToCloud(params: {
           original_filename: originalFile.name,
           sort_order: params.image.sort_order || 0,
           storage_class: "hot",
+          ...(reservation.reservation_id
+            ? { upload_reservation_id: reservation.reservation_id }
+            : {}),
         },
       ])
       .select("id")
       .single();
 
-    if (mediaError || !mediaRow?.id) {
-      console.error("migrate local media insert error:", mediaError);
-      throw new Error("图片云端记录保存失败，请稍后重试。");
-    }
+    let mediaId = mediaRow?.id ? String(mediaRow.id) : null;
 
-    const unusedReservedBytes = Math.max(0, reservedBytes - actualBytes);
-    if (unusedReservedBytes > 0) {
-      await releaseStorageBytes(unusedReservedBytes);
+    if (mediaError || !mediaId) {
+      console.error("migrate local media insert error:", mediaError);
+      const reconciliation = await reconcileMediaUploadCommit({ storagePath: fileName });
+      if (reconciliation.status === "found") {
+        mediaId = reconciliation.mediaId;
+      } else if (reconciliation.status === "unknown") {
+        cleanupAllowed = false;
+        throw new Error("图片保存状态待确认，已保留上传内容，请稍后重试。");
+      } else {
+        throw new Error("图片云端记录保存失败，请稍后重试。");
+      }
     }
+    mediaCommitted = true;
+
+    await settleStorageUploadReservation({
+      reservation,
+      targetType: "media",
+      targetId: mediaId,
+      legacyActualBytes: actualBytes,
+    });
 
     await updateLocalImageSyncMeta(params.image.id, {
       status: "synced",
       cloud_archive_id: params.cloudArchiveId,
       cloud_record_id: params.cloudRecordId,
-      cloud_media_id: mediaRow.id,
+      cloud_media_id: mediaId,
       cloud_media_url: null,
       last_sync_at: new Date().toISOString(),
     });
   } catch (error) {
-    if (uploadedMain) {
+    if (!mediaCommitted && cleanupAllowed) {
       await supabase.storage
         .from("media")
-        .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
+        .remove([fileName, uploadedThumbPath, thumbName].filter((path): path is string => Boolean(path)));
     }
-    await releaseStorageBytes(reservedBytes);
+    if (!mediaCommitted && cleanupAllowed) {
+      await cancelStorageUploadReservation(reservation);
+    }
     throw error;
   }
 }

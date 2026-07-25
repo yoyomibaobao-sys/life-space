@@ -18,11 +18,15 @@ import {
   type MarketPostType,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
-import {
-  compressImageFile,
-  createImageThumbnailFile,
-} from "@/lib/image-compression";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import {
+  requestMarketMediaDeletion,
+  rollbackReservedMarketImage,
+  setMarketPostCover,
+  settleReservedMarketImage,
+  uploadReservedMarketImage,
+  type ReservedMarketImage,
+} from "@/lib/market-media-storage";
 
 type ArchiveOption = {
   id: string;
@@ -43,6 +47,7 @@ type MarketMediaRow = {
   display_thumb_url?: string | null;
   source_media_id: string | null;
   source_record_id: string | null;
+  upload_reservation_id?: string | null;
   sort_order: number | null;
   created_at: string | null;
 };
@@ -189,6 +194,19 @@ export default function EditMarketPostPage() {
     );
   }
 
+  async function reloadMarketPost(postId: string) {
+    const { data, error } = await supabase
+      .from("market_posts")
+      .select("*")
+      .eq("id", postId)
+      .maybeSingle();
+    if (error) {
+      console.error("reload market post error:", error);
+      return;
+    }
+    if (data) setItem(data as MarketPostRow);
+  }
+
   async function handleSubmit() {
     if (!user || !item || saving || notOwner) return;
 
@@ -266,99 +284,88 @@ export default function EditMarketPostPage() {
       return Math.max(max, Number(media.sort_order || 0));
     }, -1);
 
-    const uploadedRows: {
-      url: string | null;
-      path: string;
-      thumb_url: string | null;
-      thumb_path: string;
-      sort_order: number;
-    }[] = [];
+    let firstCommitted: MarketMediaRow | null = null;
+    let failureCount = 0;
+    let lastError = "";
 
-    try {
-      for (let index = 0; index < imageFiles.length; index += 1) {
-        const file = imageFiles[index];
-        const compressed = await compressImageFile(file);
-        const thumbnail = await createImageThumbnailFile(compressed.file);
-        const safeName =
-          compressed.file.name.replace(/[^\w.\-]+/g, "_") || "image.jpg";
-        const safeThumbName =
-          thumbnail.file.name.replace(/[^\w.\-]+/g, "_") || `thumb-${safeName}`;
-        const timestamp = Date.now();
-        const filePath = `${user.id}/market/${item.id}/${timestamp}-${index}-${safeName}`;
-        const thumbPath = `${user.id}/market/${item.id}/thumbs/${timestamp}-${index}-${safeThumbName}`;
+    for (let index = 0; index < imageFiles.length; index += 1) {
+      const marketMediaId = crypto.randomUUID();
+      let uploaded: ReservedMarketImage | null = null;
+      let committed = false;
+      let cleanupAllowed = true;
 
-        const { error: uploadError } = await supabase.storage
-          .from("media")
-          .upload(filePath, compressed.file, {
-            cacheControl: "3600",
-            upsert: false,
-          });
+      try {
+        uploaded = await uploadReservedMarketImage({
+          userId: user.id,
+          postId: item.id,
+          targetType: "market_media",
+          targetId: marketMediaId,
+          file: imageFiles[index],
+        });
 
-        if (uploadError) {
-          throw uploadError;
+        const insertResult = await supabase
+          .from("market_media")
+          .insert({
+            id: marketMediaId,
+            market_post_id: item.id,
+            user_id: user.id,
+            url: null,
+            path: uploaded.path,
+            thumb_url: null,
+            thumb_path: uploaded.thumbPath,
+            source_media_id: null,
+            source_record_id: null,
+            sort_order: currentMaxSort + index + 1,
+            ...(uploaded.reservation.reservation_id
+              ? { upload_reservation_id: uploaded.reservation.reservation_id }
+              : {}),
+          })
+          .select("*")
+          .single();
+
+        let committedRow = insertResult.data as MarketMediaRow | null;
+        if (insertResult.error || !committedRow) {
+          const reconciliation = await supabase
+            .from("market_media")
+            .select("*")
+            .eq("id", marketMediaId)
+            .maybeSingle();
+          if (reconciliation.error) {
+            cleanupAllowed = false;
+            throw new Error("图片保存状态待确认，请刷新后查看。");
+          }
+          committedRow = reconciliation.data as MarketMediaRow | null;
+          if (!committedRow) throw new Error("图片保存失败，请稍后重试。");
         }
 
-        const { error: thumbUploadError } = await supabase.storage
-          .from("media")
-          .upload(thumbPath, thumbnail.file, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (thumbUploadError) {
-          await supabase.storage.from("media").remove([filePath]);
-          throw thumbUploadError;
+        committed = true;
+        await settleReservedMarketImage(uploaded);
+        firstCommitted ||= committedRow;
+      } catch (error) {
+        if (uploaded && !committed && cleanupAllowed) {
+          await rollbackReservedMarketImage(uploaded);
         }
-
-        uploadedRows.push({
-          url: null,
-          path: filePath,
-          thumb_url: null,
-          thumb_path: thumbPath,
-          sort_order: currentMaxSort + index + 1,
-        });
+        failureCount += 1;
+        lastError = error instanceof Error ? error.message : "图片上传失败，请稍后重试";
       }
-
-      const insertRows = uploadedRows.map((row) => ({
-        market_post_id: item.id,
-        user_id: user.id,
-        url: row.url,
-        path: row.path,
-        thumb_url: row.thumb_url,
-        thumb_path: row.thumb_path,
-        source_media_id: null,
-        source_record_id: null,
-        sort_order: row.sort_order,
-      }));
-
-      const { error: insertError } = await supabase
-        .from("market_media")
-        .insert(insertRows);
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      if (!item.cover_image_path && !item.cover_image_url && uploadedRows[0]) {
-        await setCoverFromValue({
-          path: uploadedRows[0].path,
-          thumbPath: uploadedRows[0].thumb_path,
-        });
-      }
-
-      await reloadMarketMedia(item.id);
-    } catch (err) {
-      console.error("upload market images error:", err);
-
-      const paths = uploadedRows.flatMap((row) => [row.path, row.thumb_path]);
-      if (paths.length > 0) {
-        await supabase.storage.from("media").remove(paths);
-      }
-
-      setErrorMsg("图片上传失败，请稍后重试");
-    } finally {
-      setUploading(false);
     }
+
+    await reloadMarketMedia(item.id);
+    if (!item.cover_image_path && !item.cover_image_url && firstCommitted) {
+      await setCoverFromValue({
+        path: firstCommitted.path,
+        thumbPath: firstCommitted.thumb_path || null,
+      });
+    }
+
+    if (failureCount > 0) {
+      setErrorMsg(
+        failureCount === imageFiles.length
+          ? lastError
+          : `已有 ${imageFiles.length - failureCount} 张保存成功，${failureCount} 张未能保存。`,
+      );
+    }
+    setUploading(false);
   }
 
   async function setCoverFromValue(params: {
@@ -367,42 +374,15 @@ export default function EditMarketPostPage() {
   }) {
     if (!user || !item) return;
 
-    const oldCoverPath = item.cover_image_path || null;
-    const oldCoverThumbPath = item.cover_thumb_path || null;
-    const oldCoverPathIsStillMedia = Boolean(
-      oldCoverPath && marketMedia.some((media) => media.path === oldCoverPath)
-    );
+    const result = await setMarketPostCover({
+      postId: item.id,
+      path: params.path,
+      thumbPath: params.thumbPath || null,
+    });
 
-    const { error } = await supabase
-      .from("market_posts")
-      .update({
-        cover_image_url: null,
-        cover_image_path: params.path,
-        cover_thumb_url: null,
-        cover_thumb_path: params.thumbPath || null,
-      })
-      .eq("id", item.id)
-      .eq("user_id", user.id);
-
-    if (error) {
-      console.error("set cover error:", error);
+    if (!result.ok) {
       setErrorMsg("设置封面失败");
       return;
-    }
-
-    if (
-      oldCoverPath &&
-      oldCoverPath !== params.path &&
-      !oldCoverPathIsStillMedia
-    ) {
-      const oldCoverPaths = [oldCoverPath, oldCoverThumbPath].filter(Boolean) as string[];
-      const { error: removeOldError } = await supabase.storage
-        .from("media")
-        .remove(oldCoverPaths);
-
-      if (removeOldError) {
-        console.error("remove old standalone cover error:", removeOldError);
-      }
     }
 
     setItem({
@@ -434,68 +414,13 @@ export default function EditMarketPostPage() {
     setWorkingMediaId(media.id);
     setErrorMsg("");
 
-    const pathsToRemove = media.path && !media.source_media_id
-      ? ([media.path, media.thumb_path].filter(Boolean) as string[])
-      : [];
-    if (pathsToRemove.length > 0) {
-      const { error: removeError } = await supabase.storage
-        .from("media")
-        .remove(pathsToRemove);
-
-      if (removeError) {
-        console.error("remove market media storage error:", removeError);
-        setErrorMsg("图片文件删除失败");
-        setWorkingMediaId(null);
-        return;
-      }
-    }
-
-    const { error } = await supabase
-      .from("market_media")
-      .delete()
-      .eq("id", media.id)
-      .eq("user_id", user.id);
-
-    if (error) {
-      console.error("delete market media error:", error);
+    const result = await requestMarketMediaDeletion(media.id);
+    if (!result.ok) {
       setErrorMsg("删除图片失败");
       setWorkingMediaId(null);
       return;
     }
-
-    const remaining = marketMedia.filter((item) => item.id !== media.id);
-    const deletingCurrentCover = item.cover_image_path
-      ? item.cover_image_path === media.path
-      : Boolean(item.cover_image_url && item.cover_image_url === media.url);
-
-    if (deletingCurrentCover) {
-      const nextCover = remaining[0] || null;
-
-      const { error: updateCoverError } = await supabase
-        .from("market_posts")
-        .update({
-          cover_image_url: null,
-          cover_image_path: nextCover?.path || null,
-          cover_thumb_url: null,
-          cover_thumb_path: nextCover?.thumb_path || null,
-        })
-        .eq("id", item.id)
-        .eq("user_id", user.id);
-
-      if (updateCoverError) {
-        console.error("reset cover after delete media error:", updateCoverError);
-      } else {
-        setItem({
-          ...item,
-          cover_image_url: null,
-          cover_image_path: nextCover?.path || null,
-          cover_thumb_url: null,
-          cover_thumb_path: nextCover?.thumb_path || null,
-        });
-      }
-    }
-
-    setMarketMedia(remaining);
+    await Promise.all([reloadMarketMedia(item.id), reloadMarketPost(item.id)]);
     setWorkingMediaId(null);
   }
 

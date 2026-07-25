@@ -394,6 +394,36 @@ begin
     from public.storage_deletion_items i
     where i.bucket_id = p_bucket_id
       and i.object_path = v_path
+      and i.status = 'retained_shared'
+      and i.result_code = 'retained_shared'
+      and not i.capacity_reconciliation_required
+      and i.capacity_released_at is null
+    order by i.processed_at desc, i.id desc
+    limit 1
+    for update;
+
+    if found then
+      update public.storage_deletion_items i
+      set
+        status = 'pending',
+        result_code = null,
+        attempts = 0,
+        next_attempt_at = now(),
+        claimed_by = null,
+        claimed_at = null,
+        lease_expires_at = null,
+        last_error_code = null,
+        processed_at = null
+      where i.id = v_item_id;
+    end if;
+  end if;
+
+  if not found then
+    select i.id
+    into v_item_id
+    from public.storage_deletion_items i
+    where i.bucket_id = p_bucket_id
+      and i.object_path = v_path
       and i.status = 'succeeded'
       and i.result_code in ('deleted', 'not_found')
       and v_size_bytes is null
@@ -1057,6 +1087,136 @@ revoke all on function public.request_delete_record(uuid)
 revoke all on function public.request_delete_media(uuid)
   from public, anon, authenticated, service_role;
 
--- Arbitrary caller-supplied byte release is superseded by item-bound settlement.
-revoke all on function public.release_storage_bytes(bigint)
-  from public, anon, authenticated, service_role;
+-- Upload-capacity transition stage 1.
+--
+-- This migration is intentionally safe to deploy on its own. It stops new
+-- browser reservations while leaving the legacy byte release available for
+-- uploads that reserved capacity before the maintenance window started. After
+-- operators confirm that no upload or local-to-cloud task is running and wait
+-- at least 30 minutes, the follow-up hardening migration installs reservation-
+-- bound settlement and revokes both legacy RPCs.
+create table if not exists public.storage_upload_control (
+  singleton boolean primary key default true,
+  accepting_new_reservations boolean not null default false,
+  maintenance_started_at timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint storage_upload_control_singleton_check check (singleton)
+);
+
+insert into public.storage_upload_control (
+  singleton,
+  accepting_new_reservations,
+  maintenance_started_at,
+  updated_at
+)
+values (true, false, now(), now())
+on conflict (singleton) do update
+set
+  accepting_new_reservations = false,
+  maintenance_started_at = coalesce(
+    public.storage_upload_control.maintenance_started_at,
+    excluded.maintenance_started_at
+  ),
+  updated_at = now();
+
+alter table public.storage_upload_control enable row level security;
+revoke all on table public.storage_upload_control from public, anon, authenticated;
+grant all on table public.storage_upload_control to service_role;
+
+create or replace function public.reserve_storage_bytes(p_bytes bigint)
+returns table (
+  ok boolean,
+  storage_used bigint,
+  storage_limit_bytes bigint,
+  remaining_bytes bigint,
+  message text
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_used bigint := 0;
+  v_limit bigint := 0;
+begin
+  if v_user_id is null then
+    return query select false, 0::bigint, 0::bigint, 0::bigint, 'not_authenticated'::text;
+    return;
+  end if;
+
+  v_limit := coalesce(public.get_user_storage_limit_bytes(v_user_id), 0);
+
+  select coalesce(p.storage_used, 0)
+  into v_used
+  from public.profiles p
+  where p.id = v_user_id;
+
+  return query select
+    false,
+    coalesce(v_used, 0),
+    v_limit,
+    greatest(v_limit - coalesce(v_used, 0), 0),
+    'upload_maintenance'::text;
+end;
+$$;
+
+revoke all on function public.reserve_storage_bytes(bigint) from public, anon;
+grant execute on function public.reserve_storage_bytes(bigint) to authenticated, service_role;
+
+comment on function public.reserve_storage_bytes(bigint) is
+  'Maintenance-stage compatibility RPC. New reservations are blocked while legacy in-flight uploads drain.';
+
+create or replace function public.is_storage_upload_accepting()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select c.accepting_new_reservations
+    from public.storage_upload_control c
+    where c.singleton
+  ), false);
+$$;
+
+revoke all on function public.is_storage_upload_accepting()
+  from public, anon;
+grant execute on function public.is_storage_upload_accepting()
+  to authenticated, service_role;
+
+-- Stage 1 must also stop upload paths that historically bypassed the legacy
+-- capacity RPC (notably direct market uploads). Rollback deletes remain
+-- available so already-started clients can remove an uncommitted object.
+drop policy if exists media_insert_own_path on storage.objects;
+create policy media_insert_own_path
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'media'
+  and auth.role() = 'authenticated'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and public.is_storage_upload_accepting()
+);
+
+drop policy if exists media_update_own_path on storage.objects;
+create policy media_update_own_path
+on storage.objects for update
+to authenticated
+using (
+  bucket_id = 'media'
+  and auth.role() = 'authenticated'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and public.can_access_active_owned_media_object(name)
+)
+with check (
+  bucket_id = 'media'
+  and auth.role() = 'authenticated'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and public.is_storage_upload_accepting()
+);
+
+-- Do not revoke release_storage_bytes(bigint) in this stage. Existing uploads
+-- still need it during the bounded drain window. The final hardening migration
+-- revokes it after reservation-bound RPCs are installed.
