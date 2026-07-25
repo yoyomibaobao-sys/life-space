@@ -10,6 +10,8 @@ const hardeningPath =
   "supabase/migrations/20260718140000_harden_storage_upload_capacity_refunds.sql";
 const marketBindingPath =
   "supabase/migrations/20260718150000_bind_market_upload_capacity_reservations.sql";
+const recoveryPath =
+  "supabase/migrations/20260718160000_resume_storage_uploads_after_reservation_deploy.sql";
 
 test("stage one blocks new reservations but preserves legacy drain refunds", async () => {
   const migration = await source(
@@ -241,7 +243,7 @@ test("market mutation routes enforce authenticated same-origin requests", async 
   assert.match(routes[2], /"delete_media"/);
 });
 
-test("final migrations stay in maintenance until a later deployment step reopens uploads", async () => {
+test("hardening migrations stay in maintenance until the post-deployment recovery step", async () => {
   const hardening = await source(hardeningPath);
   const marketBinding = await source(marketBindingPath);
 
@@ -249,6 +251,20 @@ test("final migrations stay in maintenance until a later deployment step reopens
     assert.match(migration, /accepting_new_reservations = false/i);
     assert.doesNotMatch(migration, /accepting_new_reservations = true/i);
   }
+});
+
+test("post-deployment recovery validates the secure chain before reopening uploads", async () => {
+  const migration = await source(recoveryPath);
+
+  assert.match(migration, /storage_upload_reservation_schema_missing/);
+  assert.match(migration, /storage_upload_reservation_rpc_missing/);
+  assert.match(migration, /storage_upload_reservation_binding_missing/);
+  assert.match(migration, /storage_upload_reservation_policy_missing/);
+  assert.match(migration, /legacy_storage_capacity_rpc_still_exposed/);
+  assert.match(migration, /storage_upload_transition_not_ready/);
+  assert.match(migration, /accepting_new_reservations = true/i);
+  assert.match(migration, /maintenance_started_at = null/i);
+  assert.doesNotMatch(migration, /grant execute[\s\S]*release_storage_bytes/i);
 });
 
 test("deletion-item capacity settlement remains separate and item bound", async () => {

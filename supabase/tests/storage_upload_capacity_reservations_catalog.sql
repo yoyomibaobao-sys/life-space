@@ -129,10 +129,9 @@ begin
     select 1
     from public.storage_upload_control c
     where c.singleton
-      and not c.accepting_new_reservations
       and c.transition_completed_at is not null
   ) then
-    raise exception 'upload maintenance was reopened before the application deployment gate';
+    raise exception 'upload reservation transition is incomplete';
   end if;
 
   if has_table_privilege('authenticated', 'public.market_posts', 'delete')
