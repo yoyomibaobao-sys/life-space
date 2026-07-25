@@ -19,6 +19,11 @@ import {
 } from "@/lib/membership";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
 import { releaseStorageBytes, reserveStorageBytes } from "@/lib/storage-usage";
+import {
+  isStorageUploadMaintenance,
+  STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE,
+  STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE,
+} from "@/lib/storage-upload-maintenance";
 import type { ArchiveCycle } from "@/lib/archive-detail-types";
 import {
   formatLocalCycleDate,
@@ -330,6 +335,9 @@ export default function AddRecord({
         const message = getCreateContentBlockedText(membership);
         setMembershipNotice(message);
         showToast(message);
+      } else if (reserveResult.message === "upload_maintenance") {
+        setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
+        showToast(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
       } else {
         setMembershipNotice("容量检查失败");
         showToast("容量检查失败");
@@ -358,6 +366,10 @@ export default function AddRecord({
       console.error("媒体上传失败", uploadError);
       const releaseResult = await releaseStorageBytes(reservedBytes);
       setStorageUsedBytes(releaseResult.storage_used);
+      if (await isStorageUploadMaintenance()) {
+        setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
+        showToast(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
+      }
       return 0;
     }
 
@@ -437,6 +449,12 @@ export default function AddRecord({
           uploadBytes: selectedFileBytes,
         })
       );
+      return;
+    }
+
+    if (files.length > 0 && (await isStorageUploadMaintenance())) {
+      setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
+      showToast(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
       return;
     }
 

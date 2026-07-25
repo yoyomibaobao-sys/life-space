@@ -58,6 +58,10 @@ import {
   releaseStorageBytes,
   reserveStorageBytes,
 } from "@/lib/storage-usage";
+import {
+  isStorageUploadMaintenance,
+  STORAGE_UPLOAD_MAINTENANCE_MESSAGE,
+} from "@/lib/storage-upload-maintenance";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { requestCloudTrash } from "@/lib/cloud-trash";
 
@@ -1303,6 +1307,11 @@ saveRecentArchiveBrowse({
       return [];
     }
 
+    if (await isStorageUploadMaintenance()) {
+      showToast(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
+      return [];
+    }
+
     const preparedFiles = await Promise.all(
       files.map(async (originalFile) => {
         const compressed = await compressImageFile(originalFile);
@@ -1338,6 +1347,8 @@ saveRecentArchiveBrowse({
         );
       } else if (reserveResult.message === "membership_inactive") {
         showToast(getCreateContentBlockedText(membership));
+      } else if (reserveResult.message === "upload_maintenance") {
+        showToast(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
       } else {
         showToast("容量检查失败");
       }
@@ -1367,7 +1378,11 @@ saveRecentArchiveBrowse({
 
       if (uploadError) {
         console.error("add record media upload error:", uploadError);
-        showToast("部分图片上传失败");
+        showToast(
+          (await isStorageUploadMaintenance())
+            ? STORAGE_UPLOAD_MAINTENANCE_MESSAGE
+            : "部分图片上传失败"
+        );
         continue;
       }
 

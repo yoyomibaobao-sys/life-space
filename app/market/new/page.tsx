@@ -35,6 +35,10 @@ import {
   getMediaObjectPath,
   getMediaThumbObjectPath,
 } from "@/lib/media-urls";
+import {
+  isStorageUploadMaintenance,
+  STORAGE_UPLOAD_MAINTENANCE_MARKET_NOT_SAVED_MESSAGE,
+} from "@/lib/storage-upload-maintenance";
 
 type ArchiveOption = {
   id: string;
@@ -398,6 +402,11 @@ function NewMarketPostPageContent() {
       return;
     }
 
+    if (!isFromSourceRecord && coverFile && (await isStorageUploadMaintenance())) {
+      setErrorMsg(STORAGE_UPLOAD_MAINTENANCE_MARKET_NOT_SAVED_MESSAGE);
+      return;
+    }
+
     setSaving(true);
     setErrorMsg("");
 
@@ -481,7 +490,11 @@ function NewMarketPostPageContent() {
           .eq("user_id", user.id);
 
         setSaving(false);
-        setErrorMsg("封面图上传失败，请稍后重试");
+        setErrorMsg(
+          (await isStorageUploadMaintenance())
+            ? STORAGE_UPLOAD_MAINTENANCE_MARKET_NOT_SAVED_MESSAGE
+            : "封面图上传失败，请稍后重试"
+        );
         return;
       }
 

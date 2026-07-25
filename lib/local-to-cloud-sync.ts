@@ -13,6 +13,11 @@ import {
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import { releaseStorageBytes, reserveStorageBytes } from "@/lib/storage-usage";
+import {
+  isStorageUploadMaintenance,
+  STORAGE_UPLOAD_MAINTENANCE_SYNC_MESSAGE,
+  STORAGE_UPLOAD_MAINTENANCE_SYNC_NOT_STARTED_MESSAGE,
+} from "@/lib/storage-upload-maintenance";
 import { supabase } from "@/lib/supabase";
 
 export type LocalToCloudVisibility = "private" | "public";
@@ -414,6 +419,9 @@ async function uploadLocalImageToCloud(params: {
     if (reserveResult.message === "membership_inactive") {
       throw new Error("当前云空间状态暂不能上传图片。");
     }
+    if (reserveResult.message === "upload_maintenance") {
+      throw new Error(STORAGE_UPLOAD_MAINTENANCE_SYNC_MESSAGE);
+    }
     throw new Error("容量检查失败，请稍后重试。");
   }
 
@@ -431,6 +439,9 @@ async function uploadLocalImageToCloud(params: {
 
     if (uploadError) {
       console.error("migrate local media upload error:", uploadError);
+      if (await isStorageUploadMaintenance()) {
+        throw new Error(STORAGE_UPLOAD_MAINTENANCE_SYNC_MESSAGE);
+      }
       throw new Error("图片上传失败，请稍后重试。");
     }
     uploadedMain = true;
@@ -563,6 +574,16 @@ export async function syncLocalArchiveToCloud(params: {
       success: false,
       cloudArchiveId: archive.migration_cloud_archive_id || null,
       error: "这个本地项目正在转到云空间，请稍后再试。",
+    };
+  }
+
+  const hasLocalImages = detail.records.some((record) => record.images.length > 0);
+  if (hasLocalImages && (await isStorageUploadMaintenance())) {
+    return {
+      success: false,
+      cloudArchiveId: archive.migration_cloud_archive_id || null,
+      partialFailure: false,
+      error: STORAGE_UPLOAD_MAINTENANCE_SYNC_NOT_STARTED_MESSAGE,
     };
   }
 

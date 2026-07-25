@@ -23,6 +23,10 @@ import {
   createImageThumbnailFile,
 } from "@/lib/image-compression";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import {
+  isStorageUploadMaintenance,
+  STORAGE_UPLOAD_MAINTENANCE_MESSAGE,
+} from "@/lib/storage-upload-maintenance";
 
 type ArchiveOption = {
   id: string;
@@ -259,6 +263,11 @@ export default function EditMarketPostPage() {
       return;
     }
 
+    if (await isStorageUploadMaintenance()) {
+      setErrorMsg(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
+      return;
+    }
+
     setUploading(true);
     setErrorMsg("");
 
@@ -355,7 +364,11 @@ export default function EditMarketPostPage() {
         await supabase.storage.from("media").remove(paths);
       }
 
-      setErrorMsg("图片上传失败，请稍后重试");
+      setErrorMsg(
+        (await isStorageUploadMaintenance())
+          ? STORAGE_UPLOAD_MAINTENANCE_MESSAGE
+          : "图片上传失败，请稍后重试"
+      );
     } finally {
       setUploading(false);
     }
