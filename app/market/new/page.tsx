@@ -19,9 +19,13 @@ import {
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
 import {
-  compressImageFile,
-  createImageThumbnailFile,
-} from "@/lib/image-compression";
+  requestMarketPostDeletion,
+  rollbackReservedMarketImage,
+  setMarketPostCover,
+  settleReservedMarketImage,
+  uploadReservedMarketImage,
+  type ReservedMarketImage,
+} from "@/lib/market-media-storage";
 import {
   canCreateMembershipMarketPost,
   getCreateMarketPostBlockedText,
@@ -313,56 +317,6 @@ function NewMarketPostPageContent() {
     setCoverPreviewUrl("");
   }
 
-  async function uploadMarketCoverImage(params: {
-    userId: string;
-    postId: string;
-    file: File;
-  }) {
-    const compressed = await compressImageFile(params.file);
-    const thumbnail = await createImageThumbnailFile(compressed.file);
-
-    const safeName =
-      compressed.file.name.replace(/[^\w.\-]+/g, "_") || "cover.jpg";
-    const safeThumbName =
-      thumbnail.file.name.replace(/[^\w.\-]+/g, "_") || `thumb-${safeName}`;
-    const timestamp = Date.now();
-    const filePath = `${params.userId}/market/${params.postId}/${timestamp}-${safeName}`;
-    const thumbPath = `${params.userId}/market/${params.postId}/thumbs/${timestamp}-${safeThumbName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("media")
-      .upload(filePath, compressed.file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error("upload market cover error:", uploadError);
-      return null;
-    }
-
-    const { error: thumbUploadError } = await supabase.storage
-      .from("media")
-      .upload(thumbPath, thumbnail.file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-
-    if (thumbUploadError) {
-      console.error("upload market cover thumb error:", thumbUploadError);
-      await supabase.storage.from("media").remove([filePath]);
-      return null;
-    }
-
-    return {
-      path: filePath,
-      url: null,
-      thumbPath,
-      thumbUrl: null,
-    };
-  }
-
-
   async function refreshMembership() {
     const { data, error } = await supabase.rpc("get_my_membership");
 
@@ -426,9 +380,9 @@ function NewMarketPostPageContent() {
         external_url: safeExternalUrl || null,
         external_label: safeExternalLabel || null,
         cover_image_url: null,
-        cover_image_path: firstSourceMedia ? getMediaObjectPath(firstSourceMedia) : null,
+        cover_image_path: null,
         cover_thumb_url: null,
-        cover_thumb_path: firstSourceMedia ? getMediaThumbObjectPath(firstSourceMedia) : null,
+        cover_thumb_path: null,
         status: "active",
       })
       .select("id")
@@ -462,65 +416,80 @@ function NewMarketPostPageContent() {
 
       if (marketMediaError) {
         console.error("create market media error:", marketMediaError);
-
-        await supabase
-          .from("market_posts")
-          .delete()
-          .eq("id", postId)
-          .eq("user_id", user.id);
+        await requestMarketPostDeletion(postId);
 
         setSaving(false);
         setErrorMsg("保存来源图片失败，请稍后重试");
         return;
       }
+
+      if (firstSourceMedia) {
+        const coverResult = await setMarketPostCover({
+          postId,
+          path: getMediaObjectPath(firstSourceMedia),
+          thumbPath: getMediaThumbObjectPath(firstSourceMedia),
+        });
+        if (!coverResult.ok) {
+          await requestMarketPostDeletion(postId);
+          setSaving(false);
+          setErrorMsg("保存来源封面失败，请稍后重试");
+          return;
+        }
+      }
     }
 
     if (!isFromSourceRecord && coverFile) {
-      const cover = await uploadMarketCoverImage({
-        userId: user.id,
-        postId,
-        file: coverFile,
-      });
+      let cover: ReservedMarketImage | null = null;
+      let rollbackAttempted = false;
+      try {
+        cover = await uploadReservedMarketImage({
+          userId: user.id,
+          postId,
+          targetType: "market_cover",
+          targetId: postId,
+          file: coverFile,
+        });
 
-      if (!cover) {
-        await supabase
-          .from("market_posts")
-          .delete()
-          .eq("id", postId)
-          .eq("user_id", user.id);
+        const coverResult = await setMarketPostCover({
+          postId,
+          path: cover.path,
+          thumbPath: cover.thumbPath,
+          reservationId: cover.reservation.reservation_id,
+        });
 
+        if (!coverResult.ok) {
+          const reconciliation = await supabase
+            .from("market_posts")
+            .select("cover_image_path, cover_upload_reservation_id")
+            .eq("id", postId)
+            .maybeSingle();
+          const committed =
+            !reconciliation.error &&
+            reconciliation.data?.cover_image_path === cover.path &&
+            reconciliation.data?.cover_upload_reservation_id ===
+              cover.reservation.reservation_id;
+          if (!committed) {
+            rollbackAttempted = true;
+            await rollbackReservedMarketImage(cover);
+            await requestMarketPostDeletion(postId);
+            throw new Error("封面图保存失败，请稍后重试");
+          }
+        }
+
+        await settleReservedMarketImage(cover);
+      } catch (uploadError) {
+        if (cover && !rollbackAttempted) {
+          await rollbackReservedMarketImage(cover);
+        }
+        await requestMarketPostDeletion(postId);
         setSaving(false);
         setErrorMsg(
           (await isStorageUploadMaintenance())
             ? STORAGE_UPLOAD_MAINTENANCE_MARKET_NOT_SAVED_MESSAGE
-            : "封面图上传失败，请稍后重试"
+            : uploadError instanceof Error
+              ? uploadError.message
+              : "封面图上传失败，请稍后重试",
         );
-        return;
-      }
-
-      const { error: updateCoverError } = await supabase
-        .from("market_posts")
-        .update({
-          cover_image_url: null,
-          cover_image_path: cover.path,
-          cover_thumb_url: null,
-          cover_thumb_path: cover.thumbPath,
-        })
-        .eq("id", postId)
-        .eq("user_id", user.id);
-
-      if (updateCoverError) {
-        console.error("save market cover error:", updateCoverError);
-
-        await supabase.storage.from("media").remove([cover.path, cover.thumbPath]);
-        await supabase
-          .from("market_posts")
-          .delete()
-          .eq("id", postId)
-          .eq("user_id", user.id);
-
-        setSaving(false);
-        setErrorMsg("封面图保存失败，请稍后重试");
         return;
       }
     }

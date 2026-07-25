@@ -54,13 +54,14 @@ export function hasValidMutationOrigin(request: Request) {
 
 export async function getAuthenticatedRequestClient(
   request: Request
-): Promise<{ supabase: SupabaseClient } | null> {
+): Promise<{ supabase: SupabaseClient; userId: string } | null> {
   const cookieClient = await getSupabaseServer();
   const cookieUser = await cookieClient.auth.getUser();
 
   if (!cookieUser.error && cookieUser.data.user?.id) {
     return {
       supabase: cookieClient,
+      userId: cookieUser.data.user.id,
     };
   }
 
@@ -74,5 +75,6 @@ export async function getAuthenticatedRequestClient(
 
   return {
     supabase: tokenClient,
+    userId: tokenUser.data.user.id,
   };
 }

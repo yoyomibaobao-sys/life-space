@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type TrashListingRpcRow = {
+  trash_entry_id?: unknown;
   target_type?: unknown;
   target_id?: unknown;
   deleted_at?: unknown;
@@ -13,6 +14,7 @@ type TrashListingRpcRow = {
   parent_title?: unknown;
   child_record_count?: unknown;
   child_media_count?: unknown;
+  can_retry?: unknown;
 };
 
 function noStoreJson(body: unknown, status: number) {
@@ -41,20 +43,23 @@ export async function GET(request: Request) {
     : [];
   const items = rows.flatMap((row) => {
     const type = row.target_type;
+    const trashEntryId = row.trash_entry_id;
     const id = row.target_id;
     const deletedAt = row.deleted_at;
 
     if (
       (type !== "archive" && type !== "record" && type !== "media") ||
+      typeof trashEntryId !== "string" ||
       typeof id !== "string" ||
       typeof deletedAt !== "string" ||
-      row.status !== "active"
+      (row.status !== "active" && row.status !== "purging" && row.status !== "failed")
     ) {
       return [];
     }
 
     return [
       {
+        trashEntryId,
         type,
         id,
         title:
@@ -70,9 +75,10 @@ export async function GET(request: Request) {
             ? row.parent_title.trim()
             : null,
         deletedAt,
-        status: "active" as const,
+        status: row.status,
         recordCount: Math.max(0, Number(row.child_record_count) || 0),
         mediaCount: Math.max(0, Number(row.child_media_count) || 0),
+        canRetry: row.can_retry === true,
       },
     ];
   });

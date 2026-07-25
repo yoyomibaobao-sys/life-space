@@ -30,6 +30,7 @@ export type MarketPostRow = {
   cover_image_path: string | null;
   cover_thumb_url?: string | null;
   cover_thumb_path?: string | null;
+  cover_upload_reservation_id?: string | null;
   status: MarketPostStatus;
   view_count: number | null;
   created_at: string;

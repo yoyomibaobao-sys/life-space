@@ -18,7 +18,12 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
-import { releaseStorageBytes, reserveStorageBytes } from "@/lib/storage-usage";
+import {
+  cancelStorageUploadReservation,
+  reconcileMediaUploadCommit,
+  reserveStorageUpload,
+  settleStorageUploadReservation,
+} from "@/lib/storage-usage";
 import {
   isStorageUploadMaintenance,
   STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE,
@@ -128,7 +133,7 @@ export default function AddRecord({
     limitBytes: storageLimitBytes,
   });
   // 图片会在上传前压缩，因此这里不再用“原图大小”提前拦截。
-  // 真正的容量检查在 uploadMedia 内按压缩后的大小调用 reserveStorageBytes。
+  // 真正的容量检查在 uploadMedia 内按压缩后的大小创建单次上传预留。
   const uploadWouldExceedStorage = false;
 
   useEffect(() => {
@@ -320,7 +325,24 @@ export default function AddRecord({
     const thumbBytes = thumbFile?.size || 0;
     const reservedBytes = uploadBytes + thumbBytes;
 
-    const reserveResult = await reserveStorageBytes(reservedBytes);
+    const safeName = uploadFile.name.replace(/[^\w.\-]+/g, "_");
+    const uploadKey = crypto.randomUUID();
+    const targetMediaId = crypto.randomUUID();
+    const fileName = `${userId}/${recordId}/${uploadKey}-${safeName}`;
+    const thumbSafeName = thumbFile?.name.replace(/[^\w.\-]+/g, "_") || null;
+    const thumbName = thumbFile && thumbSafeName
+      ? `${userId}/${recordId}/thumbs/${uploadKey}-${thumbSafeName}`
+      : null;
+
+    const reserveResult = await reserveStorageUpload({
+      targetType: "media",
+      targetId: targetMediaId,
+      targetParentId: recordId,
+      storagePath: fileName,
+      storageBytes: uploadBytes,
+      thumbPath: thumbName,
+      thumbBytes,
+    });
 
     if (!reserveResult.ok) {
       if (reserveResult.message === "storage_limit_exceeded") {
@@ -346,15 +368,13 @@ export default function AddRecord({
       return 0;
     }
 
-    setStorageUsedBytes(reserveResult.storage_used);
+    const reservation = {
+      reservation_id: reserveResult.reservation_id,
+      reservation_mode: reserveResult.reservation_mode,
+      reserved_bytes: reservedBytes,
+    } as const;
 
-    const safeName = uploadFile.name.replace(/[^\w.\-]+/g, "_");
-    const uploadKey = crypto.randomUUID();
-    const fileName = `${userId}/${recordId}/${uploadKey}-${safeName}`;
-    const thumbSafeName = thumbFile?.name.replace(/[^\w.\-]+/g, "_") || null;
-    const thumbName = thumbFile && thumbSafeName
-      ? `${userId}/${recordId}/thumbs/${uploadKey}-${thumbSafeName}`
-      : null;
+    setStorageUsedBytes(reserveResult.storage_used);
 
     const { error: uploadError } = await supabase.storage
       .from("media")
@@ -364,8 +384,11 @@ export default function AddRecord({
 
     if (uploadError) {
       console.error("媒体上传失败", uploadError);
-      const releaseResult = await releaseStorageBytes(reservedBytes);
-      setStorageUsedBytes(releaseResult.storage_used);
+      await supabase.storage
+        .from("media")
+        .remove([fileName, thumbName].filter((path): path is string => Boolean(path)));
+      const cancelResult = await cancelStorageUploadReservation(reservation);
+      setStorageUsedBytes(cancelResult.storage_used);
       if (await isStorageUploadMaintenance()) {
         setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
         showToast(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
@@ -385,6 +408,7 @@ export default function AddRecord({
 
       if (thumbUploadError) {
         console.error("缩略图上传失败", thumbUploadError);
+        await supabase.storage.from("media").remove([thumbName]);
       } else {
         uploadedThumbPath = thumbName;
         uploadedThumbBytes = thumbBytes;
@@ -393,8 +417,11 @@ export default function AddRecord({
 
     const actualBytes = uploadBytes + uploadedThumbBytes;
 
-    const { error: mediaError } = await supabase.from("media").insert([
-      {
+    const { data: mediaRow, error: mediaError } = await supabase
+      .from("media")
+      .insert([
+        {
+        id: targetMediaId,
         record_id: recordId,
         type: "image",
         url: null,
@@ -409,24 +436,42 @@ export default function AddRecord({
         height: compressed.height ?? null,
         original_filename: file.name,
         storage_class: "hot",
-      },
-    ]);
+        ...(reservation.reservation_id
+          ? { upload_reservation_id: reservation.reservation_id }
+          : {}),
+        },
+      ])
+      .select("id")
+      .single();
 
-    if (mediaError) {
+    let mediaId = mediaRow?.id ? String(mediaRow.id) : null;
+
+    if (mediaError || !mediaId) {
       console.error("media 写入失败", mediaError);
-      await supabase.storage
-        .from("media")
-        .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
-      const releaseResult = await releaseStorageBytes(reservedBytes);
-      setStorageUsedBytes(releaseResult.storage_used);
-      return 0;
+      const reconciliation = await reconcileMediaUploadCommit({ storagePath: fileName });
+
+      if (reconciliation.status === "found") {
+        mediaId = reconciliation.mediaId;
+      } else if (reconciliation.status === "missing") {
+        await supabase.storage
+          .from("media")
+          .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
+        const cancelResult = await cancelStorageUploadReservation(reservation);
+        setStorageUsedBytes(cancelResult.storage_used);
+        return 0;
+      } else {
+        showToast("图片保存状态待确认，请刷新后查看。为避免误删，已保留上传内容。");
+        return 0;
+      }
     }
 
-    const unusedReservedBytes = Math.max(0, reservedBytes - actualBytes);
-    if (unusedReservedBytes > 0) {
-      const releaseResult = await releaseStorageBytes(unusedReservedBytes);
-      setStorageUsedBytes(releaseResult.storage_used);
-    }
+    const settleResult = await settleStorageUploadReservation({
+      reservation,
+      targetType: "media",
+      targetId: mediaId,
+      legacyActualBytes: actualBytes,
+    });
+    if (settleResult.ok) setStorageUsedBytes(settleResult.storage_used);
 
     return actualBytes;
   }
@@ -434,6 +479,12 @@ export default function AddRecord({
   async function handleAdd() {
     if (loading) return;
     if (!text.trim() && files.length === 0) return;
+
+    if (files.length > 0 && (await isStorageUploadMaintenance())) {
+      setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
+      showToast(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
+      return;
+    }
     setMembershipNotice("");
 
     if (!canCreateMembershipContent(membership)) {
@@ -449,12 +500,6 @@ export default function AddRecord({
           uploadBytes: selectedFileBytes,
         })
       );
-      return;
-    }
-
-    if (files.length > 0 && (await isStorageUploadMaintenance())) {
-      setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
-      showToast(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
       return;
     }
 
