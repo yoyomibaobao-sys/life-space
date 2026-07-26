@@ -107,7 +107,7 @@ where singleton;
 
 select extensions.dblink_connect(
   'capacity_limit_one',
-  'dbname=postgres user=postgres password=postgres'
+  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -119,7 +119,7 @@ from public.storage_upload_capacity_concurrency_test_context c;
 
 select extensions.dblink_connect(
   'capacity_limit_two',
-  'dbname=postgres user=postgres password=postgres'
+  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -215,7 +215,7 @@ select extensions.dblink_disconnect('capacity_limit_two');
 
 select extensions.dblink_connect(
   'capacity_idempotent_one',
-  'dbname=postgres user=postgres password=postgres'
+  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -227,7 +227,7 @@ from public.storage_upload_capacity_concurrency_test_context c;
 
 select extensions.dblink_connect(
   'capacity_idempotent_two',
-  'dbname=postgres user=postgres password=postgres'
+  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -323,7 +323,7 @@ select extensions.dblink_disconnect('capacity_idempotent_two');
 
 select extensions.dblink_connect(
   'capacity_idempotent_one',
-  'dbname=postgres user=postgres password=postgres'
+  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -335,7 +335,7 @@ from public.storage_upload_capacity_concurrency_test_context c;
 
 select extensions.dblink_connect(
   'capacity_idempotent_two',
-  'dbname=postgres user=postgres password=postgres'
+  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
