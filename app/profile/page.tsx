@@ -228,7 +228,7 @@ export default function ProfilePage() {
   const membershipStatusText = membershipError || getMembershipSummary(membership);
   const marketQuotaText = membership
     ? `${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} 条`
-    : "暂无";
+    : "0 / 0 条";
 
   const privateArchiveCount = Math.max(0, Number(stats?.archiveCount || 0) - Number(stats?.publicArchiveCount || 0));
   const endedArchiveCount = Number(stats?.endedArchiveCount || 0);
@@ -694,13 +694,19 @@ export default function ProfilePage() {
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
             <InfoCard
               label="当前方案"
-              value={membership ? getMembershipPlanLabel(membership.plan) : "暂无"}
-              hint={membership ? getMembershipStatusLabel(membership.status) : "云空间记录生成后显示"}
+              value={membership ? getMembershipPlanLabel(membership.plan) : "本地免费"}
+              hint={membership ? getMembershipStatusLabel(membership.status) : "未开通云空间"}
             />
             <InfoCard
               label="有效期至"
-              value={formatMembershipDate(membershipEndDate)}
-              hint={membership?.can_create_content === false ? "已限制新增，仍可查看和导出" : "到期前可继续新增记录"}
+              value={membership ? formatMembershipDate(membershipEndDate) : "不适用"}
+              hint={
+                membership
+                  ? membership.can_create_content === false
+                    ? "已限制新增，仍可查看和导出"
+                    : "到期前可继续新增云端内容"
+                  : "本地记录没有到期日"
+              }
             />
             <InfoCard
               label="云端容量"
@@ -710,7 +716,13 @@ export default function ProfilePage() {
             <InfoCard
               label="集市发布"
               value={marketQuotaText}
-              hint={membership?.can_create_market_post === false ? "当前不可继续发布" : "同时在线发布数量"}
+              hint={
+                !membership
+                  ? "本地免费用户不能发布"
+                  : membership.can_create_market_post === false
+                    ? "当前不可继续发布"
+                    : "同时在线发布数量"
+              }
             />
           </div>
         </section>

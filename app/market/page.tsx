@@ -14,6 +14,7 @@ import {
   type MarketPostType,
 } from "@/lib/market-types";
 import {
+  canCreateMembershipMarketPost,
   getCreateMarketPostBlockedText,
   normalizeMembershipRpcResult,
   type MyMembership,
@@ -211,7 +212,9 @@ export default function MarketPage() {
     locationFilter.trim() !== "" ||
     contentFilter.trim() !== "";
 
-  const marketBlocked = membership?.can_create_market_post === false;
+  const marketBlocked = Boolean(
+    currentUserId && !canCreateMembershipMarketPost(membership)
+  );
 
   const locationOptions = useMemo(() => {
     const optionSet = new Set<string>();

@@ -78,7 +78,9 @@ export default function MembershipPage() {
 
   const marketQuotaText = membership
     ? `${Number(membership.market_post_limit || 0)} 条同时在线`
-    : "暂无";
+    : "0 条";
+
+  const isLocalFreeUser = Boolean(userEmail && !membership && !errorMsg);
 
   return (
     <main style={pageStyle}>
@@ -101,11 +103,21 @@ export default function MembershipPage() {
           </div>
 
           <div style={statusGridStyle}>
-            <InfoItem label="当前云空间" value={membership ? getMembershipPlanLabel(membership.plan) : "暂无"} hint={membership ? getMembershipStatusLabel(membership.status) : "暂无"} />
-            <InfoItem label="有效期至" value={formatMembershipDate(endDate)} hint="到期前可继续使用对应权限" />
-            <InfoItem label="云空间容量" value={storageLimitText} hint="主要用于云端照片与媒体文件" />
-            <InfoItem label="集市发布" value={marketQuotaText} hint="同时在线发布数量" />
+            <InfoItem label="当前方案" value={membership ? getMembershipPlanLabel(membership.plan) : "本地免费"} hint={membership ? getMembershipStatusLabel(membership.status) : "未开通云空间"} />
+            <InfoItem label="有效期至" value={membership ? formatMembershipDate(endDate) : "不适用"} hint={membership ? "到期前可继续使用对应权限" : "本地记录没有到期日"} />
+            <InfoItem label="云空间容量" value={membership ? storageLimitText : "0 B"} hint="正式云空间为 1GB" />
+            <InfoItem
+              label="集市发布"
+              value={marketQuotaText}
+              hint={membership ? "同时在线发布数量" : "本地免费用户不能发布"}
+            />
           </div>
+
+          {isLocalFreeUser ? (
+            <div style={localFreeNoticeStyle}>
+              当前账号是本地免费用户：可以在本机记录，并查看植物指引的基础概要；参数、完整指引、相关种植记录、互动和云端发布需开通云空间。
+            </div>
+          ) : null}
 
           {shouldShowRenewalNotice ? (
             <div style={renewalNoticeStyle}>
@@ -151,50 +163,42 @@ export default function MembershipPage() {
 
       <section style={plansGridStyle}>
         <PlanCard
-          title="本地离线版"
+          title="游客（未注册）"
           price="免费"
-          description="只保存在这台设备，不上传云端，不进入发现页。"
+          description="可以浏览公开内容，也可以直接在当前设备本地记录。"
           items={[
-            "注册是推荐路径，但不是使用本地记录的前提",
-            "项目、记录和图片保存在 App 私有存储中",
-            "不默认写入系统相册",
-            "换设备、卸载或清理数据后可能丢失",
+            "浏览发现页、公开记录和集市",
+            "查看植物目录、名称和分类",
+            "本机离线项目、记录和图片",
+            "不能查看指引概要、参数或参与互动",
           ]}
         />
         <PlanCard
-          title="云空间"
-          price="¥48 / 年"
+          title="本地免费用户"
+          price="免费"
+          description="注册账号，但记录仍只保存在这台设备。"
+          items={[
+            "拥有游客的全部浏览和本地记录能力",
+            "可以查看植物指引的基础概要",
+            "项目、记录和图片保存在 App 私有存储中",
+            "不能查看参数、完整指引或相关种植记录",
+            "不能评论、点赞、送花、关注或云端发布",
+          ]}
+        />
+        <PlanCard
+          title="云空间（首发价）"
+          price="¥64 / 年｜US$8 / year"
           description="适合同步、备份、多设备使用和公开发现。"
           items={[
+            "1GB 云空间",
             "云端私密空间和多设备同步",
             "记录可设为仅自己可见，也可公开发现",
-            "已有本地记录开通后默认同步为云空间私密",
-            "公开发现、求助和评论互动",
-            "基础导出",
+            "参数、生长周期、完整指引和相关种植记录",
+            "未来经验卡和生长线",
+            "评论、回复、点赞、鲜花和关注",
+            "集市同时“发布中”最多 30 条",
           ]}
           featured
-        />
-        <PlanCard
-          title="海外云空间"
-          price="US$6 / year"
-          description="适合海外用户使用同一套云空间能力。"
-          items={[
-            "云端私密空间",
-            "多设备同步和云端备份",
-            "公开发现、求助和评论互动",
-            "已有记录不会自动公开",
-          ]}
-        />
-        <PlanCard
-          title="集市加量包"
-          price="后续开放"
-          description="适合某段时间集中交换、赠送、转让或求购的用户。当前先作为预留说明，暂未开放自动购买。"
-          items={[
-            "云空间用户可后续加购",
-            "只增加集市同时在线数量",
-            "不增加云空间图片容量",
-            "长期大量发布可联系管理员单独评估",
-          ]}
         />
       </section>
 
@@ -210,9 +214,9 @@ export default function MembershipPage() {
         <div style={paymentGridStyle}>
           <div style={paymentItemStyle}>
             <div style={paymentTitleStyle}>国内用户</div>
-            <div style={paymentPriceStyle}>¥48 / 年</div>
+            <div style={paymentPriceStyle}>¥64 / 年</div>
             <p style={paymentDescStyle}>
-              支持微信或支付宝人工付款。请先发送邮件至 {" "}
+              当前通过支付宝人工付款。请先发送邮件至 {" "}
               <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
                 yoyomibaobao@gmail.com
               </a>{" "}
@@ -222,11 +226,11 @@ export default function MembershipPage() {
 
           <div style={paymentItemStyle}>
             <div style={paymentTitleStyle}>海外用户</div>
-            <div style={paymentPriceStyle}>US$6 / year</div>
+            <div style={paymentPriceStyle}>US$8 / year</div>
             <p style={paymentDescStyle}>
               可通过 PayPal 付款：{" "}
               <a
-                href="https://paypal.me/ying0chen/6"
+                href="https://paypal.me/ying0chen/8"
                 target="_blank"
                 rel="noreferrer"
                 style={inlineLinkStyle}
@@ -261,6 +265,8 @@ export default function MembershipPage() {
           <li>注册不等于上传云端；开通云空间后才同步、备份和多设备使用。</li>
           <li>上传云空间不等于公开，记录可设为仅自己可见或公开发现。</li>
           <li>已有本地记录开通后默认同步为云空间私密，不会自动公开。</li>
+          <li>云空间包含 1GB 容量，集市最多同时发布中 30 条；暂不提供集市加量包。</li>
+          <li>当前为首发价 ¥64/年或 US$8/year，不自动续费。</li>
           <li>当前为人工确认付款并手动开通云空间；后续可再接入自动支付或应用商店内购。</li>
         </ul>
       </section>
@@ -582,6 +588,18 @@ const ruleListStyle: CSSProperties = {
   fontSize: 14,
   lineHeight: 1.8,
 };
+
+const localFreeNoticeStyle: CSSProperties = {
+  marginTop: 14,
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid #dce9d5",
+  background: "#f7fbf4",
+  color: "#4f6849",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+
 const customStorageStyle: CSSProperties = {
   marginTop: 14,
   padding: "12px 14px",
@@ -591,4 +609,3 @@ const customStorageStyle: CSSProperties = {
   fontSize: 14,
   lineHeight: 1.7,
 };
-

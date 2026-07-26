@@ -46,7 +46,9 @@ export default function MarketCommentsSection({
   const [membershipLoading, setMembershipLoading] = useState(false);
 
   const membershipBlocked = Boolean(
-    currentUserId && !membershipLoading && membership?.can_create_content === false,
+    currentUserId &&
+      !membershipLoading &&
+      !canCreateMembershipContent(membership),
   );
   const canWrite = Boolean(currentUserId && !membershipLoading && postStatus === "active" && !membershipBlocked);
 
@@ -306,7 +308,7 @@ export default function MarketCommentsSection({
           <div style={closedNoticeStyle}>云空间状态读取中...</div>
         ) : membershipBlocked ? (
           <div style={closedNoticeStyle}>
-            使用权已到期，请{" "}
+            {getCreateContentBlockedText(membership)}，请{" "}
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
               查看云空间
             </Link>

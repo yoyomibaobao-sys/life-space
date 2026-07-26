@@ -126,7 +126,8 @@ export default function AddRecord({
     return () => window.clearTimeout(timeoutId);
   }, [activeCycleIdsKey, selectedCycleId]);
 
-  const contentBlocked = membership?.can_create_content === false;
+  const contentBlocked =
+    !membershipLoading && !canCreateMembershipContent(membership);
   const selectedFileBytes = files.reduce((total, file) => total + file.size, 0);
   const storageLimitBytes = Number(membership?.storage_limit_bytes || 0);
   const storageRemainingBytes = getStorageRemainingBytes({

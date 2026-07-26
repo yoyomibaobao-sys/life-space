@@ -143,7 +143,8 @@ function NewArchiveContent() {
     void loadMembership();
   }, []);
 
-  const contentBlocked = membership?.can_create_content === false;
+  const contentBlocked =
+    !membershipLoading && !canCreateMembershipContent(membership);
 
   const systemOptions = useMemo(() => {
     const keyword = systemSearch.trim().toLowerCase();

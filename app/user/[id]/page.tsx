@@ -13,6 +13,11 @@ import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
+import {
+  canCreateMembershipContent,
+  getCreateContentBlockedText,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
 
 type Category = "all" | ArchiveCategory;
 
@@ -726,6 +731,17 @@ export default function UserSpacePage() {
 
                   if (isFollowing) {
                     setShowUnfollowConfirm(true);
+                    return;
+                  }
+
+                  const { data: membershipData, error: membershipError } =
+                    await supabase.rpc("get_my_membership");
+                  const membership = membershipError
+                    ? null
+                    : normalizeMembershipRpcResult(membershipData);
+
+                  if (!canCreateMembershipContent(membership)) {
+                    showToast(getCreateContentBlockedText(membership));
                     return;
                   }
 

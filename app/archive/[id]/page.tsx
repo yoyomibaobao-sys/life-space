@@ -221,7 +221,9 @@ saveRecentArchiveBrowse({
       if (archiveData.species_id) {
         const { data: speciesData } = await supabase
           .from("plant_species")
-          .select("*")
+          .select(
+            "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order"
+          )
           .eq("id", archiveData.species_id)
           .maybeSingle();
         setSpecies((speciesData || null) as PlantSpeciesLite | null);
@@ -1145,6 +1147,17 @@ saveRecentArchiveBrowse({
 
     if (isProjectFollowed) {
       setShowUnfollowProjectConfirm(true);
+      return;
+    }
+
+    const { data: membershipData, error: membershipError } =
+      await supabase.rpc("get_my_membership");
+    const membership = membershipError
+      ? null
+      : normalizeMembershipRpcResult(membershipData);
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
       return;
     }
 

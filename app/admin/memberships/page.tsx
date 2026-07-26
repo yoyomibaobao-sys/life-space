@@ -65,19 +65,19 @@ type PlanPreset = {
 const PLAN_PRESETS: PlanPreset[] = [
   {
     key: "trial",
-    label: "本地离线版",
+    label: "试用云空间（过渡）",
     storageLimitBytes: 300_000_000,
     baseMarketPostLimit: 3,
     paidMonths: null,
-    note: "保留原试用到期时间，仅修正试用额度。",
+    note: "仅供现有试用账号保留原到期时间和额度，不再授予新账号。",
   },
   {
     key: "basic",
     label: "云空间",
     storageLimitBytes: 1_000_000_000,
-    baseMarketPostLimit: 10,
+    baseMarketPostLimit: 30,
     paidMonths: 12,
-    note: "适合普通长期用户：1GB，集市 10 条。",
+    note: "正式首发云空间：1GB，集市同时发布中最多 30 条。",
   },
   {
     key: "large",
@@ -141,7 +141,7 @@ function canDeleteMembership(row: AdminMembershipRow | null, currentUserId: stri
 }
 
 function getDefaultPaymentAmount(plan: PaymentPlanKey, currency: PaymentCurrency) {
-  if (plan === "basic") return currency === "CNY" ? 18 : 3;
+  if (plan === "basic") return currency === "CNY" ? 64 : 8;
   return 0;
 }
 
@@ -313,14 +313,14 @@ export default function AdminMembershipsPage() {
   const [plan, setPlan] = useState<PlanKey>("basic");
   const [paidUntilDate, setPaidUntilDate] = useState("");
   const [storageLimitBytes, setStorageLimitBytes] = useState("1000000000");
-  const [baseMarketPostLimit, setBaseMarketPostLimit] = useState("10");
+  const [baseMarketPostLimit, setBaseMarketPostLimit] = useState("30");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [paymentRows, setPaymentRows] = useState<MembershipPaymentRow[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentPlan, setPaymentPlan] = useState<PaymentPlanKey>("basic");
-  const [paymentAmount, setPaymentAmount] = useState("18");
+  const [paymentAmount, setPaymentAmount] = useState("64");
   const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>("CNY");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("manual");
   const [paymentReference, setPaymentReference] = useState("");
@@ -989,9 +989,16 @@ export default function AdminMembershipsPage() {
                       onChange={(event) => handleApplyPreset(event.target.value as PlanKey)}
                       style={inputStyle}
                     >
-                      {PLAN_PRESETS.map((preset) => (
-                        <option key={preset.key} value={preset.key}>{preset.label}</option>
-                      ))}
+                      {PLAN_PRESETS
+                        .filter(
+                          (preset) =>
+                            preset.key !== "trial" || selected?.plan === "trial"
+                        )
+                        .map((preset) => (
+                          <option key={preset.key} value={preset.key}>
+                            {preset.label}
+                          </option>
+                        ))}
                     </select>
                   </label>
 

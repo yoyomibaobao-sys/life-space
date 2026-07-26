@@ -62,7 +62,9 @@ export default function ArchiveCommentsSection({
   const [membershipLoading, setMembershipLoading] = useState(false);
 
   const membershipBlocked = Boolean(
-    currentUserId && !membershipLoading && membership?.can_create_content === false,
+    currentUserId &&
+      !membershipLoading &&
+      !canCreateMembershipContent(membership),
   );
   const canWrite = Boolean(currentUserId && !membershipLoading && !membershipBlocked);
   const canAwardFlowers = Boolean(
@@ -231,6 +233,16 @@ export default function ArchiveCommentsSection({
       return;
     }
 
+    if (membershipLoading) {
+      showToast("状态读取中");
+      return;
+    }
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
+      return;
+    }
+
     const { error } = await supabase.from("record_likes").insert({
       record_id: recordId,
       user_id: currentUserId,
@@ -318,6 +330,16 @@ export default function ArchiveCommentsSection({
       return;
     }
 
+    if (membershipLoading) {
+      showToast("状态读取中");
+      return;
+    }
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
+      return;
+    }
+
     const { error } = await supabase.from("comment_likes").insert({
       comment_id: comment.id,
       user_id: currentUserId,
@@ -390,6 +412,16 @@ function mobileCommentActionButtonStyle(active: boolean) {
     }
     if (comment.myFlower && !comment.myFlower.revoked_at) {
       showToast("这条评论已经送过花了");
+      return;
+    }
+
+    if (membershipLoading) {
+      showToast("状态读取中");
+      return;
+    }
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
       return;
     }
 
@@ -517,7 +549,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
           <span style={{ fontSize: 12, color: "#8b9688" }}>状态读取中...</span>
         ) : !compactMobile && membershipBlocked ? (
           <span style={{ fontSize: 12, color: "#9a6232" }}>
-            使用权已到期，
+            {getCreateContentBlockedText(membership)}，
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
               查看云空间
             </Link>
@@ -793,7 +825,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                 </div>
               ) : membershipBlocked ? (
                 <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
-                  使用权已到期，请{" "}
+                  {getCreateContentBlockedText(membership)}，请{" "}
                   <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
                     查看云空间
                   </Link>

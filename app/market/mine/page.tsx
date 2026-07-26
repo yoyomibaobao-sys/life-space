@@ -13,6 +13,7 @@ import {
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
 import {
+  canCreateMembershipMarketPost,
   getCreateMarketPostBlockedText,
   getMarketPostQuotaHint,
   getMarketPostQuotaLabel,
@@ -111,7 +112,9 @@ export default function MyMarketPostsPage() {
     setItems(await attachMarketPostDisplayUrls((data || []) as MarketPostRow[]));
   }
 
-  const marketBlocked = membership?.can_create_market_post === false;
+  const marketBlocked = Boolean(
+    user && !canCreateMembershipMarketPost(membership)
+  );
 
   return (
     <main style={pageStyle}>

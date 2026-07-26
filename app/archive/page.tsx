@@ -42,6 +42,7 @@ import {
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import {
+  canCreateMembershipContent,
   getCreateContentBlockedText,
   normalizeMembershipRpcResult,
   type MyMembership,
@@ -1049,7 +1050,7 @@ export default function ArchivePage() {
   const sourceTotalCount =
     (activeSource === "local" ? 0 : archiveCount) +
     (activeSource === "cloud" ? 0 : localArchives.length);
-  const contentBlocked = membership?.can_create_content === false;
+  const contentBlocked = !canCreateMembershipContent(membership);
 
   const cloudSubcategoryChips: ArchiveTaxonomyChip[] = activeCategory
     ? subTags

@@ -18,6 +18,10 @@ import {
   neutralActionLinkStyle,
   dangerActionButtonStyle,
 } from "@/lib/archive-plant-shared";
+import {
+  canCreateMembershipContent,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
 
 export default function PlantInterestsPage() {
   const router = useRouter();
@@ -28,6 +32,7 @@ export default function PlantInterestsPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [addingPlanSpeciesId, setAddingPlanSpeciesId] = useState<string | null>(null);
+  const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [removeInterestTarget, setRemoveInterestTarget] = useState<PlantInterestRow | null>(null);
   const [removingInterestId, setRemovingInterestId] = useState<string | null>(null);
 
@@ -45,7 +50,11 @@ export default function PlantInterestsPage() {
 
     setUserId(user.id);
 
-    const [{ data: interestData, error: interestError }, { data: planData }] = await Promise.all([
+    const [
+      { data: interestData, error: interestError },
+      { data: planData },
+      membershipResult,
+    ] = await Promise.all([
       supabase
         .from("user_plant_interests")
         .select(
@@ -65,7 +74,13 @@ export default function PlantInterestsPage() {
         .order("created_at", { ascending: false }),
 
       supabase.from("user_plant_plans").select("species_id").eq("user_id", user.id),
+      supabase.rpc("get_my_membership"),
     ]);
+
+    const membership = membershipResult.error
+      ? null
+      : normalizeMembershipRpcResult(membershipResult.data);
+    setHasCloudAccess(canCreateMembershipContent(membership));
 
     if (interestError) {
       showToast("读取感兴趣植物失败：" + interestError.message);
@@ -85,6 +100,10 @@ export default function PlantInterestsPage() {
 
   async function updateInterest(id: string, payload: Partial<Pick<PlantInterestRow, "note">>) {
     if (!userId) return;
+    if (!hasCloudAccess) {
+      showToast("需要有效云空间才能修改感兴趣列表；现有条目仍可移除。");
+      return;
+    }
 
     setSavingId(id);
 
@@ -135,6 +154,10 @@ export default function PlantInterestsPage() {
 
   async function addToPlan(speciesId: string) {
     if (!userId) return;
+    if (!hasCloudAccess) {
+      showToast("加入云端种植计划需要有效云空间。");
+      return;
+    }
 
     setAddingPlanSpeciesId(speciesId);
 
@@ -186,7 +209,7 @@ export default function PlantInterestsPage() {
           兴趣备注
           <textarea
             value={item.note || ""}
-            disabled={savingId === item.id}
+            disabled={!hasCloudAccess || savingId === item.id}
             onChange={(event) =>
               setInterests((prev) =>
                 prev.map((interest) =>
@@ -230,7 +253,7 @@ export default function PlantInterestsPage() {
             <button
               type="button"
               onClick={() => addToPlan(item.species_id)}
-              disabled={addingPlanSpeciesId === item.species_id}
+              disabled={!hasCloudAccess || addingPlanSpeciesId === item.species_id}
               style={{
                 padding: "9px 12px",
                 borderRadius: 999,
@@ -239,7 +262,11 @@ export default function PlantInterestsPage() {
                 border: "none",
                 fontSize: 13,
                 fontWeight: 650,
-                cursor: addingPlanSpeciesId === item.species_id ? "default" : "pointer",
+                cursor:
+                  !hasCloudAccess || addingPlanSpeciesId === item.species_id
+                    ? "default"
+                    : "pointer",
+                opacity: hasCloudAccess ? 1 : 0.55,
               }}
             >
               {addingPlanSpeciesId === item.species_id ? "加入中..." : "加入种植计划"}
@@ -247,7 +274,15 @@ export default function PlantInterestsPage() {
           )}
 
           <Link
-            href={`/archive/new?species=${item.species_id}`}
+            href={
+              hasCloudAccess
+                ? `/archive/new?species=${item.species_id}`
+                : `/local/archive/new?category=plant&plant_id=${encodeURIComponent(
+                    item.species_id
+                  )}&system_name=${encodeURIComponent(
+                    plantDisplayName(item.plant_species)
+                  )}`
+            }
             style={{
               padding: "9px 12px",
               borderRadius: 999,
@@ -259,7 +294,7 @@ export default function PlantInterestsPage() {
               fontWeight: 650,
             }}
           >
-            创建植物项目
+            {hasCloudAccess ? "创建云端项目" : "创建本地项目"}
           </Link>
 
           <Link href={`/plant/${item.species_id}`} style={neutralActionLinkStyle}>
@@ -295,6 +330,26 @@ export default function PlantInterestsPage() {
         secondaryHref="/archive/plans"
         secondaryLabel="查看种植计划"
       />
+
+      {!hasCloudAccess ? (
+        <div
+          style={{
+            marginTop: 14,
+            padding: "11px 13px",
+            borderRadius: 12,
+            border: "1px solid #dce9d5",
+            background: "#f7fbf4",
+            color: "#587052",
+            fontSize: 14,
+            lineHeight: 1.7,
+          }}
+        >
+          感兴趣列表属于云空间功能。现有过渡条目仍可查看和移除，但不能修改或新增；你仍可创建本地项目。
+          <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
+            查看云空间
+          </Link>
+        </div>
+      ) : null}
 
       {interests.length === 0 ? (
         <ArchivePlantEmptyState
