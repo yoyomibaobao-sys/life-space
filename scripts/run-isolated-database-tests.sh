@@ -75,6 +75,42 @@ run_sql_file() {
 
 run_sql_file "supabase/schema.sql"
 
+# schema.sql is a schema-only dump, so it intentionally excludes rows from the
+# Supabase-managed storage.buckets table. Older migrations assume these two
+# project buckets were already created in Dashboard; reproduce that prerequisite
+# with local-only fixture rows before replaying the migration chain.
+echo "Seeding local Storage bucket fixtures"
+psql "${psql_args[@]}" <<'SQL'
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+)
+values
+  (
+    'avatars',
+    'avatars',
+    true,
+    10485760,
+    array['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+  ),
+  (
+    'media',
+    'media',
+    true,
+    20971520,
+    array['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+  )
+on conflict (id) do update
+set
+  name = excluded.name,
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+SQL
+
 maintenance_test_ran=false
 while IFS= read -r migration_file; do
   run_sql_file "${migration_file}"
