@@ -1,0 +1,45 @@
+name: Database isolation tests
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "scripts/run-isolated-database-tests.sh"
+      - ".github/workflows/database-isolation-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-isolation-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-database:
+    name: Supabase migrations and behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends postgresql-client
+          fi
+
+      - name: Run static SQL regression checks
+        run: node --test tests/*.test.mjs
+
+      - name: Run isolated database tests
+        run: bash scripts/run-isolated-database-tests.sh

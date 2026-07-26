@@ -16,6 +16,13 @@ const uploadHardeningMigration = readFileSync(
   ),
   "utf8"
 );
+const mainOnlyCapacityMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260726130000_count_only_main_media_toward_user_capacity.sql",
+    import.meta.url
+  ),
+  "utf8"
+);
 const worker = readFileSync(
   new URL("../lib/server/storage-deletion-worker.ts", import.meta.url),
   "utf8"
@@ -83,23 +90,30 @@ test("trusted bytes come from Storage metadata and are never estimated", () => {
   assert.match(migration, /else null::bigint/i);
 });
 
-test("capacity settlement is item-bound and non-negative", () => {
-  assert.match(migration, /from public\.storage_deletion_items i[\s\S]*?for update;/i);
-  assert.match(migration, /v_item\.capacity_released_at/i);
+test("capacity settlement is item-bound, non-negative, and main-only", () => {
   assert.match(
-    migration,
-    /storage_used = greatest\(coalesce\(p\.storage_used, 0\) - v_item\.size_bytes, 0\)/i
+    mainOnlyCapacityMigration,
+    /from public\.storage_deletion_items i[\s\S]*?for update;/i
+  );
+  assert.match(mainOnlyCapacityMigration, /v_item\.capacity_released_at/i);
+  assert.match(
+    mainOnlyCapacityMigration,
+    /storage_used = greatest\(coalesce\(p\.storage_used, 0\) - v_item\.capacity_bytes, 0\)/i
   );
   assert.match(
-    migration,
+    mainOnlyCapacityMigration,
     /p_result_code = 'retained_shared' then i\.capacity_released_at/i
+  );
+  assert.match(
+    mainOnlyCapacityMigration,
+    /capacity_kind in \('main', 'thumb', 'unclassified'\)/i
   );
 });
 
 test("unknown bytes block purged state without blocking physical deletion", () => {
   assert.match(
-    migration,
-    /if v_item\.size_bytes is null then\s+v_requires_reconciliation := true;/i
+    mainOnlyCapacityMigration,
+    /if v_item\.capacity_bytes is null then\s+v_requires_reconciliation := true;/i
   );
   assert.match(
     migration,
