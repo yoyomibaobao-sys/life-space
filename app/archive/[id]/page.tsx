@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
+import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
@@ -1380,11 +1381,13 @@ saveRecentArchiveBrowse({
         reserved_bytes: item.reservedBytes,
       } as const;
 
-      const { error: uploadError } = await supabase.storage
-        .from("media")
-        .upload(fileName, file, {
+      const { error: uploadError } = await uploadMediaStorageObject(
+        fileName,
+        file,
+        {
           contentType: file.type || "image/jpeg",
-        });
+        }
+      );
 
       if (uploadError) {
         console.error("add record media upload error:", uploadError);
@@ -1404,11 +1407,13 @@ saveRecentArchiveBrowse({
       let uploadedThumbBytes = 0;
 
       if (thumbFile && thumbName) {
-        const { error: thumbUploadError } = await supabase.storage
-          .from("media")
-          .upload(thumbName, thumbFile, {
+        const { error: thumbUploadError } = await uploadMediaStorageObject(
+          thumbName,
+          thumbFile,
+          {
             contentType: thumbFile.type || "image/jpeg",
-          });
+          }
+        );
 
         if (thumbUploadError) {
           console.error("add record thumbnail upload error:", thumbUploadError);

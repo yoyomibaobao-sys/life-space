@@ -1,4 +1,5 @@
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
+import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
   completeLocalArchiveCloudTransfer,
   getLocalArchiveDetail,
@@ -439,12 +440,14 @@ async function uploadLocalImageToCloud(params: {
   let cleanupAllowed = true;
 
   try {
-    const { error: uploadError } = await supabase.storage
-      .from("media")
-      .upload(fileName, uploadFile, {
+    const { error: uploadError } = await uploadMediaStorageObject(
+      fileName,
+      uploadFile,
+      {
         contentType: uploadFile.type || "image/jpeg",
         upsert: true,
-      });
+      }
+    );
 
     if (uploadError) {
       console.error("migrate local media upload error:", uploadError);
@@ -454,12 +457,14 @@ async function uploadLocalImageToCloud(params: {
       throw new Error("图片上传失败，请稍后重试。");
     }
     if (thumbFile && thumbName) {
-      const { error: thumbError } = await supabase.storage
-        .from("media")
-        .upload(thumbName, thumbFile, {
+      const { error: thumbError } = await uploadMediaStorageObject(
+        thumbName,
+        thumbFile,
+        {
           contentType: thumbFile.type || "image/jpeg",
           upsert: true,
-        });
+        }
+      );
 
       if (thumbError) {
         console.error("migrate local thumbnail upload error:", thumbError);
