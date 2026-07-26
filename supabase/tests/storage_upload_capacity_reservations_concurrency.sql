@@ -71,15 +71,34 @@ set storage_used = 0, storage_limit = 1000
 from public.storage_upload_capacity_concurrency_test_context c
 where p.id in (c.user_limit, c.user_idempotent);
 
-update public.user_memberships m
-set
-  plan = 'trial',
-  status = 'trialing',
-  trial_started_at = now(),
-  trial_ends_at = now() + interval '1 day',
-  storage_limit_bytes = 1000
-from public.storage_upload_capacity_concurrency_test_context c
-where m.user_id in (c.user_limit, c.user_idempotent);
+insert into public.user_memberships (
+  user_id,
+  plan,
+  status,
+  trial_started_at,
+  trial_ends_at,
+  storage_limit_bytes,
+  base_market_post_limit
+)
+select
+  user_limit,
+  'trial',
+  'trialing',
+  now(),
+  now() + interval '1 day',
+  1000,
+  3
+from public.storage_upload_capacity_concurrency_test_context
+union all
+select
+  user_idempotent,
+  'trial',
+  'trialing',
+  now(),
+  now() + interval '1 day',
+  1000,
+  3
+from public.storage_upload_capacity_concurrency_test_context;
 
 insert into public.archives (id, user_id, title, category, is_public)
 select gen_random_uuid(), user_limit, 'capacity-concurrency-limit', 'plant', false
