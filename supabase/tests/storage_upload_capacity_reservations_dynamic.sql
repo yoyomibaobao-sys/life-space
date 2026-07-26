@@ -267,6 +267,57 @@ begin
 end;
 $$;
 
+-- Binary Storage requests authorize against the exact content length while
+-- retaining the completed-object size path exercised by the other cases.
+do $$
+declare
+  c upload_capacity_test_context%rowtype;
+  v_reservation uuid := gen_random_uuid();
+  v_target uuid := gen_random_uuid();
+  v_path text;
+  v_result record;
+begin
+  select * into c from upload_capacity_test_context;
+  v_path := format('%s/%s/binary-content-length.jpg', c.user_one, c.record_one);
+  perform * from public.reserve_storage_upload(
+    v_reservation, 'media', v_target, c.record_one, v_path, 100, null, 0
+  );
+  insert into storage.objects (bucket_id, name, owner_id, metadata)
+  values ('media', v_path, c.user_one::text, '{"contentLength":80}');
+  if not exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'media' and name = v_path
+  ) then
+    raise exception 'binary contentLength upload was rejected';
+  end if;
+
+  set local storage.allow_delete_query = 'true';
+  delete from storage.objects where bucket_id = 'media' and name = v_path;
+  select * into v_result from public.cancel_storage_upload_reservation(v_reservation);
+  if not v_result.ok or v_result.storage_used <> 760 then
+    raise exception 'binary contentLength reservation cleanup failed';
+  end if;
+
+  v_reservation := gen_random_uuid();
+  v_target := gen_random_uuid();
+  v_path := format('%s/%s/binary-over-reserved.jpg', c.user_one, c.record_one);
+  perform * from public.reserve_storage_upload(
+    v_reservation, 'media', v_target, c.record_one, v_path, 50, null, 0
+  );
+  begin
+    insert into storage.objects (bucket_id, name, owner_id, metadata)
+    values ('media', v_path, c.user_one::text, '{"contentLength":51}');
+    raise exception 'over-reserved binary upload was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  select * into v_result from public.cancel_storage_upload_reservation(v_reservation);
+  if not v_result.ok or v_result.storage_used <> 760 then
+    raise exception 'rejected binary reservation was not refunded';
+  end if;
+end;
+$$;
+
 -- A different user cannot cancel or settle the first user's reservation.
 do $$
 declare

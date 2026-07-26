@@ -111,6 +111,7 @@ begin
   into v_definition;
 
   if v_definition not like '%auth.uid()%'
+     or v_definition not like '%p_metadata->>''contentLength''%'
      or v_definition not like '%p_metadata->>''size''%'
      or v_definition not like '%r.status = ''reserved''%' then
     raise exception 'reserved Storage object policy helper is incomplete';

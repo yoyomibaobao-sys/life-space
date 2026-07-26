@@ -12,6 +12,8 @@ const marketBindingPath =
   "supabase/migrations/20260718150000_bind_market_upload_capacity_reservations.sql";
 const recoveryPath =
   "supabase/migrations/20260718160000_resume_storage_uploads_after_reservation_deploy.sql";
+const binaryUploadCompatibilityPath =
+  "supabase/migrations/20260726120000_accept_binary_upload_content_length.sql";
 
 test("stage one blocks new reservations but preserves legacy drain refunds", async () => {
   const migration = await source(
@@ -75,6 +77,29 @@ test("Storage writes require an active path reservation and trusted metadata siz
   assert.match(migration, /create policy media_update_own_path/i);
   assert.match(migration, /get_referenced_storage_paths/);
   assert.match(migration, /'storage_path_in_use'::text/);
+});
+
+test("binary Storage uploads validate contentLength with a completed-size fallback", async () => {
+  const migration = await source(binaryUploadCompatibilityPath);
+
+  assert.match(
+    migration,
+    /create or replace function public\.can_upload_reserved_media_object\(/i
+  );
+  assert.match(
+    migration,
+    /coalesce\(\s*p_metadata->>'contentLength',\s*p_metadata->>'size'/i
+  );
+  assert.match(migration, /\)::bigint <= rp\.reserved_bytes/i);
+  assert.match(
+    migration,
+    /revoke all[\s\S]*can_upload_reserved_media_object\(text, jsonb\)[\s\S]*from public, anon/i
+  );
+  assert.match(
+    migration,
+    /grant execute[\s\S]*can_upload_reserved_media_object\(text, jsonb\)[\s\S]*to authenticated/i
+  );
+  assert.doesNotMatch(migration, /disable row level security|drop policy/i);
 });
 
 test("media insertion atomically settles trusted main and thumbnail bytes", async () => {
