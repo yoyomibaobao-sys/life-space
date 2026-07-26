@@ -155,7 +155,12 @@ begin
      or v_definition not like '%v_used + v_user_capacity_reserved_bytes > v_limit%'
      or v_definition not like '%storage_used = v_used + v_user_capacity_reserved_bytes%'
      or v_definition like '%storage_used = v_used + v_reserved_bytes%' then
-    raise exception 'upload reservation does not use main-only user capacity';
+    raise exception
+      'upload reservation does not use main-only user capacity (declare=%, limit=%, update=%, legacy=%)',
+      strpos(v_definition, 'v_user_capacity_reserved_bytes := v_storage_bytes'),
+      strpos(v_definition, 'v_used + v_user_capacity_reserved_bytes > v_limit'),
+      strpos(v_definition, 'storage_used = v_used + v_user_capacity_reserved_bytes'),
+      strpos(v_definition, 'storage_used = v_used + v_reserved_bytes');
   end if;
 
   select pg_get_functiondef(
