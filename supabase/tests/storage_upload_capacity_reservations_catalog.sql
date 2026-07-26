@@ -31,6 +31,24 @@ begin
     raise exception 'market upload reservation links are missing';
   end if;
 
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'storage_deletion_items'
+      and column_name = 'capacity_kind'
+      and column_default = '''unclassified''::text'
+  ) or not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'storage_deletion_items'
+      and column_name = 'capacity_bytes'
+      and data_type = 'bigint'
+  ) then
+    raise exception 'main-only deletion capacity columns are missing';
+  end if;
+
   if has_table_privilege('anon', 'public.storage_upload_reservations', 'select')
      or has_table_privilege('authenticated', 'public.storage_upload_reservations', 'select')
      or has_table_privilege('authenticated', 'public.storage_upload_reservations', 'insert')
@@ -122,8 +140,67 @@ begin
 
   if v_definition not like '%storage.objects%'
      or v_definition not like '%storage_cleanup_required%'
-     or v_definition not like '%owner_user_id = v_user_id%' then
+     or v_definition not like '%owner_user_id = v_user_id%'
+     or v_definition not like '%v_main_reserved_bytes%'
+     or v_definition like '%- v_reservation.reserved_bytes%' then
     raise exception 'reservation cancellation is not owner/object bound';
+  end if;
+
+  select pg_get_functiondef(
+    'public.reserve_storage_upload(uuid,text,uuid,uuid,text,bigint,text,bigint)'::regprocedure
+  )
+  into v_definition;
+
+  if v_definition not like '%v_user_capacity_reserved_bytes := v_storage_bytes%'
+     or v_definition not like '%v_used + v_user_capacity_reserved_bytes > v_limit%'
+     or v_definition not like '%storage_used = v_used + v_user_capacity_reserved_bytes%'
+     or v_definition like '%storage_used = v_used + v_reserved_bytes%' then
+    raise exception 'upload reservation does not use main-only user capacity';
+  end if;
+
+  select pg_get_functiondef(
+    'public.private_settle_storage_upload_reservation(uuid,uuid,text,uuid,uuid,text,text)'::regprocedure
+  )
+  into v_definition;
+
+  if v_definition not like '%v_actual_bytes := v_main_bytes + v_thumb_bytes%'
+     or v_definition not like '%v_refund_bytes := v_main_path.reserved_bytes - v_main_bytes%'
+     or v_definition like '%v_reservation.reserved_bytes - v_actual_bytes%' then
+    raise exception 'upload settlement does not separate physical and user-capacity bytes';
+  end if;
+
+  select pg_get_functiondef(
+    'public.complete_storage_deletion_item(uuid,uuid,text)'::regprocedure
+  )
+  into v_definition;
+
+  if v_definition not like '%v_item.capacity_bytes%'
+     or v_definition like '%- v_item.size_bytes%' then
+    raise exception 'deletion completion does not use captured main-only capacity';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger t
+    where t.tgrelid = 'public.storage_deletion_items'::regclass
+      and t.tgname = 'storage_deletion_items_prepare_capacity'
+      and not t.tgisinternal
+  ) then
+    raise exception 'deletion capacity classification trigger is missing';
+  end if;
+
+  if to_regprocedure('public.private_reconcile_main_only_storage_used()') is null
+     or has_function_privilege(
+       'authenticated',
+       'public.private_reconcile_main_only_storage_used()',
+       'execute'
+     )
+     or has_function_privilege(
+       'service_role',
+       'public.private_reconcile_main_only_storage_used()',
+       'execute'
+     ) then
+    raise exception 'main-only reconciliation helper is missing or exposed';
   end if;
 
   if not exists (

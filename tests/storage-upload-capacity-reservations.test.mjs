@@ -14,6 +14,8 @@ const recoveryPath =
   "supabase/migrations/20260718160000_resume_storage_uploads_after_reservation_deploy.sql";
 const binaryUploadCompatibilityPath =
   "supabase/migrations/20260726120000_accept_binary_upload_content_length.sql";
+const mainOnlyCapacityPath =
+  "supabase/migrations/20260726130000_count_only_main_media_toward_user_capacity.sql";
 
 test("stage one blocks new reservations but preserves legacy drain refunds", async () => {
   const migration = await source(
@@ -102,25 +104,95 @@ test("binary Storage uploads validate contentLength with a completed-size fallba
   assert.doesNotMatch(migration, /disable row level security|drop policy/i);
 });
 
-test("media insertion atomically settles trusted main and thumbnail bytes", async () => {
-  const migration = await source(marketBindingPath);
+test("media insertion measures both objects but settles only main user capacity", async () => {
+  const binding = await source(marketBindingPath);
+  const migration = await source(mainOnlyCapacityPath);
 
-  assert.match(migration, /add column upload_reservation_id uuid/i);
-  assert.match(migration, /foreign key \(upload_reservation_id, user_id\)/i);
-  assert.match(migration, /before insert on public\.media/i);
+  assert.match(binding, /add column upload_reservation_id uuid/i);
+  assert.match(binding, /foreign key \(upload_reservation_id, user_id\)/i);
+  assert.match(binding, /before insert on public\.media/i);
+  assert.match(binding, /new\.size_bytes := v_actual_bytes/i);
+  assert.match(binding, /new\.thumb_path := v_reserved_thumb_path/i);
   assert.match(migration, /private_owned_media_object_size/gi);
-  assert.match(migration, /new\.size_bytes := v_actual_bytes/i);
-  assert.match(migration, /v_refund_bytes := v_reservation\.reserved_bytes - v_actual_bytes/i);
-  assert.match(migration, /new\.thumb_path := v_reserved_thumb_path/i);
+  assert.match(migration, /v_actual_bytes := v_main_bytes \+ v_thumb_bytes/i);
+  assert.match(
+    migration,
+    /v_refund_bytes := v_main_path\.reserved_bytes - v_main_bytes/i
+  );
+  assert.match(
+    migration,
+    /storage_used = v_used \+ v_user_capacity_reserved_bytes/i
+  );
+  assert.doesNotMatch(
+    migration,
+    /storage_used = v_used \+ v_reserved_bytes/i
+  );
 });
 
 test("cancellation refuses reservations that still have Storage objects", async () => {
-  const migration = await source(marketBindingPath);
+  const migration = await source(mainOnlyCapacityPath);
 
   assert.match(migration, /join storage\.objects o/i);
   assert.match(migration, /'storage_cleanup_required'::text/i);
   assert.match(migration, /'already_cancelled'::text/i);
   assert.match(migration, /'already_settled'::text/i);
+  assert.match(migration, /v_main_reserved_bytes/i);
+  assert.match(
+    migration,
+    /storage_used = greatest\(coalesce\(p\.storage_used, 0\) - v_main_reserved_bytes, 0\)/i
+  );
+});
+
+test("deletion queue keeps physical bytes separate from main-only capacity", async () => {
+  const migration = await source(mainOnlyCapacityPath);
+
+  assert.match(migration, /add column capacity_kind text not null default 'unclassified'/i);
+  assert.match(migration, /add column capacity_bytes bigint/i);
+  assert.match(migration, /capacity_kind in \('main', 'thumb', 'unclassified'\)/i);
+  assert.match(
+    migration,
+    /when new\.capacity_kind = 'main' then new\.size_bytes[\s\S]*else 0/i
+  );
+  assert.match(
+    migration,
+    /storage_used = greatest\(coalesce\(p\.storage_used, 0\) - v_item\.capacity_bytes, 0\)/i
+  );
+  assert.doesNotMatch(
+    migration,
+    /storage_used = greatest\(coalesce\(p\.storage_used, 0\) - v_item\.size_bytes, 0\)/i
+  );
+});
+
+test("historical reconciliation counts trusted main paths and is rerunnable", async () => {
+  const migration = await source(mainOnlyCapacityPath);
+  const behavior = await source(
+    "supabase/tests/storage_main_only_capacity_dynamic.sql"
+  );
+
+  assert.match(migration, /private_desired_main_storage_bytes/i);
+  assert.match(migration, /r\.status = 'reserved'[\s\S]*rp\.path_kind = 'main'/i);
+  assert.match(migration, /i\.capacity_kind = 'main'/i);
+  assert.match(
+    migration,
+    /v_desired_bytes := public\.private_desired_main_storage_bytes\(v_profile\.id\)/i
+  );
+  assert.match(
+    migration,
+    /private_reconcile_main_only_storage_used\(\)[\s\S]*pg_advisory_xact_lock\([\s\S]*storage-upload-owner:[\s\S]*from public\.profiles p[\s\S]*for update/i
+  );
+  assert.match(migration, /select public\.private_reconcile_main_only_storage_used\(\)/i);
+  assert.doesNotMatch(
+    migration,
+    /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i
+  );
+  assert.doesNotMatch(migration, /storage_used\s*=\s*\d+/i);
+
+  assert.match(behavior, /reserved_bytes <> 50[\s\S]*storage_used <> 1039/i);
+  assert.match(behavior, /storage_used from public\.profiles where id = c\.user_id\) <> 120/i);
+  assert.match(behavior, /v_second_changed <> 0/i);
+  assert.match(behavior, /capacity_kind = 'thumb'[\s\S]*capacity_bytes = 0/i);
+  assert.match(behavior, /capacity_kind = 'main'[\s\S]*capacity_bytes = 80/i);
+  assert.match(behavior, /storage_used from public\.profiles where id = c\.user_id\) <> 40/i);
 });
 
 test("final permissions retire byte-only RPCs and expose only safe upload RPCs", async () => {
@@ -293,13 +365,10 @@ test("post-deployment recovery validates the secure chain before reopening uploa
 });
 
 test("deletion-item capacity settlement remains separate and item bound", async () => {
-  const purge = await source(
-    "supabase/migrations/20260718120000_add_cloud_trash_purge_orchestration.sql"
-  );
+  const purge = await source(mainOnlyCapacityPath);
 
   assert.match(purge, /complete_storage_deletion_item/);
   assert.match(purge, /capacity_released_at is null/i);
   assert.match(purge, /p_result_code in \('deleted', 'not_found'\)/i);
   assert.match(purge, /p_result_code = 'retained_shared'/i);
-  assert.doesNotMatch(purge, /cancel_storage_upload_reservation/);
 });

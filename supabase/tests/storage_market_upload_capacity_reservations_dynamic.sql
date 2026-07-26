@@ -110,8 +110,9 @@ select set_config(
 select set_config('request.jwt.claim.role', 'authenticated', true);
 set local role authenticated;
 
--- A standalone cover settles trusted main+thumbnail bytes and is idempotent
--- when the client repeats the cover RPC after losing the first response.
+-- A standalone cover settles trusted physical main+thumbnail bytes while
+-- user-visible capacity counts only the main image. Repeating the cover RPC
+-- after a lost response remains idempotent.
 do $$
 declare
   c market_capacity_test_context%rowtype;
@@ -138,7 +139,7 @@ begin
     c.cover_thumb_path,
     20
   );
-  if not v_result.ok or v_result.storage_used <> 1120 then
+  if not v_result.ok or v_result.storage_used <> 1100 then
     raise exception 'market cover reservation failed';
   end if;
 
@@ -151,7 +152,7 @@ begin
     c.post_id, c.cover_main_path, c.cover_thumb_path, c.cover_reservation_id
   );
   if not v_result.ok
-     or (select storage_used from public.profiles where id = c.user_id) <> 1090
+     or (select storage_used from public.profiles where id = c.user_id) <> 1080
      or (select cover_upload_reservation_id from public.market_posts where id = c.post_id)
         is distinct from c.cover_reservation_id then
     raise exception 'market cover trusted settlement failed';
@@ -162,7 +163,7 @@ begin
   );
   if not v_result.ok
      or v_result.job_id is not null
-     or (select storage_used from public.profiles where id = c.user_id) <> 1090 then
+     or (select storage_used from public.profiles where id = c.user_id) <> 1080 then
     raise exception 'repeated market cover response changed capacity';
   end if;
 end;
@@ -178,7 +179,7 @@ declare
   c market_capacity_test_context%rowtype;
 begin
   select * into c from market_capacity_test_context;
-  if (select storage_used from public.profiles where id = c.user_id) <> 1090
+  if (select storage_used from public.profiles where id = c.user_id) <> 1080
      or not exists (
        select 1 from storage.objects
        where bucket_id = 'media' and name = c.cover_main_path
@@ -215,7 +216,7 @@ declare
   c market_capacity_test_context%rowtype;
 begin
   select * into c from market_capacity_test_context;
-  if (select storage_used from public.profiles where id = c.user_id) <> 1090
+  if (select storage_used from public.profiles where id = c.user_id) <> 1080
      or (select upload_reservation_id from public.market_media
          where id = c.shared_market_media_id) is not null
      or (select count(*) from storage.objects
@@ -225,8 +226,9 @@ begin
 end;
 $$;
 
--- Switching to the shared image queues the old standalone cover. It releases
--- exactly the trusted 90 bytes only after both objects are actually deleted.
+-- Switching to the shared image queues the old standalone cover. Both objects
+-- are physically measured and deleted, but only the trusted 80-byte main image
+-- is released from user-visible capacity.
 do $$
 declare
   c market_capacity_test_context%rowtype;
@@ -253,6 +255,30 @@ declare
 begin
   select * into c from market_capacity_test_context;
   set local storage.allow_delete_query = 'true';
+
+  if not exists (
+       select 1
+       from public.storage_deletion_items i
+       join public.storage_deletion_job_items ji on ji.item_id = i.id
+       where ji.job_id = c.cover_delete_job_id
+         and i.object_path = c.cover_main_path
+         and i.size_bytes = 80
+         and i.capacity_kind = 'main'
+         and i.capacity_bytes = 80
+     )
+     or not exists (
+       select 1
+       from public.storage_deletion_items i
+       join public.storage_deletion_job_items ji on ji.item_id = i.id
+       where ji.job_id = c.cover_delete_job_id
+         and i.object_path = c.cover_thumb_path
+         and i.size_bytes = 10
+         and i.capacity_kind = 'thumb'
+         and i.capacity_bytes = 0
+     ) then
+    raise exception 'cover deletion did not separate physical and user-capacity bytes';
+  end if;
+
   delete from storage.objects
   where bucket_id = 'media'
     and name in (c.cover_main_path, c.cover_thumb_path);

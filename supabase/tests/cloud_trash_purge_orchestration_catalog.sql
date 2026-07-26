@@ -2,6 +2,8 @@
 -- This file intentionally creates no fixtures and performs no purge.
 
 do $$
+declare
+  v_definition text;
 begin
   if to_regprocedure('public.request_purge_trash_entry(uuid,text,uuid)') is null then
     raise exception 'missing request_purge_trash_entry';
@@ -57,6 +59,32 @@ begin
       and column_name = 'capacity_reconciliation_required'
   ) then
     raise exception 'missing item capacity reconciliation marker';
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'storage_deletion_items'
+      and column_name = 'capacity_kind'
+  ) or not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'storage_deletion_items'
+      and column_name = 'capacity_bytes'
+  ) then
+    raise exception 'missing main-only deletion capacity metadata';
+  end if;
+
+  select pg_get_functiondef(
+    'public.complete_storage_deletion_item(uuid,uuid,text)'::regprocedure
+  )
+  into v_definition;
+
+  if v_definition not like '%v_item.capacity_bytes%'
+     or v_definition like '%- v_item.size_bytes%' then
+    raise exception 'deletion completion still refunds physical thumbnail bytes';
   end if;
 
   if not exists (

@@ -182,8 +182,8 @@ begin
 end;
 $$;
 
--- A missing thumbnail refunds only that path; a committed thumbnail whose
--- response was lost is recovered and settled from Storage metadata.
+-- A thumbnail never changes user-visible capacity. A committed thumbnail
+-- whose response was lost is still recovered and physically measured.
 do $$
 declare
   c upload_capacity_test_context%rowtype;
@@ -198,6 +198,9 @@ begin
   perform * from public.reserve_storage_upload(
     v_reservation, 'media', v_media, c.record_one, v_main, 80, v_thumb, 20
   );
+  if (select storage_used from public.profiles where id = c.user_one) <> 660 then
+    raise exception 'thumbnail bytes changed reserved user capacity';
+  end if;
   insert into storage.objects (bucket_id, name, owner_id, metadata)
   values ('media', v_main, c.user_one::text, '{"size":80}');
   insert into public.media (
@@ -208,7 +211,7 @@ begin
     1, 'hot', v_reservation
   );
   if (select storage_used from public.profiles where id = c.user_one) <> 660 then
-    raise exception 'missing thumbnail refund was incorrect';
+    raise exception 'missing thumbnail changed settled user capacity';
   end if;
 
   v_reservation := gen_random_uuid();
@@ -218,6 +221,9 @@ begin
   perform * from public.reserve_storage_upload(
     v_reservation, 'media', v_media, c.record_one, v_main, 80, v_thumb, 20
   );
+  if (select storage_used from public.profiles where id = c.user_one) <> 740 then
+    raise exception 'recovered thumbnail bytes changed reserved user capacity';
+  end if;
   insert into storage.objects (bucket_id, name, owner_id, metadata)
   values
     ('media', v_main, c.user_one::text, '{"size":80}'),
@@ -229,7 +235,7 @@ begin
     v_media, c.record_one, c.user_one, 'image', v_main, null,
     1, 'hot', v_reservation
   );
-  if (select storage_used from public.profiles where id = c.user_one) <> 760
+  if (select storage_used from public.profiles where id = c.user_one) <> 740
      or (select thumb_path from public.media where id = v_media) <> v_thumb
      or (select size_bytes from public.media where id = v_media) <> 100 then
     raise exception 'lost thumbnail response was not recovered';
@@ -261,7 +267,7 @@ begin
   set local storage.allow_delete_query = 'true';
   delete from storage.objects where bucket_id = 'media' and name = v_path;
   select * into v_result from public.cancel_storage_upload_reservation(v_reservation);
-  if not v_result.ok or v_result.storage_used <> 760 then
+  if not v_result.ok or v_result.storage_used <> 740 then
     raise exception 'cleaned reservation did not refund exactly once';
   end if;
 end;
@@ -295,7 +301,7 @@ begin
   set local storage.allow_delete_query = 'true';
   delete from storage.objects where bucket_id = 'media' and name = v_path;
   select * into v_result from public.cancel_storage_upload_reservation(v_reservation);
-  if not v_result.ok or v_result.storage_used <> 760 then
+  if not v_result.ok or v_result.storage_used <> 740 then
     raise exception 'binary contentLength reservation cleanup failed';
   end if;
 
@@ -312,7 +318,7 @@ begin
   exception when insufficient_privilege then null;
   end;
   select * into v_result from public.cancel_storage_upload_reservation(v_reservation);
-  if not v_result.ok or v_result.storage_used <> 760 then
+  if not v_result.ok or v_result.storage_used <> 740 then
     raise exception 'rejected binary reservation was not refunded';
   end if;
 end;
