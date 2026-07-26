@@ -16,6 +16,8 @@ create temporary table main_only_capacity_test_context (
   active_thumb_path text not null
 );
 
+grant select on main_only_capacity_test_context to authenticated;
+
 insert into main_only_capacity_test_context
 select
   gen_random_uuid(),
