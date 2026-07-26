@@ -18,6 +18,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
+import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
   cancelStorageUploadReservation,
   reconcileMediaUploadCommit,
@@ -376,11 +377,13 @@ export default function AddRecord({
 
     setStorageUsedBytes(reserveResult.storage_used);
 
-    const { error: uploadError } = await supabase.storage
-      .from("media")
-      .upload(fileName, uploadFile, {
+    const { error: uploadError } = await uploadMediaStorageObject(
+      fileName,
+      uploadFile,
+      {
         contentType: uploadFile.type || "image/jpeg",
-      });
+      }
+    );
 
     if (uploadError) {
       console.error("媒体上传失败", uploadError);
@@ -400,11 +403,13 @@ export default function AddRecord({
     let uploadedThumbBytes = 0;
 
     if (thumbFile && thumbName) {
-      const { error: thumbUploadError } = await supabase.storage
-        .from("media")
-        .upload(thumbName, thumbFile, {
+      const { error: thumbUploadError } = await uploadMediaStorageObject(
+        thumbName,
+        thumbFile,
+        {
           contentType: thumbFile.type || "image/jpeg",
-        });
+        }
+      );
 
       if (thumbUploadError) {
         console.error("缩略图上传失败", thumbUploadError);

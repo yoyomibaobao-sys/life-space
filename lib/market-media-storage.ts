@@ -1,4 +1,5 @@
 import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
+import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import { supabase } from "@/lib/supabase";
 import {
   cancelStorageUploadReservation,
@@ -117,7 +118,7 @@ export async function uploadReservedMarketImage(params: {
     reserved_bytes: reservedBytes,
   } satisfies StorageUploadReservation;
 
-  const { error: uploadError } = await supabase.storage.from("media").upload(
+  const { error: uploadError } = await uploadMediaStorageObject(
     path,
     uploadFile,
     {
@@ -136,7 +137,7 @@ export async function uploadReservedMarketImage(params: {
   let uploadedThumbPath: string | null = null;
   let uploadedThumbBytes = 0;
   if (thumbFile && thumbPath) {
-    const { error: thumbError } = await supabase.storage.from("media").upload(
+    const { error: thumbError } = await uploadMediaStorageObject(
       thumbPath,
       thumbFile,
       {
