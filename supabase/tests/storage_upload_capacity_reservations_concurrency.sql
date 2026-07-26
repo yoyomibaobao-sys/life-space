@@ -1,6 +1,6 @@
--- LOCAL SUPABASE ONLY. dblink uses the fixed local CLI database credentials to
--- open concurrent authenticated sessions. The fixture is committed for those
--- sessions and removed before this script exits.
+-- LOCAL SUPABASE ONLY. Run as supabase_admin so dblink can open concurrent
+-- authenticated sessions. The fixture is committed for those sessions and
+-- removed before this script exits.
 
 \set ON_ERROR_STOP on
 
@@ -107,7 +107,7 @@ where singleton;
 
 select extensions.dblink_connect(
   'capacity_limit_one',
-  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
+  'dbname=postgres user=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -119,7 +119,7 @@ from public.storage_upload_capacity_concurrency_test_context c;
 
 select extensions.dblink_connect(
   'capacity_limit_two',
-  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
+  'dbname=postgres user=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -215,7 +215,7 @@ select extensions.dblink_disconnect('capacity_limit_two');
 
 select extensions.dblink_connect(
   'capacity_idempotent_one',
-  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
+  'dbname=postgres user=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -227,7 +227,7 @@ from public.storage_upload_capacity_concurrency_test_context c;
 
 select extensions.dblink_connect(
   'capacity_idempotent_two',
-  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
+  'dbname=postgres user=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -323,7 +323,7 @@ select extensions.dblink_disconnect('capacity_idempotent_two');
 
 select extensions.dblink_connect(
   'capacity_idempotent_one',
-  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
+  'dbname=postgres user=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
@@ -335,7 +335,7 @@ from public.storage_upload_capacity_concurrency_test_context c;
 
 select extensions.dblink_connect(
   'capacity_idempotent_two',
-  'host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres'
+  'dbname=postgres user=postgres'
 )
 from public.storage_upload_capacity_concurrency_test_context c;
 
