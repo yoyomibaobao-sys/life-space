@@ -187,6 +187,8 @@ declare
   v_main_job uuid;
   v_main_item uuid;
   v_worker uuid := gen_random_uuid();
+  v_completed boolean;
+  v_profile_used bigint;
 begin
   select * into c from main_only_capacity_test_context;
 
@@ -269,9 +271,21 @@ begin
     lease_expires_at = now() + interval '1 minute'
   where id = v_main_item;
 
-  if not public.complete_storage_deletion_item(v_main_item, v_worker, 'deleted')
-     or (select storage_used from public.profiles where id = c.user_id) <> 40 then
-    raise exception 'main deletion did not release exactly its trusted 80 bytes';
+  v_completed := public.complete_storage_deletion_item(
+    v_main_item,
+    v_worker,
+    'deleted'
+  );
+  select storage_used
+  into v_profile_used
+  from public.profiles
+  where id = c.user_id;
+
+  if not v_completed or v_profile_used <> 40 then
+    raise exception
+      'main deletion did not release exactly its trusted 80 bytes (completed=%, storage_used=%)',
+      v_completed,
+      v_profile_used;
   end if;
 
   if not public.complete_storage_deletion_item(v_main_item, v_worker, 'deleted')
