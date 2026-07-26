@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 readonly project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly project_id="life-space"
-readonly maintenance_migration="20260718140000_harden_storage_upload_capacity_refunds.sql"
+readonly maintenance_migration="20260718120000_add_cloud_trash_purge_orchestration.sql"
 readonly maintenance_test="supabase/tests/storage_upload_maintenance_window_dynamic.sql"
 
 cd "${project_root}"
