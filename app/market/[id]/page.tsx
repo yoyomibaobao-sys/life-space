@@ -15,6 +15,7 @@ import {
 import { PUBLIC_PROFILE_SELECT, type SupabaseUser } from "@/lib/domain-types";
 import type { LightboxImage } from "@/lib/archive-detail-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { requestMarketPostDeletion } from "@/lib/market-media-storage";
 
 type ProfileBrief = {
   id: string;
@@ -241,55 +242,10 @@ export default function MarketDetailPage() {
 
     setWorking(true);
 
-    const allMediaPaths = marketMedia
-      .flatMap((media) =>
-        media.path ? [media.path, media.thumb_path] : []
-      )
-      .filter(Boolean) as string[];
-    const removableMediaPaths = marketMedia
-      .filter((media) => !media.source_media_id)
-      .flatMap((media) =>
-        media.path ? [media.path, media.thumb_path] : []
-      )
-      .filter(Boolean) as string[];
-
-    const standaloneCoverPath =
-      item.cover_image_path && !allMediaPaths.includes(item.cover_image_path)
-        ? item.cover_image_path
-        : null;
-    const standaloneCoverThumbPath =
-      standaloneCoverPath &&
-      item.cover_thumb_path &&
-      !allMediaPaths.includes(item.cover_thumb_path)
-        ? item.cover_thumb_path
-        : null;
-
-    const pathsToRemove = [
-      ...removableMediaPaths,
-      ...(standaloneCoverPath ? [standaloneCoverPath] : []),
-      ...(standaloneCoverThumbPath ? [standaloneCoverThumbPath] : []),
-    ];
-
-    const { error } = await supabase
-      .from("market_posts")
-      .delete()
-      .eq("id", item.id)
-      .eq("user_id", item.user_id);
-
-    if (error) {
+    const result = await requestMarketPostDeletion(item.id);
+    if (!result.ok) {
       setWorking(false);
-      console.error("delete market post error:", error);
       return;
-    }
-
-    if (pathsToRemove.length > 0) {
-      const { error: removeError } = await supabase.storage
-        .from("media")
-        .remove(pathsToRemove);
-
-      if (removeError) {
-        console.error("remove market media files error:", removeError);
-      }
     }
 
     setWorking(false);

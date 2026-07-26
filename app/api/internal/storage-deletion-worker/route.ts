@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import { runStorageDeletionWorker } from "@/lib/server/storage-deletion-worker";
+import { runStorageDeletionWorkerBatches } from "@/lib/server/storage-deletion-worker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +44,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const summary = await runStorageDeletionWorker();
+    const summary = await runStorageDeletionWorkerBatches({
+      maxBatches: 5,
+      maxDurationMs: 20_000,
+    });
     return noStoreJson(summary, 200);
   } catch {
     console.error("storage deletion worker route failed", {

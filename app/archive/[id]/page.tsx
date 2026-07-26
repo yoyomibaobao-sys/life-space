@@ -55,8 +55,10 @@ import {
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
 import {
-  releaseStorageBytes,
-  reserveStorageBytes,
+  cancelStorageUploadReservation,
+  reconcileMediaUploadCommit,
+  reserveStorageUpload,
+  settleStorageUploadReservation,
 } from "@/lib/storage-usage";
 import {
   isStorageUploadMaintenance,
@@ -1329,46 +1331,54 @@ saveRecentArchiveBrowse({
       })
     );
 
-    const uploadBytes = preparedFiles.reduce(
-      (total, item) => total + item.reservedBytes,
-      0
-    );
-
-    const reserveResult = await reserveStorageBytes(uploadBytes);
-
-    if (!reserveResult.ok) {
-      if (reserveResult.message === "storage_limit_exceeded") {
-        showToast(
-          getStorageLimitExceededText({
-            usedBytes: reserveResult.storage_used,
-            limitBytes: reserveResult.storage_limit_bytes,
-            uploadBytes,
-          })
-        );
-      } else if (reserveResult.message === "membership_inactive") {
-        showToast(getCreateContentBlockedText(membership));
-      } else if (reserveResult.message === "upload_maintenance") {
-        showToast(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
-      } else {
-        showToast("容量检查失败");
-      }
-
-      return [];
-    }
-
     const uploadedMedia: MediaItem[] = [];
-    let uploadedBytes = 0;
 
     for (const [index, item] of preparedFiles.entries()) {
       const file = item.file;
       const thumbFile = item.thumbFile;
       const safeName = file.name.replace(/[^\w.\-]+/g, "_");
       const timestamp = Date.now();
+      const targetMediaId = crypto.randomUUID();
       const fileName = `${user.id}/${recordId}/${timestamp}-${index}-${safeName}`;
       const thumbSafeName = thumbFile?.name.replace(/[^\w.\-]+/g, "_") || null;
       const thumbName = thumbFile && thumbSafeName
         ? `${user.id}/${recordId}/thumbs/${timestamp}-${index}-${thumbSafeName}`
         : null;
+
+      const reserveResult = await reserveStorageUpload({
+        targetType: "media",
+        targetId: targetMediaId,
+        targetParentId: recordId,
+        storagePath: fileName,
+        storageBytes: file.size,
+        thumbPath: thumbName,
+        thumbBytes: thumbFile?.size || 0,
+      });
+
+      if (!reserveResult.ok) {
+        if (reserveResult.message === "storage_limit_exceeded") {
+          showToast(
+            getStorageLimitExceededText({
+              usedBytes: reserveResult.storage_used,
+              limitBytes: reserveResult.storage_limit_bytes,
+              uploadBytes: item.reservedBytes,
+            })
+          );
+        } else if (reserveResult.message === "membership_inactive") {
+          showToast(getCreateContentBlockedText(membership));
+        } else if (reserveResult.message === "upload_maintenance") {
+          showToast(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
+        } else {
+          showToast("容量检查失败");
+        }
+        break;
+      }
+
+      const reservation = {
+        reservation_id: reserveResult.reservation_id,
+        reservation_mode: reserveResult.reservation_mode,
+        reserved_bytes: item.reservedBytes,
+      } as const;
 
       const { error: uploadError } = await supabase.storage
         .from("media")
@@ -1378,6 +1388,10 @@ saveRecentArchiveBrowse({
 
       if (uploadError) {
         console.error("add record media upload error:", uploadError);
+        await supabase.storage
+          .from("media")
+          .remove([fileName, thumbName].filter((path): path is string => Boolean(path)));
+        await cancelStorageUploadReservation(reservation);
         showToast(
           (await isStorageUploadMaintenance())
             ? STORAGE_UPLOAD_MAINTENANCE_MESSAGE
@@ -1398,6 +1412,7 @@ saveRecentArchiveBrowse({
 
         if (thumbUploadError) {
           console.error("add record thumbnail upload error:", thumbUploadError);
+          await supabase.storage.from("media").remove([thumbName]);
         } else {
           uploadedThumbPath = thumbName;
           uploadedThumbBytes = thumbFile.size;
@@ -1410,6 +1425,7 @@ saveRecentArchiveBrowse({
         .from("media")
         .insert([
           {
+            id: targetMediaId,
             record_id: recordId,
             type: "image",
             url: null,
@@ -1424,32 +1440,58 @@ saveRecentArchiveBrowse({
             height: item.compressed.height ?? null,
             original_filename: item.originalFile.name,
             storage_class: "hot",
+            ...(reservation.reservation_id
+              ? { upload_reservation_id: reservation.reservation_id }
+              : {}),
           },
         ])
         .select()
         .single();
 
-      if (mediaError) {
+      let committedMedia = mediaRow as MediaItem | null;
+
+      if (mediaError || !committedMedia?.id) {
         console.error("add record media insert error:", mediaError);
-        await supabase.storage
-          .from("media")
-          .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
-        showToast("部分图片保存失败");
-        continue;
+        const reconciliation = await reconcileMediaUploadCommit({ storagePath: fileName });
+
+        if (reconciliation.status === "found") {
+          const { data: reconciledMedia, error: reconcileReadError } = await supabase
+            .from("media")
+            .select("*")
+            .eq("id", reconciliation.mediaId)
+            .single();
+
+          if (reconcileReadError || !reconciledMedia) {
+            console.error("add record reconciled media read error:", reconcileReadError);
+            showToast("图片保存状态待确认，请刷新后查看。为避免误删，已保留上传内容。");
+            continue;
+          }
+          committedMedia = reconciledMedia as MediaItem;
+        } else if (reconciliation.status === "missing") {
+          await supabase.storage
+            .from("media")
+            .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
+          await cancelStorageUploadReservation(reservation);
+          showToast("部分图片保存失败");
+          continue;
+        } else {
+          showToast("图片保存状态待确认，请刷新后查看。为避免误删，已保留上传内容。");
+          continue;
+        }
       }
+
+      await settleStorageUploadReservation({
+        reservation,
+        targetType: "media",
+        targetId: committedMedia.id,
+        legacyActualBytes: actualBytes,
+      });
 
       const [displayMediaRow] = await attachMediaDisplayUrls(
         supabase,
-        [mediaRow as MediaItem]
+        [committedMedia]
       );
       uploadedMedia.push(displayMediaRow);
-      uploadedBytes += actualBytes;
-    }
-
-    const failedBytes = Math.max(0, uploadBytes - uploadedBytes);
-
-    if (failedBytes > 0) {
-      await releaseStorageBytes(failedBytes);
     }
 
     if (uploadedMedia.length > 0) {
