@@ -6,10 +6,12 @@ readonly project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly project_id="life-space"
 readonly maintenance_migration="20260718120000_add_cloud_trash_purge_orchestration.sql"
 readonly maintenance_test="supabase/tests/storage_upload_maintenance_window_dynamic.sql"
+readonly concurrency_test="supabase/tests/storage_upload_capacity_reservations_concurrency.sql"
+readonly database_container="supabase_db_${project_id}"
 
 cd "${project_root}"
 
-for required_command in supabase psql; do
+for required_command in docker supabase psql; do
   if ! command -v "${required_command}" >/dev/null 2>&1; then
     echo "Missing required command: ${required_command}" >&2
     exit 1
@@ -21,7 +23,8 @@ for required_path in \
   "supabase/schema.sql" \
   "supabase/migrations" \
   "supabase/tests" \
-  "${maintenance_test}"; do
+  "${maintenance_test}" \
+  "${concurrency_test}"; do
   if [[ ! -e "${required_path}" ]]; then
     echo "Missing required path: ${required_path}" >&2
     exit 1
@@ -71,6 +74,25 @@ run_sql_file() {
 
   echo "Running ${sql_file}"
   psql "${psql_args[@]}" --file="${sql_file}"
+}
+
+run_concurrency_sql_file() {
+  if ! docker inspect "${database_container}" >/dev/null 2>&1; then
+    echo "Missing isolated database container: ${database_container}" >&2
+    exit 1
+  fi
+
+  # dblink rejects non-superuser callers when the local target uses trust
+  # authentication. Run only this concurrency fixture as the local Supabase
+  # administrator, inside the disposable database container; every migration
+  # and other behavior test still runs through the ordinary postgres role.
+  echo "Running ${concurrency_test} as the isolated Supabase administrator"
+  docker exec --interactive "${database_container}" \
+    psql \
+      --username=supabase_admin \
+      --dbname=postgres \
+      "${psql_args[@]}" \
+    < "${concurrency_test}"
 }
 
 run_sql_file "supabase/schema.sql"
@@ -131,6 +153,11 @@ fi
 
 while IFS= read -r test_file; do
   if [[ "${test_file}" == "${maintenance_test}" ]]; then
+    continue
+  fi
+
+  if [[ "${test_file}" == "${concurrency_test}" ]]; then
+    run_concurrency_sql_file
     continue
   fi
 
