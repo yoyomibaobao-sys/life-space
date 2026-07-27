@@ -67,6 +67,11 @@ import {
 } from "@/lib/storage-upload-maintenance";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { requestCloudTrash } from "@/lib/cloud-trash";
+import { readImageCapturedAt } from "@/lib/photo-metadata";
+import {
+  limitRecordPhotoBatch,
+  MAX_RECORD_PHOTOS_PER_ADD,
+} from "@/lib/record-photo-batches";
 
 export default function ArchiveDetail({
   params,
@@ -1302,6 +1307,14 @@ saveRecentArchiveBrowse({
     options: { successMessage?: string | null; emptyMessage?: string | null } = {},
   ): Promise<MediaItem[]> {
     if (!files.length) return [];
+    const { accepted: acceptedFiles, rejectedCount } =
+      limitRecordPhotoBatch(files);
+
+    if (rejectedCount > 0) {
+      showToast(
+        `每次最多添加 ${MAX_RECORD_PHOTOS_PER_ADD} 张，本次只处理前 ${MAX_RECORD_PHOTOS_PER_ADD} 张；可以再次添加。`,
+      );
+    }
 
     const {
       data: { user },
@@ -1329,7 +1342,8 @@ saveRecentArchiveBrowse({
     }
 
     const preparedFiles = await Promise.all(
-      files.map(async (originalFile) => {
+      acceptedFiles.map(async (originalFile) => {
+        const capturedAt = await readImageCapturedAt(originalFile);
         const compressed = await compressImageFile(originalFile);
         const file = compressed.file;
         const thumbnail = await createImageThumbnailFile(file);
@@ -1340,6 +1354,7 @@ saveRecentArchiveBrowse({
           compressed,
           file,
           thumbFile,
+          capturedAt,
           reservedBytes: file.size + (thumbFile?.size || 0),
         };
       })
@@ -1457,6 +1472,7 @@ saveRecentArchiveBrowse({
             width: item.compressed.width ?? null,
             height: item.compressed.height ?? null,
             original_filename: item.originalFile.name,
+            captured_at: item.capturedAt,
             storage_class: "hot",
             ...(reservation.reservation_id
               ? { upload_reservation_id: reservation.reservation_id }

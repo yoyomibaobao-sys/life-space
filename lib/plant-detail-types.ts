@@ -74,6 +74,7 @@ export type PlantParameterRow = {
   ph_min?: number | null;
   ph_max?: number | null;
   sun_score?: number | null;
+  need_trellis?: boolean | null;
   air_humidity_score?: number | null;
   air_flow_score?: number | null;
   soil_moisture_score?: number | null;
@@ -119,4 +120,3 @@ export type PlantSpeciesRow = PlantSpeciesDetail;
 export type PlantSpeciesI18nRow = PlantI18nItem;
 export type PlantAliasRow = PlantAliasItem;
 export type PlantParametersRow = PlantParameterRow;
-

@@ -5,7 +5,6 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import exifr from "exifr";
 import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
 import {
@@ -37,6 +36,13 @@ import {
   toLocalDateEndIso,
 } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
+import { readImageCapturedAt } from "@/lib/photo-metadata";
+import {
+  buildRecordPhotoGroups,
+  limitRecordPhotoBatch,
+  MAX_RECORD_PHOTOS_PER_ADD,
+  type TimedRecordPhoto,
+} from "@/lib/record-photo-batches";
 
 type RecordVisibility = "public" | "private";
 
@@ -211,38 +217,41 @@ export default function AddRecord({
     return new Date().toISOString();
   }
 
-  async function resolveCycleEndRecordTime() {
-    if (timeMode !== "exif" || files.length === 0) {
-      return resolveTime({ timeMode, customTime });
-    }
+  async function prepareSelectedPhotos(): Promise<TimedRecordPhoto<File>[]> {
+    return Promise.all(
+      files.map(async (file) => {
+        const capturedAt = await readImageCapturedAt(file);
 
-    const filesToCheck = mergeMode ? files.slice(0, 1) : files;
-    const recordTimes: string[] = [];
-
-    for (const file of filesToCheck) {
-      let exifTime = null;
-      try {
-        const exifData = await exifr.parse(file);
-        if (exifData?.DateTimeOriginal) exifTime = exifData.DateTimeOriginal;
-      } catch {}
-
-      recordTimes.push(resolveTime({ timeMode, customTime, exifTime }));
-    }
-
-    return recordTimes.reduce((latest, value) =>
-      new Date(value).getTime() > new Date(latest).getTime() ? value : latest
+        return {
+          file,
+          capturedAt,
+          recordTimeISO: resolveTime({
+            timeMode,
+            customTime,
+            exifTime: capturedAt ? new Date(capturedAt) : null,
+          }),
+        };
+      }),
     );
   }
 
   function appendFiles(nextFiles: File[]) {
     if (nextFiles.length === 0) return;
-    const previews = nextFiles.map((file, index) => ({
+    const { accepted, rejectedCount } = limitRecordPhotoBatch(nextFiles);
+
+    if (rejectedCount > 0) {
+      showToast(
+        `每次最多添加 ${MAX_RECORD_PHOTOS_PER_ADD} 张，已加入前 ${MAX_RECORD_PHOTOS_PER_ADD} 张；可以再次添加。`,
+      );
+    }
+
+    const previews = accepted.map((file, index) => ({
       key: buildFileKey(file, files.length + index),
       url: URL.createObjectURL(file),
       name: file.name,
     }));
     filePreviewsRef.current = [...filePreviewsRef.current, ...previews];
-    setFiles((prev) => [...prev, ...nextFiles]);
+    setFiles((prev) => [...prev, ...accepted]);
     setFilePreviews((prev) => [...prev, ...previews]);
   }
 
@@ -318,7 +327,12 @@ export default function AddRecord({
     setStorageUsedBytes(Number(data?.storage_used || 0));
   }
 
-  async function uploadMedia(recordId: string, userId: string, file: File) {
+  async function uploadMedia(
+    recordId: string,
+    userId: string,
+    file: File,
+    capturedAt: string | null,
+  ) {
     const compressed = await compressImageFile(file);
     const uploadFile = compressed.file;
     const thumbnail = await createImageThumbnailFile(uploadFile);
@@ -441,6 +455,7 @@ export default function AddRecord({
         width: compressed.width ?? null,
         height: compressed.height ?? null,
         original_filename: file.name,
+        captured_at: capturedAt,
         storage_class: "hot",
         ...(reservation.reservation_id
           ? { upload_reservation_id: reservation.reservation_id }
@@ -530,10 +545,28 @@ export default function AddRecord({
       let archiveHelpStateUpdated = false;
       let createdRecordCount = 0;
       let cycleEndRecordTime: string | null = null;
+      const preparedPhotos =
+        files.length > 0 ? await prepareSelectedPhotos() : [];
+      const photoGroups = buildRecordPhotoGroups(preparedPhotos, mergeMode);
 
       if (endSelectedCycleAfterSave && selectedActiveCycle) {
-        cycleEndRecordTime = await resolveCycleEndRecordTime();
-        if (isLocalDateBefore(cycleEndRecordTime, selectedActiveCycle.started_at)) {
+        cycleEndRecordTime =
+          photoGroups[photoGroups.length - 1]?.recordTimeISO ||
+          resolveTime({ timeMode, customTime });
+        const hasRecordBeforeCycleStart =
+          photoGroups.length > 0
+            ? photoGroups.some((group) =>
+                isLocalDateBefore(
+                  group.recordTimeISO,
+                  selectedActiveCycle.started_at,
+                ),
+              )
+            : isLocalDateBefore(
+                cycleEndRecordTime,
+                selectedActiveCycle.started_at,
+              );
+
+        if (hasRecordBeforeCycleStart) {
           showToast(terminology.recordDateBeforeStartMessage);
           setLoading(false);
           return;
@@ -574,75 +607,27 @@ export default function AddRecord({
           .eq("user_id", user.id);
       }
 
-      if (files.length > 0) {
-        if (mergeMode) {
-          let exifTime = null;
-
-          if (timeMode === "exif") {
-            try {
-              const exifData = await exifr.parse(files[0]);
-              if (exifData?.DateTimeOriginal) {
-                exifTime = exifData.DateTimeOriginal;
-              }
-            } catch {}
-          }
-
-          const recordTimeISO = resolveTime({
-            timeMode,
-            customTime,
-            exifTime,
-          });
-
+      if (photoGroups.length > 0) {
+        for (const group of photoGroups) {
           const record = await createRecord({
             archiveId,
             userId: user.id,
             note: text.trim(),
-            recordTimeISO,
+            recordTimeISO: group.recordTimeISO,
             visibility: finalVisibility,
             statusTag: finalStatusTag,
           });
 
-          if (!record) {
-            setLoading(false);
-            return;
-          }
+          if (!record) continue;
           createdRecordCount += 1;
 
-          for (const file of files) {
-            uploadedBytes += await uploadMedia(record.id, user.id, file);
-          }
-        } else {
-          for (const file of files) {
-            let exifTime = null;
-
-            if (timeMode === "exif") {
-              try {
-                const exifData = await exifr.parse(file);
-                if (exifData?.DateTimeOriginal) {
-                  exifTime = exifData.DateTimeOriginal;
-                }
-              } catch {}
-            }
-
-            const recordTimeISO = resolveTime({
-              timeMode,
-              customTime,
-              exifTime,
-            });
-
-            const record = await createRecord({
-              archiveId,
-              userId: user.id,
-              note: text.trim(),
-              recordTimeISO,
-              visibility: finalVisibility,
-              statusTag: finalStatusTag,
-            });
-
-            if (!record) continue;
-            createdRecordCount += 1;
-
-            uploadedBytes += await uploadMedia(record.id, user.id, file);
+          for (const photo of group.photos) {
+            uploadedBytes += await uploadMedia(
+              record.id,
+              user.id,
+              photo.file,
+              photo.capturedAt,
+            );
           }
         }
       } else {
@@ -931,6 +916,10 @@ export default function AddRecord({
           style={{ display: "none" }}
         />
 
+        <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.6 }}>
+          每次最多添加 {MAX_RECORD_PHOTOS_PER_ADD} 张，可分多次继续添加；单条记录累计照片不设上限。
+        </div>
+
         {filePreviews.length > 0 ? (
           <div
             style={{
@@ -1019,8 +1008,13 @@ export default function AddRecord({
               checked={mergeMode}
               onChange={(e) => setMergeMode(e.target.checked)}
             />{" "}
-            {t.merge_as_one_record ?? "多图合并为一条记录"}
+            不按照片日期拆分，合并为一条记录（采用最新照片日期）
           </label>
+          {!mergeMode ? (
+            <div style={{ marginTop: 4, fontSize: 12, color: "#777", lineHeight: 1.6 }}>
+              将按照片日期生成记录；同一天的照片归入同一条记录。
+            </div>
+          ) : null}
         </div>
       )}
 

@@ -120,6 +120,7 @@ export type MediaItem = {
   duration_sec?: number | null;
   storage_class?: string | null;
   sort_order?: number | null;
+  captured_at?: string | null;
   created_at?: string | null;
 };
 
@@ -140,4 +141,3 @@ export type CookieWriteOptions = {
   secure?: boolean;
   sameSite?: boolean | 'lax' | 'strict' | 'none';
 };
-

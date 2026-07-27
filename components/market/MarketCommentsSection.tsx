@@ -1,17 +1,10 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import type { MarketPostStatus } from "@/lib/market-types";
-import {
-  canCreateMembershipContent,
-  getCreateContentBlockedText,
-  normalizeMembershipRpcResult,
-  type MyMembership,
-} from "@/lib/membership";
 
 type MarketCommentRow = {
   id: string;
@@ -42,44 +35,13 @@ export default function MarketCommentsSection({
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [membership, setMembership] = useState<MyMembership | null>(null);
-  const [membershipLoading, setMembershipLoading] = useState(false);
 
-  const membershipBlocked = Boolean(
-    currentUserId &&
-      !membershipLoading &&
-      !canCreateMembershipContent(membership),
-  );
-  const canWrite = Boolean(currentUserId && !membershipLoading && postStatus === "active" && !membershipBlocked);
+  const canWrite = Boolean(currentUserId && postStatus === "active");
 
   useEffect(() => {
     void loadComments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketPostId, currentUserId]);
-
-  useEffect(() => {
-    async function loadMembership() {
-      if (!currentUserId) {
-        setMembership(null);
-        setMembershipLoading(false);
-        return;
-      }
-
-      setMembershipLoading(true);
-      const { data, error } = await supabase.rpc("get_my_membership");
-
-      if (error) {
-        console.error("load market comment membership error:", error);
-        setMembership(null);
-      } else {
-        setMembership(normalizeMembershipRpcResult(data));
-      }
-
-      setMembershipLoading(false);
-    }
-
-    void loadMembership();
-  }, [currentUserId]);
 
   async function loadComments() {
     setLoading(true);
@@ -115,7 +77,7 @@ export default function MarketCommentsSection({
     >();
 
     for (const profile of
-      ((profilesResult as any).data || []) as Pick<
+      (profilesResult.data || []) as Pick<
         AppProfile,
         "id" | "username" | "avatar_url"
       >[]) {
@@ -136,32 +98,22 @@ export default function MarketCommentsSection({
     const content = commentText.trim();
 
     if (!currentUserId) {
-      showToast("请先登录后再留言");
+      showToast("请先登录后再咨询");
       return;
     }
 
     if (postStatus !== "active") {
-      showToast("这条集市信息已结束，不能继续留言");
+      showToast("这条集市信息已结束，不能继续咨询");
       return;
     }
 
     if (!content) {
-      showToast("请输入留言内容");
+      showToast("请输入咨询内容");
       return;
     }
 
     if (content.length > 1000) {
-      showToast("留言不能超过 1000 字");
-      return;
-    }
-
-    if (membershipLoading) {
-      showToast("云空间状态读取中");
-      return;
-    }
-
-    if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast("咨询不能超过 1000 字");
       return;
     }
 
@@ -177,12 +129,12 @@ export default function MarketCommentsSection({
 
     if (error) {
       console.error("submit market comment error:", error);
-      showToast("留言发送失败");
+      showToast("咨询发送失败");
       return;
     }
 
     setCommentText("");
-    showToast("留言已发送");
+    showToast("咨询已发送");
     await loadComments();
   }
 
@@ -222,15 +174,15 @@ export default function MarketCommentsSection({
   return (
     <section style={sectionStyle}>
       <div style={headerRowStyle}>
-        <h2 style={titleStyle}>留言</h2>
+        <h2 style={titleStyle}>咨询与联系</h2>
         <span style={countStyle}>{comments.length} 条</span>
       </div>
 
       <div style={listStyle}>
         {loading ? (
-          <div style={emptyStyle}>留言加载中...</div>
+          <div style={emptyStyle}>咨询加载中...</div>
         ) : comments.length === 0 ? (
-          <div style={emptyStyle}>暂无留言</div>
+          <div style={emptyStyle}>暂无咨询</div>
         ) : (
           comments.map((comment) => {
             const canDelete =
@@ -288,7 +240,7 @@ export default function MarketCommentsSection({
               <textarea
                 value={commentText}
                 onChange={(event) => setCommentText(event.target.value)}
-                placeholder="写下你的问题或交换意向…"
+                placeholder="询问产品、交换方式或联系发布者…"
                 rows={3}
                 style={textareaStyle}
               />
@@ -300,24 +252,17 @@ export default function MarketCommentsSection({
                   disabled={submitting}
                   style={submitButtonStyle}
                 >
-                  {submitting ? "发送中..." : "发布留言"}
+                  {submitting ? "发送中..." : "发送咨询"}
                 </button>
               </div>
+              <div style={consultationHintStyle}>
+                注册后的本地免费用户也可咨询；社区评论、点赞、鲜花和关注仍属于云空间互动。
+              </div>
             </>
-        ) : membershipLoading && currentUserId ? (
-          <div style={closedNoticeStyle}>云空间状态读取中...</div>
-        ) : membershipBlocked ? (
-          <div style={closedNoticeStyle}>
-            {getCreateContentBlockedText(membership)}，请{" "}
-            <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-              查看云空间
-            </Link>
-            。
-          </div>
         ) : currentUserId && postStatus !== "active" ? (
-          <div style={closedNoticeStyle}>这条集市信息已结束，不能继续留言。</div>
+          <div style={closedNoticeStyle}>这条集市信息已结束，不能继续咨询。</div>
         ) : (
-          <div style={closedNoticeStyle}>登录后可以留言。</div>
+          <div style={closedNoticeStyle}>注册或登录后可以咨询发布者。</div>
         )}
       </div>
     </section>
@@ -485,6 +430,13 @@ const formFooterStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 10,
   flexWrap: "wrap",
+};
+
+const consultationHintStyle: CSSProperties = {
+  marginTop: 8,
+  color: "#74806f",
+  fontSize: 12,
+  lineHeight: 1.6,
 };
 
 const wordCountStyle: CSSProperties = {

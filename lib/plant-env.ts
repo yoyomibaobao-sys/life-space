@@ -1,5 +1,7 @@
 export type PlantParameterLite = {
+  species_id?: string | null;
   sun_score?: number | null;
+  need_trellis?: boolean | null;
   soil_moisture_score?: number | null;
   drought_score?: number | null;
   optimal_growth_temp_min?: number | null;

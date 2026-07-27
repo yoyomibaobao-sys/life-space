@@ -89,6 +89,35 @@ test("plant guidance is split into visitor, registered, and cloud-member tiers",
     migration,
     /revoke all on function public\.get_plant_basic_overviews\(uuid, text\)\s+from public, anon, authenticated, service_role;/i
   );
+  assert.match(
+    migration,
+    /grant execute on function public\.get_plant_core_parameters\(uuid\)\s+to authenticated;/i
+  );
+  assert.match(
+    migration,
+    /revoke all on function public\.get_plant_core_parameters\(uuid\)\s+from public, anon, authenticated, service_role;/i
+  );
+
+  const coreParameterRpc =
+    migration.match(
+      /create or replace function public\.get_plant_core_parameters[\s\S]*?comment on function public\.get_plant_core_parameters\(uuid\)[\s\S]*?;/
+    )?.[0] ?? "";
+  for (const column of [
+    "sun_score",
+    "need_trellis",
+    "container_friendly_score",
+    "indoor_friendly_score",
+    "balcony_friendly_score",
+  ]) {
+    assert.match(coreParameterRpc, new RegExp(`\\b${column}\\b`));
+  }
+  for (const paidColumn of [
+    "soil_moisture_score",
+    "optimal_growth_temp_min",
+    "care_note",
+  ]) {
+    assert.doesNotMatch(coreParameterRpc, new RegExp(`\\b${paidColumn}\\b`));
+  }
 
   for (const table of [
     "plant_care_guides",
@@ -121,6 +150,7 @@ test("the plant pages request only data allowed for the current tier", async () 
 
   assert.match(indexPage, /rpc\("get_plant_basic_overviews"/);
   assert.match(indexPage, /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/);
+  assert.match(indexPage, /rpc\("get_plant_core_parameters"/);
   assert.doesNotMatch(
     indexPage,
     /\.from\("plant_species"\)[\s\S]{0,180}\.select\([^)]*description/i
@@ -128,6 +158,7 @@ test("the plant pages request only data allowed for the current tier", async () 
   assert.match(indexPage, /游客可以查看植物目录、名称和分类/);
 
   assert.match(detailPage, /rpc\("get_plant_basic_overviews"/);
+  assert.match(detailPage, /rpc\("get_plant_core_parameters"/);
   assert.match(
     detailPage,
     /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/
@@ -140,7 +171,7 @@ test("the plant pages request only data allowed for the current tier", async () 
   assert.match(detailPage, /游客可以查看目录、名称和分类/);
 });
 
-test("all launch interactions require active cloud access for new writes", async () => {
+test("all community interactions require active cloud access for new writes", async () => {
   const migration = await source(migrationPath);
 
   for (const policy of [
@@ -150,7 +181,6 @@ test("all launch interactions require active cloud access for new writes", async
     "comment_likes_insert_own",
     "comment_flowers_insert_help_owner",
     "comments_insert_own_active_visible_record",
-    "market_comments_insert_own_active_post",
     "user_plant_interests_insert_own",
     "user_plant_plans_insert_own",
   ]) {
@@ -163,6 +193,56 @@ test("all launch interactions require active cloud access for new writes", async
       )
     );
   }
+});
+
+test("registered local-free users can consult on active marketplace posts", async () => {
+  const [migration, marketComments] = await Promise.all([
+    source(migrationPath),
+    source("components/market/MarketCommentsSection.tsx"),
+  ]);
+  const consultationPolicy =
+    migration.match(
+      /create policy market_comments_insert_own_active_post[\s\S]*?\);/
+    )?.[0] ?? "";
+
+  assert.match(consultationPolicy, /\(select auth\.uid\(\)\) = user_id/i);
+  assert.match(
+    consultationPolicy,
+    /public\.can_comment_market_post\(market_post_id\)/i
+  );
+  assert.doesNotMatch(consultationPolicy, /has_active_cloud_access/i);
+  assert.doesNotMatch(marketComments, /canCreateMembershipContent/);
+  assert.doesNotMatch(marketComments, /get_my_membership/);
+  assert.match(marketComments, /咨询与联系/);
+  assert.match(marketComments, /本地免费用户也可咨询/);
+});
+
+test("record photos are unlimited cumulatively but capped at ten per add operation", async () => {
+  const [batchRules, cloudAddRecord, cloudArchive, localArchive, migration] =
+    await Promise.all([
+      source("lib/record-photo-batches.ts"),
+      source("app/archive/[id]/AddRecord.tsx"),
+      source("app/archive/[id]/page.tsx"),
+      source("app/local/archive/[id]/page.tsx"),
+      source(migrationPath),
+    ]);
+
+  assert.match(batchRules, /MAX_RECORD_PHOTOS_PER_ADD = 10/);
+  assert.match(batchRules, /items\.slice\(0, safeLimit\)/);
+  assert.match(batchRules, /if \(mergeIntoOneRecord\)/);
+  assert.match(batchRules, /const byDate = new Map/);
+  assert.match(batchRules, /recordTimeISO: latestRecordTime\(photos\)/);
+  assert.match(batchRules, /recordTimeISO: latestRecordTime\(groupPhotos\)/);
+  assert.match(
+    cloudAddRecord,
+    /每次最多添加 \{MAX_RECORD_PHOTOS_PER_ADD\} 张，可分多次继续添加；单条记录累计照片不设上限/
+  );
+  assert.match(cloudArchive, /limitRecordPhotoBatch/);
+  assert.match(localArchive, /image_captured_at/);
+  assert.match(
+    migration,
+    /alter table public\.media\s+add column if not exists captured_at timestamptz;/i
+  );
 });
 
 test("client-side entitlement checks fail closed when membership is absent", async () => {
@@ -207,8 +287,14 @@ test("the approved matrix and transition rules are documented", async () => {
 
   assert.match(docs, /游客（未注册）.*本地免费用户.*云空间会员/);
   assert.match(docs, /植物指引基础概要 \| — \| ✓ \| ✓/);
-  assert.match(docs, /参数、生长周期和完整养护指引 \| — \| — \| ✓/);
+  assert.match(docs, /少量核心静态参数 \| — \| ✓ \| ✓/);
+  assert.match(docs, /完整参数、生长周期和完整养护指引 \| — \| — \| ✓/);
   assert.match(docs, /评论、回复、点赞、鲜花和关注 \| — \| — \| ✓/);
+  assert.match(docs, /集市咨询和联系发布者 \| — \| ✓ \| ✓/);
+  assert.match(docs, /未来：作者主动公开的单张经验卡.*\| ✓ \| ✓ \| ✓/);
+  assert.match(docs, /只有报名时仍有效的云空间会员可以申请试用／试种/);
+  assert.match(docs, /主动公开、或在本次报名中明确授权展示的种植经验/);
+  assert.match(docs, /不得读取或披露报名者的私密项目、私密记录/);
   assert.match(docs, /¥64\/年或 US\$8\/year/);
   assert.match(docs, /现有 4 个试用账号保留原到期日、原容量和原集市额度/);
   assert.match(docs, /已结束的集市条目不占 30 条额度/);

@@ -2,7 +2,8 @@
 --
 -- Public states:
 --   visitor      -> public browsing + plant directory only
---   local free   -> visitor access + registered-only basic plant overview
+--   local free   -> basic plant overview, a narrow core-parameter subset,
+--                   and registered marketplace consultation
 --   cloud member -> 1 GB, full cloud/interaction/guide access, 30 active market posts
 --
 -- Existing trial rows are intentionally preserved with their original expiry,
@@ -367,6 +368,74 @@ grant execute on function public.get_plant_basic_overviews(uuid, text)
 comment on function public.get_plant_basic_overviews(uuid, text) is
   'Registered-only basic plant overview. It never returns parameters, full care guidance, growth cycles, or related records.';
 
+-- Local-free accounts also receive a deliberately small, static suitability
+-- subset. Direct plant_parameters reads stay cloud-member-only, so adding paid
+-- columns later cannot accidentally expose them through this contract.
+create or replace function private.get_plant_core_parameters(
+  p_species_id uuid default null
+)
+returns table (
+  species_id uuid,
+  sun_score smallint,
+  need_trellis boolean,
+  container_friendly_score smallint,
+  indoor_friendly_score smallint,
+  balcony_friendly_score smallint
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select
+    pp.species_id,
+    pp.sun_score,
+    pp.need_trellis,
+    pp.container_friendly_score,
+    pp.indoor_friendly_score,
+    pp.balcony_friendly_score
+  from public.plant_parameters as pp
+  join public.plant_species as ps
+    on ps.id = pp.species_id
+  where auth.uid() is not null
+    and ps.is_active = true
+    and (p_species_id is null or pp.species_id = p_species_id)
+  order by ps.sort_order asc nulls last, ps.common_name asc;
+$$;
+
+revoke all on function private.get_plant_core_parameters(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function private.get_plant_core_parameters(uuid)
+  to authenticated;
+
+create or replace function public.get_plant_core_parameters(
+  p_species_id uuid default null
+)
+returns table (
+  species_id uuid,
+  sun_score smallint,
+  need_trellis boolean,
+  container_friendly_score smallint,
+  indoor_friendly_score smallint,
+  balcony_friendly_score smallint
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select *
+  from private.get_plant_core_parameters(p_species_id);
+$$;
+
+revoke all on function public.get_plant_core_parameters(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.get_plant_core_parameters(uuid)
+  to authenticated;
+
+comment on function public.get_plant_core_parameters(uuid) is
+  'Registered-only static suitability subset. Full plant_parameters rows and detailed thresholds remain cloud-member-only.';
+
 -- Full guide, parameter, and growth-cycle tables are cloud-member only.
 alter table public.plant_care_guides enable row level security;
 drop policy if exists plant_care_guides_select_all on public.plant_care_guides;
@@ -489,8 +558,9 @@ revoke select on table public.plant_related_archives_view
   from anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- 4. Cloud-member-only writes for interactions and cloud plant preferences.
---    Existing interactions may still be removed after expiry.
+-- 4. Cloud-member-only writes for social interactions and cloud plant
+--    preferences. Registered marketplace consultation is the sole write
+--    exception; existing interactions may still be removed after expiry.
 -- ---------------------------------------------------------------------------
 
 drop policy if exists "allow insert own follow" on public.follows;
@@ -595,7 +665,6 @@ for insert
 to authenticated
 with check (
   (select auth.uid()) = user_id
-  and public.has_active_cloud_access()
   and public.can_comment_market_post(market_post_id)
 );
 
@@ -607,7 +676,6 @@ to authenticated
 using ((select auth.uid()) = user_id)
 with check (
   (select auth.uid()) = user_id
-  and public.has_active_cloud_access()
 );
 
 drop policy if exists user_plant_interests_insert_own
@@ -748,3 +816,12 @@ execute function private.enforce_market_activation_limit();
 
 comment on function private.enforce_market_activation_limit() is
   'Serializes each user market activation on the membership row and enforces the active-post quota for inserts and ended-to-active updates.';
+
+-- Preserve each image's original capture time independently from the record
+-- date. This allows optional date-based record splitting now and accurate
+-- experience-card timelines later.
+alter table public.media
+  add column if not exists captured_at timestamptz;
+
+comment on column public.media.captured_at is
+  'Original image capture time when available. Record time may instead be the latest selected image time when the user chooses not to split by date.';

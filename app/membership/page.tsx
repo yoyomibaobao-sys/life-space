@@ -115,7 +115,7 @@ export default function MembershipPage() {
 
           {isLocalFreeUser ? (
             <div style={localFreeNoticeStyle}>
-              当前账号是本地免费用户：可以在本机记录，并查看植物指引的基础概要；参数、完整指引、相关种植记录、互动和云端发布需开通云空间。
+              当前账号是本地免费用户：可以在本机记录，查看植物指引的基础概要和少量核心参数，也可在集市咨询发布者；完整参数、社区互动和云端发布需开通云空间。
             </div>
           ) : null}
 
@@ -170,6 +170,7 @@ export default function MembershipPage() {
             "浏览发现页、公开记录和集市",
             "查看植物目录、名称和分类",
             "本机离线项目、记录和图片",
+            "未来可通过直接链接查看作者公开的单张经验卡",
             "不能查看指引概要、参数或参与互动",
           ]}
         />
@@ -179,9 +180,10 @@ export default function MembershipPage() {
           description="注册账号，但记录仍只保存在这台设备。"
           items={[
             "拥有游客的全部浏览和本地记录能力",
-            "可以查看植物指引的基础概要",
+            "可以查看植物指引的基础概要和少量核心参数",
+            "可以在集市咨询或联系发布者",
             "项目、记录和图片保存在 App 私有存储中",
-            "不能查看参数、完整指引或相关种植记录",
+            "不能查看完整参数、完整指引或聚合种植经验",
             "不能评论、点赞、送花、关注或云端发布",
           ]}
         />
@@ -194,7 +196,7 @@ export default function MembershipPage() {
             "云端私密空间和多设备同步",
             "记录可设为仅自己可见，也可公开发现",
             "参数、生长周期、完整指引和相关种植记录",
-            "未来经验卡和生长线",
+            "未来可创建经验卡、生成短视频和参加试用／试种",
             "评论、回复、点赞、鲜花和关注",
             "集市同时“发布中”最多 30 条",
           ]}
@@ -235,7 +237,7 @@ export default function MembershipPage() {
                 rel="noreferrer"
                 style={inlineLinkStyle}
               >
-                paypal.me/ying0chen/6
+                paypal.me/ying0chen/8
               </a>
               。付款时请备注注册邮箱；如果付款后未及时开通，请发送邮件至 {" "}
               <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>

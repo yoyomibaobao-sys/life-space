@@ -1175,7 +1175,11 @@ export default function PlantDetailPage() {
           : Promise.resolve({ data: [] as PlantBasicOverviewRow[] }),
         canReadFullGuide
           ? supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle()
-          : Promise.resolve({ data: null }),
+          : user
+            ? supabase.rpc("get_plant_core_parameters", {
+                p_species_id: id,
+              })
+            : Promise.resolve({ data: [] as PlantParametersRow[] }),
         canReadFullGuide
           ? supabase.from("plant_growth_cycle").select("*").eq("species_id", id).maybeSingle()
           : Promise.resolve({ data: null }),
@@ -1198,7 +1202,11 @@ export default function PlantDetailPage() {
       setI18n(i18nRows);
       setAliases(aliasRows);
       setBasicOverview(overviewRows[0]?.summary || null);
-      setParameters((parameterData || null) as PlantParametersRow | null);
+      setParameters(
+        (Array.isArray(parameterData) ? parameterData[0] : parameterData || null) as
+          | PlantParametersRow
+          | null
+      );
       setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
       setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
 
@@ -1321,6 +1329,20 @@ export default function PlantDetailPage() {
   const difficulty = difficultyMeta(parameters?.management_difficulty_score);
   const environmentTags = getEnvironmentTags(parameters, { includeIndoor: true });
   const environmentCards = getEnvironmentDetailItems(parameters);
+  const localCoreParameterCards = [
+    ...environmentCards.filter((item) =>
+      ["光照", "栽培场景", "室内"].includes(item.label)
+    ),
+    {
+      label: "搭架",
+      value:
+        typeof parameters?.need_trellis === "boolean"
+          ? parameters.need_trellis
+            ? "需要"
+            : "通常不需要"
+          : null,
+    },
+  ].filter((item) => item.value);
 
   const parameterCards = [
     { label: "日照强度", value: scoreLabel(parameters?.sun_score) },
@@ -1743,14 +1765,14 @@ export default function PlantDetailPage() {
               lineHeight: 1.7,
             }}
           >
-            当前是本地免费用户。参数、生长周期、完整养护指引、相关种植记录，以及未来的经验卡和生长线仅对云空间会员开放。
+            当前是本地免费用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云空间会员开放。
             <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
               查看云空间
             </Link>
           </div>
         ) : null}
 
-        {hasCloudAccess && environmentTags.length > 0 && (
+        {isSignedIn && environmentTags.length > 0 && (
           <div
             style={{
               marginTop: 14,
@@ -1896,6 +1918,25 @@ export default function PlantDetailPage() {
           </div>
         )}
       </section>
+
+      {isSignedIn && !hasCloudAccess && localCoreParameterCards.length > 0 ? (
+        <Section title="基础适种参数">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {localCoreParameterCards.map((item) => (
+              <Card key={item.label} label={item.label} value={item.value} />
+            ))}
+          </div>
+          <div style={{ marginTop: 12, color: "#6a7566", fontSize: 13, lineHeight: 1.7 }}>
+            地区与季节适配、精确阈值、完整养护方法和多案例比较属于云空间功能。
+          </div>
+        </Section>
+      ) : null}
 
       {hasCloudAccess && (environmentCards.length > 0 ||
         hasText(climateTimingNote) ||

@@ -285,7 +285,11 @@ export default function PlantIndexPage() {
           ? supabase.from("plant_parameters").select(
               "species_id, sun_score, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
             )
-          : Promise.resolve({ data: [] as PlantParameterLite[] }),
+          : user
+            ? supabase.rpc("get_plant_core_parameters", {
+                p_species_id: null,
+              })
+            : Promise.resolve({ data: [] as PlantParameterLite[] }),
       ]);
 
       setPlants(plantData || []);
@@ -333,7 +337,7 @@ export default function PlantIndexPage() {
   const parameterMap = useMemo(() => {
     const map: Record<string, PlantParameterLite> = {};
 
-    parameters.forEach((item: any) => {
+    parameters.forEach((item) => {
       if (item?.species_id) {
         map[item.species_id] = item;
       }
@@ -575,7 +579,7 @@ export default function PlantIndexPage() {
             "当前云空间可查看完整参数、环境筛选、养护指引和相关种植记录。"
           ) : (
             <>
-              当前是本地免费用户，可以查看基础概要；参数、环境筛选和完整指引需
+              当前是本地免费用户，可以查看基础概要和少量核心参数；完整参数、环境筛选和完整指引需
               <Link href="/membership" style={{ marginLeft: 4, color: "#3f6f37", fontWeight: 700 }}>
                 开通云空间
               </Link>
@@ -738,7 +742,7 @@ export default function PlantIndexPage() {
             {filteredPlants.map((plant) => {
               const plantAliases = uniqueTextList(aliasMap[plant.id] || []);
               const summary = isSignedIn ? guideMap[plant.id]?.summary : null;
-              const envTags = hasCloudAccess
+              const envTags = isSignedIn
                 ? getEnvironmentTags(parameterMap[plant.id], {
                     includeIndoor: true,
                   }).slice(0, 6)

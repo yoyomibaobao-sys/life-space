@@ -12,6 +12,7 @@ create temporary table membership_access_test_context (
   plant_id uuid not null,
   archive_id uuid not null,
   record_id uuid not null,
+  consultation_market_id uuid not null,
   trial_ended_market_id uuid not null,
   expired_active_market_id uuid not null,
   expired_ended_market_id uuid not null
@@ -21,6 +22,7 @@ grant select on membership_access_test_context to anon, authenticated;
 
 insert into membership_access_test_context
 select
+  gen_random_uuid(),
   gen_random_uuid(),
   gen_random_uuid(),
   gen_random_uuid(),
@@ -276,11 +278,15 @@ from membership_access_test_context;
 insert into public.plant_parameters (
   species_id,
   sun_score,
+  need_trellis,
+  container_friendly_score,
+  indoor_friendly_score,
+  balcony_friendly_score,
   soil_moisture_score,
   optimal_growth_temp_min,
   optimal_growth_temp_max
 )
-select plant_id, 4, 3, 18, 26
+select plant_id, 4, true, 8, 5, 9, 3, 18, 26
 from membership_access_test_context;
 
 insert into public.plant_growth_cycle (
@@ -340,6 +346,15 @@ insert into public.market_posts (
   item_category,
   status
 )
+select
+  consultation_market_id,
+  other_user,
+  'registered-consultation-fixture',
+  'offer',
+  'seed',
+  'active'
+from membership_access_test_context
+union all
 select
   trial_ended_market_id,
   trial_user,
@@ -454,6 +469,14 @@ begin
   end;
 
   begin
+    perform *
+    from public.get_plant_core_parameters(c.plant_id);
+    raise exception 'visitor called the registered-only core-parameter RPC';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  begin
     perform pcg.summary
     from public.plant_care_guides pcg
     where pcg.plant_id = c.plant_id;
@@ -475,7 +498,8 @@ $$;
 
 reset role;
 
--- Registered local-free: basic overview only; full guide and cloud writes fail.
+-- Registered local-free: overview, narrow core parameters, and marketplace
+-- consultation work; full guidance, social writes, and publishing still fail.
 select set_config(
   'request.jwt.claim.sub',
   (select local_user::text from membership_access_test_context),
@@ -500,6 +524,18 @@ begin
     where o.summary = '注册后可以读取的基础概要'
   ) then
     raise exception 'registered local-free account could not read the basic overview';
+  end if;
+
+  if not exists (
+    select 1
+    from public.get_plant_core_parameters(c.plant_id) p
+    where p.sun_score = 4
+      and p.need_trellis = true
+      and p.container_friendly_score = 8
+      and p.indoor_friendly_score = 5
+      and p.balcony_friendly_score = 9
+  ) then
+    raise exception 'registered local-free account could not read the core parameter subset';
   end if;
 
   if (select count(*) from public.plant_care_guides where plant_id = c.plant_id) <> 0
@@ -540,6 +576,26 @@ begin
   exception when insufficient_privilege then
     null;
   end;
+
+  insert into public.market_comments (
+    market_post_id,
+    user_id,
+    content
+  )
+  values (
+    c.consultation_market_id,
+    c.local_user,
+    'local-free marketplace consultation'
+  );
+
+  if not exists (
+    select 1
+    from public.market_comments mc
+    where mc.market_post_id = c.consultation_market_id
+      and mc.user_id = c.local_user
+  ) then
+    raise exception 'registered local-free account could not consult on an active market post';
+  end if;
 
   begin
     insert into public.user_plant_interests (user_id, species_id)
@@ -755,6 +811,15 @@ begin
     where o.summary = '注册后可以读取的基础概要'
   ) then
     raise exception 'expired account lost registered local-free overview access';
+  end if;
+
+  if not exists (
+    select 1
+    from public.get_plant_core_parameters(c.plant_id) p
+    where p.sun_score = 4
+      and p.need_trellis = true
+  ) then
+    raise exception 'expired account lost registered core-parameter access';
   end if;
 
   update public.market_posts
