@@ -1,4 +1,5 @@
 name: Temporary Legacy Media Compression
+# One-time operation: first batch of five legacy photos.
 
 on:
   push:
