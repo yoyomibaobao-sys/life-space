@@ -1309,7 +1309,7 @@ export default function PlantDetailPage() {
   );
 
   const displayName =
-    zh?.common_name || plant?.common_name || plant?.scientific_name || "植物索引";
+    zh?.common_name || plant?.common_name || plant?.scientific_name || "植物指引";
   const fromArchive = searchParams.get("fromArchive");
   const fromRecord = searchParams.get("fromRecord");
   const returnRecordHref = fromArchive
@@ -1619,7 +1619,7 @@ export default function PlantDetailPage() {
     return (
       <main style={{ padding: "16px", maxWidth: 760, margin: "0 auto" }}>
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          ← 返回索引
+          ← 返回指引
         </Link>
         <div
           style={{
@@ -1645,7 +1645,7 @@ export default function PlantDetailPage() {
           </Link>
         ) : null}
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          ← 返回索引
+          ← 返回指引
         </Link>
         {!isMobileViewport ? (
           <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>

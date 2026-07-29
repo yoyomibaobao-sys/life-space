@@ -10,6 +10,17 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isNetworkError(message: string) {
+  const text = message.toLowerCase();
+  return [
+    "failed to fetch",
+    "fetch failed",
+    "network request failed",
+    "network error",
+    "load failed",
+  ].some((part) => text.includes(part));
+}
+
 function getErrorMessage(message: string) {
   const text = message.toLowerCase();
 
@@ -31,9 +42,11 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [showLocalFallback, setShowLocalFallback] = useState(false);
 
   async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setShowLocalFallback(false);
 
     const cleanEmail = email.trim().toLowerCase();
 
@@ -65,6 +78,14 @@ export default function RegisterPage() {
       });
 
       if (error) {
+        if (isNetworkError(error.message)) {
+          setMessage(
+            "当前网络不稳定，暂时无法注册。你可以先本地记录，稍后再登录绑定账号。",
+          );
+          setShowLocalFallback(true);
+          return;
+        }
+
         setMessage(getErrorMessage(error.message));
         return;
       }
@@ -84,7 +105,10 @@ export default function RegisterPage() {
 
       router.push(`/check-email?email=${encodeURIComponent(cleanEmail)}&type=signup`);
     } catch {
-      setMessage("当前网络不稳定，暂时无法注册。你可以先使用本地记录，稍后再登录绑定账号。");
+      setMessage(
+        "当前网络不稳定，暂时无法注册。你可以先本地记录，稍后再登录绑定账号。",
+      );
+      setShowLocalFallback(true);
     } finally {
       setLoading(false);
     }
@@ -150,25 +174,6 @@ export default function RegisterPage() {
 
         <button
           type="button"
-          onClick={() => router.push("/local/archive")}
-          style={{
-            width: "100%",
-            marginTop: 12,
-            padding: 12,
-            border: "1px solid #dfe8da",
-            background: "#f6faf3",
-            borderRadius: 6,
-            fontSize: 14,
-            color: "#496b3f",
-            cursor: "pointer",
-            fontWeight: 500,
-          }}
-        >
-          先本地使用
-        </button>
-
-        <button
-          type="button"
           onClick={() => router.push("/login")}
           style={{
             marginTop: 12,
@@ -197,6 +202,27 @@ export default function RegisterPage() {
             {message}
           </div>
         )}
+
+        {showLocalFallback ? (
+          <button
+            type="button"
+            onClick={() => router.push("/local/archive")}
+            style={{
+              width: "100%",
+              marginTop: 12,
+              padding: 12,
+              border: "1px solid #dfe8da",
+              background: "#f6faf3",
+              borderRadius: 6,
+              fontSize: 14,
+              color: "#496b3f",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            先本地记录
+          </button>
+        ) : null}
       </div>
     </main>
   );

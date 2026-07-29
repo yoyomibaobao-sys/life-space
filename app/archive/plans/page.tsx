@@ -401,7 +401,7 @@ export default function PlantPlansPage() {
           )}
 
           <Link href={`/plant/${plan.species_id}`} style={neutralActionLinkStyle}>
-            查看植物索引
+            查看植物指引
           </Link>
 
           <button type="button" onClick={() => removePlan(plan.id)} style={dangerActionButtonStyle}>
@@ -429,7 +429,7 @@ export default function PlantPlansPage() {
         title="我的种植计划"
         description="这里保存准备种、等待季节、正在筹备的植物。真正开始种植后，再创建正式项目并长期记录。"
         primaryHref="/plant"
-        primaryLabel="去索引选择植物"
+        primaryLabel="去指引选择植物"
         secondaryHref="/archive/interests"
         secondaryLabel="查看感兴趣植物"
       />
@@ -459,7 +459,7 @@ export default function PlantPlansPage() {
           title="还没有种植计划"
           description="看到想尝试的植物，可以先加入计划；等真的开始种，再转成正式项目。"
           href="/plant"
-          label="去索引看看"
+          label="去指引看看"
         />
       ) : (
         <div style={{ marginTop: 16, display: "grid", gap: 18 }}>

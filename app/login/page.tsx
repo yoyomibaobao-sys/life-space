@@ -5,6 +5,17 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 
+function isNetworkError(message: string) {
+  const text = message.toLowerCase();
+  return [
+    "failed to fetch",
+    "fetch failed",
+    "network request failed",
+    "network error",
+    "load failed",
+  ].some((part) => text.includes(part));
+}
+
 function getLoginErrorMessage(message: string) {
   const text = message.toLowerCase();
 
@@ -28,6 +39,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [lastSentTime, setLastSentTime] = useState(0);
+  const [showLocalFallback, setShowLocalFallback] = useState(false);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("remember_email");
@@ -38,6 +50,7 @@ export default function LoginPage() {
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setShowLocalFallback(false);
 
     const cleanEmail = email.trim().toLowerCase();
 
@@ -56,6 +69,14 @@ export default function LoginPage() {
       });
 
       if (error) {
+        if (isNetworkError(error.message)) {
+          setMessage(
+            "当前网络不稳定，暂时无法登录。你可以先本地记录，稍后再登录绑定账号。",
+          );
+          setShowLocalFallback(true);
+          return;
+        }
+
         setMessage(getLoginErrorMessage(error.message));
         return;
       }
@@ -68,13 +89,17 @@ export default function LoginPage() {
 
       router.replace("/archive");
     } catch {
-      setMessage("当前网络不稳定，暂时无法注册或登录。你可以先本地记录，稍后再登录绑定账号。");
+      setMessage(
+        "当前网络不稳定，暂时无法登录。你可以先本地记录，稍后再登录绑定账号。",
+      );
+      setShowLocalFallback(true);
     } finally {
       setLoading(false);
     }
   }
 
   async function handleResetPassword() {
+    setShowLocalFallback(false);
     const now = Date.now();
 
     if (now - lastSentTime < 30000) {
@@ -134,7 +159,7 @@ export default function LoginPage() {
             lineHeight: 1.7,
           }}
         >
-          登录后进入我的项目。注册是推荐路径；如果当前网络不稳定，也可以先本地使用，稍后绑定账号。
+          登录后进入我的项目。
         </div>
 
         <form onSubmit={handleLogin}>
@@ -205,25 +230,6 @@ export default function LoginPage() {
             注册账号
           </button>
 
-          <button
-            type="button"
-            onClick={() => router.push("/local/archive")}
-            disabled={loading}
-            style={{
-              width: "100%",
-              padding: "12px",
-              borderRadius: "6px",
-              border: "1px solid #dfe8da",
-              background: "#f6faf3",
-              marginTop: 10,
-              cursor: "pointer",
-              color: "#496b3f",
-              fontWeight: 500,
-            }}
-          >
-            先本地使用
-          </button>
-
           <div
             onClick={handleResetPassword}
             style={{
@@ -252,6 +258,27 @@ export default function LoginPage() {
             {message}
           </div>
         )}
+
+        {showLocalFallback ? (
+          <button
+            type="button"
+            onClick={() => router.push("/local/archive")}
+            disabled={loading}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "6px",
+              border: "1px solid #dfe8da",
+              background: "#f6faf3",
+              marginTop: 10,
+              cursor: "pointer",
+              color: "#496b3f",
+              fontWeight: 500,
+            }}
+          >
+            先本地记录
+          </button>
+        ) : null}
       </div>
     </main>
   );

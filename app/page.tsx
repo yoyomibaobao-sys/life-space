@@ -8,15 +8,12 @@ import { supabase } from "@/lib/supabase";
 const copy = {
   zhCN: {
     brand: "有时·耕作",
-    poem: "记录种植、养护、农法设施和生态观察。",
-    spirit: "按项目整理，按时间记录。",
-    trialNote:
-      "本地记录免费；注册是推荐路径，如果暂时无法注册，也可以先本地使用，稍后绑定账号。",
-    cloudNote:
-      "云空间用于同步、备份、多设备使用、公开发现和求助。上传云空间不等于公开，已有记录不会自动公开。",
+    poem:
+      "你所照料的、陪伴着的生命，\n也滋养、成就着彼此。\n\n有时，记录这些过程，\n让生命有迹可循。",
+    spirit: "留其间，守其度，\n顺其时，共养成。",
+    subtitle: "一个围绕耕作展开的生活空间。",
     register: "注册",
     login: "登录",
-    local: "本地记录",
     discover: "浏览发现",
     apk: "下载 Android APK",
     cards: [
@@ -145,12 +142,11 @@ export default function Home() {
               fontSize: "clamp(20px, 3.2vw, 26px)",
               fontWeight: 500,
               lineHeight: 1.6,
+              whiteSpace: "pre-line",
             }}
           >
             {t.poem}
           </p>
-
-         
 
           <div
             style={{
@@ -172,6 +168,7 @@ export default function Home() {
                 fontWeight: 600,
                 lineHeight: 1.6,
                 letterSpacing: 1.3,
+                whiteSpace: "pre-line",
               }}
             >
               {t.spirit}
@@ -182,23 +179,11 @@ export default function Home() {
             style={{
               marginTop: 16,
               color: "#8a9584",
-              fontSize: 13,
+              fontSize: 14,
               lineHeight: 1.6,
             }}
           >
-            {t.trialNote}
-          </p>
-
-          <p
-            style={{
-              maxWidth: 680,
-              margin: "8px auto 0",
-              color: "#6f7b69",
-              fontSize: 13,
-              lineHeight: 1.7,
-            }}
-          >
-            {t.cloudNote}
+            {t.subtitle}
           </p>
 
           <div
@@ -243,24 +228,6 @@ export default function Home() {
               }}
             >
               {t.login}
-            </Link>
-
-            <Link
-              href="/local"
-              style={{
-                minWidth: 140,
-                padding: "12px 22px",
-                borderRadius: 999,
-                background: "#fff",
-                color: "#6a7a60",
-                textDecoration: "none",
-                fontSize: 16,
-                fontWeight: 500,
-                border: "1px solid #e0e8dc",
-                boxSizing: "border-box",
-              }}
-            >
-              {t.local}
             </Link>
 
             <Link
