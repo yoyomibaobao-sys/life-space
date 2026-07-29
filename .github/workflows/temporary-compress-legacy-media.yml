@@ -52,6 +52,8 @@ jobs:
             output="$workdir/$id-output.jpg"
 
             curl --fail --silent --show-error --location "$signed_url" --output "$input"
+            echo "Downloaded $id: $(stat -c%s "$input") bytes"
+
             convert "$input" \
               -auto-orient \
               -strip \
@@ -61,7 +63,9 @@ jobs:
               -quality 82 \
               "$output"
 
-            read -r width height < <(identify -format '%w %h' "$output")
+            dimensions="$(identify -format '%w %h' "$output")"
+            width="${dimensions%% *}"
+            height="${dimensions##* }"
             new_bytes="$(stat -c%s "$output")"
             test "$new_bytes" -gt 1000
             test "$new_bytes" -lt "$old_bytes"
