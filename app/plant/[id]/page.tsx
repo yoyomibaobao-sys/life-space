@@ -11,6 +11,11 @@ import {
   canAccessMembershipGuidance,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
+import {
+  loadPlantBasicOverviewsCompat,
+  loadPlantCoreParametersCompat,
+  type PlantBasicOverviewCompatRow,
+} from "@/lib/plant-guide-compat";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
 import type {
   ActionMessage,
@@ -31,10 +36,7 @@ type PlantGrowthCycleRow = {
   harvest_days?: number | null;
 };
 
-type PlantBasicOverviewRow = {
-  species_id: string;
-  summary?: string | null;
-};
+type PlantBasicOverviewRow = PlantBasicOverviewCompatRow;
 
 type RelatedArchiveSourceRow = {
   id: string;
@@ -1168,17 +1170,12 @@ export default function PlantDetailPage() {
           .eq("species_id", id)
           .order("alias_name", { ascending: true }),
         user
-          ? supabase.rpc("get_plant_basic_overviews", {
-              p_species_id: id,
-              p_language_code: "zh",
-            })
+          ? loadPlantBasicOverviewsCompat(id).then((data) => ({ data }))
           : Promise.resolve({ data: [] as PlantBasicOverviewRow[] }),
         canReadFullGuide
           ? supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle()
           : user
-            ? supabase.rpc("get_plant_core_parameters", {
-                p_species_id: id,
-              })
+            ? loadPlantCoreParametersCompat(id).then((data) => ({ data }))
             : Promise.resolve({ data: [] as PlantParametersRow[] }),
         canReadFullGuide
           ? supabase.from("plant_growth_cycle").select("*").eq("species_id", id).maybeSingle()

@@ -3,6 +3,7 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import { SimpleZipBuilder } from "@/lib/export-zip";
 import { getMediaStoragePathFromUrl } from "@/lib/media-urls";
+import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
 
 type ProfileRow = {
   id: string;
@@ -68,6 +69,10 @@ type ExportMedia = MediaRow & {
   export_path?: string | null;
   relative_path?: string | null;
   download_failed?: boolean;
+};
+
+type MediaCompatRow = Omit<MediaRow, "captured_at"> & {
+  captured_at?: string | null;
 };
 
 export const runtime = "nodejs";
@@ -454,7 +459,7 @@ export async function GET(request: Request) {
   const recordIds = records.map((record) => record.id);
   let mediaRows: ExportMedia[] = [];
   if (recordIds.length > 0) {
-    const mediaResult = await supabase
+    const mediaWithCaptureResult = await supabase
       .from("media")
       .select("id,record_id,type,url,storage_path,thumb_url,thumb_path,size_mb,size_bytes,duration_sec,storage_class,captured_at,created_at,sort_order")
       .eq("user_id", user.id)
@@ -462,11 +467,36 @@ export async function GET(request: Request) {
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
 
-    if (mediaResult.error) {
-      return new Response(`读取图片失败：${mediaResult.error.message}`, { status: 500 });
+    let mediaData = (mediaWithCaptureResult.data || []) as MediaCompatRow[];
+    let mediaError = mediaWithCaptureResult.error;
+
+    if (
+      isMissingDatabaseColumn(
+        mediaWithCaptureResult.error,
+        "media",
+        "captured_at"
+      )
+    ) {
+      const legacyMediaResult = await supabase
+        .from("media")
+        .select("id,record_id,type,url,storage_path,thumb_url,thumb_path,size_mb,size_bytes,duration_sec,storage_class,created_at,sort_order")
+        .eq("user_id", user.id)
+        .in("record_id", recordIds)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      mediaData = (legacyMediaResult.data || []) as MediaCompatRow[];
+      mediaError = legacyMediaResult.error;
     }
 
-    mediaRows = (mediaResult.data || []) as ExportMedia[];
+    if (mediaError) {
+      return new Response(`读取图片失败：${mediaError.message}`, { status: 500 });
+    }
+
+    mediaRows = mediaData.map((media) => ({
+      ...media,
+      captured_at: media.captured_at || null,
+    }));
   }
 
   const zip = new SimpleZipBuilder();

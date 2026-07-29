@@ -13,6 +13,11 @@ import {
   canAccessMembershipGuidance,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
+import {
+  loadPlantBasicOverviewsCompat,
+  loadPlantCoreParametersCompat,
+  type PlantBasicOverviewCompatRow,
+} from "@/lib/plant-guide-compat";
 
 const categoryLabels: Record<string, string> = {
   all: "全部",
@@ -112,10 +117,7 @@ type AliasItem = {
   alias_name: string;
 };
 
-type BasicOverview = {
-  species_id: string;
-  summary?: string | null;
-};
+type BasicOverview = PlantBasicOverviewCompatRow;
 
 function normalize(value: unknown) {
   return String(value || "").trim().toLowerCase();
@@ -275,10 +277,7 @@ export default function PlantIndexPage() {
           .order("alias_name", { ascending: true }),
 
         user
-          ? supabase.rpc("get_plant_basic_overviews", {
-              p_species_id: null,
-              p_language_code: "zh",
-            })
+          ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))
           : Promise.resolve({ data: [] as BasicOverview[] }),
 
         canReadFullGuide
@@ -286,9 +285,7 @@ export default function PlantIndexPage() {
               "species_id, sun_score, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
             )
           : user
-            ? supabase.rpc("get_plant_core_parameters", {
-                p_species_id: null,
-              })
+            ? loadPlantCoreParametersCompat(null).then((data) => ({ data }))
             : Promise.resolve({ data: [] as PlantParameterLite[] }),
       ]);
 

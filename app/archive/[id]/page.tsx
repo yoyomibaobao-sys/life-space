@@ -72,6 +72,10 @@ import {
   limitRecordPhotoBatch,
   MAX_RECORD_PHOTOS_PER_ADD,
 } from "@/lib/record-photo-batches";
+import {
+  isMissingDatabaseColumn,
+  withoutCapturedAt,
+} from "@/lib/supabase-schema-compat";
 
 export default function ArchiveDetail({
   params,
@@ -1454,34 +1458,48 @@ saveRecentArchiveBrowse({
 
       const actualBytes = file.size + uploadedThumbBytes;
 
-      const { data: mediaRow, error: mediaError } = await supabase
+      const mediaPayload = {
+        id: targetMediaId,
+        record_id: recordId,
+        type: "image",
+        url: null,
+        user_id: user.id,
+        size_mb: actualBytes / (1024 * 1024),
+        size_bytes: actualBytes,
+        storage_path: fileName,
+        thumb_url: null,
+        thumb_path: uploadedThumbPath,
+        mime_type: file.type || "image/jpeg",
+        width: item.compressed.width ?? null,
+        height: item.compressed.height ?? null,
+        original_filename: item.originalFile.name,
+        captured_at: item.capturedAt,
+        storage_class: "hot",
+        ...(reservation.reservation_id
+          ? { upload_reservation_id: reservation.reservation_id }
+          : {}),
+      };
+      let mediaInsertResult = await supabase
         .from("media")
-        .insert([
-          {
-            id: targetMediaId,
-            record_id: recordId,
-            type: "image",
-            url: null,
-            user_id: user.id,
-            size_mb: actualBytes / (1024 * 1024),
-            size_bytes: actualBytes,
-            storage_path: fileName,
-            thumb_url: null,
-            thumb_path: uploadedThumbPath,
-            mime_type: file.type || "image/jpeg",
-            width: item.compressed.width ?? null,
-            height: item.compressed.height ?? null,
-            original_filename: item.originalFile.name,
-            captured_at: item.capturedAt,
-            storage_class: "hot",
-            ...(reservation.reservation_id
-              ? { upload_reservation_id: reservation.reservation_id }
-              : {}),
-          },
-        ])
+        .insert([mediaPayload])
         .select()
         .single();
 
+      if (
+        isMissingDatabaseColumn(
+          mediaInsertResult.error,
+          "media",
+          "captured_at"
+        )
+      ) {
+        mediaInsertResult = await supabase
+          .from("media")
+          .insert([withoutCapturedAt(mediaPayload)])
+          .select()
+          .single();
+      }
+
+      const { data: mediaRow, error: mediaError } = mediaInsertResult;
       let committedMedia = mediaRow as MediaItem | null;
 
       if (mediaError || !committedMedia?.id) {

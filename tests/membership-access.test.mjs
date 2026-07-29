@@ -143,22 +143,23 @@ test("plant guidance is split into visitor, registered, and cloud-member tiers",
 });
 
 test("the plant pages request only data allowed for the current tier", async () => {
-  const [indexPage, detailPage] = await Promise.all([
+  const [indexPage, detailPage, guideCompat] = await Promise.all([
     source("app/plant/page.tsx"),
     source("app/plant/[id]/page.tsx"),
+    source("lib/plant-guide-compat.ts"),
   ]);
 
-  assert.match(indexPage, /rpc\("get_plant_basic_overviews"/);
+  assert.match(indexPage, /loadPlantBasicOverviewsCompat\(null\)/);
   assert.match(indexPage, /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/);
-  assert.match(indexPage, /rpc\("get_plant_core_parameters"/);
+  assert.match(indexPage, /loadPlantCoreParametersCompat\(null\)/);
   assert.doesNotMatch(
     indexPage,
     /\.from\("plant_species"\)[\s\S]{0,180}\.select\([^)]*description/i
   );
   assert.match(indexPage, /游客可以查看植物目录、名称和分类/);
 
-  assert.match(detailPage, /rpc\("get_plant_basic_overviews"/);
-  assert.match(detailPage, /rpc\("get_plant_core_parameters"/);
+  assert.match(detailPage, /loadPlantBasicOverviewsCompat\(id\)/);
+  assert.match(detailPage, /loadPlantCoreParametersCompat\(id\)/);
   assert.match(
     detailPage,
     /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/
@@ -169,6 +170,32 @@ test("the plant pages request only data allowed for the current tier", async () 
   );
   assert.doesNotMatch(detailPage, /from\("plant_related_archives_view"\)/);
   assert.match(detailPage, /游客可以查看目录、名称和分类/);
+
+  assert.match(guideCompat, /rpc\("get_plant_basic_overviews"/);
+  assert.match(guideCompat, /rpc\("get_plant_core_parameters"/);
+  assert.match(
+    guideCompat,
+    /isMissingDatabaseFunction\(rpcResult\.error, "get_plant_basic_overviews"\)/
+  );
+  assert.match(
+    guideCompat,
+    /isMissingDatabaseFunction\(rpcResult\.error, "get_plant_core_parameters"\)/
+  );
+  const coreFallbackSelect =
+    guideCompat.match(
+      /\.from\("plant_parameters"\)[\s\S]*?\.select\(\s*"([^"]+)"\s*\)/
+    )?.[1] ?? "";
+  for (const column of [
+    "species_id",
+    "sun_score",
+    "need_trellis",
+    "container_friendly_score",
+    "indoor_friendly_score",
+    "balcony_friendly_score",
+  ]) {
+    assert.match(coreFallbackSelect, new RegExp(`\\b${column}\\b`));
+  }
+  assert.doesNotMatch(coreFallbackSelect, /\bsoil_moisture_score\b/);
 });
 
 test("all community interactions require active cloud access for new writes", async () => {
@@ -245,6 +272,52 @@ test("record photos are unlimited cumulatively but capped at ten per add operati
   );
 });
 
+test("the application remains usable while production is between code and migration", async () => {
+  const [
+    schemaCompat,
+    guideCompat,
+    cloudAddRecord,
+    cloudArchive,
+    localToCloudSync,
+    exportRoute,
+  ] = await Promise.all([
+    source("lib/supabase-schema-compat.ts"),
+    source("lib/plant-guide-compat.ts"),
+    source("app/archive/[id]/AddRecord.tsx"),
+    source("app/archive/[id]/page.tsx"),
+    source("lib/local-to-cloud-sync.ts"),
+    source("app/api/export/my-records/route.ts"),
+  ]);
+
+  assert.match(schemaCompat, /code === "PGRST204" \|\| code === "42703"/);
+  assert.match(schemaCompat, /code === "PGRST202" \|\| code === "42883"/);
+  assert.match(guideCompat, /isMissingDatabaseFunction/);
+
+  for (const sourceText of [
+    cloudAddRecord,
+    cloudArchive,
+    localToCloudSync,
+  ]) {
+    assert.match(
+      sourceText,
+      /isMissingDatabaseColumn\([\s\S]*?mediaInsertResult\.error,[\s\S]*?"media",[\s\S]*?"captured_at"/
+    );
+    assert.match(
+      sourceText,
+      /\.insert\(\[withoutCapturedAt\(mediaPayload\)\]\)/
+    );
+  }
+
+  assert.match(
+    exportRoute,
+    /isMissingDatabaseColumn\([\s\S]*?mediaWithCaptureResult\.error,[\s\S]*?"media",[\s\S]*?"captured_at"/
+  );
+  assert.match(
+    exportRoute,
+    /\.select\("id,record_id,type,url,storage_path,thumb_url,thumb_path,size_mb,size_bytes,duration_sec,storage_class,created_at,sort_order"\)/
+  );
+});
+
 test("client-side entitlement checks fail closed when membership is absent", async () => {
   const membership = await source("lib/membership.ts");
 
@@ -298,6 +371,8 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /¥64\/年或 US\$8\/year/);
   assert.match(docs, /现有 4 个试用账号保留原到期日、原容量和原集市额度/);
   assert.match(docs, /已结束的集市条目不占 30 条额度/);
+  assert.match(docs, /先发布包含过渡兼容层的应用代码，再执行本 PR 的生产 migration/);
+  assert.match(docs, /不能先执行收紧植物表列权限的 migration 后继续运行旧前端/);
 });
 
 test("isolated database CI runs membership behavior and both concurrency suites", async () => {
