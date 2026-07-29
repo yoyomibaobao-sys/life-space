@@ -217,7 +217,7 @@ export default function NewLocalArchivePage() {
       notice={
         <>
           只保存在当前设备，不上传云端。子分类和分组可在项目列表或项目档案中继续整理，本地分类 / 分组仍独立于云空间。
-          {plantId || plantSlug ? " 已保存索引关联线索，但不会缓存索引正文、图片、相关项目或大家的经验。" : ""}
+          {plantId || plantSlug ? " 已保存指引关联线索，但不会缓存指引正文、图片、相关项目或大家的经验。" : ""}
         </>
       }
       submitText="创建项目"

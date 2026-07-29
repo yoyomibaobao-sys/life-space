@@ -434,7 +434,7 @@ export default function Navbar() {
           </NavItem>
 
           <NavItem href="/plant" active={isActive("/plant")}>
-            索引
+            指引
           </NavItem>
         </div>
       </div>
@@ -519,7 +519,7 @@ function MobileBottomNav({
       activePaths: ["/archive"],
     },
     {
-      label: "索引",
+      label: "指引",
       href: "/plant",
       activePaths: ["/plant"],
     },
@@ -642,7 +642,7 @@ function getMobilePageTitle(pathname: string) {
   if (pathname === "/" || pathname === "/archive") return "我的空间";
   if (pathname.startsWith("/discover")) return "发现";
   if (pathname.startsWith("/follow")) return "我的关注";
-  if (pathname.startsWith("/plant")) return "索引";
+  if (pathname.startsWith("/plant")) return "指引";
   if (pathname.startsWith("/profile")) return "我";
   if (pathname.startsWith("/notifications")) return "通知";
   if (pathname.startsWith("/membership")) return "云空间";
