@@ -1,0 +1,1 @@
+Run the approved first batch of five legacy photo compression migrations.
