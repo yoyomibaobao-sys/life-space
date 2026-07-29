@@ -9,6 +9,15 @@ import {
   getEnvironmentTags,
   matchesEnvironmentFilters,
 } from "@/lib/plant-env";
+import {
+  canAccessMembershipGuidance,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
+import {
+  loadPlantBasicOverviewsCompat,
+  loadPlantCoreParametersCompat,
+  type PlantBasicOverviewCompatRow,
+} from "@/lib/plant-guide-compat";
 
 const categoryLabels: Record<string, string> = {
   all: "全部",
@@ -99,7 +108,6 @@ type PlantItem = {
   family?: string | null;
   category?: string | null;
   sub_category?: string | null;
-  description?: string | null;
   sort_order?: number | null;
   is_active?: boolean | null;
 };
@@ -109,10 +117,7 @@ type AliasItem = {
   alias_name: string;
 };
 
-type CareGuide = {
-  plant_id: string;
-  summary?: string | null;
-};
+type BasicOverview = PlantBasicOverviewCompatRow;
 
 function normalize(value: unknown) {
   return String(value || "").trim().toLowerCase();
@@ -204,8 +209,10 @@ function FilterSelect({
 export default function PlantIndexPage() {
   const [plants, setPlants] = useState<PlantItem[]>([]);
   const [aliases, setAliases] = useState<AliasItem[]>([]);
-  const [careGuides, setCareGuides] = useState<CareGuide[]>([]);
+  const [basicOverviews, setBasicOverviews] = useState<BasicOverview[]>([]);
   const [parameters, setParameters] = useState<PlantParameterLite[]>([]);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -233,16 +240,32 @@ export default function PlantIndexPage() {
     async function load() {
       setLoading(true);
 
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      setIsSignedIn(Boolean(user));
+
+      const membershipResult = user
+        ? await supabase.rpc("get_my_membership")
+        : { data: null, error: null };
+      const membership = membershipResult.error
+        ? null
+        : normalizeMembershipRpcResult(membershipResult.data);
+      const canReadFullGuide = canAccessMembershipGuidance(membership);
+
+      setHasCloudAccess(canReadFullGuide);
+
       const [
         { data: plantData },
         { data: aliasData },
-        { data: guideData },
+        { data: overviewData },
         { data: parameterData },
       ] = await Promise.all([
         supabase
           .from("plant_species")
           .select(
-            "id, slug, common_name, scientific_name, family, category, sub_category, description, sort_order, is_active"
+            "id, slug, common_name, scientific_name, family, category, sub_category, sort_order, is_active"
           )
           .eq("is_active", true)
           .order("sort_order", { ascending: true, nullsFirst: false })
@@ -253,19 +276,22 @@ export default function PlantIndexPage() {
           .select("species_id, alias_name")
           .order("alias_name", { ascending: true }),
 
-        supabase
-          .from("plant_care_guides")
-          .select("plant_id, summary")
-          .eq("language_code", "zh"),
+        user
+          ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))
+          : Promise.resolve({ data: [] as BasicOverview[] }),
 
-        supabase.from("plant_parameters").select(
-          "species_id, sun_score, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
-        ),
+        canReadFullGuide
+          ? supabase.from("plant_parameters").select(
+              "species_id, sun_score, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
+            )
+          : user
+            ? loadPlantCoreParametersCompat(null).then((data) => ({ data }))
+            : Promise.resolve({ data: [] as PlantParameterLite[] }),
       ]);
 
       setPlants(plantData || []);
       setAliases(aliasData || []);
-      setCareGuides(guideData || []);
+      setBasicOverviews((overviewData || []) as BasicOverview[]);
       setParameters(parameterData || []);
       setLoading(false);
     }
@@ -294,21 +320,21 @@ export default function PlantIndexPage() {
   }, [aliases]);
 
   const guideMap = useMemo(() => {
-    const map: Record<string, CareGuide> = {};
+    const map: Record<string, BasicOverview> = {};
 
-    careGuides.forEach((guide) => {
-      if (guide.plant_id) {
-        map[guide.plant_id] = guide;
+    basicOverviews.forEach((overview) => {
+      if (overview.species_id) {
+        map[overview.species_id] = overview;
       }
     });
 
     return map;
-  }, [careGuides]);
+  }, [basicOverviews]);
 
   const parameterMap = useMemo(() => {
     const map: Record<string, PlantParameterLite> = {};
 
-    parameters.forEach((item: any) => {
+    parameters.forEach((item) => {
       if (item?.species_id) {
         map[item.species_id] = item;
       }
@@ -358,7 +384,12 @@ export default function PlantIndexPage() {
         activeCategory === "all" || normalizePlantCategoryKey(plant.category) === activeCategory;
 
       if (!inCategory) return false;
-      if (!matchesEnvironmentFilters(parameterMap[plant.id], filters)) return false;
+      if (
+        hasCloudAccess &&
+        !matchesEnvironmentFilters(parameterMap[plant.id], filters)
+      ) {
+        return false;
+      }
 
       if (!keyword) return true;
 
@@ -375,14 +406,23 @@ export default function PlantIndexPage() {
 
       return searchable.some((item) => normalize(item).includes(keyword));
     });
-  }, [plants, aliasMap, query, activeCategory, parameterMap, filters]);
+  }, [
+    plants,
+    aliasMap,
+    query,
+    activeCategory,
+    parameterMap,
+    filters,
+    hasCloudAccess,
+  ]);
 
   const hasActiveEnvironmentFilters =
-    filters.light !== "all" ||
-    filters.water !== "all" ||
-    filters.temperature !== "all" ||
-    filters.scene !== "all" ||
-    filters.indoor !== "all";
+    hasCloudAccess &&
+    (filters.light !== "all" ||
+      filters.water !== "all" ||
+      filters.temperature !== "all" ||
+      filters.scene !== "all" ||
+      filters.indoor !== "all");
 
   function updateFilter<K extends keyof EnvironmentFilters>(key: K, value: EnvironmentFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -515,6 +555,38 @@ export default function PlantIndexPage() {
 
         <div
           style={{
+            marginTop: 14,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #e0eadb",
+            background: "#f8fbf6",
+            color: "#5a6d55",
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
+          {!isSignedIn ? (
+            <>
+              游客可以查看植物目录、名称和分类。
+              <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
+                注册后查看基础概要
+              </Link>
+            </>
+          ) : hasCloudAccess ? (
+            "当前云空间可查看完整参数、环境筛选、养护指引和相关种植记录。"
+          ) : (
+            <>
+              当前是本地免费用户，可以查看基础概要和少量核心参数；完整参数、环境筛选和完整指引需
+              <Link href="/membership" style={{ marginLeft: 4, color: "#3f6f37", fontWeight: 700 }}>
+                开通云空间
+              </Link>
+              。
+            </>
+          )}
+        </div>
+
+        <div
+          style={{
             marginTop: isMobileViewport ? 8 : 16,
             paddingTop: isMobileViewport ? 8 : 16,
             borderTop: "1px solid #f0f0f0",
@@ -531,7 +603,9 @@ export default function PlantIndexPage() {
               flexWrap: "wrap",
             }}
           >
-            <div style={{ fontSize: isMobileViewport ? 13 : 14, fontWeight: 600 }}>环境筛选</div>
+            <div style={{ fontSize: isMobileViewport ? 13 : 14, fontWeight: 600 }}>
+              {hasCloudAccess ? "类别与环境筛选" : "类别筛选"}
+            </div>
             {hasActiveEnvironmentFilters && (
               <button
                 type="button"
@@ -568,41 +642,45 @@ export default function PlantIndexPage() {
               options={categoryFilterOptions}
               compact={isMobileViewport}
             />
-            <FilterSelect
-              label="光照"
-              value={filters.light}
-              onChange={(value) => updateFilter("light", value)}
-              options={lightOptions}
-              compact={isMobileViewport}
-            />
-            <FilterSelect
-              label="水分"
-              value={filters.water}
-              onChange={(value) => updateFilter("water", value)}
-              options={waterOptions}
-              compact={isMobileViewport}
-            />
-            <FilterSelect
-              label="温度"
-              value={filters.temperature}
-              onChange={(value) => updateFilter("temperature", value)}
-              options={temperatureOptions}
-              compact={isMobileViewport}
-            />
-            <FilterSelect
-              label="场景"
-              value={filters.scene}
-              onChange={(value) => updateFilter("scene", value)}
-              options={sceneOptions}
-              compact={isMobileViewport}
-            />
-            <FilterSelect
-              label="室内辅助参考"
-              value={filters.indoor}
-              onChange={(value) => updateFilter("indoor", value)}
-              options={indoorOptions}
-              compact={isMobileViewport}
-            />
+            {hasCloudAccess ? (
+              <>
+                <FilterSelect
+                  label="光照"
+                  value={filters.light}
+                  onChange={(value) => updateFilter("light", value)}
+                  options={lightOptions}
+                  compact={isMobileViewport}
+                />
+                <FilterSelect
+                  label="水分"
+                  value={filters.water}
+                  onChange={(value) => updateFilter("water", value)}
+                  options={waterOptions}
+                  compact={isMobileViewport}
+                />
+                <FilterSelect
+                  label="温度"
+                  value={filters.temperature}
+                  onChange={(value) => updateFilter("temperature", value)}
+                  options={temperatureOptions}
+                  compact={isMobileViewport}
+                />
+                <FilterSelect
+                  label="场景"
+                  value={filters.scene}
+                  onChange={(value) => updateFilter("scene", value)}
+                  options={sceneOptions}
+                  compact={isMobileViewport}
+                />
+                <FilterSelect
+                  label="室内辅助参考"
+                  value={filters.indoor}
+                  onChange={(value) => updateFilter("indoor", value)}
+                  options={indoorOptions}
+                  compact={isMobileViewport}
+                />
+              </>
+            ) : null}
           </div>
         </div>
       </section>
@@ -660,10 +738,12 @@ export default function PlantIndexPage() {
           >
             {filteredPlants.map((plant) => {
               const plantAliases = uniqueTextList(aliasMap[plant.id] || []);
-              const summary = guideMap[plant.id]?.summary;
-              const envTags = getEnvironmentTags(parameterMap[plant.id], {
-                includeIndoor: true,
-              }).slice(0, 6);
+              const summary = isSignedIn ? guideMap[plant.id]?.summary : null;
+              const envTags = isSignedIn
+                ? getEnvironmentTags(parameterMap[plant.id], {
+                    includeIndoor: true,
+                  }).slice(0, 6)
+                : [];
 
               return (
                 <Link
@@ -773,7 +853,10 @@ export default function PlantIndexPage() {
                       whiteSpace: "pre-wrap",
                     }}
                   >
-                    {summary || plant.description || "种植卡待补充。"}
+                    {summary ||
+                      (isSignedIn
+                        ? "基础概要待补充。"
+                        : "注册后可查看基础概要。")}
                   </p>
                 </Link>
               );

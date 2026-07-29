@@ -67,6 +67,15 @@ import {
 } from "@/lib/storage-upload-maintenance";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { requestCloudTrash } from "@/lib/cloud-trash";
+import { readImageCapturedAt } from "@/lib/photo-metadata";
+import {
+  limitRecordPhotoBatch,
+  MAX_RECORD_PHOTOS_PER_ADD,
+} from "@/lib/record-photo-batches";
+import {
+  isMissingDatabaseColumn,
+  withoutCapturedAt,
+} from "@/lib/supabase-schema-compat";
 
 export default function ArchiveDetail({
   params,
@@ -221,7 +230,9 @@ saveRecentArchiveBrowse({
       if (archiveData.species_id) {
         const { data: speciesData } = await supabase
           .from("plant_species")
-          .select("*")
+          .select(
+            "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order"
+          )
           .eq("id", archiveData.species_id)
           .maybeSingle();
         setSpecies((speciesData || null) as PlantSpeciesLite | null);
@@ -1148,6 +1159,17 @@ saveRecentArchiveBrowse({
       return;
     }
 
+    const { data: membershipData, error: membershipError } =
+      await supabase.rpc("get_my_membership");
+    const membership = membershipError
+      ? null
+      : normalizeMembershipRpcResult(membershipData);
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
+      return;
+    }
+
     setProjectFollowSubmitting(true);
     const { error } = await supabase.from("archive_follows").insert([
       {
@@ -1289,6 +1311,14 @@ saveRecentArchiveBrowse({
     options: { successMessage?: string | null; emptyMessage?: string | null } = {},
   ): Promise<MediaItem[]> {
     if (!files.length) return [];
+    const { accepted: acceptedFiles, rejectedCount } =
+      limitRecordPhotoBatch(files);
+
+    if (rejectedCount > 0) {
+      showToast(
+        `每次最多添加 ${MAX_RECORD_PHOTOS_PER_ADD} 张，本次只处理前 ${MAX_RECORD_PHOTOS_PER_ADD} 张；可以再次添加。`,
+      );
+    }
 
     const {
       data: { user },
@@ -1316,7 +1346,8 @@ saveRecentArchiveBrowse({
     }
 
     const preparedFiles = await Promise.all(
-      files.map(async (originalFile) => {
+      acceptedFiles.map(async (originalFile) => {
+        const capturedAt = await readImageCapturedAt(originalFile);
         const compressed = await compressImageFile(originalFile);
         const file = compressed.file;
         const thumbnail = await createImageThumbnailFile(file);
@@ -1327,6 +1358,7 @@ saveRecentArchiveBrowse({
           compressed,
           file,
           thumbFile,
+          capturedAt,
           reservedBytes: file.size + (thumbFile?.size || 0),
         };
       })
@@ -1426,33 +1458,48 @@ saveRecentArchiveBrowse({
 
       const actualBytes = file.size + uploadedThumbBytes;
 
-      const { data: mediaRow, error: mediaError } = await supabase
+      const mediaPayload = {
+        id: targetMediaId,
+        record_id: recordId,
+        type: "image",
+        url: null,
+        user_id: user.id,
+        size_mb: actualBytes / (1024 * 1024),
+        size_bytes: actualBytes,
+        storage_path: fileName,
+        thumb_url: null,
+        thumb_path: uploadedThumbPath,
+        mime_type: file.type || "image/jpeg",
+        width: item.compressed.width ?? null,
+        height: item.compressed.height ?? null,
+        original_filename: item.originalFile.name,
+        captured_at: item.capturedAt,
+        storage_class: "hot",
+        ...(reservation.reservation_id
+          ? { upload_reservation_id: reservation.reservation_id }
+          : {}),
+      };
+      let mediaInsertResult = await supabase
         .from("media")
-        .insert([
-          {
-            id: targetMediaId,
-            record_id: recordId,
-            type: "image",
-            url: null,
-            user_id: user.id,
-            size_mb: actualBytes / (1024 * 1024),
-            size_bytes: actualBytes,
-            storage_path: fileName,
-            thumb_url: null,
-            thumb_path: uploadedThumbPath,
-            mime_type: file.type || "image/jpeg",
-            width: item.compressed.width ?? null,
-            height: item.compressed.height ?? null,
-            original_filename: item.originalFile.name,
-            storage_class: "hot",
-            ...(reservation.reservation_id
-              ? { upload_reservation_id: reservation.reservation_id }
-              : {}),
-          },
-        ])
+        .insert([mediaPayload])
         .select()
         .single();
 
+      if (
+        isMissingDatabaseColumn(
+          mediaInsertResult.error,
+          "media",
+          "captured_at"
+        )
+      ) {
+        mediaInsertResult = await supabase
+          .from("media")
+          .insert([withoutCapturedAt(mediaPayload)])
+          .select()
+          .single();
+      }
+
+      const { data: mediaRow, error: mediaError } = mediaInsertResult;
       let committedMedia = mediaRow as MediaItem | null;
 
       if (mediaError || !committedMedia?.id) {

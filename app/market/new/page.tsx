@@ -122,7 +122,7 @@ function NewMarketPostPageContent() {
   const [membership, setMembership] = useState<MyMembership | null>(null);
 
   const isFromSourceRecord = Boolean(sourceRecordId);
-  const marketBlocked = membership?.can_create_market_post === false;
+  const marketBlocked = !canCreateMembershipMarketPost(membership);
 
   useEffect(() => {
     async function init() {

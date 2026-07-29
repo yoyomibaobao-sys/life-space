@@ -98,6 +98,7 @@ export type LocalImage = {
   cached_size: number;
   width?: number | null;
   height?: number | null;
+  captured_at?: string | null;
   sort_order: number;
   created_at: string;
   local_only: true;
@@ -1835,6 +1836,7 @@ export async function createLocalRecord(input: {
   end_cycle_after_record?: boolean;
   note: string;
   image_files?: File[];
+  image_captured_at?: Array<string | null>;
   record_time?: string;
 }) {
   const note = input.note.trim();
@@ -1874,6 +1876,11 @@ export async function createLocalRecord(input: {
     cached_size: image.cached_size,
     width: image.width,
     height: image.height,
+    captured_at:
+      input.image_captured_at?.[index] &&
+      !Number.isNaN(new Date(input.image_captured_at[index]!).getTime())
+        ? new Date(input.image_captured_at[index]!).toISOString()
+        : null,
     sort_order: index,
     created_at: timestamp,
     local_only: true,

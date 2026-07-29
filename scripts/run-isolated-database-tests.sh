@@ -6,7 +6,9 @@ readonly project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly project_id="life-space"
 readonly maintenance_migration="20260718120000_add_cloud_trash_purge_orchestration.sql"
 readonly maintenance_test="supabase/tests/storage_upload_maintenance_window_dynamic.sql"
-readonly concurrency_test="supabase/tests/storage_upload_capacity_reservations_concurrency.sql"
+readonly membership_test="supabase/tests/membership_access_dynamic.sql"
+readonly storage_concurrency_test="supabase/tests/storage_upload_capacity_reservations_concurrency.sql"
+readonly market_concurrency_test="supabase/tests/market_post_limit_concurrency.sql"
 readonly database_container="supabase_db_${project_id}"
 
 cd "${project_root}"
@@ -24,7 +26,9 @@ for required_path in \
   "supabase/migrations" \
   "supabase/tests" \
   "${maintenance_test}" \
-  "${concurrency_test}"; do
+  "${membership_test}" \
+  "${storage_concurrency_test}" \
+  "${market_concurrency_test}"; do
   if [[ ! -e "${required_path}" ]]; then
     echo "Missing required path: ${required_path}" >&2
     exit 1
@@ -77,22 +81,24 @@ run_sql_file() {
 }
 
 run_concurrency_sql_file() {
+  local sql_file="$1"
+
   if ! docker inspect "${database_container}" >/dev/null 2>&1; then
     echo "Missing isolated database container: ${database_container}" >&2
     exit 1
   fi
 
   # dblink rejects non-superuser callers when the local target uses trust
-  # authentication. Run only this concurrency fixture as the local Supabase
+  # authentication. Run only concurrency fixtures as the local Supabase
   # administrator, inside the disposable database container; every migration
   # and other behavior test still runs through the ordinary postgres role.
-  echo "Running ${concurrency_test} as the isolated Supabase administrator"
+  echo "Running ${sql_file} as the isolated Supabase administrator"
   docker exec --interactive "${database_container}" \
     psql \
       --username=supabase_admin \
       --dbname=postgres \
       "${psql_args[@]}" \
-    < "${concurrency_test}"
+    < "${sql_file}"
 }
 
 run_sql_file "supabase/schema.sql"
@@ -156,8 +162,9 @@ while IFS= read -r test_file; do
     continue
   fi
 
-  if [[ "${test_file}" == "${concurrency_test}" ]]; then
-    run_concurrency_sql_file
+  if [[ "${test_file}" == "${storage_concurrency_test}" ||
+        "${test_file}" == "${market_concurrency_test}" ]]; then
+    run_concurrency_sql_file "${test_file}"
     continue
   fi
 

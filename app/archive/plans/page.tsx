@@ -22,6 +22,10 @@ import {
   neutralActionLinkStyle,
   dangerActionButtonStyle,
 } from "@/lib/archive-plant-shared";
+import {
+  canCreateMembershipContent,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
 
 const statusLabels: Record<PlantPlanStatus, string> = {
   want: "想种",
@@ -73,6 +77,7 @@ export default function PlantPlansPage() {
   const [plans, setPlans] = useState<PlantPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [removePlanTarget, setRemovePlanTarget] = useState<PlantPlanRow | null>(null);
   const [removingPlanId, setRemovingPlanId] = useState<string | null>(null);
 
@@ -90,23 +95,31 @@ export default function PlantPlansPage() {
 
     setUserId(user.id);
 
-    const { data, error } = await supabase
-      .from("user_plant_plans")
-      .select(
+    const [{ data, error }, membershipResult] = await Promise.all([
+      supabase
+        .from("user_plant_plans")
+        .select(
+          `
+          *,
+          plant_species:species_id (
+            id,
+            common_name,
+            scientific_name,
+            slug,
+            category,
+            sub_category
+          )
         `
-        *,
-        plant_species:species_id (
-          id,
-          common_name,
-          scientific_name,
-          slug,
-          category,
-          sub_category
         )
-      `
-      )
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false });
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false }),
+      supabase.rpc("get_my_membership"),
+    ]);
+
+    const membership = membershipResult.error
+      ? null
+      : normalizeMembershipRpcResult(membershipResult.data);
+    setHasCloudAccess(canCreateMembershipContent(membership));
 
     if (error) {
       showToast("读取种植计划失败：" + error.message);
@@ -152,6 +165,10 @@ export default function PlantPlansPage() {
     >
   ) {
     if (!userId) return;
+    if (!hasCloudAccess) {
+      showToast("需要有效云空间才能修改种植计划；现有条目仍可移除。");
+      return;
+    }
 
     setSavingId(id);
 
@@ -235,7 +252,7 @@ export default function PlantPlansPage() {
             状态
             <select
               value={plan.status || "want"}
-              disabled={savingId === plan.id}
+              disabled={!hasCloudAccess || savingId === plan.id}
               onChange={(event) =>
                 updatePlan(plan.id, { status: event.target.value as PlantPlanStatus })
               }
@@ -261,7 +278,7 @@ export default function PlantPlansPage() {
             <input
               type="date"
               value={plan.planned_start_date || ""}
-              disabled={savingId === plan.id}
+              disabled={!hasCloudAccess || savingId === plan.id}
               onChange={(event) =>
                 updatePlan(plan.id, {
                   planned_start_date: event.target.value || null,
@@ -282,7 +299,7 @@ export default function PlantPlansPage() {
             计划位置
             <select
               value={plan.location_type || ""}
-              disabled={savingId === plan.id}
+              disabled={!hasCloudAccess || savingId === plan.id}
               onChange={(event) =>
                 updatePlan(plan.id, {
                   location_type: (event.target.value || null) as PlantPlanLocationType | null,
@@ -318,7 +335,7 @@ export default function PlantPlansPage() {
           备注
           <textarea
             value={plan.note || ""}
-            disabled={savingId === plan.id}
+            disabled={!hasCloudAccess || savingId === plan.id}
             onChange={(event) =>
               setPlans((prev) =>
                 prev.map((item) =>
@@ -360,7 +377,15 @@ export default function PlantPlansPage() {
             </Link>
           ) : (
             <Link
-              href={`/archive/new?species=${plan.species_id}&plan=${plan.id}`}
+              href={
+                hasCloudAccess
+                  ? `/archive/new?species=${plan.species_id}&plan=${plan.id}`
+                  : `/local/archive/new?category=plant&plant_id=${encodeURIComponent(
+                      plan.species_id
+                    )}&system_name=${encodeURIComponent(
+                      plantDisplayName(plan.plant_species)
+                    )}`
+              }
               style={{
                 padding: "9px 12px",
                 borderRadius: 999,
@@ -371,7 +396,7 @@ export default function PlantPlansPage() {
                 textDecoration: "none",
               }}
             >
-              创建植物项目
+              {hasCloudAccess ? "创建云端项目" : "创建本地项目"}
             </Link>
           )}
 
@@ -408,6 +433,26 @@ export default function PlantPlansPage() {
         secondaryHref="/archive/interests"
         secondaryLabel="查看感兴趣植物"
       />
+
+      {!hasCloudAccess ? (
+        <div
+          style={{
+            marginTop: 14,
+            padding: "11px 13px",
+            borderRadius: 12,
+            border: "1px solid #dce9d5",
+            background: "#f7fbf4",
+            color: "#587052",
+            fontSize: 14,
+            lineHeight: 1.7,
+          }}
+        >
+          云端种植计划仅对有效云空间开放。现有过渡条目仍可查看和移除，但不能修改；你仍可创建本地项目。
+          <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
+            查看云空间
+          </Link>
+        </div>
+      ) : null}
 
       {plans.length === 0 ? (
         <ArchivePlantEmptyState

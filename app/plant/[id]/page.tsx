@@ -7,6 +7,15 @@ import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import {
+  canAccessMembershipGuidance,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
+import {
+  loadPlantBasicOverviewsCompat,
+  loadPlantCoreParametersCompat,
+  type PlantBasicOverviewCompatRow,
+} from "@/lib/plant-guide-compat";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
 import type {
   ActionMessage,
@@ -26,6 +35,8 @@ type PlantGrowthCycleRow = {
   flowering_days?: number | null;
   harvest_days?: number | null;
 };
+
+type PlantBasicOverviewRow = PlantBasicOverviewCompatRow;
 
 type RelatedArchiveSourceRow = {
   id: string;
@@ -1085,12 +1096,14 @@ export default function PlantDetailPage() {
   const [plant, setPlant] = useState<PlantSpeciesRow | null>(null);
   const [i18n, setI18n] = useState<PlantSpeciesI18nRow[]>([]);
   const [aliases, setAliases] = useState<PlantAliasRow[]>([]);
-const [parameters, setParameters] = useState<PlantParametersRow | null>(null);
-const [growthCycle, setGrowthCycle] = useState<PlantGrowthCycleRow | null>(null);
-const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
-const [relatedArchives, setRelatedArchives] = useState<PlantRelatedArchiveItem[]>([]);
-const [ownArchives, setOwnArchives] = useState<PlantRelatedArchiveItem[]>([]);
-const [isSignedIn, setIsSignedIn] = useState(false);
+  const [basicOverview, setBasicOverview] = useState<string | null>(null);
+  const [parameters, setParameters] = useState<PlantParametersRow | null>(null);
+  const [growthCycle, setGrowthCycle] = useState<PlantGrowthCycleRow | null>(null);
+  const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
+  const [relatedArchives, setRelatedArchives] = useState<PlantRelatedArchiveItem[]>([]);
+  const [ownArchives, setOwnArchives] = useState<PlantRelatedArchiveItem[]>([]);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [interestAdded, setInterestAdded] = useState(false);
   const [planAdded, setPlanAdded] = useState(false);
   const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
@@ -1116,19 +1129,39 @@ const [isSignedIn, setIsSignedIn] = useState(false);
       setLoading(true);
       setActionMessage(null);
 
-const [
-  { data: plantData },
-  { data: i18nData },
-  { data: aliasData },
-  { data: parameterData },
-  { data: growthCycleData },
-  { data: careGuideData },
-  { data: relatedData },
-] = await Promise.all([
-        supabase.from("plant_species").select("*").eq("id", id).maybeSingle(),
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setIsSignedIn(Boolean(user));
+
+      const membershipResult = user
+        ? await supabase.rpc("get_my_membership")
+        : { data: null, error: null };
+      const membership = membershipResult.error
+        ? null
+        : normalizeMembershipRpcResult(membershipResult.data);
+      const canReadFullGuide = canAccessMembershipGuidance(membership);
+      setHasCloudAccess(canReadFullGuide);
+
+      const [
+        { data: plantData },
+        { data: i18nData },
+        { data: aliasData },
+        { data: overviewData },
+        { data: parameterData },
+        { data: growthCycleData },
+        { data: careGuideData },
+      ] = await Promise.all([
+        supabase
+          .from("plant_species")
+          .select(
+            "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order"
+          )
+          .eq("id", id)
+          .maybeSingle(),
         supabase
           .from("plant_species_i18n")
-          .select("*")
+          .select("plant_id, language_code, common_name, family")
           .eq("plant_id", id)
           .order("language_code", { ascending: true }),
         supabase
@@ -1136,94 +1169,102 @@ const [
           .select("species_id, alias_name, relation_type")
           .eq("species_id", id)
           .order("alias_name", { ascending: true }),
-        supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle(),
-        supabase.from("plant_growth_cycle").select("*").eq("species_id", id).maybeSingle(),
-        supabase
-          .from("plant_care_guides")
-          .select("*")
-          .eq("plant_id", id)
-          .eq("language_code", "zh")
-          .maybeSingle(),
-        supabase
-          .from("plant_related_archives_view")
-          .select("*")
-          .eq("species_id", id)
-          .limit(RELATED_ARCHIVE_LIMIT),
+        user
+          ? loadPlantBasicOverviewsCompat(id).then((data) => ({ data }))
+          : Promise.resolve({ data: [] as PlantBasicOverviewRow[] }),
+        canReadFullGuide
+          ? supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle()
+          : user
+            ? loadPlantCoreParametersCompat(id).then((data) => ({ data }))
+            : Promise.resolve({ data: [] as PlantParametersRow[] }),
+        canReadFullGuide
+          ? supabase.from("plant_growth_cycle").select("*").eq("species_id", id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        canReadFullGuide
+          ? supabase
+              .from("plant_care_guides")
+              .select("*")
+              .eq("plant_id", id)
+              .eq("language_code", "zh")
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
       ]);
 
       const plantRow = (plantData || null) as PlantSpeciesRow | null;
       const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
       const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
+      const overviewRows = (overviewData || []) as PlantBasicOverviewRow[];
 
       setPlant(plantRow);
       setI18n(i18nRows);
       setAliases(aliasRows);
-setParameters((parameterData || null) as PlantParametersRow | null);
-setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
-setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setIsSignedIn(Boolean(user));
+      setBasicOverview(overviewRows[0]?.summary || null);
+      setParameters(
+        (Array.isArray(parameterData) ? parameterData[0] : parameterData || null) as
+          | PlantParametersRow
+          | null
+      );
+      setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
+      setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
 
       const plantNameTerms = buildPlantNameTerms(plantRow, i18nRows, aliasRows);
       const archiveMatchFilter = buildArchiveMatchFilter(id, plantNameTerms);
       const archiveSelect =
         "id, user_id, title, system_name, species_id, species_name_snapshot, is_public, status, ended_at, help_status, cover_image_url, cover_image_path, cover_thumb_path, created_at";
 
-      const [{ data: publicArchiveRows }, { data: ownArchiveRows }] = await Promise.all([
-        supabase
-          .from("archives")
-          .select(archiveSelect)
-          .eq("is_public", true)
-          .or(archiveMatchFilter)
-          .order("last_record_time", { ascending: false, nullsFirst: false })
-          .order("created_at", { ascending: false, nullsFirst: false })
-          .limit(RELATED_ARCHIVE_LIMIT),
-        user
-          ? supabase
+      if (canReadFullGuide) {
+        const [{ data: publicArchiveRows }, { data: ownArchiveRows }] =
+          await Promise.all([
+            supabase
               .from("archives")
               .select(archiveSelect)
-              .eq("user_id", user.id)
+              .eq("is_public", true)
               .or(archiveMatchFilter)
               .order("last_record_time", { ascending: false, nullsFirst: false })
               .order("created_at", { ascending: false, nullsFirst: false })
-              .limit(RELATED_ARCHIVE_LIMIT)
-          : Promise.resolve({ data: [] as RelatedArchiveSourceRow[] }),
-      ]);
+              .limit(RELATED_ARCHIVE_LIMIT),
+            user
+              ? supabase
+                  .from("archives")
+                  .select(archiveSelect)
+                  .eq("user_id", user.id)
+                  .or(archiveMatchFilter)
+                  .order("last_record_time", { ascending: false, nullsFirst: false })
+                  .order("created_at", { ascending: false, nullsFirst: false })
+                  .limit(RELATED_ARCHIVE_LIMIT)
+              : Promise.resolve({ data: [] as RelatedArchiveSourceRow[] }),
+          ]);
 
-      const publicRelatedRows = mergeRelatedArchiveItems([
-        ...((relatedData || []) as PlantRelatedArchiveItem[]).map((archive) => ({
-          ...archive,
-          archive_is_public: true,
-          is_own_archive: Boolean(user?.id && archive.user_id === user.id),
-        })),
-        ...(await buildArchiveItemsFromRows(
-          (publicArchiveRows || []) as RelatedArchiveSourceRow[],
-          user?.id || null
-        )),
-      ]).filter((archive) => !user?.id || archive.user_id !== user.id);
-      const ownRelatedRows = user
-        ? mergeRelatedArchiveItems(
-            await buildArchiveItemsFromRows(
-              (ownArchiveRows || []) as RelatedArchiveSourceRow[],
-              user.id,
-              { recordScope: "all" }
-            )
+        const publicRelatedRows = (
+          await buildArchiveItemsFromRows(
+            (publicArchiveRows || []) as RelatedArchiveSourceRow[],
+            user?.id || null
           )
-        : [];
+        ).filter((archive) => !user?.id || archive.user_id !== user.id);
+        const ownRelatedRows = user
+          ? mergeRelatedArchiveItems(
+              await buildArchiveItemsFromRows(
+                (ownArchiveRows || []) as RelatedArchiveSourceRow[],
+                user.id,
+                { recordScope: "all" }
+              )
+            )
+          : [];
 
-      const hydratedRelatedRows = await hydrateRelatedArchiveImages([
-        ...publicRelatedRows,
-        ...ownRelatedRows,
-      ]);
-      setRelatedArchives(
-        hydratedRelatedRows.slice(0, publicRelatedRows.length)
-      );
-      setOwnArchives(hydratedRelatedRows.slice(publicRelatedRows.length));
+        const hydratedRelatedRows = await hydrateRelatedArchiveImages([
+          ...publicRelatedRows,
+          ...ownRelatedRows,
+        ]);
+        setRelatedArchives(
+          hydratedRelatedRows.slice(0, publicRelatedRows.length)
+        );
+        setOwnArchives(hydratedRelatedRows.slice(publicRelatedRows.length));
+      } else {
+        setRelatedArchives([]);
+        setOwnArchives([]);
+      }
 
-      if (user) {
+      if (user && canReadFullGuide) {
         const [{ data: interestData }, { data: planData }] = await Promise.all([
           supabase
             .from("user_plant_interests")
@@ -1276,10 +1317,29 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
         fromRecord ? `?record=${encodeURIComponent(fromRecord)}` : ""
       }`
     : null;
+  const newProjectHref = hasCloudAccess
+    ? `/archive/new?species=${encodeURIComponent(plant?.id || id || "")}`
+    : `/local/archive/new?category=plant&plant_id=${encodeURIComponent(
+        plant?.id || id || ""
+      )}&system_name=${encodeURIComponent(displayName)}`;
 
   const difficulty = difficultyMeta(parameters?.management_difficulty_score);
   const environmentTags = getEnvironmentTags(parameters, { includeIndoor: true });
   const environmentCards = getEnvironmentDetailItems(parameters);
+  const localCoreParameterCards = [
+    ...environmentCards.filter((item) =>
+      ["光照", "栽培场景", "室内"].includes(item.label)
+    ),
+    {
+      label: "搭架",
+      value:
+        typeof parameters?.need_trellis === "boolean"
+          ? parameters.need_trellis
+            ? "需要"
+            : "通常不需要"
+          : null,
+    },
+  ].filter((item) => item.value);
 
   const parameterCards = [
     { label: "日照强度", value: scoreLabel(parameters?.sun_score) },
@@ -1419,6 +1479,26 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
   async function handleAddInterest() {
     if (!plant || actionLoading) return;
 
+    if (!isSignedIn) {
+      setActionMessage({
+        type: "error",
+        text: "请先登录，再加入感兴趣的植物。",
+        href: "/login",
+        hrefText: "去登录",
+      });
+      return;
+    }
+
+    if (!hasCloudAccess) {
+      setActionMessage({
+        type: "error",
+        text: "加入感兴趣列表属于云空间功能。",
+        href: "/membership",
+        hrefText: "查看云空间",
+      });
+      return;
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -1465,6 +1545,26 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
 
   async function handleAddPlan() {
     if (!plant || actionLoading) return;
+
+    if (!isSignedIn) {
+      setActionMessage({
+        type: "error",
+        text: "请先登录，再加入种植计划。",
+        href: "/login",
+        hrefText: "去登录",
+      });
+      return;
+    }
+
+    if (!hasCloudAccess) {
+      setActionMessage({
+        type: "error",
+        text: "云端种植计划属于云空间功能；你仍可新建本地项目。",
+        href: "/membership",
+        hrefText: "查看云空间",
+      });
+      return;
+    }
 
     const {
       data: { user },
@@ -1602,7 +1702,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
         </div>
 
 
-        {(careGuide?.summary || zh?.description || plant.description) && (
+        {isSignedIn && basicOverview ? (
           <div
             style={{
               marginTop: 4,
@@ -1626,12 +1726,50 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
                 fontSize: 16,
               }}
             >
-              {careGuide?.summary || zh?.description || plant.description}
+              {basicOverview}
             </div>
           </div>
-        )}
+        ) : null}
 
-        {environmentTags.length > 0 && (
+        {!isSignedIn ? (
+          <div
+            style={{
+              marginTop: 14,
+              padding: "11px 13px",
+              borderRadius: 12,
+              border: "1px solid #e4eadf",
+              background: "#fafcf8",
+              color: "#667260",
+              fontSize: 14,
+              lineHeight: 1.7,
+            }}
+          >
+            游客可以查看目录、名称和分类。
+            <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
+              注册后查看基础概要
+            </Link>
+          </div>
+        ) : !hasCloudAccess ? (
+          <div
+            style={{
+              marginTop: 14,
+              padding: "11px 13px",
+              borderRadius: 12,
+              border: "1px solid #dce9d5",
+              background: "#f7fbf4",
+              color: "#587052",
+              fontSize: 14,
+              lineHeight: 1.7,
+            }}
+          >
+            当前是本地免费用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云空间会员开放。
+            <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
+              查看云空间
+            </Link>
+          </div>
+        ) : null}
+
+        {isSignedIn && environmentTags.length > 0 && (
           <div
             style={{
               marginTop: 14,
@@ -1670,7 +1808,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
           }}
         >
           <Link
-            href={`/archive/new?species=${plant.id}`}
+            href={newProjectHref}
             style={{
               padding: "12px 20px",
               borderRadius: 14,
@@ -1687,56 +1825,60 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
               boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
             }}
           >
-            新建种植项目
+            {hasCloudAccess ? "新建云端种植项目" : "新建本地种植项目"}
           </Link>
 
-          <button
-            type="button"
-            onClick={handleAddPlan}
-            disabled={planAdded || actionLoading !== null}
-            style={{
-              padding: "12px 20px",
-              borderRadius: 14,
-              border: "1.5px solid #cfe1d0",
-              background: planAdded ? "#f5faf5" : "#fff",
-              color: planAdded ? "#5f7f5f" : "#2f6f35",
-              fontSize: 15,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              cursor: planAdded || actionLoading !== null ? "default" : "pointer",
-              boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
-            }}
-          >
-            {planAdded
-              ? "已在种植计划"
-              : actionLoading === "plan"
-                ? "加入中..."
-                : "加入种植计划"}
-          </button>
+          {hasCloudAccess ? (
+            <>
+              <button
+                type="button"
+                onClick={handleAddPlan}
+                disabled={planAdded || actionLoading !== null}
+                style={{
+                  padding: "12px 20px",
+                  borderRadius: 14,
+                  border: "1.5px solid #cfe1d0",
+                  background: planAdded ? "#f5faf5" : "#fff",
+                  color: planAdded ? "#5f7f5f" : "#2f6f35",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                  cursor: planAdded || actionLoading !== null ? "default" : "pointer",
+                  boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
+                }}
+              >
+                {planAdded
+                  ? "已在种植计划"
+                  : actionLoading === "plan"
+                    ? "加入中..."
+                    : "加入种植计划"}
+              </button>
 
-          <button
-            type="button"
-            onClick={handleAddInterest}
-            disabled={interestAdded || actionLoading !== null}
-            style={{
-              padding: "12px 20px",
-              borderRadius: 14,
-              border: "1.5px solid #cfe1d0",
-              background: interestAdded ? "#f5faf5" : "#fff",
-              color: interestAdded ? "#5f7f5f" : "#2f6f35",
-              fontSize: 15,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              cursor: interestAdded || actionLoading !== null ? "default" : "pointer",
-              boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
-            }}
-          >
-            {interestAdded
-              ? "已加入感兴趣"
-              : actionLoading === "interest"
-                ? "加入中..."
-                : "加入感兴趣"}
-          </button>
+              <button
+                type="button"
+                onClick={handleAddInterest}
+                disabled={interestAdded || actionLoading !== null}
+                style={{
+                  padding: "12px 20px",
+                  borderRadius: 14,
+                  border: "1.5px solid #cfe1d0",
+                  background: interestAdded ? "#f5faf5" : "#fff",
+                  color: interestAdded ? "#5f7f5f" : "#2f6f35",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                  cursor: interestAdded || actionLoading !== null ? "default" : "pointer",
+                  boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
+                }}
+              >
+                {interestAdded
+                  ? "已加入感兴趣"
+                  : actionLoading === "interest"
+                    ? "加入中..."
+                    : "加入感兴趣"}
+              </button>
+            </>
+          ) : null}
         </div>
 
         {actionMessage && (
@@ -1774,7 +1916,26 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
         )}
       </section>
 
-      {(environmentCards.length > 0 ||
+      {isSignedIn && !hasCloudAccess && localCoreParameterCards.length > 0 ? (
+        <Section title="基础适种参数">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {localCoreParameterCards.map((item) => (
+              <Card key={item.label} label={item.label} value={item.value} />
+            ))}
+          </div>
+          <div style={{ marginTop: 12, color: "#6a7566", fontSize: 13, lineHeight: 1.7 }}>
+            地区与季节适配、精确阈值、完整养护方法和多案例比较属于云空间功能。
+          </div>
+        </Section>
+      ) : null}
+
+      {hasCloudAccess && (environmentCards.length > 0 ||
         hasText(climateTimingNote) ||
         hasTemperatureSection) && (
         <Section title="气候环境">
@@ -1827,7 +1988,7 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
         </Section>
       )}
 
-      {(growthCycle || parameterCards.length > 0 || hasPhotoperiodSection) && (
+      {hasCloudAccess && (growthCycle || parameterCards.length > 0 || hasPhotoperiodSection) && (
         <Section title="生长与参数">
           <Subsection title="生长周期">
             <GrowthCycleBlock cycle={growthCycle} />
@@ -1875,17 +2036,21 @@ setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
         </Section>
       )}
 
-      <PlantingGuideSection
-        parameters={parameters}
-        careGuide={careGuide}
-      />
+      {hasCloudAccess ? (
+        <>
+          <PlantingGuideSection
+            parameters={parameters}
+            careGuide={careGuide}
+          />
 
-      <PlantRecordsSection
-        parameters={parameters}
-        ownArchives={ownArchives}
-        publicArchives={relatedArchives}
-        isLoggedIn={isSignedIn}
-      />
+          <PlantRecordsSection
+            parameters={parameters}
+            ownArchives={ownArchives}
+            publicArchives={relatedArchives}
+            isLoggedIn={isSignedIn}
+          />
+        </>
+      ) : null}
     </main>
   );
 }

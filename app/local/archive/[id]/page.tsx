@@ -61,6 +61,13 @@ import {
   getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import { readImageCapturedAt } from "@/lib/photo-metadata";
+import {
+  buildRecordPhotoGroups,
+  limitRecordPhotoBatch,
+  MAX_RECORD_PHOTOS_PER_ADD,
+  type TimedRecordPhoto,
+} from "@/lib/record-photo-batches";
 
 function formatDate(value?: string | null) {
   if (!value) return "";
@@ -118,8 +125,9 @@ export default function LocalArchiveDetailPage() {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [timeMode, setTimeMode] = useState<"now" | "custom">("now");
+  const [timeMode, setTimeMode] = useState<"exif" | "now" | "custom">("exif");
   const [customTime, setCustomTime] = useState("");
+  const [mergeMode, setMergeMode] = useState(true);
   const [saving, setSaving] = useState(false);
   const [cycleBusy, setCycleBusy] = useState(false);
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
@@ -284,19 +292,55 @@ export default function LocalArchiveDetailPage() {
   function appendFiles(files: FileList | null) {
     const images = fileListToArray(files);
     if (images.length === 0) return;
-    setSelectedFiles((current) => [...current, ...images].slice(0, 12));
+    const { accepted, rejectedCount } = limitRecordPhotoBatch(images);
+
+    if (rejectedCount > 0) {
+      showToast(
+        `每次最多添加 ${MAX_RECORD_PHOTOS_PER_ADD} 张，已加入前 ${MAX_RECORD_PHOTOS_PER_ADD} 张；可以再次添加。`,
+      );
+    }
+
+    setSelectedFiles((current) => [...current, ...accepted]);
   }
 
   async function handleAddRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!archiveId || saving) return;
 
-    const recordTime =
-      timeMode === "custom" && customTime ? new Date(customTime) : new Date();
-    if (Number.isNaN(recordTime.getTime())) {
+    const nowISO = new Date().toISOString();
+    const customRecordTime =
+      timeMode === "custom" && customTime ? new Date(customTime) : null;
+    if (customRecordTime && Number.isNaN(customRecordTime.getTime())) {
       showToast("记录时间无效");
       return;
     }
+
+    setSaving(true);
+    const preparedPhotos: TimedRecordPhoto<File>[] = await Promise.all(
+      selectedFiles.map(async (file) => {
+        const capturedAt = await readImageCapturedAt(file);
+        const recordTimeISO =
+          timeMode === "exif" && capturedAt
+            ? capturedAt
+            : customRecordTime?.toISOString() || nowISO;
+
+        return {
+          file,
+          capturedAt,
+          recordTimeISO,
+        };
+      }),
+    );
+    const photoGroups = buildRecordPhotoGroups(preparedPhotos, mergeMode);
+    const groupsToSave =
+      photoGroups.length > 0
+        ? photoGroups
+        : [
+            {
+              photos: [] as TimedRecordPhoto<File>[],
+              recordTimeISO: customRecordTime?.toISOString() || nowISO,
+            },
+          ];
 
     const activeCycles = [...(detail?.archive.cycles || [])]
       .filter((cycle) => cycle.status === "active")
@@ -312,30 +356,43 @@ export default function LocalArchiveDetailPage() {
     if (
       endSelectedCycleAfterSave &&
       selectedActiveCycle &&
-      isLocalDateBefore(recordTime, selectedActiveCycle.started_at)
+      groupsToSave.some((group) =>
+        isLocalDateBefore(group.recordTimeISO, selectedActiveCycle.started_at),
+      )
     ) {
       showToast(cycleTerminology.recordDateBeforeStartMessage);
+      setSaving(false);
       return;
     }
 
-    setSaving(true);
     try {
-      await createLocalRecord({
-        archive_id: archiveId,
-        cycle_id: effectiveCycleId || null,
-        end_cycle_after_record: endSelectedCycleAfterSave && Boolean(effectiveCycleId),
-        note,
-        image_files: selectedFiles,
-        record_time: recordTime.toISOString(),
-      });
+      for (const [index, group] of groupsToSave.entries()) {
+        await createLocalRecord({
+          archive_id: archiveId,
+          cycle_id: effectiveCycleId || null,
+          end_cycle_after_record:
+            endSelectedCycleAfterSave &&
+            Boolean(effectiveCycleId) &&
+            index === groupsToSave.length - 1,
+          note,
+          image_files: group.photos.map((photo) => photo.file),
+          image_captured_at: group.photos.map((photo) => photo.capturedAt),
+          record_time: group.recordTimeISO,
+        });
+      }
       setNote("");
       setSelectedFiles([]);
-      setTimeMode("now");
+      setTimeMode("exif");
       setCustomTime("");
+      setMergeMode(true);
       setSelectedCycleId(undefined);
       setEndSelectedCycleAfterSave(false);
       setAddRecordOpen(false);
-      showToast("本地记录已保存");
+      showToast(
+        groupsToSave.length > 1
+          ? `已按照片日期保存为 ${groupsToSave.length} 条本地记录`
+          : "本地记录已保存",
+      );
       await loadDetail();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "保存本地记录失败");
@@ -997,11 +1054,19 @@ export default function LocalArchiveDetailPage() {
             <div style={recordControlRowStyle}>
               <select
                 value={timeMode}
-                onChange={(event) =>
-                  setTimeMode(event.target.value === "custom" ? "custom" : "now")
-                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTimeMode(
+                    value === "custom"
+                      ? "custom"
+                      : value === "now"
+                        ? "now"
+                        : "exif",
+                  );
+                }}
                 style={recordSelectStyle}
               >
+                <option value="exif">照片时间</option>
                 <option value="now">当前时间</option>
                 <option value="custom">自定义时间</option>
               </select>
@@ -1059,7 +1124,28 @@ export default function LocalArchiveDetailPage() {
                 已选择 {selectedFiles.length} 张图片
                 {selectedSizeLabel ? ` · 原始大小 ${selectedSizeLabel}` : ""}
                 <br />
+                每次最多添加 {MAX_RECORD_PHOTOS_PER_ADD} 张，可分多次继续添加；单条记录累计照片不设上限。
+                <br />
                 保存时会生成 App 内部缓存副本，默认不写入系统相册。
+              </div>
+            ) : null}
+
+            {selectedFiles.length > 1 ? (
+              <div style={selectedFilesStyle}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={mergeMode}
+                    onChange={(event) => setMergeMode(event.target.checked)}
+                  />{" "}
+                  不按照片日期拆分，合并为一条记录（采用最新照片日期）
+                </label>
+                {!mergeMode ? (
+                  <>
+                    <br />
+                    将按照片日期生成记录；同一天的照片归入同一条记录。
+                  </>
+                ) : null}
               </div>
             ) : null}
 

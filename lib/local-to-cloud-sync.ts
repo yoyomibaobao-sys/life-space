@@ -25,6 +25,10 @@ import {
   STORAGE_UPLOAD_MAINTENANCE_SYNC_NOT_STARTED_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
 import { supabase } from "@/lib/supabase";
+import {
+  isMissingDatabaseColumn,
+  withoutCapturedAt,
+} from "@/lib/supabase-schema-compat";
 
 export type LocalToCloudVisibility = "private" | "public";
 
@@ -374,7 +378,9 @@ async function uploadLocalImageToCloud(params: {
     params.image.name || `${params.image.id}.jpg`,
     {
       type: params.image.mime_type || params.image.blob.type || "image/jpeg",
-      lastModified: new Date(params.image.created_at || Date.now()).getTime(),
+      lastModified: new Date(
+        params.image.captured_at || params.image.created_at || Date.now()
+      ).getTime(),
     }
   );
   const compressed = await compressImageFile(originalFile);
@@ -476,34 +482,49 @@ async function uploadLocalImageToCloud(params: {
     }
 
     const actualBytes = uploadFile.size + uploadedThumbBytes;
-    const { data: mediaRow, error: mediaError } = await supabase
+    const mediaPayload = {
+      id: targetMediaId,
+      record_id: params.cloudRecordId,
+      type: "image",
+      url: null,
+      user_id: params.userId,
+      size_mb: actualBytes / (1024 * 1024),
+      size_bytes: actualBytes,
+      storage_path: fileName,
+      thumb_url: null,
+      thumb_path: uploadedThumbPath,
+      mime_type: uploadFile.type || "image/jpeg",
+      width: compressed.width ?? params.image.width ?? null,
+      height: compressed.height ?? params.image.height ?? null,
+      original_filename: originalFile.name,
+      captured_at: params.image.captured_at || null,
+      sort_order: params.image.sort_order || 0,
+      storage_class: "hot",
+      ...(reservation.reservation_id
+        ? { upload_reservation_id: reservation.reservation_id }
+        : {}),
+    };
+    let mediaInsertResult = await supabase
       .from("media")
-      .insert([
-        {
-          id: targetMediaId,
-          record_id: params.cloudRecordId,
-          type: "image",
-          url: null,
-          user_id: params.userId,
-          size_mb: actualBytes / (1024 * 1024),
-          size_bytes: actualBytes,
-          storage_path: fileName,
-          thumb_url: null,
-          thumb_path: uploadedThumbPath,
-          mime_type: uploadFile.type || "image/jpeg",
-          width: compressed.width ?? params.image.width ?? null,
-          height: compressed.height ?? params.image.height ?? null,
-          original_filename: originalFile.name,
-          sort_order: params.image.sort_order || 0,
-          storage_class: "hot",
-          ...(reservation.reservation_id
-            ? { upload_reservation_id: reservation.reservation_id }
-            : {}),
-        },
-      ])
+      .insert([mediaPayload])
       .select("id")
       .single();
 
+    if (
+      isMissingDatabaseColumn(
+        mediaInsertResult.error,
+        "media",
+        "captured_at"
+      )
+    ) {
+      mediaInsertResult = await supabase
+        .from("media")
+        .insert([withoutCapturedAt(mediaPayload)])
+        .select("id")
+        .single();
+    }
+
+    const { data: mediaRow, error: mediaError } = mediaInsertResult;
     let mediaId = mediaRow?.id ? String(mediaRow.id) : null;
 
     if (mediaError || !mediaId) {

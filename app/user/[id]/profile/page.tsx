@@ -19,6 +19,11 @@ import {
   type MarketPostRow,
 } from "@/lib/market-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import {
+  canCreateMembershipContent,
+  getCreateContentBlockedText,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
 
 type MarketPostDisplayRow = MarketPostRow & {
   display_cover_image_url?: string | null;
@@ -160,6 +165,17 @@ export default function PublicUserProfilePage() {
 
     if (isFollowing) {
       setShowUnfollowConfirm(true);
+      return;
+    }
+
+    const { data: membershipData, error: membershipError } =
+      await supabase.rpc("get_my_membership");
+    const membership = membershipError
+      ? null
+      : normalizeMembershipRpcResult(membershipData);
+
+    if (!canCreateMembershipContent(membership)) {
+      showToast(getCreateContentBlockedText(membership));
       return;
     }
 

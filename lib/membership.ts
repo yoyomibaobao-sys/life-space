@@ -24,7 +24,7 @@ export function normalizeMembershipRpcResult(data: unknown): MyMembership | null
 export function getMembershipPlanLabel(plan?: string | null) {
   switch (plan) {
     case "trial":
-      return "本地离线版";
+      return "试用云空间（过渡）";
     case "basic":
       return "云空间";
     case "large":
@@ -81,7 +81,7 @@ export function getMembershipEndDate(membership?: MyMembership | null) {
 }
 
 export function getMembershipSummary(membership?: MyMembership | null) {
-  if (!membership) return "暂未读取到云空间信息";
+  if (!membership) return "本地免费用户 · 未开通云空间";
 
   const label = getMembershipPlanLabel(membership.plan);
   const status = getMembershipStatusLabel(membership.status);
@@ -100,16 +100,20 @@ export function getMembershipSummary(membership?: MyMembership | null) {
 }
 
 export function canCreateMembershipContent(membership?: MyMembership | null) {
-  return membership?.can_create_content !== false;
+  return membership?.can_create_content === true;
 }
 
 export function canCreateMembershipMarketPost(membership?: MyMembership | null) {
-  return membership?.can_create_market_post !== false;
+  return membership?.can_create_market_post === true;
+}
+
+export function canAccessMembershipGuidance(membership?: MyMembership | null) {
+  return membership?.can_create_content === true;
 }
 
 export function getCreateContentBlockedText(membership?: MyMembership | null) {
   if (!membership) {
-    return "云空间状态无法确认";
+    return "需要开通有效云空间";
   }
 
   if (membership.can_create_content === false) {
@@ -121,7 +125,7 @@ export function getCreateContentBlockedText(membership?: MyMembership | null) {
 
 export function getCreateMarketPostBlockedText(membership?: MyMembership | null) {
   if (!membership) {
-    return "集市额度无法确认";
+    return "需要开通有效云空间";
   }
 
   if (membership.can_create_content === false) {
@@ -150,14 +154,14 @@ export function getMarketPostQuotaLabel(membership?: MyMembership | null) {
 
 export function getMarketPostQuotaHint(membership?: MyMembership | null) {
   if (!membership) {
-    return "集市额度无法确认";
+    return "本地免费用户不能发布集市信息；云空间可同时发布 30 条。";
   }
 
   if (membership.can_create_market_post === false) {
     return getCreateMarketPostBlockedText(membership);
   }
 
-  return `${getMarketPostQuotaLabel(membership)}。本地离线版不支持发布集市；云空间基础额度 10 条。`;
+  return `${getMarketPostQuotaLabel(membership)}。本地免费用户不能发布集市；云空间基础额度 30 条。`;
 }
 
 
