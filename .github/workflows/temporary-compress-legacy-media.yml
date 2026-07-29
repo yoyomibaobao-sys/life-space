@@ -2,9 +2,9 @@ name: Temporary Legacy Media Compression
 # One-time operation: first batch of five legacy photos.
 
 on:
-  push:
+  pull_request:
     paths:
-      - ".github/workflows/temporary-compress-legacy-media.yml"
+      - ".github/compression-trigger.txt"
   workflow_dispatch:
 
 permissions:
