@@ -1,4 +1,4 @@
-import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
+import { createImageThumbnailFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
   completeLocalArchiveCloudTransfer,
@@ -383,8 +383,9 @@ async function uploadLocalImageToCloud(params: {
       ).getTime(),
     }
   );
-  const compressed = await compressImageFile(originalFile);
-  const uploadFile = compressed.file;
+  // 本地图片已经在写入 IndexedDB 前生成标准版，转到云空间时直接复用，
+  // 避免对已有缓存再次有损压缩。
+  const uploadFile = originalFile;
   const thumbnail = await createImageThumbnailFile(uploadFile);
   const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
   const safeName = safeFileName(uploadFile.name);
@@ -494,8 +495,8 @@ async function uploadLocalImageToCloud(params: {
       thumb_url: null,
       thumb_path: uploadedThumbPath,
       mime_type: uploadFile.type || "image/jpeg",
-      width: compressed.width ?? params.image.width ?? null,
-      height: compressed.height ?? params.image.height ?? null,
+      width: params.image.width ?? null,
+      height: params.image.height ?? null,
       original_filename: originalFile.name,
       captured_at: params.image.captured_at || null,
       sort_order: params.image.sort_order || 0,

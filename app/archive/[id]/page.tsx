@@ -4,7 +4,10 @@ import { use, useCallback, useEffect, useRef, useState, type CSSProperties, type
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
+import {
+  createImageThumbnailFile,
+  standardizeRecordPhotoFile,
+} from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
@@ -1348,7 +1351,7 @@ saveRecentArchiveBrowse({
     const preparedFiles = await Promise.all(
       acceptedFiles.map(async (originalFile) => {
         const capturedAt = await readImageCapturedAt(originalFile);
-        const compressed = await compressImageFile(originalFile);
+        const compressed = await standardizeRecordPhotoFile(originalFile);
         const file = compressed.file;
         const thumbnail = await createImageThumbnailFile(file);
         const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;

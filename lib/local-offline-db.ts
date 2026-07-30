@@ -1,5 +1,6 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
+import { standardizeRecordPhotoFile } from "@/lib/image-compression";
 
 const DB_NAME = "life-space-local-offline";
 const DB_VERSION = 6;
@@ -8,8 +9,6 @@ const RECORD_STORE = "records";
 const IMAGE_STORE = "images";
 const TAXONOMY_STORE = "taxonomy";
 const MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
-const MAX_LOCAL_IMAGE_EDGE = 1600;
-const LOCAL_IMAGE_QUALITY = 0.82;
 const DEFAULT_LOCAL_ARCHIVE_CATEGORY: ArchiveCategory = "plant";
 const LOCAL_ARCHIVE_CATEGORIES: ArchiveCategory[] = [
   "plant",
@@ -1476,79 +1475,20 @@ function ensureLocalImageFile(file: File) {
   }
 }
 
-function loadImageElement(url: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("图片读取失败"));
-    image.src = url;
-  });
-}
-
-async function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality: number) {
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("图片缓存生成失败"));
-      },
-      mimeType,
-      quality
-    );
-  });
-}
-
 async function prepareLocalImage(file: File, sortOrder: number) {
   ensureLocalImageFile(file);
 
-  if (file.type === "image/gif" || file.type === "image/svg+xml") {
-    return {
-      blob: file,
-      mime_type: file.type,
-      original_size: file.size,
-      cached_size: file.size,
-      name: file.name || `local-image-${sortOrder + 1}`,
-      width: null,
-      height: null,
-    };
-  }
+  const standard = await standardizeRecordPhotoFile(file);
 
-  const objectUrl = URL.createObjectURL(file);
-
-  try {
-    const image = await loadImageElement(objectUrl);
-    const sourceWidth = image.naturalWidth || image.width;
-    const sourceHeight = image.naturalHeight || image.height;
-    const maxEdge = Math.max(sourceWidth, sourceHeight);
-    const scale = maxEdge > MAX_LOCAL_IMAGE_EDGE ? MAX_LOCAL_IMAGE_EDGE / maxEdge : 1;
-    const width = Math.max(1, Math.round(sourceWidth * scale));
-    const height = Math.max(1, Math.round(sourceHeight * scale));
-    const canvas = document.createElement("canvas");
-
-    canvas.width = width;
-    canvas.height = height;
-
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("图片缓存生成失败");
-
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, width, height);
-    context.drawImage(image, 0, 0, width, height);
-
-    const blob = await canvasToBlob(canvas, "image/jpeg", LOCAL_IMAGE_QUALITY);
-
-    return {
-      blob,
-      mime_type: "image/jpeg",
-      original_size: file.size,
-      cached_size: blob.size,
-      name: file.name || `local-image-${sortOrder + 1}.jpg`,
-      width,
-      height,
-    };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+  return {
+    blob: standard.file,
+    mime_type: standard.file.type || file.type,
+    original_size: file.size,
+    cached_size: standard.file.size,
+    name: standard.file.name || file.name || `local-image-${sortOrder + 1}.jpg`,
+    width: standard.width ?? null,
+    height: standard.height ?? null,
+  };
 }
 
 export async function createLocalArchiveCycle(

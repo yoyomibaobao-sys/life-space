@@ -1126,7 +1126,7 @@ export default function LocalArchiveDetailPage() {
                 <br />
                 每次最多添加 {MAX_RECORD_PHOTOS_PER_ADD} 张，可分多次继续添加；单条记录累计照片不设上限。
                 <br />
-                保存时会生成 App 内部缓存副本，默认不写入系统相册。
+                保存时会生成最长边不超过 1800px、质量 82% 的 App 内部标准版；小图不放大，默认不写入系统相册。
               </div>
             ) : null}
 

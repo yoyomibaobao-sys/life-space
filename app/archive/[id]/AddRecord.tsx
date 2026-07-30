@@ -16,7 +16,10 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
-import { compressImageFile, createImageThumbnailFile } from "@/lib/image-compression";
+import {
+  createImageThumbnailFile,
+  standardizeRecordPhotoFile,
+} from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
   cancelStorageUploadReservation,
@@ -337,7 +340,7 @@ export default function AddRecord({
     file: File,
     capturedAt: string | null,
   ) {
-    const compressed = await compressImageFile(file);
+    const compressed = await standardizeRecordPhotoFile(file);
     const uploadFile = compressed.file;
     const thumbnail = await createImageThumbnailFile(uploadFile);
     const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
@@ -936,6 +939,8 @@ export default function AddRecord({
 
         <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.6 }}>
           每次最多添加 {MAX_RECORD_PHOTOS_PER_ADD} 张，可分多次继续添加；单条记录累计照片不设上限。
+          <br />
+          保存前自动生成最长边不超过 1800px、质量 82% 的标准版；小图不放大。
         </div>
 
         {filePreviews.length > 0 ? (
