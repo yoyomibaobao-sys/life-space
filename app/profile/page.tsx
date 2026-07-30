@@ -55,7 +55,7 @@ type MobileProfileNavItem = {
 const baseMobileProfileModules: MobileProfileNavItem[] = [
   { value: "info", label: "用户信息" },
   { value: "membership", label: "云空间与付款" },
-  { value: "space", label: "痕迹" },
+  { value: "space", label: "个人空间" },
   { href: "/profile/trash", label: "回收站" },
   { value: "account", label: "帐号操作" },
 ];
@@ -88,6 +88,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [stats, setStats] = useState<UserProfileStats | null>(null);
   const [marketPostCount, setMarketPostCount] = useState(0);
+  const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipError, setMembershipError] = useState("");
   const [paymentRows, setPaymentRows] = useState<MembershipPaymentRow[]>([]);
@@ -135,9 +136,19 @@ export default function ProfilePage() {
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
       setStats(data.stats);
-      const [marketCountResult, membershipResult, adminResult, paymentsResult] = await Promise.all([
+      const [
+        marketCountResult,
+        experienceCardCountResult,
+        membershipResult,
+        adminResult,
+        paymentsResult,
+      ] = await Promise.all([
         supabase
           .from("market_posts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        supabase
+          .from("experience_cards")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id),
         supabase.rpc("get_my_membership"),
@@ -156,6 +167,16 @@ export default function ProfilePage() {
         setMarketPostCount(0);
       } else {
         setMarketPostCount(Number(marketCountResult.count || 0));
+      }
+
+      if (experienceCardCountResult.error) {
+        console.error(
+          "load my experience card count error:",
+          experienceCardCountResult.error
+        );
+        setExperienceCardCount(0);
+      } else {
+        setExperienceCardCount(Number(experienceCardCountResult.count || 0));
       }
 
       if (membershipResult.error) {
@@ -650,7 +671,7 @@ export default function ProfilePage() {
             <div style={isMobileViewport ? mobileProfileActionRowStyle : { marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? "保存中..." : "保存资料"}</button>
               <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>查看公开资料页</Link>
-              <Link href="/archive" style={secondaryActionStyle}>进入我的空间</Link>
+              <Link href="/archive" style={secondaryActionStyle}>进入个人空间</Link>
               <Link href="/membership" style={secondaryActionStyle}>云空间</Link>
               {isAdmin && !isMobileViewport ? (
                 <Link href="/admin/memberships" style={isMobileViewport ? { ...mobileSecondaryLinkStyle, border: "1px solid #c9d8be", background: "#edf6e8", color: "#2f5a27" } : adminLinkStyle}>会员管理</Link>
@@ -819,8 +840,8 @@ export default function ProfilePage() {
           {!isMobileViewport ? (
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的空间</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>空间、关注与互动</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>个人空间</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>项目、经验卡与互动</h2>
             </div>
           </div>
           ) : null}
@@ -837,7 +858,7 @@ export default function ProfilePage() {
                 <StatLinkCard
                   href="/experience-cards"
                   label="我的经验卡"
-                  value="进入"
+                  value={String(experienceCardCount)}
                   hint=""
                   compact
                 />
@@ -881,7 +902,7 @@ export default function ProfilePage() {
                 <StatLinkCard
                   href="/experience-cards"
                   label="我的经验卡"
-                  value="进入"
+                  value={String(experienceCardCount)}
                   hint="管理草稿和已公开的经验时间线"
                 />
                 <StatLinkCard

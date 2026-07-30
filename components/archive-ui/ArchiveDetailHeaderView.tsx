@@ -71,6 +71,7 @@ type Props = {
   hint?: string;
   profileRows?: ArchiveProfileRow[];
   profileActions?: ReactNode;
+  profileExtra?: ReactNode;
   profileEditor?: ArchiveProfileEditorConfig;
 };
 
@@ -85,6 +86,7 @@ export default function ArchiveDetailHeaderView({
   hint,
   profileRows = [],
   profileActions,
+  profileExtra,
   profileEditor,
 }: Props) {
   const [profileOpen, setProfileOpen] = useState(false);
@@ -483,6 +485,7 @@ export default function ArchiveDetailHeaderView({
             })}
           </div>
           {profileActions ? <div style={profileActionsStyle}>{profileActions}</div> : null}
+          {profileExtra}
         </>
       ) : null}
     </section>

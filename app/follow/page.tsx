@@ -459,7 +459,7 @@ export default function FollowPage() {
         <section style={heroStyle}>
           <div>
             <div style={eyebrowStyle}>持续追踪中心</div>
-            <h1 style={titleStyle}>我的关注</h1>
+            <h1 style={titleStyle}>关注</h1>
             <div style={subtitleStyle}>查看你正在追踪的项目和用户最近发生了什么。</div>
           </div>
 
@@ -646,7 +646,7 @@ export default function FollowPage() {
       <ConfirmDialog
         open={!!projectConfirmId}
         title="取消关注项目"
-        message="确定取消关注这个项目吗？取消后，它将从“我的关注”中移除。"
+        message="确定取消关注这个项目吗？取消后，它将从关注列表中移除。"
         confirmText={projectSubmitting ? "处理中..." : "取消关注"}
         cancelText="返回"
         danger
@@ -663,7 +663,7 @@ export default function FollowPage() {
       <ConfirmDialog
         open={!!userConfirmId}
         title="取消关注用户"
-        message="确定取消关注这个用户吗？取消后，对方将从“我的关注”中移除。"
+        message="确定取消关注这个用户吗？取消后，对方将从关注列表中移除。"
         confirmText={userSubmitting ? "处理中..." : "取消关注"}
         cancelText="返回"
         danger

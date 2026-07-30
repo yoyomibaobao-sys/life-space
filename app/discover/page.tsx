@@ -624,7 +624,7 @@ export default function DiscoverPage() {
 
       <div className="mobile-app-desktop-only">
         {showFollowing ? (
-          <header style={followedDesktopHeaderStyle}>我的关注</header>
+          <header style={followedDesktopHeaderStyle}>关注</header>
         ) : (
           <DiscoverHeader />
         )}
@@ -843,7 +843,7 @@ function MobileDiscoverTabs({
         onClick={() => onChange("following")}
         style={mobileDiscoverTabButtonStyle(active === "following")}
       >
-        我的关注
+        关注
       </button>
     </nav>
   );

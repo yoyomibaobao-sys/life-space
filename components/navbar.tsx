@@ -419,7 +419,7 @@ export default function Navbar() {
               );
             }}
           >
-            我的关注
+            关注
           </NavItem>
 
           <NavItem
@@ -428,7 +428,7 @@ export default function Navbar() {
               isActive("/archive") || pathname.startsWith("/experience-cards")
             }
           >
-            本人空间
+            个人空间
           </NavItem>
 
           <NavItem href="/market" active={isActive("/market")}>
@@ -642,10 +642,10 @@ function getMobileCreateLabel(pathname: string) {
 }
 
 function getMobilePageTitle(pathname: string) {
-  if (pathname === "/" || pathname === "/archive") return "我的空间";
+  if (pathname === "/" || pathname === "/archive") return "个人空间";
   if (pathname.startsWith("/experience-cards")) return "我的经验卡";
   if (pathname.startsWith("/discover")) return "发现";
-  if (pathname.startsWith("/follow")) return "我的关注";
+  if (pathname.startsWith("/follow")) return "关注";
   if (pathname.startsWith("/plant")) return "指引";
   if (pathname.startsWith("/profile")) return "我";
   if (pathname.startsWith("/notifications")) return "通知";

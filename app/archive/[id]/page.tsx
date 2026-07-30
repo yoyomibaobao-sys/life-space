@@ -13,6 +13,7 @@ import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
 import ArchiveDetailHeader from "@/components/archive-detail/ArchiveDetailHeader";
+import ArchiveExperienceCards from "@/components/archive-detail/ArchiveExperienceCards";
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
@@ -1909,6 +1910,12 @@ saveRecentArchiveBrowse({
                   { archive_summary: nextSummary || null },
                 );
               }}
+              profileExtra={
+                <ArchiveExperienceCards
+                  archiveId={activeArchive.id}
+                  isOwner={isOwner}
+                />
+              }
             />
           </div>
         ) : null}
@@ -1966,6 +1973,13 @@ saveRecentArchiveBrowse({
             }
             onToggleArchiveVisibility={() => void toggleArchiveVisibility()}
             onDeleteArchive={() => setDeleteArchiveDialogOpen(true)}
+          />
+        ) : null}
+
+        {isMobileViewport && mobileDetailTab === "profile" ? (
+          <ArchiveExperienceCards
+            archiveId={activeArchive.id}
+            isOwner={isOwner}
           />
         ) : null}
 
