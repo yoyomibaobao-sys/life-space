@@ -27,8 +27,11 @@ export type ImageVariantResult = {
   wasGenerated: boolean;
 };
 
-const DEFAULT_MAX_WIDTH_OR_HEIGHT = 1800;
-const DEFAULT_QUALITY = 0.82;
+export const RECORD_PHOTO_MAX_EDGE = 1800;
+export const RECORD_PHOTO_QUALITY = 0.82;
+
+const DEFAULT_MAX_WIDTH_OR_HEIGHT = RECORD_PHOTO_MAX_EDGE;
+const DEFAULT_QUALITY = RECORD_PHOTO_QUALITY;
 const DEFAULT_MIN_COMPRESS_BYTES = 500 * 1024;
 
 const THUMB_MAX_WIDTH_OR_HEIGHT = 600;
@@ -139,6 +142,8 @@ async function renderImageVariant(
       };
     }
 
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, target.width, target.height);
     ctx.drawImage(image, 0, 0, target.width, target.height);
 
     const blob = await canvasToBlob(canvas, "image/jpeg", options.quality);
@@ -246,6 +251,25 @@ export async function compressImageFile(
     console.error("compress image failed:", error);
     return fallback;
   }
+}
+
+export async function standardizeRecordPhotoFile(
+  file: File
+): Promise<CompressImageResult> {
+  const originalSize = file.size;
+  const standard = await renderImageVariant(file, {
+    maxWidthOrHeight: RECORD_PHOTO_MAX_EDGE,
+    quality: RECORD_PHOTO_QUALITY,
+  });
+
+  return {
+    file: standard.file,
+    originalSize,
+    compressedSize: standard.size,
+    wasCompressed: standard.wasGenerated,
+    width: standard.width,
+    height: standard.height,
+  };
 }
 
 export async function createImageThumbnailFile(file: File) {
