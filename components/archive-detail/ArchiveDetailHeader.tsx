@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import ArchiveDetailHeaderView, {
   type ArchiveProfileFieldSave,
   type ArchiveProfileSystemNameValue,
@@ -239,6 +240,12 @@ export default function ArchiveDetailHeader({
       profileActions={
         mode === "owner" ? (
           <>
+            <Link
+              href={`/experience-cards/new?archiveId=${archive.id}`}
+              style={profileActionLinkStyle}
+            >
+              生成经验卡
+            </Link>
             <button type="button" onClick={onToggleArchiveStatus} style={profileActionButtonStyle}>
               {archive.status === "ended" ? "恢复" : "结束"}
             </button>
@@ -296,4 +303,11 @@ const profileDangerButtonStyle = {
   ...profileActionButtonStyle,
   color: "#c85f5a",
   border: "1px solid #efd8d5",
+} as const;
+
+const profileActionLinkStyle = {
+  ...profileActionButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  textDecoration: "none",
 } as const;

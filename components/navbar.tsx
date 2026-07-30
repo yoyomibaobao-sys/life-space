@@ -424,7 +424,9 @@ export default function Navbar() {
 
           <NavItem
             href={user ? "/archive" : "/login"}
-            active={isActive("/archive")}
+            active={
+              isActive("/archive") || pathname.startsWith("/experience-cards")
+            }
           >
             本人空间
           </NavItem>
@@ -516,7 +518,7 @@ function MobileBottomNav({
     {
       label: "空间",
       href: user ? "/archive" : "/login",
-      activePaths: ["/archive"],
+      activePaths: ["/archive", "/experience-cards"],
     },
     {
       label: "指引",
@@ -615,6 +617,7 @@ function isMobilePlantPath(pathname: string) {
 
 function shouldShowMobileCreateAction(pathname: string) {
   if (pathname === "/plant" || pathname.startsWith("/plant/")) return false;
+  if (pathname.startsWith("/experience-cards")) return false;
   if (isMobileMePath(pathname)) return false;
   if (isMobileDiscoverIndexPath(pathname)) return false;
   if (isMobileMarketPath(pathname)) return false;
@@ -640,6 +643,7 @@ function getMobileCreateLabel(pathname: string) {
 
 function getMobilePageTitle(pathname: string) {
   if (pathname === "/" || pathname === "/archive") return "我的空间";
+  if (pathname.startsWith("/experience-cards")) return "我的经验卡";
   if (pathname.startsWith("/discover")) return "发现";
   if (pathname.startsWith("/follow")) return "我的关注";
   if (pathname.startsWith("/plant")) return "指引";

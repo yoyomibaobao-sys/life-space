@@ -1,0 +1,555 @@
+"use client";
+
+import Link from "next/link";
+import { use, useEffect, useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
+import { showToast } from "@/components/Toast";
+import {
+  deleteExperienceCard,
+  formatExperienceCardDate,
+  getExperienceCardErrorText,
+  loadExperienceCard,
+  publishExperienceCard,
+  unpublishExperienceCard,
+} from "@/lib/experience-cards";
+import type { ExperienceCardDetail } from "@/lib/experience-card-types";
+import { supabase } from "@/lib/supabase";
+
+type PendingAction = "publish" | "unpublish" | "delete" | null;
+
+export default function ExperienceCardPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const router = useRouter();
+  const [detail, setDetail] = useState<ExperienceCardDetail | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [errorText, setErrorText] = useState("");
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+
+  async function reload() {
+    setLoading(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setViewerId(user?.id || null);
+    setDetail(await loadExperienceCard(id));
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const isOwner = Boolean(detail && viewerId === detail.card.user_id);
+
+  async function runAction(action: Exclude<PendingAction, null>) {
+    if (!detail || busy) return;
+    setBusy(true);
+    setErrorText("");
+
+    try {
+      if (action === "publish") {
+        await publishExperienceCard(detail.card.id);
+        showToast("经验卡已公开");
+        await reload();
+      } else if (action === "unpublish") {
+        await unpublishExperienceCard(detail.card.id);
+        showToast("经验卡已取消公开");
+        await reload();
+      } else {
+        await deleteExperienceCard(detail.card.id);
+        showToast("经验卡已删除，原记录不受影响");
+        router.replace("/experience-cards");
+      }
+    } catch (error) {
+      setErrorText(getExperienceCardErrorText(error));
+    } finally {
+      setBusy(false);
+      setPendingAction(null);
+    }
+  }
+
+  async function shareCard() {
+    if (!detail?.isPubliclyAvailable) return;
+    const url = window.location.href.split("?")[0];
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: detail.card.title, url });
+        return;
+      }
+      await copyCardLink();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      showToast("暂时无法分享，请复制浏览器地址");
+    }
+  }
+
+  async function copyCardLink() {
+    if (!detail?.isPubliclyAvailable) return;
+    const url = window.location.href.split("?")[0];
+
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("公开链接已复制");
+    } catch {
+      showToast("暂时无法复制，请复制浏览器地址");
+    }
+  }
+
+  if (loading) {
+    return <main style={pageStyle}>正在读取经验卡...</main>;
+  }
+
+  if (!detail) {
+    return (
+      <main style={pageStyle}>
+        <section style={emptyStyle}>
+          <h1 style={titleStyle}>经验卡当前不可查看</h1>
+          <p style={mutedStyle}>
+            它可能尚未公开，或其中一条来源记录已经改为私密、进入回收站或被删除。
+          </p>
+          <Link href="/discover" style={secondaryLinkStyle}>
+            返回发现
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  const startDate = formatExperienceCardDate(detail.records[0]?.record_time);
+  const endDate = formatExperienceCardDate(
+    detail.records[detail.records.length - 1]?.record_time
+  );
+  const systemName =
+    detail.archive.system_name ||
+    detail.archive.species_name_snapshot ||
+    "未填写系统名";
+  const coverSrc =
+    detail.cover?.display_url || detail.cover?.display_thumb_url || null;
+
+  return (
+    <main style={pageStyle}>
+      <header style={topBarStyle}>
+        <Link
+          href={isOwner ? "/experience-cards" : "/discover"}
+          style={backLinkStyle}
+        >
+          {isOwner ? "← 我的经验卡" : "← 返回发现"}
+        </Link>
+        {isOwner ? (
+          <Link
+            href={`/experience-cards/${detail.card.id}/edit`}
+            style={secondaryLinkStyle}
+          >
+            修改
+          </Link>
+        ) : null}
+      </header>
+
+      <article style={cardShellStyle}>
+        {coverSrc ? (
+          <div style={coverWrapStyle}>
+            <img src={coverSrc} alt="" style={coverStyle} />
+          </div>
+        ) : (
+          <div style={coverFallbackStyle}>
+            <span>有时·耕作</span>
+            <strong>{detail.card.title}</strong>
+          </div>
+        )}
+
+        <div style={introStyle}>
+          <div style={eyebrowStyle}>真实记录组成的经验时间线</div>
+          <h1 style={titleStyle}>{detail.card.title}</h1>
+          <p style={projectStyle}>
+            {detail.archive.title} · {systemName}
+          </p>
+
+          <div style={metaGridStyle}>
+            <Meta label="作者" value={detail.author?.username || "用户"} />
+            <Meta
+              label="时间"
+              value={
+                startDate && endDate
+                  ? startDate === endDate
+                    ? startDate
+                    : `${startDate}—${endDate}`
+                  : "暂无"
+              }
+            />
+            <Meta
+              label="来源记录"
+              value={`${detail.records.length} 条`}
+            />
+            <Meta
+              label="状态"
+              value={
+                detail.isPubliclyAvailable
+                  ? "已公开"
+                  : detail.card.status === "published"
+                    ? "公开已暂停"
+                    : "私密草稿"
+              }
+            />
+          </div>
+        </div>
+      </article>
+
+      {isOwner && !detail.sourceIsComplete ? (
+        <section style={warningStyle}>
+          来源记录已经变化。这张经验卡已自动停止公开，请重新选择3～12条有效记录后再发布。
+        </section>
+      ) : null}
+
+      {isOwner &&
+      detail.card.status === "published" &&
+      !detail.isPubliclyAvailable &&
+      detail.sourceIsComplete ? (
+        <section style={warningStyle}>
+          项目或其中一条来源记录当前不是公开状态，因此游客暂时无法查看这张经验卡。
+        </section>
+      ) : null}
+
+      {errorText ? <section style={errorStyle}>{errorText}</section> : null}
+
+      <section style={timelinePanelStyle}>
+        <ExperienceCardTimeline
+          archive={detail.archive}
+          records={detail.records}
+        />
+      </section>
+
+      <footer style={footerStyle}>
+        <div>
+          <div style={footerBrandStyle}>有时·耕作</div>
+          <div style={footerTextStyle}>
+            经验卡只串联原始记录，内容随来源同步更新。
+          </div>
+        </div>
+
+        <div style={footerActionsStyle}>
+          {detail.isPubliclyAvailable ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void shareCard()}
+                style={primaryButtonStyle}
+              >
+                直接分享
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyCardLink()}
+                style={secondaryButtonStyle}
+              >
+                复制链接
+              </button>
+            </>
+          ) : null}
+
+          {isOwner && detail.card.status === "draft" ? (
+            <button
+              type="button"
+              onClick={() => setPendingAction("publish")}
+              style={primaryButtonStyle}
+            >
+              发布
+            </button>
+          ) : null}
+
+          {isOwner && detail.card.status === "published" ? (
+            <button
+              type="button"
+              onClick={() => setPendingAction("unpublish")}
+              style={secondaryButtonStyle}
+            >
+              取消公开
+            </button>
+          ) : null}
+
+          {isOwner ? (
+            <button
+              type="button"
+              onClick={() => setPendingAction("delete")}
+              style={dangerButtonStyle}
+            >
+              删除
+            </button>
+          ) : null}
+        </div>
+      </footer>
+
+      <ConfirmDialog
+        open={pendingAction === "publish"}
+        title="确认公开经验卡"
+        message={`发布后，项目基础信息和所选${detail.records.length}条记录及照片将公开；其他未选择的记录不会因此公开。`}
+        confirmText={busy ? "发布中..." : "确认发布"}
+        cancelText="取消"
+        confirmDisabled={busy}
+        cancelDisabled={busy}
+        onClose={() => {
+          if (!busy) setPendingAction(null);
+        }}
+        onConfirm={() => runAction("publish")}
+      />
+
+      <ConfirmDialog
+        open={pendingAction === "unpublish"}
+        title="取消公开经验卡"
+        message="公开链接将立即停止访问。来源记录原有的公开状态不会自动改变，可回到项目中单独调整。"
+        confirmText={busy ? "处理中..." : "取消公开"}
+        cancelText="返回"
+        confirmDisabled={busy}
+        cancelDisabled={busy}
+        onClose={() => {
+          if (!busy) setPendingAction(null);
+        }}
+        onConfirm={() => runAction("unpublish")}
+      />
+
+      <ConfirmDialog
+        open={pendingAction === "delete"}
+        title="删除经验卡"
+        message="只删除经验卡及其引用关系，原项目、原记录和照片不会删除。"
+        confirmText={busy ? "删除中..." : "确认删除"}
+        cancelText="取消"
+        danger
+        confirmDisabled={busy}
+        cancelDisabled={busy}
+        onClose={() => {
+          if (!busy) setPendingAction(null);
+        }}
+        onConfirm={() => runAction("delete")}
+      />
+    </main>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={metaItemStyle}>
+      <div style={metaLabelStyle}>{label}</div>
+      <div style={metaValueStyle}>{value}</div>
+    </div>
+  );
+}
+
+const pageStyle: CSSProperties = {
+  maxWidth: 820,
+  margin: "0 auto",
+  padding: "20px 16px 70px",
+  color: "#283428",
+};
+
+const topBarStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 14,
+};
+
+const backLinkStyle: CSSProperties = {
+  color: "#697667",
+  textDecoration: "none",
+  fontSize: 14,
+};
+
+const cardShellStyle: CSSProperties = {
+  overflow: "hidden",
+  border: "1px solid #e0e8dd",
+  borderRadius: 22,
+  background: "#fff",
+  marginBottom: 14,
+};
+
+const coverWrapStyle: CSSProperties = {
+  width: "100%",
+  aspectRatio: "16 / 9",
+  maxHeight: 420,
+  background: "#edf1ea",
+};
+
+const coverStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+};
+
+const coverFallbackStyle: CSSProperties = {
+  minHeight: 230,
+  padding: 28,
+  background: "linear-gradient(145deg, #dcebd7, #f3ead8)",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "flex-end",
+  gap: 8,
+  color: "#40553d",
+};
+
+const introStyle: CSSProperties = {
+  padding: 22,
+};
+
+const eyebrowStyle: CSSProperties = {
+  color: "#71806e",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.06em",
+};
+
+const titleStyle: CSSProperties = {
+  margin: "7px 0 7px",
+  fontSize: 30,
+  lineHeight: 1.25,
+  overflowWrap: "anywhere",
+};
+
+const projectStyle: CSSProperties = {
+  margin: 0,
+  color: "#5f6f5c",
+  fontSize: 15,
+  lineHeight: 1.6,
+};
+
+const metaGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+  gap: 10,
+  marginTop: 18,
+};
+
+const metaItemStyle: CSSProperties = {
+  padding: 11,
+  borderRadius: 12,
+  background: "#f6f8f4",
+};
+
+const metaLabelStyle: CSSProperties = {
+  color: "#82907f",
+  fontSize: 11,
+  marginBottom: 4,
+};
+
+const metaValueStyle: CSSProperties = {
+  color: "#3d4b3b",
+  fontSize: 13,
+  fontWeight: 800,
+  overflowWrap: "anywhere",
+};
+
+const timelinePanelStyle: CSSProperties = {
+  border: "1px solid #e0e8dd",
+  borderRadius: 20,
+  background: "#fff",
+  padding: "22px 18px 4px",
+};
+
+const warningStyle: CSSProperties = {
+  padding: 14,
+  marginBottom: 14,
+  borderRadius: 14,
+  border: "1px solid #eadfbf",
+  background: "#fff9e9",
+  color: "#756436",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+
+const errorStyle: CSSProperties = {
+  ...warningStyle,
+  borderColor: "#efd8d5",
+  background: "#fff8f7",
+  color: "#a14d48",
+};
+
+const footerStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  flexWrap: "wrap",
+  marginTop: 14,
+  padding: 16,
+  borderRadius: 18,
+  background: "#f3f7f0",
+  border: "1px solid #dfe8db",
+};
+
+const footerBrandStyle: CSSProperties = {
+  color: "#405b3d",
+  fontSize: 15,
+  fontWeight: 900,
+};
+
+const footerTextStyle: CSSProperties = {
+  color: "#71806e",
+  fontSize: 12,
+  marginTop: 3,
+};
+
+const footerActionsStyle: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const baseButtonStyle: CSSProperties = {
+  minHeight: 40,
+  padding: "8px 14px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const primaryButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
+  border: "1px solid #64885e",
+  background: "#64885e",
+  color: "#fff",
+};
+
+const secondaryButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
+  border: "1px solid #d3ded0",
+  background: "#fff",
+  color: "#50604d",
+};
+
+const dangerButtonStyle: CSSProperties = {
+  ...secondaryButtonStyle,
+  color: "#b1534f",
+  borderColor: "#ecd1ce",
+};
+
+const secondaryLinkStyle: CSSProperties = {
+  ...secondaryButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  textDecoration: "none",
+};
+
+const emptyStyle: CSSProperties = {
+  marginTop: 46,
+  border: "1px solid #e0e8dd",
+  borderRadius: 20,
+  background: "#fff",
+  padding: 24,
+};
+
+const mutedStyle: CSSProperties = {
+  color: "#71806e",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
