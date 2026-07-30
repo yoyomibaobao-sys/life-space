@@ -1,0 +1,128 @@
+name: Temporary Standardize Existing Media 1800
+
+on:
+  pull_request:
+    paths:
+      - ".github/run-standardize-existing-media-1800.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  standardize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick jq
+
+      - name: Standardize existing photos to 1800px and quality 82
+        env:
+          ENDPOINT: https://eidltoikfpnrzxruvawf.supabase.co/functions/v1/admin-compress-legacy-media
+          OPERATION_ID: standard1800-existing-20260730-R8vL4mQ2sN7kT5xP
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ANON_KEY"
+
+          ids=(
+            "9d48b229-e619-43d9-ba9f-e666e78b7f86"
+            "6629b44b-e7d8-4b34-a808-6157441cef27"
+            "af3a6620-a03f-48e5-bc21-4461f23e3017"
+            "4b23c01f-0526-4aca-9dd9-1726161f7b18"
+            "bfe90d28-f8b6-4587-b66a-68da916143da"
+            "f9f13834-ed80-4b2b-8b90-968c2a8a5320"
+            "1f9d1bb9-0f5a-4876-a3db-9584b78a9491"
+            "ca7a05ac-503c-4518-b337-adf8b56a71bc"
+            "b76d4c09-8794-4beb-908b-10e94d86a88b"
+            "05813a41-7c58-4e67-9185-ed37fe50996f"
+            "d1bf4e26-49d1-4dad-bfce-c68d597ab3e7"
+            "6d41af08-2eba-4b9a-ad40-76874a5dbe78"
+            "0bb8adaf-40a2-4a34-9b07-80a38c396294"
+            "588ac468-58b6-4951-bf08-f0add2e8fe9c"
+            "0e32fb62-1606-4e74-b58a-998331d36817"
+            "762fc966-43b2-4847-a440-b4dffdf3734b"
+            "9b7143cb-32ed-47c4-a5cf-763d50f4eab9"
+            "28dfb839-64c1-4689-a69f-f3f9bc5e7531"
+            "e2f33535-f642-4e6c-be26-e00aa16653c3"
+            "cd2e39e9-f6ca-4e44-abf1-4c87499a3cba"
+            "c44559d9-1056-450b-8890-30717f4c7e5f"
+            "9ff45ad7-5c4b-44c1-a4c0-fbf158b80759"
+            "8c3357f8-e076-4109-8146-eb1dfea5129e"
+            "93df68a0-2cea-42b7-b802-2ea9359c8727"
+            "9ff65595-df0f-4878-8fe8-b2ce9c47242b"
+            "fbf2d41c-c69c-45e0-b606-cc4c2d8a3757"
+          )
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          total_old=0
+          total_new=0
+          completed=0
+
+          for id in "${ids[@]}"; do
+            echo "Preparing $id"
+            prepare_json="$(curl --fail-with-body --silent --show-error \
+              -X POST "$ENDPOINT" \
+              -H 'Content-Type: application/json' \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "x-operation-id: $OPERATION_ID" \
+              --data "{\"action\":\"prepare\",\"media_id\":\"$id\"}")"
+            echo "$prepare_json" | jq -e '.ok == true' >/dev/null
+
+            signed_url="$(echo "$prepare_json" | jq -r '.signed_url')"
+            old_path="$(echo "$prepare_json" | jq -r '.old_path')"
+            old_bytes="$(echo "$prepare_json" | jq -r '.old_bytes')"
+            input="$workdir/$id-input"
+            output="$workdir/$id-output.jpg"
+
+            curl --fail --silent --show-error --location "$signed_url" --output "$input"
+            convert "$input" \
+              -auto-orient \
+              -strip \
+              -colorspace sRGB \
+              -resize '1800x1800>' \
+              -sampling-factor 4:2:0 \
+              -interlace Plane \
+              -quality 82 \
+              "$output"
+
+            dimensions="$(identify -format '%w %h' "$output")"
+            width="${dimensions%% *}"
+            height="${dimensions##* }"
+            new_bytes="$(stat -c%s "$output")"
+
+            test "$new_bytes" -gt 1000
+            test "$new_bytes" -lt "$old_bytes"
+            test "$width" -le 1800
+            test "$height" -le 1800
+
+            echo "Committing $id: $old_bytes -> $new_bytes bytes, ${width}x${height}"
+            commit_json="$(curl --fail-with-body --silent --show-error \
+              -X POST "$ENDPOINT" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "x-operation-id: $OPERATION_ID" \
+              -F 'action=commit' \
+              -F "media_id=$id" \
+              -F "expected_old_path=$old_path" \
+              -F "width=$width" \
+              -F "height=$height" \
+              -F "file=@$output;type=image/jpeg")"
+            echo "$commit_json" | jq -e '.ok == true and .old_deleted == true' >/dev/null
+            echo "$commit_json" | jq '{media_id,old_bytes,new_bytes,saved_bytes,width,height,records_updated,archives_updated,market_media_updated,market_posts_updated,old_deleted}'
+
+            total_old=$((total_old + old_bytes))
+            total_new=$((total_new + new_bytes))
+            completed=$((completed + 1))
+          done
+
+          jq -n \
+            --argjson completed "$completed" \
+            --argjson old_bytes "$total_old" \
+            --argjson new_bytes "$total_new" \
+            '{ok:true,completed:$completed,old_bytes:$old_bytes,new_bytes:$new_bytes,saved_bytes:($old_bytes-$new_bytes)}'
