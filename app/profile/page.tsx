@@ -28,6 +28,7 @@ import {
   parseLegacyLocation,
   type RegionOption,
 } from "@/lib/region-shared";
+import { getAccountRegistrationSummary } from "@/lib/account-number";
 
 
 type MembershipPaymentRow = {
@@ -212,6 +213,9 @@ export default function ProfilePage() {
     const limit = formatStorage(Number(membership?.storage_limit_bytes || profile?.storage_limit || 0));
     return `${used} / ${limit}`;
   }, [profile, membership]);
+  const accountRegistrationSummary = getAccountRegistrationSummary(
+    profile?.account_number
+  );
 
   const membershipEndDate = getMembershipEndDate(membership);
   const membershipDaysRemaining = getDaysRemaining(membershipEndDate);
@@ -581,6 +585,16 @@ export default function ProfilePage() {
             </div>
 
             <div style={metaListStyle}>
+              <MetaItem
+                label="账号编号"
+                value={
+                  profile.account_number ||
+                  (profile.is_internal_test ? "内部测试账号" : "暂未分配")
+                }
+              />
+              {accountRegistrationSummary ? (
+                <MetaItem label="注册顺序" value={accountRegistrationSummary} />
+              ) : null}
               <MetaItem label="账号等级" value={`Lv.${Number(profile.level || 1)}`} />
               <MetaItem label="花朵" value={`🌸 ${Number(profile.flower_count || 0)}`} />
               <MetaItem label="存储" value={storageText} />

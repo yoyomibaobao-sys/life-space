@@ -1,4 +1,5 @@
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
+import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
 
 export type UserProfileStats = {
   archiveCount: number;
@@ -82,9 +83,26 @@ async function loadUserProfileDataWithProfile(
     profileSource === "own"
       ? supabase.from("profiles").select("*").eq("id", userId).maybeSingle()
       : supabase.from("public_profiles").select(PUBLIC_PROFILE_SELECT).eq("id", userId).maybeSingle();
+  const accountIdentitySource =
+    profileSource === "own" ? "users" : "public_profiles";
+  const accountIdentityQuery =
+    profileSource === "own"
+      ? supabase
+          .from("users")
+          .select(
+            "account_number, registration_year, registration_sequence, is_internal_test"
+          )
+          .eq("id", userId)
+          .maybeSingle()
+      : supabase
+          .from("public_profiles")
+          .select("account_number, registration_year, registration_sequence")
+          .eq("id", userId)
+          .maybeSingle();
 
   const [
     profileResult,
+    accountIdentityResult,
     archivesResult,
     followingResult,
     followerResult,
@@ -95,6 +113,7 @@ async function loadUserProfileDataWithProfile(
     sentFlowersResult,
   ] = await Promise.all([
     profileQuery,
+    accountIdentityQuery,
     supabase
       .from("archives")
       .select("id, title, system_name, category, status, last_record_time, record_count, view_count, is_public")
@@ -113,6 +132,54 @@ async function loadUserProfileDataWithProfile(
     supabase.from("comment_flowers").select("*", { count: "exact", head: true }).eq("sender_user_id", userId).is("revoked_at", null),
   ]);
 
+  const accountIdentityMissing =
+    Boolean(accountIdentityResult.error) &&
+    (
+      isMissingDatabaseColumn(
+        accountIdentityResult.error,
+        accountIdentitySource,
+        "account_number"
+      ) ||
+      isMissingDatabaseColumn(
+        accountIdentityResult.error,
+        accountIdentitySource,
+        "registration_year"
+      ) ||
+      isMissingDatabaseColumn(
+        accountIdentityResult.error,
+        accountIdentitySource,
+        "registration_sequence"
+      )
+    );
+
+  if (accountIdentityResult.error && !accountIdentityMissing) {
+    console.error("load account identity error:", accountIdentityResult.error);
+  }
+
+  const baseProfile = (profileResult.data || null) as AppProfile | null;
+  const accountIdentity = accountIdentityMissing
+    ? null
+    : (accountIdentityResult.data as Partial<AppProfile> | null);
+  const mergedProfile = baseProfile
+    ? {
+        ...baseProfile,
+        account_number:
+          accountIdentity?.account_number ?? baseProfile.account_number ?? null,
+        registration_year:
+          accountIdentity?.registration_year ??
+          baseProfile.registration_year ??
+          null,
+        registration_sequence:
+          accountIdentity?.registration_sequence ??
+          baseProfile.registration_sequence ??
+          null,
+        is_internal_test:
+          accountIdentity?.is_internal_test ??
+          baseProfile.is_internal_test ??
+          null,
+      }
+    : null;
+
   const archives = (archivesResult.data || []) as Array<UserProfileArchiveItem & { is_public?: boolean | null }>;
   const publicArchives = archives.filter((item) => item.is_public);
   const endedArchives = archives.filter((item) => item.status === "ended");
@@ -123,7 +190,7 @@ async function loadUserProfileDataWithProfile(
     .slice(0, 3);
 
   return {
-    profile: (profileResult.data || null) as AppProfile | null,
+    profile: mergedProfile,
     stats: {
       archiveCount: archives.length,
       publicArchiveCount: publicArchives.length,

@@ -29,6 +29,22 @@ type AdminMembershipRow = {
   updated_at: string | null;
 };
 
+type SignupRolloutStatus = {
+  internal_test_account_count: number | string | null;
+  formal_account_count: number | string | null;
+  trial_slot_limit: number | string | null;
+  trial_slots_granted: number | string | null;
+  trial_slots_remaining: number | string | null;
+  trial_allowance_bytes: number | string | null;
+  platform_storage_bytes: number | string | null;
+  unrealized_trial_allowance_bytes: number | string | null;
+  projected_storage_bytes: number | string | null;
+  platform_storage_pause_bytes: number | string | null;
+  trial_grants_enabled: boolean | null;
+  trial_grants_paused: boolean | null;
+  pause_reason: string | null;
+};
+
 type MembershipPaymentRow = {
   id: string;
   user_id: string;
@@ -65,11 +81,11 @@ type PlanPreset = {
 const PLAN_PRESETS: PlanPreset[] = [
   {
     key: "trial",
-    label: "试用云空间（过渡）",
-    storageLimitBytes: 300_000_000,
+    label: "30MB云空间体验",
+    storageLimitBytes: 30_000_000,
     baseMarketPostLimit: 3,
     paidMonths: null,
-    note: "仅供现有试用账号保留原到期时间和额度，不再授予新账号。",
+    note: "系统只自动授予首批20名正式账号，不设6个月期限；现有内部测试账号保留原数据。",
   },
   {
     key: "basic",
@@ -129,6 +145,13 @@ const DELETE_MEMBERSHIP_MESSAGE =
 function getAdminMembershipStatusLabel(status?: string | null) {
   if (status === "canceled") return "已删除";
   return getMembershipStatusLabel(status);
+}
+
+function getSignupTrialPauseLabel(reason?: string | null) {
+  if (reason === "disabled") return "已由后台暂停";
+  if (reason === "first_twenty_registered") return "首批20个正式账号已注册";
+  if (reason === "storage_safety_threshold") return "已触及存储安全线";
+  return "可继续发放";
 }
 
 function canDeleteMembership(row: AdminMembershipRow | null, currentUserId: string) {
@@ -307,6 +330,9 @@ export default function AdminMembershipsPage() {
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [keyword, setKeyword] = useState("");
   const [rows, setRows] = useState<AdminMembershipRow[]>([]);
+  const [rolloutStatus, setRolloutStatus] = useState<SignupRolloutStatus | null>(null);
+  const [rolloutLoading, setRolloutLoading] = useState(false);
+  const [rolloutError, setRolloutError] = useState("");
   const [selected, setSelected] = useState<AdminMembershipRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminMembershipRow | null>(null);
   const [deleteSaving, setDeleteSaving] = useState(false);
@@ -375,6 +401,26 @@ export default function AdminMembershipsPage() {
     setLoading(false);
   }
 
+  async function loadSignupRolloutStatus() {
+    setRolloutLoading(true);
+    setRolloutError("");
+
+    const { data, error } = await supabase.rpc(
+      "admin_get_signup_rollout_status"
+    );
+
+    if (error) {
+      logSupabaseError("load signup rollout status error:", error);
+      setRolloutStatus(null);
+      setRolloutError(describeSupabaseError(error) || "读取注册体验统计失败");
+      setRolloutLoading(false);
+      return;
+    }
+
+    setRolloutStatus(firstRpcRow<SignupRolloutStatus>(data));
+    setRolloutLoading(false);
+  }
+
   async function loadPaymentRows(userId: string) {
     setPaymentLoading(true);
 
@@ -440,7 +486,7 @@ export default function AdminMembershipsPage() {
       setChecking(false);
 
       if (allowed) {
-        await loadRows("");
+        await Promise.all([loadRows(""), loadSignupRolloutStatus()]);
       } else {
         setLoading(false);
       }
@@ -863,12 +909,79 @@ export default function AdminMembershipsPage() {
         <Link href="/membership" style={secondaryButtonStyle}>查看云空间说明页</Link>
       </section>
 
+      <section style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}>
+        <div style={detailTopStyle}>
+          <div>
+            <div style={sectionLabelStyle}>首批注册体验</div>
+            <h2 style={sectionTitleStyle}>20名正式用户 · 每人30MB</h2>
+            <p style={smallTextStyle}>
+              内部测试账号另计。安全预算按实际Storage占用加上体验用户尚未使用的剩余额度计算，达到700MB安全线前会自动停止继续赠送。
+            </p>
+          </div>
+          <span style={pillStyle}>
+            {rolloutLoading
+              ? "读取中"
+              : rolloutStatus?.trial_grants_paused
+                ? getSignupTrialPauseLabel(rolloutStatus.pause_reason)
+                : "可继续发放"}
+          </span>
+        </div>
+
+        {rolloutError ? <p style={errorStyle}>{rolloutError}</p> : null}
+
+        {rolloutStatus ? (
+          <div style={currentSummaryGridStyle}>
+            <InfoItem
+              label="正式账号"
+              value={`${Number(rolloutStatus.formal_account_count || 0)} 个`}
+            />
+            <InfoItem
+              label="内部测试账号"
+              value={`${Number(rolloutStatus.internal_test_account_count || 0)} 个`}
+            />
+            <InfoItem
+              label="体验名额"
+              value={`${Number(rolloutStatus.trial_slots_granted || 0)} / ${Number(rolloutStatus.trial_slot_limit || 0)}`}
+            />
+            <InfoItem
+              label="首批窗口剩余"
+              value={`${Number(rolloutStatus.trial_slots_remaining || 0)} 个`}
+            />
+            <InfoItem
+              label="单人体验额度"
+              value={formatStorageBytes(Number(rolloutStatus.trial_allowance_bytes || 0))}
+            />
+            <InfoItem
+              label="平台实际存储"
+              value={`${formatStorageBytes(Number(rolloutStatus.platform_storage_bytes || 0))} / ${formatStorageBytes(Number(rolloutStatus.platform_storage_pause_bytes || 0))}`}
+            />
+            <InfoItem
+              label="尚未使用的体验额度"
+              value={formatStorageBytes(Number(rolloutStatus.unrealized_trial_allowance_bytes || 0))}
+            />
+            <InfoItem
+              label="当前安全预算"
+              value={`${formatStorageBytes(Number(rolloutStatus.projected_storage_bytes || 0))} / ${formatStorageBytes(Number(rolloutStatus.platform_storage_pause_bytes || 0))}`}
+            />
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          style={secondaryButtonStyle}
+          onClick={() => void loadSignupRolloutStatus()}
+          disabled={rolloutLoading}
+        >
+          重新读取体验统计
+        </button>
+      </section>
+
       <section style={currentCardStyle}>
         <form onSubmit={handleSearch} style={searchRowStyle}>
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索邮箱、用户名或 user_id"
+            placeholder="搜索邮箱、用户名、账号编号或 user_id"
             style={inputStyle}
           />
           <button type="submit" style={primaryButtonStyle} disabled={loading}>

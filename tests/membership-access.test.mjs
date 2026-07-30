@@ -8,10 +8,13 @@ async function source(path) {
 
 const migrationPath =
   "supabase/migrations/20260726140000_align_membership_access_and_market_limits.sql";
+const signupRolloutMigrationPath =
+  "supabase/migrations/20260730054747_add_signup_account_rollout.sql";
 
-test("new registrations become local-free instead of receiving an automatic trial", async () => {
-  const [migration, registration] = await Promise.all([
+test("new registrations use the bounded 30 MB signup rollout instead of the legacy automatic trial", async () => {
+  const [migration, signupRolloutMigration, registration] = await Promise.all([
     source(migrationPath),
+    source(signupRolloutMigrationPath),
     source("app/register/page.tsx"),
   ]);
 
@@ -27,8 +30,20 @@ test("new registrations become local-free instead of receiving an automatic tria
     migration,
     /alter table public\.profiles\s+alter column storage_limit set default 0;/i
   );
-  assert.match(registration, /注册后成为本地免费用户/);
-  assert.match(registration, /注册不会赠送云空间/);
+  assert.match(
+    signupRolloutMigration,
+    /trial_slot_limit integer not null default 20/i
+  );
+  assert.match(
+    signupRolloutMigration,
+    /trial_allowance_bytes bigint not null default 30000000/i
+  );
+  assert.match(
+    signupRolloutMigration,
+    /from private\.initialize_new_account/i
+  );
+  assert.match(registration, /首批20名正式注册用户/);
+  assert.match(registration, /30MB云空间体验/);
 });
 
 test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async () => {
@@ -369,13 +384,13 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /主动公开、或在本次报名中明确授权展示的种植经验/);
   assert.match(docs, /不得读取或披露报名者的私密项目、私密记录/);
   assert.match(docs, /¥64\/年或 US\$8\/year/);
-  assert.match(docs, /现有 4 个试用账号保留原到期日、原容量和原集市额度/);
+  assert.match(docs, /现有 4 个内部试用账号保留原到期日、原容量和原集市额度/);
   assert.match(docs, /已结束的集市条目不占 30 条额度/);
-  assert.match(docs, /先发布包含过渡兼容层的应用代码，再执行本 PR 的生产 migration/);
-  assert.match(docs, /不能先执行收紧植物表列权限的 migration 后继续运行旧前端/);
+  assert.match(docs, /先执行账号编号与首批体验额度 migration，再发布/);
+  assert.match(docs, /第21个正式账号与存储安全线两条路径都只停止赠送，不阻断注册/);
 });
 
-test("isolated database CI runs membership behavior and both concurrency suites", async () => {
+test("isolated database CI runs membership behavior and all concurrency suites", async () => {
   const runner = await source("scripts/run-isolated-database-tests.sh");
 
   assert.match(runner, /supabase\/tests\/membership_access_dynamic\.sql/);
@@ -384,6 +399,7 @@ test("isolated database CI runs membership behavior and both concurrency suites"
     /supabase\/tests\/storage_upload_capacity_reservations_concurrency\.sql/
   );
   assert.match(runner, /supabase\/tests\/market_post_limit_concurrency\.sql/);
+  assert.match(runner, /supabase\/tests\/signup_account_rollout_concurrency\.sql/);
   assert.match(
     runner,
     /run_concurrency_sql_file "\$\{test_file\}"/
