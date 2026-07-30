@@ -1,0 +1,1 @@
+Run the one-time existing photo standardization to longest edge 1800px, JPEG quality 82, without upscaling smaller photos.
