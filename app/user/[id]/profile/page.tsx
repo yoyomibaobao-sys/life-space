@@ -24,6 +24,7 @@ import {
   getCreateContentBlockedText,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
+import { getAccountRegistrationSummary } from "@/lib/account-number";
 
 type MarketPostDisplayRow = MarketPostRow & {
   display_cover_image_url?: string | null;
@@ -130,6 +131,9 @@ export default function PublicUserProfilePage() {
   const profile = data.profile;
   const stats = data.stats;
   const isSelf = viewerId === userId;
+  const accountRegistrationSummary = getAccountRegistrationSummary(
+    profile?.account_number
+  );
 
   if (!profile) {
     return (
@@ -229,6 +233,14 @@ export default function PublicUserProfilePage() {
             <div style={{ marginTop: 8, fontSize: 14, color: "#63705d" }}>
               所在地区：{formatRegionDisplayFromProfile(profile)}
             </div>
+            {profile.account_number ? (
+              <div style={{ marginTop: 6, fontSize: 13, color: "#73806d" }}>
+                账号编号：{profile.account_number}
+                {accountRegistrationSummary
+                  ? ` · ${accountRegistrationSummary}`
+                  : ""}
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

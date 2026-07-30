@@ -105,6 +105,8 @@ insert into public.user_memberships (
   user_id,
   plan,
   status,
+  trial_started_at,
+  trial_ends_at,
   paid_until,
   storage_limit_bytes,
   base_market_post_limit
@@ -113,6 +115,8 @@ select
   cloud_user,
   'basic',
   'active',
+  now(),
+  now() + interval '6 months',
   now() + interval '1 year',
   123,
   7
@@ -122,6 +126,8 @@ select
   trial_user,
   'trial',
   'trialing',
+  now(),
+  now() + interval '1 year',
   null,
   300000000,
   3
@@ -131,6 +137,8 @@ select
   expired_user,
   'basic',
   'active',
+  now(),
+  now() + interval '6 months',
   now() + interval '1 day',
   456,
   9
@@ -140,6 +148,8 @@ select
   other_user,
   'basic',
   'active',
+  now(),
+  now() + interval '6 months',
   now() + interval '1 year',
   789,
   11

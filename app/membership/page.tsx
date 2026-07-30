@@ -79,6 +79,9 @@ export default function MembershipPage() {
   const marketQuotaText = membership
     ? `${Number(membership.market_post_limit || 0)} 条同时在线`
     : "0 条";
+  const isSignupTrialAllowance = Boolean(
+    membership?.plan === "trial" && !membership.trial_ends_at
+  );
 
   const isLocalFreeUser = Boolean(userEmail && !membership && !errorMsg);
 
@@ -104,8 +107,32 @@ export default function MembershipPage() {
 
           <div style={statusGridStyle}>
             <InfoItem label="当前方案" value={membership ? getMembershipPlanLabel(membership.plan) : "本地免费"} hint={membership ? getMembershipStatusLabel(membership.status) : "未开通云空间"} />
-            <InfoItem label="有效期至" value={membership ? formatMembershipDate(endDate) : "不适用"} hint={membership ? "到期前可继续使用对应权限" : "本地记录没有到期日"} />
-            <InfoItem label="云空间容量" value={membership ? storageLimitText : "0 B"} hint="正式云空间为 1GB" />
+            <InfoItem
+              label="有效期至"
+              value={
+                membership
+                  ? isSignupTrialAllowance
+                    ? "不设固定期限"
+                    : formatMembershipDate(endDate)
+                  : "不适用"
+              }
+              hint={
+                membership
+                  ? isSignupTrialAllowance
+                    ? "30MB体验额度用完后可升级"
+                    : "到期前可继续使用对应权限"
+                  : "本地记录没有到期日"
+              }
+            />
+            <InfoItem
+              label="云空间容量"
+              value={membership ? storageLimitText : "0 B"}
+              hint={
+                isSignupTrialAllowance
+                  ? "首批注册体验额度；正式云空间为1GB"
+                  : "正式云空间为1GB"
+              }
+            />
             <InfoItem
               label="集市发布"
               value={marketQuotaText}
@@ -146,7 +173,7 @@ export default function MembershipPage() {
             <div style={sectionLabelStyle}>尚未登录</div>
             <h2 style={sectionTitleStyle}>注册后仍可使用本地项目</h2>
             <p style={mutedTextStyle}>
-              注册是推荐路径，但注册不等于上传云端。本地离线版免费；开通云空间后再同步、备份和公开发现。
+              注册是推荐路径，但注册不等于上传云端。本地离线版免费；首批20名正式注册用户在名额和存储安全线允许时可获得30MB云空间体验。
             </p>
           </div>
 
@@ -160,6 +187,14 @@ export default function MembershipPage() {
           </div>
         </section>
       )}
+
+      <section style={trialNoticeStyle}>
+        <div style={sectionLabelStyle}>首批注册体验</div>
+        <h2 style={noteTitleStyle}>前20名正式账号可获30MB云空间</h2>
+        <p style={mutedTextStyle}>
+          体验额度不设6个月期限，是否获得以注册成功时的剩余名额和平台存储安全线为准。30MB用完后仍可继续使用本地记录；开通正式云空间后，容量升级为1GB。内部测试账号不占这20个名额。
+        </p>
+      </section>
 
       <section style={plansGridStyle}>
         <PlanCard
@@ -264,7 +299,7 @@ export default function MembershipPage() {
         <h2 style={noteTitleStyle}>使用规则</h2>
         <ul style={ruleListStyle}>
           <li>本地离线版免费，数据只保存在当前设备的 App 私有存储中。</li>
-          <li>注册不等于上传云端；开通云空间后才同步、备份和多设备使用。</li>
+          <li>注册不等于上传云端；首批20名正式账号可获30MB体验额度，其他账号仍可免费使用本地功能。</li>
           <li>上传云空间不等于公开，记录可设为仅自己可见或公开发现。</li>
           <li>已有本地记录开通后默认同步为云空间私密，不会自动公开。</li>
           <li>云空间包含 1GB 容量，集市最多同时发布中 30 条；暂不提供集市加量包。</li>
@@ -361,6 +396,12 @@ const statusCardStyle: CSSProperties = {
   display: "grid",
   gap: 18,
   marginBottom: 20,
+};
+
+const trialNoticeStyle: CSSProperties = {
+  ...cardStyle,
+  marginBottom: 20,
+  background: "#f7faf3",
 };
 
 const sectionLabelStyle: CSSProperties = {

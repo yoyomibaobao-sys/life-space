@@ -17,6 +17,10 @@ export type AppProfile = {
   view_count?: number | null;
   storage_used?: number | null;
   storage_limit?: number | null;
+  account_number?: string | null;
+  registration_year?: number | null;
+  registration_sequence?: number | null;
+  is_internal_test?: boolean | null;
   created_at?: string | null;
   updated_at?: string | null;
   is_public?: boolean | null;

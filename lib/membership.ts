@@ -24,7 +24,7 @@ export function normalizeMembershipRpcResult(data: unknown): MyMembership | null
 export function getMembershipPlanLabel(plan?: string | null) {
   switch (plan) {
     case "trial":
-      return "试用云空间（过渡）";
+      return "云空间体验";
     case "basic":
       return "云空间";
     case "large":

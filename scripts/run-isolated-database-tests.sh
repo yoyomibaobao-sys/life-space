@@ -9,6 +9,7 @@ readonly maintenance_test="supabase/tests/storage_upload_maintenance_window_dyna
 readonly membership_test="supabase/tests/membership_access_dynamic.sql"
 readonly storage_concurrency_test="supabase/tests/storage_upload_capacity_reservations_concurrency.sql"
 readonly market_concurrency_test="supabase/tests/market_post_limit_concurrency.sql"
+readonly signup_rollout_concurrency_test="supabase/tests/signup_account_rollout_concurrency.sql"
 readonly database_container="supabase_db_${project_id}"
 
 cd "${project_root}"
@@ -28,7 +29,8 @@ for required_path in \
   "${maintenance_test}" \
   "${membership_test}" \
   "${storage_concurrency_test}" \
-  "${market_concurrency_test}"; do
+  "${market_concurrency_test}" \
+  "${signup_rollout_concurrency_test}"; do
   if [[ ! -e "${required_path}" ]]; then
     echo "Missing required path: ${required_path}" >&2
     exit 1
@@ -163,7 +165,8 @@ while IFS= read -r test_file; do
   fi
 
   if [[ "${test_file}" == "${storage_concurrency_test}" ||
-        "${test_file}" == "${market_concurrency_test}" ]]; then
+        "${test_file}" == "${market_concurrency_test}" ||
+        "${test_file}" == "${signup_rollout_concurrency_test}" ]]; then
     run_concurrency_sql_file "${test_file}"
     continue
   fi
