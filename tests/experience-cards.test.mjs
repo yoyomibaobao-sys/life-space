@@ -7,7 +7,7 @@ async function source(path) {
 }
 
 const migrationPath =
-  "supabase/migrations/20260730075346_add_experience_cards_v1.sql";
+  "supabase/migrations/20260730090616_add_experience_cards_v1.sql";
 
 test("experience cards reference 3-12 source records without copying content or media", async () => {
   const migration = await source(migrationPath);
