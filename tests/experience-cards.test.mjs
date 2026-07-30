@@ -130,13 +130,26 @@ test("the experience-card UI covers selection, preview, publication, source link
 });
 
 test("experience cards have a persistent personal-space entry", async () => {
-  const [profile, navbar] = await Promise.all([
+  const [profile, navbar, archivePage, archiveCards] = await Promise.all([
     source("app/profile/page.tsx"),
     source("components/navbar.tsx"),
+    source("app/archive/[id]/page.tsx"),
+    source("components/archive-detail/ArchiveExperienceCards.tsx"),
   ]);
 
   assert.match(profile, /href="\/experience-cards"/);
   assert.match(profile, /label="我的经验卡"/);
+  assert.match(profile, /value: "space", label: "个人空间"/);
   assert.match(navbar, /activePaths: \["\/archive", "\/experience-cards"\]/);
   assert.match(navbar, /pathname\.startsWith\("\/experience-cards"\)/);
+  assert.match(navbar, />\s*关注\s*</);
+  assert.match(navbar, />\s*个人空间\s*</);
+  assert.doesNotMatch(navbar, />\s*我的关注\s*</);
+  assert.doesNotMatch(navbar, />\s*本人空间\s*</);
+
+  assert.match(archivePage, /<ArchiveExperienceCards/);
+  assert.match(archiveCards, /\.eq\("archive_id", archiveId\)/);
+  assert.match(archiveCards, /\/experience-cards\/\$\{item\.id\}\/edit/);
+  assert.match(archiveCards, /deleteExperienceCard\(deleteTarget\.id\)/);
+  assert.match(archiveCards, /if \(!isOwner\) return null/);
 });

@@ -11,7 +11,7 @@ export default function FollowHero({
     <section style={heroStyle}>
       <div>
         <div style={eyebrowStyle}>持续追踪中心</div>
-        <h1 style={titleStyle}>我的关注</h1>
+        <h1 style={titleStyle}>关注</h1>
         <div style={subtitleStyle}>查看你正在追踪的项目和用户最近发生了什么。</div>
       </div>
 

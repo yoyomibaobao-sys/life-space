@@ -157,7 +157,7 @@ function ProfileFlowersContent() {
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link href="/profile" style={linkStyle}>返回资料页</Link>
-            <Link href="/follow" style={linkStyle}>我的关注</Link>
+            <Link href="/follow" style={linkStyle}>关注</Link>
           </div>
         </div>
 

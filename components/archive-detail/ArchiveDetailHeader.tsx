@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import ArchiveDetailHeaderView, {
   type ArchiveProfileFieldSave,
   type ArchiveProfileSystemNameValue,
@@ -38,6 +39,7 @@ export default function ArchiveDetailHeader({
   onSaveSource,
   onSaveNote,
   onSaveArchiveSummary,
+  profileExtra,
 }: {
   mode: ArchiveMode;
   archive: ArchiveDetailArchive;
@@ -62,6 +64,7 @@ export default function ArchiveDetailHeader({
   onSaveSource?: (value: string) => Promise<void> | void;
   onSaveNote?: (value: string) => Promise<void> | void;
   onSaveArchiveSummary?: (value: string) => Promise<void> | void;
+  profileExtra?: ReactNode;
 }) {
   const archiveCategory = normalizeArchiveCategory(archive.category);
   const createdAtText = formatDate(archive.created_at) || "暂无";
@@ -258,6 +261,7 @@ export default function ArchiveDetailHeader({
           </>
         ) : null
       }
+      profileExtra={profileExtra}
     />
   );
 }

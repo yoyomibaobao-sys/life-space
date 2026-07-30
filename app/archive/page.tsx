@@ -1813,7 +1813,7 @@ export default function ArchivePage() {
                 fontWeight: 700,
               }}
             >
-              我的空间
+              个人空间
             </h1>
           </div>
         </section>
