@@ -835,6 +835,13 @@ export default function ProfilePage() {
                   endedArchiveCount={endedArchiveCount}
                 />
                 <StatLinkCard
+                  href="/experience-cards"
+                  label="我的经验卡"
+                  value="进入"
+                  hint=""
+                  compact
+                />
+                <StatLinkCard
                   href="/profile/recent"
                   label="最近看过的项目"
                   value="进入"
@@ -870,6 +877,12 @@ export default function ProfilePage() {
                   label="我的项目"
                   value={String(stats.archiveCount)}
                   hint={`公开 ${stats.publicArchiveCount} · 仅自己可见 ${privateArchiveCount}`}
+                />
+                <StatLinkCard
+                  href="/experience-cards"
+                  label="我的经验卡"
+                  value="进入"
+                  hint="管理草稿和已公开的经验时间线"
                 />
                 <StatLinkCard
                   href="/profile/recent"

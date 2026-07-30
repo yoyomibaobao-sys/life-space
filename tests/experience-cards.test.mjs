@@ -128,3 +128,15 @@ test("the experience-card UI covers selection, preview, publication, source link
   assert.match(list, /我的经验卡/);
   assert.match(archiveHeader, /生成经验卡/);
 });
+
+test("experience cards have a persistent personal-space entry", async () => {
+  const [profile, navbar] = await Promise.all([
+    source("app/profile/page.tsx"),
+    source("components/navbar.tsx"),
+  ]);
+
+  assert.match(profile, /href="\/experience-cards"/);
+  assert.match(profile, /label="我的经验卡"/);
+  assert.match(navbar, /activePaths: \["\/archive", "\/experience-cards"\]/);
+  assert.match(navbar, /pathname\.startsWith\("\/experience-cards"\)/);
+});
