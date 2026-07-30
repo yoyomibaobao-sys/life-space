@@ -1,0 +1,82 @@
+name: Temporary Legacy Media Compression Batch 4
+
+on:
+  pull_request:
+    paths:
+      - ".github/run-legacy-compression-batch-4.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  compress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick jq
+
+      - name: Compress and migrate fourth five legacy photos
+        env:
+          ENDPOINT: https://eidltoikfpnrzxruvawf.supabase.co/functions/v1/admin-compress-legacy-media
+          OPERATION_ID: batch4-legacy-compression-20260730-H7v3Qk9mT2pL6sNx
+        run: |
+          set -euo pipefail
+          ids=(
+            "6629b44b-e7d8-4b34-a808-6157441cef27"
+            "9ff45ad7-5c4b-44c1-a4c0-fbf158b80759"
+            "8c3357f8-e076-4109-8146-eb1dfea5129e"
+            "ca7a05ac-503c-4518-b337-adf8b56a71bc"
+            "4b23c01f-0526-4aca-9dd9-1726161f7b18"
+          )
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          for id in "${ids[@]}"; do
+            echo "Preparing $id"
+            prepare_json="$(curl --fail-with-body --silent --show-error \
+              -X POST "$ENDPOINT" \
+              -H 'Content-Type: application/json' \
+              -H "x-operation-id: $OPERATION_ID" \
+              --data "{\"action\":\"prepare\",\"media_id\":\"$id\"}")"
+            echo "$prepare_json" | jq -e '.ok == true' >/dev/null
+
+            signed_url="$(echo "$prepare_json" | jq -r '.signed_url')"
+            old_bytes="$(echo "$prepare_json" | jq -r '.old_bytes')"
+            input="$workdir/$id-input.jpg"
+            output="$workdir/$id-output.jpg"
+
+            curl --fail --silent --show-error --location "$signed_url" --output "$input"
+            convert "$input" \
+              -auto-orient \
+              -strip \
+              -resize '2048x2048>' \
+              -sampling-factor 4:2:0 \
+              -interlace Plane \
+              -quality 82 \
+              "$output"
+
+            dimensions="$(identify -format '%w %h' "$output")"
+            width="${dimensions%% *}"
+            height="${dimensions##* }"
+            new_bytes="$(stat -c%s "$output")"
+            test "$new_bytes" -gt 1000
+            test "$new_bytes" -lt "$old_bytes"
+            test "$width" -le 2048
+            test "$height" -le 2048
+
+            echo "Committing $id: $old_bytes -> $new_bytes bytes, ${width}x${height}"
+            commit_json="$(curl --fail-with-body --silent --show-error \
+              -X POST "$ENDPOINT" \
+              -H "x-operation-id: $OPERATION_ID" \
+              -F 'action=commit' \
+              -F "media_id=$id" \
+              -F "width=$width" \
+              -F "height=$height" \
+              -F "file=@$output;type=image/jpeg")"
+            echo "$commit_json" | jq -e '.ok == true and .old_deleted == true' >/dev/null
+            echo "$commit_json" | jq '{media_id,old_bytes,new_bytes,saved_bytes,width,height,old_deleted}'
+          done
