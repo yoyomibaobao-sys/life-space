@@ -9,7 +9,7 @@ async function source(path) {
 const migrationPath =
   "supabase/migrations/20260726140000_align_membership_access_and_market_limits.sql";
 const signupRolloutMigrationPath =
-  "supabase/migrations/20260730054747_add_signup_account_rollout.sql";
+  "supabase/migrations/20260730063743_add_signup_account_rollout.sql";
 
 test("new registrations use the bounded 30 MB signup rollout instead of the legacy automatic trial", async () => {
   const [migration, signupRolloutMigration, registration] = await Promise.all([

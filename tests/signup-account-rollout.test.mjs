@@ -7,7 +7,7 @@ async function source(path) {
 }
 
 const migrationPath =
-  "supabase/migrations/20260730054747_add_signup_account_rollout.sql";
+  "supabase/migrations/20260730063743_add_signup_account_rollout.sql";
 
 test("formal account numbers are global, permanent, and exclude existing internal accounts", async () => {
   const migration = await source(migrationPath);
