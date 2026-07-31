@@ -365,7 +365,7 @@ const descriptionStyle: CSSProperties = {
 
 const contentGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(190px, 280px) minmax(0, 1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 250px), 1fr))",
   gap: 18,
   alignItems: "start",
 };

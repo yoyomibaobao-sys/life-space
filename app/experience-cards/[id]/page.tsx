@@ -5,6 +5,7 @@ import { use, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
+import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
 import { showToast } from "@/components/Toast";
 import {
   deleteExperienceCard,
@@ -227,6 +228,10 @@ export default function ExperienceCardPage({
           records={detail.records}
         />
       </section>
+
+      {isOwner ? (
+        <ExperienceCardVideoPanel detail={detail} />
+      ) : null}
 
       <footer style={footerStyle}>
         <div>
