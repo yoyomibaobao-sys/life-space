@@ -6,21 +6,27 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("the homepage uses the confirmed brand copy without a local-record entry", async () => {
+test("the homepage uses the confirmed natural-life-space copy without a local-record entry", async () => {
   const homepage = await source("app/page.tsx");
 
   for (const text of [
-    "你所照料的、陪伴着的生命",
-    "也滋养、成就着彼此",
-    "有时，记录这些过程",
-    "让生命有迹可循",
+    "有时·耕作",
+    "LifeSpace",
+    "自然生活空间",
+    "一个围绕耕作、生态与自然生活展开的空间",
+    "记录四时变化",
+    "留下发现、收获与成长",
+    "让生命被看见",
+    "让生活有迹可循",
     "留其间，守其度",
-    "顺其时，共养成",
-    "一个围绕耕作展开的生活空间",
+    "顺其时，共生长",
   ]) {
     assert.match(homepage, new RegExp(text));
   }
 
+  assert.doesNotMatch(homepage, /你所照料的、陪伴着的生命/);
+  assert.doesNotMatch(homepage, /顺其时，共养成/);
+  assert.doesNotMatch(homepage, /一个围绕耕作展开的生活空间/);
   assert.doesNotMatch(homepage, /href="\/local"/);
   assert.doesNotMatch(homepage, /本地记录/);
   assert.doesNotMatch(homepage, /trialNote|cloudNote/);
@@ -44,6 +50,30 @@ test("plant navigation and visible plant links consistently use guidance wording
 
   assert.match(files[0], />\s*指引\s*</);
   assert.match(files[1], /植物指引/);
+});
+
+test("other project copy consistently refers to natural life", async () => {
+  const [homepage, categories] = await Promise.all([
+    source("app/page.tsx"),
+    source("lib/archive-categories.ts"),
+  ]);
+
+  for (const file of [homepage, categories]) {
+    assert.match(file, /其他自然生活相关项目/);
+    assert.doesNotMatch(file, /其他耕作相关项目/);
+  }
+});
+
+test("desktop navigation places guidance before marketplace without changing mobile order", async () => {
+  const navbar = await source("components/navbar.tsx");
+  const desktopStart = navbar.indexOf("<div style={getNavItemsWrapStyle(isCompact)}>");
+  const mobileStart = navbar.indexOf("function MobileBottomNav");
+  const desktopNav = navbar.slice(desktopStart, mobileStart);
+  const mobileNav = navbar.slice(mobileStart);
+
+  assert.ok(desktopStart >= 0 && mobileStart > desktopStart);
+  assert.ok(desktopNav.indexOf('href="/plant"') < desktopNav.indexOf('href="/market"'));
+  assert.ok(mobileNav.indexOf('label: "集市"') < mobileNav.indexOf('label: "指引"'));
 });
 
 test("local recording is offered only after a network registration or login failure", async () => {

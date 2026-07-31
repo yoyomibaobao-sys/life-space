@@ -25,7 +25,7 @@ export const archiveCategoryOptions: {
   {
     value: "other",
     label: "其他",
-    description: "其他耕作相关项目",
+    description: "其他自然生活相关项目",
   },
 ];
 

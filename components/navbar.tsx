@@ -431,12 +431,12 @@ export default function Navbar() {
             个人空间
           </NavItem>
 
-          <NavItem href="/market" active={isActive("/market")}>
-            集市
-          </NavItem>
-
           <NavItem href="/plant" active={isActive("/plant")}>
             指引
+          </NavItem>
+
+          <NavItem href="/market" active={isActive("/market")}>
+            集市
           </NavItem>
         </div>
       </div>
