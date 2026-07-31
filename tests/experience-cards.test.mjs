@@ -153,3 +153,30 @@ test("experience cards have a persistent personal-space entry", async () => {
   assert.match(archiveCards, /deleteExperienceCard\(deleteTarget\.id\)/);
   assert.match(archiveCards, /if \(!isOwner\) return null/);
 });
+
+
+test("experience cards generate a local looping H.264 MP4 with burned record text", async () => {
+  const [detail, panel, renderer, packageJson] = await Promise.all([
+    source("app/experience-cards/[id]/page.tsx"),
+    source("components/experience-card/ExperienceCardVideoPanel.tsx"),
+    source("lib/experience-card-video.ts"),
+    source("package.json"),
+  ]);
+
+  assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\}/);
+  assert.match(panel, /生成竖屏MP4/);
+  assert.match(panel, /所有被选记录都会进入视频/);
+  assert.match(panel, /原文字自动烧录为字幕/);
+  assert.match(panel, /<video[\s\S]*?loop[\s\S]*?playsInline/);
+  assert.match(panel, /navigator\.canShare/);
+  assert.match(panel, /不上传云端，也不占云空间/);
+  assert.match(panel, /repeat\(auto-fit/);
+
+  assert.match(renderer, /new Mp4OutputFormat\(\{ fastStart: "in-memory" \}\)/);
+  assert.match(renderer, /codec: "avc"/);
+  assert.match(renderer, /EXPERIENCE_CARD_VIDEO_WIDTH = 720/);
+  assert.match(renderer, /EXPERIENCE_CARD_VIDEO_HEIGHT = 1280/);
+  assert.match(renderer, /splitExperienceCardVideoText\(record\.note\)/);
+  assert.match(renderer, /detail\.records\.forEach/);
+  assert.match(packageJson, /"mediabunny"/);
+});
