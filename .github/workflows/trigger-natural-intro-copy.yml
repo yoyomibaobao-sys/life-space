@@ -1,0 +1,61 @@
+name: Trigger natural intro update
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/natural-intro-and-web-nav
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply the prepared transformation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path(".github/workflows/apply-natural-intro-copy.yml").read_text(encoding="utf-8")
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "\n          PY\n"
+          block = workflow.split(start_marker, 1)[1].split(end_marker, 1)[0]
+          code = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in block.splitlines()
+          )
+          exec(compile(code, "prepared-natural-intro-update.py", "exec"), {"__name__": "__main__"})
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run rule tests
+        run: node --test tests/*.test.mjs
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Commit changes and remove temporary workflows
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-natural-intro-copy.yml
+          rm -f .github/workflows/trigger-natural-intro-copy.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/page.tsx components/navbar.tsx lib/archive-categories.ts tests/homepage-guide-copy.test.mjs .github/workflows/apply-natural-intro-copy.yml .github/workflows/trigger-natural-intro-copy.yml
+          git commit -m "Align natural intro copy and web navigation"
+          git push origin HEAD:agent/natural-intro-and-web-nav
