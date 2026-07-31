@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: agent/experience-card-local-mp4
+          ref: agent/experience-card-local-mp4-v2
 
       - uses: actions/setup-node@v4
         with:
@@ -91,7 +91,7 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
           PY
 
       - name: Install locked dependencies
-        run: npm install mediabunny@1.44.2 --save-exact
+        run: npm install mediabunny@1.51.0 --save-exact
 
       - name: Run rule tests
         run: node --test tests/*.test.mjs
@@ -114,4 +114,4 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add AGENTS.md app/experience-cards/[id]/page.tsx components/experience-card/ExperienceCardVideoPanel.tsx lib/experience-card-video.ts tests/experience-cards.test.mjs package.json package-lock.json .github/workflows/apply-experience-card-local-mp4.yml .github/workflows/trigger-experience-card-local-mp4.yml
           git commit -m "Add local experience card MP4 generation"
-          git push origin HEAD:agent/experience-card-local-mp4
+          git push origin HEAD:agent/experience-card-local-mp4-v2
