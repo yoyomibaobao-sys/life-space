@@ -8,10 +8,12 @@ import { supabase } from "@/lib/supabase";
 const copy = {
   zhCN: {
     brand: "有时·耕作",
+    englishBrand: "LifeSpace",
+    spaceTitle: "自然生活空间",
+    subtitle: "一个围绕耕作、生态与自然生活展开的空间。",
     poem:
-      "你所照料的、陪伴着的生命，\n也滋养、成就着彼此。\n\n有时，记录这些过程，\n让生命有迹可循。",
-    spirit: "留其间，守其度，\n顺其时，共养成。",
-    subtitle: "一个围绕耕作展开的生活空间。",
+      "记录四时变化，\n留下发现、收获与成长，\n让生命被看见，\n让生活有迹可循。",
+    spirit: "留其间，守其度，\n顺其时，共生长。",
     register: "注册",
     login: "登录",
     discover: "浏览发现",
@@ -34,7 +36,7 @@ const copy = {
       },
       {
         title: "其他",
-        description: "记录其他耕作相关项目。",
+        description: "记录其他自然生活相关项目。",
       },
     ],
   },
@@ -123,25 +125,65 @@ export default function Home() {
         >
           <h1
             style={{
-              margin: "0 0 16px",
+              margin: "0 0 12px",
               color: "#243024",
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "center",
+              gap: 10,
+              flexWrap: "wrap",
               fontSize: "clamp(28px, 5vw, 38px)",
               fontWeight: 600,
               letterSpacing: 1.6,
               lineHeight: 1.2,
             }}
           >
-            {t.brand}
+            <span>{t.brand}</span>
+            <span
+              style={{
+                color: "#587052",
+                fontSize: "0.5em",
+                fontWeight: 600,
+                letterSpacing: 0.5,
+              }}
+            >
+              {t.englishBrand}
+            </span>
           </h1>
+
+          <p
+            style={{
+              margin: "0 auto 14px",
+              color: "#496347",
+              fontSize: "clamp(16px, 2.6vw, 19px)",
+              fontWeight: 700,
+              letterSpacing: 2,
+              lineHeight: 1.5,
+            }}
+          >
+            {t.spaceTitle}
+          </p>
+
+          <p
+            style={{
+              maxWidth: 680,
+              margin: "0 auto 24px",
+              color: "#71806d",
+              fontSize: 14.5,
+              lineHeight: 1.7,
+            }}
+          >
+            {t.subtitle}
+          </p>
 
           <p
             style={{
               maxWidth: 680,
               margin: "0 auto 16px",
               color: "#2f3b2f",
-              fontSize: "clamp(20px, 3.2vw, 26px)",
+              fontSize: "clamp(18px, 3vw, 23px)",
               fontWeight: 500,
-              lineHeight: 1.6,
+              lineHeight: 1.8,
               whiteSpace: "pre-line",
             }}
           >
@@ -151,7 +193,7 @@ export default function Home() {
           <div
             style={{
               display: "inline-block",
-              margin: "28px auto 0",
+              margin: "24px auto 0",
               padding: "13px 24px",
               borderRadius: 18,
               border: "1px solid #d9e5cf",
@@ -174,17 +216,6 @@ export default function Home() {
               {t.spirit}
             </p>
           </div>
-
-          <p
-            style={{
-              marginTop: 16,
-              color: "#8a9584",
-              fontSize: 14,
-              lineHeight: 1.6,
-            }}
-          >
-            {t.subtitle}
-          </p>
 
           <div
             style={{
