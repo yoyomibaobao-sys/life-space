@@ -58,10 +58,11 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(discoverCard, /className=\{styles\.imageStats\}/);
   assert.ok(
     discoverCard.indexOf("item.public_record_count") <
-      discoverCard.indexOf('<div className={styles.body}>')
+      discoverCard.indexOf("{updateDate} 更新")
   );
-  assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: start/);
-  assert.doesNotMatch(discoverCss, /\.body \{[^}]*flex: 1/);
+  assert.doesNotMatch(discoverCard, /getProjectSystemName|species_name_snapshot/);
+  assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: stretch/);
+  assert.match(discoverCss, /\.body \{[^}]*flex: 1/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
 });
 

@@ -22,14 +22,6 @@ function formatShortLocalDate(value?: string | null) {
   return `${year}/${month}/${day}`;
 }
 
-function getProjectSystemName(item: DiscoveryProjectFeedItem) {
-  const value =
-    item.category === "plant"
-      ? item.species_name_snapshot
-      : item.system_name;
-  return value?.trim() || null;
-}
-
 export function DiscoverProjectCard({
   item,
   eager = false,
@@ -41,7 +33,6 @@ export function DiscoverProjectCard({
   const title = item.archive_title?.trim() || "未命名项目";
   const categoryLabel = getArchiveCategoryLabel(item.category);
   const categoryIcon = getArchiveCategoryIcon(item.category);
-  const systemName = getProjectSystemName(item);
   const updateDate = formatShortLocalDate(item.public_activity_at);
   const durationDays = getDurationDays(
     item.archive_created_at,
@@ -91,21 +82,7 @@ export function DiscoverProjectCard({
 
       </div>
 
-      <div className={styles.imageStats}>
-        {item.public_record_count} 条记录
-        <span aria-hidden="true">·</span>
-        {durationDays} 天
-        <span aria-hidden="true">·</span>
-        {item.public_comment_count} 条评论
-      </div>
-
       <div className={styles.body}>
-        {systemName ? (
-          <div className={styles.systemName}>
-            {systemName}
-          </div>
-        ) : null}
-
         <h2 className={styles.title}>
           {title}
         </h2>
@@ -115,7 +92,26 @@ export function DiscoverProjectCard({
             {item.card_summary}
           </p>
         ) : null}
+      </div>
 
+      <div className={styles.imageStats}>
+        <span>{item.public_record_count} 条记录</span>
+        {updateDate ? (
+          <span className={styles.statSegment}>
+            <span aria-hidden="true">·</span>
+            <time dateTime={item.public_activity_at || undefined}>
+              {updateDate} 更新
+            </time>
+          </span>
+        ) : null}
+        <span className={styles.statSegment}>
+          <span aria-hidden="true">·</span>
+          <span>{durationDays} 天</span>
+        </span>
+        <span className={styles.statSegment}>
+          <span aria-hidden="true">·</span>
+          <span>{item.public_comment_count} 条评论</span>
+        </span>
       </div>
 
       <div className={styles.ownerRow}>
@@ -123,9 +119,6 @@ export function DiscoverProjectCard({
           {ownerName}
           {region ? ` · ${region}` : ""}
         </span>
-        {updateDate ? (
-          <time className={styles.updateDate}>{updateDate} 更新</time>
-        ) : null}
       </div>
     </Link>
   );

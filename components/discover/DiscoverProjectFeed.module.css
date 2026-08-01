@@ -2,11 +2,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .card {
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -103,26 +104,11 @@
 
 .body {
   min-width: 0;
+  flex: 1;
   display: grid;
+  align-content: start;
   gap: 7px;
-  order: 1;
   padding: 11px 11px 0;
-}
-
-.systemName,
-.owner,
-.updateDate {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.systemName {
-  color: #6a7a67;
-  font-size: 11px;
-  line-height: 1.4;
-  font-weight: 700;
 }
 
 .summary {
@@ -139,7 +125,6 @@
 
 .imageStats {
   display: flex;
-  order: 2;
   gap: 4px;
   align-items: center;
   flex-wrap: wrap;
@@ -149,31 +134,35 @@
   line-height: 1.4;
 }
 
+.statSegment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
 .ownerRow {
   display: flex;
-  order: 3;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  min-height: 27px;
   margin: 7px 11px 11px;
   padding-top: 7px;
   border-top: 1px solid #edf1eb;
 }
 
 .owner {
+  min-width: 0;
+  overflow: hidden;
   color: #8a9488;
   font-size: 10px;
   line-height: 1.35;
-}
-
-.updateDate {
-  flex-shrink: 0;
-  color: #9aa39a;
-  font-size: 10px;
-  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .skeletonCard {
+  height: 100%;
   overflow: hidden;
   border: 1px solid #e7ece4;
   border-radius: 12px;
@@ -279,23 +268,18 @@
   }
 
   .body {
-    padding: 12px;
+    padding: 12px 12px 0;
   }
 
   .title {
     font-size: 16px;
   }
 
-  .systemName {
-    font-size: 13px;
-  }
-
   .summary {
     font-size: 12px;
   }
 
-  .updateDate,
-  .stats,
+  .imageStats,
   .owner {
     font-size: 11px;
   }

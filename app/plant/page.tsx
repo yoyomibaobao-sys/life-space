@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   type EnvironmentFilters,
@@ -97,8 +97,9 @@ const indoorOptions = [
   { value: "long_term_ok", label: "可长期室内" },
 ];
 
-
-
+const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
+const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
+const MAX_RECENT_SEARCHES = 8;
 
 type PlantItem = {
   id: string;
@@ -159,6 +160,23 @@ function uniqueTextList(items: unknown[]) {
     });
 }
 
+function normalizeRecentSearches(items: unknown[]) {
+  const seen = new Set<string>();
+
+  return items
+    .map((item) => String(item ?? "").trim())
+    .filter((item) => {
+      if (!item) return false;
+
+      const key = item.toLowerCase();
+      if (seen.has(key)) return false;
+
+      seen.add(key);
+      return true;
+    })
+    .slice(0, MAX_RECENT_SEARCHES);
+}
+
 function FilterSelect({
   label,
   value,
@@ -213,10 +231,20 @@ export default function PlantIndexPage() {
   const [parameters, setParameters] = useState<PlantParameterLite[]>([]);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
+  const [interestCount, setInterestCount] = useState<number | null>(null);
+  const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [searchStateRestored, setSearchStateRestored] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const desktopSearchWrapRef = useRef<HTMLDivElement>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+  const resultsSectionRef = useRef<HTMLElement>(null);
+  const pendingScrollYRef = useRef<number | null>(null);
   const [filters, setFilters] = useState<EnvironmentFilters>({
     light: "all",
     water: "all",
@@ -234,6 +262,64 @@ export default function PlantIndexPage() {
     window.addEventListener("resize", updateViewportMode);
 
     return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const storedRecent = JSON.parse(
+          window.localStorage.getItem(PLANT_SEARCH_HISTORY_KEY) || "[]"
+        );
+        setRecentSearches(
+          normalizeRecentSearches(Array.isArray(storedRecent) ? storedRecent : [])
+        );
+      } catch {
+        setRecentSearches([]);
+      }
+
+      try {
+        const storedState = JSON.parse(
+          window.sessionStorage.getItem(PLANT_SEARCH_STATE_KEY) || "null"
+        ) as {
+          query?: unknown;
+          searchInput?: unknown;
+          activeCategory?: unknown;
+          filters?: Partial<EnvironmentFilters>;
+          scrollY?: unknown;
+        } | null;
+
+        if (!storedState) {
+          setSearchStateRestored(true);
+          return;
+        }
+
+        const restoredQuery = String(storedState.query ?? "").trim();
+        const restoredInput = String(storedState.searchInput ?? restoredQuery).trim();
+        const restoredCategory = String(storedState.activeCategory ?? "all");
+        const restoredFilters = storedState.filters || {};
+
+        setQuery(restoredQuery);
+        setSearchInput(restoredInput);
+        setActiveCategory(restoredCategory || "all");
+        setFilters({
+          light: String(restoredFilters.light || "all"),
+          water: String(restoredFilters.water || "all"),
+          temperature: String(restoredFilters.temperature || "all"),
+          scene: String(restoredFilters.scene || "all"),
+          indoor: String(restoredFilters.indoor || "all"),
+        });
+
+        if (Number.isFinite(Number(storedState.scrollY))) {
+          pendingScrollYRef.current = Math.max(0, Number(storedState.scrollY));
+        }
+        setSearchStateRestored(true);
+      } catch {
+        window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
+        setSearchStateRestored(true);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -261,6 +347,7 @@ export default function PlantIndexPage() {
         { data: aliasData },
         { data: overviewData },
         { data: parameterData },
+        interestCountResult,
       ] = await Promise.all([
         supabase
           .from("plant_species")
@@ -287,17 +374,66 @@ export default function PlantIndexPage() {
           : user
             ? loadPlantCoreParametersCompat(null).then((data) => ({ data }))
             : Promise.resolve({ data: [] as PlantParameterLite[] }),
+
+        user
+          ? supabase
+              .from("user_plant_interests")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", user.id)
+          : Promise.resolve({ count: null }),
       ]);
 
       setPlants(plantData || []);
       setAliases(aliasData || []);
       setBasicOverviews((overviewData || []) as BasicOverview[]);
       setParameters(parameterData || []);
+      setInterestCount(user ? interestCountResult.count ?? 0 : null);
       setLoading(false);
     }
 
     load();
   }, []);
+
+  useEffect(() => {
+    if (loading || !searchStateRestored || pendingScrollYRef.current === null) return;
+
+    const scrollY = pendingScrollYRef.current;
+    pendingScrollYRef.current = null;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
+    });
+  }, [loading, searchStateRestored]);
+
+  useEffect(() => {
+    if (!searchPanelOpen || isMobileViewport) return;
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!desktopSearchWrapRef.current?.contains(event.target as Node)) {
+        setSearchPanelOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => window.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [searchPanelOpen, isMobileViewport]);
+
+  useEffect(() => {
+    if (!isMobileSearchOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsMobileSearchOpen(false);
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isMobileSearchOpen]);
 
   const aliasMap = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -416,6 +552,24 @@ export default function PlantIndexPage() {
     hasCloudAccess,
   ]);
 
+  const searchSuggestions = useMemo(() => {
+    const keyword = normalize(searchInput);
+    if (!keyword) return [];
+
+    return plants
+      .filter((plant) => {
+        const searchable = [
+          plant.common_name,
+          plant.scientific_name,
+          plant.slug,
+          ...(aliasMap[plant.id] || []),
+        ];
+
+        return searchable.some((item) => normalize(item).includes(keyword));
+      })
+      .slice(0, 6);
+  }, [plants, aliasMap, searchInput]);
+
   const hasActiveEnvironmentFilters =
     hasCloudAccess &&
     (filters.light !== "all" ||
@@ -438,8 +592,327 @@ export default function PlantIndexPage() {
     });
   }
 
+  function persistSearchState(nextQuery = query, nextInput = searchInput) {
+    try {
+      window.sessionStorage.setItem(
+        PLANT_SEARCH_STATE_KEY,
+        JSON.stringify({
+          query: nextQuery,
+          searchInput: nextInput,
+          activeCategory,
+          filters,
+          scrollY: window.scrollY,
+        })
+      );
+    } catch {
+      // Search still works if browser storage is unavailable.
+    }
+  }
+
+  function rememberSearch(value: string) {
+    const keyword = value.trim();
+    if (!keyword) return;
+
+    setRecentSearches((current) => {
+      const next = normalizeRecentSearches([keyword, ...current]);
+
+      try {
+        window.localStorage.setItem(PLANT_SEARCH_HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        // Keep the in-memory list when browser storage is unavailable.
+      }
+
+      return next;
+    });
+  }
+
+  function executeSearch(value = searchInput) {
+    const keyword = value.trim();
+
+    setSearchInput(keyword);
+    setQuery(keyword);
+    setSearchPanelOpen(false);
+    setIsMobileSearchOpen(false);
+    rememberSearch(keyword);
+    persistSearchState(keyword, keyword);
+
+    window.requestAnimationFrame(() => {
+      resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function openSearch() {
+    setSearchPanelOpen(true);
+    if (isMobileViewport) setIsMobileSearchOpen(true);
+  }
+
+  function removeRecentSearch(value: string) {
+    setRecentSearches((current) => {
+      const next = current.filter((item) => item !== value);
+
+      try {
+        window.localStorage.setItem(PLANT_SEARCH_HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        // Keep the in-memory list when browser storage is unavailable.
+      }
+
+      return next;
+    });
+  }
+
+  function clearRecentSearches() {
+    setRecentSearches([]);
+
+    try {
+      window.localStorage.removeItem(PLANT_SEARCH_HISTORY_KEY);
+    } catch {
+      // The visible list is still cleared when browser storage is unavailable.
+    }
+  }
+
+  function renderSearchAssist() {
+    if (searchInput.trim()) {
+      return (
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ color: "#71806d", fontSize: 12, fontWeight: 700 }}>
+            名称联想
+          </div>
+          {searchSuggestions.length > 0 ? (
+            searchSuggestions.map((plant) => {
+              const displayName = plant.common_name || plant.scientific_name || "未命名植物";
+
+              return (
+                <Link
+                  key={plant.id}
+                  href={`/plant/${plant.id}`}
+                  onClick={() => {
+                    rememberSearch(searchInput);
+                    persistSearchState(searchInput.trim(), searchInput.trim());
+                  }}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 11px",
+                    borderRadius: 10,
+                    color: "#2f3c2d",
+                    textDecoration: "none",
+                    background: "#f7faf5",
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    <strong style={{ display: "block", fontSize: 14 }}>{displayName}</strong>
+                    {plant.scientific_name && plant.scientific_name !== displayName ? (
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: 2,
+                          color: "#7b8578",
+                          fontSize: 12,
+                          fontStyle: "italic",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {plant.scientific_name}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span aria-hidden="true" style={{ color: "#789174", flexShrink: 0 }}>
+                    →
+                  </span>
+                </Link>
+              );
+            })
+          ) : (
+            <div style={{ color: "#7b8578", fontSize: 13, lineHeight: 1.6 }}>
+              没有匹配的名称联想，仍可点击“搜索”查看完整结果。
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: "grid", gap: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <span style={{ color: "#71806d", fontSize: 12, fontWeight: 700 }}>最近搜索</span>
+          {recentSearches.length > 0 ? (
+            <button
+              type="button"
+              onClick={clearRecentSearches}
+              style={{
+                border: 0,
+                padding: 0,
+                background: "transparent",
+                color: "#8a9287",
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              清空
+            </button>
+          ) : null}
+        </div>
+
+        {recentSearches.length > 0 ? (
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {recentSearches.map((item) => (
+              <span
+                key={item}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  border: "1px solid #dfe8dc",
+                  borderRadius: 999,
+                  background: "#f8fbf7",
+                  overflow: "hidden",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => executeSearch(item)}
+                  style={{
+                    border: 0,
+                    padding: "7px 5px 7px 10px",
+                    background: "transparent",
+                    color: "#496345",
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  {item}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`删除最近搜索：${item}`}
+                  onClick={() => removeRecentSearch(item)}
+                  style={{
+                    border: 0,
+                    padding: "7px 9px 7px 4px",
+                    background: "transparent",
+                    color: "#98a095",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: "#929990", fontSize: 13 }}>最近还没有搜索。</div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main style={{ padding: isMobileViewport ? "10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
+      {isMobileSearchOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="搜索植物"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1200,
+            background: "#f7f8f5",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px",
+              borderBottom: "1px solid #e6e9e3",
+              background: "rgba(255,255,255,0.96)",
+            }}
+          >
+            <button
+              type="button"
+              aria-label="返回植物指引"
+              onClick={() => setIsMobileSearchOpen(false)}
+              style={{
+                width: 36,
+                height: 36,
+                border: 0,
+                borderRadius: 10,
+                background: "transparent",
+                color: "#52604f",
+                cursor: "pointer",
+                fontSize: 22,
+              }}
+            >
+              ←
+            </button>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                executeSearch();
+              }}
+              style={{ display: "flex", gap: 7, minWidth: 0, flex: 1 }}
+            >
+              <input
+                ref={mobileSearchInputRef}
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="搜索植物名、别名或拉丁名"
+                aria-label="搜索植物名、别名或拉丁名"
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: 38,
+                  borderRadius: 11,
+                  border: "1px solid #dfe5dc",
+                  padding: "0 11px",
+                  background: "#fff",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                  outlineColor: "#89ad82",
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  minWidth: 58,
+                  height: 38,
+                  border: "1px solid #477a43",
+                  borderRadius: 11,
+                  padding: "0 12px",
+                  background: "#4f824b",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 700,
+                }}
+              >
+                搜索
+              </button>
+            </form>
+          </div>
+
+          <div style={{ padding: "14px 16px 28px" }}>{renderSearchAssist()}</div>
+        </div>
+      ) : null}
+
       <section
         style={{
           padding: isMobileViewport ? 10 : 22,
@@ -449,97 +922,130 @@ export default function PlantIndexPage() {
           boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
         }}
       >
-        {isMobileViewport ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "auto minmax(0, 1fr)",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <h1
-              style={{
-                margin: 0,
-                color: "#1f2d1f",
-                fontSize: 15,
-                fontWeight: 800,
-                whiteSpace: "nowrap",
-              }}
-            >
-              植物指引
-            </h1>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索植物"
-              style={{
-                width: "100%",
-                minWidth: 0,
-                height: 34,
-                borderRadius: 10,
-                border: "1px solid #e5e7eb",
-                padding: "0 10px",
-                fontSize: 13,
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-        ) : (
-          <>
-            <div>
-              <div style={{ color: "#4CAF50", fontSize: 13, marginBottom: 8 }}>
-                植物指引
-              </div>
-
-              <h1 style={{ margin: 0, fontSize: 28 }}>
-                植物指引
-              </h1>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="输入搜索植物"
-                style={{
-                  width: "100%",
-                  height: 44,
-                  borderRadius: 12,
-                  border: "1px solid #e5e7eb",
-                  padding: "0 14px",
-                  fontSize: 14,
-                }}
-              />
-            </div>
-          </>
-        )}
-
         <div
           style={{
             display: "flex",
-            justifyContent: "flex-end",
-            marginTop: isMobileViewport ? 8 : 12,
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
           }}
         >
+          <h1
+            style={{
+              margin: 0,
+              color: "#1f2d1f",
+              fontSize: isMobileViewport ? 20 : 28,
+              fontWeight: 800,
+              whiteSpace: "nowrap",
+            }}
+          >
+            植物指引
+          </h1>
           <Link
             href={isSignedIn ? "/archive/interests" : "/login"}
             style={{
               display: "inline-flex",
               alignItems: "center",
-              minHeight: 34,
-              padding: "5px 12px",
+              minHeight: isMobileViewport ? 30 : 34,
+              padding: isMobileViewport ? "4px 9px" : "5px 12px",
               border: "1px solid #dbe7d7",
               borderRadius: 999,
-              background: "#f7fbf5",
+              background: "#fbfdf9",
               color: "#42663f",
-              fontSize: 13,
+              fontSize: isMobileViewport ? 12 : 13,
               fontWeight: 750,
               textDecoration: "none",
+              whiteSpace: "nowrap",
             }}
           >
-            我的收藏
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ marginRight: 5 }}
+            >
+              <path d="M6.5 4.5h11v15l-5.5-3.4-5.5 3.4z" />
+            </svg>
+            我的收藏{isSignedIn && interestCount !== null ? `（${interestCount}）` : ""}
           </Link>
+        </div>
+
+        <div
+          ref={desktopSearchWrapRef}
+          style={{ position: "relative", marginTop: isMobileViewport ? 10 : 16 }}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              executeSearch();
+            }}
+            style={{ display: "flex", gap: isMobileViewport ? 7 : 8 }}
+          >
+            <input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onFocus={openSearch}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setSearchPanelOpen(false);
+              }}
+              placeholder="搜索植物名、别名或拉丁名"
+              aria-label="搜索植物名、别名或拉丁名"
+              style={{
+                width: "100%",
+                minWidth: 0,
+                height: isMobileViewport ? 38 : 44,
+                borderRadius: 12,
+                border: "1px solid #dfe5dc",
+                padding: isMobileViewport ? "0 11px" : "0 14px",
+                background: "#fff",
+                fontSize: isMobileViewport ? 13 : 14,
+                boxSizing: "border-box",
+                outlineColor: "#89ad82",
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                minWidth: isMobileViewport ? 58 : 72,
+                height: isMobileViewport ? 38 : 44,
+                border: "1px solid #477a43",
+                borderRadius: 12,
+                padding: isMobileViewport ? "0 12px" : "0 18px",
+                background: "#4f824b",
+                color: "#fff",
+                cursor: "pointer",
+                fontSize: isMobileViewport ? 13 : 14,
+                fontWeight: 700,
+              }}
+            >
+              搜索
+            </button>
+          </form>
+
+          {!isMobileViewport && searchPanelOpen ? (
+            <div
+              style={{
+                position: "absolute",
+                top: 52,
+                left: 0,
+                right: 80,
+                zIndex: 20,
+                padding: 13,
+                border: "1px solid #dfe5dc",
+                borderRadius: 14,
+                background: "#fff",
+                boxShadow: "0 14px 32px rgba(35,50,32,0.12)",
+              }}
+            >
+              {renderSearchAssist()}
+            </div>
+          ) : null}
         </div>
 
         {!isMobileViewport ? (
@@ -712,7 +1218,7 @@ export default function PlantIndexPage() {
         </div>
       </section>
 
-      <section style={{ marginTop: 18 }}>
+      <section ref={resultsSectionRef} style={{ marginTop: 18, scrollMarginTop: 12 }}>
         <div
           style={{
             display: "flex",
@@ -723,10 +1229,32 @@ export default function PlantIndexPage() {
             flexWrap: "wrap",
           }}
         >
-          {!isMobileViewport ? <h2 style={{ margin: 0, fontSize: 18 }}>全部植物</h2> : null}
+          {!isMobileViewport || query ? (
+            <h2 style={{ margin: 0, fontSize: isMobileViewport ? 16 : 18 }}>
+              {query ? `“${query}”的搜索结果` : "全部植物"}
+            </h2>
+          ) : null}
 
-          <div style={{ fontSize: 13, color: "#888" }}>
-            {loading ? "加载中..." : `${filteredPlants.length} 个结果`}
+          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <span style={{ fontSize: 13, color: "#888" }}>
+              {loading ? "加载中..." : `${filteredPlants.length} 个结果`}
+            </span>
+            {query ? (
+              <button
+                type="button"
+                onClick={() => executeSearch("")}
+                style={{
+                  border: 0,
+                  padding: 0,
+                  background: "transparent",
+                  color: "#587552",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                清除搜索
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -776,6 +1304,7 @@ export default function PlantIndexPage() {
                 <Link
                   key={plant.id}
                   href={`/plant/${plant.id}`}
+                  onClick={() => persistSearchState()}
                   style={{
                     display: "block",
                     border: "1px solid #eee",

@@ -129,6 +129,16 @@ export default function ExperienceCardPage({
   const endDate = formatExperienceCardDate(
     detail.records[detail.records.length - 1]?.record_time
   );
+  const authorName = detail.author?.username || "用户";
+  const systemName =
+    detail.archive.system_name?.trim() ||
+    detail.archive.species_name_snapshot?.trim() ||
+    "";
+  const systemNameHref = getSystemNameHref({
+    category: detail.archive.category,
+    speciesId: detail.archive.species_id,
+    systemName,
+  });
   return (
     <main style={pageStyle}>
       <header style={topBarStyle}>
@@ -154,8 +164,6 @@ export default function ExperienceCardPage({
         <div style={introStyle}>
           <h1 style={titleStyle}>{detail.card.title}</h1>
           <div style={metaLineStyle}>
-            <span>{detail.author?.username || "用户"}</span>
-            <span aria-hidden="true">·</span>
             <span>
               {startDate && endDate
                 ? startDate === endDate
@@ -171,6 +179,38 @@ export default function ExperienceCardPage({
                   ? "公开已暂停"
                   : "私密草稿"}
             </span>
+          </div>
+          <div style={sourceLinksStyle} aria-label="经验卡来源">
+            <Link
+              href={`/user/${detail.card.user_id}`}
+              style={sourceLinkStyle}
+            >
+              <span style={sourceLabelStyle}>用户</span>
+              <span style={sourceValueStyle}>{authorName}</span>
+              <span aria-hidden="true">→</span>
+            </Link>
+            <Link
+              href={`/archive/${detail.archive.id}`}
+              style={sourceLinkStyle}
+            >
+              <span style={sourceLabelStyle}>项目</span>
+              <span style={sourceValueStyle}>
+                {detail.archive.title || "查看项目"}
+              </span>
+              <span aria-hidden="true">→</span>
+            </Link>
+            {systemNameHref ? (
+              <Link href={systemNameHref} style={sourceLinkStyle}>
+                <span style={sourceLabelStyle}>系统名</span>
+                <span style={sourceValueStyle}>{systemName}</span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            ) : (
+              <span style={sourceMissingStyle}>
+                <span style={sourceLabelStyle}>系统名</span>
+                <span style={sourceValueStyle}>未填写</span>
+              </span>
+            )}
           </div>
         </div>
       </article>
@@ -291,6 +331,31 @@ export default function ExperienceCardPage({
   );
 }
 
+function getSystemNameHref({
+  category,
+  speciesId,
+  systemName,
+}: {
+  category: string | null;
+  speciesId: string | null;
+  systemName: string;
+}) {
+  if (!systemName) return null;
+  if (category === "plant" && speciesId) return `/plant/${speciesId}`;
+
+  const params = new URLSearchParams();
+  if (
+    category === "plant" ||
+    category === "system" ||
+    category === "insect_fish" ||
+    category === "other"
+  ) {
+    params.set("category", category);
+  }
+  params.set("name", systemName);
+  return `/discover/search?${params.toString()}`;
+}
+
 const pageStyle: CSSProperties = {
   maxWidth: 820,
   margin: "0 auto",
@@ -337,6 +402,45 @@ const metaLineStyle: CSSProperties = {
   color: "#7b8778",
   fontSize: 12,
   lineHeight: 1.5,
+};
+
+const sourceLinksStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: "7px 14px",
+  marginTop: 11,
+};
+
+const sourceLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minWidth: 0,
+  maxWidth: "100%",
+  gap: 6,
+  color: "#4e634a",
+  fontSize: 13,
+  lineHeight: 1.5,
+  textDecoration: "none",
+};
+
+const sourceMissingStyle: CSSProperties = {
+  ...sourceLinkStyle,
+  color: "#7b8778",
+};
+
+const sourceLabelStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#899486",
+  fontSize: 12,
+};
+
+const sourceValueStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontWeight: 750,
 };
 
 const warningStyle: CSSProperties = {

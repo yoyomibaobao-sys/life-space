@@ -642,7 +642,8 @@ function getMobileCreateLabel(pathname: string) {
 }
 
 function getMobilePageTitle(pathname: string) {
-  if (pathname === "/" || pathname === "/archive") return "个人空间";
+  if (pathname === "/archive") return "我的空间";
+  if (pathname === "/") return "个人空间";
   if (pathname.startsWith("/experience-cards")) return "我的经验卡";
   if (pathname.startsWith("/discover")) return "发现";
   if (pathname.startsWith("/follow")) return "关注";

@@ -127,6 +127,7 @@ export default function ArchivePage() {
   const [deleteArchiveTarget, setDeleteArchiveTarget] = useState<ArchiveItem | null>(null);
   const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
@@ -207,6 +208,7 @@ export default function ArchivePage() {
         setSubTags([]);
         setSpeciesList([]);
         setMembership(null);
+        setExperienceCardCount(0);
         return;
       }
 
@@ -218,6 +220,7 @@ export default function ArchivePage() {
         { data: aliasData },
         { data: archiveFollowRows },
         membershipResult,
+        experienceCardCountResult,
       ] = await Promise.all([
         supabase.from("archives").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
         supabase.from("group_tags").select("*").eq("user_id", user.id),
@@ -233,6 +236,10 @@ export default function ArchivePage() {
           .eq("plant_species.is_active", true),
         supabase.from("archive_follows").select("archive_id"),
         supabase.rpc("get_my_membership"),
+        supabase
+          .from("experience_cards")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id),
       ]);
 
       const aliasesBySpecies = new Map<string, string[]>();
@@ -392,6 +399,14 @@ export default function ArchivePage() {
         setMembership(null);
       } else {
         setMembership(normalizeMembershipRpcResult(membershipResult.data));
+      }
+      if (experienceCardCountResult.error) {
+        console.error(
+          "load my experience card count error:",
+          experienceCardCountResult.error
+        );
+      } else {
+        setExperienceCardCount(Number(experienceCardCountResult.count || 0));
       }
     } finally {
       loadingRef.current = false;
@@ -994,9 +1009,6 @@ export default function ArchivePage() {
   }, [archives, currentOwnerContext?.userId, localArchives, speciesList]);
 
   const archiveCount = archives.length;
-  const publicArchiveCount = archives.filter((item) => item.is_public).length;
-  const privateArchiveCount = archiveCount - publicArchiveCount;
-  const endedArchiveCount = archives.filter((item) => item.status === "ended").length;
   const archiveCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1796,46 +1808,23 @@ export default function ArchivePage() {
       }}
     >
       {!isMobileViewport ? (
-        <section
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 16,
-            marginBottom: 10,
-          }}
-        >
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 26,
-                color: "#1f2d1f",
-                fontWeight: 700,
-              }}
-            >
-              个人空间
-            </h1>
-          </div>
+        <section style={personalSpaceHeaderStyle}>
+          <h1 style={personalSpaceTitleStyle}>我的空间</h1>
+          <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
+            <span>我的经验卡（{experienceCardCount}）</span>
+            <span style={personalSpaceExperienceCardArrowStyle}>→</span>
+          </Link>
         </section>
-      ) : null}
-
-      <section style={personalSpaceEntryRowStyle}>
-        <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
-          <span>我的经验卡</span>
-          <span style={personalSpaceExperienceCardArrowStyle}>→</span>
-        </Link>
-      </section>
+      ) : (
+        <section style={personalSpaceEntryRowStyle}>
+          <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
+            <span>我的经验卡（{experienceCardCount}）</span>
+            <span style={personalSpaceExperienceCardArrowStyle}>→</span>
+          </Link>
+        </section>
+      )}
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
-        statsText={
-          !isMobileViewport ? (
-            <>
-              我的项目 {archiveCount + localArchives.length} 个 · 云空间 {archiveCount} · 本地 {localArchives.length} · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount}
-              {endedArchiveCount > 0 ? " · 已结束 " + endedArchiveCount : ""}
-            </>
-          ) : undefined
-        }
         sourceOptions={[
           { value: "all", label: "全部", count: archiveCount + localArchives.length },
           { value: "cloud", label: "云空间", count: archiveCount },
@@ -2224,6 +2213,20 @@ function LocalArchiveFilters({
     </>
   );
 }
+
+const personalSpaceHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  marginBottom: 10,
+};
+
+const personalSpaceTitleStyle: CSSProperties = {
+  margin: 0,
+  color: "#1f2d1f",
+  fontSize: 26,
+  fontWeight: 700,
+};
 
 const personalSpaceEntryRowStyle: CSSProperties = {
   marginBottom: 8,
