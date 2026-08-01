@@ -62,9 +62,28 @@ function buildDefaultImageSelection(
   return Object.fromEntries(
     detail.records.map((record) => [
       record.id,
-      getRecordImageOptions(record)[0]?.sourceUrl || null,
+      getRecordImageOptions(record).map((option) => option.sourceUrl),
     ])
   );
+}
+
+function getSelectedImageUrls(
+  detail: ExperienceCardDetail,
+  selection: ExperienceCardVideoImageSelection
+) {
+  return detail.records.flatMap((record) => selection[record.id] || []);
+}
+
+function getDefaultCoverImageUrl(
+  detail: ExperienceCardDetail,
+  selection: ExperienceCardVideoImageSelection
+) {
+  const selectedUrls = getSelectedImageUrls(detail, selection);
+  const savedCoverUrl =
+    detail.cover?.display_url || detail.cover?.display_thumb_url || null;
+  return savedCoverUrl && selectedUrls.includes(savedCoverUrl)
+    ? savedCoverUrl
+    : selectedUrls[0] || null;
 }
 
 export default function ExperienceCardVideoPanel({
@@ -85,6 +104,10 @@ export default function ExperienceCardVideoPanel({
     useState<ExperienceCardVideoImageSelection>(() =>
       buildDefaultImageSelection(detail)
     );
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(() => {
+    const selection = buildDefaultImageSelection(detail);
+    return getDefaultCoverImageUrl(detail, selection);
+  });
 
   const imageOptionsByRecordId = useMemo(
     () =>
@@ -96,16 +119,31 @@ export default function ExperienceCardVideoPanel({
       ),
     [detail]
   );
-  const selectedImageCount = useMemo(
+  const totalImageCount = useMemo(
     () =>
-      detail.records.filter((record) =>
-        Boolean(selectedImageByRecordId[record.id])
-      ).length,
-    [detail.records, selectedImageByRecordId]
+      Array.from(imageOptionsByRecordId.values()).reduce(
+        (total, options) => total + options.length,
+        0
+      ),
+    [imageOptionsByRecordId]
   );
-  const scenes = useMemo(
-    () => buildExperienceCardVideoScenes(detail, selectedImageByRecordId),
+  const selectedImageUrls = useMemo(
+    () => getSelectedImageUrls(detail, selectedImageByRecordId),
     [detail, selectedImageByRecordId]
+  );
+  const selectedImageCount = selectedImageUrls.length;
+  const effectiveCoverImageUrl =
+    coverImageUrl && selectedImageUrls.includes(coverImageUrl)
+      ? coverImageUrl
+      : selectedImageUrls[0] || null;
+  const scenes = useMemo(
+    () =>
+      buildExperienceCardVideoScenes(
+        detail,
+        selectedImageByRecordId,
+        effectiveCoverImageUrl
+      ),
+    [detail, effectiveCoverImageUrl, selectedImageByRecordId]
   );
   const duration = useMemo(
     () => getExperienceCardVideoDuration(scenes),
@@ -117,7 +155,9 @@ export default function ExperienceCardVideoPanel({
   );
 
   useEffect(() => {
-    setSelectedImageByRecordId(buildDefaultImageSelection(detail));
+    const nextSelection = buildDefaultImageSelection(detail);
+    setSelectedImageByRecordId(nextSelection);
+    setCoverImageUrl(getDefaultCoverImageUrl(detail, nextSelection));
     clearGeneratedVideo();
     setErrorText("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,14 +228,34 @@ export default function ExperienceCardVideoPanel({
     setVideoBlob(null);
   }
 
-  function selectRecordImage(recordId: string, imageUrl: string | null) {
+  function toggleRecordImage(recordId: string, imageUrl: string) {
+    if (generating) return;
+    clearGeneratedVideo();
+    setErrorText("");
+    setSelectedImageByRecordId((current) => {
+      const currentUrls = current[recordId] || [];
+      const nextUrls = currentUrls.includes(imageUrl)
+        ? currentUrls.filter((url) => url !== imageUrl)
+        : [...currentUrls, imageUrl];
+      return { ...current, [recordId]: nextUrls };
+    });
+  }
+
+  function clearRecordImages(recordId: string) {
     if (generating) return;
     clearGeneratedVideo();
     setErrorText("");
     setSelectedImageByRecordId((current) => ({
       ...current,
-      [recordId]: imageUrl,
+      [recordId]: [],
     }));
+  }
+
+  function selectCoverImage(imageUrl: string) {
+    if (generating || !selectedImageUrls.includes(imageUrl)) return;
+    clearGeneratedVideo();
+    setErrorText("");
+    setCoverImageUrl(imageUrl);
   }
 
   async function handleGenerate() {
@@ -288,17 +348,17 @@ export default function ExperienceCardVideoPanel({
       </div>
 
       <p style={descriptionStyle}>
-        自动串联全部来源记录，文字烧录为字幕；每条记录可单独选图或不用图片。本机生成，不上传云端，也不占云空间。
+        自动串联全部来源记录，记录文字烧录为字幕；每张照片都可单独选取，并可从已选照片中指定视频封面。本机生成，不上传云端，也不占云空间。
       </p>
 
       <details style={imageSelectorStyle}>
         <summary style={imageSelectorSummaryStyle}>
-          选择记录图片（已选择 {selectedImageCount}/{detail.records.length}）
+          选择图片与封面（已选 {selectedImageCount}/{totalImageCount} 张）
         </summary>
         <div style={imageSelectorListStyle}>
           {detail.records.map((record, index) => {
             const options = imageOptionsByRecordId.get(record.id) || [];
-            const selectedUrl = selectedImageByRecordId[record.id] || null;
+            const selectedUrls = selectedImageByRecordId[record.id] || [];
 
             return (
               <div key={record.id} style={imageSelectorRecordStyle}>
@@ -308,30 +368,44 @@ export default function ExperienceCardVideoPanel({
                 <div style={imageChoiceGridStyle}>
                   <button
                     type="button"
-                    onClick={() => selectRecordImage(record.id, null)}
-                    aria-pressed={!selectedUrl}
-                    style={imageNoneButtonStyle(!selectedUrl)}
+                    onClick={() => clearRecordImages(record.id)}
+                    aria-pressed={selectedUrls.length === 0}
+                    style={imageNoneButtonStyle(selectedUrls.length === 0)}
                   >
                     不使用图片
                   </button>
                   {options.map((option) => {
-                    const active = selectedUrl === option.sourceUrl;
+                    const active = selectedUrls.includes(option.sourceUrl);
+                    const isCover =
+                      active && effectiveCoverImageUrl === option.sourceUrl;
                     return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() =>
-                          selectRecordImage(record.id, option.sourceUrl)
-                        }
-                        aria-pressed={active}
-                        style={imageChoiceButtonStyle(active)}
-                      >
-                        <img
-                          src={option.previewUrl}
-                          alt={`第${index + 1}条记录可选图片`}
-                          style={imageChoiceImageStyle}
-                        />
-                      </button>
+                      <div key={option.id} style={imageChoiceItemStyle}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleRecordImage(record.id, option.sourceUrl)
+                          }
+                          aria-pressed={active}
+                          style={imageChoiceButtonStyle(active)}
+                        >
+                          <img
+                            src={option.previewUrl}
+                            alt={`第${index + 1}条记录可选图片`}
+                            style={imageChoiceImageStyle}
+                          />
+                          <span style={imageSelectedBadgeStyle(active)}>
+                            {active ? "已选" : "选择"}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!active}
+                          onClick={() => selectCoverImage(option.sourceUrl)}
+                          style={coverChoiceButtonStyle(isCover, active)}
+                        >
+                          {isCover ? "当前封面" : "设为封面"}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -517,12 +591,20 @@ const imageSelectorRecordTitleStyle: CSSProperties = {
 
 const imageChoiceGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(68px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))",
   gap: 7,
+  alignItems: "start",
+};
+
+const imageChoiceItemStyle: CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 5,
 };
 
 function imageChoiceButtonStyle(active: boolean): CSSProperties {
   return {
+    position: "relative",
     aspectRatio: "1 / 1",
     padding: 2,
     border: active ? "2px solid #5f8b59" : "1px solid #dce5d8",
@@ -530,6 +612,38 @@ function imageChoiceButtonStyle(active: boolean): CSSProperties {
     background: active ? "#edf5e9" : "#f8faf7",
     overflow: "hidden",
     cursor: "pointer",
+  };
+}
+
+function imageSelectedBadgeStyle(active: boolean): CSSProperties {
+  return {
+    position: "absolute",
+    left: 5,
+    bottom: 5,
+    padding: "2px 6px",
+    borderRadius: 999,
+    background: active ? "rgba(55,91,52,0.88)" : "rgba(25,36,25,0.62)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 800,
+  };
+}
+
+function coverChoiceButtonStyle(
+  isCover: boolean,
+  enabled: boolean
+): CSSProperties {
+  return {
+    minHeight: 28,
+    padding: "3px 5px",
+    border: isCover ? "1px solid #5f8b59" : "1px solid #dce5d8",
+    borderRadius: 8,
+    background: isCover ? "#e8f2e4" : "#fff",
+    color: isCover ? "#365c34" : "#71806e",
+    fontSize: 10,
+    fontWeight: 800,
+    cursor: enabled ? "pointer" : "not-allowed",
+    opacity: enabled ? 1 : 0.45,
   };
 }
 
