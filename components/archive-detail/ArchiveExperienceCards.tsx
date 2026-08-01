@@ -14,6 +14,7 @@ import { supabase } from "@/lib/supabase";
 type ArchiveExperienceCardsProps = {
   archiveId: string;
   isOwner: boolean;
+  onCountChange?: (count: number) => void;
 };
 
 type ArchiveExperienceCardItem = ExperienceCardRow & {
@@ -23,16 +24,15 @@ type ArchiveExperienceCardItem = ExperienceCardRow & {
 export default function ArchiveExperienceCards({
   archiveId,
   isOwner,
+  onCountChange,
 }: ArchiveExperienceCardsProps) {
   const [items, setItems] = useState<ArchiveExperienceCardItem[]>([]);
-  const [loading, setLoading] = useState(isOwner);
+  const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] =
     useState<ArchiveExperienceCardItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!isOwner) return;
-
     setLoading(true);
     const { data, error } = await supabase
       .from("experience_cards")
@@ -49,6 +49,18 @@ export default function ArchiveExperienceCards({
     }
 
     const rows = (data || []) as ExperienceCardRow[];
+    onCountChange?.(rows.length);
+    if (!isOwner) {
+      setItems(
+        rows.map((row) => ({
+          ...row,
+          isPubliclyAvailable: true,
+        }))
+      );
+      setLoading(false);
+      return;
+    }
+
     const publicStates = await Promise.all(
       rows.map(async (row) => {
         const { data: publicData } = await supabase.rpc(
@@ -68,7 +80,7 @@ export default function ArchiveExperienceCards({
       }))
     );
     setLoading(false);
-  }, [archiveId, isOwner]);
+  }, [archiveId, isOwner, onCountChange]);
 
   useEffect(() => {
     void load();
@@ -91,28 +103,33 @@ export default function ArchiveExperienceCards({
     }
   }
 
-  if (!isOwner) return null;
-
   return (
-    <section style={sectionStyle} aria-label="该项目的经验卡">
+    <section
+      style={sectionStyle}
+      aria-label="项目经验卡"
+    >
       <div style={headerStyle}>
         <div>
-          <div style={eyebrowStyle}>该项目的经验卡</div>
+          <div style={eyebrowStyle}>经验卡</div>
           <div style={summaryStyle}>
             {loading ? "正在读取..." : `共 ${items.length} 张`}
           </div>
         </div>
-        <Link
-          href={`/experience-cards/new?archiveId=${archiveId}`}
-          style={createLinkStyle}
-        >
-          生成经验卡
-        </Link>
+        {isOwner ? (
+          <Link
+            href={`/experience-cards/new?archiveId=${archiveId}`}
+            style={createLinkStyle}
+          >
+            生成经验卡
+          </Link>
+        ) : null}
       </div>
 
       {!loading && items.length === 0 ? (
         <div style={emptyStyle}>
-          还没有经验卡。项目已有起点、过程和结果记录后，可以从这里生成。
+          {isOwner
+            ? "还没有经验卡。项目已有起点、过程和结果记录后，可以从这里生成。"
+            : "这个项目暂时没有公开经验卡。"}
         </div>
       ) : null}
 
@@ -122,13 +139,15 @@ export default function ArchiveExperienceCards({
             <article key={item.id} style={cardStyle}>
               <div style={cardMainStyle}>
                 <div style={statusRowStyle}>
-                  <span style={statusStyle(item.isPubliclyAvailable)}>
-                    {item.isPubliclyAvailable
-                      ? "已公开"
-                      : item.status === "published"
-                        ? "公开已暂停"
-                        : "私密草稿"}
-                  </span>
+                  {isOwner ? (
+                    <span style={statusStyle(item.isPubliclyAvailable)}>
+                      {item.isPubliclyAvailable
+                        ? "已公开"
+                        : item.status === "published"
+                          ? "公开已暂停"
+                          : "私密草稿"}
+                    </span>
+                  ) : null}
                   <span style={dateStyle}>
                     {formatExperienceCardDate(item.updated_at)}
                   </span>
@@ -146,19 +165,23 @@ export default function ArchiveExperienceCards({
                 >
                   查看
                 </Link>
-                <Link
-                  href={`/experience-cards/${item.id}/edit`}
-                  style={actionLinkStyle}
-                >
-                  编辑
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setDeleteTarget(item)}
-                  style={deleteButtonStyle}
-                >
-                  删除
-                </button>
+                {isOwner ? (
+                  <>
+                    <Link
+                      href={`/experience-cards/${item.id}/edit`}
+                      style={actionLinkStyle}
+                    >
+                      编辑
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(item)}
+                      style={deleteButtonStyle}
+                    >
+                      删除
+                    </button>
+                  </>
+                ) : null}
               </div>
             </article>
           ))}

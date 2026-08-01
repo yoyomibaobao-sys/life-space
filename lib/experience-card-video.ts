@@ -21,6 +21,7 @@ export type ExperienceCardVideoScene = {
   kind: VideoSceneKind;
   duration: number;
   title: string;
+  authorName: string;
   subtitle: string;
   text: string;
   tags: string[];
@@ -174,6 +175,7 @@ export function buildExperienceCardVideoScenes(
       kind: "intro",
       duration: INTRO_DURATION_SECONDS,
       title: detail.card.title,
+      authorName,
       subtitle: "有时·耕作 LifeSpace",
       text: `发布者 · ${authorName}`,
       tags: [],
@@ -210,6 +212,7 @@ export function buildExperienceCardVideoScenes(
         kind: "record",
         duration: text ? getTextDuration(text) : 3.8,
         title: detail.card.title,
+        authorName,
         subtitle: "有时·耕作 LifeSpace",
         text,
         tags,
@@ -231,6 +234,7 @@ export function buildExperienceCardVideoScenes(
     kind: "outro",
     duration: OUTRO_DURATION_SECONDS,
     title: "让生活有迹可循",
+    authorName,
     subtitle: websiteUrl,
     text: "有时·耕作 LifeSpace",
     tags: [],
@@ -396,6 +400,36 @@ function wrapText(
   return lines.length > 0 ? lines : [""];
 }
 
+function wrapTextWithFirstLineWidth(
+  context: CanvasRenderingContext2D,
+  text: string,
+  firstLineWidth: number,
+  remainingLineWidth: number
+) {
+  const lines: string[] = [];
+  let current = "";
+
+  for (const char of Array.from(text)) {
+    if (char === "\n") {
+      lines.push(current);
+      current = "";
+      continue;
+    }
+
+    const maxWidth = lines.length === 0 ? firstLineWidth : remainingLineWidth;
+    const next = current + char;
+    if (current && context.measureText(next).width > maxWidth) {
+      lines.push(current);
+      current = char;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current || lines.length === 0) lines.push(current);
+  return lines;
+}
+
 function fitWrappedText(
   context: CanvasRenderingContext2D,
   text: string,
@@ -412,6 +446,38 @@ function fitWrappedText(
 
   setFont(context, minimumSize, 600);
   return { lines: wrapText(context, text, maxWidth), size: minimumSize };
+}
+
+function fitInlineCaptionText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  firstLineWidth: number,
+  remainingLineWidth: number,
+  maxLines: number,
+  initialSize: number,
+  minimumSize: number
+) {
+  for (let size = initialSize; size >= minimumSize; size -= 2) {
+    setFont(context, size, 600);
+    const lines = wrapTextWithFirstLineWidth(
+      context,
+      text,
+      firstLineWidth,
+      remainingLineWidth
+    );
+    if (lines.length <= maxLines) return { lines, size };
+  }
+
+  setFont(context, minimumSize, 600);
+  return {
+    lines: wrapTextWithFirstLineWidth(
+      context,
+      text,
+      firstLineWidth,
+      remainingLineWidth
+    ),
+    size: minimumSize,
+  };
 }
 
 function drawCoverImage(
@@ -489,51 +555,47 @@ function drawBrandPill(
   counterText?: string
 ) {
   const x = 42 * scale;
-  const y = 42 * scale;
+  const y = 53 * scale;
   const right = 42 * scale;
-  const gap = 10 * scale;
-  const counterWidth = 82 * scale;
-  const pillWidth = counterText
+  const gap = 14 * scale;
+  const counterWidth = 68 * scale;
+  const counterHeight = 38 * scale;
+  const brandWidth = counterText
     ? width - x - right - counterWidth - gap
     : width - x - right;
-  const pillHeight = 52 * scale;
-  fillRoundedRect(
-    context,
-    x,
-    y,
-    pillWidth,
-    pillHeight,
-    26 * scale,
-    "rgba(20, 37, 23, 0.58)"
-  );
-  setFont(context, 17 * scale, 800);
-  context.fillStyle = "#ffffff";
+  setFont(context, 18 * scale, 800);
+  context.fillStyle = "rgba(255,255,255,0.66)";
   context.textBaseline = "middle";
   const brandText = contextText || "有时·耕作 LifeSpace";
+  context.shadowColor = "rgba(7,18,9,0.55)";
+  context.shadowBlur = 7 * scale;
   context.fillText(
-    ellipsizeCanvasText(context, brandText, pillWidth - 36 * scale),
-    x + 18 * scale,
-    y + pillHeight / 2 + scale
+    ellipsizeCanvasText(context, brandText, brandWidth),
+    x,
+    y
   );
+  context.shadowColor = "transparent";
+  context.shadowBlur = 0;
 
   if (counterText) {
     const counterX = width - right - counterWidth;
+    const counterY = y - counterHeight / 2;
     fillRoundedRect(
       context,
       counterX,
-      y,
+      counterY,
       counterWidth,
-      pillHeight,
-      26 * scale,
-      "rgba(255,255,255,0.88)"
+      counterHeight,
+      19 * scale,
+      "rgba(15,30,17,0.34)"
     );
-    setFont(context, 19 * scale, 800);
-    context.fillStyle = "#36523a";
+    setFont(context, 20 * scale, 700);
+    context.fillStyle = "rgba(255,255,255,0.82)";
     context.textAlign = "center";
     context.fillText(
       counterText,
       counterX + counterWidth / 2,
-      y + pillHeight / 2 + scale
+      y + scale
     );
     context.textAlign = "left";
   }
@@ -543,36 +605,39 @@ function drawBrandPill(
 
 function drawExperienceName(
   context: CanvasRenderingContext2D,
+  authorName: string,
   title: string,
   width: number,
   scale: number
 ) {
-  const x = 44 * scale;
+  const x = 42 * scale;
   const y = 108 * scale;
-  const height = 42 * scale;
-  const maxWidth = width - x - 44 * scale;
-  setFont(context, 20 * scale, 800);
+  const maxWidth = width - x - 42 * scale;
+  setFont(context, 22 * scale, 700);
+  const displayAuthor = ellipsizeCanvasText(
+    context,
+    authorName,
+    maxWidth * 0.42
+  );
+  const authorText = `${displayAuthor} · `;
+  const authorWidth = context.measureText(authorText).width;
+  setFont(context, 22 * scale, 800);
   const displayTitle = ellipsizeCanvasText(
     context,
     title,
-    maxWidth - 30 * scale
+    Math.max(0, maxWidth - authorWidth)
   );
-  const pillWidth = Math.min(
-    maxWidth,
-    context.measureText(displayTitle).width + 30 * scale
-  );
-  fillRoundedRect(
-    context,
-    x,
-    y,
-    pillWidth,
-    height,
-    21 * scale,
-    "rgba(20,37,23,0.58)"
-  );
-  context.fillStyle = "rgba(255,255,255,0.96)";
   context.textBaseline = "middle";
-  context.fillText(displayTitle, x + 15 * scale, y + height / 2 + scale);
+  context.shadowColor = "rgba(7,18,9,0.60)";
+  context.shadowBlur = 8 * scale;
+  setFont(context, 22 * scale, 700);
+  context.fillStyle = "rgba(255,255,255,0.76)";
+  context.fillText(authorText, x, y);
+  setFont(context, 22 * scale, 800);
+  context.fillStyle = "rgba(255,255,255,0.96)";
+  context.fillText(displayTitle, x + authorWidth, y);
+  context.shadowColor = "transparent";
+  context.shadowBlur = 0;
   context.textBaseline = "alphabetic";
 }
 
@@ -668,11 +733,11 @@ function drawRecordScene(
     drawSoftBackground(context, width, height, "green");
   }
 
-  const topOverlay = context.createLinearGradient(0, 0, 0, height * 0.28);
-  topOverlay.addColorStop(0, "rgba(12,27,15,0.72)");
+  const topOverlay = context.createLinearGradient(0, 0, 0, height * 0.25);
+  topOverlay.addColorStop(0, "rgba(12,27,15,0.56)");
   topOverlay.addColorStop(1, "rgba(12,27,15,0)");
   context.fillStyle = topOverlay;
-  context.fillRect(0, 0, width, height * 0.3);
+  context.fillRect(0, 0, width, height * 0.27);
 
   const hasCaption = Boolean(scene.text.trim());
   if (hasCaption) {
@@ -684,8 +749,8 @@ function drawRecordScene(
       height
     );
     bottomOverlay.addColorStop(0, "rgba(15,27,17,0)");
-    bottomOverlay.addColorStop(0.58, "rgba(15,27,17,0.34)");
-    bottomOverlay.addColorStop(1, "rgba(15,27,17,0.82)");
+    bottomOverlay.addColorStop(0.62, "rgba(15,27,17,0.24)");
+    bottomOverlay.addColorStop(1, "rgba(15,27,17,0.62)");
     context.fillStyle = bottomOverlay;
     context.fillRect(0, bottomOverlayStart, width, height - bottomOverlayStart);
   }
@@ -700,7 +765,7 @@ function drawRecordScene(
       ? `${scene.imageIndex + 1}/${scene.imageCount}`
       : undefined
   );
-  drawExperienceName(context, scene.title, width, scale);
+  drawExperienceName(context, scene.authorName, scene.title, width, scale);
 
   if (hasCaption) {
     const panelX = 42 * scale;
@@ -708,9 +773,14 @@ function drawRecordScene(
     const contentX = panelX + 28 * scale;
     const contentWidth = panelWidth - 56 * scale;
     const maxTextLines = image ? 4 : 6;
-    const fitted = fitWrappedText(
+    const dateFontSize = 22 * scale;
+    const dateGap = 14 * scale;
+    setFont(context, dateFontSize, 700);
+    const dateWidth = context.measureText(scene.date).width;
+    const fitted = fitInlineCaptionText(
       context,
       scene.text,
+      Math.max(80 * scale, contentWidth - dateWidth - dateGap),
       contentWidth,
       maxTextLines,
       (image ? 28 : 34) * scale,
@@ -718,17 +788,13 @@ function drawRecordScene(
     );
     const lines = fitted.lines.slice(0, maxTextLines);
     const lineHeight = fitted.size * (image ? 1.35 : 1.45);
-    const topPadding = 28 * scale;
-    const dateHeight = 24 * scale;
-    const dateGap = 18 * scale;
-    const bottomPadding = 28 * scale;
+    const topPadding = 22 * scale;
+    const bottomPadding = 22 * scale;
     const panelHeight =
       topPadding +
-      dateHeight +
-      dateGap +
       lines.length * lineHeight +
       bottomPadding;
-    const panelY = height - 46 * scale - panelHeight;
+    const panelY = height - 40 * scale - panelHeight;
 
     fillRoundedRect(
       context,
@@ -736,31 +802,30 @@ function drawRecordScene(
       panelY,
       panelWidth,
       panelHeight,
-      28 * scale,
-      "rgba(18,31,20,0.70)"
+      24 * scale,
+      "rgba(18,31,20,0.54)"
     );
 
-    let cursorY = panelY + topPadding + dateHeight;
-    setFont(context, 20 * scale, 700);
-    context.fillStyle = "rgba(255,255,255,0.70)";
+    const cursorY = panelY + topPadding + fitted.size;
+    setFont(context, dateFontSize, 700);
+    context.fillStyle = "rgba(255,255,255,0.76)";
     context.fillText(scene.date, contentX, cursorY);
-    cursorY += dateGap + lineHeight;
-
     setFont(context, fitted.size, 600);
     context.fillStyle = "#ffffff";
     lines.forEach((line, index) => {
-      context.fillText(line, contentX, cursorY + index * lineHeight);
+      const lineX = index === 0 ? contentX + dateWidth + dateGap : contentX;
+      context.fillText(line, lineX, cursorY + index * lineHeight);
     });
   }
 
-  context.fillStyle = "rgba(255,255,255,0.20)";
-  context.fillRect(42 * scale, height - 25 * scale, width - 84 * scale, 6 * scale);
-  context.fillStyle = "rgba(235,245,230,0.92)";
+  context.fillStyle = "rgba(255,255,255,0.14)";
+  context.fillRect(42 * scale, height - 20 * scale, width - 84 * scale, 3 * scale);
+  context.fillStyle = "rgba(235,245,230,0.72)";
   context.fillRect(
     42 * scale,
-    height - 25 * scale,
+    height - 20 * scale,
     (width - 84 * scale) * clamp(overallProgress, 0, 1),
-    6 * scale
+    3 * scale
   );
 }
 

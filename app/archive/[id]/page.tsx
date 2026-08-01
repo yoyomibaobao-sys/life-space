@@ -93,7 +93,7 @@ export default function ArchiveDetail({
   return <Content id={id} />;
 }
 
-type MobileArchiveDetailTab = "profile" | "records" | "experience" | "growth";
+type ArchiveDetailTab = "profile" | "records" | "experience" | "growth";
 
 type MobileArchiveEditableField =
   | "title"
@@ -131,7 +131,8 @@ function Content({ id }: { id: string }) {
   const [projectFollowSubmitting, setProjectFollowSubmitting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [mobileDetailTab, setMobileDetailTab] = useState<MobileArchiveDetailTab>("records");
+  const [activeDetailTab, setActiveDetailTab] = useState<ArchiveDetailTab>("records");
+  const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [mobileAddRecordOpen, setMobileAddRecordOpen] = useState(false);
   const [mobileArchiveEditingField, setMobileArchiveEditingField] =
     useState<MobileArchiveEditableField | null>(null);
@@ -204,7 +205,24 @@ function Content({ id }: { id: string }) {
       if (!archiveData.is_public && !isOwnerView) {
         setCycles([]);
         setRecords([]);
+        setExperienceCardCount(0);
         return;
+      }
+
+      const { count: visibleExperienceCardCount, error: experienceCardCountError } =
+        await supabase
+          .from("experience_cards")
+          .select("id", { count: "exact", head: true })
+          .eq("archive_id", archiveData.id);
+
+      if (experienceCardCountError) {
+        console.error(
+          "load project experience card count error:",
+          experienceCardCountError
+        );
+        setExperienceCardCount(0);
+      } else {
+        setExperienceCardCount(Number(visibleExperienceCardCount || 0));
       }
 saveRecentArchiveBrowse({
   id: archiveData.id,
@@ -577,7 +595,7 @@ saveRecentArchiveBrowse({
 
   useEffect(() => {
     function openAddRecordPanel() {
-      setMobileDetailTab("records");
+      setActiveDetailTab("records");
       setMobileAddRecordOpen(true);
     }
 
@@ -1845,42 +1863,47 @@ saveRecentArchiveBrowse({
           </div>
         ) : null}
 
-        <nav
-          className="mobile-app-grid-only"
-          style={archiveDetailTabWrapStyle}
-          aria-label="项目详情导航"
-        >
+        {!isMobileViewport ? (
+          <header style={desktopProjectIdentityStyle}>
+            <h1 style={desktopProjectTitleStyle}>{activeArchive.title}</h1>
+            <span style={desktopProjectOwnerStyle}>
+              {isOwner ? "我的项目" : username}
+            </span>
+          </header>
+        ) : null}
+
+        <nav style={archiveDetailTabWrapStyle} aria-label="项目详情导航">
           <button
             type="button"
-            onClick={() => setMobileDetailTab("profile")}
-            style={archiveDetailTabButtonStyle(mobileDetailTab === "profile")}
+            onClick={() => setActiveDetailTab("records")}
+            style={archiveDetailTabButtonStyle(activeDetailTab === "records")}
+          >
+            详情
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDetailTab("profile")}
+            style={archiveDetailTabButtonStyle(activeDetailTab === "profile")}
           >
             档案
           </button>
           <button
             type="button"
-            onClick={() => setMobileDetailTab("records")}
-            style={archiveDetailTabButtonStyle(mobileDetailTab === "records")}
+            onClick={() => setActiveDetailTab("experience")}
+            style={archiveDetailTabButtonStyle(activeDetailTab === "experience")}
           >
-            记录
+            经验卡（{experienceCardCount}）
           </button>
           <button
             type="button"
-            onClick={() => setMobileDetailTab("experience")}
-            style={archiveDetailTabButtonStyle(mobileDetailTab === "experience")}
-          >
-            经验卡
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileDetailTab("growth")}
-            style={archiveDetailTabButtonStyle(mobileDetailTab === "growth")}
+            onClick={() => setActiveDetailTab("growth")}
+            style={archiveDetailTabButtonStyle(activeDetailTab === "growth")}
           >
             生长线
           </button>
         </nav>
 
-        {!isMobileViewport ? (
+        {!isMobileViewport && activeDetailTab === "profile" ? (
           <div id="archive-profile" style={archiveDetailAnchorStyle}>
             <ArchiveDetailHeader
               mode={mode}
@@ -1930,7 +1953,7 @@ saveRecentArchiveBrowse({
           </div>
         ) : null}
 
-        {isMobileViewport && mobileDetailTab === "profile" ? (
+        {isMobileViewport && activeDetailTab === "profile" ? (
           <MobileArchiveProfile
             archive={activeArchive}
             archiveDisplayName={archiveDisplayName}
@@ -1986,21 +2009,22 @@ saveRecentArchiveBrowse({
           />
         ) : null}
 
-        {isMobileViewport && mobileDetailTab === "experience" ? (
+        {activeDetailTab === "experience" ? (
           <ArchiveExperienceCards
             archiveId={activeArchive.id}
             isOwner={isOwner}
+            onCountChange={setExperienceCardCount}
           />
         ) : null}
 
-        {isMobileViewport && mobileDetailTab === "growth" ? (
+        {activeDetailTab === "growth" ? (
           <section style={mobileGrowthLinePlaceholderStyle}>
             <strong>生长线</strong>
-            <span>生长线将在后续开放，并与档案、记录、经验卡保持同级入口。</span>
+            <span>生长线将在后续开放，并与详情、档案、经验卡保持同级入口。</span>
           </section>
         ) : null}
 
-        {mode === "owner" && (!isMobileViewport || mobileDetailTab === "records") ? (
+        {mode === "owner" && activeDetailTab === "records" ? (
           <ArchiveAddRecordSection
             archiveId={activeArchive.id}
             archiveCategory={activeArchive.category}
@@ -2019,7 +2043,7 @@ saveRecentArchiveBrowse({
           />
         ) : null}
 
-        {!isMobileViewport || mobileDetailTab === "records" ? (
+        {activeDetailTab === "records" ? (
         <ArchiveCycleTimeline
           cycles={cycles}
           records={records}
@@ -2613,6 +2637,28 @@ const mobileRecordTopLinkStyle: CSSProperties = {
   fontWeight: 700,
 };
 
+const desktopProjectIdentityStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: 14,
+  marginBottom: 12,
+};
+
+const desktopProjectTitleStyle: CSSProperties = {
+  minWidth: 0,
+  margin: 0,
+  color: "#243424",
+  fontSize: 28,
+  lineHeight: 1.3,
+};
+
+const desktopProjectOwnerStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#7a8677",
+  fontSize: 13,
+};
+
 const archiveDetailTabWrapStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -2631,8 +2677,9 @@ function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
     borderRadius: 12,
     color: active ? "#2f6a31" : "#40583a",
     background: active ? "#e3f1dd" : "transparent",
-    fontSize: 13,
+    fontSize: "clamp(11px, 3.2vw, 13px)",
     fontWeight: 800,
+    whiteSpace: "nowrap",
     cursor: "pointer",
   };
 }
