@@ -17,6 +17,7 @@ import type {
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { saveExperienceCardVideoSelection } from "@/lib/experience-card-video-cache";
 import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
@@ -52,6 +53,14 @@ const MEDIA_SELECT = [
   "height",
 ].join(", ");
 
+function isSelectableImage(media: ExperienceCardMedia) {
+  const mimeType = String(media.mime_type || "").toLowerCase();
+  const type = String(media.type || "").toLowerCase();
+  if (mimeType) return mimeType.startsWith("image/");
+  if (type) return type === "image" || type === "photo";
+  return true;
+}
+
 export default function ExperienceCardEditor({
   cardId,
 }: {
@@ -64,7 +73,7 @@ export default function ExperienceCardEditor({
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
   const [records, setRecords] = useState<ExperienceCardSourceRecord[]>([]);
   const [membership, setMembership] = useState<MyMembership | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [coverMediaId, setCoverMediaId] = useState<string | null>(null);
   const [wasPublished, setWasPublished] = useState(false);
@@ -174,8 +183,17 @@ export default function ExperienceCardEditor({
 
       setArchive(archiveData as ExperienceCardArchive);
       setRecords(nextRecords);
-      setSelectedIds(
-        existingRecordIds.filter((id) => recordIds.includes(id))
+      setSelectedMediaIds(
+        nextRecords
+          .filter((record) => existingRecordIds.includes(record.id))
+          .flatMap((record) =>
+            record.media
+              .filter(isSelectableImage)
+              .filter((media) =>
+                Boolean(media.display_url || media.display_thumb_url)
+              )
+              .map((media) => media.id)
+          )
       );
       setCoverMediaId(existingCoverMediaId);
       if (!cardId) setTitle(`${archiveData.title}的经验`);
@@ -185,9 +203,31 @@ export default function ExperienceCardEditor({
     void init();
   }, [cardId, requestedArchiveId, router]);
 
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const selectedRecords = records.filter((record) => selectedSet.has(record.id));
-  const coverOptions = selectedRecords.flatMap((record) => record.media);
+  const imageOptions = useMemo(
+    () =>
+      records.flatMap((record) =>
+        record.media
+          .filter(isSelectableImage)
+          .filter((media) =>
+            Boolean(media.display_url || media.display_thumb_url)
+          )
+      ),
+    [records]
+  );
+  const selectedMediaSet = useMemo(
+    () => new Set(selectedMediaIds),
+    [selectedMediaIds]
+  );
+  const selectedImages = imageOptions.filter((media) =>
+    selectedMediaSet.has(media.id)
+  );
+  const selectedRecordIdSet = new Set(
+    selectedImages.map((media) => media.record_id)
+  );
+  const selectedRecords = records.filter((record) =>
+    selectedRecordIdSet.has(record.id)
+  );
+  const coverOptions = selectedImages;
   const effectiveCoverMediaId =
     coverOptions.some((media) => media.id === coverMediaId)
       ? coverMediaId
@@ -197,20 +237,29 @@ export default function ExperienceCardEditor({
     canCreateMembershipContent(membership) &&
     title.trim().length >= 1 &&
     title.trim().length <= 120 &&
-    selectedIds.length >= 3 &&
-    selectedIds.length <= 12 &&
+    selectedMediaIds.length >= 1 &&
+    selectedRecords.length >= 3 &&
+    selectedRecords.length <= 12 &&
     !saving;
 
-  function toggleRecord(recordId: string) {
-    setSelectedIds((current) => {
-      if (current.includes(recordId)) {
-        return current.filter((id) => id !== recordId);
+  function toggleImage(media: ExperienceCardMedia) {
+    setSelectedMediaIds((current) => {
+      if (current.includes(media.id)) {
+        return current.filter((id) => id !== media.id);
       }
-      if (current.length >= 12) {
-        showToast("一张经验卡最多选择12条记录");
+      const currentRecordIds = new Set(
+        imageOptions
+          .filter((option) => current.includes(option.id))
+          .map((option) => option.record_id)
+      );
+      if (
+        !currentRecordIds.has(media.record_id) &&
+        currentRecordIds.size >= 12
+      ) {
+        showToast("一张经验卡最多关联12条来源记录");
         return current;
       }
-      return [...current, recordId];
+      return [...current, media.id];
     });
   }
 
@@ -225,6 +274,18 @@ export default function ExperienceCardEditor({
         archiveId: archive.id,
         title,
         recordIds: selectedRecords.map((record) => record.id),
+        coverMediaId: effectiveCoverMediaId,
+      });
+
+      saveExperienceCardVideoSelection(savedCardId, {
+        selectedMediaIdsByRecordId: Object.fromEntries(
+          selectedRecords.map((record) => [
+            record.id,
+            selectedImages
+              .filter((media) => media.record_id === record.id)
+              .map((media) => media.id),
+          ])
+        ),
         coverMediaId: effectiveCoverMediaId,
       });
 
@@ -296,9 +357,6 @@ export default function ExperienceCardEditor({
             ← 返回
           </Link>
           <h1 style={titleStyle}>{cardId ? "修改经验卡" : "生成经验卡"}</h1>
-          <p style={mutedStyle}>
-            从同一个项目选择3～12条原始记录，系统按记录日期排列。
-          </p>
         </div>
         <Link href="/experience-cards" style={secondaryLinkStyle}>
           我的经验卡
@@ -338,91 +396,61 @@ export default function ExperienceCardEditor({
       <section style={panelStyle}>
         <div style={sectionHeadingRowStyle}>
           <div>
-            <div style={eyebrowStyle}>选择记录</div>
-            <h2 style={sectionTitleStyle}>已选择 {selectedIds.length} 条</h2>
+            <div style={eyebrowStyle}>选择图片</div>
+            <h2 style={sectionTitleStyle}>
+              已选择 {selectedMediaIds.length} 张
+            </h2>
           </div>
-          <span style={countPillStyle(selectedIds.length >= 3)}>
-            3～12条
+          <span style={countPillStyle(selectedRecords.length >= 3)}>
+            来自 {selectedRecords.length} 条记录
           </span>
         </div>
 
-        {records.length < 3 ? (
+        {imageOptions.length === 0 ? (
           <p style={errorStyle}>
-            当前项目不足3条记录，请先补充起点、过程和结果记录。
+            当前项目还没有可选择的照片。
           </p>
         ) : (
-          <div style={recordListStyle}>
-            {records.map((record, index) => {
-              const selected = selectedSet.has(record.id);
-              const thumb =
-                record.media[0]?.display_thumb_url ||
-                record.media[0]?.display_url ||
-                null;
-
-              return (
-                <label
-                  key={record.id}
-                  style={recordOptionStyle(selected)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() => toggleRecord(record.id)}
-                    style={checkboxStyle}
-                  />
-                  {thumb ? (
-                    <img src={thumb} alt="" style={recordThumbStyle} />
-                  ) : (
-                    <div style={recordThumbFallbackStyle}>记录</div>
-                  )}
-                  <div style={recordTextStyle}>
-                    <div style={recordDateStyle}>
-                      {new Date(record.record_time).toLocaleDateString("zh-CN")}
-                      <span style={recordOrderStyle}>第 {index + 1} 条</span>
-                    </div>
-                    <div style={recordNoteStyle}>
-                      {record.note || "无文字记录"}
-                    </div>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section style={panelStyle}>
-        <div style={eyebrowStyle}>选择封面</div>
-        <h2 style={sectionTitleStyle}>从所选记录照片中选择</h2>
-
-        {coverOptions.length === 0 ? (
-          <p style={mutedStyle}>
-            所选记录没有照片，经验卡将使用简洁的文字封面。
-          </p>
-        ) : (
-          <div style={coverGridStyle}>
-            {coverOptions.map((media) => {
+          <div style={imageGridStyle}>
+            {imageOptions.map((media, index) => {
+              const selected = selectedMediaSet.has(media.id);
+              const selectedAsCover =
+                selected && effectiveCoverMediaId === media.id;
               const src = media.display_thumb_url || media.display_url;
               if (!src) return null;
-              const selected = effectiveCoverMediaId === media.id;
-
               return (
-                <button
-                  key={media.id}
-                  type="button"
-                  onClick={() => setCoverMediaId(media.id)}
-                  style={coverButtonStyle(selected)}
-                  aria-pressed={selected}
-                >
-                  <img src={src} alt="" style={coverImageStyle} />
-                  <span style={coverBadgeStyle(selected)}>
-                    {selected ? "当前封面" : "选择"}
-                  </span>
-                </button>
+                <div key={media.id} style={imageOptionWrapStyle}>
+                  <button
+                    type="button"
+                    onClick={() => toggleImage(media)}
+                    aria-pressed={selected}
+                    style={imageOptionStyle(selected)}
+                  >
+                    <img
+                      src={src}
+                      alt={`经验卡可选图片${index + 1}`}
+                      style={imageOptionImageStyle}
+                    />
+                    <span style={imageOptionBadgeStyle(selected)}>
+                      {selected ? "已选" : "选择"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selected}
+                    onClick={() => setCoverMediaId(media.id)}
+                    style={imageCoverButtonStyle(selectedAsCover, selected)}
+                  >
+                    {selectedAsCover ? "当前封面" : "设为封面"}
+                  </button>
+                </div>
               );
             })}
           </div>
         )}
+        {selectedRecords.length > 0 && selectedRecords.length < 3 ? (
+          <p style={selectionHintStyle}>请至少选择来自3条记录的图片。</p>
+        ) : null}
       </section>
 
       {errorText ? <section style={errorPanelStyle}>{errorText}</section> : null}
@@ -457,7 +485,7 @@ export default function ExperienceCardEditor({
       <ConfirmDialog
         open={publishConfirmOpen}
         title="确认公开经验卡"
-        message={`发布后，项目基础信息和所选${selectedIds.length}条记录及照片将公开，游客可通过直接链接完整查看。项目中其他未选择的记录仍保持原来的可见性。`}
+        message={`发布后，所选${selectedMediaIds.length}张图片及其来源记录将公开，游客可通过直接链接查看。项目中其他记录仍保持原来的可见性。`}
         confirmText={saving ? "发布中..." : "确认发布"}
         cancelText="取消"
         confirmDisabled={saving}
@@ -584,107 +612,39 @@ function countPillStyle(valid: boolean): CSSProperties {
   };
 }
 
-const recordListStyle: CSSProperties = {
+const imageGridStyle: CSSProperties = {
   display: "grid",
-  gap: 9,
+  gridTemplateColumns: "repeat(auto-fill, minmax(112px, 1fr))",
+  gap: 10,
 };
 
-function recordOptionStyle(selected: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: "22px 72px minmax(0, 1fr)",
-    gap: 10,
-    alignItems: "center",
-    border: selected ? "1px solid #8db384" : "1px solid #e1e6df",
-    background: selected ? "#f5fbf2" : "#fff",
-    borderRadius: 14,
-    padding: 9,
-    cursor: "pointer",
-  };
-}
-
-const checkboxStyle: CSSProperties = {
-  width: 18,
-  height: 18,
-  accentColor: "#5f8a58",
-};
-
-const recordThumbStyle: CSSProperties = {
-  width: 72,
-  height: 58,
-  borderRadius: 10,
-  objectFit: "cover",
-  display: "block",
-};
-
-const recordThumbFallbackStyle: CSSProperties = {
-  ...recordThumbStyle,
+const imageOptionWrapStyle: CSSProperties = {
   display: "grid",
-  placeItems: "center",
-  background: "#eef2eb",
-  color: "#80907a",
-  fontSize: 12,
+  gap: 6,
 };
 
-const recordTextStyle: CSSProperties = {
-  minWidth: 0,
-};
-
-const recordDateStyle: CSSProperties = {
-  display: "flex",
-  gap: 8,
-  alignItems: "center",
-  flexWrap: "wrap",
-  marginBottom: 4,
-  color: "#50604d",
-  fontSize: 13,
-  fontWeight: 800,
-};
-
-const recordOrderStyle: CSSProperties = {
-  color: "#8a9387",
-  fontSize: 11,
-  fontWeight: 600,
-};
-
-const recordNoteStyle: CSSProperties = {
-  color: "#6d776a",
-  fontSize: 13,
-  lineHeight: 1.5,
-  overflow: "hidden",
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
-};
-
-const coverGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))",
-  gap: 9,
-  marginTop: 12,
-};
-
-function coverButtonStyle(selected: boolean): CSSProperties {
+function imageOptionStyle(selected: boolean): CSSProperties {
   return {
     position: "relative",
     border: selected ? "2px solid #6f9867" : "1px solid #dfe6dc",
     borderRadius: 13,
     overflow: "hidden",
     background: "#eef2eb",
-    padding: 0,
+    padding: 2,
     cursor: "pointer",
-    minHeight: 110,
+    aspectRatio: "1 / 1",
   };
 }
 
-const coverImageStyle: CSSProperties = {
+const imageOptionImageStyle: CSSProperties = {
   width: "100%",
-  height: 118,
+  height: "100%",
   objectFit: "cover",
   display: "block",
+  borderRadius: 10,
 };
 
-function coverBadgeStyle(selected: boolean): CSSProperties {
+function imageOptionBadgeStyle(selected: boolean): CSSProperties {
   return {
     position: "absolute",
     right: 6,
@@ -697,6 +657,30 @@ function coverBadgeStyle(selected: boolean): CSSProperties {
     fontWeight: 800,
   };
 }
+
+function imageCoverButtonStyle(
+  isCover: boolean,
+  enabled: boolean
+): CSSProperties {
+  return {
+    minHeight: 32,
+    padding: "5px 8px",
+    border: isCover ? "1px solid #6f9867" : "1px solid #dfe6dc",
+    borderRadius: 9,
+    background: isCover ? "#edf5e9" : "#fff",
+    color: isCover ? "#42653e" : "#6f7b6c",
+    fontSize: 11,
+    fontWeight: 800,
+    cursor: enabled ? "pointer" : "not-allowed",
+    opacity: enabled ? 1 : 0.45,
+  };
+}
+
+const selectionHintStyle: CSSProperties = {
+  margin: "12px 0 0",
+  color: "#8b7048",
+  fontSize: 13,
+};
 
 const errorStyle: CSSProperties = {
   color: "#a74b47",

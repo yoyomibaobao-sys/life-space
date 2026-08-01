@@ -515,6 +515,33 @@ export default function PlantIndexPage() {
           </>
         )}
 
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginTop: isMobileViewport ? 8 : 12,
+          }}
+        >
+          <Link
+            href={isSignedIn ? "/archive/interests" : "/login"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              minHeight: 34,
+              padding: "5px 12px",
+              border: "1px solid #dbe7d7",
+              borderRadius: 999,
+              background: "#f7fbf5",
+              color: "#42663f",
+              fontSize: 13,
+              fontWeight: 750,
+              textDecoration: "none",
+            }}
+          >
+            我的收藏
+          </Link>
+        </div>
+
         {!isMobileViewport ? (
           <div
             style={{

@@ -11,7 +11,7 @@ export const EXPERIENCE_CARD_VIDEO_FPS = 6;
 export const EXPERIENCE_CARD_VIDEO_BITRATE = 2_200_000;
 
 const INTRO_DURATION_SECONDS = 4.8;
-const OUTRO_DURATION_SECONDS = 2.4;
+const OUTRO_DURATION_SECONDS = 5.5;
 const TEXT_CHUNK_LENGTH = 60;
 
 type VideoSceneKind = "intro" | "record" | "outro";
@@ -25,9 +25,8 @@ export type ExperienceCardVideoScene = {
   text: string;
   tags: string[];
   imageUrl: string | null;
-  recordIndex: number | null;
-  recordCount: number;
-  stage: string;
+  imageIndex: number | null;
+  imageCount: number;
   date: string;
   partIndex: number;
   partCount: number;
@@ -103,14 +102,6 @@ function getTextDuration(text: string) {
   return clamp(3.2 + length / 9, 4.8, 12);
 }
 
-function getSystemName(detail: ExperienceCardDetail) {
-  return (
-    detail.archive.system_name ||
-    detail.archive.species_name_snapshot ||
-    "未填写系统名"
-  );
-}
-
 function isImageMedia(media: ExperienceCardMedia) {
   const mimeType = String(media.mime_type || "").toLowerCase();
   const type = String(media.type || "").toLowerCase();
@@ -155,46 +146,61 @@ function getRecordTags(record: ExperienceCardSourceRecord) {
 export function buildExperienceCardVideoScenes(
   detail: ExperienceCardDetail,
   imageSelection?: ExperienceCardVideoImageSelection,
-  coverImageUrl?: string | null
+  coverImageUrl?: string | null,
+  websiteUrl = ""
 ): ExperienceCardVideoScene[] {
-  const systemName = getSystemName(detail);
   const authorName = detail.author?.username?.trim() || "用户";
-  const recordCount = detail.records.length;
+  const selectedImageUrlsByRecordId = new Map(
+    detail.records.map((record) => {
+      const hasExplicitImageSelection = Boolean(
+        imageSelection &&
+          Object.prototype.hasOwnProperty.call(imageSelection, record.id)
+      );
+      return [
+        record.id,
+        hasExplicitImageSelection
+          ? imageSelection?.[record.id] || []
+          : getExperienceCardRecordVideoImageUrls(record),
+      ];
+    })
+  );
+  const imageCount = Array.from(selectedImageUrlsByRecordId.values()).reduce(
+    (total, urls) => total + urls.length,
+    0
+  );
   const scenes: ExperienceCardVideoScene[] = [
     {
       id: "intro",
       kind: "intro",
       duration: INTRO_DURATION_SECONDS,
       title: detail.card.title,
-      subtitle: `${detail.archive.title} · ${systemName}`,
+      subtitle: "有时·耕作 LifeSpace",
       text: `发布者 · ${authorName}`,
       tags: [],
       imageUrl:
         coverImageUrl !== undefined
           ? coverImageUrl
           : detail.cover?.display_url || detail.cover?.display_thumb_url || null,
-      recordIndex: null,
-      recordCount,
-      stage: "",
+      imageIndex: null,
+      imageCount,
       date: "",
       partIndex: 1,
       partCount: 1,
     },
   ];
 
-  detail.records.forEach((record, recordIndex) => {
+  let imageOffset = 0;
+  detail.records.forEach((record) => {
     const chunks = splitExperienceCardVideoText(record.note);
-    const hasExplicitImageSelection = Boolean(
-      imageSelection &&
-        Object.prototype.hasOwnProperty.call(imageSelection, record.id)
-    );
-    const imageUrls = hasExplicitImageSelection
-      ? imageSelection?.[record.id] || []
-      : getExperienceCardRecordVideoImageUrls(record);
+    const imageUrls = selectedImageUrlsByRecordId.get(record.id) || [];
     const tags = getRecordTags(record);
     const sceneCount = Math.max(imageUrls.length, chunks.length, 1);
 
     Array.from({ length: sceneCount }).forEach((_, partIndex) => {
+      const localImageIndex =
+        imageUrls.length > 0
+          ? Math.min(partIndex, imageUrls.length - 1)
+          : null;
       const text =
         chunks.length > 0
           ? chunks[Math.min(partIndex, chunks.length - 1)]
@@ -204,21 +210,20 @@ export function buildExperienceCardVideoScenes(
         kind: "record",
         duration: text ? getTextDuration(text) : 3.8,
         title: detail.card.title,
-        subtitle: `${detail.archive.title} · ${systemName}`,
+        subtitle: "有时·耕作 LifeSpace",
         text,
         tags,
         imageUrl:
-          imageUrls.length > 0
-            ? imageUrls[partIndex % imageUrls.length]
-            : null,
-        recordIndex,
-        recordCount,
-        stage: "",
+          localImageIndex === null ? null : imageUrls[localImageIndex],
+        imageIndex:
+          localImageIndex === null ? null : imageOffset + localImageIndex,
+        imageCount,
         date: formatExperienceCardDate(record.record_time) || "日期未记录",
         partIndex: partIndex + 1,
         partCount: sceneCount,
       });
     });
+    imageOffset += imageUrls.length;
   });
 
   scenes.push({
@@ -226,13 +231,12 @@ export function buildExperienceCardVideoScenes(
     kind: "outro",
     duration: OUTRO_DURATION_SECONDS,
     title: "让生活有迹可循",
-    subtitle: detail.card.title,
+    subtitle: websiteUrl,
     text: "有时·耕作 LifeSpace",
     tags: [],
     imageUrl: null,
-    recordIndex: null,
-    recordCount,
-    stage: "",
+    imageIndex: null,
+    imageCount,
     date: "",
     partIndex: 1,
     partCount: 1,
@@ -505,9 +509,7 @@ function drawBrandPill(
   setFont(context, 17 * scale, 800);
   context.fillStyle = "#ffffff";
   context.textBaseline = "middle";
-  const brandText = contextText
-    ? `有时·耕作 LifeSpace · ${contextText}`
-    : "有时·耕作 LifeSpace";
+  const brandText = contextText || "有时·耕作 LifeSpace";
   context.fillText(
     ellipsizeCanvasText(context, brandText, pillWidth - 36 * scale),
     x + 18 * scale,
@@ -694,7 +696,9 @@ function drawRecordScene(
     width,
     scale,
     scene.subtitle,
-    `${scene.recordIndex! + 1}/${scene.recordCount}`
+    scene.imageIndex !== null && scene.imageCount > 0
+      ? `${scene.imageIndex + 1}/${scene.imageCount}`
+      : undefined
   );
   drawExperienceName(context, scene.title, width, scale);
 

@@ -4,9 +4,10 @@ const DB_NAME = "lifespace-experience-card-video-cache";
 const DB_VERSION = 1;
 const STORE_NAME = "videos";
 const CACHE_FORMAT_VERSION = 1;
-const RENDER_FORMAT_VERSION = "experience-card-video-20260801-v2";
+const RENDER_FORMAT_VERSION = "experience-card-video-20260801-v3";
 const MAX_CACHE_ITEMS = 12;
 const MAX_CACHE_BYTES = 120 * 1024 * 1024;
+const SELECTION_STORAGE_PREFIX = "lifespace-experience-card-selection:";
 
 export type CachedExperienceCardVideo = {
   cardId: string;
@@ -19,6 +20,62 @@ export type CachedExperienceCardVideo = {
   createdAt: string;
   sizeBytes: number;
 };
+
+export type ExperienceCardVideoSelectionPreference = {
+  selectedMediaIdsByRecordId: Record<string, string[]>;
+  coverMediaId: string | null;
+};
+
+function cloneSelection(
+  selection: Record<string, string[]>
+): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(selection).map(([recordId, mediaIds]) => [
+      recordId,
+      [...mediaIds],
+    ])
+  );
+}
+
+export function getExperienceCardVideoSelection(cardId: string) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const stored = window.localStorage.getItem(
+      `${SELECTION_STORAGE_PREFIX}${cardId}`
+    );
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as ExperienceCardVideoSelectionPreference;
+    if (!parsed || typeof parsed.selectedMediaIdsByRecordId !== "object") {
+      return null;
+    }
+    return {
+      selectedMediaIdsByRecordId: cloneSelection(
+        parsed.selectedMediaIdsByRecordId
+      ),
+      coverMediaId: parsed.coverMediaId || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveExperienceCardVideoSelection(
+  cardId: string,
+  selection: ExperienceCardVideoSelectionPreference
+) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(
+    `${SELECTION_STORAGE_PREFIX}${cardId}`,
+    JSON.stringify({
+      selectedMediaIdsByRecordId: cloneSelection(
+        selection.selectedMediaIdsByRecordId
+      ),
+      coverMediaId: selection.coverMediaId,
+    })
+  );
+}
 
 function assertCacheAvailable() {
   if (typeof window === "undefined" || !("indexedDB" in window)) {
@@ -80,12 +137,6 @@ export function getExperienceCardVideoSourceSignature(
     card: {
       id: detail.card.id,
       title: detail.card.title,
-    },
-    archive: {
-      id: detail.archive.id,
-      title: detail.archive.title,
-      systemName: detail.archive.system_name,
-      speciesName: detail.archive.species_name_snapshot,
     },
     authorName: detail.author?.username || null,
     records: detail.records.map((record) => ({
@@ -171,13 +222,8 @@ export async function saveCachedExperienceCardVideo(input: {
   const entry: CachedExperienceCardVideo = {
     ...input,
     cacheFormatVersion: CACHE_FORMAT_VERSION,
-    selectedMediaIdsByRecordId: Object.fromEntries(
-      Object.entries(input.selectedMediaIdsByRecordId).map(
-        ([recordId, mediaIds]) => [
-          recordId,
-          [...mediaIds],
-        ]
-      )
+    selectedMediaIdsByRecordId: cloneSelection(
+      input.selectedMediaIdsByRecordId
     ),
     createdAt: new Date().toISOString(),
     sizeBytes: input.blob.size,
@@ -185,6 +231,11 @@ export async function saveCachedExperienceCardVideo(input: {
 
   transaction.objectStore(STORE_NAME).put(entry);
   await closeDbAfter(db, transactionDone(transaction));
+
+  saveExperienceCardVideoSelection(input.cardId, {
+    selectedMediaIdsByRecordId: input.selectedMediaIdsByRecordId,
+    coverMediaId: input.coverMediaId,
+  });
 
   try {
     await pruneCachedVideos();
