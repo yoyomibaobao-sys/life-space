@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
@@ -1819,6 +1820,16 @@ export default function ArchivePage() {
         </section>
       ) : null}
 
+      <section style={personalSpaceEntryRowStyle}>
+        <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
+          <span style={personalSpaceExperienceCardTextStyle}>
+            <strong>我的经验卡</strong>
+            <small>集中查看和管理全部项目的经验卡</small>
+          </span>
+          <span style={personalSpaceExperienceCardArrowStyle}>进入 →</span>
+        </Link>
+      </section>
+
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
         statsText={
           !isMobileViewport ? (
@@ -2216,6 +2227,36 @@ function LocalArchiveFilters({
     </>
   );
 }
+
+const personalSpaceEntryRowStyle: CSSProperties = {
+  marginBottom: 12,
+};
+
+const personalSpaceExperienceCardEntryStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "13px 15px",
+  border: "1px solid #dbe7d6",
+  borderRadius: 16,
+  background: "linear-gradient(135deg, #f7fbf4, #ffffff)",
+  color: "#2f4f2f",
+  textDecoration: "none",
+};
+
+const personalSpaceExperienceCardTextStyle: CSSProperties = {
+  display: "grid",
+  gap: 3,
+  minWidth: 0,
+};
+
+const personalSpaceExperienceCardArrowStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#4f7650",
+  fontSize: 13,
+  fontWeight: 800,
+};
 
 const workspaceFilterPanelStyle: CSSProperties = {
   marginBottom: 12,

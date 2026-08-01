@@ -38,6 +38,7 @@ export type ExperienceCardVideoScene = {
 
 export type ExperienceCardVideoImage = ImageBitmap | HTMLImageElement;
 export type ExperienceCardVideoImages = Map<string, ExperienceCardVideoImage>;
+export type ExperienceCardVideoImageSelection = Record<string, string | null>;
 
 export type GenerateExperienceCardVideoOptions = {
   detail: ExperienceCardDetail;
@@ -147,7 +148,8 @@ function getRecordTags(record: ExperienceCardSourceRecord) {
 }
 
 export function buildExperienceCardVideoScenes(
-  detail: ExperienceCardDetail
+  detail: ExperienceCardDetail,
+  imageSelection?: ExperienceCardVideoImageSelection
 ): ExperienceCardVideoScene[] {
   const systemName = getSystemName(detail);
   const recordCount = detail.records.length;
@@ -173,7 +175,13 @@ export function buildExperienceCardVideoScenes(
 
   detail.records.forEach((record, recordIndex) => {
     const chunks = splitExperienceCardVideoText(record.note);
-    const imageUrl = getExperienceCardRecordVideoImageUrl(record);
+    const hasExplicitImageSelection = Boolean(
+      imageSelection &&
+        Object.prototype.hasOwnProperty.call(imageSelection, record.id)
+    );
+    const imageUrl = hasExplicitImageSelection
+      ? imageSelection?.[record.id] || null
+      : getExperienceCardRecordVideoImageUrl(record);
     const tags = getRecordTags(record);
 
     chunks.forEach((text, partIndex) => {
@@ -263,11 +271,12 @@ async function loadCanvasImage(url: string): Promise<ExperienceCardVideoImage> {
 }
 
 export async function loadExperienceCardVideoImages(
-  detail: ExperienceCardDetail
+  detail: ExperienceCardDetail,
+  scenes: ExperienceCardVideoScene[] = buildExperienceCardVideoScenes(detail)
 ): Promise<ExperienceCardVideoImages> {
   const urls = Array.from(
     new Set(
-      buildExperienceCardVideoScenes(detail)
+      scenes
         .map((scene) => scene.imageUrl)
         .filter((url): url is string => Boolean(url))
     )
@@ -564,12 +573,13 @@ function drawRecordScene(
   context.fillStyle = topOverlay;
   context.fillRect(0, 0, width, height * 0.3);
 
-  const bottomOverlay = context.createLinearGradient(0, height * 0.36, 0, height);
-  bottomOverlay.addColorStop(0, "rgba(15,27,17,0.02)");
-  bottomOverlay.addColorStop(0.42, "rgba(15,27,17,0.52)");
-  bottomOverlay.addColorStop(1, "rgba(15,27,17,0.92)");
+  const bottomOverlayStart = image ? height * 0.58 : height * 0.42;
+  const bottomOverlay = context.createLinearGradient(0, bottomOverlayStart, 0, height);
+  bottomOverlay.addColorStop(0, "rgba(15,27,17,0)");
+  bottomOverlay.addColorStop(0.52, "rgba(15,27,17,0.42)");
+  bottomOverlay.addColorStop(1, "rgba(15,27,17,0.90)");
   context.fillStyle = bottomOverlay;
-  context.fillRect(0, height * 0.34, width, height * 0.66);
+  context.fillRect(0, bottomOverlayStart, width, height - bottomOverlayStart);
 
   const scale = width / EXPERIENCE_CARD_VIDEO_WIDTH;
   drawBrandPill(context, width, scale);
@@ -600,8 +610,8 @@ function drawRecordScene(
 
   const panelX = 42 * scale;
   const panelWidth = width - panelX * 2;
-  const panelY = height * 0.59;
-  const panelHeight = height - panelY - 58 * scale;
+  const panelY = image ? height * 0.70 : height * 0.56;
+  const panelHeight = height - panelY - 46 * scale;
   fillRoundedRect(
     context,
     panelX,
@@ -625,17 +635,18 @@ function drawRecordScene(
   context.fillText(partText, contentX, cursorY);
   cursorY += 42 * scale;
 
+  const maxTextLines = image ? 5 : 7;
   const fitted = fitWrappedText(
     context,
     scene.text,
     contentWidth,
-    7,
-    34 * scale,
-    24 * scale
+    maxTextLines,
+    (image ? 28 : 34) * scale,
+    (image ? 21 : 24) * scale
   );
-  const lineHeight = fitted.size * 1.45;
+  const lineHeight = fitted.size * (image ? 1.35 : 1.45);
   context.fillStyle = "#ffffff";
-  fitted.lines.slice(0, 8).forEach((line, index) => {
+  fitted.lines.slice(0, maxTextLines).forEach((line, index) => {
     context.fillText(line, contentX, cursorY + index * lineHeight);
   });
 

@@ -156,6 +156,10 @@ export default function ExperienceCardPage({
         ) : null}
       </header>
 
+      {isOwner ? (
+        <ExperienceCardVideoPanel detail={detail} />
+      ) : null}
+
       <article style={cardShellStyle}>
         {coverSrc ? (
           <div style={coverWrapStyle}>
@@ -228,10 +232,6 @@ export default function ExperienceCardPage({
           records={detail.records}
         />
       </section>
-
-      {isOwner ? (
-        <ExperienceCardVideoPanel detail={detail} />
-      ) : null}
 
       <footer style={footerStyle}>
         <div>
