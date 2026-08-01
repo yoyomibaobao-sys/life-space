@@ -1,0 +1,52 @@
+name: Apply experience card layout refinements
+
+on:
+  push:
+    branches:
+      - agent/experience-card-layout-refine
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply refinements
+        run: python scripts/apply-experience-card-layout-refine.py
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run rule tests
+        run: node --test tests/*.test.mjs
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run targeted lint
+        run: npx eslint app/experience-cards/[id]/page.tsx components/experience-card/ExperienceCardVideoPanel.tsx lib/experience-card-video.ts app/archive/[id]/page.tsx app/archive/page.tsx
+
+      - name: Verify diff
+        run: git diff --check
+
+      - name: Commit validated changes and remove temporary files
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-experience-card-layout-refine.yml
+          rm -f scripts/apply-experience-card-layout-refine.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AGENTS.md app/experience-cards/[id]/page.tsx components/experience-card/ExperienceCardVideoPanel.tsx lib/experience-card-video.ts app/archive/[id]/page.tsx app/archive/page.tsx tests/experience-cards.test.mjs .github/workflows/apply-experience-card-layout-refine.yml scripts/apply-experience-card-layout-refine.py
+          git commit -m "Refine experience card layout and mobile navigation"
+          git push origin HEAD:agent/experience-card-layout-refine
