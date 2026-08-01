@@ -270,12 +270,17 @@ export default function ExperienceCardVideoPanel({
     }
   }
 
+  function restartGeneratedVideo(video: HTMLVideoElement) {
+    video.currentTime = 0;
+    void video.play().catch(() => undefined);
+  }
+
   return (
     <section style={panelStyle} aria-label="经验卡视频">
       <div style={headerStyle}>
         <div>
           <div style={eyebrowStyle}>经验卡视频</div>
-          <h2 style={titleStyle}>自动生成竖屏 MP4</h2>
+          <h2 style={titleStyle}>竖屏 MP4</h2>
         </div>
         <span style={durationStyle}>
           {formatExperienceCardVideoDuration(duration)}
@@ -283,7 +288,7 @@ export default function ExperienceCardVideoPanel({
       </div>
 
       <p style={descriptionStyle}>
-        所有被选记录都会进入视频；原文字自动烧录为字幕。每条记录的图片可以单独选择，也可以不使用图片。视频只在当前设备生成，不上传云端，也不占云空间。
+        自动串联全部来源记录，文字烧录为字幕；每条记录可单独选图或不用图片。本机生成，不上传云端，也不占云空间。
       </p>
 
       <details style={imageSelectorStyle}>
@@ -344,8 +349,8 @@ export default function ExperienceCardVideoPanel({
               controls
               autoPlay
               muted
-              loop
               playsInline
+              onEnded={(event) => restartGeneratedVideo(event.currentTarget)}
               style={previewStyle}
             />
           ) : (
@@ -358,18 +363,7 @@ export default function ExperienceCardVideoPanel({
 
         <div style={controlStyle}>
           <div style={summaryStyle}>
-            <Info label="来源记录" value={`${detail.records.length} 条`} />
-            <Info label="画面比例" value="9:16 竖屏" />
-            <Info label="视频格式" value="静音 H.264 MP4" />
-            <Info
-              label="字幕"
-              value={
-                scenes.filter((scene) => scene.kind === "record").length >
-                detail.records.length
-                  ? "长文字自动分段"
-                  : "原记录文字"
-              }
-            />
+            {detail.records.length} 条记录 · 9:16 竖屏 · 静音 H.264 MP4 · {scenes.filter((scene) => scene.kind === "record").length > detail.records.length ? "长文字自动分段" : "原记录文字"}
           </div>
 
           {imageLoading ? (
@@ -430,7 +424,7 @@ export default function ExperienceCardVideoPanel({
           </div>
 
           <p style={helperStyle}>
-            手机支持文件分享时，会打开系统分享面板；也可以保存后上传到 YouTube、哔哩哔哩或其他视频平台。生成期间请保持页面开启。
+            页面内会自动循环播放；保存后的MP4是否循环由相册或视频平台决定。手机支持文件分享时，会打开系统分享面板。生成期间请保持页面开启。
           </p>
         </div>
       </div>
@@ -438,18 +432,9 @@ export default function ExperienceCardVideoPanel({
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={infoStyle}>
-      <div style={infoLabelStyle}>{label}</div>
-      <div style={infoValueStyle}>{value}</div>
-    </div>
-  );
-}
-
 const panelStyle: CSSProperties = {
-  marginTop: 14,
-  padding: 18,
+  margin: "0 0 14px",
+  padding: 16,
   border: "1px solid #dfe8db",
   borderRadius: 20,
   background: "#f8fbf6",
@@ -490,7 +475,7 @@ const durationStyle: CSSProperties = {
 };
 
 const descriptionStyle: CSSProperties = {
-  margin: "10px 0 16px",
+  margin: "8px 0 13px",
   color: "#657260",
   fontSize: 13,
   lineHeight: 1.75,
@@ -615,28 +600,9 @@ const controlStyle: CSSProperties = {
 };
 
 const summaryStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-  gap: 8,
-};
-
-const infoStyle: CSSProperties = {
-  padding: 10,
-  borderRadius: 12,
-  border: "1px solid #e2e9de",
-  background: "#fff",
-};
-
-const infoLabelStyle: CSSProperties = {
-  color: "#82907f",
-  fontSize: 11,
-};
-
-const infoValueStyle: CSSProperties = {
-  marginTop: 4,
-  color: "#3f4e3d",
-  fontSize: 13,
-  fontWeight: 800,
+  color: "#687565",
+  fontSize: 12,
+  lineHeight: 1.6,
 };
 
 const noticeStyle: CSSProperties = {

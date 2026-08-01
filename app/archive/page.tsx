@@ -1822,11 +1822,8 @@ export default function ArchivePage() {
 
       <section style={personalSpaceEntryRowStyle}>
         <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
-          <span style={personalSpaceExperienceCardTextStyle}>
-            <strong>我的经验卡</strong>
-            <small>集中查看和管理全部项目的经验卡</small>
-          </span>
-          <span style={personalSpaceExperienceCardArrowStyle}>进入 →</span>
+          <span>我的经验卡</span>
+          <span style={personalSpaceExperienceCardArrowStyle}>→</span>
         </Link>
       </section>
 
@@ -2229,33 +2226,28 @@ function LocalArchiveFilters({
 }
 
 const personalSpaceEntryRowStyle: CSSProperties = {
-  marginBottom: 12,
+  marginBottom: 8,
 };
 
 const personalSpaceExperienceCardEntryStyle: CSSProperties = {
-  display: "flex",
+  display: "inline-flex",
   alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  padding: "13px 15px",
-  border: "1px solid #dbe7d6",
-  borderRadius: 16,
-  background: "linear-gradient(135deg, #f7fbf4, #ffffff)",
-  color: "#2f4f2f",
+  gap: 6,
+  minHeight: 34,
+  padding: "5px 10px",
+  border: "1px solid #e0e8dc",
+  borderRadius: 999,
+  background: "#f8faf7",
+  color: "#496047",
+  fontSize: 13,
+  fontWeight: 800,
   textDecoration: "none",
-};
-
-const personalSpaceExperienceCardTextStyle: CSSProperties = {
-  display: "grid",
-  gap: 3,
-  minWidth: 0,
 };
 
 const personalSpaceExperienceCardArrowStyle: CSSProperties = {
   flexShrink: 0,
-  color: "#4f7650",
-  fontSize: 13,
-  fontWeight: 800,
+  color: "#71836d",
+  fontSize: 12,
 };
 
 const workspaceFilterPanelStyle: CSSProperties = {

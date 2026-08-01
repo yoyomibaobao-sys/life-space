@@ -64,8 +64,7 @@ export default function Home() {
         @media (max-width: 760px) {
           .signed-out-home { min-height: auto !important; padding: 18px 14px 92px !important; align-items: flex-start !important; }
           .home-content { gap: 14px !important; }
-          .home-hero { padding: 20px 14px !important; }
-          .home-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .home-hero { padding: 12px 4px 8px !important; }
           .home-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         }
         @media (max-height: 720px) and (min-width: 761px) {
@@ -87,8 +86,6 @@ export default function Home() {
           <div style={spiritStyle}>{copy.spirit}</div>
 
           <div className="home-actions" style={actionsStyle}>
-            <Link href="/register" style={primaryActionStyle}>注册</Link>
-            <Link href="/login" style={secondaryActionStyle}>登录</Link>
             <Link href="/discover" style={softActionStyle}>浏览发现</Link>
             <Link href="/api/download/android" style={softActionStyle}>下载 Android</Link>
           </div>
@@ -137,13 +134,9 @@ const heroStyle: CSSProperties = {
   maxWidth: 860,
   width: "100%",
   margin: "0 auto",
-  padding: "28px 24px 22px",
+  padding: "16px 10px 10px",
   boxSizing: "border-box",
   textAlign: "center",
-  border: "1px solid #e2eadc",
-  borderRadius: 24,
-  background: "rgba(255,255,255,0.82)",
-  boxShadow: "0 14px 36px rgba(54, 81, 45, 0.07)",
 };
 
 const brandStyle: CSSProperties = {
@@ -154,7 +147,7 @@ const brandStyle: CSSProperties = {
   gap: 9,
   flexWrap: "wrap",
   color: "#243024",
-  fontSize: "clamp(28px, 4.4vw, 38px)",
+  fontSize: "clamp(26px, 3.8vw, 34px)",
   fontWeight: 650,
   letterSpacing: 1.2,
   lineHeight: 1.15,
@@ -169,7 +162,7 @@ const englishBrandStyle: CSSProperties = {
 
 const spaceTitleStyle: CSSProperties = {
   color: "#496347",
-  fontSize: "clamp(16px, 2.2vw, 19px)",
+  fontSize: "clamp(15px, 2vw, 18px)",
   fontWeight: 800,
   letterSpacing: 2,
 };
@@ -184,7 +177,7 @@ const subtitleStyle: CSSProperties = {
 const poemStyle: CSSProperties = {
   margin: "0 auto",
   color: "#2f3b2f",
-  fontSize: "clamp(17px, 2.5vw, 21px)",
+  fontSize: "clamp(16px, 2.2vw, 19px)",
   fontWeight: 550,
   lineHeight: 1.65,
   whiteSpace: "pre-line",
@@ -198,16 +191,16 @@ const spiritStyle: CSSProperties = {
   border: "1px solid #d9e5cf",
   background: "#f7faf3",
   color: "#2f4b2b",
-  fontSize: "clamp(15px, 2vw, 18px)",
+  fontSize: "clamp(14px, 1.8vw, 16px)",
   fontWeight: 750,
   letterSpacing: 0.8,
 };
 
 const actionsStyle: CSSProperties = {
-  maxWidth: 680,
-  margin: "18px auto 0",
+  maxWidth: 360,
+  margin: "15px auto 0",
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 9,
 };
 
@@ -223,20 +216,6 @@ const actionBaseStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 750,
   whiteSpace: "nowrap",
-};
-
-const primaryActionStyle: CSSProperties = {
-  ...actionBaseStyle,
-  background: "#3f7d3d",
-  color: "#fff",
-  border: "1px solid #3f7d3d",
-};
-
-const secondaryActionStyle: CSSProperties = {
-  ...actionBaseStyle,
-  background: "#fff",
-  color: "#2f5f2d",
-  border: "1px solid #cfdcc8",
 };
 
 const softActionStyle: CSSProperties = {
