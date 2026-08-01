@@ -20,6 +20,7 @@ export type ExperienceCardArchive = {
   user_id: string;
   title: string;
   category: string | null;
+  species_id: string | null;
   system_name: string | null;
   species_name_snapshot: string | null;
   is_public: boolean | null;

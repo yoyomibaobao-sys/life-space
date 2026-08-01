@@ -123,8 +123,10 @@ test("the experience-card UI covers selection, preview, publication, source link
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);
   assert.match(detail, /来源记录已经变化/);
-  assert.match(timeline, /查看原记录/);
+  assert.doesNotMatch(timeline, /查看原记录/);
   assert.match(timeline, /getExperienceCardStageLabel/);
+  assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
+  assert.match(detail, /href=\{guideHref\}/);
   assert.match(list, /我的经验卡/);
   assert.match(archiveHeader, /生成经验卡/);
 });

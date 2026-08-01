@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import type { CSSProperties } from "react";
 import {
   formatExperienceCardDate,
@@ -91,13 +90,6 @@ export default function ExperienceCardTimeline({
                   })}
                 </div>
               ) : null}
-
-              <Link
-                href={`/archive/${archive.id}?record=${record.id}`}
-                style={sourceLinkStyle}
-              >
-                查看原记录 →
-              </Link>
             </div>
           </article>
         );
@@ -226,11 +218,4 @@ const mediaStyle: CSSProperties = {
   maxHeight: 260,
   objectFit: "cover",
   display: "block",
-};
-
-const sourceLinkStyle: CSSProperties = {
-  color: "#557653",
-  fontSize: 13,
-  textDecoration: "none",
-  fontWeight: 700,
 };

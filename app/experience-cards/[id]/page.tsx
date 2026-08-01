@@ -136,6 +136,12 @@ export default function ExperienceCardPage({
     "未填写系统名";
   const coverSrc =
     detail.cover?.display_url || detail.cover?.display_thumb_url || null;
+  const guideHref =
+    detail.archive.category === "plant" && detail.archive.species_id
+      ? `/plant/${detail.archive.species_id}?fromArchive=${encodeURIComponent(
+          detail.archive.id
+        )}`
+      : null;
 
   return (
     <main style={pageStyle}>
@@ -175,9 +181,23 @@ export default function ExperienceCardPage({
         <div style={introStyle}>
           <div style={eyebrowStyle}>真实记录组成的经验时间线</div>
           <h1 style={titleStyle}>{detail.card.title}</h1>
-          <p style={projectStyle}>
-            {detail.archive.title} · {systemName}
-          </p>
+          <div style={projectStyle}>
+            <Link
+              href={`/archive/${detail.archive.id}`}
+              style={projectLinkStyle}
+              title="打开项目记录详情"
+            >
+              {detail.archive.title}
+            </Link>
+            <span style={projectDividerStyle}>·</span>
+            {guideHref ? (
+              <Link href={guideHref} style={guideLinkStyle} title="打开指引">
+                {systemName}
+              </Link>
+            ) : (
+              <span>{systemName}</span>
+            )}
+          </div>
 
           <div style={metaGridStyle}>
             <Meta label="作者" value={detail.author?.username || "用户"} />
@@ -422,9 +442,30 @@ const titleStyle: CSSProperties = {
 
 const projectStyle: CSSProperties = {
   margin: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  flexWrap: "wrap",
   color: "#5f6f5c",
   fontSize: 15,
   lineHeight: 1.6,
+};
+
+const projectLinkStyle: CSSProperties = {
+  color: "#3f633d",
+  fontWeight: 800,
+  textDecoration: "none",
+};
+
+const projectDividerStyle: CSSProperties = {
+  color: "#9aa493",
+};
+
+const guideLinkStyle: CSSProperties = {
+  color: "#557653",
+  fontWeight: 800,
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
 };
 
 const metaGridStyle: CSSProperties = {

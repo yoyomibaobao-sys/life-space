@@ -160,7 +160,7 @@ export async function loadExperienceCard(
     supabase
       .from("archives")
       .select(
-        "id, user_id, title, category, system_name, species_name_snapshot, is_public"
+        "id, user_id, title, category, species_id, system_name, species_name_snapshot, is_public"
       )
       .eq("id", card.archive_id)
       .maybeSingle(),

@@ -299,39 +299,27 @@ export default function MarketPage() {
             )}
           </div>
 
-          <div style={isMobileViewport ? hiddenMobileHeaderActionStyle : headerActionStyle}>
-            {currentUserId ? (
-              <>
-                <Link href="/market/mine" style={mineButtonStyle}>
-                  我的发布
-                </Link>
+          {currentUserId ? (
+            <div style={isMobileViewport ? hiddenMobileHeaderActionStyle : headerActionStyle}>
+              <Link href="/market/mine" style={mineButtonStyle}>
+                我的发布
+              </Link>
 
-                {marketBlocked ? (
-                  <Link
-                    href="/membership"
-                    style={disabledPublishButtonStyle}
-                    title={getCreateMarketPostBlockedText(membership)}
-                  >
-                    发布受限
-                  </Link>
-                ) : (
-                  <Link href="/market/new" style={publishButtonStyle}>
-                    发布信息
-                  </Link>
-                )}
-              </>
-            ) : (
-              <>
-                <Link href="/login" style={mineButtonStyle}>
-                  登录后发布
+              {marketBlocked ? (
+                <Link
+                  href="/membership"
+                  style={disabledPublishButtonStyle}
+                  title={getCreateMarketPostBlockedText(membership)}
+                >
+                  发布受限
                 </Link>
-
-                <Link href="/register" style={publishButtonStyle}>
-                  注册账号
+              ) : (
+                <Link href="/market/new" style={publishButtonStyle}>
+                  发布信息
                 </Link>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          ) : null}
         </header>
 
         {isMobileViewport ? (
