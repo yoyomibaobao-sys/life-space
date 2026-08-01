@@ -31,4 +31,50 @@ test("signed-out home uses a compact viewport-oriented layout", async () => {
   assert.match(home, /@media \(max-height: 720px\)/);
   assert.match(home, /记录四时变化，留下发现、收获与成长/);
   assert.match(home, /其他自然生活相关项目/);
+  assert.doesNotMatch(home, /href="\/register"/);
+  assert.doesNotMatch(home, /href="\/login"/);
+  assert.doesNotMatch(home, /background: "rgba\(255,255,255,0\.82\)"/);
+  assert.doesNotMatch(home, /boxShadow: "0 14px 36px/);
+});
+
+test("project archive label, following cards, and discover cards use the refined layout", async () => {
+  const [archiveHeader, followedCard, followedCss, discoverCard, discoverCss] =
+    await Promise.all([
+      source("components/archive-ui/ArchiveDetailHeaderView.tsx"),
+      source("components/discover/FollowedProjectCard.tsx"),
+      source("components/discover/FollowedProjects.module.css"),
+      source("components/discover/DiscoverProjectCard.tsx"),
+      source("components/discover/DiscoverProjectFeed.module.css"),
+    ]);
+
+  assert.match(archiveHeader, /title="打开项目档案"/);
+  assert.match(archiveHeader, /style=\{eyebrowButtonStyle\}/);
+  assert.match(archiveHeader, /<span style=\{titleTextDisplayStyle\}>/);
+
+  assert.match(followedCard, /className=\{styles\.nameRow\}/);
+  assert.match(followedCard, /· \{systemName\}/);
+  assert.match(followedCss, /\.body \{[\s\S]*?height: 88px/);
+
+  assert.match(discoverCard, /className=\{styles\.imageStats\}/);
+  assert.ok(
+    discoverCard.indexOf("item.public_record_count") <
+      discoverCard.indexOf('<div className={styles.body}>')
+  );
+  assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: start/);
+  assert.doesNotMatch(discoverCss, /\.body \{[^}]*flex: 1/);
+  assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
+});
+
+test("plant detail exposes guide, experience cards, and records as peer tabs", async () => {
+  const detail = await source("app/plant/[id]/page.tsx");
+
+  assert.match(detail, /type PlantDetailTab = "guide" \| "experience" \| "records"/);
+  assert.match(detail, /\["guide", "概要与种植办法"\]/);
+  assert.match(detail, /\["experience", "经验卡"\]/);
+  assert.match(detail, /\["records", "种植记录"\]/);
+  assert.match(detail, /activeTab === "experience"/);
+  assert.match(detail, /<PlantExperienceCardsSection cards=\{relatedExperienceCards\}/);
+  assert.match(detail, /activeTab === "records"/);
+  assert.match(detail, /\.from\("experience_cards"\)/);
+  assert.match(detail, /is_experience_card_public/);
 });

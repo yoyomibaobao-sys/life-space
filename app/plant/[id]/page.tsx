@@ -75,6 +75,17 @@ type PlantAliasSearchRow = PlantAliasRow & {
   relation_type?: string | null;
 };
 
+type PlantDetailTab = "guide" | "experience" | "records";
+
+type PlantExperienceCardItem = {
+  id: string;
+  archive_id: string;
+  title: string;
+  source_record_count: number;
+  published_at?: string | null;
+  archiveTitle: string;
+};
+
 const RELATED_ARCHIVE_LIMIT = 24;
 
 const categoryLabels: Record<string, string> = {
@@ -1088,6 +1099,84 @@ function PlantRecordsSection({
   );
 }
 
+function PlantExperienceCardsSection({
+  cards,
+}: {
+  cards: PlantExperienceCardItem[];
+}) {
+  return (
+    <Section title="经验卡">
+      {cards.length > 0 ? (
+        <div style={{ display: "grid", gap: 10 }}>
+          {cards.map((card) => (
+            <Link
+              key={card.id}
+              href={`/experience-cards/${card.id}`}
+              style={{
+                display: "grid",
+                gap: 6,
+                padding: "14px 15px",
+                border: "1px solid #e2e8df",
+                borderRadius: 14,
+                background: "#fff",
+                color: "inherit",
+                textDecoration: "none",
+              }}
+            >
+              <strong style={{ color: "#2d3b2c", fontSize: 16 }}>
+                {card.title}
+              </strong>
+              <span style={{ color: "#647160", fontSize: 13 }}>
+                {card.archiveTitle} · {card.source_record_count} 条来源记录
+                {card.published_at
+                  ? ` · ${formatShortDate(card.published_at)}发布`
+                  : ""}
+              </span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: 18,
+            border: "1px solid #eee",
+            borderRadius: 14,
+            color: "#888",
+            background: "#fff",
+          }}
+        >
+          还没有与这个植物关联的公开经验卡。
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function PlantTabAccessNotice({ label }: { label: string }) {
+  return (
+    <section
+      style={{
+        marginTop: 16,
+        padding: 18,
+        border: "1px solid #e1e8dd",
+        borderRadius: 16,
+        background: "#fff",
+        color: "#687565",
+        fontSize: 14,
+        lineHeight: 1.7,
+      }}
+    >
+      {label}属于云空间中的完整指引内容。
+      <Link
+        href="/membership"
+        style={{ marginLeft: 7, color: "#3f6f37", fontWeight: 700 }}
+      >
+        查看云空间
+      </Link>
+    </section>
+  );
+}
+
 export default function PlantDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -1102,6 +1191,10 @@ export default function PlantDetailPage() {
   const [careGuide, setCareGuide] = useState<PlantCareGuideRow | null>(null);
   const [relatedArchives, setRelatedArchives] = useState<PlantRelatedArchiveItem[]>([]);
   const [ownArchives, setOwnArchives] = useState<PlantRelatedArchiveItem[]>([]);
+  const [relatedExperienceCards, setRelatedExperienceCards] = useState<
+    PlantExperienceCardItem[]
+  >([]);
+  const [activeTab, setActiveTab] = useState<PlantDetailTab>("guide");
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [interestAdded, setInterestAdded] = useState(false);
@@ -1259,9 +1352,59 @@ export default function PlantDetailPage() {
           hydratedRelatedRows.slice(0, publicRelatedRows.length)
         );
         setOwnArchives(hydratedRelatedRows.slice(publicRelatedRows.length));
+
+        const matchingArchiveRows = Array.from(
+          new Map(
+            [
+              ...((publicArchiveRows || []) as RelatedArchiveSourceRow[]),
+              ...((ownArchiveRows || []) as RelatedArchiveSourceRow[]),
+            ].map((archive) => [archive.id, archive])
+          ).values()
+        );
+        const matchingArchiveIds = matchingArchiveRows.map((archive) => archive.id);
+        const matchingArchiveTitleMap = new Map(
+          matchingArchiveRows.map((archive) => [
+            archive.id,
+            archive.title?.trim() || "种植项目",
+          ])
+        );
+
+        if (matchingArchiveIds.length > 0) {
+          const { data: experienceCardRows } = await supabase
+            .from("experience_cards")
+            .select("id, archive_id, title, source_record_count, published_at")
+            .in("archive_id", matchingArchiveIds)
+            .eq("status", "published")
+            .order("published_at", { ascending: false, nullsFirst: false })
+            .limit(RELATED_ARCHIVE_LIMIT);
+          const cardRows = (experienceCardRows || []) as Array<
+            Omit<PlantExperienceCardItem, "archiveTitle">
+          >;
+          const publicStates = await Promise.all(
+            cardRows.map(async (card) => {
+              const { data } = await supabase.rpc("is_experience_card_public", {
+                p_card_id: card.id,
+              });
+              return Boolean(Array.isArray(data) ? data[0] : data);
+            })
+          );
+
+          setRelatedExperienceCards(
+            cardRows
+              .filter((_card, index) => publicStates[index])
+              .map((card) => ({
+                ...card,
+                archiveTitle:
+                  matchingArchiveTitleMap.get(card.archive_id) || "种植项目",
+              }))
+          );
+        } else {
+          setRelatedExperienceCards([]);
+        }
       } else {
         setRelatedArchives([]);
         setOwnArchives([]);
+        setRelatedExperienceCards([]);
       }
 
       if (user && canReadFullGuide) {
@@ -1701,36 +1844,6 @@ export default function PlantDetailPage() {
           {en?.common_name && <div>英文名：{en.common_name}</div>}
         </div>
 
-
-        {isSignedIn && basicOverview ? (
-          <div
-            style={{
-              marginTop: 4,
-              paddingTop: 2,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: "#666",
-                marginBottom: 8,
-              }}
-            >
-              简介
-            </div>
-            <div
-              style={{
-                lineHeight: 1.7,
-                color: "#303030",
-                fontSize: 16,
-              }}
-            >
-              {basicOverview}
-            </div>
-          </div>
-        ) : null}
-
         {!isSignedIn ? (
           <div
             style={{
@@ -1916,6 +2029,53 @@ export default function PlantDetailPage() {
         )}
       </section>
 
+      <nav
+        aria-label="指引详情内容"
+        style={{
+          marginTop: 16,
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: 8,
+        }}
+      >
+        {([
+          ["guide", "概要与种植办法"],
+          ["experience", "经验卡"],
+          ["records", "种植记录"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setActiveTab(value)}
+            aria-pressed={activeTab === value}
+            style={{
+              minHeight: 42,
+              padding: "8px 9px",
+              border:
+                activeTab === value
+                  ? "1px solid #8eb083"
+                  : "1px solid #dde6d9",
+              borderRadius: 12,
+              background: activeTab === value ? "#edf5e9" : "#fff",
+              color: activeTab === value ? "#315f30" : "#657061",
+              fontSize: 13,
+              fontWeight: 750,
+              cursor: "pointer",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "guide" ? (
+        <>
+      {isSignedIn && basicOverview ? (
+        <Section title="概要">
+          <TextBlock text={basicOverview} />
+        </Section>
+      ) : null}
+
       {isSignedIn && !hasCloudAccess && localCoreParameterCards.length > 0 ? (
         <Section title="基础适种参数">
           <div
@@ -2037,19 +2197,33 @@ export default function PlantDetailPage() {
       )}
 
       {hasCloudAccess ? (
-        <>
-          <PlantingGuideSection
-            parameters={parameters}
-            careGuide={careGuide}
-          />
+        <PlantingGuideSection
+          parameters={parameters}
+          careGuide={careGuide}
+        />
+      ) : null}
+        </>
+      ) : null}
 
+      {activeTab === "experience" ? (
+        hasCloudAccess ? (
+          <PlantExperienceCardsSection cards={relatedExperienceCards} />
+        ) : (
+          <PlantTabAccessNotice label="相关经验卡" />
+        )
+      ) : null}
+
+      {activeTab === "records" ? (
+        hasCloudAccess ? (
           <PlantRecordsSection
             parameters={parameters}
             ownArchives={ownArchives}
             publicArchives={relatedArchives}
             isLoggedIn={isSignedIn}
           />
-        </>
+        ) : (
+          <PlantTabAccessNotice label="相关种植记录" />
+        )
       ) : null}
     </main>
   );

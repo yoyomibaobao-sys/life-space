@@ -13,9 +13,9 @@ export const EXPERIENCE_CARD_VIDEO_HEIGHT = 1280;
 export const EXPERIENCE_CARD_VIDEO_FPS = 6;
 export const EXPERIENCE_CARD_VIDEO_BITRATE = 2_200_000;
 
-const INTRO_DURATION_SECONDS = 2.6;
+const INTRO_DURATION_SECONDS = 4.8;
 const OUTRO_DURATION_SECONDS = 2.4;
-const TEXT_CHUNK_LENGTH = 84;
+const TEXT_CHUNK_LENGTH = 60;
 
 type VideoSceneKind = "intro" | "record" | "outro";
 
@@ -152,6 +152,7 @@ export function buildExperienceCardVideoScenes(
   imageSelection?: ExperienceCardVideoImageSelection
 ): ExperienceCardVideoScene[] {
   const systemName = getSystemName(detail);
+  const authorName = detail.author?.username?.trim() || "用户";
   const recordCount = detail.records.length;
   const scenes: ExperienceCardVideoScene[] = [
     {
@@ -160,7 +161,7 @@ export function buildExperienceCardVideoScenes(
       duration: INTRO_DURATION_SECONDS,
       title: detail.card.title,
       subtitle: `${detail.archive.title} · ${systemName}`,
-      text: "真实记录组成的经验时间线",
+      text: `发布者 · ${authorName}`,
       tags: [],
       imageUrl:
         detail.cover?.display_url || detail.cover?.display_thumb_url || null,
@@ -601,16 +602,11 @@ function drawRecordScene(
   context.textBaseline = "middle";
   context.fillText(stageText, 60 * scale, metaY + 25 * scale);
 
-  setFont(context, 21 * scale, 700);
-  context.fillStyle = "rgba(255,255,255,0.94)";
-  context.textAlign = "right";
-  context.fillText(scene.date, width - 48 * scale, metaY + 25 * scale);
-  context.textAlign = "left";
   context.textBaseline = "alphabetic";
 
   const panelX = 42 * scale;
   const panelWidth = width - panelX * 2;
-  const panelY = image ? height * 0.70 : height * 0.56;
+  const panelY = image ? height * 0.74 : height * 0.56;
   const panelHeight = height - panelY - 46 * scale;
   fillRoundedRect(
     context,
@@ -630,12 +626,12 @@ function drawRecordScene(
   context.fillStyle = "rgba(255,255,255,0.66)";
   const partText =
     scene.partCount > 1
-      ? `${scene.subtitle} · 字幕 ${scene.partIndex}/${scene.partCount}`
-      : scene.subtitle;
+      ? `${scene.date} · ${scene.subtitle} · ${scene.partIndex}/${scene.partCount}`
+      : `${scene.date} · ${scene.subtitle}`;
   context.fillText(partText, contentX, cursorY);
   cursorY += 42 * scale;
 
-  const maxTextLines = image ? 5 : 7;
+  const maxTextLines = image ? 4 : 7;
   const fitted = fitWrappedText(
     context,
     scene.text,

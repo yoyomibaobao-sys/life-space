@@ -167,9 +167,13 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
 
   assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\}/);
   assert.match(panel, /生成竖屏MP4/);
-  assert.match(panel, /所有被选记录都会进入视频/);
-  assert.match(panel, /原文字自动烧录为字幕/);
-  assert.match(panel, /<video[\s\S]*?loop[\s\S]*?playsInline/);
+  assert.match(panel, /自动串联全部来源记录/);
+  assert.match(panel, /文字烧录为字幕/);
+  assert.match(panel, /<video[\s\S]*?autoPlay[\s\S]*?muted[\s\S]*?playsInline/);
+  assert.match(panel, /onEnded=\{\(event\) => restartGeneratedVideo\(event\.currentTarget\)\}/);
+  assert.match(panel, /video\.currentTime = 0/);
+  assert.match(panel, /video\.play\(\)\.catch/);
+  assert.match(panel, /保存后的MP4是否循环由相册或视频平台决定/);
   assert.match(panel, /navigator\.canShare/);
   assert.match(panel, /不上传云端，也不占云空间/);
   assert.match(panel, /repeat\(auto-fit/);
@@ -180,6 +184,10 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
   assert.match(renderer, /EXPERIENCE_CARD_VIDEO_HEIGHT = 1280/);
   assert.match(renderer, /splitExperienceCardVideoText\(record\.note\)/);
   assert.match(renderer, /detail\.records\.forEach/);
+  assert.match(renderer, /发布者 · \$\{authorName\}/);
+  assert.match(renderer, /INTRO_DURATION_SECONDS = 4\.8/);
+  assert.match(renderer, /`\$\{scene\.date\} · \$\{scene\.subtitle\}`/);
+  assert.doesNotMatch(renderer, /fillText\(scene\.date, width - 48/);
   assert.match(packageJson, /"mediabunny"/);
 });
 
@@ -199,8 +207,11 @@ test("experience card MP4 is shown first, supports optional record images, and p
   assert.match(panel, /不使用图片/);
   assert.match(panel, /selectedImageByRecordId/);
   assert.match(renderer, /imageSelection\?: ExperienceCardVideoImageSelection/);
-  assert.match(renderer, /panelY = image \? height \* 0\.70/);
-  assert.match(renderer, /maxTextLines = image \? 5 : 7/);
+  assert.match(renderer, /panelY = image \? height \* 0\.74/);
+  assert.match(renderer, /maxTextLines = image \? 4 : 7/);
+  assert.doesNotMatch(detail, /coverWrapStyle/);
+  assert.doesNotMatch(detail, /metaGridStyle/);
+  assert.match(detail, /metaLineStyle/);
 });
 
 test("mobile project details expose archive, records, experience cards, and growth line as peers", async () => {
@@ -224,5 +235,7 @@ test("personal space project page has a direct My Experience Cards entry", async
 
   assert.match(personalSpace, /href="\/experience-cards"/);
   assert.match(personalSpace, /我的经验卡/);
-  assert.match(personalSpace, /集中查看和管理全部项目的经验卡/);
+  assert.doesNotMatch(personalSpace, /集中查看和管理全部项目的经验卡/);
+  assert.match(personalSpace, /display: "inline-flex"/);
+  assert.match(personalSpace, /minHeight: 34/);
 });

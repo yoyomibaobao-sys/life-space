@@ -365,19 +365,24 @@ export default function ArchiveDetailHeaderView({
     <section style={headerStyle}>
       <div style={topRowStyle}>
         <div style={titleWrapStyle}>
-          {eyebrow ? <span style={eyebrowStyle}>{eyebrow}</span> : null}
-          <span style={projectIdentityStyle}>
+          {eyebrow ? (
             <button
               type="button"
               onClick={() => {
                 setProfileOpen((open) => !open);
                 cancelFieldEdit();
               }}
-              style={titleButtonStyle}
+              style={eyebrowButtonStyle}
               aria-expanded={profileOpen}
+              title="打开项目档案"
             >
-              {project.title}
+              {eyebrow}
             </button>
+          ) : null}
+          <span style={projectIdentityStyle}>
+            <span style={titleTextDisplayStyle}>
+              {project.title}
+            </span>
             {project.systemName ? <span style={titleDividerStyle}> · </span> : null}
             {project.systemName && encyclopediaHref ? (
               <a href={encyclopediaHref} style={systemNameLinkStyle}>
@@ -540,14 +545,8 @@ const titleWrapStyle: CSSProperties = {
   gap: 0,
 };
 
-const titleButtonStyle: CSSProperties = {
-  border: "none",
-  background: "transparent",
-  padding: 0,
-  margin: 0,
+const titleTextDisplayStyle: CSSProperties = {
   minWidth: 0,
-  textAlign: "left",
-  cursor: "pointer",
   color: "#1f2d1f",
   fontSize: 21,
   fontWeight: 830,
@@ -564,14 +563,19 @@ const projectIdentityStyle: CSSProperties = {
   maxWidth: "100%",
 };
 
-const eyebrowStyle: CSSProperties = {
+const eyebrowButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
+  gap: 5,
+  padding: 0,
+  border: 0,
+  background: "transparent",
   color: "#71826d",
   fontSize: 12,
   fontWeight: 800,
   lineHeight: 1,
   marginRight: 10,
+  cursor: "pointer",
 };
 
 const titleDividerStyle: CSSProperties = {

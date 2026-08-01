@@ -76,17 +76,17 @@ export function FollowedProjectCard({
         </div>
 
         <div className={styles.body}>
-          <h2 className={styles.title}>{title}</h2>
-          {systemName ? (
-            <div className={styles.systemName}>{systemName}</div>
-          ) : null}
+          <div className={styles.nameRow}>
+            <h2 className={styles.title}>{title}</h2>
+            {systemName ? (
+              <span className={styles.systemName}>· {systemName}</span>
+            ) : null}
+          </div>
           {item.card_summary ? (
             <p className={styles.summary}>{item.card_summary}</p>
           ) : null}
-          {updateDate ? (
-            <div className={styles.updateDate}>{updateDate} 更新</div>
-          ) : null}
-          <div className={styles.stats}>
+          <div className={styles.metaLine}>
+            {updateDate ? `${updateDate} 更新 · ` : ""}
             {item.public_record_count}条记录 · {durationDays}天 · {item.public_comment_count}条评论
           </div>
           <div className={styles.owner}>

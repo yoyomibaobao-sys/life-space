@@ -160,26 +160,35 @@
 
 .body {
   min-width: 0;
+  height: 88px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 1px 0;
+  overflow: hidden;
+}
+
+.nameRow {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
 }
 
 .title {
-  display: -webkit-box;
+  min-width: 0;
   overflow: hidden;
   margin: 0;
   color: #263326;
   font-size: 15px;
   line-height: 1.35;
   font-weight: 750;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .systemName,
-.updateDate,
 .owner {
   min-width: 0;
   overflow: hidden;
@@ -188,9 +197,11 @@
 }
 
 .systemName {
+  flex: 0 1 auto;
   color: #4e604d;
   font-size: 12px;
   font-weight: 650;
+  text-overflow: ellipsis;
 }
 
 .summary {
@@ -202,19 +213,20 @@
   line-height: 1.4;
   white-space: pre-line;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
-.updateDate,
-.stats,
+.metaLine,
 .owner {
   color: #929b90;
   font-size: 11px;
   line-height: 1.35;
 }
 
-.stats {
-  white-space: normal;
+.metaLine {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .owner {
@@ -390,6 +402,10 @@
   .skeletonImage {
     width: 96px;
   }
+
+  .body {
+    height: 96px;
+  }
 }
 
 @media (min-width: 768px) {
@@ -406,6 +422,7 @@
   }
 
   .body {
+    height: 104px;
     gap: 6px;
   }
 
@@ -419,7 +436,7 @@
   }
 
   .summary {
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
   }
 }
 
@@ -433,6 +450,10 @@
   .imageRegion,
   .skeletonImage {
     width: 112px;
+  }
+
+  .body {
+    height: 112px;
   }
 }
 

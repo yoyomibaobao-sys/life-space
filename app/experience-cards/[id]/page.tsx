@@ -134,8 +134,6 @@ export default function ExperienceCardPage({
     detail.archive.system_name ||
     detail.archive.species_name_snapshot ||
     "未填写系统名";
-  const coverSrc =
-    detail.cover?.display_url || detail.cover?.display_thumb_url || null;
   const guideHref =
     detail.archive.category === "plant" && detail.archive.species_id
       ? `/plant/${detail.archive.species_id}?fromArchive=${encodeURIComponent(
@@ -167,19 +165,8 @@ export default function ExperienceCardPage({
       ) : null}
 
       <article style={cardShellStyle}>
-        {coverSrc ? (
-          <div style={coverWrapStyle}>
-            <img src={coverSrc} alt="" style={coverStyle} />
-          </div>
-        ) : (
-          <div style={coverFallbackStyle}>
-            <span>有时·耕作</span>
-            <strong>{detail.card.title}</strong>
-          </div>
-        )}
-
         <div style={introStyle}>
-          <div style={eyebrowStyle}>真实记录组成的经验时间线</div>
+          <div style={eyebrowStyle}>经验时间线</div>
           <h1 style={titleStyle}>{detail.card.title}</h1>
           <div style={projectStyle}>
             <Link
@@ -199,32 +186,26 @@ export default function ExperienceCardPage({
             )}
           </div>
 
-          <div style={metaGridStyle}>
-            <Meta label="作者" value={detail.author?.username || "用户"} />
-            <Meta
-              label="时间"
-              value={
-                startDate && endDate
-                  ? startDate === endDate
-                    ? startDate
-                    : `${startDate}—${endDate}`
-                  : "暂无"
-              }
-            />
-            <Meta
-              label="来源记录"
-              value={`${detail.records.length} 条`}
-            />
-            <Meta
-              label="状态"
-              value={
-                detail.isPubliclyAvailable
-                  ? "已公开"
-                  : detail.card.status === "published"
-                    ? "公开已暂停"
-                    : "私密草稿"
-              }
-            />
+          <div style={metaLineStyle}>
+            <span>{detail.author?.username || "用户"}</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {startDate && endDate
+                ? startDate === endDate
+                  ? startDate
+                  : `${startDate}—${endDate}`
+                : "暂无日期"}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>{detail.records.length} 条记录</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {detail.isPubliclyAvailable
+                ? "已公开"
+                : detail.card.status === "published"
+                  ? "公开已暂停"
+                  : "私密草稿"}
+            </span>
           </div>
         </div>
       </article>
@@ -359,15 +340,6 @@ export default function ExperienceCardPage({
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={metaItemStyle}>
-      <div style={metaLabelStyle}>{label}</div>
-      <div style={metaValueStyle}>{value}</div>
-    </div>
-  );
-}
-
 const pageStyle: CSSProperties = {
   maxWidth: 820,
   margin: "0 auto",
@@ -390,40 +362,12 @@ const backLinkStyle: CSSProperties = {
 };
 
 const cardShellStyle: CSSProperties = {
-  overflow: "hidden",
-  border: "1px solid #e0e8dd",
-  borderRadius: 22,
-  background: "#fff",
+  borderBottom: "1px solid #e2e9df",
   marginBottom: 14,
 };
 
-const coverWrapStyle: CSSProperties = {
-  width: "100%",
-  aspectRatio: "16 / 9",
-  maxHeight: 420,
-  background: "#edf1ea",
-};
-
-const coverStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-  display: "block",
-};
-
-const coverFallbackStyle: CSSProperties = {
-  minHeight: 230,
-  padding: 28,
-  background: "linear-gradient(145deg, #dcebd7, #f3ead8)",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "flex-end",
-  gap: 8,
-  color: "#40553d",
-};
-
 const introStyle: CSSProperties = {
-  padding: 22,
+  padding: "5px 2px 16px",
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -434,8 +378,8 @@ const eyebrowStyle: CSSProperties = {
 };
 
 const titleStyle: CSSProperties = {
-  margin: "7px 0 7px",
-  fontSize: 30,
+  margin: "5px 0 5px",
+  fontSize: 26,
   lineHeight: 1.25,
   overflowWrap: "anywhere",
 };
@@ -468,30 +412,15 @@ const guideLinkStyle: CSSProperties = {
   textUnderlineOffset: 3,
 };
 
-const metaGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-  gap: 10,
-  marginTop: 18,
-};
-
-const metaItemStyle: CSSProperties = {
-  padding: 11,
-  borderRadius: 12,
-  background: "#f6f8f4",
-};
-
-const metaLabelStyle: CSSProperties = {
-  color: "#82907f",
-  fontSize: 11,
-  marginBottom: 4,
-};
-
-const metaValueStyle: CSSProperties = {
-  color: "#3d4b3b",
-  fontSize: 13,
-  fontWeight: 800,
-  overflowWrap: "anywhere",
+const metaLineStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 6,
+  marginTop: 10,
+  color: "#7b8778",
+  fontSize: 12,
+  lineHeight: 1.5,
 };
 
 const timelinePanelStyle: CSSProperties = {
