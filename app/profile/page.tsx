@@ -1150,9 +1150,15 @@ function ProjectStatsCard({
   endedArchiveCount: number;
 }) {
   return (
-    <div style={mobileProjectStatsCardStyle}>
-      我的项目 {archiveCount} 个 · 公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount} · 已结束 {endedArchiveCount}
-    </div>
+    <Link href="/archive" style={mobileProjectStatsCardStyle}>
+      <span style={mobileProjectStatsTitleRowStyle}>
+        <strong>项目档案</strong>
+        <strong>{archiveCount} 个 →</strong>
+      </span>
+      <span style={mobileProjectStatsDetailStyle}>
+        公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount} · 已结束 {endedArchiveCount}
+      </span>
+    </Link>
   );
 }
 
@@ -1795,10 +1801,26 @@ const compactStatHintStyle: CSSProperties = {
 const mobileProjectStatsCardStyle: CSSProperties = {
   ...compactStatCardStyle,
   minHeight: 0,
+  display: "grid",
+  gap: 4,
   color: "#22301f",
   fontSize: 13,
   fontWeight: 800,
   lineHeight: 1.45,
+  textDecoration: "none",
+};
+
+const mobileProjectStatsTitleRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const mobileProjectStatsDetailStyle: CSSProperties = {
+  color: "#74806f",
+  fontSize: 12,
+  fontWeight: 600,
 };
 
 const statActionCardStyle: CSSProperties = {
