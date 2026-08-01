@@ -93,6 +93,8 @@ export default function ArchiveDetail({
   return <Content id={id} />;
 }
 
+type MobileArchiveDetailTab = "profile" | "records" | "experience" | "growth";
+
 type MobileArchiveEditableField =
   | "title"
   | "category"
@@ -129,7 +131,7 @@ function Content({ id }: { id: string }) {
   const [projectFollowSubmitting, setProjectFollowSubmitting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [mobileDetailTab, setMobileDetailTab] = useState<"profile" | "records">("records");
+  const [mobileDetailTab, setMobileDetailTab] = useState<MobileArchiveDetailTab>("records");
   const [mobileAddRecordOpen, setMobileAddRecordOpen] = useState(false);
   const [mobileArchiveEditingField, setMobileArchiveEditingField] =
     useState<MobileArchiveEditableField | null>(null);
@@ -1862,6 +1864,20 @@ saveRecentArchiveBrowse({
           >
             记录
           </button>
+          <button
+            type="button"
+            onClick={() => setMobileDetailTab("experience")}
+            style={archiveDetailTabButtonStyle(mobileDetailTab === "experience")}
+          >
+            经验卡
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileDetailTab("growth")}
+            style={archiveDetailTabButtonStyle(mobileDetailTab === "growth")}
+          >
+            生长线
+          </button>
         </nav>
 
         {!isMobileViewport ? (
@@ -1976,14 +1992,21 @@ saveRecentArchiveBrowse({
           />
         ) : null}
 
-        {isMobileViewport && mobileDetailTab === "profile" ? (
+        {isMobileViewport && mobileDetailTab === "experience" ? (
           <ArchiveExperienceCards
             archiveId={activeArchive.id}
             isOwner={isOwner}
           />
         ) : null}
 
-        {mode === "owner" ? (
+        {isMobileViewport && mobileDetailTab === "growth" ? (
+          <section style={mobileGrowthLinePlaceholderStyle}>
+            <strong>生长线</strong>
+            <span>生长线将在后续开放，并与档案、记录、经验卡保持同级入口。</span>
+          </section>
+        ) : null}
+
+        {mode === "owner" && (!isMobileViewport || mobileDetailTab === "records") ? (
           <ArchiveAddRecordSection
             archiveId={activeArchive.id}
             archiveCategory={activeArchive.category}
@@ -2598,7 +2621,7 @@ const mobileRecordTopLinkStyle: CSSProperties = {
 
 const archiveDetailTabWrapStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
   gap: 6,
   marginBottom: 12,
   padding: 4,
@@ -2614,7 +2637,7 @@ function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
     borderRadius: 12,
     color: active ? "#2f6a31" : "#40583a",
     background: active ? "#e3f1dd" : "transparent",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 800,
     cursor: "pointer",
   };
@@ -2622,6 +2645,19 @@ function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
 
 const archiveDetailAnchorStyle: CSSProperties = {
   scrollMarginTop: 76,
+};
+
+const mobileGrowthLinePlaceholderStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+  marginBottom: 14,
+  padding: 18,
+  border: "1px dashed #d6e3d0",
+  borderRadius: 16,
+  background: "#fbfdf9",
+  color: "#60705c",
+  fontSize: 13,
+  lineHeight: 1.65,
 };
 
 const mobileArchiveProfileStyle: CSSProperties = {

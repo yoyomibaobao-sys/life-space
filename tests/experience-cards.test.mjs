@@ -180,3 +180,47 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
   assert.match(renderer, /detail\.records\.forEach/);
   assert.match(packageJson, /"mediabunny"/);
 });
+
+
+test("experience card MP4 is shown first, supports optional record images, and preserves photo area", async () => {
+  const [detail, panel, renderer] = await Promise.all([
+    source("app/experience-cards/[id]/page.tsx"),
+    source("components/experience-card/ExperienceCardVideoPanel.tsx"),
+    source("lib/experience-card-video.ts"),
+  ]);
+
+  assert.ok(
+    detail.indexOf("<ExperienceCardVideoPanel detail={detail}") <
+      detail.indexOf("<article style={cardShellStyle}")
+  );
+  assert.match(panel, /选择记录图片/);
+  assert.match(panel, /不使用图片/);
+  assert.match(panel, /selectedImageByRecordId/);
+  assert.match(renderer, /imageSelection\?: ExperienceCardVideoImageSelection/);
+  assert.match(renderer, /panelY = image \? height \* 0\.70/);
+  assert.match(renderer, /maxTextLines = image \? 5 : 7/);
+});
+
+test("mobile project details expose archive, records, experience cards, and growth line as peers", async () => {
+  const archiveDetail = await source("app/archive/[id]/page.tsx");
+
+  assert.match(
+    archiveDetail,
+    /type MobileArchiveDetailTab = "profile" \| "records" \| "experience" \| "growth"/
+  );
+  assert.match(archiveDetail, />\s*档案\s*</);
+  assert.match(archiveDetail, />\s*记录\s*</);
+  assert.match(archiveDetail, />\s*经验卡\s*</);
+  assert.match(archiveDetail, />\s*生长线\s*</);
+  assert.match(archiveDetail, /mobileDetailTab === "experience"/);
+  assert.match(archiveDetail, /mobileDetailTab === "growth"/);
+  assert.match(archiveDetail, /repeat\(4, minmax\(0, 1fr\)\)/);
+});
+
+test("personal space project page has a direct My Experience Cards entry", async () => {
+  const personalSpace = await source("app/archive/page.tsx");
+
+  assert.match(personalSpace, /href="\/experience-cards"/);
+  assert.match(personalSpace, /我的经验卡/);
+  assert.match(personalSpace, /集中查看和管理全部项目的经验卡/);
+});

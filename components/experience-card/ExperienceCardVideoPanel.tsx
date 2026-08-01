@@ -8,7 +8,11 @@ import {
   type CSSProperties,
 } from "react";
 import { showToast } from "@/components/Toast";
-import type { ExperienceCardDetail } from "@/lib/experience-card-types";
+import type {
+  ExperienceCardDetail,
+  ExperienceCardMedia,
+  ExperienceCardSourceRecord,
+} from "@/lib/experience-card-types";
 import {
   buildExperienceCardVideoScenes,
   formatExperienceCardVideoDuration,
@@ -20,7 +24,48 @@ import {
   releaseExperienceCardVideoImages,
   renderExperienceCardVideoFrame,
   type ExperienceCardVideoImages,
+  type ExperienceCardVideoImageSelection,
 } from "@/lib/experience-card-video";
+
+type RecordImageOption = {
+  id: string;
+  sourceUrl: string;
+  previewUrl: string;
+};
+
+function isImageMedia(media: ExperienceCardMedia) {
+  const mimeType = String(media.mime_type || "").toLowerCase();
+  const type = String(media.type || "").toLowerCase();
+  if (mimeType) return mimeType.startsWith("image/");
+  if (type) return type === "image" || type === "photo";
+  return true;
+}
+
+function getRecordImageOptions(record: ExperienceCardSourceRecord): RecordImageOption[] {
+  return record.media
+    .filter(
+      (media) =>
+        isImageMedia(media) &&
+        Boolean(media.display_url || media.display_thumb_url)
+    )
+    .map((media) => ({
+      id: media.id,
+      sourceUrl: media.display_url || media.display_thumb_url || "",
+      previewUrl: media.display_thumb_url || media.display_url || "",
+    }))
+    .filter((item) => Boolean(item.sourceUrl));
+}
+
+function buildDefaultImageSelection(
+  detail: ExperienceCardDetail
+): ExperienceCardVideoImageSelection {
+  return Object.fromEntries(
+    detail.records.map((record) => [
+      record.id,
+      getRecordImageOptions(record)[0]?.sourceUrl || null,
+    ])
+  );
+}
 
 export default function ExperienceCardVideoPanel({
   detail,
@@ -36,10 +81,31 @@ export default function ExperienceCardVideoPanel({
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [errorText, setErrorText] = useState("");
+  const [selectedImageByRecordId, setSelectedImageByRecordId] =
+    useState<ExperienceCardVideoImageSelection>(() =>
+      buildDefaultImageSelection(detail)
+    );
 
-  const scenes = useMemo(
-    () => buildExperienceCardVideoScenes(detail),
+  const imageOptionsByRecordId = useMemo(
+    () =>
+      new Map(
+        detail.records.map((record) => [
+          record.id,
+          getRecordImageOptions(record),
+        ])
+      ),
     [detail]
+  );
+  const selectedImageCount = useMemo(
+    () =>
+      detail.records.filter((record) =>
+        Boolean(selectedImageByRecordId[record.id])
+      ).length,
+    [detail.records, selectedImageByRecordId]
+  );
+  const scenes = useMemo(
+    () => buildExperienceCardVideoScenes(detail, selectedImageByRecordId),
+    [detail, selectedImageByRecordId]
   );
   const duration = useMemo(
     () => getExperienceCardVideoDuration(scenes),
@@ -51,12 +117,19 @@ export default function ExperienceCardVideoPanel({
   );
 
   useEffect(() => {
+    setSelectedImageByRecordId(buildDefaultImageSelection(detail));
+    clearGeneratedVideo();
+    setErrorText("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail.card.id]);
+
+  useEffect(() => {
     let cancelled = false;
     let loadedImages: ExperienceCardVideoImages = new Map();
     setImageLoading(true);
     setImages(new Map());
 
-    void loadExperienceCardVideoImages(detail)
+    void loadExperienceCardVideoImages(detail, scenes)
       .then((nextImages) => {
         loadedImages = nextImages;
         if (cancelled) {
@@ -73,7 +146,7 @@ export default function ExperienceCardVideoPanel({
       cancelled = true;
       releaseExperienceCardVideoImages(loadedImages);
     };
-  }, [detail]);
+  }, [detail, scenes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -113,6 +186,16 @@ export default function ExperienceCardVideoPanel({
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     setVideoUrl("");
     setVideoBlob(null);
+  }
+
+  function selectRecordImage(recordId: string, imageUrl: string | null) {
+    if (generating) return;
+    clearGeneratedVideo();
+    setErrorText("");
+    setSelectedImageByRecordId((current) => ({
+      ...current,
+      [recordId]: imageUrl,
+    }));
   }
 
   async function handleGenerate() {
@@ -200,8 +283,58 @@ export default function ExperienceCardVideoPanel({
       </div>
 
       <p style={descriptionStyle}>
-        所有被选记录都会进入视频；每条记录的原文字自动烧录为字幕，并采用该记录的首张照片。视频只在当前设备生成，不上传云端，也不占云空间。
+        所有被选记录都会进入视频；原文字自动烧录为字幕。每条记录的图片可以单独选择，也可以不使用图片。视频只在当前设备生成，不上传云端，也不占云空间。
       </p>
+
+      <details style={imageSelectorStyle}>
+        <summary style={imageSelectorSummaryStyle}>
+          选择记录图片（已选择 {selectedImageCount}/{detail.records.length}）
+        </summary>
+        <div style={imageSelectorListStyle}>
+          {detail.records.map((record, index) => {
+            const options = imageOptionsByRecordId.get(record.id) || [];
+            const selectedUrl = selectedImageByRecordId[record.id] || null;
+
+            return (
+              <div key={record.id} style={imageSelectorRecordStyle}>
+                <div style={imageSelectorRecordTitleStyle}>
+                  第 {index + 1} 条记录
+                </div>
+                <div style={imageChoiceGridStyle}>
+                  <button
+                    type="button"
+                    onClick={() => selectRecordImage(record.id, null)}
+                    aria-pressed={!selectedUrl}
+                    style={imageNoneButtonStyle(!selectedUrl)}
+                  >
+                    不使用图片
+                  </button>
+                  {options.map((option) => {
+                    const active = selectedUrl === option.sourceUrl;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() =>
+                          selectRecordImage(record.id, option.sourceUrl)
+                        }
+                        aria-pressed={active}
+                        style={imageChoiceButtonStyle(active)}
+                      >
+                        <img
+                          src={option.previewUrl}
+                          alt={`第${index + 1}条记录可选图片`}
+                          style={imageChoiceImageStyle}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </details>
 
       <div style={contentGridStyle}>
         <div style={previewShellStyle}>
@@ -361,6 +494,78 @@ const descriptionStyle: CSSProperties = {
   color: "#657260",
   fontSize: 13,
   lineHeight: 1.75,
+};
+
+const imageSelectorStyle: CSSProperties = {
+  margin: "0 0 16px",
+  border: "1px solid #dfe8db",
+  borderRadius: 14,
+  background: "#fff",
+  overflow: "hidden",
+};
+
+const imageSelectorSummaryStyle: CSSProperties = {
+  padding: "11px 13px",
+  color: "#466043",
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const imageSelectorListStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  padding: "0 12px 12px",
+};
+
+const imageSelectorRecordStyle: CSSProperties = {
+  paddingTop: 10,
+  borderTop: "1px solid #edf1ea",
+};
+
+const imageSelectorRecordTitleStyle: CSSProperties = {
+  marginBottom: 7,
+  color: "#6b7967",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const imageChoiceGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(68px, 1fr))",
+  gap: 7,
+};
+
+function imageChoiceButtonStyle(active: boolean): CSSProperties {
+  return {
+    aspectRatio: "1 / 1",
+    padding: 2,
+    border: active ? "2px solid #5f8b59" : "1px solid #dce5d8",
+    borderRadius: 10,
+    background: active ? "#edf5e9" : "#f8faf7",
+    overflow: "hidden",
+    cursor: "pointer",
+  };
+}
+
+function imageNoneButtonStyle(active: boolean): CSSProperties {
+  return {
+    ...imageChoiceButtonStyle(active),
+    minHeight: 68,
+    aspectRatio: "auto",
+    color: active ? "#365c34" : "#6f7c6b",
+    fontSize: 12,
+    fontWeight: 800,
+    lineHeight: 1.35,
+  };
+}
+
+const imageChoiceImageStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+  borderRadius: 7,
 };
 
 const contentGridStyle: CSSProperties = {
