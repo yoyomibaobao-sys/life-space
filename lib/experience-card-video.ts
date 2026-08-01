@@ -1,7 +1,4 @@
-import {
-  formatExperienceCardDate,
-  getExperienceCardStageLabel,
-} from "@/lib/experience-cards";
+import { formatExperienceCardDate } from "@/lib/experience-cards";
 import type {
   ExperienceCardDetail,
   ExperienceCardMedia,
@@ -38,7 +35,7 @@ export type ExperienceCardVideoScene = {
 
 export type ExperienceCardVideoImage = ImageBitmap | HTMLImageElement;
 export type ExperienceCardVideoImages = Map<string, ExperienceCardVideoImage>;
-export type ExperienceCardVideoImageSelection = Record<string, string | null>;
+export type ExperienceCardVideoImageSelection = Record<string, string[]>;
 
 export type GenerateExperienceCardVideoOptions = {
   detail: ExperienceCardDetail;
@@ -81,7 +78,7 @@ function findPreferredBreak(chars: string[], start: number, end: number) {
 
 export function splitExperienceCardVideoText(value?: string | null) {
   const normalized = normalizeRecordText(value);
-  if (!normalized) return ["这条记录没有文字。"];
+  if (!normalized) return [];
 
   const chars = Array.from(normalized);
   const chunks: string[] = [];
@@ -98,7 +95,7 @@ export function splitExperienceCardVideoText(value?: string | null) {
     cursor = end;
   }
 
-  return chunks.length > 0 ? chunks : ["这条记录没有文字。"];
+  return chunks;
 }
 
 function getTextDuration(text: string) {
@@ -125,11 +122,19 @@ function isImageMedia(media: ExperienceCardMedia) {
 export function getExperienceCardRecordVideoImageUrl(
   record: ExperienceCardSourceRecord
 ) {
-  const media = record.media.find(
-    (item) =>
-      isImageMedia(item) && Boolean(item.display_url || item.display_thumb_url)
-  );
-  return media?.display_url || media?.display_thumb_url || null;
+  return getExperienceCardRecordVideoImageUrls(record)[0] || null;
+}
+
+export function getExperienceCardRecordVideoImageUrls(
+  record: ExperienceCardSourceRecord
+) {
+  return record.media
+    .filter(
+      (item) =>
+        isImageMedia(item) && Boolean(item.display_url || item.display_thumb_url)
+    )
+    .map((item) => item.display_url || item.display_thumb_url || "")
+    .filter(Boolean);
 }
 
 function getRecordTags(record: ExperienceCardSourceRecord) {
@@ -149,7 +154,8 @@ function getRecordTags(record: ExperienceCardSourceRecord) {
 
 export function buildExperienceCardVideoScenes(
   detail: ExperienceCardDetail,
-  imageSelection?: ExperienceCardVideoImageSelection
+  imageSelection?: ExperienceCardVideoImageSelection,
+  coverImageUrl?: string | null
 ): ExperienceCardVideoScene[] {
   const systemName = getSystemName(detail);
   const authorName = detail.author?.username?.trim() || "用户";
@@ -164,7 +170,9 @@ export function buildExperienceCardVideoScenes(
       text: `发布者 · ${authorName}`,
       tags: [],
       imageUrl:
-        detail.cover?.display_url || detail.cover?.display_thumb_url || null,
+        coverImageUrl !== undefined
+          ? coverImageUrl
+          : detail.cover?.display_url || detail.cover?.display_thumb_url || null,
       recordIndex: null,
       recordCount,
       stage: "",
@@ -180,27 +188,35 @@ export function buildExperienceCardVideoScenes(
       imageSelection &&
         Object.prototype.hasOwnProperty.call(imageSelection, record.id)
     );
-    const imageUrl = hasExplicitImageSelection
-      ? imageSelection?.[record.id] || null
-      : getExperienceCardRecordVideoImageUrl(record);
+    const imageUrls = hasExplicitImageSelection
+      ? imageSelection?.[record.id] || []
+      : getExperienceCardRecordVideoImageUrls(record);
     const tags = getRecordTags(record);
+    const sceneCount = Math.max(imageUrls.length, chunks.length, 1);
 
-    chunks.forEach((text, partIndex) => {
+    Array.from({ length: sceneCount }).forEach((_, partIndex) => {
+      const text =
+        chunks.length > 0
+          ? chunks[Math.min(partIndex, chunks.length - 1)]
+          : "";
       scenes.push({
         id: `record:${record.id}:${partIndex}`,
         kind: "record",
-        duration: getTextDuration(text),
+        duration: text ? getTextDuration(text) : 3.8,
         title: detail.card.title,
-        subtitle: detail.archive.title,
+        subtitle: `${detail.archive.title} · ${systemName}`,
         text,
         tags,
-        imageUrl,
+        imageUrl:
+          imageUrls.length > 0
+            ? imageUrls[partIndex % imageUrls.length]
+            : null,
         recordIndex,
         recordCount,
-        stage: getExperienceCardStageLabel(recordIndex, recordCount),
+        stage: "",
         date: formatExperienceCardDate(record.record_time) || "日期未记录",
         partIndex: partIndex + 1,
-        partCount: chunks.length,
+        partCount: sceneCount,
       });
     });
   });
@@ -445,14 +461,37 @@ function drawSoftBackground(
   context.globalAlpha = 1;
 }
 
+function ellipsizeCanvasText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+) {
+  if (context.measureText(text).width <= maxWidth) return text;
+
+  const chars = Array.from(text);
+  while (chars.length > 0) {
+    chars.pop();
+    const candidate = `${chars.join("")}…`;
+    if (context.measureText(candidate).width <= maxWidth) return candidate;
+  }
+  return "";
+}
+
 function drawBrandPill(
   context: CanvasRenderingContext2D,
   width: number,
-  scale: number
+  scale: number,
+  contextText: string,
+  counterText?: string
 ) {
   const x = 42 * scale;
   const y = 42 * scale;
-  const pillWidth = 245 * scale;
+  const right = 42 * scale;
+  const gap = 10 * scale;
+  const counterWidth = 82 * scale;
+  const pillWidth = counterText
+    ? width - x - right - counterWidth - gap
+    : width - x - right;
   const pillHeight = 52 * scale;
   fillRoundedRect(
     context,
@@ -463,14 +502,76 @@ function drawBrandPill(
     26 * scale,
     "rgba(20, 37, 23, 0.58)"
   );
-  setFont(context, 19 * scale, 800);
+  setFont(context, 17 * scale, 800);
   context.fillStyle = "#ffffff";
   context.textBaseline = "middle";
-  context.fillText("有时·耕作  LifeSpace", x + 18 * scale, y + pillHeight / 2 + scale);
-  context.textBaseline = "alphabetic";
+  const brandText = contextText
+    ? `有时·耕作 LifeSpace · ${contextText}`
+    : "有时·耕作 LifeSpace";
+  context.fillText(
+    ellipsizeCanvasText(context, brandText, pillWidth - 36 * scale),
+    x + 18 * scale,
+    y + pillHeight / 2 + scale
+  );
 
-  context.fillStyle = "rgba(255,255,255,0.62)";
-  context.fillRect(width - 94 * scale, y + 24 * scale, 48 * scale, 2 * scale);
+  if (counterText) {
+    const counterX = width - right - counterWidth;
+    fillRoundedRect(
+      context,
+      counterX,
+      y,
+      counterWidth,
+      pillHeight,
+      26 * scale,
+      "rgba(255,255,255,0.88)"
+    );
+    setFont(context, 19 * scale, 800);
+    context.fillStyle = "#36523a";
+    context.textAlign = "center";
+    context.fillText(
+      counterText,
+      counterX + counterWidth / 2,
+      y + pillHeight / 2 + scale
+    );
+    context.textAlign = "left";
+  }
+
+  context.textBaseline = "alphabetic";
+}
+
+function drawExperienceName(
+  context: CanvasRenderingContext2D,
+  title: string,
+  width: number,
+  scale: number
+) {
+  const x = 44 * scale;
+  const y = 108 * scale;
+  const height = 42 * scale;
+  const maxWidth = width - x - 44 * scale;
+  setFont(context, 20 * scale, 800);
+  const displayTitle = ellipsizeCanvasText(
+    context,
+    title,
+    maxWidth - 30 * scale
+  );
+  const pillWidth = Math.min(
+    maxWidth,
+    context.measureText(displayTitle).width + 30 * scale
+  );
+  fillRoundedRect(
+    context,
+    x,
+    y,
+    pillWidth,
+    height,
+    21 * scale,
+    "rgba(20,37,23,0.58)"
+  );
+  context.fillStyle = "rgba(255,255,255,0.96)";
+  context.textBaseline = "middle";
+  context.fillText(displayTitle, x + 15 * scale, y + height / 2 + scale);
+  context.textBaseline = "alphabetic";
 }
 
 function drawIntroScene(
@@ -494,7 +595,7 @@ function drawIntroScene(
   }
 
   const scale = width / EXPERIENCE_CARD_VIDEO_WIDTH;
-  drawBrandPill(context, width, scale);
+  drawBrandPill(context, width, scale, scene.subtitle);
 
   const x = 58 * scale;
   const maxWidth = width - x * 2;
@@ -515,9 +616,6 @@ function drawIntroScene(
     context.fillText(line, x, height * 0.56 + index * fitted.size * 1.28);
   });
 
-  setFont(context, 24 * scale, 600);
-  context.fillStyle = "rgba(255,255,255,0.82)";
-  context.fillText(scene.subtitle, x, height - 92 * scale);
 }
 
 function drawOutroScene(
@@ -574,86 +672,81 @@ function drawRecordScene(
   context.fillStyle = topOverlay;
   context.fillRect(0, 0, width, height * 0.3);
 
-  const bottomOverlayStart = image ? height * 0.58 : height * 0.42;
-  const bottomOverlay = context.createLinearGradient(0, bottomOverlayStart, 0, height);
-  bottomOverlay.addColorStop(0, "rgba(15,27,17,0)");
-  bottomOverlay.addColorStop(0.52, "rgba(15,27,17,0.42)");
-  bottomOverlay.addColorStop(1, "rgba(15,27,17,0.90)");
-  context.fillStyle = bottomOverlay;
-  context.fillRect(0, bottomOverlayStart, width, height - bottomOverlayStart);
+  const hasCaption = Boolean(scene.text.trim());
+  if (hasCaption) {
+    const bottomOverlayStart = image ? height * 0.66 : height * 0.52;
+    const bottomOverlay = context.createLinearGradient(
+      0,
+      bottomOverlayStart,
+      0,
+      height
+    );
+    bottomOverlay.addColorStop(0, "rgba(15,27,17,0)");
+    bottomOverlay.addColorStop(0.58, "rgba(15,27,17,0.34)");
+    bottomOverlay.addColorStop(1, "rgba(15,27,17,0.82)");
+    context.fillStyle = bottomOverlay;
+    context.fillRect(0, bottomOverlayStart, width, height - bottomOverlayStart);
+  }
 
   const scale = width / EXPERIENCE_CARD_VIDEO_WIDTH;
-  drawBrandPill(context, width, scale);
-
-  const metaY = 122 * scale;
-  const stageText = `${scene.recordIndex! + 1}/${scene.recordCount} · ${scene.stage}`;
-  setFont(context, 22 * scale, 800);
-  const stageWidth = context.measureText(stageText).width + 32 * scale;
-  fillRoundedRect(
+  drawBrandPill(
     context,
-    44 * scale,
-    metaY,
-    stageWidth,
-    48 * scale,
-    24 * scale,
-    "rgba(255,255,255,0.86)"
+    width,
+    scale,
+    scene.subtitle,
+    `${scene.recordIndex! + 1}/${scene.recordCount}`
   );
-  context.fillStyle = "#36523a";
-  context.textBaseline = "middle";
-  context.fillText(stageText, 60 * scale, metaY + 25 * scale);
+  drawExperienceName(context, scene.title, width, scale);
 
-  context.textBaseline = "alphabetic";
-
-  const panelX = 42 * scale;
-  const panelWidth = width - panelX * 2;
-  const panelY = image ? height * 0.74 : height * 0.56;
-  const panelHeight = height - panelY - 46 * scale;
-  fillRoundedRect(
-    context,
-    panelX,
-    panelY,
-    panelWidth,
-    panelHeight,
-    28 * scale,
-    "rgba(18,31,20,0.72)"
-  );
-
-  const contentX = panelX + 28 * scale;
-  const contentWidth = panelWidth - 56 * scale;
-  let cursorY = panelY + 43 * scale;
-
-  setFont(context, 20 * scale, 700);
-  context.fillStyle = "rgba(255,255,255,0.66)";
-  const partText =
-    scene.partCount > 1
-      ? `${scene.date} · ${scene.subtitle} · ${scene.partIndex}/${scene.partCount}`
-      : `${scene.date} · ${scene.subtitle}`;
-  context.fillText(partText, contentX, cursorY);
-  cursorY += 42 * scale;
-
-  const maxTextLines = image ? 4 : 7;
-  const fitted = fitWrappedText(
-    context,
-    scene.text,
-    contentWidth,
-    maxTextLines,
-    (image ? 28 : 34) * scale,
-    (image ? 21 : 24) * scale
-  );
-  const lineHeight = fitted.size * (image ? 1.35 : 1.45);
-  context.fillStyle = "#ffffff";
-  fitted.lines.slice(0, maxTextLines).forEach((line, index) => {
-    context.fillText(line, contentX, cursorY + index * lineHeight);
-  });
-
-  if (scene.tags.length > 0) {
-    setFont(context, 18 * scale, 700);
-    context.fillStyle = "rgba(230,240,225,0.82)";
-    context.fillText(
-      scene.tags.map((tag) => `#${tag}`).join("  "),
-      contentX,
-      panelY + panelHeight - 31 * scale
+  if (hasCaption) {
+    const panelX = 42 * scale;
+    const panelWidth = width - panelX * 2;
+    const contentX = panelX + 28 * scale;
+    const contentWidth = panelWidth - 56 * scale;
+    const maxTextLines = image ? 4 : 6;
+    const fitted = fitWrappedText(
+      context,
+      scene.text,
+      contentWidth,
+      maxTextLines,
+      (image ? 28 : 34) * scale,
+      (image ? 21 : 24) * scale
     );
+    const lines = fitted.lines.slice(0, maxTextLines);
+    const lineHeight = fitted.size * (image ? 1.35 : 1.45);
+    const topPadding = 28 * scale;
+    const dateHeight = 24 * scale;
+    const dateGap = 18 * scale;
+    const bottomPadding = 28 * scale;
+    const panelHeight =
+      topPadding +
+      dateHeight +
+      dateGap +
+      lines.length * lineHeight +
+      bottomPadding;
+    const panelY = height - 46 * scale - panelHeight;
+
+    fillRoundedRect(
+      context,
+      panelX,
+      panelY,
+      panelWidth,
+      panelHeight,
+      28 * scale,
+      "rgba(18,31,20,0.70)"
+    );
+
+    let cursorY = panelY + topPadding + dateHeight;
+    setFont(context, 20 * scale, 700);
+    context.fillStyle = "rgba(255,255,255,0.70)";
+    context.fillText(scene.date, contentX, cursorY);
+    cursorY += dateGap + lineHeight;
+
+    setFont(context, fitted.size, 600);
+    context.fillStyle = "#ffffff";
+    lines.forEach((line, index) => {
+      context.fillText(line, contentX, cursorY + index * lineHeight);
+    });
   }
 
   context.fillStyle = "rgba(255,255,255,0.20)";

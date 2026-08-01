@@ -186,7 +186,7 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
   assert.match(renderer, /detail\.records\.forEach/);
   assert.match(renderer, /发布者 · \$\{authorName\}/);
   assert.match(renderer, /INTRO_DURATION_SECONDS = 4\.8/);
-  assert.match(renderer, /`\$\{scene\.date\} · \$\{scene\.subtitle\}`/);
+  assert.match(renderer, /context\.fillText\(scene\.date, contentX, cursorY\)/);
   assert.doesNotMatch(renderer, /fillText\(scene\.date, width - 48/);
   assert.match(packageJson, /"mediabunny"/);
 });
@@ -203,12 +203,26 @@ test("experience card MP4 is shown first, supports optional record images, and p
     detail.indexOf("<ExperienceCardVideoPanel detail={detail}") <
       detail.indexOf("<article style={cardShellStyle}")
   );
-  assert.match(panel, /选择记录图片/);
+  assert.match(panel, /选择图片与封面/);
   assert.match(panel, /不使用图片/);
   assert.match(panel, /selectedImageByRecordId/);
+  assert.match(panel, /设为封面/);
+  assert.match(panel, /getRecordImageOptions\(record\)\.map/);
+  assert.match(panel, /selectedUrls\.includes\(option\.sourceUrl\)/);
   assert.match(renderer, /imageSelection\?: ExperienceCardVideoImageSelection/);
-  assert.match(renderer, /panelY = image \? height \* 0\.74/);
-  assert.match(renderer, /maxTextLines = image \? 4 : 7/);
+  assert.match(renderer, /Record<string, string\[\]>/);
+  assert.match(renderer, /const sceneCount = Math\.max\(imageUrls\.length, chunks\.length, 1\)/);
+  assert.match(renderer, /imageUrls\[partIndex % imageUrls\.length\]/);
+  assert.match(renderer, /coverImageUrl !== undefined/);
+  assert.match(renderer, /counterText/);
+  assert.match(renderer, /`\$\{scene\.recordIndex! \+ 1\}\/\$\{scene\.recordCount\}`/);
+  assert.match(renderer, /drawExperienceName\(context, scene\.title/);
+  assert.doesNotMatch(renderer, /\$\{scene\.stage\}/);
+  assert.doesNotMatch(renderer, /width - 94 \* scale/);
+  assert.match(renderer, /const hasCaption = Boolean\(scene\.text\.trim\(\)\)/);
+  assert.match(renderer, /const panelHeight =/);
+  assert.doesNotMatch(renderer, /这条记录没有文字。/);
+  assert.doesNotMatch(renderer, /scene\.date} · \$\{scene\.subtitle/);
   assert.doesNotMatch(detail, /coverWrapStyle/);
   assert.doesNotMatch(detail, /metaGridStyle/);
   assert.match(detail, /metaLineStyle/);
