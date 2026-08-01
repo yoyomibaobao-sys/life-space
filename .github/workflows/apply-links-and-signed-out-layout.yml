@@ -29,6 +29,14 @@ jobs:
       - name: Apply refinements
         run: python scripts/apply-links-and-signed-out-layout.py
 
+      - name: Normalize generated files
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("components/experience-card/ExperienceCardTimeline.tsx")
+          path.write_text(path.read_text(encoding="utf-8").rstrip() + "\n", encoding="utf-8")
+          PY
+
       - name: Install locked dependencies
         run: npm ci
 
