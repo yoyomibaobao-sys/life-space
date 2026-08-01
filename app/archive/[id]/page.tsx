@@ -1926,12 +1926,6 @@ saveRecentArchiveBrowse({
                   { archive_summary: nextSummary || null },
                 );
               }}
-              profileExtra={
-                <ArchiveExperienceCards
-                  archiveId={activeArchive.id}
-                  isOwner={isOwner}
-                />
-              }
             />
           </div>
         ) : null}

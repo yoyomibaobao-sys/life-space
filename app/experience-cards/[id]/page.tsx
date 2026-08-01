@@ -4,7 +4,6 @@ import Link from "next/link";
 import { use, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
 import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
 import { showToast } from "@/components/Toast";
 import {
@@ -130,17 +129,6 @@ export default function ExperienceCardPage({
   const endDate = formatExperienceCardDate(
     detail.records[detail.records.length - 1]?.record_time
   );
-  const systemName =
-    detail.archive.system_name ||
-    detail.archive.species_name_snapshot ||
-    "未填写系统名";
-  const guideHref =
-    detail.archive.category === "plant" && detail.archive.species_id
-      ? `/plant/${detail.archive.species_id}?fromArchive=${encodeURIComponent(
-          detail.archive.id
-        )}`
-      : null;
-
   return (
     <main style={pageStyle}>
       <header style={topBarStyle}>
@@ -160,32 +148,11 @@ export default function ExperienceCardPage({
         ) : null}
       </header>
 
-      {isOwner ? (
-        <ExperienceCardVideoPanel detail={detail} />
-      ) : null}
+      <ExperienceCardVideoPanel detail={detail} readOnly={!isOwner} />
 
       <article style={cardShellStyle}>
         <div style={introStyle}>
-          <div style={eyebrowStyle}>经验时间线</div>
           <h1 style={titleStyle}>{detail.card.title}</h1>
-          <div style={projectStyle}>
-            <Link
-              href={`/archive/${detail.archive.id}`}
-              style={projectLinkStyle}
-              title="打开项目记录详情"
-            >
-              {detail.archive.title}
-            </Link>
-            <span style={projectDividerStyle}>·</span>
-            {guideHref ? (
-              <Link href={guideHref} style={guideLinkStyle} title="打开指引">
-                {systemName}
-              </Link>
-            ) : (
-              <span>{systemName}</span>
-            )}
-          </div>
-
           <div style={metaLineStyle}>
             <span>{detail.author?.username || "用户"}</span>
             <span aria-hidden="true">·</span>
@@ -196,8 +163,6 @@ export default function ExperienceCardPage({
                   : `${startDate}—${endDate}`
                 : "暂无日期"}
             </span>
-            <span aria-hidden="true">·</span>
-            <span>{detail.records.length} 条记录</span>
             <span aria-hidden="true">·</span>
             <span>
               {detail.isPubliclyAvailable
@@ -227,21 +192,7 @@ export default function ExperienceCardPage({
 
       {errorText ? <section style={errorStyle}>{errorText}</section> : null}
 
-      <section style={timelinePanelStyle}>
-        <ExperienceCardTimeline
-          archive={detail.archive}
-          records={detail.records}
-        />
-      </section>
-
       <footer style={footerStyle}>
-        <div>
-          <div style={footerBrandStyle}>有时·耕作</div>
-          <div style={footerTextStyle}>
-            经验卡只串联原始记录，内容随来源同步更新。
-          </div>
-        </div>
-
         <div style={footerActionsStyle}>
           {detail.isPubliclyAvailable ? (
             <>
@@ -370,46 +321,11 @@ const introStyle: CSSProperties = {
   padding: "5px 2px 16px",
 };
 
-const eyebrowStyle: CSSProperties = {
-  color: "#71806e",
-  fontSize: 12,
-  fontWeight: 800,
-  letterSpacing: "0.06em",
-};
-
 const titleStyle: CSSProperties = {
-  margin: "5px 0 5px",
+  margin: 0,
   fontSize: 26,
   lineHeight: 1.25,
   overflowWrap: "anywhere",
-};
-
-const projectStyle: CSSProperties = {
-  margin: 0,
-  display: "flex",
-  alignItems: "center",
-  gap: 7,
-  flexWrap: "wrap",
-  color: "#5f6f5c",
-  fontSize: 15,
-  lineHeight: 1.6,
-};
-
-const projectLinkStyle: CSSProperties = {
-  color: "#3f633d",
-  fontWeight: 800,
-  textDecoration: "none",
-};
-
-const projectDividerStyle: CSSProperties = {
-  color: "#9aa493",
-};
-
-const guideLinkStyle: CSSProperties = {
-  color: "#557653",
-  fontWeight: 800,
-  textDecoration: "underline",
-  textUnderlineOffset: 3,
 };
 
 const metaLineStyle: CSSProperties = {
@@ -421,13 +337,6 @@ const metaLineStyle: CSSProperties = {
   color: "#7b8778",
   fontSize: 12,
   lineHeight: 1.5,
-};
-
-const timelinePanelStyle: CSSProperties = {
-  border: "1px solid #e0e8dd",
-  borderRadius: 20,
-  background: "#fff",
-  padding: "22px 18px 4px",
 };
 
 const warningStyle: CSSProperties = {
@@ -450,7 +359,7 @@ const errorStyle: CSSProperties = {
 
 const footerStyle: CSSProperties = {
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent: "flex-end",
   alignItems: "center",
   gap: 16,
   flexWrap: "wrap",
@@ -459,18 +368,6 @@ const footerStyle: CSSProperties = {
   borderRadius: 18,
   background: "#f3f7f0",
   border: "1px solid #dfe8db",
-};
-
-const footerBrandStyle: CSSProperties = {
-  color: "#405b3d",
-  fontSize: 15,
-  fontWeight: 900,
-};
-
-const footerTextStyle: CSSProperties = {
-  color: "#71806e",
-  fontSize: 12,
-  marginTop: 3,
 };
 
 const footerActionsStyle: CSSProperties = {

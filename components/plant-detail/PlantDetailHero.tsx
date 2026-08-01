@@ -160,7 +160,7 @@ export default function PlantDetailHero({
         <button
           type="button"
           onClick={onAddPlan}
-          disabled={planAdded || actionLoading !== null}
+          disabled={actionLoading !== null}
           style={{
             padding: "12px 20px",
             borderRadius: 14,
@@ -170,17 +170,17 @@ export default function PlantDetailHero({
             fontSize: 15,
             fontWeight: 700,
             lineHeight: 1.2,
-            cursor: planAdded || actionLoading !== null ? "default" : "pointer",
+            cursor: actionLoading !== null ? "default" : "pointer",
             boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
           }}
         >
-          {planAdded ? "已在种植计划" : actionLoading === "plan" ? "加入中..." : "加入种植计划"}
+          {planAdded ? "已添加计划" : actionLoading === "plan" ? "加入中..." : "加入种植计划"}
         </button>
 
         <button
           type="button"
           onClick={onAddInterest}
-          disabled={interestAdded || actionLoading !== null}
+          disabled={actionLoading !== null}
           style={{
             padding: "12px 20px",
             borderRadius: 14,
@@ -190,11 +190,11 @@ export default function PlantDetailHero({
             fontSize: 15,
             fontWeight: 700,
             lineHeight: 1.2,
-            cursor: interestAdded || actionLoading !== null ? "default" : "pointer",
+            cursor: actionLoading !== null ? "default" : "pointer",
             boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
           }}
         >
-          {interestAdded ? "已加入感兴趣" : actionLoading === "interest" ? "加入中..." : "加入感兴趣"}
+          {interestAdded ? "已收藏" : actionLoading === "interest" ? "加入中..." : "加入收藏"}
         </button>
       </div>
 

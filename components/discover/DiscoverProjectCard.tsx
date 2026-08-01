@@ -89,15 +89,14 @@ export function DiscoverProjectCard({
           ) : null}
         </div>
 
-        <div className={styles.imageTitleArea}>
-          <h2 className={styles.title}>
-            {title}
-          </h2>
-          <div className={styles.imageStats}>
-            {updateDate ? `${updateDate} 更新 · ` : ""}
-            {item.public_record_count}记录 · {durationDays}天 · {item.public_comment_count}评论
-          </div>
-        </div>
+      </div>
+
+      <div className={styles.imageStats}>
+        {item.public_record_count} 条记录
+        <span aria-hidden="true">·</span>
+        {durationDays} 天
+        <span aria-hidden="true">·</span>
+        {item.public_comment_count} 条评论
       </div>
 
       <div className={styles.body}>
@@ -107,16 +106,26 @@ export function DiscoverProjectCard({
           </div>
         ) : null}
 
+        <h2 className={styles.title}>
+          {title}
+        </h2>
+
         {item.card_summary ? (
           <p className={styles.summary}>
             {item.card_summary}
           </p>
         ) : null}
 
-        <div className={styles.owner}>
+      </div>
+
+      <div className={styles.ownerRow}>
+        <span className={styles.owner}>
           {ownerName}
           {region ? ` · ${region}` : ""}
-        </div>
+        </span>
+        {updateDate ? (
+          <time className={styles.updateDate}>{updateDate} 更新</time>
+        ) : null}
       </div>
     </Link>
   );

@@ -106,27 +106,27 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
   );
 });
 
-test("the experience-card UI covers selection, preview, publication, source links, and sharing", async () => {
-  const [editor, detail, timeline, list, archiveHeader] = await Promise.all([
+test("the experience-card UI covers image selection, preview, publication, and sharing", async () => {
+  const [editor, detail, list, archiveHeader] = await Promise.all([
     source("components/experience-card/ExperienceCardEditor.tsx"),
     source("app/experience-cards/[id]/page.tsx"),
-    source("components/experience-card/ExperienceCardTimeline.tsx"),
     source("app/experience-cards/page.tsx"),
     source("components/archive-detail/ArchiveDetailHeader.tsx"),
   ]);
 
-  assert.match(editor, /请选择3～12条记录|3～12条/);
+  assert.match(editor, /选择图片/);
+  assert.match(editor, /selectedMediaIds/);
+  assert.match(editor, /请至少选择来自3条记录的图片/);
   assert.match(editor, /保存草稿/);
   assert.match(editor, /预览/);
   assert.match(editor, /发布经验卡/);
-  assert.match(editor, /其他未选择的记录仍保持原来的可见性/);
+  assert.match(editor, /项目中其他记录仍保持原来的可见性/);
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);
   assert.match(detail, /来源记录已经变化/);
-  assert.doesNotMatch(timeline, /查看原记录/);
-  assert.match(timeline, /getExperienceCardStageLabel/);
-  assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
-  assert.match(detail, /href=\{guideHref\}/);
+  assert.doesNotMatch(detail, /ExperienceCardTimeline/);
+  assert.doesNotMatch(detail, /detail\.archive\.system_name/);
+  assert.doesNotMatch(detail, /detail\.archive\.title/);
   assert.match(list, /我的经验卡/);
   assert.match(archiveHeader, /生成经验卡/);
 });
@@ -149,7 +149,11 @@ test("experience cards have a persistent personal-space entry", async () => {
   assert.doesNotMatch(navbar, />\s*我的关注\s*</);
   assert.doesNotMatch(navbar, />\s*本人空间\s*</);
 
-  assert.match(archivePage, /<ArchiveExperienceCards/);
+  assert.match(archivePage, /mobileDetailTab === "experience"/);
+  assert.doesNotMatch(
+    archivePage,
+    /profileExtra=\{[\s\S]*?<ArchiveExperienceCards/
+  );
   assert.match(archiveCards, /\.eq\("archive_id", archiveId\)/);
   assert.match(archiveCards, /\/experience-cards\/\$\{item\.id\}\/edit/);
   assert.match(archiveCards, /deleteExperienceCard\(deleteTarget\.id\)/);
@@ -168,18 +172,16 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
 
   assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\}/);
   assert.match(panel, /生成竖屏MP4/);
-  assert.match(panel, /自动串联全部来源记录/);
-  assert.match(panel, /文字烧录为字幕/);
+  assert.match(panel, /图片与视频/);
+  assert.match(panel, /selectedImageCount.*张图片/s);
   assert.match(panel, /<video[\s\S]*?autoPlay[\s\S]*?muted[\s\S]*?playsInline/);
   assert.match(panel, /onEnded=\{\(event\) => restartGeneratedVideo\(event\.currentTarget\)\}/);
   assert.match(panel, /video\.currentTime = 0/);
   assert.match(panel, /video\.play\(\)\.catch/);
-  assert.match(panel, /保存后的MP4是否循环由相册或视频平台决定/);
   assert.match(panel, /navigator\.canShare/);
-  assert.match(panel, /不上传云端，也不占云空间/);
   assert.match(panel, /saveCachedExperienceCardVideo/);
   assert.match(panel, /getCachedExperienceCardVideo/);
-  assert.match(panel, /再次打开可直接下载/);
+  assert.match(panel, /getExperienceCardVideoSelection/);
   assert.match(panel, /repeat\(auto-fit/);
 
   assert.match(renderer, /new Mp4OutputFormat\(\{ fastStart: "in-memory" \}\)/);
@@ -190,12 +192,15 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(renderer, /detail\.records\.forEach/);
   assert.match(renderer, /发布者 · \$\{authorName\}/);
   assert.match(renderer, /INTRO_DURATION_SECONDS = 4\.8/);
+  assert.match(renderer, /OUTRO_DURATION_SECONDS = 5\.5/);
+  assert.match(renderer, /websiteUrl/);
   assert.match(renderer, /context\.fillText\(scene\.date, contentX, cursorY\)/);
   assert.doesNotMatch(renderer, /fillText\(scene\.date, width - 48/);
   assert.match(cache, /indexedDB\.open\(DB_NAME, DB_VERSION\)/);
   assert.match(cache, /sourceSignature/);
   assert.match(cache, /selectedMediaIdsByRecordId/);
   assert.match(cache, /coverMediaId/);
+  assert.match(cache, /saveExperienceCardVideoSelection/);
   assert.match(cache, /storagePath/);
   assert.doesNotMatch(cache, /displayUrl/);
   assert.match(cache, /MAX_CACHE_BYTES/);
@@ -203,7 +208,7 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
 });
 
 
-test("experience card MP4 is shown first, supports optional record images, and preserves photo area", async () => {
+test("experience card MP4 is shown first, selects individual images, and preserves photo area", async () => {
   const [detail, panel, renderer] = await Promise.all([
     source("app/experience-cards/[id]/page.tsx"),
     source("components/experience-card/ExperienceCardVideoPanel.tsx"),
@@ -214,21 +219,22 @@ test("experience card MP4 is shown first, supports optional record images, and p
     detail.indexOf("<ExperienceCardVideoPanel detail={detail}") <
       detail.indexOf("<article style={cardShellStyle}")
   );
-  assert.match(panel, /选择图片与封面/);
-  assert.match(panel, /不使用图片/);
+  assert.match(panel, /已选 \{selectedImageCount\}\/\{totalImageCount\} 张/);
+  assert.match(panel, /imageOptions\.map/);
+  assert.doesNotMatch(panel, /第 \{index \+ 1\} 条记录/);
   assert.match(panel, /selectedImageByRecordId/);
   assert.match(panel, /设为封面/);
   assert.match(panel, /getRecordImageOptions\(record\)\.map/);
-  assert.match(panel, /selectedUrls\.includes\(option\.sourceUrl\)/);
+  assert.match(panel, /selectedUrls\.has\(option\.sourceUrl\)/);
   assert.match(renderer, /imageSelection\?: ExperienceCardVideoImageSelection/);
   assert.match(renderer, /Record<string, string\[\]>/);
   assert.match(renderer, /const sceneCount = Math\.max\(imageUrls\.length, chunks\.length, 1\)/);
-  assert.match(renderer, /imageUrls\[partIndex % imageUrls\.length\]/);
+  assert.match(renderer, /imageUrls\[localImageIndex\]/);
   assert.match(renderer, /coverImageUrl !== undefined/);
   assert.match(renderer, /counterText/);
-  assert.match(renderer, /`\$\{scene\.recordIndex! \+ 1\}\/\$\{scene\.recordCount\}`/);
+  assert.match(renderer, /`\$\{scene\.imageIndex \+ 1\}\/\$\{scene\.imageCount\}`/);
   assert.match(renderer, /drawExperienceName\(context, scene\.title/);
-  assert.doesNotMatch(renderer, /\$\{scene\.stage\}/);
+  assert.doesNotMatch(renderer, /scene\.recordIndex/);
   assert.doesNotMatch(renderer, /width - 94 \* scale/);
   assert.match(renderer, /const hasCaption = Boolean\(scene\.text\.trim\(\)\)/);
   assert.match(renderer, /const panelHeight =/);
@@ -237,6 +243,32 @@ test("experience card MP4 is shown first, supports optional record images, and p
   assert.doesNotMatch(detail, /coverWrapStyle/);
   assert.doesNotMatch(detail, /metaGridStyle/);
   assert.match(detail, /metaLineStyle/);
+});
+
+test("guidance favorites, plan toggles, and discovery cards use the simplified hierarchy", async () => {
+  const [guide, plantDetail, plantHero, discoverCard, discoverStyles] =
+    await Promise.all([
+      source("app/plant/page.tsx"),
+      source("app/plant/[id]/page.tsx"),
+      source("components/plant-detail/PlantDetailHero.tsx"),
+      source("components/discover/DiscoverProjectCard.tsx"),
+      source("components/discover/DiscoverProjectFeed.module.css"),
+    ]);
+
+  assert.match(guide, /href=\{isSignedIn \? "\/archive\/interests" : "\/login"\}/);
+  assert.match(guide, />\s*我的收藏\s*</);
+  assert.match(plantDetail, /from\("user_plant_interests"\)[\s\S]*?\.delete\(\)/);
+  assert.match(plantDetail, /from\("user_plant_plans"\)[\s\S]*?\.delete\(\)/);
+  assert.match(plantDetail, /已添加计划/);
+  assert.match(plantDetail, /已收藏/);
+  assert.doesNotMatch(plantHero, /disabled=\{planAdded \|\|/);
+  assert.doesNotMatch(plantHero, /disabled=\{interestAdded \|\|/);
+  assert.ok(
+    discoverCard.indexOf('className={styles.title}') >
+      discoverCard.indexOf('className={styles.body}')
+  );
+  assert.match(discoverStyles, /\.ownerRow/);
+  assert.doesNotMatch(discoverStyles, /\.imageTitleArea/);
 });
 
 test("mobile project details expose archive, records, experience cards, and growth line as peers", async () => {

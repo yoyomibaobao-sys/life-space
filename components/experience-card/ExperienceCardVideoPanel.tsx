@@ -29,12 +29,15 @@ import {
 import {
   deleteCachedExperienceCardVideo,
   getCachedExperienceCardVideo,
+  getExperienceCardVideoSelection,
   getExperienceCardVideoSourceSignature,
   saveCachedExperienceCardVideo,
+  saveExperienceCardVideoSelection,
 } from "@/lib/experience-card-video-cache";
 
 type RecordImageOption = {
   id: string;
+  recordId: string;
   sourceUrl: string;
   previewUrl: string;
 };
@@ -56,6 +59,7 @@ function getRecordImageOptions(record: ExperienceCardSourceRecord): RecordImageO
     )
     .map((media) => ({
       id: media.id,
+      recordId: record.id,
       sourceUrl: media.display_url || media.display_thumb_url || "",
       previewUrl: media.display_thumb_url || media.display_url || "",
     }))
@@ -123,8 +127,10 @@ function getDefaultCoverImageUrl(
 
 export default function ExperienceCardVideoPanel({
   detail,
+  readOnly = false,
 }: {
   detail: ExperienceCardDetail;
+  readOnly?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -156,13 +162,13 @@ export default function ExperienceCardVideoPanel({
       ),
     [detail]
   );
-  const totalImageCount = useMemo(
-    () =>
-      Array.from(imageOptionsByRecordId.values()).reduce(
-        (total, options) => total + options.length,
-        0
-      ),
+  const imageOptions = useMemo(
+    () => Array.from(imageOptionsByRecordId.values()).flat(),
     [imageOptionsByRecordId]
+  );
+  const totalImageCount = useMemo(
+    () => imageOptions.length,
+    [imageOptions]
   );
   const selectedImageUrls = useMemo(
     () => getSelectedImageUrls(detail, selectedImageByRecordId),
@@ -173,14 +179,22 @@ export default function ExperienceCardVideoPanel({
     coverImageUrl && selectedImageUrls.includes(coverImageUrl)
       ? coverImageUrl
       : selectedImageUrls[0] || null;
+  const websiteUrl = useMemo(
+    () =>
+      typeof window === "undefined"
+        ? ""
+        : window.location.origin.replace(/^https?:\/\//, ""),
+    []
+  );
   const scenes = useMemo(
     () =>
       buildExperienceCardVideoScenes(
         detail,
         selectedImageByRecordId,
-        effectiveCoverImageUrl
+        effectiveCoverImageUrl,
+        websiteUrl
       ),
-    [detail, effectiveCoverImageUrl, selectedImageByRecordId]
+    [detail, effectiveCoverImageUrl, selectedImageByRecordId, websiteUrl]
   );
   const duration = useMemo(
     () => getExperienceCardVideoDuration(scenes),
@@ -206,13 +220,18 @@ export default function ExperienceCardVideoPanel({
 
     void getCachedExperienceCardVideo(detail.card.id)
       .then(async (cached) => {
-        if (cancelled || !cached) return;
-        if (cached.sourceSignature !== sourceSignature) {
+        if (cancelled) return;
+        let validCached = cached;
+        if (validCached && validCached.sourceSignature !== sourceSignature) {
           await deleteCachedExperienceCardVideo(detail.card.id).catch(
             () => undefined
           );
-          return;
+          validCached = null;
         }
+
+        const storedSelection =
+          validCached || getExperienceCardVideoSelection(detail.card.id);
+        if (!storedSelection) return;
 
         const optionsByRecordId = new Map(
           detail.records.map((record) => [
@@ -225,9 +244,9 @@ export default function ExperienceCardVideoPanel({
             record.id,
             (optionsByRecordId.get(record.id) || [])
               .filter((option) =>
-                (cached.selectedMediaIdsByRecordId[record.id] || []).includes(
-                  option.id
-                )
+                (
+                  storedSelection.selectedMediaIdsByRecordId[record.id] || []
+                ).includes(option.id)
               )
               .map((option) => option.sourceUrl),
           ])
@@ -235,14 +254,14 @@ export default function ExperienceCardVideoPanel({
         const restoredUrls = getSelectedImageUrls(detail, restoredSelection);
         const restoredCoverOption = Array.from(optionsByRecordId.values())
           .flat()
-          .find((option) => option.id === cached.coverMediaId);
+          .find((option) => option.id === storedSelection.coverMediaId);
         const restoredCover =
           restoredCoverOption?.sourceUrl || restoredUrls[0] || null;
 
         if (cancelled) return;
         setSelectedImageByRecordId(restoredSelection);
         setCoverImageUrl(restoredCover);
-        replaceGeneratedVideo(cached.blob);
+        if (validCached) replaceGeneratedVideo(validCached.blob);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -328,27 +347,72 @@ export default function ExperienceCardVideoPanel({
     replaceGeneratedVideo(null);
   }
 
+  function invalidateGeneratedVideo() {
+    clearGeneratedVideo();
+    void deleteCachedExperienceCardVideo(detail.card.id).catch(
+      () => undefined
+    );
+  }
+
+  function saveSelectionPreference(
+    selection: ExperienceCardVideoImageSelection,
+    coverUrl: string | null
+  ) {
+    try {
+      saveExperienceCardVideoSelection(detail.card.id, {
+        selectedMediaIdsByRecordId: getSelectedMediaIdsByRecordId(
+          detail,
+          selection
+        ),
+        coverMediaId: getCoverMediaId(detail, coverUrl),
+      });
+    } catch {
+      // Selection persistence is best effort; video generation remains usable.
+    }
+  }
+
   function toggleRecordImage(recordId: string, imageUrl: string) {
     if (generating || cacheLoading) return;
-    clearGeneratedVideo();
+    invalidateGeneratedVideo();
     setErrorText("");
     setSelectedImageByRecordId((current) => {
       const currentUrls = current[recordId] || [];
       const nextUrls = currentUrls.includes(imageUrl)
         ? currentUrls.filter((url) => url !== imageUrl)
         : [...currentUrls, imageUrl];
-      return { ...current, [recordId]: nextUrls };
+      const next = { ...current, [recordId]: nextUrls };
+      const nextSelectedUrls = getSelectedImageUrls(detail, next);
+      const nextCover =
+        coverImageUrl && nextSelectedUrls.includes(coverImageUrl)
+          ? coverImageUrl
+          : nextSelectedUrls[0] || null;
+      setCoverImageUrl(nextCover);
+      saveSelectionPreference(next, nextCover);
+      return next;
     });
   }
 
-  function clearRecordImages(recordId: string) {
+  function selectAllImages() {
     if (generating || cacheLoading) return;
-    clearGeneratedVideo();
+    invalidateGeneratedVideo();
     setErrorText("");
-    setSelectedImageByRecordId((current) => ({
-      ...current,
-      [recordId]: [],
-    }));
+    const next = buildDefaultImageSelection(detail);
+    const nextCover = getDefaultCoverImageUrl(detail, next);
+    setSelectedImageByRecordId(next);
+    setCoverImageUrl(nextCover);
+    saveSelectionPreference(next, nextCover);
+  }
+
+  function clearAllImages() {
+    if (generating || cacheLoading) return;
+    invalidateGeneratedVideo();
+    setErrorText("");
+    const next = Object.fromEntries(
+      detail.records.map((record) => [record.id, []])
+    );
+    setSelectedImageByRecordId(next);
+    setCoverImageUrl(null);
+    saveSelectionPreference(next, null);
   }
 
   function selectCoverImage(imageUrl: string) {
@@ -359,9 +423,10 @@ export default function ExperienceCardVideoPanel({
     ) {
       return;
     }
-    clearGeneratedVideo();
+    invalidateGeneratedVideo();
     setErrorText("");
     setCoverImageUrl(imageUrl);
+    saveSelectionPreference(selectedImageByRecordId, imageUrl);
   }
 
   async function handleGenerate() {
@@ -456,87 +521,83 @@ export default function ExperienceCardVideoPanel({
 
   return (
     <section style={panelStyle} aria-label="经验卡视频">
-      <div style={headerStyle}>
-        <div>
-          <div style={eyebrowStyle}>经验卡视频</div>
-          <h2 style={titleStyle}>竖屏 MP4</h2>
-        </div>
-        <span style={durationStyle}>
-          {formatExperienceCardVideoDuration(duration)}
-        </span>
-      </div>
+      {!readOnly ? (
+        <>
+          <div style={headerStyle}>
+            <h2 style={titleStyle}>图片与视频</h2>
+            <span style={durationStyle}>
+              {formatExperienceCardVideoDuration(duration)}
+            </span>
+          </div>
 
-      <p style={descriptionStyle}>
-        自动串联全部来源记录，记录文字烧录为字幕；每张照片都可单独选取，并可从已选照片中指定视频封面。生成后保存在当前浏览器，再次打开可直接下载；不上传云端，也不占云空间。
-      </p>
+          <div style={imageSelectorStyle}>
+            <div style={imageSelectorHeaderStyle}>
+              <strong>
+                已选 {selectedImageCount}/{totalImageCount} 张
+              </strong>
+              <span style={imageSelectorActionsStyle}>
+                <button
+                  type="button"
+                  disabled={cacheLoading}
+                  onClick={selectAllImages}
+                  style={imageSelectorActionButtonStyle}
+                >
+                  全选
+                </button>
+                <button
+                  type="button"
+                  disabled={cacheLoading}
+                  onClick={clearAllImages}
+                  style={imageSelectorActionButtonStyle}
+                >
+                  清空
+                </button>
+              </span>
+            </div>
+            <div style={imageChoiceGridStyle}>
+              {imageOptions.map((option, index) => {
+                const active = (
+                  selectedImageByRecordId[option.recordId] || []
+                ).includes(option.sourceUrl);
+                const isCover =
+                  active && effectiveCoverImageUrl === option.sourceUrl;
+                return (
+                  <div key={option.id} style={imageChoiceItemStyle}>
+                    <button
+                      type="button"
+                      disabled={cacheLoading}
+                      onClick={() =>
+                        toggleRecordImage(option.recordId, option.sourceUrl)
+                      }
+                      aria-pressed={active}
+                      style={imageChoiceButtonStyle(active)}
+                    >
+                      <img
+                        src={option.previewUrl}
+                        alt={`经验卡可选图片${index + 1}`}
+                        style={imageChoiceImageStyle}
+                      />
+                      <span style={imageSelectedBadgeStyle(active)}>
+                        {active ? "已选" : "选择"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!active || cacheLoading}
+                      onClick={() => selectCoverImage(option.sourceUrl)}
+                      style={coverChoiceButtonStyle(isCover, active)}
+                    >
+                      {isCover ? "当前封面" : "设为封面"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      ) : null}
 
-      <details style={imageSelectorStyle}>
-        <summary style={imageSelectorSummaryStyle}>
-          选择图片与封面（已选 {selectedImageCount}/{totalImageCount} 张）
-        </summary>
-        <div style={imageSelectorListStyle}>
-          {detail.records.map((record, index) => {
-            const options = imageOptionsByRecordId.get(record.id) || [];
-            const selectedUrls = selectedImageByRecordId[record.id] || [];
-
-            return (
-              <div key={record.id} style={imageSelectorRecordStyle}>
-                <div style={imageSelectorRecordTitleStyle}>
-                  第 {index + 1} 条记录
-                </div>
-                <div style={imageChoiceGridStyle}>
-                  <button
-                    type="button"
-                    disabled={cacheLoading}
-                    onClick={() => clearRecordImages(record.id)}
-                    aria-pressed={selectedUrls.length === 0}
-                    style={imageNoneButtonStyle(selectedUrls.length === 0)}
-                  >
-                    不使用图片
-                  </button>
-                  {options.map((option) => {
-                    const active = selectedUrls.includes(option.sourceUrl);
-                    const isCover =
-                      active && effectiveCoverImageUrl === option.sourceUrl;
-                    return (
-                      <div key={option.id} style={imageChoiceItemStyle}>
-                        <button
-                          type="button"
-                          disabled={cacheLoading}
-                          onClick={() =>
-                            toggleRecordImage(record.id, option.sourceUrl)
-                          }
-                          aria-pressed={active}
-                          style={imageChoiceButtonStyle(active)}
-                        >
-                          <img
-                            src={option.previewUrl}
-                            alt={`第${index + 1}条记录可选图片`}
-                            style={imageChoiceImageStyle}
-                          />
-                          <span style={imageSelectedBadgeStyle(active)}>
-                            {active ? "已选" : "选择"}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!active || cacheLoading}
-                          onClick={() => selectCoverImage(option.sourceUrl)}
-                          style={coverChoiceButtonStyle(isCover, active)}
-                        >
-                          {isCover ? "当前封面" : "设为封面"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </details>
-
-      <div style={contentGridStyle}>
+      <div style={readOnly ? publicPreviewWrapStyle : contentGridStyle}>
         <div style={previewShellStyle}>
           {videoUrl ? (
             <video
@@ -551,14 +612,16 @@ export default function ExperienceCardVideoPanel({
           ) : (
             <canvas ref={canvasRef} style={previewStyle} aria-label="循环视频预览" />
           )}
-          <div style={previewLabelStyle}>
-            {videoUrl ? "MP4循环播放" : "循环预览"}
-          </div>
+          {!readOnly ? (
+            <div style={previewLabelStyle}>
+              {videoUrl ? "MP4循环播放" : "循环预览"}
+            </div>
+          ) : null}
         </div>
 
-        <div style={controlStyle}>
+        {!readOnly ? <div style={controlStyle}>
           <div style={summaryStyle}>
-            {detail.records.length} 条记录 · 9:16 竖屏 · 静音 H.264 MP4 · {scenes.filter((scene) => scene.kind === "record").length > detail.records.length ? "长文字自动分段" : "原记录文字"}
+            {selectedImageCount} 张图片 · 9:16 竖屏 · 静音 H.264 MP4
           </div>
 
           {imageLoading ? (
@@ -622,10 +685,7 @@ export default function ExperienceCardVideoPanel({
             ) : null}
           </div>
 
-          <p style={helperStyle}>
-            页面内会自动循环播放；同一设备和浏览器可再次下载，换设备或清理网站数据后需重新生成。保存后的MP4是否循环由相册或视频平台决定。手机支持文件分享时，会打开系统分享面板。生成期间请保持页面开启。
-          </p>
-        </div>
+        </div> : null}
       </div>
     </section>
   );
@@ -647,15 +707,8 @@ const headerStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
-const eyebrowStyle: CSSProperties = {
-  color: "#71806e",
-  fontSize: 12,
-  fontWeight: 800,
-  letterSpacing: "0.06em",
-};
-
 const titleStyle: CSSProperties = {
-  margin: "5px 0 0",
+  margin: 0,
   color: "#2c3a2b",
   fontSize: 21,
   lineHeight: 1.3,
@@ -673,45 +726,38 @@ const durationStyle: CSSProperties = {
   fontWeight: 800,
 };
 
-const descriptionStyle: CSSProperties = {
-  margin: "8px 0 13px",
-  color: "#657260",
-  fontSize: 13,
-  lineHeight: 1.75,
-};
-
 const imageSelectorStyle: CSSProperties = {
-  margin: "0 0 16px",
+  margin: "14px 0 16px",
   border: "1px solid #dfe8db",
   borderRadius: 14,
   background: "#fff",
-  overflow: "hidden",
+  padding: 12,
 };
 
-const imageSelectorSummaryStyle: CSSProperties = {
-  padding: "11px 13px",
+const imageSelectorHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 10,
   color: "#466043",
   fontSize: 13,
-  fontWeight: 800,
-  cursor: "pointer",
 };
 
-const imageSelectorListStyle: CSSProperties = {
-  display: "grid",
-  gap: 10,
-  padding: "0 12px 12px",
+const imageSelectorActionsStyle: CSSProperties = {
+  display: "inline-flex",
+  gap: 6,
 };
 
-const imageSelectorRecordStyle: CSSProperties = {
-  paddingTop: 10,
-  borderTop: "1px solid #edf1ea",
-};
-
-const imageSelectorRecordTitleStyle: CSSProperties = {
-  marginBottom: 7,
-  color: "#6b7967",
+const imageSelectorActionButtonStyle: CSSProperties = {
+  minHeight: 28,
+  padding: "3px 9px",
+  border: "1px solid #d7e2d3",
+  borderRadius: 999,
+  background: "#f8faf7",
+  color: "#62715e",
   fontSize: 12,
-  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const imageChoiceGridStyle: CSSProperties = {
@@ -772,18 +818,6 @@ function coverChoiceButtonStyle(
   };
 }
 
-function imageNoneButtonStyle(active: boolean): CSSProperties {
-  return {
-    ...imageChoiceButtonStyle(active),
-    minHeight: 68,
-    aspectRatio: "auto",
-    color: active ? "#365c34" : "#6f7c6b",
-    fontSize: 12,
-    fontWeight: 800,
-    lineHeight: 1.35,
-  };
-}
-
 const imageChoiceImageStyle: CSSProperties = {
   width: "100%",
   height: "100%",
@@ -797,6 +831,11 @@ const contentGridStyle: CSSProperties = {
   gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 250px), 1fr))",
   gap: 18,
   alignItems: "start",
+};
+
+const publicPreviewWrapStyle: CSSProperties = {
+  maxWidth: 360,
+  margin: "0 auto",
 };
 
 const previewShellStyle: CSSProperties = {
@@ -931,11 +970,4 @@ const stopButtonStyle: CSSProperties = {
   justifySelf: "start",
   color: "#a14d48",
   borderColor: "#ecd1ce",
-};
-
-const helperStyle: CSSProperties = {
-  margin: 0,
-  color: "#7a8776",
-  fontSize: 12,
-  lineHeight: 1.65,
 };

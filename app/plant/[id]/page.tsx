@@ -1407,7 +1407,7 @@ export default function PlantDetailPage() {
         setRelatedExperienceCards([]);
       }
 
-      if (user && canReadFullGuide) {
+      if (user) {
         const [{ data: interestData }, { data: planData }] = await Promise.all([
           supabase
             .from("user_plant_interests")
@@ -1632,16 +1632,6 @@ export default function PlantDetailPage() {
       return;
     }
 
-    if (!hasCloudAccess) {
-      setActionMessage({
-        type: "error",
-        text: "加入感兴趣列表属于云空间功能。",
-        href: "/membership",
-        hrefText: "查看云空间",
-      });
-      return;
-    }
-
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -1656,33 +1646,50 @@ export default function PlantDetailPage() {
       return;
     }
 
+    if (!interestAdded && !hasCloudAccess) {
+      setActionMessage({
+        type: "error",
+        text: "加入收藏属于云空间功能。",
+        href: "/membership",
+        hrefText: "查看云空间",
+      });
+      return;
+    }
+
     setActionLoading("interest");
     setActionMessage(null);
 
-    const { error } = await supabase.from("user_plant_interests").upsert(
-      {
-        user_id: user.id,
-        species_id: plant.id,
-      },
-      { onConflict: "user_id,species_id" }
-    );
+    const { error } = interestAdded
+      ? await supabase
+          .from("user_plant_interests")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("species_id", plant.id)
+      : await supabase.from("user_plant_interests").upsert(
+          {
+            user_id: user.id,
+            species_id: plant.id,
+          },
+          { onConflict: "user_id,species_id" }
+        );
 
     setActionLoading(null);
 
     if (error) {
       setActionMessage({
         type: "error",
-        text: "加入失败：" + error.message,
+        text: `${interestAdded ? "取消" : "加入"}失败：${error.message}`,
       });
       return;
     }
 
-    setInterestAdded(true);
+    const nextInterestAdded = !interestAdded;
+    setInterestAdded(nextInterestAdded);
     setActionMessage({
       type: "success",
-      text: "已加入我感兴趣的植物。",
-      href: "/archive/interests",
-      hrefText: "查看列表",
+      text: nextInterestAdded ? "已加入我的收藏。" : "已取消收藏。",
+      href: nextInterestAdded ? "/archive/interests" : undefined,
+      hrefText: nextInterestAdded ? "查看收藏" : undefined,
     });
   }
 
@@ -1699,16 +1706,6 @@ export default function PlantDetailPage() {
       return;
     }
 
-    if (!hasCloudAccess) {
-      setActionMessage({
-        type: "error",
-        text: "云端种植计划属于云空间功能；你仍可新建本地项目。",
-        href: "/membership",
-        hrefText: "查看云空间",
-      });
-      return;
-    }
-
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -1723,34 +1720,51 @@ export default function PlantDetailPage() {
       return;
     }
 
+    if (!planAdded && !hasCloudAccess) {
+      setActionMessage({
+        type: "error",
+        text: "云端种植计划属于云空间功能；你仍可新建本地项目。",
+        href: "/membership",
+        hrefText: "查看云空间",
+      });
+      return;
+    }
+
     setActionLoading("plan");
     setActionMessage(null);
 
-    const { error } = await supabase.from("user_plant_plans").upsert(
-      {
-        user_id: user.id,
-        species_id: plant.id,
-        status: "want",
-      },
-      { onConflict: "user_id,species_id" }
-    );
+    const { error } = planAdded
+      ? await supabase
+          .from("user_plant_plans")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("species_id", plant.id)
+      : await supabase.from("user_plant_plans").upsert(
+          {
+            user_id: user.id,
+            species_id: plant.id,
+            status: "want",
+          },
+          { onConflict: "user_id,species_id" }
+        );
 
     setActionLoading(null);
 
     if (error) {
       setActionMessage({
         type: "error",
-        text: "加入失败：" + error.message,
+        text: `${planAdded ? "取消" : "加入"}失败：${error.message}`,
       });
       return;
     }
 
-    setPlanAdded(true);
+    const nextPlanAdded = !planAdded;
+    setPlanAdded(nextPlanAdded);
     setActionMessage({
       type: "success",
-      text: "已加入我的种植计划。",
-      href: "/archive/plans",
-      hrefText: "查看计划",
+      text: nextPlanAdded ? "已添加种植计划。" : "已取消种植计划。",
+      href: nextPlanAdded ? "/archive/plans" : undefined,
+      hrefText: nextPlanAdded ? "查看计划" : undefined,
     });
   }
 
@@ -1941,12 +1955,11 @@ export default function PlantDetailPage() {
             {hasCloudAccess ? "新建云端种植项目" : "新建本地种植项目"}
           </Link>
 
-          {hasCloudAccess ? (
-            <>
+          {hasCloudAccess || planAdded ? (
               <button
                 type="button"
                 onClick={handleAddPlan}
-                disabled={planAdded || actionLoading !== null}
+                disabled={actionLoading !== null}
                 style={{
                   padding: "12px 20px",
                   borderRadius: 14,
@@ -1956,21 +1969,23 @@ export default function PlantDetailPage() {
                   fontSize: 15,
                   fontWeight: 700,
                   lineHeight: 1.2,
-                  cursor: planAdded || actionLoading !== null ? "default" : "pointer",
+                  cursor: actionLoading !== null ? "default" : "pointer",
                   boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
                 }}
               >
                 {planAdded
-                  ? "已在种植计划"
+                  ? "已添加计划"
                   : actionLoading === "plan"
                     ? "加入中..."
                     : "加入种植计划"}
               </button>
+          ) : null}
 
+          {hasCloudAccess || interestAdded ? (
               <button
                 type="button"
                 onClick={handleAddInterest}
-                disabled={interestAdded || actionLoading !== null}
+                disabled={actionLoading !== null}
                 style={{
                   padding: "12px 20px",
                   borderRadius: 14,
@@ -1980,17 +1995,16 @@ export default function PlantDetailPage() {
                   fontSize: 15,
                   fontWeight: 700,
                   lineHeight: 1.2,
-                  cursor: interestAdded || actionLoading !== null ? "default" : "pointer",
+                  cursor: actionLoading !== null ? "default" : "pointer",
                   boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
                 }}
               >
                 {interestAdded
-                  ? "已加入感兴趣"
+                  ? "已收藏"
                   : actionLoading === "interest"
                     ? "加入中..."
-                    : "加入感兴趣"}
+                    : "加入收藏"}
               </button>
-            </>
           ) : null}
         </div>
 

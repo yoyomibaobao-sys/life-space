@@ -89,46 +89,29 @@
   background: rgba(255, 240, 232, 0.95);
 }
 
-.imageTitleArea {
-  position: absolute;
-  inset: auto 0 0;
-  padding: 46px 12px 10px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.25), transparent);
-}
-
 .title {
   display: -webkit-box;
   overflow: hidden;
-  margin: 0;
-  color: #fff;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 650;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  margin: 1px 0 0;
+  color: #2d3b2c;
+  font-size: 15px;
+  line-height: 1.38;
+  font-weight: 720;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-}
-
-.imageStats {
-  margin-top: 4px;
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 10px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .body {
   min-width: 0;
   display: grid;
-  gap: 5px;
-  padding: 10px;
+  gap: 7px;
+  order: 1;
+  padding: 11px 11px 0;
 }
 
 .systemName,
-.owner {
+.owner,
+.updateDate {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -136,17 +119,17 @@
 }
 
 .systemName {
-  color: #334333;
-  font-size: 12px;
+  color: #6a7a67;
+  font-size: 11px;
   line-height: 1.4;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .summary {
   display: -webkit-box;
   overflow: hidden;
   margin: 0;
-  color: #657164;
+  color: #697568;
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-line;
@@ -154,9 +137,38 @@
   -webkit-line-clamp: 2;
 }
 
+.imageStats {
+  display: flex;
+  order: 2;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 7px 11px 0;
+  color: #778375;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ownerRow {
+  display: flex;
+  order: 3;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 7px 11px 11px;
+  padding-top: 7px;
+  border-top: 1px solid #edf1eb;
+}
+
 .owner {
-  padding-top: 2px;
   color: #8a9488;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.updateDate {
+  flex-shrink: 0;
+  color: #9aa39a;
   font-size: 10px;
   line-height: 1.35;
 }
@@ -271,7 +283,7 @@
   }
 
   .title {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .systemName {
