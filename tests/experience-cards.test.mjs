@@ -157,11 +157,12 @@ test("experience cards have a persistent personal-space entry", async () => {
 });
 
 
-test("experience cards generate a local looping H.264 MP4 with burned record text", async () => {
-  const [detail, panel, renderer, packageJson] = await Promise.all([
+test("experience cards generate and cache a local looping H.264 MP4 with burned record text", async () => {
+  const [detail, panel, renderer, cache, packageJson] = await Promise.all([
     source("app/experience-cards/[id]/page.tsx"),
     source("components/experience-card/ExperienceCardVideoPanel.tsx"),
     source("lib/experience-card-video.ts"),
+    source("lib/experience-card-video-cache.ts"),
     source("package.json"),
   ]);
 
@@ -176,6 +177,9 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
   assert.match(panel, /保存后的MP4是否循环由相册或视频平台决定/);
   assert.match(panel, /navigator\.canShare/);
   assert.match(panel, /不上传云端，也不占云空间/);
+  assert.match(panel, /saveCachedExperienceCardVideo/);
+  assert.match(panel, /getCachedExperienceCardVideo/);
+  assert.match(panel, /再次打开可直接下载/);
   assert.match(panel, /repeat\(auto-fit/);
 
   assert.match(renderer, /new Mp4OutputFormat\(\{ fastStart: "in-memory" \}\)/);
@@ -188,6 +192,13 @@ test("experience cards generate a local looping H.264 MP4 with burned record tex
   assert.match(renderer, /INTRO_DURATION_SECONDS = 4\.8/);
   assert.match(renderer, /context\.fillText\(scene\.date, contentX, cursorY\)/);
   assert.doesNotMatch(renderer, /fillText\(scene\.date, width - 48/);
+  assert.match(cache, /indexedDB\.open\(DB_NAME, DB_VERSION\)/);
+  assert.match(cache, /sourceSignature/);
+  assert.match(cache, /selectedMediaIdsByRecordId/);
+  assert.match(cache, /coverMediaId/);
+  assert.match(cache, /storagePath/);
+  assert.doesNotMatch(cache, /displayUrl/);
+  assert.match(cache, /MAX_CACHE_BYTES/);
   assert.match(packageJson, /"mediabunny"/);
 });
 

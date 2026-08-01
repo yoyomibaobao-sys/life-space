@@ -26,6 +26,12 @@ import {
   type ExperienceCardVideoImages,
   type ExperienceCardVideoImageSelection,
 } from "@/lib/experience-card-video";
+import {
+  deleteCachedExperienceCardVideo,
+  getCachedExperienceCardVideo,
+  getExperienceCardVideoSourceSignature,
+  saveCachedExperienceCardVideo,
+} from "@/lib/experience-card-video-cache";
 
 type RecordImageOption = {
   id: string;
@@ -74,6 +80,35 @@ function getSelectedImageUrls(
   return detail.records.flatMap((record) => selection[record.id] || []);
 }
 
+function getSelectedMediaIdsByRecordId(
+  detail: ExperienceCardDetail,
+  selection: ExperienceCardVideoImageSelection
+) {
+  return Object.fromEntries(
+    detail.records.map((record) => {
+      const selectedUrls = new Set(selection[record.id] || []);
+      return [
+        record.id,
+        getRecordImageOptions(record)
+          .filter((option) => selectedUrls.has(option.sourceUrl))
+          .map((option) => option.id),
+      ];
+    })
+  );
+}
+
+function getCoverMediaId(
+  detail: ExperienceCardDetail,
+  coverImageUrl: string | null
+) {
+  if (!coverImageUrl) return null;
+  return (
+    detail.records
+      .flatMap((record) => getRecordImageOptions(record))
+      .find((option) => option.sourceUrl === coverImageUrl)?.id || null
+  );
+}
+
 function getDefaultCoverImageUrl(
   detail: ExperienceCardDetail,
   selection: ExperienceCardVideoImageSelection
@@ -93,12 +128,14 @@ export default function ExperienceCardVideoPanel({
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const videoUrlRef = useRef("");
   const [images, setImages] = useState<ExperienceCardVideoImages>(new Map());
   const [imageLoading, setImageLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
+  const [cacheLoading, setCacheLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
   const [selectedImageByRecordId, setSelectedImageByRecordId] =
     useState<ExperienceCardVideoImageSelection>(() =>
@@ -153,15 +190,71 @@ export default function ExperienceCardVideoPanel({
     () => getExperienceCardVideoFilename(detail),
     [detail]
   );
+  const sourceSignature = useMemo(
+    () => getExperienceCardVideoSourceSignature(detail),
+    [detail]
+  );
 
   useEffect(() => {
+    let cancelled = false;
     const nextSelection = buildDefaultImageSelection(detail);
     setSelectedImageByRecordId(nextSelection);
     setCoverImageUrl(getDefaultCoverImageUrl(detail, nextSelection));
     clearGeneratedVideo();
     setErrorText("");
+    setCacheLoading(true);
+
+    void getCachedExperienceCardVideo(detail.card.id)
+      .then(async (cached) => {
+        if (cancelled || !cached) return;
+        if (cached.sourceSignature !== sourceSignature) {
+          await deleteCachedExperienceCardVideo(detail.card.id).catch(
+            () => undefined
+          );
+          return;
+        }
+
+        const optionsByRecordId = new Map(
+          detail.records.map((record) => [
+            record.id,
+            getRecordImageOptions(record),
+          ])
+        );
+        const restoredSelection = Object.fromEntries(
+          detail.records.map((record) => [
+            record.id,
+            (optionsByRecordId.get(record.id) || [])
+              .filter((option) =>
+                (cached.selectedMediaIdsByRecordId[record.id] || []).includes(
+                  option.id
+                )
+              )
+              .map((option) => option.sourceUrl),
+          ])
+        );
+        const restoredUrls = getSelectedImageUrls(detail, restoredSelection);
+        const restoredCoverOption = Array.from(optionsByRecordId.values())
+          .flat()
+          .find((option) => option.id === cached.coverMediaId);
+        const restoredCover =
+          restoredCoverOption?.sourceUrl || restoredUrls[0] || null;
+
+        if (cancelled) return;
+        setSelectedImageByRecordId(restoredSelection);
+        setCoverImageUrl(restoredCover);
+        replaceGeneratedVideo(cached.blob);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setCacheLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // The signature captures every source field used by the generated video.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail.card.id]);
+  }, [detail.card.id, sourceSignature]);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,21 +308,28 @@ export default function ExperienceCardVideoPanel({
     return () => window.cancelAnimationFrame(frameId);
   }, [images, scenes, videoUrl]);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       abortRef.current?.abort();
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-    };
-  }, [videoUrl]);
+      if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current);
+    },
+    []
+  );
+
+  function replaceGeneratedVideo(blob: Blob | null) {
+    if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current);
+    const nextUrl = blob ? URL.createObjectURL(blob) : "";
+    videoUrlRef.current = nextUrl;
+    setVideoBlob(blob);
+    setVideoUrl(nextUrl);
+  }
 
   function clearGeneratedVideo() {
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
-    setVideoUrl("");
-    setVideoBlob(null);
+    replaceGeneratedVideo(null);
   }
 
   function toggleRecordImage(recordId: string, imageUrl: string) {
-    if (generating) return;
+    if (generating || cacheLoading) return;
     clearGeneratedVideo();
     setErrorText("");
     setSelectedImageByRecordId((current) => {
@@ -242,7 +342,7 @@ export default function ExperienceCardVideoPanel({
   }
 
   function clearRecordImages(recordId: string) {
-    if (generating) return;
+    if (generating || cacheLoading) return;
     clearGeneratedVideo();
     setErrorText("");
     setSelectedImageByRecordId((current) => ({
@@ -252,14 +352,20 @@ export default function ExperienceCardVideoPanel({
   }
 
   function selectCoverImage(imageUrl: string) {
-    if (generating || !selectedImageUrls.includes(imageUrl)) return;
+    if (
+      generating ||
+      cacheLoading ||
+      !selectedImageUrls.includes(imageUrl)
+    ) {
+      return;
+    }
     clearGeneratedVideo();
     setErrorText("");
     setCoverImageUrl(imageUrl);
   }
 
   async function handleGenerate() {
-    if (generating || imageLoading) return;
+    if (generating || imageLoading || cacheLoading) return;
     clearGeneratedVideo();
     setErrorText("");
     setProgress(0);
@@ -275,11 +381,24 @@ export default function ExperienceCardVideoPanel({
         signal: controller.signal,
         onProgress: setProgress,
       });
-      const nextUrl = URL.createObjectURL(generated.blob);
-      setVideoBlob(generated.blob);
-      setVideoUrl(nextUrl);
+      replaceGeneratedVideo(generated.blob);
       setProgress(1);
-      showToast("竖屏MP4已生成");
+      try {
+        await saveCachedExperienceCardVideo({
+          cardId: detail.card.id,
+          sourceSignature,
+          blob: generated.blob,
+          filename,
+          selectedMediaIdsByRecordId: getSelectedMediaIdsByRecordId(
+            detail,
+            selectedImageByRecordId
+          ),
+          coverMediaId: getCoverMediaId(detail, effectiveCoverImageUrl),
+        });
+        showToast("竖屏MP4已生成并保存在本机");
+      } catch {
+        showToast("MP4已生成，但本机缓存失败，请立即保存");
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         showToast("视频生成已停止");
@@ -348,7 +467,7 @@ export default function ExperienceCardVideoPanel({
       </div>
 
       <p style={descriptionStyle}>
-        自动串联全部来源记录，记录文字烧录为字幕；每张照片都可单独选取，并可从已选照片中指定视频封面。本机生成，不上传云端，也不占云空间。
+        自动串联全部来源记录，记录文字烧录为字幕；每张照片都可单独选取，并可从已选照片中指定视频封面。生成后保存在当前浏览器，再次打开可直接下载；不上传云端，也不占云空间。
       </p>
 
       <details style={imageSelectorStyle}>
@@ -368,6 +487,7 @@ export default function ExperienceCardVideoPanel({
                 <div style={imageChoiceGridStyle}>
                   <button
                     type="button"
+                    disabled={cacheLoading}
                     onClick={() => clearRecordImages(record.id)}
                     aria-pressed={selectedUrls.length === 0}
                     style={imageNoneButtonStyle(selectedUrls.length === 0)}
@@ -382,6 +502,7 @@ export default function ExperienceCardVideoPanel({
                       <div key={option.id} style={imageChoiceItemStyle}>
                         <button
                           type="button"
+                          disabled={cacheLoading}
                           onClick={() =>
                             toggleRecordImage(record.id, option.sourceUrl)
                           }
@@ -399,7 +520,7 @@ export default function ExperienceCardVideoPanel({
                         </button>
                         <button
                           type="button"
-                          disabled={!active}
+                          disabled={!active || cacheLoading}
                           onClick={() => selectCoverImage(option.sourceUrl)}
                           style={coverChoiceButtonStyle(isCover, active)}
                         >
@@ -444,6 +565,10 @@ export default function ExperienceCardVideoPanel({
             <div style={noticeStyle}>正在准备记录照片...</div>
           ) : null}
 
+          {cacheLoading ? (
+            <div style={noticeStyle}>正在检查本机已生成的MP4...</div>
+          ) : null}
+
           {generating ? (
             <div style={progressWrapStyle}>
               <div style={progressTextStyle}>
@@ -470,7 +595,7 @@ export default function ExperienceCardVideoPanel({
               <button
                 type="button"
                 onClick={() => void handleGenerate()}
-                disabled={imageLoading}
+                disabled={imageLoading || cacheLoading}
                 style={primaryButtonStyle}
               >
                 {videoBlob ? "重新生成MP4" : "生成竖屏MP4"}
@@ -498,7 +623,7 @@ export default function ExperienceCardVideoPanel({
           </div>
 
           <p style={helperStyle}>
-            页面内会自动循环播放；保存后的MP4是否循环由相册或视频平台决定。手机支持文件分享时，会打开系统分享面板。生成期间请保持页面开启。
+            页面内会自动循环播放；同一设备和浏览器可再次下载，换设备或清理网站数据后需重新生成。保存后的MP4是否循环由相册或视频平台决定。手机支持文件分享时，会打开系统分享面板。生成期间请保持页面开启。
           </p>
         </div>
       </div>
