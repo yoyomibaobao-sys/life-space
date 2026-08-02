@@ -15,6 +15,7 @@ export type CloudTrashItem = {
   recordCount: number;
   mediaCount: number;
   canRetry: boolean;
+  previewUrl: string | null;
 };
 
 type CloudTrashListResult = {

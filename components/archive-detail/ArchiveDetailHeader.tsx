@@ -13,6 +13,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { ArchiveDetailArchive, ArchiveMode } from "@/lib/archive-detail-types";
+import UiIcon from "@/components/ui/UiIcon";
 
 export default function ArchiveDetailHeader({
   mode,
@@ -90,6 +91,10 @@ export default function ArchiveDetailHeader({
     visibilityTone: archive.is_public ? ("public" as const) : ("private" as const),
     storageLabel: "云端",
     storageTone: "cloud" as const,
+    recordCount,
+    durationDays: ongoingDays,
+    latestTime: latestUpdate,
+    ended: archive.status === "ended",
   };
 
   const profileRows = [
@@ -195,7 +200,7 @@ export default function ArchiveDetailHeader({
           href={`/user/${archive.user_id}`}
           style={{ fontSize: 14, color: "#4CAF50", textDecoration: "none" }}
         >
-          去 TA 的空间 →
+          进入{username}的空间 <UiIcon name="arrow-right" size={14} />
         </a>
       ) : null}
     </>
@@ -255,6 +260,7 @@ export default function ArchiveDetailHeader({
         ) : null
       }
       profileExtra={profileExtra}
+      profileAlwaysOpen
     />
   );
 }

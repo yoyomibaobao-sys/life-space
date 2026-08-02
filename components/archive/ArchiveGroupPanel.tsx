@@ -1,6 +1,7 @@
 "use client";
 
 import type { GroupTagItem } from "@/lib/archive-page-types";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   activeGroupTag: string | null;
@@ -108,7 +109,7 @@ export default function ArchiveGroupPanel({
               }}
               title="删除分组"
             >
-              ×
+              <UiIcon name="close" size={12} />
             </button>
           </span>
         ))}
@@ -128,7 +129,7 @@ export default function ArchiveGroupPanel({
               lineHeight: mobileMode ? 1.15 : 1.3,
             }}
           >
-            ＋
+            <UiIcon name="plus" size={14} />
           </button>
         )}
       </section>
@@ -162,7 +163,7 @@ export default function ArchiveGroupPanel({
             lineHeight: mobileMode ? 1.15 : 1.3,
           }}
         >
-          ＋ 新增分组
+          <UiIcon name="plus" size={14} /> 新增分组
         </button>
       </section>
     );

@@ -11,13 +11,16 @@ import type {
   PlantSpeciesOption,
   SubTagItem,
 } from "@/lib/archive-page-types";
-import { formatArchiveDate, getArchiveSystemName } from "@/lib/archive-page-utils";
+import { getArchiveSystemName } from "@/lib/archive-page-utils";
 import ArchiveCategoryDropdown from "@/components/archive/ArchiveCategoryDropdown";
 import ArchiveGroupDropdown from "@/components/archive/ArchiveGroupDropdown";
 import ArchivePlantNameEditor from "@/components/archive/ArchivePlantNameEditor";
 import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   item: ArchiveItem;
@@ -185,7 +188,7 @@ export default function ArchiveCard({
   const systemName = getArchiveSystemName(item);
   const mobileSystemName = getMobileArchiveSystemName(item);
   const latestRecordPreview = getLatestRecordPreview(item);
-  const updateDate = formatArchiveDate(item.latest_record_time || item.last_record_time || item.created_at);
+  const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
   const ongoingDays = getOngoingDays(item.created_at);
   const statusPills = buildStatusPills(item, ended);
   const availableGroupTags = item.sub_tag_id
@@ -274,10 +277,7 @@ export default function ArchiveCard({
               fontSize: 24,
             }}
           >
-            <span>{getArchiveCategoryIcon(item.category)}</span>
-            {hasLatestRecord ? (
-              <span style={{ fontSize: 11, color: "#8c9b88" }}>最新无图</span>
-            ) : null}
+            <span style={{ fontSize: 12, color: "#8c9b88" }}>无图</span>
           </div>
         )}
       </div>
@@ -498,26 +498,25 @@ export default function ArchiveCard({
             WebkitLineClamp: 1,
             WebkitBoxOrient: "vertical",
           }}
-          title={latestRecordPreview ? `最新：${latestRecordPreview} · 更新 ${updateDate || "暂无"}` : `更新 ${updateDate || "暂无"}`}
+          title={latestRecordPreview || "还没有记录内容"}
         >
-          {latestRecordPreview ? `最新：${latestRecordPreview} · 更新 ${updateDate || "暂无"}` : `更新 ${updateDate || "暂无"}`}
+          {latestRecordPreview || "还没有记录内容"}
+          {latestRecordTime ? (
+            <>
+              <span aria-hidden="true"> · </span>
+              <CompactActivityTime value={latestRecordTime} />
+            </>
+          ) : null}
         </div>
 
-        <div
-          style={{
-            fontSize: 12,
-            color: "#999",
-            marginTop: "auto",
-            paddingTop: 5,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          记录 {item.record_count || 0}
-          {ongoingDays ? ` · 已持续 ${ongoingDays} 天` : ""} · 浏览 {item.view_count || 0}
-          {typeof item.follower_count !== "undefined" ? ` · 关注 ${item.follower_count || 0}` : ""}
-        </div>
+        <ProjectMetaLine
+          recordCount={item.record_count || 0}
+          durationDays={ongoingDays}
+          ended={ended}
+          viewCount={item.view_count || 0}
+          followerCount={item.follower_count}
+          style={{ marginTop: "auto", paddingTop: 5 }}
+        />
       </div>
 
       <div
@@ -604,19 +603,9 @@ function MobileArchiveCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const ongoingDays = getOngoingDays(item.created_at);
-  const mobilePrimaryStatsText = [
-    `记录 ${item.record_count || 0}`,
-    ongoingDays ? `已持续 ${ongoingDays} 天` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
+  const latestRecordPreview = getLatestRecordPreview(item);
   const visibilityText = item.is_public ? "公开发现" : "仅自己可见";
-  const mobileStatusDetailText = [
-    `浏览 ${item.view_count || 0}`,
-    typeof item.follower_count !== "undefined" ? `关注 ${item.follower_count || 0}` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
   const mobileEndedText = ended ? "已结束" : "";
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
@@ -631,12 +620,17 @@ function MobileArchiveCard({
     categoryIcon: getArchiveCategoryIcon(item.category),
     systemName,
     cover: imageUrl ? { kind: "url", url: imageUrl, alt: imageAlt } : null,
-    latestText: null,
+    latestText: latestRecordPreview || "还没有记录内容",
+    latestTime: latestRecordTime,
+    recordCount: item.record_count || 0,
+    durationDays: ongoingDays,
+    viewCount: item.view_count || 0,
+    followerCount: item.follower_count,
     visibilityLabel: visibilityText,
     visibilityTone: item.is_public ? "public" : "private",
-    activityText: mobilePrimaryStatsText,
-    mobilePrimaryStatsText,
-    mobileSecondaryStatsText: mobileStatusDetailText,
+    activityText: null,
+    mobilePrimaryStatsText: null,
+    mobileSecondaryStatsText: null,
     statusLabel: mobileEndedText,
     ended,
   };

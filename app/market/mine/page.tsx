@@ -12,6 +12,7 @@ import {
   type MarketPostStatus,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   canCreateMembershipMarketPost,
   getCreateMarketPostBlockedText,
@@ -122,7 +123,7 @@ export default function MyMarketPostsPage() {
         <header style={headerStyle}>
           <div>
             <Link href="/market" style={backLinkStyle}>
-              ← 返回集市
+              <UiIcon name="arrow-left" size={15} /> 返回集市
             </Link>
             <h1 style={titleStyle}>我的集市发布</h1>
             <p style={subtitleStyle}>

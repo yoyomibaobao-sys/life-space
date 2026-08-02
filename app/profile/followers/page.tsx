@@ -21,6 +21,8 @@ import {
   userCardStyle,
 } from "@/components/follow/FollowShared";
 import { formatDateTime, getTimeValue } from "@/lib/follow-utils";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 
 type FollowRow = {
   follower_id: string;
@@ -174,7 +176,7 @@ export default function FollowersPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href="/profile" style={backLinkStyle}>
-          ← 返回个人资料
+          <UiIcon name="arrow-left" size={15} /> 返回个人资料
         </Link>
 
         <h1 style={titleStyle}>粉丝</h1>
@@ -192,7 +194,7 @@ export default function FollowersPage() {
                   {item.avatarUrl ? (
                     <img src={item.avatarUrl} alt="" style={userAvatarStyle} />
                   ) : (
-                    <div style={userAvatarFallbackStyle}>🌱</div>
+                    <div style={userAvatarFallbackStyle}><UiIcon name="sprout" size={22} /></div>
                   )}
                 </div>
 
@@ -217,8 +219,10 @@ export default function FollowersPage() {
                   </div>
 
                   <div style={statsLineStyle}>
-                    {formatDateTime(item.latestRecordTime)}更新 · 共
-                    {item.publicArchiveCount}个公开项目
+                    <ProjectMetaLine
+                      projectCount={item.publicArchiveCount}
+                      updatedAt={item.latestRecordTime}
+                    />
                   </div>
 
                   <div style={buttonRowStyle}>

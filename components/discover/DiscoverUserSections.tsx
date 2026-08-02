@@ -2,6 +2,7 @@ import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { FeedItem, UserSection } from "@/lib/discover-types";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { DefaultUserAvatar, ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
+import UiIcon from "@/components/ui/UiIcon";
 
 function DiscoverUserRecordCard({
   record,
@@ -74,7 +75,7 @@ function DiscoverUserRecordCard({
                   : "1px solid #efe1af",
             }}
           >
-            {getArchiveCategoryIcon(record.archive_category)}
+            <UiIcon name={getArchiveCategoryIcon(record.archive_category)} size={22} />
           </div>
         )}
 

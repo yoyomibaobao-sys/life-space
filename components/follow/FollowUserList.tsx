@@ -1,7 +1,7 @@
 import { EmptyState, buttonRowStyle, cardBodyStyle, cardTopRowStyle, ghostButtonStyle, listStyle, noteLineStyle, primaryButtonStyle, projectTitleStyle, statsLineStyle, userAvatarWrapStyle, userCardStyle } from "@/components/follow/FollowShared";
 import type { FollowUserCard } from "@/lib/follow-types";
-import { formatDateTime } from "@/lib/follow-utils";
 import UserAvatar from "@/components/social/UserAvatar";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 
 export default function FollowUserList({
   items,
@@ -44,7 +44,10 @@ export default function FollowUserList({
             </div>
 
             <div style={statsLineStyle}>
-              {formatDateTime(item.latestRecordTime)}更新 · 共{item.publicArchiveCount}个公开项目
+              <ProjectMetaLine
+                projectCount={item.publicArchiveCount}
+                updatedAt={item.latestRecordTime}
+              />
             </div>
 
             <div style={buttonRowStyle}>

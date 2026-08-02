@@ -6,6 +6,7 @@ import {
 } from "@/lib/archive-categories";
 import type { SubTagItem } from "@/lib/archive-page-types";
 import ArchiveSubTagChip from "@/components/archive/ArchiveSubTagChip";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   activeCategory: ArchiveCategory | null;
@@ -158,7 +159,7 @@ export default function ArchiveFiltersPanel({
             }}
             title="新增子分类"
           >
-            ＋
+            <UiIcon name="plus" size={14} />
           </button>
         </div>
       </>

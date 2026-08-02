@@ -1,4 +1,8 @@
-import type { SearchCategory, SearchFilters } from "@/lib/discover-search-types";
+import type {
+  DiscoverSearchKind,
+  SearchCategory,
+  SearchFilters,
+} from "@/lib/discover-search-types";
 
 export function sanitizeOrSearchText(value: string) {
   return value.replace(/[(),]/g, " ").trim();
@@ -11,6 +15,22 @@ export function parseSearchCategory(value: string | null): SearchCategory {
     value === "other"
     ? value
     : "all";
+}
+
+export function parseDiscoverSearchKind(search: string): DiscoverSearchKind {
+  const params = new URLSearchParams(search);
+  const value = params.get("type");
+  if (value === "records" || value === "experience") return value;
+  if (value === "projects") return value;
+  if (
+    params.has("fromArchive") ||
+    params.has("tag") ||
+    params.has("content") ||
+    params.get("help") === "1"
+  ) {
+    return "records";
+  }
+  return "projects";
 }
 
 export function parseSearchFiltersFromUrl(search: string): SearchFilters {
@@ -31,8 +51,14 @@ export function parseSearchFiltersFromUrl(search: string): SearchFilters {
     speciesId: params.get("species"),
   };
 }
-export function buildDiscoverSearchUrl(filters: SearchFilters, extraParams?: Record<string, string>) {
+export function buildDiscoverSearchUrl(
+  filters: SearchFilters,
+  extraParams?: Record<string, string>,
+  kind: DiscoverSearchKind = "projects"
+) {
   const params = new URLSearchParams();
+
+  params.set("type", kind);
 
   if (filters.countryCode) params.set("country", filters.countryCode);
   if (filters.countryName) params.set("countryName", filters.countryName);
@@ -52,5 +78,5 @@ export function buildDiscoverSearchUrl(filters: SearchFilters, extraParams?: Rec
   });
 
   const query = params.toString();
-  return query ? `/discover/search?${query}` : "/discover/search";
+  return `/discover/search?${query}`;
 }

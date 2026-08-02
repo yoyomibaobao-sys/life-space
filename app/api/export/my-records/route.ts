@@ -363,12 +363,12 @@ function buildArchiveHtml({
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(archive.title || "项目档案")}</title>
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f8f1;color:#1f2a1f;line-height:1.7}.wrap{max-width:900px;margin:0 auto;padding:28px 16px}.hero,.record{background:#fff;border:1px solid #e4ecdc;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(32,56,24,.05)}a{color:#4f762c;text-decoration:none}.back{font-size:14px}.muted,.time{color:#6f7b69;font-size:13px}h1{margin:8px 0 6px;font-size:26px}.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tag{background:#f1f6ec;border:1px solid #dfead5;border-radius:999px;padding:4px 10px;font-size:13px;color:#506345}.record{margin-top:14px}.note{margin-top:8px;white-space:normal}.images{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}.images img{width:100%;border-radius:14px;border:1px solid #e7efe3;object-fit:cover}.missing{display:block;background:#fff8ea;border:1px solid #ead9b8;border-radius:12px;padding:10px;color:#7a5c24}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f8f1;color:#1f2a1f;line-height:1.7}.wrap{max-width:900px;margin:0 auto;padding:28px 16px}.hero,.record{background:#fff;border:1px solid #e4ecdc;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(32,56,24,.05)}a{color:#4f762c;text-decoration:none}.back{display:inline-flex;align-items:center;gap:5px;font-size:14px}.back svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.muted,.time{color:#6f7b69;font-size:13px}h1{margin:8px 0 6px;font-size:26px}.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tag{background:#f1f6ec;border:1px solid #dfead5;border-radius:999px;padding:4px 10px;font-size:13px;color:#506345}.record{margin-top:14px}.note{margin-top:8px;white-space:normal}.images{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}.images img{width:100%;border-radius:14px;border:1px solid #e7efe3;object-fit:cover}.missing{display:block;background:#fff8ea;border:1px solid #ead9b8;border-radius:12px;padding:10px;color:#7a5c24}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a class="back" href="../../index.html">← 返回全部项目</a>
+  <a class="back" href="../../index.html"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7M8 12h11" /></svg>返回全部项目</a>
   <section class="hero">
     <div class="muted">项目档案</div>
     <h1>${escapeHtml(archive.title || "未命名项目")}</h1>

@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 
 let globalShow: (msg: string) => void;
 
-// ✅ 必须有这个导出
+// 供页面统一调用的提示函数。
 export function showToast(msg: string) {
   globalShow?.(msg);
 }
 
-// ✅ 默认导出组件
+// 默认导出提示容器。
 export default function Toast() {
   const [message, setMessage] = useState("");
   const [visible, setVisible] = useState(false);

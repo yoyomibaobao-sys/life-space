@@ -1,3 +1,5 @@
+import UiIcon from "@/components/ui/UiIcon";
+
 type Props = {
   fromArchiveId: string;
   fromArchiveTitle: string;
@@ -34,7 +36,7 @@ export default function DiscoverSearchFromArchiveNotice({
         href={`/archive/${fromArchiveId}`}
         style={{ color: "#4CAF50", textDecoration: "none", whiteSpace: "nowrap" }}
       >
-        返回原记录 →
+        <UiIcon name="arrow-left" size={14} /> 返回来源项目
       </a>
     </div>
   );

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import type { UiIconName } from "@/components/ui/UiIcon";
 
 export type ArchiveMode = "cloud" | "local";
 
@@ -26,12 +27,18 @@ export type ArchiveProjectView = {
   plantId?: string | null;
   plantSlug?: string | null;
   categoryLabel: string;
-  categoryIcon: string;
+  categoryIcon: UiIconName;
   systemName: string;
   subcategoryLabel?: string | null;
   groupLabel?: string | null;
   cover?: ArchiveProjectCoverView;
   latestText?: string | null;
+  latestTime?: string | null;
+  recordCount?: number | null;
+  durationDays?: number | null;
+  viewCount?: number | null;
+  followerCount?: number | null;
+  commentCount?: number | null;
   activityText?: string | null;
   mobilePrimaryStatsText?: string | null;
   mobileSecondaryStatsText?: string | null;

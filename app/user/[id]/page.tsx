@@ -6,6 +6,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
@@ -20,19 +23,6 @@ import {
 } from "@/lib/membership";
 
 type Category = "all" | ArchiveCategory;
-
-function formatDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function categoryLabel(category?: string | null) {
   return getArchiveCategoryLabel(category);
@@ -382,7 +372,7 @@ export default function UserSpacePage() {
             textDecoration: "none",
           }}
         >
-          去发现 →
+          <UiIcon name="arrow-left" size={15} /> 返回发现
         </Link>
       </section>
 
@@ -514,12 +504,7 @@ export default function UserSpacePage() {
             const isEnded = archive.status === "ended";
             const hasHelp = stat?.hasHelp;
 
-            const metaItems = [
-              subTagName,
-              groupTagName,
-              `共 ${stat?.count || archive.record_count || 0} 条记录`,
-              `浏览 ${archive.view_count || 0} 次`,
-            ].filter(Boolean);
+            const metaItems = [subTagName, groupTagName].filter(Boolean);
 
             return (
               <article
@@ -563,7 +548,7 @@ export default function UserSpacePage() {
                       }}
                     />
                   ) : (
-                    getArchiveCategoryIcon(archive.category)
+                    <UiIcon name={getArchiveCategoryIcon(archive.category)} size={22} />
                   )}
                 </div>
 
@@ -622,8 +607,8 @@ export default function UserSpacePage() {
                     {latest?.note || "还没有公开记录"}
                     {latest?.record_time ? (
                       <span style={{ color: "#9a9f94" }}>
-                        {" "}
-                        · 更新 {formatDate(latest.record_time)}
+                        <span aria-hidden="true"> · </span>
+                        <CompactActivityTime value={latest.record_time} />
                       </span>
                     ) : null}
                   </div>
@@ -638,7 +623,11 @@ export default function UserSpacePage() {
                       fontSize: 13,
                     }}
                   >
-                    {metaItems.join(" · ")}
+                    {metaItems.length ? `${metaItems.join(" · ")} · ` : null}
+                    <ProjectMetaLine
+                      recordCount={stat?.count || archive.record_count || 0}
+                      viewCount={archive.view_count || 0}
+                    />
                   </div>
                 </div>
               </article>
@@ -698,7 +687,7 @@ export default function UserSpacePage() {
                   fontSize: 28,
                 }}
               >
-                🌱
+                <UiIcon name="sprout" size={26} />
               </div>
             )}
 
@@ -707,7 +696,7 @@ export default function UserSpacePage() {
             </div>
 
             <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>
-              Lv.{cardProfile.level || 1} · 🌸 {cardProfile.flower_count || 0}
+              Lv.{cardProfile.level || 1} · <UiIcon name="flower" size={13} /> {cardProfile.flower_count || 0}
             </div>
 
             <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>

@@ -15,6 +15,7 @@ import type {
   RecordLikeRow,
 } from "@/lib/archive-detail-types";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -507,7 +508,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
           }
           aria-label={recordLikedByMe ? "取消喜欢" : "喜欢"}
         >
-          {recordLikedByMe ? "♥" : "♡"} {recordLikeCount}
+          <UiIcon name={recordLikedByMe ? "heart-filled" : "heart"} size={14} /> {recordLikeCount}
         </button>
 
         <button
@@ -659,7 +660,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                     </span>
                     {comment.flowerCount > 0 ? (
                       <span style={{ color: "#9d6f1f", whiteSpace: "nowrap" }}>
-                        🌸
+                        <UiIcon name="flower" size={13} /> {comment.flowerCount}
                       </span>
                     ) : null}
                     <button
@@ -676,7 +677,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                       }}
                       aria-label={comment.likedByMe ? "取消喜欢" : "喜欢评论"}
                     >
-                      {comment.likedByMe ? "♥" : "♡"} {comment.likeCount}
+                      <UiIcon name={comment.likedByMe ? "heart-filled" : "heart"} size={13} /> {comment.likeCount}
                     </button>
 
                     {canDeleteComment ? (

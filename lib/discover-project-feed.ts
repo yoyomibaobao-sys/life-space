@@ -56,7 +56,11 @@ export function normalizeDiscoveryProjectFeedRow(
     public_record_count: normalizeCount(row.public_record_count),
     public_comment_count: normalizeCount(row.public_comment_count),
     has_public_help: row.has_public_help === true,
-    card_summary: archiveSummary || latestNote,
+    card_summary:
+      latestNote ||
+      (row.latest_public_primary_image_url
+        ? "新增了照片"
+        : archiveSummary || "项目刚刚开始"),
     display_image_url: null,
   };
 }

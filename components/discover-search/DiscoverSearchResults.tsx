@@ -1,14 +1,44 @@
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
+import { DiscoverProjectCard } from "@/components/discover/DiscoverProjectCard";
+import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
+import type { ExperienceCardListItem } from "@/lib/experience-card-types";
+import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
+import type { DiscoverSearchKind } from "@/lib/discover-search-types";
 import type { FeedItem } from "@/lib/discover-types";
 import { ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
-  items: FeedItem[];
+  kind: DiscoverSearchKind;
+  projectItems: DiscoveryProjectFeedItem[];
+  recordItems: FeedItem[];
+  experienceItems: ExperienceCardListItem[];
   loading: boolean;
   hasRun: boolean;
 };
 
-export default function DiscoverSearchResults({ items, loading, hasRun }: Props) {
+const kindLabels: Record<DiscoverSearchKind, { title: string; unit: string }> = {
+  projects: { title: "项目", unit: "个" },
+  records: { title: "记录", unit: "条" },
+  experience: { title: "经验卡", unit: "张" },
+};
+
+export default function DiscoverSearchResults({
+  kind,
+  projectItems,
+  recordItems,
+  experienceItems,
+  loading,
+  hasRun,
+}: Props) {
+  const itemCount =
+    kind === "projects"
+      ? projectItems.length
+      : kind === "records"
+        ? recordItems.length
+        : experienceItems.length;
+  const labels = kindLabels[kind];
+
   return (
     <section>
       <div
@@ -22,8 +52,8 @@ export default function DiscoverSearchResults({ items, loading, hasRun }: Props)
           fontSize: 12,
         }}
       >
-        <span>全部记录</span>
-        {hasRun && !loading ? <span>{items.length} 条</span> : null}
+        <span>{labels.title}</span>
+        {hasRun && !loading ? <span>{itemCount} {labels.unit}</span> : null}
       </div>
 
       {loading ? (
@@ -37,7 +67,7 @@ export default function DiscoverSearchResults({ items, loading, hasRun }: Props)
         >
           搜索中...
         </div>
-      ) : hasRun && items.length === 0 ? (
+      ) : hasRun && itemCount === 0 ? (
         <div
           style={{
             padding: "28px 12px",
@@ -49,10 +79,37 @@ export default function DiscoverSearchResults({ items, loading, hasRun }: Props)
             border: "1px solid #edf2ea",
           }}
         >
-          没有找到符合条件的公开记录
+          没有找到符合条件的公开{labels.title}
+        </div>
+      ) : kind === "projects" ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 210px), 1fr))",
+            gap: 12,
+          }}
+        >
+          {projectItems.map((item, index) => (
+            <DiscoverProjectCard
+              key={item.archive_id}
+              item={item}
+              eager={index < 4}
+            />
+          ))}
+        </div>
+      ) : kind === "experience" ? (
+        <div style={{ display: "grid", gap: 9 }}>
+          {experienceItems.map((item) => (
+            <ExperienceCardListCard
+              key={item.id}
+              item={item}
+              dateValue={item.published_at}
+              showAuthor
+            />
+          ))}
         </div>
       ) : (
-        items.map((record) => {
+        recordItems.map((record) => {
           const isHelp = record.status_tag === "help";
           const isResolved = record.status_tag === "resolved";
           const displayImageUrl = getFeedItemDisplayImageUrl(record);
@@ -116,7 +173,7 @@ export default function DiscoverSearchResults({ items, loading, hasRun }: Props)
                       fontSize: 18,
                     }}
                   >
-                    {getArchiveCategoryIcon(record.archive_category)}
+                    <UiIcon name={getArchiveCategoryIcon(record.archive_category)} size={20} />
                   </div>
                 )}
 

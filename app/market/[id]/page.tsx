@@ -16,6 +16,7 @@ import { PUBLIC_PROFILE_SELECT, type SupabaseUser } from "@/lib/domain-types";
 import type { LightboxImage } from "@/lib/archive-detail-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { requestMarketPostDeletion } from "@/lib/market-media-storage";
+import UiIcon from "@/components/ui/UiIcon";
 
 type ProfileBrief = {
   id: string;
@@ -281,7 +282,7 @@ export default function MarketDetailPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href="/market" style={backLinkStyle}>
-            ← 返回集市
+            <UiIcon name="arrow-left" size={15} /> 返回集市
           </Link>
           <section style={emptyStyle}>这条集市信息不存在或已不可见</section>
         </div>
@@ -303,7 +304,7 @@ export default function MarketDetailPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href="/market" style={backLinkStyle}>
-            ← 返回集市
+            <UiIcon name="arrow-left" size={15} /> 返回集市
           </Link>
 
           <section style={panelStyle}>

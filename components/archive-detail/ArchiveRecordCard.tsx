@@ -22,6 +22,7 @@ import type {
   ArchiveMode,
   RecordItem,
 } from "@/lib/archive-detail-types";
+import UiIcon from "@/components/ui/UiIcon";
 import type { MediaItem } from "@/lib/domain-types";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
@@ -633,7 +634,7 @@ function DesktopAndMobileRecordActions({
               item.status_tag === "resolved" ? "#acd7b5" : "#dfe7de",
             )}
           >
-            {item.status_tag === "resolved" ? "已解决 ✓" : "已解决"}
+            已解决 {item.status_tag === "resolved" ? <UiIcon name="check" size={13} /> : null}
           </button>
         </>
       ) : null}
@@ -770,7 +771,7 @@ function DesktopRecordTags({
             background: "#fff",
           }}
         >
-          <option value="">+ 添加标签</option>
+          <option value="">添加标签</option>
           {RECORD_TAG_OPTIONS.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -814,7 +815,7 @@ function DesktopSameTagLinks({
             borderRadius: 999,
           }}
         >
-          {getBehaviorTagLabel(linkItem.tag)}（{linkItem.count}） →
+          {getBehaviorTagLabel(linkItem.tag)}（{linkItem.count}） <UiIcon name="arrow-right" size={13} />
         </a>
       ))}
     </div>

@@ -15,6 +15,20 @@ export type ExperienceCardRow = {
   updated_at: string;
 };
 
+export type ExperienceCardListItem = ExperienceCardRow & {
+  archiveTitle: string;
+  archiveCategory: string | null;
+  systemName: string | null;
+  coverUrl: string | null;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  authorRegion: string;
+  authorCountryCode: string | null;
+  authorCountryName: string | null;
+  authorRegionName: string | null;
+  authorCityName: string | null;
+};
+
 export type ExperienceCardArchive = {
   id: string;
   user_id: string;

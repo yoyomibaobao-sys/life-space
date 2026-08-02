@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import type { MarketPostStatus } from "@/lib/market-types";
+import UiIcon from "@/components/ui/UiIcon";
 
 type MarketCommentRow = {
   id: string;
@@ -199,7 +200,7 @@ export default function MarketCommentsSection({
                         style={avatarStyle}
                       />
                     ) : (
-                      <div style={avatarFallbackStyle}>🌱</div>
+                      <div style={avatarFallbackStyle}><UiIcon name="sprout" size={20} /></div>
                     )}
 
                     <div style={{ minWidth: 0 }}>

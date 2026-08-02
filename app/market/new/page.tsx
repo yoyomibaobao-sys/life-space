@@ -18,6 +18,7 @@ import {
   type MarketPostType,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   requestMarketPostDeletion,
   rollbackReservedMarketImage,
@@ -506,7 +507,7 @@ function NewMarketPostPageContent() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href="/market" style={backLinkStyle}>
-          ← 返回集市
+          <UiIcon name="arrow-left" size={15} /> 返回集市
         </Link>
 
         <section style={panelStyle}>

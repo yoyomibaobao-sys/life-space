@@ -6,18 +6,10 @@ import { useState } from "react";
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import { getDurationDays } from "@/lib/follow-utils";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 import styles from "@/components/discover/FollowedProjects.module.css";
-
-function formatLocalDate(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}/${month}/${day}`;
-}
 
 function getSystemName(item: DiscoveryProjectFeedItem) {
   const value =
@@ -41,7 +33,6 @@ export function FollowedProjectCard({
   const [imageFailed, setImageFailed] = useState(false);
   const title = item.archive_title?.trim() || "未命名项目";
   const systemName = getSystemName(item);
-  const updateDate = formatLocalDate(item.public_activity_at);
   const durationDays = getDurationDays(
     item.archive_created_at,
     item.archive_ended_at
@@ -70,7 +61,7 @@ export function FollowedProjectCard({
             />
           ) : (
             <div className={styles.imagePlaceholder} aria-hidden="true">
-              {getArchiveCategoryIcon(item.category)}
+              <UiIcon name={getArchiveCategoryIcon(item.category)} size={28} strokeWidth={1.6} />
             </div>
           )}
         </div>
@@ -83,12 +74,23 @@ export function FollowedProjectCard({
             ) : null}
           </div>
           {item.card_summary ? (
-            <p className={styles.summary}>{item.card_summary}</p>
+            <p className={styles.summary}>
+              {item.card_summary}
+              {item.public_activity_at ? (
+                <span className={styles.summaryTime}>
+                  <span aria-hidden="true"> · </span>
+                  <CompactActivityTime value={item.public_activity_at} />
+                </span>
+              ) : null}
+            </p>
           ) : null}
-          <div className={styles.metaLine}>
-            {updateDate ? `${updateDate} 更新 · ` : ""}
-            {item.public_record_count}条记录 · {durationDays}天 · {item.public_comment_count}条评论
-          </div>
+          <ProjectMetaLine
+            recordCount={item.public_record_count}
+            durationDays={durationDays}
+            ended={Boolean(item.archive_ended_at)}
+            commentCount={item.public_comment_count}
+            className={styles.metaLine}
+          />
           <div className={styles.owner}>
             {ownerName}
             {region ? ` · ${region}` : ""}

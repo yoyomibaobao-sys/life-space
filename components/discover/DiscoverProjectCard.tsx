@@ -8,19 +8,11 @@ import {
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
+import { formatDiscoveryActivityTime } from "@/lib/discover-card-format";
 import { getDurationDays } from "@/lib/follow-utils";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 import styles from "@/components/discover/DiscoverProjectFeed.module.css";
-
-function formatShortLocalDate(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}/${month}/${day}`;
-}
 
 export function DiscoverProjectCard({
   item,
@@ -33,7 +25,7 @@ export function DiscoverProjectCard({
   const title = item.archive_title?.trim() || "未命名项目";
   const categoryLabel = getArchiveCategoryLabel(item.category);
   const categoryIcon = getArchiveCategoryIcon(item.category);
-  const updateDate = formatShortLocalDate(item.public_activity_at);
+  const activityTime = formatDiscoveryActivityTime(item.public_activity_at);
   const durationDays = getDurationDays(
     item.archive_created_at,
     item.archive_ended_at
@@ -65,7 +57,7 @@ export function DiscoverProjectCard({
             className={styles.imagePlaceholder}
             aria-hidden="true"
           >
-            {categoryIcon}
+            <UiIcon name={categoryIcon} size={28} strokeWidth={1.6} />
           </div>
         )}
 
@@ -80,39 +72,38 @@ export function DiscoverProjectCard({
           ) : null}
         </div>
 
+        <div className={styles.imageTitleArea}>
+          <h2 className={styles.title}>
+            {title}
+          </h2>
+        </div>
       </div>
 
       <div className={styles.body}>
-        <h2 className={styles.title}>
-          {title}
-        </h2>
-
         {item.card_summary ? (
           <p className={styles.summary}>
             {item.card_summary}
+            {activityTime ? (
+              <span className={styles.summaryTime}>
+                <span aria-hidden="true"> · </span>
+                <time
+                  dateTime={item.public_activity_at || undefined}
+                  suppressHydrationWarning
+                >
+                  {activityTime}
+                </time>
+              </span>
+            ) : null}
           </p>
         ) : null}
       </div>
 
-      <div className={styles.imageStats}>
-        <span>{item.public_record_count} 条记录</span>
-        {updateDate ? (
-          <span className={styles.statSegment}>
-            <span aria-hidden="true">·</span>
-            <time dateTime={item.public_activity_at || undefined}>
-              {updateDate} 更新
-            </time>
-          </span>
-        ) : null}
-        <span className={styles.statSegment}>
-          <span aria-hidden="true">·</span>
-          <span>{durationDays} 天</span>
-        </span>
-        <span className={styles.statSegment}>
-          <span aria-hidden="true">·</span>
-          <span>{item.public_comment_count} 条评论</span>
-        </span>
-      </div>
+      <ProjectMetaLine
+        recordCount={item.public_record_count}
+        durationDays={durationDays}
+        ended={Boolean(item.archive_ended_at)}
+        className={styles.projectMeta}
+      />
 
       <div className={styles.ownerRow}>
         <span className={styles.owner}>

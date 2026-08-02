@@ -12,6 +12,8 @@ import {
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import type { SupabaseUser } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import UiIcon from "@/components/ui/UiIcon";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 
 type RecentArchiveRow = {
   id: string;
@@ -124,7 +126,7 @@ export default function RecentBrowsePage() {
         <div style={topBarStyle}>
           <div>
             <Link href="/profile" style={backLinkStyle}>
-              ← 返回个人资料
+              <UiIcon name="arrow-left" size={15} /> 返回个人资料
             </Link>
             <h1 style={titleStyle}>最近浏览</h1>
             <div style={subtitleStyle}>最近访问过的项目记录页</div>
@@ -183,8 +185,10 @@ export default function RecentBrowsePage() {
                     )}
 
                     <div style={metaStyle}>
-                      记录 {Number(item.record_count || 0)} 条 · 浏览{" "}
-                      {Number(item.view_count || 0)} 次
+                      <ProjectMetaLine
+                        recordCount={Number(item.record_count || 0)}
+                        viewCount={Number(item.view_count || 0)}
+                      />
                     </div>
                   </div>
                 </Link>

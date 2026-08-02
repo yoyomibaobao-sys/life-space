@@ -102,13 +102,13 @@ export default function EditRecord({
     setEditing(false);
   }
 
-  // 👀 只读模式
+  // 只读模式
   if (readOnly) {
     if (!text.trim()) return null;
     return <div style={compact ? mobileReadTextStyle : undefined}>{text}</div>;
   }
 
-  // 👤 阅读态
+  // 阅读态
   if (!editing) {
     return (
       <div
@@ -127,7 +127,7 @@ export default function EditRecord({
     );
   }
 
-  // ✏️ 编辑态（Notion风格）
+  // 编辑态（Notion 风格）
   return (
     <div style={{ position: "relative" }}>
       <textarea

@@ -19,6 +19,7 @@ import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   archiveCategoryOptions,
   getArchiveCategoryLabel,
@@ -1257,17 +1258,17 @@ saveRecentArchiveBrowse({
     )}`;
 
     if (species?.id) {
-      return `/discover/search?tag=${encodedTag}&species=${species.id}&${fromParams}`;
+      return `/discover/search?type=records&tag=${encodedTag}&species=${species.id}&${fromParams}`;
     }
 
     if (activeArchive.species_name_snapshot && activeArchive.category === "plant") {
-      return `/discover/search?tag=${encodedTag}&name=${encodeURIComponent(
+      return `/discover/search?type=records&tag=${encodedTag}&name=${encodeURIComponent(
         activeArchive.species_name_snapshot
       )}&${fromParams}`;
     }
 
     if (activeArchive.system_name && isNonPlantArchiveCategory(activeArchive.category)) {
-      return `/discover/search?tag=${encodedTag}&name=${encodeURIComponent(
+      return `/discover/search?type=records&tag=${encodedTag}&name=${encodeURIComponent(
         activeArchive.system_name
       )}&category=${activeArchive.category}&${fromParams}`;
     }
@@ -1858,7 +1859,8 @@ saveRecentArchiveBrowse({
               href={mode === "owner" ? "/archive" : "/discover"}
               style={{ fontSize: 14, color: "#666", textDecoration: "none" }}
             >
-              {mode === "owner" ? "← 我的项目" : "← 返回发现"}
+              <UiIcon name="arrow-left" size={15} />
+              {mode === "owner" ? " 我的项目" : " 返回发现"}
             </Link>
           </div>
         ) : null}
@@ -2423,7 +2425,7 @@ function MobileArchiveProfile({
             }
             customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
             emptyStyle={mobileArchiveSuggestionEmptyStyle}
-            customActionLabel={(inputValue) => `+ 新增为具体名称：${inputValue}`}
+            customActionLabel={(inputValue) => `新增为具体名称：${inputValue}`}
           />
         )}
       </MobileArchiveEditableField>

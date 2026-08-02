@@ -8,19 +8,6 @@ import type {
 } from "@/lib/local-offline-db";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 
-function formatLocalDate(value?: string | null) {
-  if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-
-  return date.toLocaleString("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function getOngoingDays(createdAt?: string | null) {
   if (!createdAt) return null;
 
@@ -49,7 +36,7 @@ export function localArchiveToProjectView(
   ownerContext?: LocalArchiveOwnerContext | null
 ): ArchiveProjectView {
   const ongoingDays = getOngoingDays(archive.created_at);
-  const updateDate = formatLocalDate(archive.latest_record_time || archive.updated_at);
+  const latestTime = archive.latest_record_time || archive.updated_at;
   const latestSummary = archive.latest_record_note || archive.note || "暂无记录内容";
 
   return {
@@ -73,22 +60,15 @@ export function localArchiveToProjectView(
           alt: archive.title || "本地项目封面",
         }
       : null,
-    latestText: `${latestSummary} · 更新 ${updateDate}`,
+    latestText: latestSummary,
+    latestTime,
+    recordCount: archive.record_count || 0,
+    durationDays: ongoingDays,
     visibilityLabel: "本地",
     visibilityTone: "neutral",
-    mobilePrimaryStatsText: [
-      `记录 ${archive.record_count || 0}`,
-      ongoingDays ? `已持续 ${ongoingDays} 天` : "",
-    ]
-      .filter(Boolean)
-      .join(" · "),
-    mobileSecondaryStatsText: "浏览 0 · 关注 0",
-    activityText: [
-      `记录 ${archive.record_count || 0}`,
-      ongoingDays ? `已持续 ${ongoingDays} 天` : "",
-    ]
-      .filter(Boolean)
-      .join(" · "),
+    mobilePrimaryStatsText: null,
+    mobileSecondaryStatsText: null,
+    activityText: null,
     footerItems: [],
     badges: [],
   };

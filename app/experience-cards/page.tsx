@@ -4,17 +4,21 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
+import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import {
   deleteExperienceCard,
-  formatExperienceCardDate,
+  hydrateExperienceCardListItems,
   unpublishExperienceCard,
 } from "@/lib/experience-cards";
-import type { ExperienceCardRow } from "@/lib/experience-card-types";
+import type {
+  ExperienceCardListItem,
+  ExperienceCardRow,
+} from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 
-type CardListItem = ExperienceCardRow & {
-  archiveTitle: string;
+type CardListItem = ExperienceCardListItem & {
   isPubliclyAvailable: boolean;
 };
 
@@ -44,32 +48,19 @@ export default function MyExperienceCardsPage() {
       .order("id", { ascending: false });
 
     const rows = (cards || []) as ExperienceCardRow[];
-    const archiveIds = Array.from(new Set(rows.map((row) => row.archive_id)));
-    const archiveMap = new Map<string, string>();
-
-    if (archiveIds.length > 0) {
-      const { data: archives } = await supabase
-        .from("archives")
-        .select("id, title")
-        .in("id", archiveIds);
-      (archives || []).forEach((archive) => {
-        archiveMap.set(archive.id, archive.title);
-      });
-    }
-
-    const publicStates = await Promise.all(
-      rows.map(async (row) => {
+    const [hydratedRows, publicStates] = await Promise.all([
+      hydrateExperienceCardListItems(rows),
+      Promise.all(rows.map(async (row) => {
         const { data } = await supabase.rpc("is_experience_card_public", {
           p_card_id: row.id,
         });
         return Boolean(Array.isArray(data) ? data[0] : data);
-      })
-    );
+      })),
+    ]);
 
     setItems(
-      rows.map((row, index) => ({
+      hydratedRows.map((row, index) => ({
         ...row,
-        archiveTitle: archiveMap.get(row.archive_id) || "来源项目已删除",
         isPubliclyAvailable: publicStates[index],
       }))
     );
@@ -110,7 +101,7 @@ export default function MyExperienceCardsPage() {
       <header style={headerStyle}>
         <div>
           <Link href="/archive" style={backLinkStyle}>
-            ← 我的项目
+            <UiIcon name="arrow-left" size={15} /> 我的项目
           </Link>
           <h1 style={titleStyle}>我的经验卡</h1>
           <p style={mutedStyle}>
@@ -138,9 +129,11 @@ export default function MyExperienceCardsPage() {
       ) : (
         <section style={listStyle}>
           {items.map((item) => (
-            <article key={item.id} style={cardStyle}>
-              <div style={cardMainStyle}>
-                <div style={statusRowStyle}>
+            <ExperienceCardListCard
+              key={item.id}
+              item={item}
+              dateValue={item.updated_at}
+              status={
                   <span style={statusStyle(item.isPubliclyAvailable)}>
                     {item.isPubliclyAvailable
                       ? "已公开"
@@ -148,17 +141,9 @@ export default function MyExperienceCardsPage() {
                         ? "公开已暂停"
                         : "私密草稿"}
                   </span>
-                  <span style={dateStyle}>
-                    更新于 {formatExperienceCardDate(item.updated_at)}
-                  </span>
-                </div>
-                <h2 style={cardTitleStyle}>{item.title}</h2>
-                <p style={mutedStyle}>
-                  {item.archiveTitle} · {item.source_record_count}条来源记录
-                </p>
-              </div>
-
-              <div style={actionRowStyle}>
+              }
+              actions={
+                <>
                 <Link
                   href={`/experience-cards/${item.id}`}
                   style={primaryLinkStyle}
@@ -189,8 +174,9 @@ export default function MyExperienceCardsPage() {
                 >
                   删除
                 </button>
-              </div>
-            </article>
+                </>
+              }
+            />
           ))}
         </section>
       )}

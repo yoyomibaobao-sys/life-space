@@ -1,6 +1,7 @@
 "use client";
 
 import type { SubTagItem } from "@/lib/archive-page-types";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   tag: SubTagItem;
@@ -64,7 +65,7 @@ export default function ArchiveSubTagChip({
         }}
         title="删除分类"
       >
-        ×
+        <UiIcon name="close" size={12} />
       </button>
     </span>
   );

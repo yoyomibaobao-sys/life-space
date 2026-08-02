@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   canCreateMembershipContent,
   formatStorageBytes,
@@ -989,7 +990,7 @@ export default function AddRecord({
                     lineHeight: "30px",
                   }}
                 >
-                  ×
+                  <UiIcon name="close" size={16} />
                 </button>
               </div>
             ))}

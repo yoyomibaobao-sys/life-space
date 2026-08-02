@@ -18,6 +18,7 @@ import {
   loadPlantCoreParametersCompat,
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
+import UiIcon from "@/components/ui/UiIcon";
 
 const categoryLabels: Record<string, string> = {
   all: "全部",
@@ -100,6 +101,30 @@ const indoorOptions = [
 const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
 const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
 const MAX_RECENT_SEARCHES = 8;
+
+let hasCheckedInitialPlantNavigation = false;
+
+function isPageReload() {
+  if (hasCheckedInitialPlantNavigation) return false;
+  hasCheckedInitialPlantNavigation = true;
+
+  try {
+    const navigationEntry = window.performance.getEntriesByType(
+      "navigation"
+    )[0] as PerformanceNavigationTiming | undefined;
+
+    if (!navigationEntry || navigationEntry.type !== "reload") return false;
+
+    const initialUrl = new URL(navigationEntry.name, window.location.href);
+
+    return (
+      initialUrl.pathname === window.location.pathname &&
+      initialUrl.search === window.location.search
+    );
+  } catch {
+    return false;
+  }
+}
 
 type PlantItem = {
   id: string;
@@ -278,6 +303,12 @@ export default function PlantIndexPage() {
       }
 
       try {
+        if (isPageReload()) {
+          window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
+          setSearchStateRestored(true);
+          return;
+        }
+
         const storedState = JSON.parse(
           window.sessionStorage.getItem(PLANT_SEARCH_STATE_KEY) || "null"
         ) as {
@@ -720,9 +751,7 @@ export default function PlantIndexPage() {
                       </span>
                     ) : null}
                   </span>
-                  <span aria-hidden="true" style={{ color: "#789174", flexShrink: 0 }}>
-                    →
-                  </span>
+                  <UiIcon name="arrow-right" size={14} style={{ color: "#789174" }} />
                 </Link>
               );
             })
@@ -806,7 +835,7 @@ export default function PlantIndexPage() {
                     lineHeight: 1,
                   }}
                 >
-                  ×
+                  <UiIcon name="close" size={14} />
                 </button>
               </span>
             ))}
@@ -861,7 +890,7 @@ export default function PlantIndexPage() {
                 fontSize: 22,
               }}
             >
-              ←
+              <UiIcon name="arrow-left" size={20} />
             </button>
             <form
               onSubmit={(event) => {
@@ -958,20 +987,7 @@ export default function PlantIndexPage() {
               whiteSpace: "nowrap",
             }}
           >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ marginRight: 5 }}
-            >
-              <path d="M6.5 4.5h11v15l-5.5-3.4-5.5 3.4z" />
-            </svg>
+            <UiIcon name="bookmark" size={14} style={{ marginRight: 5 }} />
             我的收藏{isSignedIn && interestCount !== null ? `（${interestCount}）` : ""}
           </Link>
         </div>
