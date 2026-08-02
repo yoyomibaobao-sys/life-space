@@ -1,9 +1,9 @@
 name: Apply experience card interactions and useful marks
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/experience-card-useful-interactions
+      - main
 
 permissions:
   contents: write
