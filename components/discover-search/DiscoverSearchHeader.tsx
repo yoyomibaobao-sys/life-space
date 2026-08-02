@@ -1,4 +1,5 @@
-import AppIcon from "@/components/ui/AppIcon";
+import UiIcon from "@/components/ui/UiIcon";
+
 export default function DiscoverSearchHeader() {
   return (
     <header
@@ -11,7 +12,7 @@ export default function DiscoverSearchHeader() {
       }}
     >
       <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>
-        搜索记录
+        搜索发现
       </div>
 
       <a
@@ -25,7 +26,7 @@ export default function DiscoverSearchHeader() {
           whiteSpace: "nowrap",
         }}
       >
-        <AppIcon name="arrow-left" size={14} /> 返回发现
+        <UiIcon name="arrow-left" size={14} /> 返回发现
       </a>
     </header>
   );

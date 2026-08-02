@@ -126,6 +126,22 @@ test("trash UI renders the three user-visible states", async () => {
   assert.match(page, /正在永久删除/);
   assert.match(page, /永久删除失败/);
   assert.match(page, /删除未完成，请重试/);
+  assert.match(page, /item\.previewUrl/);
+  assert.match(page, /previewImageStyle/);
+});
+
+test("trash previews stay owner-bound and expose only signed display URLs", async () => {
+  const [route, client] = await Promise.all([
+    source("app/api/trash/route.ts"),
+    source("lib/cloud-trash.ts"),
+  ]);
+
+  assert.match(route, /\.eq\("owner_user_id", auth\.userId\)/);
+  assert.match(route, /\.eq\("user_id", auth\.userId\)/);
+  assert.match(route, /resolveMediaDisplayPairs\(admin, previewSources\)/);
+  assert.match(route, /previewUrl:/);
+  assert.doesNotMatch(route, /storage_path:\s*media|thumb_path:\s*media/);
+  assert.match(client, /previewUrl: string \| null/);
 });
 
 test("trash UI uses the approved irreversible confirmation copy", async () => {

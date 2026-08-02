@@ -18,6 +18,7 @@ import {
   type MarketPostType,
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   requestMarketPostDeletion,
   rollbackReservedMarketImage,
@@ -43,7 +44,6 @@ import {
   isStorageUploadMaintenance,
   STORAGE_UPLOAD_MAINTENANCE_MARKET_NOT_SAVED_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
-import AppIcon from "@/components/ui/AppIcon";
 
 type ArchiveOption = {
   id: string;
@@ -507,7 +507,7 @@ function NewMarketPostPageContent() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href="/market" style={backLinkStyle}>
-          <AppIcon name="arrow-left" size={14} /> 返回集市
+          <UiIcon name="arrow-left" size={15} /> 返回集市
         </Link>
 
         <section style={panelStyle}>

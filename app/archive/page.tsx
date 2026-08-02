@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import UiIcon from "@/components/ui/UiIcon";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
@@ -49,7 +50,6 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { requestCloudTrash } from "@/lib/cloud-trash";
-import AppIcon from "@/components/ui/AppIcon";
 import {
   createLocalTaxonomyItem,
   deleteLocalArchive,
@@ -1813,14 +1813,14 @@ export default function ArchivePage() {
           <h1 style={personalSpaceTitleStyle}>我的空间</h1>
           <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
             <span>我的经验卡（{experienceCardCount}）</span>
-            <AppIcon name="arrow-right" size={15} style={personalSpaceExperienceCardArrowStyle} />
+            <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
           </Link>
         </section>
       ) : (
         <section style={personalSpaceEntryRowStyle}>
           <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
             <span>我的经验卡（{experienceCardCount}）</span>
-            <AppIcon name="arrow-right" size={15} style={personalSpaceExperienceCardArrowStyle} />
+            <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
           </Link>
         </section>
       )}
@@ -1964,7 +1964,7 @@ export default function ArchivePage() {
                           aria-label="更多本地项目操作"
                           style={localProjectMoreButtonStyle}
                         >
-                          <AppIcon name="more-horizontal" size={18} />
+                          <UiIcon name="more" size={20} />
                         </button>
                         {localProjectMenuOpenId === archive.id ? (
                           <div style={localProjectMenuStyle}>

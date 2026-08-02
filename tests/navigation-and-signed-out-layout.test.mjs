@@ -38,13 +38,33 @@ test("signed-out home uses a compact viewport-oriented layout", async () => {
 });
 
 test("project archive label, following cards, and discover cards use the refined layout", async () => {
-  const [archiveHeader, followedCard, followedCss, discoverCard, discoverCss] =
+  const [
+    archiveHeader,
+    followedCard,
+    followedCss,
+    discoverCard,
+    discoverCss,
+    discoverFormat,
+    activityFormat,
+    projectMeta,
+    uiIcon,
+    archiveCard,
+    localProjectView,
+    discoverData,
+  ] =
     await Promise.all([
       source("components/archive-ui/ArchiveDetailHeaderView.tsx"),
       source("components/discover/FollowedProjectCard.tsx"),
       source("components/discover/FollowedProjects.module.css"),
       source("components/discover/DiscoverProjectCard.tsx"),
       source("components/discover/DiscoverProjectFeed.module.css"),
+      source("lib/discover-card-format.ts"),
+      source("lib/activity-time.ts"),
+      source("components/ui/ProjectMetaLine.tsx"),
+      source("components/ui/UiIcon.tsx"),
+      source("components/archive/ArchiveCard.tsx"),
+      source("components/archive-ui/localArchiveProjectView.ts"),
+      source("lib/discover-project-feed.ts"),
     ]);
 
   assert.match(archiveHeader, /title="打开项目档案"/);
@@ -53,17 +73,51 @@ test("project archive label, following cards, and discover cards use the refined
 
   assert.match(followedCard, /className=\{styles\.nameRow\}/);
   assert.match(followedCard, /· \{systemName\}/);
+  assert.match(followedCard, /<ProjectMetaLine/);
+  assert.match(followedCard, /<CompactActivityTime/);
+  assert.doesNotMatch(followedCard, /更新 ·|最新：/);
   assert.match(followedCss, /\.body \{[\s\S]*?height: 88px/);
 
-  assert.match(discoverCard, /className=\{styles\.imageStats\}/);
-  assert.match(discoverCard, /item\.public_record_count/);
-  assert.match(discoverCard, /durationLabel/);
-  assert.match(discoverCard, /className=\{styles\.imageTitle\}/);
-  assert.match(discoverCard, /formatCompactActivityTime/);
-  assert.doesNotMatch(discoverCard, /public_comment_count|view_count|getProjectSystemName|species_name_snapshot/);
+  assert.match(discoverCard, /className=\{styles\.imageTitleArea\}/);
+  assert.ok(
+    discoverCard.indexOf("{item.card_summary}") <
+      discoverCard.indexOf("className={styles.summaryTime}")
+  );
+  assert.match(discoverCard, /className=\{styles\.projectMeta\}/);
+  assert.match(discoverCard, /<ProjectMetaLine[\s\S]*?recordCount=\{item\.public_record_count\}[\s\S]*?durationDays=\{durationDays\}[\s\S]*?ended=\{Boolean\(item\.archive_ended_at\)\}/);
+  assert.doesNotMatch(discoverCard, /item\.public_comment_count/);
+  assert.doesNotMatch(discoverCard, /view_count|浏览/);
+  assert.doesNotMatch(discoverCard, /getProjectSystemName|species_name_snapshot/);
   assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: stretch/);
   assert.match(discoverCss, /\.body \{[^}]*flex: 1/);
+  assert.match(discoverCss, /\.imageTitleArea \{[\s\S]*?linear-gradient/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
+  assert.match(discoverFormat, /formatCompactActivityTime as formatDiscoveryActivityTime/);
+  assert.match(activityFormat, /Intl\.DateTimeFormat\("en-US"/);
+  assert.match(activityFormat, /elapsed \/ MINUTE_MS\)\)\}m/);
+  assert.match(activityFormat, /elapsed \/ HOUR_MS\)\}h/);
+  assert.match(activityFormat, /elapsed \/ DAY_MS\)\}d/);
+  assert.match(projectMeta, /recordCount/);
+  assert.match(projectMeta, /durationDays/);
+  assert.match(projectMeta, /viewCount/);
+  assert.match(projectMeta, /followerCount/);
+  assert.match(projectMeta, /commentCount/);
+  assert.match(projectMeta, /updatedAt/);
+  assert.match(projectMeta, /notation: "compact"/);
+  assert.match(uiIcon, /"record"/);
+  assert.match(uiIcon, /"duration"/);
+  assert.match(uiIcon, /"view"/);
+  assert.match(uiIcon, /"follow"/);
+  assert.match(archiveCard, />无图</);
+  assert.match(archiveCard, /<CompactActivityTime value=\{latestRecordTime\}/);
+  assert.match(archiveCard, /<ProjectMetaLine/);
+  assert.doesNotMatch(archiveCard, /最新无图|最新：|· 更新/);
+  assert.doesNotMatch(localProjectView, /浏览 0|关注 0|最新：|· 更新/);
+  assert.ok(
+    discoverData.indexOf("latestNote ||") <
+      discoverData.indexOf("row.latest_public_primary_image_url")
+  );
+  assert.match(discoverData, /archiveSummary \|\| "项目刚刚开始"/);
 });
 
 test("plant detail exposes guide, experience cards, and records as peer tabs", async () => {
@@ -78,4 +132,30 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
   assert.match(detail, /activeTab === "records"/);
   assert.match(detail, /\.from\("experience_cards"\)/);
   assert.match(detail, /is_experience_card_public/);
+});
+
+test("discover search separates projects, records, and covered experience cards", async () => {
+  const [page, tabs, form, results, data, utils] = await Promise.all([
+    source("app/discover/search/page.tsx"),
+    source("components/discover-search/DiscoverSearchTabs.tsx"),
+    source("components/discover-search/DiscoverSearchForm.tsx"),
+    source("components/discover-search/DiscoverSearchResults.tsx"),
+    source("lib/discover-search-data.ts"),
+    source("lib/discover-search-utils.ts"),
+  ]);
+
+  assert.match(tabs, /label: "项目"/);
+  assert.match(tabs, /label: "记录"/);
+  assert.match(tabs, /label: "经验卡"/);
+  assert.match(page, /fetchDiscoverProjectSearchResults/);
+  assert.match(page, /fetchDiscoverSearchResults/);
+  assert.match(page, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(form, /searchKind === "records"/);
+  assert.match(results, /<DiscoverProjectCard/);
+  assert.match(results, /<ExperienceCardListCard/);
+  assert.match(data, /\.from\("discovery_project_feed_view"\)/);
+  assert.match(data, /hydrateExperienceCardListItems/);
+  assert.match(data, /is_experience_card_public/);
+  assert.match(utils, /params\.set\("type", kind\)/);
+  assert.match(utils, /return "records"/);
 });

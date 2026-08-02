@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import { showToast } from "@/components/Toast";
 import {
   deleteExperienceCard,
-  formatExperienceCardDate,
+  hydrateExperienceCardListItems,
 } from "@/lib/experience-cards";
-import type { ExperienceCardRow } from "@/lib/experience-card-types";
+import type {
+  ExperienceCardListItem,
+  ExperienceCardRow,
+} from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 
 type ArchiveExperienceCardsProps = {
@@ -17,7 +21,7 @@ type ArchiveExperienceCardsProps = {
   onCountChange?: (count: number) => void;
 };
 
-type ArchiveExperienceCardItem = ExperienceCardRow & {
+type ArchiveExperienceCardItem = ExperienceCardListItem & {
   isPubliclyAvailable: boolean;
 };
 
@@ -50,9 +54,10 @@ export default function ArchiveExperienceCards({
 
     const rows = (data || []) as ExperienceCardRow[];
     onCountChange?.(rows.length);
+    const hydratedRows = await hydrateExperienceCardListItems(rows);
     if (!isOwner) {
       setItems(
-        rows.map((row) => ({
+        hydratedRows.map((row) => ({
           ...row,
           isPubliclyAvailable: true,
         }))
@@ -74,7 +79,7 @@ export default function ArchiveExperienceCards({
     );
 
     setItems(
-      rows.map((row, index) => ({
+      hydratedRows.map((row, index) => ({
         ...row,
         isPubliclyAvailable: publicStates[index],
       }))
@@ -136,29 +141,23 @@ export default function ArchiveExperienceCards({
       {items.length > 0 ? (
         <div style={listStyle}>
           {items.map((item) => (
-            <article key={item.id} style={cardStyle}>
-              <div style={cardMainStyle}>
-                <div style={statusRowStyle}>
-                  {isOwner ? (
-                    <span style={statusStyle(item.isPubliclyAvailable)}>
+            <ExperienceCardListCard
+              key={item.id}
+              item={item}
+              dateValue={item.updated_at}
+              status={
+                isOwner ? (
+                  <span style={statusStyle(item.isPubliclyAvailable)}>
                       {item.isPubliclyAvailable
                         ? "已公开"
                         : item.status === "published"
                           ? "公开已暂停"
                           : "私密草稿"}
                     </span>
-                  ) : null}
-                  <span style={dateStyle}>
-                    {formatExperienceCardDate(item.updated_at)}
-                  </span>
-                </div>
-                <div style={titleStyle}>{item.title}</div>
-                <div style={metaStyle}>
-                  {item.source_record_count} 条来源记录
-                </div>
-              </div>
-
-              <div style={actionsStyle}>
+                ) : null
+              }
+              actions={
+                <>
                 <Link
                   href={`/experience-cards/${item.id}`}
                   style={actionLinkStyle}
@@ -182,8 +181,9 @@ export default function ArchiveExperienceCards({
                     </button>
                   </>
                 ) : null}
-              </div>
-            </article>
+                </>
+              }
+            />
           ))}
         </div>
       ) : null}

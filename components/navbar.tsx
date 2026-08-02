@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
-import AppIcon from "@/components/ui/AppIcon";
+import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
 
 type MobileArchiveTitleInfo = {
   title: string;
@@ -271,7 +271,7 @@ export default function Navbar() {
               aria-label="通知"
               title="通知"
             >
-              <AppIcon name="bell" size={18} />
+              <UiIcon name="bell" size={18} />
             </Link>
 
             {isMobileDiscoverIndexPath(pathname) ? (
@@ -339,7 +339,7 @@ export default function Navbar() {
                   aria-label="更多账号操作"
                   style={mobileMeMoreButtonStyle}
                 >
-                  <AppIcon name="more-horizontal" size={18} />
+                  <UiIcon name="more" size={20} />
                 </button>
                 {mobileMeMenuOpen ? (
                   <div style={mobileMeMenuStyle}>
@@ -366,7 +366,7 @@ export default function Navbar() {
                   }
                 }}
               >
-                <AppIcon name="plus" size={17} /> {getMobileCreateLabel(pathname)}
+                <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname)}
               </Link>
             ) : !user && shouldShowMobileLoginAction(pathname) ? (
               <Link href="/login" style={mobileLoginActionStyle}>
@@ -445,7 +445,7 @@ export default function Navbar() {
       {user ? (
         <div style={getUserAreaStyle(isCompact)}>
           <Link href="/notifications" style={notificationStyle} title="通知">
-            <AppIcon name="bell" size={18} />
+            <UiIcon name="bell" size={18} />
             {unreadCount > 0 ? (
               <span style={notificationBadgeStyle}>
                 {unreadCount > 99 ? "99+" : unreadCount}
@@ -508,26 +508,31 @@ function MobileBottomNav({
   const items = [
     {
       label: "发现",
+      icon: "home" as UiIconName,
       href: "/discover",
       activePaths: ["/discover"],
     },
     {
       label: "集市",
+      icon: "store" as UiIconName,
       href: "/market",
       activePaths: ["/market"],
     },
     {
       label: "空间",
+      icon: "project" as UiIconName,
       href: user ? "/archive" : "/login",
       activePaths: ["/archive", "/experience-cards"],
     },
     {
       label: "指引",
+      icon: "sprout" as UiIconName,
       href: "/plant",
       activePaths: ["/plant"],
     },
     {
       label: "我",
+      icon: "user" as UiIconName,
       href: user ? "/profile" : "/login",
       activePaths: ["/profile", "/notifications", "/membership", "/admin", "/login", "/register"],
       badge: user && unreadCount > 0 ? (unreadCount > 99 ? "99+" : String(unreadCount)) : null,
@@ -542,6 +547,7 @@ function MobileBottomNav({
           href={item.href}
           active={item.activePaths.some((path) => isPathActive(pathname, path))}
           badge={item.badge}
+          icon={item.icon}
         >
           {item.label}
         </MobileBottomNavItem>
@@ -554,16 +560,19 @@ function MobileBottomNavItem({
   href,
   active,
   badge,
+  icon,
   children,
 }: {
   href: string;
   active: boolean;
   badge?: string | null;
+  icon: UiIconName;
   children: ReactNode;
 }) {
   return (
     <Link href={href} style={mobileBottomNavItemStyle(active)}>
       <span style={mobileBottomNavLabelStyle}>
+        <UiIcon name={icon} size={17} strokeWidth={1.7} />
         {children}
         {badge ? <span style={mobileBottomBadgeStyle}>{badge}</span> : null}
       </span>

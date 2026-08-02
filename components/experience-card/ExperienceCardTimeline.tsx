@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { CSSProperties } from "react";
 import {
   formatExperienceCardDate,
@@ -20,6 +21,12 @@ export default function ExperienceCardTimeline({
   return (
     <section style={timelineStyle} aria-label="经验时间线">
       {records.map((record, index) => {
+        const imageMedia = record.media.filter((media) =>
+          Boolean(media.display_thumb_url || media.display_url)
+        );
+        const firstImage = imageMedia[0];
+        const firstImageUrl =
+          firstImage?.display_thumb_url || firstImage?.display_url || null;
         const tags = Array.from(
           new Set(
             (record.record_tags || [])
@@ -40,7 +47,11 @@ export default function ExperienceCardTimeline({
               {index < records.length - 1 ? <div style={lineStyle} /> : null}
             </div>
 
-            <div style={contentStyle}>
+            <Link
+              href={`/archive/${archive.id}?record=${record.id}`}
+              style={contentStyle}
+              aria-label={`查看${formatExperienceCardDate(record.record_time) || "这一天"}的原记录`}
+            >
               <div style={metaRowStyle}>
                 <span style={stageStyle}>
                   {getExperienceCardStageLabel(index, records.length)}
@@ -50,47 +61,42 @@ export default function ExperienceCardTimeline({
                 </time>
               </div>
 
-              {tags.length > 0 ? (
-                <div style={tagRowStyle}>
-                  {tags.map((tag) => (
-                    <span key={tag} style={tagStyle}>
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
+              <div style={recordRowStyle}>
+                {firstImageUrl ? (
+                  <div style={thumbWrapStyle}>
+                    <img
+                      src={firstImageUrl}
+                      alt={`${formatExperienceCardDate(record.record_time)}的记录照片`}
+                      style={thumbStyle}
+                      loading="lazy"
+                    />
+                    {imageMedia.length > 1 ? (
+                      <span style={mediaCountStyle}>+{imageMedia.length - 1}</span>
+                    ) : null}
+                  </div>
+                ) : null}
 
-              {record.note ? (
-                <p style={noteStyle}>{record.note}</p>
-              ) : (
-                <p style={emptyNoteStyle}>这条记录没有文字。</p>
-              )}
+                <div style={recordTextStyle}>
+                  {tags.length > 0 ? (
+                    <div style={tagRowStyle}>
+                      {tags.map((tag) => (
+                        <span key={tag} style={tagStyle}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
 
-              {record.media.length > 0 ? (
-                <div style={mediaGridStyle}>
-                  {record.media.map((media) => {
-                    const src =
-                      media.display_thumb_url || media.display_url || null;
-                    return src ? (
-                      <a
-                        key={media.id}
-                        href={media.display_url || src}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={mediaLinkStyle}
-                      >
-                        <img
-                          src={src}
-                          alt={`${formatExperienceCardDate(record.record_time)}的记录照片`}
-                          style={mediaStyle}
-                          loading="lazy"
-                        />
-                      </a>
-                    ) : null;
-                  })}
+                  {record.note ? (
+                    <p style={noteStyle}>{record.note}</p>
+                  ) : (
+                    <p style={emptyNoteStyle}>
+                      {firstImageUrl ? "这条记录以照片为主。" : "这条记录没有文字。"}
+                    </p>
+                  )}
                 </div>
-              ) : null}
-            </div>
+              </div>
+            </Link>
           </article>
         );
       })}
@@ -136,9 +142,12 @@ const lineStyle: CSSProperties = {
 };
 
 const contentStyle: CSSProperties = {
+  display: "block",
   minWidth: 0,
-  marginBottom: 28,
-  padding: "0 0 2px",
+  marginBottom: 20,
+  padding: "0 0 3px",
+  color: "inherit",
+  textDecoration: "none",
 };
 
 const metaRowStyle: CSSProperties = {
@@ -146,7 +155,7 @@ const metaRowStyle: CSSProperties = {
   alignItems: "center",
   gap: 10,
   flexWrap: "wrap",
-  marginBottom: 8,
+  marginBottom: 7,
 };
 
 const stageStyle: CSSProperties = {
@@ -170,7 +179,7 @@ const tagRowStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   gap: 6,
-  marginBottom: 9,
+  marginBottom: 5,
 };
 
 const tagStyle: CSSProperties = {
@@ -182,12 +191,16 @@ const tagStyle: CSSProperties = {
 };
 
 const noteStyle: CSSProperties = {
-  margin: "0 0 12px",
+  margin: 0,
   color: "#2f3b2e",
-  fontSize: 15,
-  lineHeight: 1.8,
+  fontSize: 14,
+  lineHeight: 1.65,
   whiteSpace: "pre-wrap",
   overflowWrap: "anywhere",
+  display: "-webkit-box",
+  WebkitLineClamp: 3,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
 };
 
 const emptyNoteStyle: CSSProperties = {
@@ -196,26 +209,43 @@ const emptyNoteStyle: CSSProperties = {
   fontStyle: "italic",
 };
 
-const mediaGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(126px, 1fr))",
-  gap: 8,
-  marginBottom: 12,
+const recordRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  minWidth: 0,
 };
 
-const mediaLinkStyle: CSSProperties = {
-  display: "block",
-  borderRadius: 12,
+const thumbWrapStyle: CSSProperties = {
+  position: "relative",
+  width: 78,
+  height: 68,
+  flex: "0 0 78px",
+  borderRadius: 9,
   overflow: "hidden",
   background: "#eef2eb",
-  minHeight: 120,
 };
 
-const mediaStyle: CSSProperties = {
+const thumbStyle: CSSProperties = {
   width: "100%",
   height: "100%",
-  minHeight: 120,
-  maxHeight: 260,
   objectFit: "cover",
   display: "block",
+};
+
+const mediaCountStyle: CSSProperties = {
+  position: "absolute",
+  right: 5,
+  bottom: 5,
+  borderRadius: 999,
+  background: "rgba(31, 45, 31, 0.72)",
+  color: "#fff",
+  padding: "2px 6px",
+  fontSize: 10,
+  fontWeight: 800,
+};
+
+const recordTextStyle: CSSProperties = {
+  minWidth: 0,
+  flex: 1,
 };

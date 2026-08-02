@@ -3,8 +3,12 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
+import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
+import type { ExperienceCardListItem, ExperienceCardRow } from "@/lib/experience-card-types";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
@@ -26,8 +30,6 @@ import type {
   PlantSpeciesI18nRow,
   PlantSpeciesRow,
 } from "@/lib/plant-detail-types";
-import AppIcon from "@/components/ui/AppIcon";
-import RatingStars from "@/components/ui/RatingStars";
 
 type PlantGrowthCycleRow = {
   species_id: string;
@@ -79,14 +81,7 @@ type PlantAliasSearchRow = PlantAliasRow & {
 
 type PlantDetailTab = "guide" | "experience" | "records";
 
-type PlantExperienceCardItem = {
-  id: string;
-  archive_id: string;
-  title: string;
-  source_record_count: number;
-  published_at?: string | null;
-  archiveTitle: string;
-};
+type PlantExperienceCardItem = ExperienceCardListItem;
 
 const RELATED_ARCHIVE_LIMIT = 24;
 
@@ -203,13 +198,13 @@ function difficultyMeta(value: unknown) {
   const score = Number(value);
   if (Number.isNaN(score)) return null;
 
-  if (score <= 1) return { filledStars: 0, label: "野生级", detail: `${score}/10` };
-  if (score <= 3) return { filledStars: 1, label: "非常容易", detail: `${score}/10` };
-  if (score <= 5) return { filledStars: 2, label: "容易", detail: `${score}/10` };
-  if (score <= 7) return { filledStars: 3, label: "中等", detail: `${score}/10` };
-  if (score <= 9) return { filledStars: 4, label: "较难", detail: `${score}/10` };
+  if (score <= 1) return { rating: 0, label: "野生级", detail: `${score}/10` };
+  if (score <= 3) return { rating: 1, label: "非常容易", detail: `${score}/10` };
+  if (score <= 5) return { rating: 2, label: "容易", detail: `${score}/10` };
+  if (score <= 7) return { rating: 3, label: "中等", detail: `${score}/10` };
+  if (score <= 9) return { rating: 4, label: "较难", detail: `${score}/10` };
 
-  return { filledStars: 5, label: "专业种植", detail: `${score}/10` };
+  return { rating: 5, label: "专业种植", detail: `${score}/10` };
 }
 
 function categoryLabel(value?: string | null) {
@@ -552,6 +547,24 @@ function Card({
       <div style={{ fontSize: 17, fontWeight: 700, color: "#2f2f2f" }}>{value}</div>
       {hint && <div style={{ marginTop: 4, color: "#999", fontSize: 12 }}>{hint}</div>}
     </div>
+  );
+}
+
+function StarRating({ rating }: { rating: number }) {
+  return (
+    <span
+      aria-label={`${rating} / 5`}
+      style={{ display: "inline-flex", alignItems: "center", gap: 1 }}
+    >
+      {Array.from({ length: 5 }, (_, index) => (
+        <UiIcon
+          key={index}
+          name={index < rating ? "star-filled" : "star"}
+          size={13}
+          strokeWidth={1.6}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -1111,30 +1124,12 @@ function PlantExperienceCardsSection({
       {cards.length > 0 ? (
         <div style={{ display: "grid", gap: 10 }}>
           {cards.map((card) => (
-            <Link
+            <ExperienceCardListCard
               key={card.id}
-              href={`/experience-cards/${card.id}`}
-              style={{
-                display: "grid",
-                gap: 6,
-                padding: "14px 15px",
-                border: "1px solid #e2e8df",
-                borderRadius: 14,
-                background: "#fff",
-                color: "inherit",
-                textDecoration: "none",
-              }}
-            >
-              <strong style={{ color: "#2d3b2c", fontSize: 16 }}>
-                {card.title}
-              </strong>
-              <span style={{ color: "#647160", fontSize: 13 }}>
-                {card.archiveTitle} · {card.source_record_count} 条来源记录
-                {card.published_at
-                  ? ` · ${formatShortDate(card.published_at)}发布`
-                  : ""}
-              </span>
-            </Link>
+              item={card}
+              dateValue={card.published_at}
+              showAuthor
+            />
           ))}
         </div>
       ) : (
@@ -1364,41 +1359,29 @@ export default function PlantDetailPage() {
           ).values()
         );
         const matchingArchiveIds = matchingArchiveRows.map((archive) => archive.id);
-        const matchingArchiveTitleMap = new Map(
-          matchingArchiveRows.map((archive) => [
-            archive.id,
-            archive.title?.trim() || "种植项目",
-          ])
-        );
-
         if (matchingArchiveIds.length > 0) {
           const { data: experienceCardRows } = await supabase
             .from("experience_cards")
-            .select("id, archive_id, title, source_record_count, published_at")
+            .select("*")
             .in("archive_id", matchingArchiveIds)
             .eq("status", "published")
             .order("published_at", { ascending: false, nullsFirst: false })
             .limit(RELATED_ARCHIVE_LIMIT);
-          const cardRows = (experienceCardRows || []) as Array<
-            Omit<PlantExperienceCardItem, "archiveTitle">
-          >;
+          const allCardRows = (experienceCardRows || []) as ExperienceCardRow[];
           const publicStates = await Promise.all(
-            cardRows.map(async (card) => {
+            allCardRows.map(async (card) => {
               const { data } = await supabase.rpc("is_experience_card_public", {
                 p_card_id: card.id,
               });
               return Boolean(Array.isArray(data) ? data[0] : data);
             })
           );
+          const cardRows = allCardRows.filter(
+            (_card, index) => publicStates[index]
+          );
 
           setRelatedExperienceCards(
-            cardRows
-              .filter((_card, index) => publicStates[index])
-              .map((card) => ({
-                ...card,
-                archiveTitle:
-                  matchingArchiveTitleMap.get(card.archive_id) || "种植项目",
-              }))
+            await hydrateExperienceCardListItems(cardRows)
           );
         } else {
           setRelatedExperienceCards([]);
@@ -1502,16 +1485,9 @@ export default function PlantDetailPage() {
     { label: "阳台适配", value: scoreLabel(parameters?.balcony_friendly_score) },
     {
       label: "管理难度",
-      value: difficulty ? (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <RatingStars
-            value={difficulty.filledStars}
-            label={`管理难度：${difficulty.label}`}
-            style={{ color: "#738467" }}
-          />
-          <span>（{difficulty.detail}，{difficulty.label}）</span>
-        </span>
-      ) : null,
+      value: difficulty
+        ? <span><StarRating rating={difficulty.rating} />（{difficulty.detail}，{difficulty.label}）</span>
+        : null,
     },
   ].filter((item) => item.value);
 
@@ -1785,7 +1761,7 @@ export default function PlantDetailPage() {
     return (
       <main style={{ padding: "16px", maxWidth: 760, margin: "0 auto" }}>
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          <AppIcon name="arrow-left" size={14} /> 返回指引
+          <UiIcon name="arrow-left" size={15} /> 返回指引
         </Link>
         <div
           style={{
@@ -1810,8 +1786,8 @@ export default function PlantDetailPage() {
             返回原记录
           </Link>
         ) : null}
-        <Link href="/plant" style={{ color: "#666", fontSize: 14, display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <AppIcon name="arrow-left" size={14} /> 返回指引
+        <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
+          <UiIcon name="arrow-left" size={15} /> 返回指引
         </Link>
         {!isMobileViewport ? (
           <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>

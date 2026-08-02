@@ -1,5 +1,4 @@
 "use client";
-import AppIcon from "@/components/ui/AppIcon";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +18,7 @@ import {
   loadPlantCoreParametersCompat,
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
+import UiIcon from "@/components/ui/UiIcon";
 
 const categoryLabels: Record<string, string> = {
   all: "全部",
@@ -101,6 +101,30 @@ const indoorOptions = [
 const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
 const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
 const MAX_RECENT_SEARCHES = 8;
+
+let hasCheckedInitialPlantNavigation = false;
+
+function isPageReload() {
+  if (hasCheckedInitialPlantNavigation) return false;
+  hasCheckedInitialPlantNavigation = true;
+
+  try {
+    const navigationEntry = window.performance.getEntriesByType(
+      "navigation"
+    )[0] as PerformanceNavigationTiming | undefined;
+
+    if (!navigationEntry || navigationEntry.type !== "reload") return false;
+
+    const initialUrl = new URL(navigationEntry.name, window.location.href);
+
+    return (
+      initialUrl.pathname === window.location.pathname &&
+      initialUrl.search === window.location.search
+    );
+  } catch {
+    return false;
+  }
+}
 
 type PlantItem = {
   id: string;
@@ -279,6 +303,12 @@ export default function PlantIndexPage() {
       }
 
       try {
+        if (isPageReload()) {
+          window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
+          setSearchStateRestored(true);
+          return;
+        }
+
         const storedState = JSON.parse(
           window.sessionStorage.getItem(PLANT_SEARCH_STATE_KEY) || "null"
         ) as {
@@ -287,16 +317,13 @@ export default function PlantIndexPage() {
           activeCategory?: unknown;
           filters?: Partial<EnvironmentFilters>;
           scrollY?: unknown;
-          restoreOnReturn?: unknown;
         } | null;
 
-        if (!storedState || storedState.restoreOnReturn !== true) {
-          window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
+        if (!storedState) {
           setSearchStateRestored(true);
           return;
         }
 
-        window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
         const restoredQuery = String(storedState.query ?? "").trim();
         const restoredInput = String(storedState.searchInput ?? restoredQuery).trim();
         const restoredCategory = String(storedState.activeCategory ?? "all");
@@ -606,7 +633,6 @@ export default function PlantIndexPage() {
           activeCategory,
           filters,
           scrollY: window.scrollY,
-          restoreOnReturn: true,
         })
       );
     } catch {
@@ -639,6 +665,7 @@ export default function PlantIndexPage() {
     setSearchPanelOpen(false);
     setIsMobileSearchOpen(false);
     rememberSearch(keyword);
+    persistSearchState(keyword, keyword);
 
     window.requestAnimationFrame(() => {
       resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -724,9 +751,7 @@ export default function PlantIndexPage() {
                       </span>
                     ) : null}
                   </span>
-                  <span aria-hidden="true" style={{ color: "#789174", flexShrink: 0 }}>
-                    <AppIcon name="arrow-right" size={14} />
-                  </span>
+                  <UiIcon name="arrow-right" size={14} style={{ color: "#789174" }} />
                 </Link>
               );
             })
@@ -810,7 +835,7 @@ export default function PlantIndexPage() {
                     lineHeight: 1,
                   }}
                 >
-                  ×
+                  <UiIcon name="close" size={14} />
                 </button>
               </span>
             ))}
@@ -865,7 +890,7 @@ export default function PlantIndexPage() {
                 fontSize: 22,
               }}
             >
-              <AppIcon name="arrow-left" size={15} />
+              <UiIcon name="arrow-left" size={20} />
             </button>
             <form
               onSubmit={(event) => {
@@ -962,7 +987,7 @@ export default function PlantIndexPage() {
               whiteSpace: "nowrap",
             }}
           >
-            <AppIcon name="bookmark" size={14} style={{ marginRight: 5 }} />
+            <UiIcon name="bookmark" size={14} style={{ marginRight: 5 }} />
             我的收藏{isSignedIn && interestCount !== null ? `（${interestCount}）` : ""}
           </Link>
         </div>

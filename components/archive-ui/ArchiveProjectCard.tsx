@@ -3,8 +3,10 @@
 import Link from "next/link";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import LocalBlobImage from "@/components/local/LocalBlobImage";
-import AppIcon from "@/components/ui/AppIcon";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   project: ArchiveProjectView;
@@ -123,7 +125,13 @@ export default function ArchiveProjectCard({
           ) : null}
         </div>
 
-        {mobilePrimaryStatsText ? (
+        {project.recordCount !== undefined || project.durationDays !== undefined ? (
+          <ProjectMetaLine
+            recordCount={project.recordCount}
+            durationDays={project.durationDays}
+            ended={Boolean(project.ended)}
+          />
+        ) : mobilePrimaryStatsText ? (
           <div style={mobileStatsLineStyle}>{mobilePrimaryStatsText}</div>
         ) : null}
         {mobileSecondaryStatsText ? (
@@ -169,12 +177,29 @@ export default function ArchiveProjectCard({
 
         {project.latestText ? (
           <div style={latestTextStyle} title={project.latestText}>
-            最新：{project.latestText}
+            {project.latestText}
+            {project.latestTime ? (
+              <>
+                <span aria-hidden="true"> · </span>
+                <CompactActivityTime value={project.latestTime} />
+              </>
+            ) : null}
           </div>
         ) : null}
 
         <div style={bottomRowStyle}>
-          <span style={statusLineStyle}>{project.activityText || ""}</span>
+          {project.recordCount !== undefined || project.durationDays !== undefined ? (
+            <ProjectMetaLine
+              recordCount={project.recordCount}
+              durationDays={project.durationDays}
+              ended={Boolean(project.ended)}
+              viewCount={project.viewCount}
+              followerCount={project.followerCount}
+              commentCount={project.commentCount}
+            />
+          ) : (
+            <span style={statusLineStyle}>{project.activityText || ""}</span>
+          )}
           {project.statusLabel ? (
             <span style={endedStyle}>{project.statusLabel}</span>
           ) : null}
@@ -250,7 +275,7 @@ function ArchiveProjectCover({
 
   return (
     <div style={{ ...style, ...placeholderStyle }}>
-      <AppIcon name={project.categoryIcon} size={mobileMode ? 28 : 30} strokeWidth={1.7} />
+      <UiIcon name={project.categoryIcon} size={24} strokeWidth={1.6} />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   requestMarketMediaDeletion,
   rollbackReservedMarketImage,
@@ -31,7 +32,6 @@ import {
   isStorageUploadMaintenance,
   STORAGE_UPLOAD_MAINTENANCE_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
-import AppIcon from "@/components/ui/AppIcon";
 
 type ArchiveOption = {
   id: string;
@@ -443,7 +443,7 @@ export default function EditMarketPostPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href="/market" style={backLinkStyle}>
-            <AppIcon name="arrow-left" size={14} /> 返回集市
+            <UiIcon name="arrow-left" size={15} /> 返回集市
           </Link>
           <section style={emptyStyle}>这条集市信息不存在或已不可见</section>
         </div>
@@ -456,7 +456,7 @@ export default function EditMarketPostPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href={`/market/${item.id}`} style={backLinkStyle}>
-            <AppIcon name="arrow-left" size={14} /> 返回集市详情
+            <UiIcon name="arrow-left" size={15} /> 返回集市详情
           </Link>
           <section style={emptyStyle}>只有发布者可以编辑这条集市信息。</section>
         </div>
@@ -468,7 +468,7 @@ export default function EditMarketPostPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href={`/market/${item.id}`} style={backLinkStyle}>
-          <AppIcon name="arrow-left" size={14} /> 返回集市详情
+          <UiIcon name="arrow-left" size={15} /> 返回集市详情
         </Link>
 
         <section style={panelStyle}>

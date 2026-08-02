@@ -72,13 +72,13 @@ export function difficultyMeta(value: unknown) {
   const score = Number(value);
   if (Number.isNaN(score)) return null;
 
-  if (score <= 1) return { filledStars: 0, label: "野生级", detail: `${score}/10` };
-  if (score <= 3) return { filledStars: 1, label: "非常容易", detail: `${score}/10` };
-  if (score <= 5) return { filledStars: 2, label: "容易", detail: `${score}/10` };
-  if (score <= 7) return { filledStars: 3, label: "中等", detail: `${score}/10` };
-  if (score <= 9) return { filledStars: 4, label: "较难", detail: `${score}/10` };
+  if (score <= 1) return { rating: 0, label: "野生级", detail: `${score}/10` };
+  if (score <= 3) return { rating: 1, label: "非常容易", detail: `${score}/10` };
+  if (score <= 5) return { rating: 2, label: "容易", detail: `${score}/10` };
+  if (score <= 7) return { rating: 3, label: "中等", detail: `${score}/10` };
+  if (score <= 9) return { rating: 4, label: "较难", detail: `${score}/10` };
 
-  return { filledStars: 5, label: "专业种植", detail: `${score}/10` };
+  return { rating: 5, label: "专业种植", detail: `${score}/10` };
 }
 
 export const categoryLabel = getPlantCategoryLabel;

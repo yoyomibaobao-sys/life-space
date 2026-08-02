@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
+import UiIcon from "@/components/ui/UiIcon";
 import type { PlantInterestRow, SpeciesRefRow } from "@/lib/domain-types";
 import ArchivePlantPageHero from "@/components/archive-plant/ArchivePlantPageHero";
 import ArchivePlantEmptyState from "@/components/archive-plant/ArchivePlantEmptyState";
@@ -22,7 +23,6 @@ import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
-import AppIcon from "@/components/ui/AppIcon";
 
 export default function PlantInterestsPage() {
   const router = useRouter();
@@ -319,7 +319,7 @@ export default function PlantInterestsPage() {
   return (
     <main style={{ padding: "16px", maxWidth: 980, margin: "0 auto" }}>
       <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-        <AppIcon name="arrow-left" size={14} /> 返回空间
+        <UiIcon name="arrow-left" size={15} /> 返回空间
       </Link>
 
       <ArchivePlantPageHero

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import AppIcon from "@/components/ui/AppIcon";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   username: string;
@@ -55,7 +55,7 @@ export default function UserSpaceHeader({ username, onOpenCard }: Props) {
           textDecoration: "none",
         }}
       >
-        去发现 <AppIcon name="arrow-right" size={14} />
+        <UiIcon name="arrow-left" size={15} /> 返回发现
       </Link>
     </section>
   );

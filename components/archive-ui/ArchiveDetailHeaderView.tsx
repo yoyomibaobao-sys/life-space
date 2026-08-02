@@ -7,8 +7,9 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
-import AppIcon from "@/components/ui/AppIcon";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 
 export type ArchiveProfileEditableField =
   | "title"
@@ -74,6 +75,7 @@ type Props = {
   profileActions?: ReactNode;
   profileExtra?: ReactNode;
   profileEditor?: ArchiveProfileEditorConfig;
+  profileAlwaysOpen?: boolean;
 };
 
 export default function ArchiveDetailHeaderView({
@@ -89,8 +91,9 @@ export default function ArchiveDetailHeaderView({
   profileActions,
   profileExtra,
   profileEditor,
+  profileAlwaysOpen = false,
 }: Props) {
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(profileAlwaysOpen);
   const [editingField, setEditingField] = useState<ArchiveProfileEditableField | null>(null);
   const [textDraft, setTextDraft] = useState("");
   const [categoryDraft, setCategoryDraft] = useState<ArchiveCategory>(project.category);
@@ -106,6 +109,10 @@ export default function ArchiveDetailHeaderView({
     project.groupLabel,
   ].filter(Boolean) as string[];
   const summaryItems = [recordCountText, durationText, latestUpdateText].filter(Boolean) as string[];
+  const hasStructuredSummary =
+    project.recordCount !== undefined ||
+    project.durationDays !== undefined ||
+    Boolean(project.latestTime);
 
   const systemNameMode = profileEditor?.systemNameMode || "candidate";
   const systemCandidates = profileEditor?.systemNameCandidates || [];
@@ -367,18 +374,22 @@ export default function ArchiveDetailHeaderView({
       <div style={topRowStyle}>
         <div style={titleWrapStyle}>
           {eyebrow ? (
-            <button
-              type="button"
-              onClick={() => {
-                setProfileOpen((open) => !open);
-                cancelFieldEdit();
-              }}
-              style={eyebrowButtonStyle}
-              aria-expanded={profileOpen}
-              title="打开项目档案"
-            >
-              {eyebrow}
-            </button>
+            profileAlwaysOpen ? (
+              <span style={eyebrowStaticStyle}>{eyebrow}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileOpen((open) => !open);
+                  cancelFieldEdit();
+                }}
+                style={eyebrowButtonStyle}
+                aria-expanded={profileOpen}
+                title="打开项目档案"
+              >
+                {eyebrow}
+              </button>
+            )
           ) : null}
           <span style={projectIdentityStyle}>
             <span style={titleTextDisplayStyle}>
@@ -399,7 +410,7 @@ export default function ArchiveDetailHeaderView({
                 title={project.storageTone === "device" ? "本地项目" : "云端项目"}
                 style={storageIconStyle(project.storageTone)}
               >
-                <AppIcon name={project.storageTone === "device" ? "cloud-off" : "cloud"} size={16} />
+                <ArchiveStorageIcon tone={project.storageTone} />
               </span>
             ) : null}
           </span>
@@ -421,7 +432,15 @@ export default function ArchiveDetailHeaderView({
             </span>
           ))}
         </div>
-        {summaryItems.length ? (
+        {hasStructuredSummary ? (
+          <ProjectMetaLine
+            recordCount={project.recordCount}
+            durationDays={project.durationDays}
+            ended={Boolean(project.ended)}
+            updatedAt={project.latestTime}
+            className={undefined}
+          />
+        ) : summaryItems.length ? (
           <div style={summaryStyle}>
             {summaryItems.map((item) => (
               <span key={item}>{item}</span>
@@ -432,7 +451,7 @@ export default function ArchiveDetailHeaderView({
 
       {hint ? <div style={hintStyle}>{hint}</div> : null}
 
-      {profileOpen ? (
+      {profileAlwaysOpen || profileOpen ? (
         <>
           <div style={profilePanelStyle}>
             {profileRows.map((row) => {
@@ -498,6 +517,17 @@ export default function ArchiveDetailHeaderView({
   );
 }
 
+function ArchiveStorageIcon({ tone }: { tone?: "cloud" | "device" }) {
+  return (
+    <UiIcon
+      name={tone === "device" ? "cloud-off" : "cloud"}
+      size={16}
+      strokeWidth={2}
+      style={{ color: tone === "device" ? "#6f7b69" : "#2f6f3a" }}
+    />
+  );
+}
+
 const headerStyle: CSSProperties = {
   border: "1px solid #e4e9df",
   borderRadius: 18,
@@ -555,6 +585,11 @@ const eyebrowButtonStyle: CSSProperties = {
   lineHeight: 1,
   marginRight: 10,
   cursor: "pointer",
+};
+
+const eyebrowStaticStyle: CSSProperties = {
+  ...eyebrowButtonStyle,
+  cursor: "default",
 };
 
 const titleDividerStyle: CSSProperties = {

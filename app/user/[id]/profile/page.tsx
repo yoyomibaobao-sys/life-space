@@ -25,7 +25,7 @@ import {
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
 import { getAccountRegistrationSummary } from "@/lib/account-number";
-import AppIcon from "@/components/ui/AppIcon";
+import UiIcon from "@/components/ui/UiIcon";
 
 type MarketPostDisplayRow = MarketPostRow & {
   display_cover_image_url?: string | null;
@@ -217,6 +217,15 @@ export default function PublicUserProfilePage() {
 
   return (
     <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px 48px" }}>
+      <div style={{ marginBottom: 10 }}>
+        <Link
+          href={isSelf ? "/profile" : "/discover"}
+          style={secondaryLinkStyle}
+        >
+          <UiIcon name="arrow-left" size={15} />
+          {isSelf ? " 返回我的空间" : " 返回发现"}
+        </Link>
+      </div>
       <section style={{ ...panelStyle, padding: 24 }}>
         <div
           style={{
@@ -299,12 +308,12 @@ export default function PublicUserProfilePage() {
                   fontSize: 34,
                 }}
               >
-                <AppIcon name="leaf" size={28} />
+                <UiIcon name="sprout" size={28} />
               </div>
             )}
 
             <div style={{ marginTop: 14, fontSize: 13, color: "#6f7b69" }}>
-              Lv.{Number(profile.level || 1)} · <AppIcon name="flower" size={13} />{" "}
+              Lv.{Number(profile.level || 1)} · <UiIcon name="flower" size={13} />{" "}
               {Number(profile.flower_count || 0)}
             </div>
 

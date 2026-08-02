@@ -52,13 +52,7 @@
   align-items: center;
   justify-content: center;
   color: #879783;
-}
-
-.imageShade {
-  position: absolute;
-  inset: 38% 0 0;
-  background: linear-gradient(180deg, transparent, rgba(20, 31, 20, 0.72));
-  pointer-events: none;
+  font-size: 30px;
 }
 
 .imageMeta {
@@ -96,19 +90,27 @@
   background: rgba(255, 240, 232, 0.95);
 }
 
-.imageTitle {
+.imageTitleArea {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
-  left: 10px;
+  inset: auto 0 0;
+  padding: 46px 12px 10px;
+  background: linear-gradient(
+    to top,
+    rgba(14, 23, 14, 0.74),
+    rgba(14, 23, 14, 0.27),
+    transparent
+  );
+}
+
+.title {
   display: -webkit-box;
   overflow: hidden;
   margin: 0;
   color: #fff;
-  font-size: 16px;
-  line-height: 1.32;
-  font-weight: 760;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 680;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.38);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -116,37 +118,29 @@
 .body {
   min-width: 0;
   flex: 1;
+  display: grid;
+  align-content: start;
   padding: 10px 11px 0;
 }
 
 .summary {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  margin: 0;
-  color: #657164;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.summary > span:first-child {
-  min-width: 0;
   display: -webkit-box;
   overflow: hidden;
+  margin: 0;
+  color: #536051;
+  font-size: 11px;
+  line-height: 1.5;
   white-space: pre-line;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .summaryTime {
-  flex: 0 0 auto;
-  color: #98a095;
-  font-size: 10px;
+  color: #919a90;
   white-space: nowrap;
 }
 
-.imageStats {
+.projectMeta {
   display: flex;
   gap: 4px;
   align-items: center;
@@ -157,7 +151,7 @@
   line-height: 1.4;
 }
 
-.statSegment {
+.metaSegment {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -290,20 +284,19 @@
     gap: 12px;
   }
 
-  .imageTitle {
-    font-size: 17px;
+  .body {
+    padding: 12px 12px 0;
   }
 
-  .body {
-    padding: 11px 12px 0;
+  .title {
+    font-size: 15px;
   }
 
   .summary {
     font-size: 12px;
   }
 
-  .summaryTime,
-  .imageStats,
+  .projectMeta,
   .owner {
     font-size: 11px;
   }

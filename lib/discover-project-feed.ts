@@ -56,7 +56,11 @@ export function normalizeDiscoveryProjectFeedRow(
     public_record_count: normalizeCount(row.public_record_count),
     public_comment_count: normalizeCount(row.public_comment_count),
     has_public_help: row.has_public_help === true,
-    card_summary: latestNote || archiveSummary || "项目刚刚开始",
+    card_summary:
+      latestNote ||
+      (row.latest_public_primary_image_url
+        ? "新增了照片"
+        : archiveSummary || "项目刚刚开始"),
     display_image_url: null,
   };
 }
@@ -141,22 +145,13 @@ export async function enrichDiscoveryProjectMedia(
 
   const displayPairs = await resolveMediaDisplayPairs(supabase, sources);
 
-  return items.map((item, index) => {
-    const displayImageUrl =
+  return items.map((item, index) => ({
+    ...item,
+    display_image_url:
       displayPairs[index]?.display_thumb_url ||
       displayPairs[index]?.display_url ||
-      null;
-    const latestNote = normalizeOptionalText(item.latest_public_record_note);
-    const archiveSummary = normalizeOptionalText(item.archive_summary);
-
-    return {
-      ...item,
-      display_image_url: displayImageUrl,
-      card_summary:
-        latestNote ||
-        (displayImageUrl ? "新增了照片" : archiveSummary || "项目刚刚开始"),
-    };
-  });
+      null,
+  }));
 }
 
 export async function fetchDiscoveryProjectCandidates(
