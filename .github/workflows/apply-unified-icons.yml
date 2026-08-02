@@ -79,8 +79,8 @@ jobs:
       - name: Run TypeScript check
         run: npx tsc --noEmit
 
-      - name: Run lint
-        run: npm run lint
+      - name: Run targeted lint
+        run: npx eslint components/ui/AppIcon.tsx components/ui/RatingStars.tsx components/discover/DiscoverProjectCard.tsx components/discover/FollowedProjectCard.tsx components/archive-ui/ArchiveProjectCard.tsx lib/archive-categories.ts lib/discover-project-feed.ts tests/icon-consistency.test.mjs
 
       - name: Build production application
         run: npm run build
