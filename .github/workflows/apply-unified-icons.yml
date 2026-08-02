@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: apply-unified-icons-20260802
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply:
@@ -44,6 +44,32 @@ jobs:
           base64 --decode /tmp/encoded-patch | gzip --decompress > /tmp/restore-unified-icons.patch
           git apply --index /tmp/restore-unified-icons.patch
 
+      - name: Normalize generated imports
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          replacements = {
+              Path('app/archive/[id]/page.tsx'): (
+                  'import {\nimport AppIcon from "@/components/ui/AppIcon";\n  isMissingDatabaseColumn,',
+                  'import AppIcon from "@/components/ui/AppIcon";\nimport {\n  isMissingDatabaseColumn,',
+              ),
+              Path('app/archive/page.tsx'): (
+                  'import {\nimport AppIcon from "@/components/ui/AppIcon";\n  createLocalTaxonomyItem,',
+                  'import AppIcon from "@/components/ui/AppIcon";\nimport {\n  createLocalTaxonomyItem,',
+              ),
+              Path('components/discover/DiscoverShared.tsx'): (
+                  'import {\nimport AppIcon from "@/components/ui/AppIcon";\n  categoryLabel,',
+                  'import AppIcon from "@/components/ui/AppIcon";\nimport {\n  categoryLabel,',
+              ),
+          }
+          for path, (old, new) in replacements.items():
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f'missing expected import pattern: {path}')
+              path.write_text(text.replace(old, new, 1))
+          PY
+          git add app/archive/[id]/page.tsx app/archive/page.tsx components/discover/DiscoverShared.tsx
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -65,6 +91,7 @@ jobs:
       - name: Commit validated changes
         shell: bash
         run: |
+          rm -f .github/workflows/export-source-snapshot.yml
           rm -f .github/workflows/apply-unified-icons.yml
           rm -f scripts/restore-unified-icons.patch.gz.b64.part00
           rm -f scripts/restore-unified-icons.patch.gz.b64.part01
