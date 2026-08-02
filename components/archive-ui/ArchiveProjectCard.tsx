@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import LocalBlobImage from "@/components/local/LocalBlobImage";
+import AppIcon from "@/components/ui/AppIcon";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 
 type Props = {
@@ -249,7 +250,7 @@ function ArchiveProjectCover({
 
   return (
     <div style={{ ...style, ...placeholderStyle }}>
-      <span>{project.categoryIcon}</span>
+      <AppIcon name={project.categoryIcon} size={mobileMode ? 28 : 30} strokeWidth={1.7} />
     </div>
   );
 }

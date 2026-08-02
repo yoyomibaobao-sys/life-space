@@ -7,6 +7,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
+import AppIcon from "@/components/ui/AppIcon";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 
 export type ArchiveProfileEditableField =
@@ -398,7 +399,7 @@ export default function ArchiveDetailHeaderView({
                 title={project.storageTone === "device" ? "本地项目" : "云端项目"}
                 style={storageIconStyle(project.storageTone)}
               >
-                <ArchiveStorageIcon tone={project.storageTone} />
+                <AppIcon name={project.storageTone === "device" ? "cloud-off" : "cloud"} size={16} />
               </span>
             ) : null}
           </span>
@@ -494,28 +495,6 @@ export default function ArchiveDetailHeaderView({
         </>
       ) : null}
     </section>
-  );
-}
-
-function ArchiveStorageIcon({ tone }: { tone?: "cloud" | "device" }) {
-  const stroke = tone === "device" ? "#6f7b69" : "#2f6f3a";
-
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      fill="none"
-      stroke={stroke}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ flexShrink: 0 }}
-    >
-      <path d="M17.5 18H8a5 5 0 1 1 .7-9.95A6 6 0 0 1 20 10.5a3.75 3.75 0 0 1-2.5 7.5Z" />
-      {tone === "device" ? <path d="M4 4l16 16" /> : null}
-    </svg>
   );
 }
 

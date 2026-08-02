@@ -16,6 +16,7 @@ import {
 } from "@/lib/experience-cards";
 import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
+import AppIcon from "@/components/ui/AppIcon";
 
 type PendingAction = "publish" | "unpublish" | "delete" | null;
 
@@ -146,7 +147,7 @@ export default function ExperienceCardPage({
           href={isOwner ? "/experience-cards" : "/discover"}
           style={backLinkStyle}
         >
-          {isOwner ? "← 我的经验卡" : "← 返回发现"}
+          <AppIcon name="arrow-left" size={15} /> {isOwner ? "我的经验卡" : "返回发现"}
         </Link>
         {isOwner ? (
           <Link
@@ -187,7 +188,7 @@ export default function ExperienceCardPage({
             >
               <span style={sourceLabelStyle}>用户</span>
               <span style={sourceValueStyle}>{authorName}</span>
-              <span aria-hidden="true">→</span>
+              <AppIcon name="arrow-right" size={14} />
             </Link>
             <Link
               href={`/archive/${detail.archive.id}`}
@@ -197,13 +198,13 @@ export default function ExperienceCardPage({
               <span style={sourceValueStyle}>
                 {detail.archive.title || "查看项目"}
               </span>
-              <span aria-hidden="true">→</span>
+              <AppIcon name="arrow-right" size={14} />
             </Link>
             {systemNameHref ? (
               <Link href={systemNameHref} style={sourceLinkStyle}>
                 <span style={sourceLabelStyle}>系统名</span>
                 <span style={sourceValueStyle}>{systemName}</span>
-                <span aria-hidden="true">→</span>
+                <AppIcon name="arrow-right" size={14} />
               </Link>
             ) : (
               <span style={sourceMissingStyle}>

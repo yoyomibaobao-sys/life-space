@@ -50,6 +50,7 @@ import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
+import AppIcon from "@/components/ui/AppIcon";
 
 type RecordVisibility = "public" | "private";
 
@@ -989,7 +990,7 @@ export default function AddRecord({
                     lineHeight: "30px",
                   }}
                 >
-                  ×
+                  <AppIcon name="close" size={16} />
                 </button>
               </div>
             ))}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import type { AppIconName } from "@/components/ui/AppIcon";
 
 export type ArchiveMode = "cloud" | "local";
 
@@ -26,7 +27,7 @@ export type ArchiveProjectView = {
   plantId?: string | null;
   plantSlug?: string | null;
   categoryLabel: string;
-  categoryIcon: string;
+  categoryIcon: AppIconName;
   systemName: string;
   subcategoryLabel?: string | null;
   groupLabel?: string | null;

@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import AppIcon from "@/components/ui/AppIcon";
 
 export default function ArchivePrivateState() {
   return (
     <main style={{ padding: "16px", maxWidth: 680, margin: "0 auto" }}>
       <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
-        ← 返回发现页
+        <AppIcon name="arrow-left" size={14} /> 返回发现页
       </Link>
 
       <div

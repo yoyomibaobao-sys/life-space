@@ -22,6 +22,7 @@ import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
+import AppIcon from "@/components/ui/AppIcon";
 
 export default function PlantInterestsPage() {
   const router = useRouter();
@@ -318,7 +319,7 @@ export default function PlantInterestsPage() {
   return (
     <main style={{ padding: "16px", maxWidth: 980, margin: "0 auto" }}>
       <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-        ← 返回空间
+        <AppIcon name="arrow-left" size={14} /> 返回空间
       </Link>
 
       <ArchivePlantPageHero

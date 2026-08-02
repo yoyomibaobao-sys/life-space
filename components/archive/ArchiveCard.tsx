@@ -18,6 +18,7 @@ import ArchivePlantNameEditor from "@/components/archive/ArchivePlantNameEditor"
 import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import AppIcon from "@/components/ui/AppIcon";
 
 type Props = {
   item: ArchiveItem;
@@ -114,7 +115,7 @@ function buildStatusPills(item: ArchiveItem, ended: boolean): StatusPill[] {
 function getLatestRecordPreview(item: ArchiveItem) {
   const note = item.latest_record_note?.trim();
   if (note) return note;
-  if (item.latest_record_media_count && item.latest_record_media_count > 0) return "新增了图片记录";
+  if (item.latest_record_media_count && item.latest_record_media_count > 0) return "新增了照片";
   if (item.latest_record_time || item.last_record_time) return "新增了一条记录";
   return "";
 }
@@ -274,10 +275,11 @@ export default function ArchiveCard({
               fontSize: 24,
             }}
           >
-            <span>{getArchiveCategoryIcon(item.category)}</span>
             {hasLatestRecord ? (
-              <span style={{ fontSize: 11, color: "#8c9b88" }}>最新无图</span>
-            ) : null}
+              <span style={{ fontSize: 12, color: "#8c9b88", fontWeight: 700 }}>无图</span>
+            ) : (
+              <AppIcon name={getArchiveCategoryIcon(item.category)} size={26} strokeWidth={1.7} />
+            )}
           </div>
         )}
       </div>
@@ -498,9 +500,9 @@ export default function ArchiveCard({
             WebkitLineClamp: 1,
             WebkitBoxOrient: "vertical",
           }}
-          title={latestRecordPreview ? `最新：${latestRecordPreview} · 更新 ${updateDate || "暂无"}` : `更新 ${updateDate || "暂无"}`}
+          title={latestRecordPreview ? `${latestRecordPreview} · ${updateDate || "暂无"}` : updateDate || "暂无"}
         >
-          {latestRecordPreview ? `最新：${latestRecordPreview} · 更新 ${updateDate || "暂无"}` : `更新 ${updateDate || "暂无"}`}
+          {latestRecordPreview ? `${latestRecordPreview} · ${updateDate || "暂无"}` : updateDate || "暂无"}
         </div>
 
         <div
@@ -669,7 +671,7 @@ function MobileArchiveCard({
         aria-label="更多项目操作"
         style={mobileCardMoreButtonStyle}
       >
-        ⋯
+        <AppIcon name="more-horizontal" size={18} />
       </button>
 
       {menuOpen ? (

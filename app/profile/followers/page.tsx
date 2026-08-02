@@ -21,6 +21,7 @@ import {
   userCardStyle,
 } from "@/components/follow/FollowShared";
 import { formatDateTime, getTimeValue } from "@/lib/follow-utils";
+import AppIcon from "@/components/ui/AppIcon";
 
 type FollowRow = {
   follower_id: string;
@@ -174,7 +175,7 @@ export default function FollowersPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href="/profile" style={backLinkStyle}>
-          ← 返回个人资料
+          <AppIcon name="arrow-left" size={14} /> 返回个人资料
         </Link>
 
         <h1 style={titleStyle}>粉丝</h1>
@@ -192,7 +193,7 @@ export default function FollowersPage() {
                   {item.avatarUrl ? (
                     <img src={item.avatarUrl} alt="" style={userAvatarStyle} />
                   ) : (
-                    <div style={userAvatarFallbackStyle}>🌱</div>
+                    <div style={userAvatarFallbackStyle}><AppIcon name="leaf" size={24} /></div>
                   )}
                 </div>
 

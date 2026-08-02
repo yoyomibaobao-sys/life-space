@@ -25,6 +25,7 @@ import {
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
 import { getAccountRegistrationSummary } from "@/lib/account-number";
+import AppIcon from "@/components/ui/AppIcon";
 
 type MarketPostDisplayRow = MarketPostRow & {
   display_cover_image_url?: string | null;
@@ -298,12 +299,12 @@ export default function PublicUserProfilePage() {
                   fontSize: 34,
                 }}
               >
-                🌱
+                <AppIcon name="leaf" size={28} />
               </div>
             )}
 
             <div style={{ marginTop: 14, fontSize: 13, color: "#6f7b69" }}>
-              Lv.{Number(profile.level || 1)} · 🌸{" "}
+              Lv.{Number(profile.level || 1)} · <AppIcon name="flower" size={13} />{" "}
               {Number(profile.flower_count || 0)}
             </div>
 

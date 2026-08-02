@@ -29,6 +29,7 @@ import {
   type RegionOption,
 } from "@/lib/region-shared";
 import { getAccountRegistrationSummary } from "@/lib/account-number";
+import AppIcon, { type AppIconName } from "@/components/ui/AppIcon";
 
 
 type MembershipPaymentRow = {
@@ -585,7 +586,7 @@ export default function ProfilePage() {
               {profile.avatar_url ? (
                 <img src={String(profile.avatar_url)} alt="" style={isMobileViewport ? mobileAvatarStyle : { width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "1px solid #e4ebe0" }} />
               ) : (
-                <div style={isMobileViewport ? mobileAvatarFallbackStyle : { width: 72, height: 72, borderRadius: "50%", background: "#eef5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🌱</div>
+                <div style={isMobileViewport ? mobileAvatarFallbackStyle : { width: 72, height: 72, borderRadius: "50%", background: "#eef5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}><AppIcon name="leaf" size={28} /></div>
               )}
 
               <div style={{ minWidth: 0, flex: 1 }}>
@@ -617,7 +618,7 @@ export default function ProfilePage() {
                 <MetaItem label="注册顺序" value={accountRegistrationSummary} />
               ) : null}
               <MetaItem label="账号等级" value={`Lv.${Number(profile.level || 1)}`} />
-              <MetaItem label="花朵" value={`🌸 ${Number(profile.flower_count || 0)}`} />
+              <MetaItem label="花朵" value={`${Number(profile.flower_count || 0)}`} icon="flower" />
               <MetaItem label="存储" value={storageText} />
               <MetaItem label="加入时间" value={formatProfileDateTime(profile.created_at)} />
             </div>
@@ -1092,11 +1093,13 @@ function getInterestHint(interestCount: number) {
   return "查看我感兴趣的植物";
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function MetaItem({ label, value, icon }: { label: string; value: string; icon?: AppIconName }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, color: "#5f6a5b" }}>
       <span>{label}</span>
-      <span style={{ color: "#1f2a1f", fontWeight: 600 }}>{value}</span>
+      <span style={{ color: "#1f2a1f", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {icon ? <AppIcon name={icon} size={13} /> : null}{value}
+      </span>
     </div>
   );
 }
@@ -1153,7 +1156,7 @@ function ProjectStatsCard({
     <Link href="/archive" style={mobileProjectStatsCardStyle}>
       <span style={mobileProjectStatsTitleRowStyle}>
         <strong>项目档案</strong>
-        <strong>{archiveCount} 个 →</strong>
+        <strong style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{archiveCount} 个 <AppIcon name="arrow-right" size={14} /></strong>
       </span>
       <span style={mobileProjectStatsDetailStyle}>
         公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount} · 已结束 {endedArchiveCount}

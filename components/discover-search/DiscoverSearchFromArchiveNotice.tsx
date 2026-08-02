@@ -1,3 +1,4 @@
+import AppIcon from "@/components/ui/AppIcon";
 type Props = {
   fromArchiveId: string;
   fromArchiveTitle: string;
@@ -34,7 +35,7 @@ export default function DiscoverSearchFromArchiveNotice({
         href={`/archive/${fromArchiveId}`}
         style={{ color: "#4CAF50", textDecoration: "none", whiteSpace: "nowrap" }}
       >
-        返回原记录 →
+        返回原记录 <AppIcon name="arrow-right" size={14} />
       </a>
     </div>
   );

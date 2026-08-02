@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import AppIcon from "@/components/ui/AppIcon";
 
 type Props = {
   value: string;
@@ -53,7 +54,7 @@ export default function PasswordInput({
           justifyContent: "center",
         }}
       >
-        {show ? "🙈" : "👁"}
+        <AppIcon name={show ? "eye-off" : "eye"} size={18} />
       </button>
     </div>
   );

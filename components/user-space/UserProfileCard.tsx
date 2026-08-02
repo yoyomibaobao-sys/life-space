@@ -1,5 +1,6 @@
 import UserAvatar from "@/components/social/UserAvatar";
 import type { UserCardProfile } from "@/lib/user-space-types";
+import AppIcon from "@/components/ui/AppIcon";
 
 type Props = {
   open: boolean;
@@ -59,7 +60,7 @@ export default function UserProfileCard({
         </div>
 
         <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>
-          Lv.{profile.level || 1} · 🌸 {profile.flower_count || 0}
+          Lv.{profile.level || 1} · <AppIcon name="flower" size={13} /> {profile.flower_count || 0}
         </div>
 
         <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>

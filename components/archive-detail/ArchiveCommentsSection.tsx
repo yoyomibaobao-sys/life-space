@@ -21,6 +21,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import AppIcon from "@/components/ui/AppIcon";
 
 type CommentItem = RecordComment & {
   profile: Pick<AppProfile, "id" | "username" | "avatar_url"> | null;
@@ -507,7 +508,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
           }
           aria-label={recordLikedByMe ? "取消喜欢" : "喜欢"}
         >
-          {recordLikedByMe ? "♥" : "♡"} {recordLikeCount}
+          <AppIcon name="heart" size={14} style={recordLikedByMe ? { fill: "currentColor" } : undefined} /> {recordLikeCount}
         </button>
 
         <button
@@ -659,7 +660,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                     </span>
                     {comment.flowerCount > 0 ? (
                       <span style={{ color: "#9d6f1f", whiteSpace: "nowrap" }}>
-                        🌸
+                        <AppIcon name="flower" size={14} />
                       </span>
                     ) : null}
                     <button
@@ -676,7 +677,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                       }}
                       aria-label={comment.likedByMe ? "取消喜欢" : "喜欢评论"}
                     >
-                      {comment.likedByMe ? "♥" : "♡"} {comment.likeCount}
+                      <AppIcon name="heart" size={13} style={comment.likedByMe ? { fill: "currentColor" } : undefined} /> {comment.likeCount}
                     </button>
 
                     {canDeleteComment ? (

@@ -1,6 +1,7 @@
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { FeedItem } from "@/lib/discover-types";
 import { ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
+import AppIcon from "@/components/ui/AppIcon";
 
 type Props = {
   items: FeedItem[];
@@ -116,7 +117,7 @@ export default function DiscoverSearchResults({ items, loading, hasRun }: Props)
                       fontSize: 18,
                     }}
                   >
-                    {getArchiveCategoryIcon(record.archive_category)}
+                    <AppIcon name={getArchiveCategoryIcon(record.archive_category)} size={22} strokeWidth={1.7} />
                   </div>
                 )}
 

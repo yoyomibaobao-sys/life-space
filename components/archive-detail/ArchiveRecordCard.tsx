@@ -25,6 +25,7 @@ import type {
 import type { MediaItem } from "@/lib/domain-types";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
+import AppIcon from "@/components/ui/AppIcon";
 
 type ArchiveRecordCardProps = {
   archive: ArchiveDetailArchive;
@@ -266,7 +267,7 @@ export default function ArchiveRecordCard({
                     aria-label="更多记录操作"
                     style={mobileRecordMoreButtonStyle}
                   >
-                    ⋯
+                    <AppIcon name="more-horizontal" size={18} />
                   </button>
 
                   {menuOpen && isLocalMode ? (
@@ -814,7 +815,7 @@ function DesktopSameTagLinks({
             borderRadius: 999,
           }}
         >
-          {getBehaviorTagLabel(linkItem.tag)}（{linkItem.count}） →
+          {getBehaviorTagLabel(linkItem.tag)}（{linkItem.count}） <AppIcon name="arrow-right" size={13} />
         </a>
       ))}
     </div>

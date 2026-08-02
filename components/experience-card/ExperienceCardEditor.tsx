@@ -24,6 +24,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
+import AppIcon from "@/components/ui/AppIcon";
 
 const RECORD_SELECT = [
   "id",
@@ -354,7 +355,7 @@ export default function ExperienceCardEditor({
             href={cardId ? `/experience-cards/${cardId}` : `/archive/${archive?.id}`}
             style={backLinkStyle}
           >
-            ← 返回
+            <AppIcon name="arrow-left" size={14} /> 返回
           </Link>
           <h1 style={titleStyle}>{cardId ? "修改经验卡" : "生成经验卡"}</h1>
         </div>

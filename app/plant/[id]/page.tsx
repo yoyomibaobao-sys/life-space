@@ -26,6 +26,8 @@ import type {
   PlantSpeciesI18nRow,
   PlantSpeciesRow,
 } from "@/lib/plant-detail-types";
+import AppIcon from "@/components/ui/AppIcon";
+import RatingStars from "@/components/ui/RatingStars";
 
 type PlantGrowthCycleRow = {
   species_id: string;
@@ -201,13 +203,13 @@ function difficultyMeta(value: unknown) {
   const score = Number(value);
   if (Number.isNaN(score)) return null;
 
-  if (score <= 1) return { stars: "☆☆☆☆☆", label: "野生级", detail: `${score}/10` };
-  if (score <= 3) return { stars: "★☆☆☆☆", label: "非常容易", detail: `${score}/10` };
-  if (score <= 5) return { stars: "★★☆☆☆", label: "容易", detail: `${score}/10` };
-  if (score <= 7) return { stars: "★★★☆☆", label: "中等", detail: `${score}/10` };
-  if (score <= 9) return { stars: "★★★★☆", label: "较难", detail: `${score}/10` };
+  if (score <= 1) return { filledStars: 0, label: "野生级", detail: `${score}/10` };
+  if (score <= 3) return { filledStars: 1, label: "非常容易", detail: `${score}/10` };
+  if (score <= 5) return { filledStars: 2, label: "容易", detail: `${score}/10` };
+  if (score <= 7) return { filledStars: 3, label: "中等", detail: `${score}/10` };
+  if (score <= 9) return { filledStars: 4, label: "较难", detail: `${score}/10` };
 
-  return { stars: "★★★★★", label: "专业种植", detail: `${score}/10` };
+  return { filledStars: 5, label: "专业种植", detail: `${score}/10` };
 }
 
 function categoryLabel(value?: string | null) {
@@ -1500,9 +1502,16 @@ export default function PlantDetailPage() {
     { label: "阳台适配", value: scoreLabel(parameters?.balcony_friendly_score) },
     {
       label: "管理难度",
-      value: difficulty
-        ? `${difficulty.stars}（${difficulty.detail}，${difficulty.label}）`
-        : null,
+      value: difficulty ? (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <RatingStars
+            value={difficulty.filledStars}
+            label={`管理难度：${difficulty.label}`}
+            style={{ color: "#738467" }}
+          />
+          <span>（{difficulty.detail}，{difficulty.label}）</span>
+        </span>
+      ) : null,
     },
   ].filter((item) => item.value);
 
@@ -1776,7 +1785,7 @@ export default function PlantDetailPage() {
     return (
       <main style={{ padding: "16px", maxWidth: 760, margin: "0 auto" }}>
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          ← 返回指引
+          <AppIcon name="arrow-left" size={14} /> 返回指引
         </Link>
         <div
           style={{
@@ -1801,8 +1810,8 @@ export default function PlantDetailPage() {
             返回原记录
           </Link>
         ) : null}
-        <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          ← 返回指引
+        <Link href="/plant" style={{ color: "#666", fontSize: 14, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <AppIcon name="arrow-left" size={14} /> 返回指引
         </Link>
         {!isMobileViewport ? (
           <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>

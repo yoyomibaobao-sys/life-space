@@ -5,6 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { SupabaseUser } from "@/lib/domain-types";
+import AppIcon from "@/components/ui/AppIcon";
 
 type NotificationItem = {
   id: string;
@@ -123,7 +124,7 @@ export default function NotificationsPage() {
         <div style={topBarStyle}>
           <div>
             <Link href="/profile" style={backLinkStyle}>
-              ← 返回个人资料
+              <AppIcon name="arrow-left" size={14} /> 返回个人资料
             </Link>
             <h1 style={titleStyle}>通知</h1>
             <div style={subtitleStyle}>
