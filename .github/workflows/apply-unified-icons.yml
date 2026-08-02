@@ -1,9 +1,9 @@
 name: Apply unified icon restoration
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/restore-unified-icons-20260802
+      - main
 
 permissions:
   contents: write
