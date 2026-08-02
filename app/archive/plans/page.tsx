@@ -26,6 +26,7 @@ import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
+import AppIcon from "@/components/ui/AppIcon";
 
 const statusLabels: Record<PlantPlanStatus, string> = {
   want: "想种",
@@ -421,7 +422,7 @@ export default function PlantPlansPage() {
   return (
     <main style={{ padding: "16px", maxWidth: 980, margin: "0 auto" }}>
       <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-        ← 返回空间
+        <AppIcon name="arrow-left" size={14} /> 返回空间
       </Link>
 
       <ArchivePlantPageHero

@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import type { FeedItem } from "@/lib/discover-types";
+import AppIcon from "@/components/ui/AppIcon";
 import {
   categoryLabel,
   formatDate,
@@ -10,7 +11,6 @@ import {
   getArchiveFollowerCount,
   getArchiveSystemName,
   getArchiveUserTitle,
-  getArchiveViewCount,
   shortText,
 } from "@/lib/discover-utils";
 
@@ -37,7 +37,7 @@ export function DefaultUserAvatar({ size = 30 }: { size?: number }) {
         border: "1px solid #dbe8d5",
       }}
     >
-      🌱
+      <AppIcon name="leaf" size={Math.max(15, Math.round(size * 0.55))} />
     </span>
   );
 }
@@ -194,7 +194,6 @@ export function ProjectCardRows({
   const archiveUserTitle = getArchiveUserTitle(record);
   const archiveSystemName = getArchiveSystemName(record);
   const archiveRecordCount = getArchiveRecordCount(record);
-  const archiveViewCount = getArchiveViewCount(record);
   const archiveDurationDays = getArchiveDurationDays(record);
   const archiveFollowerCount = getArchiveFollowerCount(record);
   const commentCount = typeof record.comment_count === "number" ? record.comment_count : 0;
@@ -206,7 +205,6 @@ export function ProjectCardRows({
     archiveRecordCount !== null ? `共 ${archiveRecordCount} 条记录` : null,
     archiveDurationDays !== null ? `已持续 ${archiveDurationDays} 天` : null,
     `关注 ${archiveFollowerCount}`,
-    archiveViewCount !== null ? `浏览 ${archiveViewCount} 次` : null,
     `${commentCount} 评论`,
   ].filter((item): item is string => Boolean(item));
 

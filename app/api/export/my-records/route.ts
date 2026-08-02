@@ -368,7 +368,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
 </head>
 <body>
 <div class="wrap">
-  <a class="back" href="../../index.html">← 返回全部项目</a>
+  <a class="back" href="../../index.html">返回全部项目</a>
   <section class="hero">
     <div class="muted">项目档案</div>
     <h1>${escapeHtml(archive.title || "未命名项目")}</h1>

@@ -293,11 +293,14 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
   assert.doesNotMatch(plantHero, /disabled=\{planAdded \|\|/);
   assert.doesNotMatch(plantHero, /disabled=\{interestAdded \|\|/);
   assert.ok(
-    discoverCard.indexOf('className={styles.title}') >
+    discoverCard.indexOf('className={styles.imageTitle}') <
       discoverCard.indexOf('className={styles.body}')
   );
+  assert.match(discoverCard, /formatCompactActivityTime/);
+  assert.match(discoverCard, /项目刚刚开始/);
+  assert.doesNotMatch(discoverCard, /public_comment_count|view_count/);
   assert.match(discoverStyles, /\.ownerRow/);
-  assert.doesNotMatch(discoverStyles, /\.imageTitleArea/);
+  assert.match(discoverStyles, /\.imageTitle/);
 });
 
 test("project details expose details, archive, experience cards, and growth line as peer tabs on every viewport", async () => {

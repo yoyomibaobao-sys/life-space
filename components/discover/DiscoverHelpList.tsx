@@ -2,6 +2,7 @@ import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { FeedItem } from "@/lib/discover-types";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
+import AppIcon from "@/components/ui/AppIcon";
 
 export function DiscoverHelpList({ items }: { items: FeedItem[] }) {
   return (
@@ -59,7 +60,7 @@ export function DiscoverHelpList({ items }: { items: FeedItem[] }) {
                     fontSize: 18,
                   }}
                 >
-                  {getArchiveCategoryIcon(record.archive_category)}
+                  <AppIcon name={getArchiveCategoryIcon(record.archive_category)} size={22} strokeWidth={1.7} />
                 </div>
               )}
 

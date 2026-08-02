@@ -7,6 +7,7 @@ import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import { getDurationDays } from "@/lib/follow-utils";
 import styles from "@/components/discover/FollowedProjects.module.css";
+import AppIcon from "@/components/ui/AppIcon";
 
 function formatLocalDate(value?: string | null) {
   if (!value) return null;
@@ -70,7 +71,7 @@ export function FollowedProjectCard({
             />
           ) : (
             <div className={styles.imagePlaceholder} aria-hidden="true">
-              {getArchiveCategoryIcon(item.category)}
+              <AppIcon name={getArchiveCategoryIcon(item.category)} size={28} strokeWidth={1.7} />
             </div>
           )}
         </div>
@@ -87,7 +88,7 @@ export function FollowedProjectCard({
           ) : null}
           <div className={styles.metaLine}>
             {updateDate ? `${updateDate} 更新 · ` : ""}
-            {item.public_record_count}条记录 · {durationDays}天 · {item.public_comment_count}条评论
+            {item.public_record_count}条记录 · {durationDays}天
           </div>
           <div className={styles.owner}>
             {ownerName}

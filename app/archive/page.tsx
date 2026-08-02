@@ -49,6 +49,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { requestCloudTrash } from "@/lib/cloud-trash";
+import AppIcon from "@/components/ui/AppIcon";
 import {
   createLocalTaxonomyItem,
   deleteLocalArchive,
@@ -1812,14 +1813,14 @@ export default function ArchivePage() {
           <h1 style={personalSpaceTitleStyle}>我的空间</h1>
           <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
             <span>我的经验卡（{experienceCardCount}）</span>
-            <span style={personalSpaceExperienceCardArrowStyle}>→</span>
+            <AppIcon name="arrow-right" size={15} style={personalSpaceExperienceCardArrowStyle} />
           </Link>
         </section>
       ) : (
         <section style={personalSpaceEntryRowStyle}>
           <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
             <span>我的经验卡（{experienceCardCount}）</span>
-            <span style={personalSpaceExperienceCardArrowStyle}>→</span>
+            <AppIcon name="arrow-right" size={15} style={personalSpaceExperienceCardArrowStyle} />
           </Link>
         </section>
       )}
@@ -1963,7 +1964,7 @@ export default function ArchivePage() {
                           aria-label="更多本地项目操作"
                           style={localProjectMoreButtonStyle}
                         >
-                          ⋯
+                          <AppIcon name="more-horizontal" size={18} />
                         </button>
                         {localProjectMenuOpenId === archive.id ? (
                           <div style={localProjectMenuStyle}>

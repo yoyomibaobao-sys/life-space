@@ -12,6 +12,7 @@ import {
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import AppIcon from "@/components/ui/AppIcon";
 
 type TabKey = "projects" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -586,7 +587,7 @@ export default function FollowPage() {
                   {item.avatarUrl ? (
                     <img src={item.avatarUrl} alt="" style={userAvatarStyle} />
                   ) : (
-                    <div style={userAvatarFallbackStyle}>🌱</div>
+                    <div style={userAvatarFallbackStyle}><AppIcon name="leaf" size={24} /></div>
                   )}
                 </div>
 

@@ -1,4 +1,5 @@
 "use client";
+import AppIcon from "@/components/ui/AppIcon";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -286,13 +287,16 @@ export default function PlantIndexPage() {
           activeCategory?: unknown;
           filters?: Partial<EnvironmentFilters>;
           scrollY?: unknown;
+          restoreOnReturn?: unknown;
         } | null;
 
-        if (!storedState) {
+        if (!storedState || storedState.restoreOnReturn !== true) {
+          window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
           setSearchStateRestored(true);
           return;
         }
 
+        window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
         const restoredQuery = String(storedState.query ?? "").trim();
         const restoredInput = String(storedState.searchInput ?? restoredQuery).trim();
         const restoredCategory = String(storedState.activeCategory ?? "all");
@@ -602,6 +606,7 @@ export default function PlantIndexPage() {
           activeCategory,
           filters,
           scrollY: window.scrollY,
+          restoreOnReturn: true,
         })
       );
     } catch {
@@ -634,7 +639,6 @@ export default function PlantIndexPage() {
     setSearchPanelOpen(false);
     setIsMobileSearchOpen(false);
     rememberSearch(keyword);
-    persistSearchState(keyword, keyword);
 
     window.requestAnimationFrame(() => {
       resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -721,7 +725,7 @@ export default function PlantIndexPage() {
                     ) : null}
                   </span>
                   <span aria-hidden="true" style={{ color: "#789174", flexShrink: 0 }}>
-                    →
+                    <AppIcon name="arrow-right" size={14} />
                   </span>
                 </Link>
               );
@@ -861,7 +865,7 @@ export default function PlantIndexPage() {
                 fontSize: 22,
               }}
             >
-              ←
+              <AppIcon name="arrow-left" size={15} />
             </button>
             <form
               onSubmit={(event) => {
@@ -958,20 +962,7 @@ export default function PlantIndexPage() {
               whiteSpace: "nowrap",
             }}
           >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ marginRight: 5 }}
-            >
-              <path d="M6.5 4.5h11v15l-5.5-3.4-5.5 3.4z" />
-            </svg>
+            <AppIcon name="bookmark" size={14} style={{ marginRight: 5 }} />
             我的收藏{isSignedIn && interestCount !== null ? `（${interestCount}）` : ""}
           </Link>
         </div>

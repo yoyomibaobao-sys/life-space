@@ -12,6 +12,7 @@ import {
 } from "@/lib/experience-cards";
 import type { ExperienceCardRow } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
+import AppIcon from "@/components/ui/AppIcon";
 
 type CardListItem = ExperienceCardRow & {
   archiveTitle: string;
@@ -110,7 +111,7 @@ export default function MyExperienceCardsPage() {
       <header style={headerStyle}>
         <div>
           <Link href="/archive" style={backLinkStyle}>
-            ← 我的项目
+            <AppIcon name="arrow-left" size={14} /> 我的项目
           </Link>
           <h1 style={titleStyle}>我的经验卡</h1>
           <p style={mutedStyle}>

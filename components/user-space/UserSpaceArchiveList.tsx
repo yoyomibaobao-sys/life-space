@@ -11,6 +11,7 @@ import {
 } from "@/components/user-space/UserSpaceShared";
 import { formatDate, getGroupTagName, getSubTagName } from "@/lib/user-space-utils";
 import { getArchiveDisplayName } from "@/lib/social-space-shared";
+import AppIcon from "@/components/ui/AppIcon";
 
 type Props = {
   archives: UserSpaceArchive[];
@@ -112,7 +113,7 @@ export default function UserSpaceArchiveList({
                   }}
                 />
               ) : (
-                getArchiveCategoryIcon(archive.category)
+                <AppIcon name={getArchiveCategoryIcon(archive.category)} size={26} strokeWidth={1.7} />
               )}
             </div>
 

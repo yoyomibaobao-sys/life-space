@@ -1,3 +1,5 @@
+import type { AppIconName } from "@/components/ui/AppIcon";
+
 export type ArchiveCategory = "plant" | "system" | "insect_fish" | "other";
 
 export type NonPlantArchiveCategory = Exclude<ArchiveCategory, "plant">;
@@ -64,11 +66,11 @@ export function getArchiveCategoryLabel(value?: string | null) {
   return match?.label || "项目";
 }
 
-export function getArchiveCategoryIcon(value?: string | null) {
-  if (value === "system") return "🛠";
-  if (value === "insect_fish") return "🐟";
-  if (value === "other") return "🧩";
-  return "🌿";
+export function getArchiveCategoryIcon(value?: string | null): AppIconName {
+  if (value === "system") return "tools";
+  if (value === "insect_fish") return "fish";
+  if (value === "other") return "puzzle";
+  return "sprout";
 }
 
 export function isPlantArchiveCategory(value?: string | null) {

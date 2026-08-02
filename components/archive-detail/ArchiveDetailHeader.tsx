@@ -13,6 +13,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { ArchiveDetailArchive, ArchiveMode } from "@/lib/archive-detail-types";
+import AppIcon from "@/components/ui/AppIcon";
 
 export default function ArchiveDetailHeader({
   mode,
@@ -195,7 +196,7 @@ export default function ArchiveDetailHeader({
           href={`/user/${archive.user_id}`}
           style={{ fontSize: 14, color: "#4CAF50", textDecoration: "none" }}
         >
-          去 TA 的空间 →
+          去 TA 的空间 <AppIcon name="arrow-right" size={14} />
         </a>
       ) : null}
     </>

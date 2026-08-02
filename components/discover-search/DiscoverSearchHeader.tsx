@@ -1,3 +1,4 @@
+import AppIcon from "@/components/ui/AppIcon";
 export default function DiscoverSearchHeader() {
   return (
     <header
@@ -24,7 +25,7 @@ export default function DiscoverSearchHeader() {
           whiteSpace: "nowrap",
         }}
       >
-        ← 返回发现
+        <AppIcon name="arrow-left" size={14} /> 返回发现
       </a>
     </header>
   );

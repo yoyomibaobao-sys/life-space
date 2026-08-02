@@ -8,12 +8,12 @@ export function formatArchiveDate(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("zh-CN", {
-    month: "numeric",
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  };
+  if (date.getFullYear() !== new Date().getFullYear()) options.year = "numeric";
+  return date.toLocaleDateString("en-US", options);
 }
 
 export function getArchiveSortTime(

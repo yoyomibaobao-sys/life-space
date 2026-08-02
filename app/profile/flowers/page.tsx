@@ -8,6 +8,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { formatProfileDateTime } from "@/lib/user-profile-shared";
+import AppIcon, { type AppIconName } from "@/components/ui/AppIcon";
 
 type FlowerSourceItem = {
   id: string;
@@ -167,7 +168,7 @@ function ProfileFlowersContent() {
         </div>
 
         <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <StatPill label={tab === "received" ? "有效花朵" : "有效送花"} value={`🌸 ${activeCount}`} />
+          <StatPill label={tab === "received" ? "有效花朵" : "有效送花"} value={`${activeCount}`} icon="flower" />
           <StatPill label="当前列表" value={String(visibleItems.length)} />
         </div>
 
@@ -270,10 +271,12 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function StatPill({ label, value }: { label: string; value: string }) {
+function StatPill({ label, value, icon }: { label: string; value: string; icon?: AppIconName }) {
   return (
     <div style={{ border: "1px solid #e2ebdd", background: "#f9fcf7", borderRadius: 999, padding: "9px 14px", fontSize: 13, color: "#50614b" }}>
-      {label}：<span style={{ color: "#1f2a1f", fontWeight: 700 }}>{value}</span>
+      {label}：<span style={{ color: "#1f2a1f", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {icon ? <AppIcon name={icon} size={13} /> : null}{value}
+      </span>
     </div>
   );
 }

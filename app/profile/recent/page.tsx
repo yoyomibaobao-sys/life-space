@@ -12,6 +12,7 @@ import {
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import type { SupabaseUser } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import AppIcon from "@/components/ui/AppIcon";
 
 type RecentArchiveRow = {
   id: string;
@@ -124,7 +125,7 @@ export default function RecentBrowsePage() {
         <div style={topBarStyle}>
           <div>
             <Link href="/profile" style={backLinkStyle}>
-              ← 返回个人资料
+              <AppIcon name="arrow-left" size={14} /> 返回个人资料
             </Link>
             <h1 style={titleStyle}>最近浏览</h1>
             <div style={subtitleStyle}>最近访问过的项目记录页</div>

@@ -56,11 +56,11 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(followedCss, /\.body \{[\s\S]*?height: 88px/);
 
   assert.match(discoverCard, /className=\{styles\.imageStats\}/);
-  assert.ok(
-    discoverCard.indexOf("item.public_record_count") <
-      discoverCard.indexOf("{updateDate} 更新")
-  );
-  assert.doesNotMatch(discoverCard, /getProjectSystemName|species_name_snapshot/);
+  assert.match(discoverCard, /item\.public_record_count/);
+  assert.match(discoverCard, /durationLabel/);
+  assert.match(discoverCard, /className=\{styles\.imageTitle\}/);
+  assert.match(discoverCard, /formatCompactActivityTime/);
+  assert.doesNotMatch(discoverCard, /public_comment_count|view_count|getProjectSystemName|species_name_snapshot/);
   assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: stretch/);
   assert.match(discoverCss, /\.body \{[^}]*flex: 1/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);

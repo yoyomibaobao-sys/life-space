@@ -31,6 +31,7 @@ import {
   isStorageUploadMaintenance,
   STORAGE_UPLOAD_MAINTENANCE_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
+import AppIcon from "@/components/ui/AppIcon";
 
 type ArchiveOption = {
   id: string;
@@ -442,7 +443,7 @@ export default function EditMarketPostPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href="/market" style={backLinkStyle}>
-            ← 返回集市
+            <AppIcon name="arrow-left" size={14} /> 返回集市
           </Link>
           <section style={emptyStyle}>这条集市信息不存在或已不可见</section>
         </div>
@@ -455,7 +456,7 @@ export default function EditMarketPostPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href={`/market/${item.id}`} style={backLinkStyle}>
-            ← 返回集市详情
+            <AppIcon name="arrow-left" size={14} /> 返回集市详情
           </Link>
           <section style={emptyStyle}>只有发布者可以编辑这条集市信息。</section>
         </div>
@@ -467,7 +468,7 @@ export default function EditMarketPostPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href={`/market/${item.id}`} style={backLinkStyle}>
-          ← 返回集市详情
+          <AppIcon name="arrow-left" size={14} /> 返回集市详情
         </Link>
 
         <section style={panelStyle}>

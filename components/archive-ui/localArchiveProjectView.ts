@@ -13,12 +13,9 @@ function formatLocalDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "暂无";
 
-  return date.toLocaleString("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (date.getFullYear() !== new Date().getFullYear()) options.year = "numeric";
+  return date.toLocaleDateString("en-US", options);
 }
 
 function getOngoingDays(createdAt?: string | null) {
@@ -73,7 +70,7 @@ export function localArchiveToProjectView(
           alt: archive.title || "本地项目封面",
         }
       : null,
-    latestText: `${latestSummary} · 更新 ${updateDate}`,
+    latestText: `${latestSummary} · ${updateDate}`,
     visibilityLabel: "本地",
     visibilityTone: "neutral",
     mobilePrimaryStatsText: [
@@ -82,7 +79,6 @@ export function localArchiveToProjectView(
     ]
       .filter(Boolean)
       .join(" · "),
-    mobileSecondaryStatsText: "浏览 0 · 关注 0",
     activityText: [
       `记录 ${archive.record_count || 0}`,
       ongoingDays ? `已持续 ${ongoingDays} 天` : "",

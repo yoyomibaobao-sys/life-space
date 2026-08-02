@@ -13,6 +13,7 @@ import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
+import AppIcon from "@/components/ui/AppIcon";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -382,7 +383,7 @@ export default function UserSpacePage() {
             textDecoration: "none",
           }}
         >
-          去发现 →
+          去发现 <AppIcon name="arrow-right" size={14} />
         </Link>
       </section>
 
@@ -563,7 +564,7 @@ export default function UserSpacePage() {
                       }}
                     />
                   ) : (
-                    getArchiveCategoryIcon(archive.category)
+                    <AppIcon name={getArchiveCategoryIcon(archive.category)} size={26} strokeWidth={1.7} />
                   )}
                 </div>
 
@@ -698,7 +699,7 @@ export default function UserSpacePage() {
                   fontSize: 28,
                 }}
               >
-                🌱
+                <AppIcon name="leaf" size={28} />
               </div>
             )}
 
@@ -707,7 +708,7 @@ export default function UserSpacePage() {
             </div>
 
             <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>
-              Lv.{cardProfile.level || 1} · 🌸 {cardProfile.flower_count || 0}
+              Lv.{cardProfile.level || 1} · <AppIcon name="flower" size={13} /> {cardProfile.flower_count || 0}
             </div>
 
             <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>

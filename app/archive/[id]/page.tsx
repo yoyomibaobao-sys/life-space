@@ -76,6 +76,7 @@ import {
   limitRecordPhotoBatch,
   MAX_RECORD_PHOTOS_PER_ADD,
 } from "@/lib/record-photo-batches";
+import AppIcon from "@/components/ui/AppIcon";
 import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
@@ -1858,7 +1859,7 @@ saveRecentArchiveBrowse({
               href={mode === "owner" ? "/archive" : "/discover"}
               style={{ fontSize: 14, color: "#666", textDecoration: "none" }}
             >
-              {mode === "owner" ? "← 我的项目" : "← 返回发现"}
+              <AppIcon name="arrow-left" size={15} /> {mode === "owner" ? "我的项目" : "返回发现"}
             </Link>
           </div>
         ) : null}

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
+import AppIcon from "@/components/ui/AppIcon";
 
 type MobileArchiveTitleInfo = {
   title: string;
@@ -270,7 +271,7 @@ export default function Navbar() {
               aria-label="通知"
               title="通知"
             >
-              🔔
+              <AppIcon name="bell" size={18} />
             </Link>
 
             {isMobileDiscoverIndexPath(pathname) ? (
@@ -338,7 +339,7 @@ export default function Navbar() {
                   aria-label="更多账号操作"
                   style={mobileMeMoreButtonStyle}
                 >
-                  ⋯
+                  <AppIcon name="more-horizontal" size={18} />
                 </button>
                 {mobileMeMenuOpen ? (
                   <div style={mobileMeMenuStyle}>
@@ -365,7 +366,7 @@ export default function Navbar() {
                   }
                 }}
               >
-                ＋ {getMobileCreateLabel(pathname)}
+                <AppIcon name="plus" size={17} /> {getMobileCreateLabel(pathname)}
               </Link>
             ) : !user && shouldShowMobileLoginAction(pathname) ? (
               <Link href="/login" style={mobileLoginActionStyle}>
@@ -444,7 +445,7 @@ export default function Navbar() {
       {user ? (
         <div style={getUserAreaStyle(isCompact)}>
           <Link href="/notifications" style={notificationStyle} title="通知">
-            🔔
+            <AppIcon name="bell" size={18} />
             {unreadCount > 0 ? (
               <span style={notificationBadgeStyle}>
                 {unreadCount > 99 ? "99+" : unreadCount}
