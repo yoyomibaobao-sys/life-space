@@ -10,7 +10,7 @@ import {
   toLocalDateInputValue,
 } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
-import AppIcon from "@/components/ui/AppIcon";
+import UiIcon from "@/components/ui/UiIcon";
 
 type CycleDateUpdate = {
   startedAt: string;
@@ -155,7 +155,7 @@ export default function ArchiveCycleTimeline({
                       {cycle.status === "active" ? "进行中" : "已结束"}
                     </span>
                     <span style={cycleCountStyle}>{cycleRecords.length}条记录</span>
-                    <span aria-hidden="true" style={cycleChevronStyle}><AppIcon name={isExpanded ? "chevron-up" : "chevron-down"} size={15} /></span>
+                    <span aria-hidden="true" style={cycleChevronStyle}><UiIcon name={isExpanded ? "chevron-up" : "chevron-down"} size={15} /></span>
                   </button>
                   {canManage ? (
                     <div style={cycleActionGroupStyle}>
@@ -224,7 +224,7 @@ export default function ArchiveCycleTimeline({
               >
                 <span style={cycleTitleStyle}>{terminology.unassignedTitle}</span>
                 <span style={cycleCountStyle}>{ungroupedRecords.length}条</span>
-                <span aria-hidden="true" style={cycleChevronStyle}><AppIcon name={expanded.ungrouped ? "chevron-up" : "chevron-down"} size={15} /></span>
+                <span aria-hidden="true" style={cycleChevronStyle}><UiIcon name={expanded.ungrouped ? "chevron-up" : "chevron-down"} size={15} /></span>
               </button>
               {expanded.ungrouped ? (
                 <ArchiveTimeline mobileMode={mobileMode}>

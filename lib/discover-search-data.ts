@@ -1,5 +1,18 @@
 import { supabase } from "@/lib/supabase";
+import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
+import type {
+  ExperienceCardListItem,
+  ExperienceCardRow,
+} from "@/lib/experience-card-types";
 import { enrichDiscoverFeedItems } from "@/lib/discover-data";
+import { enrichDiscoveryProjectMedia } from "@/lib/discover-project-feed";
+import {
+  normalizeDiscoveryProjectFeedRow,
+} from "@/lib/discover-project-feed";
+import type {
+  DiscoveryProjectFeedItem,
+  DiscoveryProjectFeedRow,
+} from "@/lib/discover-project-types";
 import type { FeedItem } from "@/lib/discover-types";
 import {
   SEARCH_BATCH_SIZE,
@@ -13,6 +26,49 @@ import {
 } from "@/lib/region-shared";
 
 type IdRow = { id?: string | null; plant_id?: string | null; species_id?: string | null; record_id?: string | null };
+
+function includesSearchTerm(value: string | null | undefined, term: string) {
+  return String(value || "").toLocaleLowerCase().includes(term);
+}
+
+function matchesExperienceRegion(
+  item: ExperienceCardListItem,
+  filters: SearchFilters
+) {
+  const locationTerm = sanitizeOrSearchText(filters.locationQuery || "")
+    .toLocaleLowerCase();
+  if (locationTerm && !includesSearchTerm(item.authorRegion, locationTerm)) {
+    return false;
+  }
+
+  if (
+    filters.countryCode &&
+    filters.countryCode !== "OTHER" &&
+    item.authorCountryCode !== filters.countryCode
+  ) {
+    return false;
+  }
+  if (
+    filters.countryCode === "OTHER" &&
+    filters.countryName.trim() &&
+    !includesSearchTerm(item.authorCountryName, filters.countryName.toLocaleLowerCase())
+  ) {
+    return false;
+  }
+  if (
+    filters.region.trim() &&
+    !includesSearchTerm(item.authorRegionName, filters.region.toLocaleLowerCase())
+  ) {
+    return false;
+  }
+  if (
+    filters.city.trim() &&
+    !includesSearchTerm(item.authorCityName, filters.city.toLocaleLowerCase())
+  ) {
+    return false;
+  }
+  return true;
+}
 
 export async function findSpeciesIdsByNameTerm(nameTerm: string) {
   const term = sanitizeOrSearchText(nameTerm);
@@ -191,4 +247,114 @@ export async function fetchDiscoverSearchResults(filters: SearchFilters) {
 
   const enrichedItems = await enrichDiscoverFeedItems((data || []) as FeedItem[]);
   return [...enrichedItems].sort(compareArchiveDisplayOrder);
+}
+
+export async function fetchDiscoverProjectSearchResults(
+  filters: SearchFilters
+): Promise<DiscoveryProjectFeedItem[]> {
+  const textTerm = sanitizeOrSearchText(filters.textQuery || filters.name);
+  let userFilterIds: string[] | null = null;
+
+  if (!filters.locationQuery?.trim() && (
+    filters.countryCode ||
+    filters.countryName ||
+    filters.region ||
+    filters.city
+  )) {
+    userFilterIds = await findUserIdsByRegionFilters(supabase, {
+      countryCode: filters.countryCode,
+      countryName: filters.countryName,
+      regionName: filters.region,
+      cityName: filters.city,
+    });
+    if (userFilterIds.length === 0) return [];
+  }
+
+  let query = supabase
+    .from("discovery_project_feed_view")
+    .select("*")
+    .order("public_activity_at", { ascending: false, nullsFirst: false })
+    .order("archive_id", { ascending: false })
+    .limit(SEARCH_BATCH_SIZE);
+
+  if (filters.category !== "all") query = query.eq("category", filters.category);
+  if (userFilterIds?.length) query = query.in("owner_user_id", userFilterIds);
+  if (filters.locationQuery?.trim()) {
+    const locationTerm = sanitizeOrSearchText(filters.locationQuery);
+    query = query.ilike("profile_region", `%${locationTerm}%`);
+  }
+  if (textTerm) {
+    query = query.or(
+      [
+        `archive_title.ilike.%${textTerm}%`,
+        `system_name.ilike.%${textTerm}%`,
+        `species_name_snapshot.ilike.%${textTerm}%`,
+        `profile_display_name.ilike.%${textTerm}%`,
+      ].join(",")
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("discover project search error:", error);
+    return [];
+  }
+
+  const normalized = ((data || []) as unknown as DiscoveryProjectFeedRow[]).map(
+    normalizeDiscoveryProjectFeedRow
+  );
+  return enrichDiscoveryProjectMedia(normalized);
+}
+
+export async function fetchDiscoverExperienceCardSearchResults(
+  filters: SearchFilters
+): Promise<ExperienceCardListItem[]> {
+  const { data, error } = await supabase
+    .from("experience_cards")
+    .select("*")
+    .eq("status", "published")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .order("id", { ascending: false })
+    .limit(SEARCH_BATCH_SIZE);
+
+  if (error) {
+    console.error("discover experience card search error:", error);
+    return [];
+  }
+
+  const rows = (data || []) as ExperienceCardRow[];
+  const publicStates = await Promise.all(
+    rows.map(async (row) => {
+      const { data: publicData } = await supabase.rpc(
+        "is_experience_card_public",
+        { p_card_id: row.id }
+      );
+      return Boolean(
+        Array.isArray(publicData) ? publicData[0] : publicData
+      );
+    })
+  );
+  const items = await hydrateExperienceCardListItems(
+    rows.filter((_row, index) => publicStates[index])
+  );
+  const textTerm = sanitizeOrSearchText(filters.textQuery || filters.name)
+    .toLocaleLowerCase();
+
+  return items.filter((item) => {
+    if (
+      filters.category !== "all" &&
+      item.archiveCategory !== filters.category
+    ) {
+      return false;
+    }
+    if (!matchesExperienceRegion(item, filters)) return false;
+    if (!textTerm) return true;
+
+    return [
+      item.title,
+      item.archiveTitle,
+      item.systemName,
+      item.authorName,
+    ].some((value) => includesSearchTerm(value, textTerm));
+  });
 }

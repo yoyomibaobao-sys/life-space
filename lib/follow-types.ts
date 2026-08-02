@@ -1,3 +1,5 @@
+import type { UiIconName } from "@/components/ui/UiIcon";
+
 export type TabKey = "projects" | "users";
 export type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
 
@@ -65,7 +67,7 @@ export type FollowProjectCard = {
   ownerName: string;
   ownerAvatarUrl: string | null;
   categoryLabel: string;
-  categoryIcon: string;
+  categoryIcon: UiIconName;
   subTagName: string;
   groupTagName: string;
   latestNote: string;
@@ -85,7 +87,7 @@ export type FollowUserPublicArchiveCard = {
   title: string;
   displaySystemName: string;
   categoryLabel: string;
-  categoryIcon: string;
+  categoryIcon: UiIconName;
   latestRecordTime: string | null;
   recordCount: number;
   durationDays: number;

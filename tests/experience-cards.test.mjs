@@ -124,7 +124,11 @@ test("the experience-card UI covers image selection, preview, publication, and s
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);
   assert.match(detail, /来源记录已经变化/);
-  assert.doesNotMatch(detail, /ExperienceCardTimeline/);
+  assert.match(detail, /ExperienceCardTimeline/);
+  assert.ok(
+    detail.indexOf("<ExperienceCardVideoPanel") <
+      detail.indexOf("<ExperienceCardTimeline")
+  );
   assert.match(detail, /detail\.archive\.system_name/);
   assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
   assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
@@ -132,9 +136,11 @@ test("the experience-card UI covers image selection, preview, publication, and s
   assert.match(detail, /<span style=\{sourceLabelStyle\}>项目<\/span>/);
   assert.match(detail, /<span style=\{sourceLabelStyle\}>系统名<\/span>/);
   assert.match(detail, /if \(category === "plant" && speciesId\) return `\/plant\/\$\{speciesId\}`/);
+  assert.match(detail, /params\.set\("type", "projects"\)/);
   assert.match(detail, /return `\/discover\/search\?\$\{params\.toString\(\)\}`/);
   assert.match(detail, /detail\.archive\.title/);
   assert.match(list, /我的经验卡/);
+  assert.match(list, /ExperienceCardListCard/);
   assert.doesNotMatch(archiveHeader, /生成经验卡/);
 });
 
@@ -167,8 +173,29 @@ test("experience cards have a persistent personal-space entry", async () => {
   assert.match(archiveCards, /aria-label="项目经验卡"/);
   assert.match(archiveCards, /<div style=\{eyebrowStyle\}>经验卡<\/div>/);
   assert.match(archiveCards, /onCountChange\?\.\(rows\.length\)/);
+  assert.match(archiveCards, /hydrateExperienceCardListItems\(rows\)/);
+  assert.match(archiveCards, /ExperienceCardListCard/);
   assert.match(archivePage, /经验卡（\{experienceCardCount\}）/);
   assert.doesNotMatch(archivePage, /!isMobileViewport && !isOwner/);
+});
+
+test("experience card lists use a shared cover with source and archive fallbacks", async () => {
+  const [listCard, loader, timeline, plantDetail] = await Promise.all([
+    source("components/experience-card/ExperienceCardListCard.tsx"),
+    source("lib/experience-cards.ts"),
+    source("components/experience-card/ExperienceCardTimeline.tsx"),
+    source("app/plant/[id]/page.tsx"),
+  ]);
+
+  assert.match(listCard, /item\.coverUrl/);
+  assert.match(listCard, /alt=\{`\$\{item\.title\}封面`\}/);
+  assert.match(loader, /row\.cover_media_id/);
+  assert.match(loader, /mediaByRecord\.get\(recordId\)\?\.\[0\]/);
+  assert.match(loader, /archive\.cover_thumb_path/);
+  assert.match(timeline, /thumbWrapStyle/);
+  assert.match(timeline, /href=\{`\/archive\/\$\{archive\.id\}\?record=\$\{record\.id\}`\}/);
+  assert.match(plantDetail, /hydrateExperienceCardListItems\(cardRows\)/);
+  assert.match(plantDetail, /<ExperienceCardListCard/);
 });
 
 
@@ -283,6 +310,15 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
   assert.match(guide, /removeRecentSearch/);
   assert.match(guide, /clearRecentSearches/);
   assert.match(guide, /window\.sessionStorage\.setItem/);
+  assert.match(
+    guide,
+    /getEntriesByType\(\s*"navigation"\s*\)[\s\S]*?navigationEntry\.type !== "reload"/
+  );
+  assert.match(guide, /hasCheckedInitialPlantNavigation/);
+  assert.match(
+    guide,
+    /initialUrl\.pathname === window\.location\.pathname[\s\S]*?initialUrl\.search === window\.location\.search/
+  );
   assert.match(guide, /pendingScrollYRef/);
   assert.match(guide, /role="dialog"/);
   assert.match(guide, /aria-label="返回植物指引"/);
@@ -293,18 +329,19 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
   assert.doesNotMatch(plantHero, /disabled=\{planAdded \|\|/);
   assert.doesNotMatch(plantHero, /disabled=\{interestAdded \|\|/);
   assert.ok(
-    discoverCard.indexOf('className={styles.imageTitle}') <
+    discoverCard.indexOf('className={styles.title}') <
       discoverCard.indexOf('className={styles.body}')
   );
-  assert.match(discoverCard, /formatCompactActivityTime/);
-  assert.match(discoverCard, /项目刚刚开始/);
-  assert.doesNotMatch(discoverCard, /public_comment_count|view_count/);
   assert.match(discoverStyles, /\.ownerRow/);
-  assert.match(discoverStyles, /\.imageTitle/);
+  assert.match(discoverStyles, /\.imageTitleArea/);
 });
 
 test("project details expose details, archive, experience cards, and growth line as peer tabs on every viewport", async () => {
-  const archiveDetail = await source("app/archive/[id]/page.tsx");
+  const [archiveDetail, archiveHeader, headerView] = await Promise.all([
+    source("app/archive/[id]/page.tsx"),
+    source("components/archive-detail/ArchiveDetailHeader.tsx"),
+    source("components/archive-ui/ArchiveDetailHeaderView.tsx"),
+  ]);
 
   assert.match(
     archiveDetail,
@@ -319,6 +356,8 @@ test("project details expose details, archive, experience cards, and growth line
   assert.match(archiveDetail, /repeat\(4, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(archiveDetail, /className="mobile-app-grid-only"/);
   assert.match(archiveDetail, /onCountChange=\{setExperienceCardCount\}/);
+  assert.match(archiveHeader, /profileAlwaysOpen/);
+  assert.match(headerView, /profileAlwaysOpen \|\| profileOpen/);
 });
 
 test("personal space project page has a direct My Experience Cards entry", async () => {

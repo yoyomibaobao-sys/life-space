@@ -291,6 +291,20 @@ export default function CloudTrashPage() {
             const itemBusy = actionKey?.endsWith(item.trashEntryId) === true;
             return (
               <article key={item.trashEntryId} style={itemStyle}>
+                <div style={previewStyle}>
+                  {item.previewUrl ? (
+                    <img
+                      src={item.previewUrl}
+                      alt={`${item.title}预览`}
+                      loading="lazy"
+                      style={previewImageStyle}
+                    />
+                  ) : (
+                    <span style={previewPlaceholderStyle} aria-hidden="true">
+                      {item.type === "archive" ? "项目" : item.type === "record" ? "记录" : "照片"}
+                    </span>
+                  )}
+                </div>
                 <div style={itemContentStyle}>
                   <div style={itemMetaRowStyle}>
                     <span style={typeChipStyle}>{getTypeLabel(item.type)}</span>
@@ -531,6 +545,31 @@ const itemStyle: CSSProperties = {
   borderRadius: 14,
   background: "#fff",
   flexWrap: "wrap",
+};
+const previewStyle: CSSProperties = {
+  width: 92,
+  height: 76,
+  flex: "0 0 92px",
+  overflow: "hidden",
+  borderRadius: 10,
+  background: "linear-gradient(145deg, #eef4eb, #f7f3e8)",
+};
+const previewImageStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  display: "block",
+  objectFit: "cover",
+};
+const previewPlaceholderStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  display: "flex",
+  alignItems: "flex-end",
+  padding: 9,
+  boxSizing: "border-box",
+  color: "#778572",
+  fontSize: 12,
+  fontWeight: 800,
 };
 const itemContentStyle: CSSProperties = { minWidth: 180, flex: "1 1 320px" };
 const itemMetaRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };

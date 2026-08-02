@@ -7,12 +7,14 @@ import { supabase } from "@/lib/supabase";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
-import AppIcon from "@/components/ui/AppIcon";
 
 type TabKey = "projects" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -89,7 +91,7 @@ type FollowProjectCard = {
   ownerName: string;
   ownerAvatarUrl: string | null;
   categoryLabel: string;
-  categoryIcon: string;
+  categoryIcon: UiIconName;
   subTagName: string;
   groupTagName: string;
   latestNote: string;
@@ -521,15 +523,13 @@ export default function FollowPage() {
                 if (item.subTagName) meta.push(item.subTagName);
                 if (item.groupTagName) meta.push(item.groupTagName);
 
-                const latestRecordText = `最新：${item.latestNote} · ${formatDateTime(item.latestRecordTime)}`;
-
                 return (
                   <article key={item.id} style={cardStyle}>
                     <div style={coverStyle}>
                       {item.coverUrl ? (
                         <img src={item.coverUrl} alt="" style={coverImageStyle} />
                       ) : (
-                        <span style={{ fontSize: 34 }}>{item.categoryIcon}</span>
+                        <UiIcon name={item.categoryIcon} size={32} strokeWidth={1.6} />
                       )}
                     </div>
 
@@ -537,7 +537,7 @@ export default function FollowPage() {
                       <div style={cardInlineTitleRowStyle}>
                         <span style={projectInlineMetaStyle}>{item.categoryLabel} ·</span>
                         <span style={projectTitleInlineStyle}>{item.title}</span>
-                        <span style={projectStatsPillStyle}>{item.recordCount}条 · 持续{item.durationDays}天</span>
+                        <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} />
                         {item.statusKind !== "normal" ? (
                           <StatusBadge kind={item.statusKind}>{item.statusLabel}</StatusBadge>
                         ) : null}
@@ -545,7 +545,15 @@ export default function FollowPage() {
 
                       <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || "关注项目"}</div>
 
-                      <div style={noteLineStyle}>{latestRecordText}</div>
+                      <div style={noteLineStyle}>
+                        {item.latestNote}
+                        {item.latestRecordTime ? (
+                          <>
+                            <span aria-hidden="true"> · </span>
+                            <CompactActivityTime value={item.latestRecordTime} />
+                          </>
+                        ) : null}
+                      </div>
 
                       <div style={buttonRowStyle}>
                         <button
@@ -587,7 +595,7 @@ export default function FollowPage() {
                   {item.avatarUrl ? (
                     <img src={item.avatarUrl} alt="" style={userAvatarStyle} />
                   ) : (
-                    <div style={userAvatarFallbackStyle}><AppIcon name="leaf" size={24} /></div>
+                    <div style={userAvatarFallbackStyle}><UiIcon name="sprout" size={22} /></div>
                   )}
                 </div>
 
@@ -604,7 +612,10 @@ export default function FollowPage() {
                   </div>
 
                   <div style={statsLineStyle}>
-                    {formatDateTime(item.latestRecordTime)}更新 · 共{item.publicArchiveCount}个公开项目
+                    <ProjectMetaLine
+                      projectCount={item.publicArchiveCount}
+                      updatedAt={item.latestRecordTime}
+                    />
                   </div>
 
                   <div style={buttonRowStyle}>

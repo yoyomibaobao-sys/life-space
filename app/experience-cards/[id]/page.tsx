@@ -5,6 +5,8 @@ import { use, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
+import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
+import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import {
   deleteExperienceCard,
@@ -16,7 +18,6 @@ import {
 } from "@/lib/experience-cards";
 import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
-import AppIcon from "@/components/ui/AppIcon";
 
 type PendingAction = "publish" | "unpublish" | "delete" | null;
 
@@ -147,7 +148,8 @@ export default function ExperienceCardPage({
           href={isOwner ? "/experience-cards" : "/discover"}
           style={backLinkStyle}
         >
-          <AppIcon name="arrow-left" size={15} /> {isOwner ? "我的经验卡" : "返回发现"}
+          <UiIcon name="arrow-left" size={15} />
+          {isOwner ? " 我的经验卡" : " 返回发现"}
         </Link>
         {isOwner ? (
           <Link
@@ -160,6 +162,17 @@ export default function ExperienceCardPage({
       </header>
 
       <ExperienceCardVideoPanel detail={detail} readOnly={!isOwner} />
+
+      <section style={timelineSectionStyle}>
+        <div style={timelineHeadingStyle}>
+          <strong>来源记录</strong>
+          <span>{detail.records.length} 条 · 按原始时间排列</span>
+        </div>
+        <ExperienceCardTimeline
+          archive={detail.archive}
+          records={detail.records}
+        />
+      </section>
 
       <article style={cardShellStyle}>
         <div style={introStyle}>
@@ -188,7 +201,7 @@ export default function ExperienceCardPage({
             >
               <span style={sourceLabelStyle}>用户</span>
               <span style={sourceValueStyle}>{authorName}</span>
-              <AppIcon name="arrow-right" size={14} />
+              <UiIcon name="arrow-right" size={14} />
             </Link>
             <Link
               href={`/archive/${detail.archive.id}`}
@@ -198,13 +211,13 @@ export default function ExperienceCardPage({
               <span style={sourceValueStyle}>
                 {detail.archive.title || "查看项目"}
               </span>
-              <AppIcon name="arrow-right" size={14} />
+              <UiIcon name="arrow-right" size={14} />
             </Link>
             {systemNameHref ? (
               <Link href={systemNameHref} style={sourceLinkStyle}>
                 <span style={sourceLabelStyle}>系统名</span>
                 <span style={sourceValueStyle}>{systemName}</span>
-                <AppIcon name="arrow-right" size={14} />
+                <UiIcon name="arrow-right" size={14} />
               </Link>
             ) : (
               <span style={sourceMissingStyle}>
@@ -345,6 +358,7 @@ function getSystemNameHref({
   if (category === "plant" && speciesId) return `/plant/${speciesId}`;
 
   const params = new URLSearchParams();
+  params.set("type", "projects");
   if (
     category === "plant" ||
     category === "system" ||
@@ -381,6 +395,25 @@ const backLinkStyle: CSSProperties = {
 const cardShellStyle: CSSProperties = {
   borderBottom: "1px solid #e2e9df",
   marginBottom: 14,
+};
+
+const timelineSectionStyle: CSSProperties = {
+  margin: "2px 0 14px",
+  padding: "13px 12px 2px",
+  border: "1px solid #e3e9df",
+  borderRadius: 15,
+  background: "#fbfdf9",
+};
+
+const timelineHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 12,
+  color: "#52624e",
+  fontSize: 12,
+  flexWrap: "wrap",
 };
 
 const introStyle: CSSProperties = {

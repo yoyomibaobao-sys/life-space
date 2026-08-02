@@ -1,16 +1,6 @@
 import Link from "next/link";
 import type { PlantRelatedArchiveItem } from "@/lib/plant-detail-types";
-
-function formatDate(value?: string | null) {
-  if (!value) return "暂无公开记录";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无公开记录";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
-}
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 
 function getHelpLabel(status?: string | null) {
   if (status === "open") return "求助中";
@@ -103,9 +93,14 @@ export default function PlantRelatedArchives({
                     {archive.species_name_snapshot || archive.system_name || "未填写植物名"}
                   </div>
                   <div style={{ marginTop: 8, color: "#6a7564", fontSize: 13 }}>
-                    {visibilityLabel} · 公开记录 {Number(archive.public_record_count || 0)} · 最近 {formatDate(archive.last_public_record_time)}
+                    {visibilityLabel}
                     {helpLabel ? ` · ${helpLabel}` : ""}
                   </div>
+                  <ProjectMetaLine
+                    recordCount={Number(archive.public_record_count || 0)}
+                    updatedAt={archive.last_public_record_time}
+                    style={{ marginTop: 7 }}
+                  />
                   <div
                     style={{
                       marginTop: 6,

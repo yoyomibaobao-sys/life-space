@@ -380,7 +380,7 @@ function NewArchiveContent() {
               }}
               emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
               emptyText="没有找到匹配植物"
-              customActionLabel={(inputValue) => `+ 新增候选植物：${inputValue}`}
+              customActionLabel={(inputValue) => `新增候选植物：${inputValue}`}
             />
             {pendingSpeciesName ? (
               <span style={archiveNewProjectHelperTextStyle}>
@@ -431,7 +431,7 @@ function NewArchiveContent() {
               }}
               emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
               emptyText="没有找到匹配名称"
-              customActionLabel={(inputValue) => `+ 新增为系统名：${inputValue}`}
+              customActionLabel={(inputValue) => `新增为系统名：${inputValue}`}
             />
           </>
         )

@@ -1,5 +1,9 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import type { SearchCategory, SearchFilters } from "@/lib/discover-search-types";
+import type {
+  DiscoverSearchKind,
+  SearchCategory,
+  SearchFilters,
+} from "@/lib/discover-search-types";
 import { commonSearchTags } from "@/lib/discover-search-types";
 import {
   countryOptions,
@@ -9,6 +13,7 @@ import {
 } from "@/lib/region-shared";
 
 type Props = {
+  searchKind: DiscoverSearchKind;
   filters: SearchFilters;
   onFiltersChange: (next: SearchFilters) => void;
   onSubmit: () => void;
@@ -16,12 +21,26 @@ type Props = {
 };
 
 export default function DiscoverSearchForm({
+  searchKind,
   filters,
   onFiltersChange,
   onSubmit,
   onReset,
 }: Props) {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const isRecordSearch = searchKind === "records";
+  const keywordLabel =
+    searchKind === "projects"
+      ? "项目搜索"
+      : searchKind === "experience"
+        ? "经验卡搜索"
+        : "记录搜索";
+  const keywordPlaceholder =
+    searchKind === "projects"
+      ? "项目名 / 系统名 / 用户名"
+      : searchKind === "experience"
+        ? "经验卡标题 / 项目名 / 系统名 / 用户名"
+        : "项目名 / 记录内容 / 系统名";
   const hasCustomTag =
     filters.tag.trim() && !commonSearchTags.includes(filters.tag.trim() as (typeof commonSearchTags)[number]);
 
@@ -73,7 +92,7 @@ export default function DiscoverSearchForm({
           </label>
 
           <label style={fieldLabelStyle}>
-            内容搜索
+            {keywordLabel}
             <input
               value={filters.textQuery || ""}
               onChange={(event) =>
@@ -84,7 +103,7 @@ export default function DiscoverSearchForm({
                   speciesId: null,
                 })
               }
-              placeholder="项目名 / 记录内容 / 相关文字"
+              placeholder={keywordPlaceholder}
               style={inputStyle}
             />
           </label>
@@ -104,33 +123,37 @@ export default function DiscoverSearchForm({
             </select>
           </label>
 
-          <label style={fieldLabelStyle}>
-            标签
-            <select
-              value={filters.tag}
-              onChange={(event) => patch({ tag: event.target.value })}
-              style={inputStyle}
-            >
-              <option value="">全部标签</option>
-              {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
-              {commonSearchTags.map((tag) => (
-                <option key={tag} value={tag}>
-                  {tag}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isRecordSearch ? (
+            <label style={fieldLabelStyle}>
+              标签
+              <select
+                value={filters.tag}
+                onChange={(event) => patch({ tag: event.target.value })}
+                style={inputStyle}
+              >
+                <option value="">全部标签</option>
+                {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
+                {commonSearchTags.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         <div style={mobileActionsStyle}>
-          <label style={mobileHelpOnlyStyle}>
-            <input
-              type="checkbox"
-              checked={filters.helpOnly}
-              onChange={(event) => patch({ helpOnly: event.target.checked })}
-            />
-            只看求助
-          </label>
+          {isRecordSearch ? (
+            <label style={mobileHelpOnlyStyle}>
+              <input
+                type="checkbox"
+                checked={filters.helpOnly}
+                onChange={(event) => patch({ helpOnly: event.target.checked })}
+              />
+              只看求助
+            </label>
+          ) : <span />}
 
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={onReset} style={secondaryButtonStyle}>
@@ -164,7 +187,9 @@ export default function DiscoverSearchForm({
         style={{
           display: "grid",
           gridTemplateColumns:
-            "minmax(124px, 0.9fr) minmax(130px, 1fr) minmax(124px, 0.9fr) minmax(96px, 0.8fr) minmax(130px, 1.1fr) minmax(108px, 0.9fr) minmax(150px, 1.25fr)",
+            isRecordSearch
+              ? "minmax(124px, 0.9fr) minmax(130px, 1fr) minmax(124px, 0.9fr) minmax(96px, 0.8fr) minmax(130px, 1.1fr) minmax(108px, 0.9fr) minmax(150px, 1.25fr)"
+              : "minmax(124px, 1fr) minmax(140px, 1.1fr) minmax(124px, 1fr) minmax(110px, 0.8fr) minmax(240px, 1.8fr)",
           gap: 8,
           overflowX: "auto",
         }}
@@ -251,50 +276,56 @@ export default function DiscoverSearchForm({
         </label>
 
         <label style={fieldLabelStyle}>
-          名称
+          {keywordLabel}
           <input
             value={filters.name}
             onChange={(e) => patch({ name: e.target.value, speciesId: filters.speciesId ? null : filters.speciesId })}
-            placeholder="项目名 / 植物名 / 具体名称"
+            placeholder={keywordPlaceholder}
             style={inputStyle}
           />
         </label>
 
-        <label style={fieldLabelStyle}>
-          标签
-          <select
-            value={filters.tag}
-            onChange={(e) => patch({ tag: e.target.value })}
-            style={inputStyle}
-          >
-            <option value="">全部标签</option>
-            {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
-            {commonSearchTags.map((tag) => (
-              <option key={tag} value={tag}>{tag}</option>
-            ))}
-          </select>
-        </label>
+        {isRecordSearch ? (
+          <>
+            <label style={fieldLabelStyle}>
+              标签
+              <select
+                value={filters.tag}
+                onChange={(e) => patch({ tag: e.target.value })}
+                style={inputStyle}
+              >
+                <option value="">全部标签</option>
+                {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
+                {commonSearchTags.map((tag) => (
+                  <option key={tag} value={tag}>{tag}</option>
+                ))}
+              </select>
+            </label>
 
-        <label style={fieldLabelStyle}>
-          内容
-          <input
-            value={filters.content}
-            onChange={(e) => patch({ content: e.target.value })}
-            placeholder="记录内容"
-            style={inputStyle}
-          />
-        </label>
+            <label style={fieldLabelStyle}>
+              内容
+              <input
+                value={filters.content}
+                onChange={(e) => patch({ content: e.target.value })}
+                placeholder="记录内容"
+                style={inputStyle}
+              />
+            </label>
+          </>
+        ) : null}
       </div>
 
       <div style={{ marginTop: 8, fontSize: 12, color: "#6f7f6f", lineHeight: 1.6 }}>
-        按地区匹配公开记录
+        按地区匹配公开{searchKind === "projects" ? "项目" : searchKind === "experience" ? "经验卡" : "记录"}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374737", cursor: "pointer" }}>
-          <input type="checkbox" checked={filters.helpOnly} onChange={(e) => patch({ helpOnly: e.target.checked })} />
-          只看求助
-        </label>
+        {isRecordSearch ? (
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374737", cursor: "pointer" }}>
+            <input type="checkbox" checked={filters.helpOnly} onChange={(e) => patch({ helpOnly: e.target.checked })} />
+            只看求助
+          </label>
+        ) : <span />}
 
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" onClick={onReset} style={secondaryButtonStyle}>重置</button>

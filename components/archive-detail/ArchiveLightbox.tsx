@@ -8,7 +8,7 @@ import {
   APP_STATUS_BAR_LIGHT,
   setAppStatusBarTheme,
 } from "@/components/StatusBarTheme";
-import AppIcon from "@/components/ui/AppIcon";
+import UiIcon from "@/components/ui/UiIcon";
 
 type PanOffset = {
   x: number;
@@ -423,7 +423,7 @@ export default function ArchiveLightbox({
                   aria-label="图片更多操作"
                   style={mobileLightboxMoreButtonStyle}
                 >
-                  <AppIcon name="more-horizontal" size={18} />
+                  <UiIcon name="more" size={20} />
                 </button>
               ) : null}
               {mobileMenuOpen && onDeleteCurrentImage ? (
@@ -575,7 +575,7 @@ export default function ArchiveLightbox({
         aria-label="上一张"
         style={navButtonStyle("left")}
       >
-        <AppIcon name="chevron-left" size={24} />
+        <UiIcon name="chevron-left" size={26} />
       </button>
 
       <div
@@ -635,7 +635,7 @@ export default function ArchiveLightbox({
         aria-label="下一张"
         style={navButtonStyle("right")}
       >
-        <AppIcon name="chevron-right" size={24} />
+        <UiIcon name="chevron-right" size={26} />
       </button>
 
       {!isMobileViewport ? (
@@ -662,7 +662,7 @@ export default function ArchiveLightbox({
             cursor: "pointer",
           }}
         >
-          <AppIcon name="close" size={20} />
+          <UiIcon name="close" size={24} />
         </button>
       ) : null}
 

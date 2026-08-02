@@ -5,10 +5,38 @@ import type {
   ExperienceCardAuthor,
   ExperienceCardDetail,
   ExperienceCardMedia,
+  ExperienceCardListItem,
   ExperienceCardRow,
   ExperienceCardSaveInput,
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
+
+type ExperienceCardListArchiveRow = {
+  id: string;
+  title: string | null;
+  category: string | null;
+  system_name: string | null;
+  species_name_snapshot: string | null;
+  cover_image_url: string | null;
+  cover_image_path: string | null;
+  cover_thumb_url: string | null;
+  cover_thumb_path: string | null;
+};
+
+type ExperienceCardListProfileRow = {
+  id: string;
+  username: string | null;
+  avatar_url: string | null;
+  country_code: string | null;
+  country_name: string | null;
+  region_name: string | null;
+  city_name: string | null;
+};
+
+type ExperienceCardListRelationRow = {
+  card_id: string;
+  record_id: string;
+};
 
 const CARD_RECORD_SELECT = [
   "id",
@@ -52,6 +80,129 @@ export function formatExperienceCardDate(value?: string | null) {
     year: "numeric",
     month: "numeric",
     day: "numeric",
+  });
+}
+
+function joinExperienceCardRegion(profile?: ExperienceCardListProfileRow) {
+  return [profile?.country_name, profile?.region_name, profile?.city_name]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export async function hydrateExperienceCardListItems(
+  rows: ExperienceCardRow[]
+): Promise<ExperienceCardListItem[]> {
+  if (rows.length === 0) return [];
+
+  const archiveIds = Array.from(new Set(rows.map((row) => row.archive_id)));
+  const authorIds = Array.from(new Set(rows.map((row) => row.user_id)));
+  const cardIds = rows.map((row) => row.id);
+
+  const [archiveResult, profileResult, relationResult] = await Promise.all([
+    supabase
+      .from("archives")
+      .select(
+        "id, title, category, system_name, species_name_snapshot, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
+      )
+      .in("id", archiveIds),
+    supabase
+      .from("public_profiles")
+      .select(
+        "id, username, avatar_url, country_code, country_name, region_name, city_name"
+      )
+      .in("id", authorIds),
+    supabase
+      .from("experience_card_records")
+      .select("card_id, record_id")
+      .in("card_id", cardIds),
+  ]);
+
+  const archives = (archiveResult.data || []) as ExperienceCardListArchiveRow[];
+  const profiles = (profileResult.data || []) as ExperienceCardListProfileRow[];
+  const relations = (relationResult.data || []) as ExperienceCardListRelationRow[];
+  const archiveById = new Map(archives.map((archive) => [archive.id, archive]));
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const recordIds = Array.from(new Set(relations.map((row) => row.record_id)));
+  const mediaByRecord = new Map<string, ExperienceCardMedia[]>();
+
+  if (recordIds.length > 0) {
+    const { data: mediaData } = await supabase
+      .from("media")
+      .select(CARD_MEDIA_SELECT)
+      .in("record_id", recordIds)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    const mediaRows = await attachMediaDisplayUrls(
+      supabase,
+      (mediaData || []) as unknown as ExperienceCardMedia[]
+    );
+
+    mediaRows.forEach((media) => {
+      const list = mediaByRecord.get(media.record_id) || [];
+      list.push(media);
+      mediaByRecord.set(media.record_id, list);
+    });
+  }
+
+  const archiveCoverRows = await attachMediaDisplayUrls(
+    supabase,
+    archives.map((archive) => ({
+      id: archive.id,
+      url: archive.cover_image_url,
+      storage_path: archive.cover_image_path,
+      thumb_url: archive.cover_thumb_url,
+      thumb_path: archive.cover_thumb_path,
+    }))
+  );
+  const archiveCoverById = new Map(
+    archiveCoverRows.map((archive) => [
+      archive.id,
+      archive.display_thumb_url || archive.display_url || null,
+    ])
+  );
+  const recordIdsByCard = new Map<string, string[]>();
+  relations.forEach((relation) => {
+    const list = recordIdsByCard.get(relation.card_id) || [];
+    list.push(relation.record_id);
+    recordIdsByCard.set(relation.card_id, list);
+  });
+
+  return rows.map((row) => {
+    const archive = archiveById.get(row.archive_id);
+    const profile = profileById.get(row.user_id);
+    const relatedRecordIds = recordIdsByCard.get(row.id) || [];
+    const relatedMedia = relatedRecordIds.flatMap(
+      (recordId) => mediaByRecord.get(recordId) || []
+    );
+    const preferredCover = row.cover_media_id
+      ? relatedMedia.find((media) => media.id === row.cover_media_id)
+      : null;
+    const firstSourceCover = relatedRecordIds
+      .map((recordId) => mediaByRecord.get(recordId)?.[0])
+      .find(Boolean);
+    const cover = preferredCover || firstSourceCover;
+
+    return {
+      ...row,
+      archiveTitle: archive?.title?.trim() || "来源项目已删除",
+      archiveCategory: archive?.category || null,
+      systemName:
+        archive?.system_name?.trim() ||
+        archive?.species_name_snapshot?.trim() ||
+        null,
+      coverUrl:
+        cover?.display_thumb_url ||
+        cover?.display_url ||
+        archiveCoverById.get(row.archive_id) ||
+        null,
+      authorName: profile?.username?.trim() || "用户",
+      authorAvatarUrl: profile?.avatar_url || null,
+      authorRegion: joinExperienceCardRegion(profile),
+      authorCountryCode: profile?.country_code || null,
+      authorCountryName: profile?.country_name || null,
+      authorRegionName: profile?.region_name || null,
+      authorCityName: profile?.city_name || null,
+    };
   });
 }
 

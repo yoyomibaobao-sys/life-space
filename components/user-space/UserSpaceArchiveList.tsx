@@ -9,9 +9,11 @@ import {
   helpBadgeStyle,
   typeBadgeStyle,
 } from "@/components/user-space/UserSpaceShared";
-import { formatDate, getGroupTagName, getSubTagName } from "@/lib/user-space-utils";
+import { getGroupTagName, getSubTagName } from "@/lib/user-space-utils";
 import { getArchiveDisplayName } from "@/lib/social-space-shared";
-import AppIcon from "@/components/ui/AppIcon";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   archives: UserSpaceArchive[];
@@ -64,12 +66,7 @@ export default function UserSpaceArchiveList({
         const isEnded = archive.status === "ended";
         const hasHelp = stat?.hasHelp;
 
-        const metaItems = [
-          subTagName,
-          groupTagName,
-          `共 ${stat?.count || archive.record_count || 0} 条记录`,
-          `浏览 ${archive.view_count || 0} 次`,
-        ].filter(Boolean);
+        const metaItems = [subTagName, groupTagName].filter(Boolean);
 
         return (
           <article
@@ -113,7 +110,7 @@ export default function UserSpaceArchiveList({
                   }}
                 />
               ) : (
-                <AppIcon name={getArchiveCategoryIcon(archive.category)} size={26} strokeWidth={1.7} />
+                <UiIcon name={getArchiveCategoryIcon(archive.category)} size={22} />
               )}
             </div>
 
@@ -172,7 +169,8 @@ export default function UserSpaceArchiveList({
                 {latest?.note || "还没有公开记录"}
                 {latest?.record_time ? (
                   <span style={{ color: "#9a9f94" }}>
-                    {" "}· 更新 {formatDate(latest.record_time)}
+                    <span aria-hidden="true"> · </span>
+                    <CompactActivityTime value={latest.record_time} />
                   </span>
                 ) : null}
               </div>
@@ -187,7 +185,11 @@ export default function UserSpaceArchiveList({
                   fontSize: 13,
                 }}
               >
-                {metaItems.join(" · ")}
+                {metaItems.length ? `${metaItems.join(" · ")} · ` : null}
+                <ProjectMetaLine
+                  recordCount={stat?.count || archive.record_count || 0}
+                  viewCount={archive.view_count || 0}
+                />
               </div>
             </div>
           </article>

@@ -1,16 +1,18 @@
 import type { MouseEvent } from "react";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import type { FeedItem } from "@/lib/discover-types";
-import AppIcon from "@/components/ui/AppIcon";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   categoryLabel,
-  formatDate,
   getArchiveLifecycleStatus,
   getArchiveRecordCount,
   getArchiveDurationDays,
   getArchiveFollowerCount,
   getArchiveSystemName,
   getArchiveUserTitle,
+  getArchiveViewCount,
   shortText,
 } from "@/lib/discover-utils";
 
@@ -37,7 +39,7 @@ export function DefaultUserAvatar({ size = 30 }: { size?: number }) {
         border: "1px solid #dbe8d5",
       }}
     >
-      <AppIcon name="leaf" size={Math.max(15, Math.round(size * 0.55))} />
+      <UiIcon name="sprout" size={Math.max(15, Math.round(size * 0.55))} />
     </span>
   );
 }
@@ -145,11 +147,11 @@ export function RecordTagPill({
               e.stopPropagation();
 
               if (record.species_id) {
-                window.location.href = `/discover/search?tag=${encodeURIComponent(tag)}&species=${record.species_id}`;
+                window.location.href = `/discover/search?type=records&tag=${encodeURIComponent(tag)}&species=${record.species_id}`;
                 return;
               }
 
-              window.location.href = `/discover/search?tag=${encodeURIComponent(tag)}`;
+              window.location.href = `/discover/search?type=records&tag=${encodeURIComponent(tag)}`;
             }
           : undefined
       }
@@ -194,19 +196,12 @@ export function ProjectCardRows({
   const archiveUserTitle = getArchiveUserTitle(record);
   const archiveSystemName = getArchiveSystemName(record);
   const archiveRecordCount = getArchiveRecordCount(record);
+  const archiveViewCount = getArchiveViewCount(record);
   const archiveDurationDays = getArchiveDurationDays(record);
   const archiveFollowerCount = getArchiveFollowerCount(record);
   const commentCount = typeof record.comment_count === "number" ? record.comment_count : 0;
   const tags = Array.isArray(record.display_tags) ? record.display_tags.slice(0, 2) : [];
-  const updateText = formatDate(record.record_time);
   const displayUsername = record.username || "用户";
-  const statParts = [
-    showUsername ? displayUsername : null,
-    archiveRecordCount !== null ? `共 ${archiveRecordCount} 条记录` : null,
-    archiveDurationDays !== null ? `已持续 ${archiveDurationDays} 天` : null,
-    `关注 ${archiveFollowerCount}`,
-    `${commentCount} 评论`,
-  ].filter((item): item is string => Boolean(item));
 
   if (mobileFourLine) {
     const statusBadges = (
@@ -303,7 +298,12 @@ export function ProjectCardRows({
           }}
         >
           {record.note ? shortText(record.note, noteMaxLength) : "没有文字"}
-          {updateText ? <span style={{ color: "#9aa59a" }}>　更新 {updateText}</span> : null}
+          {record.record_time ? (
+            <span style={{ color: "#9aa59a" }}>
+              <span aria-hidden="true"> · </span>
+              <CompactActivityTime value={record.record_time} />
+            </span>
+          ) : null}
         </div>
 
         <div
@@ -324,16 +324,12 @@ export function ProjectCardRows({
               {statusBadges}
             </span>
           ) : null}
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              minWidth: 0,
-            }}
-          >
-            {statParts.slice(0, 3).join(" · ")}
-          </span>
+          {showUsername ? <span>{displayUsername}</span> : null}
+          <ProjectMetaLine
+            recordCount={archiveRecordCount}
+            durationDays={archiveDurationDays}
+            ended={lifecycleStatus === "ended"}
+          />
         </div>
       </div>
     );
@@ -458,7 +454,12 @@ export function ProjectCardRows({
           }}
         >
           {record.note ? shortText(record.note, noteMaxLength) : "没有文字"}
-          {updateText ? <span style={{ color: "#9aa59a" }}>　更新 {updateText}</span> : null}
+          {record.record_time ? (
+            <span style={{ color: "#9aa59a" }}>
+              <span aria-hidden="true"> · </span>
+              <CompactActivityTime value={record.record_time} />
+            </span>
+          ) : null}
         </span>
       </div>
 
@@ -476,43 +477,15 @@ export function ProjectCardRows({
           textOverflow: "ellipsis",
         }}
       >
-        {statParts.map((part, index) => (
-          <span
-            key={`${part}-${index}`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              minWidth: 0,
-              flexShrink: index === 0 && showUsername ? 1 : 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={part}
-          >
-            <span
-              style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {part}
-            </span>
-            {index < statParts.length - 1 && (
-              <span
-                aria-hidden="true"
-                style={{
-                  color: "#cbd4c8",
-                  margin: "0 1px 0 5px",
-                  flexShrink: 0,
-                }}
-              >
-                ·
-              </span>
-            )}
-          </span>
-        ))}
+        {showUsername ? <span>{displayUsername}</span> : null}
+        <ProjectMetaLine
+          recordCount={archiveRecordCount}
+          durationDays={archiveDurationDays}
+          ended={lifecycleStatus === "ended"}
+          followerCount={archiveFollowerCount}
+          viewCount={archiveViewCount}
+          commentCount={commentCount}
+        />
       </div>
     </div>
   );

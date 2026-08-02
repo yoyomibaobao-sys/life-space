@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { EmptyState, StatusBadge, buttonRowStyle, cardBodyStyle, cardStyle, coverImageStyle, coverStyle, ghostButtonStyle, listStyle, metaLineStyle, noteLineStyle, primaryButtonStyle, projectInlineMetaStyle, projectStatsPillStyle, projectTitleStyle, textLinkStyle } from "@/components/follow/FollowShared";
 import type { FollowProjectCard } from "@/lib/follow-types";
-import { formatDateTime } from "@/lib/follow-utils";
 import { getArchiveDisplayName } from "@/lib/social-space-shared";
+import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import UiIcon from "@/components/ui/UiIcon";
 
 export default function FollowProjectList({
   items,
@@ -31,8 +33,6 @@ export default function FollowProjectList({
         if (item.subTagName) meta.push(item.subTagName);
         if (item.groupTagName) meta.push(item.groupTagName);
 
-        const latestRecordText = `最新：${item.latestNote} · ${formatDateTime(item.latestRecordTime)}`;
-
         return (
           <article
             key={item.id}
@@ -49,7 +49,7 @@ export default function FollowProjectList({
               {item.coverUrl ? (
                 <img src={item.coverUrl} alt="" style={coverImageStyle} />
               ) : (
-                <span style={{ fontSize: 34 }}>{item.categoryIcon}</span>
+                <UiIcon name={item.categoryIcon} size={32} strokeWidth={1.6} />
               )}
             </div>
 
@@ -77,14 +77,22 @@ export default function FollowProjectList({
                 >
                   {getArchiveDisplayName(item.title, item.displaySystemName)}
                 </span>
-                <span style={{ ...projectStatsPillStyle, background: "transparent", padding: 0, color: "#7b8578", fontSize: 11, flexShrink: 0 }}>{item.recordCount}条 · 持续{item.durationDays}天</span>
+                <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} />
                 {item.statusKind !== "normal" ? (
                   <StatusBadge kind={item.statusKind}>{item.statusLabel}</StatusBadge>
                 ) : null}
               </div>
 
               <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || "关注项目"}</div>
-              <div style={noteLineStyle}>{latestRecordText}</div>
+              <div style={noteLineStyle}>
+                {item.latestNote}
+                {item.latestRecordTime ? (
+                  <>
+                    <span aria-hidden="true"> · </span>
+                    <CompactActivityTime value={item.latestRecordTime} />
+                  </>
+                ) : null}
+              </div>
 
               <div style={{ ...buttonRowStyle, gap: 5, flexWrap: "nowrap", overflow: "hidden", marginTop: 0 }}>
                 <button type="button" onClick={() => onOpenArchive(item.id)} style={{ ...primaryButtonStyle, padding: "4px 8px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>

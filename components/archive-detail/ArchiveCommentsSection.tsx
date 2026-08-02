@@ -15,13 +15,13 @@ import type {
   RecordLikeRow,
 } from "@/lib/archive-detail-types";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
-import AppIcon from "@/components/ui/AppIcon";
 
 type CommentItem = RecordComment & {
   profile: Pick<AppProfile, "id" | "username" | "avatar_url"> | null;
@@ -508,7 +508,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
           }
           aria-label={recordLikedByMe ? "取消喜欢" : "喜欢"}
         >
-          <AppIcon name="heart" size={14} style={recordLikedByMe ? { fill: "currentColor" } : undefined} /> {recordLikeCount}
+          <UiIcon name={recordLikedByMe ? "heart-filled" : "heart"} size={14} /> {recordLikeCount}
         </button>
 
         <button
@@ -660,7 +660,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                     </span>
                     {comment.flowerCount > 0 ? (
                       <span style={{ color: "#9d6f1f", whiteSpace: "nowrap" }}>
-                        <AppIcon name="flower" size={14} />
+                        <UiIcon name="flower" size={13} /> {comment.flowerCount}
                       </span>
                     ) : null}
                     <button
@@ -677,7 +677,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                       }}
                       aria-label={comment.likedByMe ? "取消喜欢" : "喜欢评论"}
                     >
-                      <AppIcon name="heart" size={13} style={comment.likedByMe ? { fill: "currentColor" } : undefined} /> {comment.likeCount}
+                      <UiIcon name={comment.likedByMe ? "heart-filled" : "heart"} size={13} /> {comment.likeCount}
                     </button>
 
                     {canDeleteComment ? (

@@ -3,7 +3,7 @@
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
-import AppIcon from "@/components/ui/AppIcon";
+import UiIcon from "@/components/ui/UiIcon";
 
 import type { CSSProperties } from "react";
 
@@ -89,7 +89,7 @@ export default function TagList({
                   color: "#999",
                 }}
               >
-                <AppIcon name="close" size={11} />
+                <UiIcon name="close" size={12} />
               </span>
             ) : null}
           </span>

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { t } from "@/lib/i18n";
 import { showToast } from "@/components/Toast";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   canCreateMembershipContent,
   formatStorageBytes,
@@ -50,7 +51,6 @@ import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
-import AppIcon from "@/components/ui/AppIcon";
 
 type RecordVisibility = "public" | "private";
 
@@ -990,7 +990,7 @@ export default function AddRecord({
                     lineHeight: "30px",
                   }}
                 >
-                  <AppIcon name="close" size={16} />
+                  <UiIcon name="close" size={16} />
                 </button>
               </div>
             ))}

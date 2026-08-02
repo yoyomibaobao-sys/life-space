@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
+import UiIcon from "@/components/ui/UiIcon";
 import type {
   PlantPlanLocationType,
   PlantPlanRow,
@@ -26,7 +27,6 @@ import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
-import AppIcon from "@/components/ui/AppIcon";
 
 const statusLabels: Record<PlantPlanStatus, string> = {
   want: "想种",
@@ -422,7 +422,7 @@ export default function PlantPlansPage() {
   return (
     <main style={{ padding: "16px", maxWidth: 980, margin: "0 auto" }}>
       <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-        <AppIcon name="arrow-left" size={14} /> 返回空间
+        <UiIcon name="arrow-left" size={15} /> 返回空间
       </Link>
 
       <ArchivePlantPageHero

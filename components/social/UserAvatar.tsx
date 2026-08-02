@@ -1,11 +1,12 @@
-import type { CSSProperties } from "react";
-import AppIcon from "@/components/ui/AppIcon";
+import type { CSSProperties, ReactNode } from "react";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   avatarUrl?: string | null;
   size?: number;
   iconSize?: number;
   radius?: number | string;
+  fallback?: ReactNode;
   style?: CSSProperties;
 };
 
@@ -14,6 +15,7 @@ export default function UserAvatar({
   size = 48,
   iconSize = 22,
   radius = "50%",
+  fallback,
   style,
 }: Props) {
   const baseStyle: CSSProperties = {
@@ -30,7 +32,6 @@ export default function UserAvatar({
 
   return (
     <div
-      aria-hidden="true"
       style={{
         width: size,
         height: size,
@@ -40,10 +41,11 @@ export default function UserAvatar({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        fontSize: iconSize,
         ...style,
       }}
     >
-      <AppIcon name="leaf" size={iconSize} strokeWidth={1.7} />
+      {fallback || <UiIcon name="sprout" size={iconSize} />}
     </div>
   );
 }
