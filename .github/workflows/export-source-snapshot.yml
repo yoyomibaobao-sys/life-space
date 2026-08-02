@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/restore-unified-icons-20260802
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -13,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/restore-unified-icons-20260802
       - name: Create source archive
         run: |
           tar --exclude=.git -czf /tmp/life-space-source.tar.gz .
