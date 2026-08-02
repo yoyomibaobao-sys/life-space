@@ -83,6 +83,9 @@ jobs:
         run: npx eslint components/ui/AppIcon.tsx components/ui/RatingStars.tsx components/discover/DiscoverProjectCard.tsx components/discover/FollowedProjectCard.tsx components/archive-ui/ArchiveProjectCard.tsx lib/archive-categories.ts lib/discover-project-feed.ts tests/icon-consistency.test.mjs
 
       - name: Build production application
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-placeholder-key
         run: npm run build
 
       - name: Verify patch formatting
