@@ -1,8 +1,8 @@
 import type { ArchiveStat, UserSpaceArchive, UserSpaceRecord, UserSpaceTag } from "@/lib/user-space-types";
+import { formatCardDate } from "@/lib/date-time";
 
 export function formatDate(value?: string | null) {
-  if (!value) return "";
-  return new Date(value).toLocaleDateString("zh-CN");
+  return formatCardDate(value);
 }
 
 export function getMediaUrl(media: {

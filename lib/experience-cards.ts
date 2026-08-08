@@ -1,10 +1,12 @@
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { supabase } from "@/lib/supabase";
+import { formatCardDate, getInclusiveDaySpan } from "@/lib/date-time";
 import type {
   ExperienceCardArchive,
   ExperienceCardAuthor,
   ExperienceCardDetail,
   ExperienceCardMedia,
+  ExperienceCardInteractionSummary,
   ExperienceCardListItem,
   ExperienceCardRow,
   ExperienceCardSaveInput,
@@ -36,6 +38,11 @@ type ExperienceCardListProfileRow = {
 type ExperienceCardListRelationRow = {
   card_id: string;
   record_id: string;
+};
+
+type ExperienceCardRecordTimeRow = {
+  id: string;
+  record_time: string | null;
 };
 
 const CARD_RECORD_SELECT = [
@@ -73,14 +80,7 @@ function firstBoolean(data: unknown) {
 }
 
 export function formatExperienceCardDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
+  return formatCardDate(value);
 }
 
 function joinExperienceCardRegion(profile?: ExperienceCardListProfileRow) {
@@ -98,7 +98,7 @@ export async function hydrateExperienceCardListItems(
   const authorIds = Array.from(new Set(rows.map((row) => row.user_id)));
   const cardIds = rows.map((row) => row.id);
 
-  const [archiveResult, profileResult, relationResult] = await Promise.all([
+  const [archiveResult, profileResult, relationResult, interactionResult] = await Promise.all([
     supabase
       .from("archives")
       .select(
@@ -115,23 +115,37 @@ export async function hydrateExperienceCardListItems(
       .from("experience_card_records")
       .select("card_id, record_id")
       .in("card_id", cardIds),
+    supabase.rpc("get_experience_card_interaction_summaries", {
+      p_card_ids: cardIds,
+    }),
   ]);
 
   const archives = (archiveResult.data || []) as ExperienceCardListArchiveRow[];
   const profiles = (profileResult.data || []) as ExperienceCardListProfileRow[];
   const relations = (relationResult.data || []) as ExperienceCardListRelationRow[];
+  const interactionRows = (interactionResult.data || []) as ExperienceCardInteractionSummary[];
   const archiveById = new Map(archives.map((archive) => [archive.id, archive]));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const recordIds = Array.from(new Set(relations.map((row) => row.record_id)));
   const mediaByRecord = new Map<string, ExperienceCardMedia[]>();
+  const recordTimeById = new Map<string, string>();
 
   if (recordIds.length > 0) {
-    const { data: mediaData } = await supabase
-      .from("media")
-      .select(CARD_MEDIA_SELECT)
-      .in("record_id", recordIds)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true });
+    const [{ data: recordTimeData }, { data: mediaData }] = await Promise.all([
+      supabase
+        .from("records")
+        .select("id, record_time")
+        .in("id", recordIds),
+      supabase
+        .from("media")
+        .select(CARD_MEDIA_SELECT)
+        .in("record_id", recordIds)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    ((recordTimeData || []) as ExperienceCardRecordTimeRow[]).forEach((record) => {
+      if (record.record_time) recordTimeById.set(record.id, record.record_time);
+    });
     const mediaRows = await attachMediaDisplayUrls(
       supabase,
       (mediaData || []) as unknown as ExperienceCardMedia[]
@@ -166,6 +180,9 @@ export async function hydrateExperienceCardListItems(
     list.push(relation.record_id);
     recordIdsByCard.set(relation.card_id, list);
   });
+  const interactionByCard = new Map(
+    interactionRows.map((summary) => [summary.card_id, summary])
+  );
 
   return rows.map((row) => {
     const archive = archiveById.get(row.archive_id);
@@ -181,10 +198,18 @@ export async function hydrateExperienceCardListItems(
       .map((recordId) => mediaByRecord.get(recordId)?.[0])
       .find(Boolean);
     const cover = preferredCover || firstSourceCover;
+    const sortedRecordTimes = relatedRecordIds
+      .map((recordId) => recordTimeById.get(recordId))
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const periodStart = sortedRecordTimes[0] || null;
+    const periodEnd = sortedRecordTimes[sortedRecordTimes.length - 1] || null;
+    const interaction = interactionByCard.get(row.id);
 
     return {
       ...row,
-      archiveTitle: archive?.title?.trim() || "来源项目已删除",
+      archiveTitle: archive?.title?.trim() || "来源暂不可用",
+      sourceAvailable: Boolean(archive),
       archiveCategory: archive?.category || null,
       systemName:
         archive?.system_name?.trim() ||
@@ -202,6 +227,14 @@ export async function hydrateExperienceCardListItems(
       authorCountryName: profile?.country_name || null,
       authorRegionName: profile?.region_name || null,
       authorCityName: profile?.city_name || null,
+      durationDays: getInclusiveDaySpan(periodStart, periodEnd),
+      periodStart,
+      periodEnd,
+      commentCount: Number(interaction?.comment_count || 0),
+      bookmarkCount: Number(interaction?.bookmark_count || 0),
+      helpfulCount: Number(interaction?.helpful_count || 0),
+      bookmarkedByMe: Boolean(interaction?.bookmarked_by_me),
+      helpfulByMe: Boolean(interaction?.helpful_by_me),
     };
   });
 }

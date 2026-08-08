@@ -404,15 +404,15 @@ function mobileCommentActionButtonStyle(active: boolean) {
 
   async function handleSendFlower(comment: CommentItem) {
     if (!currentUserId || !canAwardFlowers) {
-      showToast("只有求助记录的主人才能送花");
+      showToast("只有求助记录的主人才能标记有帮助");
       return;
     }
     if (comment.user_id === currentUserId) {
-      showToast("不能给自己的评论送花");
+      showToast("不能把自己的回答标为有帮助");
       return;
     }
     if (comment.myFlower && !comment.myFlower.revoked_at) {
-      showToast("这条评论已经送过花了");
+      showToast("这条回答已经标记为有帮助");
       return;
     }
 
@@ -431,15 +431,15 @@ function mobileCommentActionButtonStyle(active: boolean) {
       comment_id: comment.id,
       sender_user_id: currentUserId,
       receiver_user_id: comment.user_id,
-      reason: "求助评论送花",
+      reason: "求助回答有帮助",
     });
 
     if (error) {
-      showToast("送花失败");
+      showToast("标记失败");
       return;
     }
 
-    showToast("已送花");
+    showToast("已标记为有帮助");
     await loadData();
   }
 
@@ -462,19 +462,19 @@ function mobileCommentActionButtonStyle(active: boolean) {
       .eq("sender_user_id", currentUserId);
 
     if (error) {
-      showToast("撤回送花失败");
+      showToast("撤回标记失败");
       return;
     }
 
-    showToast("已撤回送花");
+    showToast("已撤回“有帮助”");
     await loadData();
   }
 
   const commentHint = useMemo(() => {
     if (recordStatusTag === "help")
-      return "记录主人可送花。";
+      return "记录主人可把真正解决问题的回答标为“有帮助”。";
     if (recordStatusTag === "resolved")
-      return "可补送花。";
+      return "仍可补充标记有帮助的回答。";
     return "";
   }, [recordStatusTag]);
 
@@ -660,7 +660,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                     </span>
                     {comment.flowerCount > 0 ? (
                       <span style={{ color: "#9d6f1f", whiteSpace: "nowrap" }}>
-                        <UiIcon name="flower" size={13} /> {comment.flowerCount}
+                        <UiIcon name="helpful" size={13} /> 有帮助 {comment.flowerCount}
                       </span>
                     ) : null}
                     <button
@@ -717,13 +717,13 @@ function mobileCommentActionButtonStyle(active: boolean) {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {canRevoke ? "已送花 · 撤回" : "已送花"}
+                          {canRevoke ? "已标记 · 撤回" : "已标记"}
                         </button>
                       ) : comment.myFlower?.revoked_at ? (
                         <span
                           style={{ color: "#9b8771", whiteSpace: "nowrap" }}
                         >
-                          已撤回送花
+                          已撤回标记
                         </span>
                       ) : (
                         <button
@@ -739,7 +739,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          送花
+                          有帮助
                         </button>
                       )
                     ) : null}
@@ -780,12 +780,12 @@ function mobileCommentActionButtonStyle(active: boolean) {
                     }}
                   >
                     <div style={{ fontSize: 11, color: "#7b8776" }}>
-                      花朵记录可在{" "}
+                      帮助标记可在{" "}
                       <Link
-                        href="/profile/flowers"
+                        href="/profile/helpful"
                         style={{ color: "#4c7b3f" }}
                       >
-                        我的花朵
+                        帮助标记记录
                       </Link>{" "}
                       中追溯。
                     </div>

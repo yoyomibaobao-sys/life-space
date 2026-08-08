@@ -1,3 +1,5 @@
+import { formatCardDate } from "@/lib/date-time";
+
 export type MembershipPlan = "trial" | "basic" | "large" | "seller" | "admin";
 export type MembershipStatus = "trialing" | "active" | "past_due" | "expired" | "canceled";
 
@@ -56,14 +58,7 @@ export function getMembershipStatusLabel(status?: string | null) {
 }
 
 export function formatMembershipDate(value?: string | null) {
-  if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
+  return formatCardDate(value) || "暂无";
 }
 
 export function getDaysRemaining(value?: string | null) {

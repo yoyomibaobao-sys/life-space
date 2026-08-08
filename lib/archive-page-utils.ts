@@ -3,17 +3,10 @@ import {
   getArchiveNamePlaceholder,
 } from "@/lib/archive-categories";
 import type { ArchiveItem } from "@/lib/archive-page-types";
+import { formatCardDate } from "@/lib/date-time";
 
 export function formatArchiveDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const options: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-  };
-  if (date.getFullYear() !== new Date().getFullYear()) options.year = "numeric";
-  return date.toLocaleDateString("en-US", options);
+  return formatCardDate(value);
 }
 
 export function getArchiveSortTime(

@@ -1,0 +1,183 @@
+.section {
+  margin: 0 0 14px;
+  padding: 13px 14px;
+  border: 1px solid #e1e8de;
+  border-radius: 15px;
+  background: #fbfdf9;
+}
+
+.actionRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action,
+.staticMetric {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #d8e2d4;
+  border-radius: 999px;
+  background: #fff;
+  color: #566552;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.action {
+  cursor: pointer;
+}
+
+.action[aria-pressed="true"] {
+  border-color: #a9c5a3;
+  background: #edf6e9;
+  color: #3f663a;
+}
+
+.action:focus-visible,
+.commentDelete:focus-visible,
+.submit:focus-visible,
+.cancel:focus-visible {
+  outline: 2px solid #6c9466;
+  outline-offset: 2px;
+}
+
+.hint {
+  margin: 9px 0 0;
+  color: #7a8676;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.comments {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e7ece4;
+}
+
+.commentList {
+  display: grid;
+  gap: 8px;
+}
+
+.comment {
+  padding: 10px 0;
+  border-bottom: 1px solid #edf1ea;
+}
+
+.comment:last-child {
+  border-bottom: 0;
+}
+
+.commentMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #879182;
+  font-size: 11px;
+}
+
+.commentAuthor {
+  color: #52644e;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.commentContent {
+  margin: 5px 0 0;
+  color: #303d2f;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.commentDelete {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #9b6c64;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.composer {
+  margin-top: 10px;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 76px;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid #d7e1d3;
+  border-radius: 11px;
+  background: #fff;
+  color: #293628;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.textarea:focus {
+  border-color: #82a47c;
+  outline: 2px solid rgba(108, 148, 102, 0.18);
+}
+
+.composerActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.submit,
+.cancel {
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.submit {
+  border: 1px solid #63885d;
+  background: #63885d;
+  color: #fff;
+}
+
+.cancel {
+  border: 1px solid #d8e2d4;
+  background: #fff;
+  color: #667362;
+}
+
+.empty {
+  padding: 7px 0;
+  color: #879182;
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .section {
+    padding: 11px;
+  }
+
+  .actionRow {
+    gap: 6px;
+  }
+
+  .action,
+  .staticMetric {
+    min-height: 34px;
+    padding: 6px 9px;
+  }
+}

@@ -7,6 +7,7 @@ import ExperienceCardListCard from "@/components/experience-card/ExperienceCardL
 import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { formatCardDate } from "@/lib/date-time";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import type { ExperienceCardListItem, ExperienceCardRow } from "@/lib/experience-card-types";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
@@ -495,15 +496,7 @@ function splitGuideItems(...values: Array<unknown>) {
 }
 
 function formatShortDate(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
+  return formatCardDate(value) || null;
 }
 
 function Card({
@@ -1116,35 +1109,46 @@ function PlantRecordsSection({
 
 function PlantExperienceCardsSection({
   cards,
+  currentUserId,
 }: {
   cards: PlantExperienceCardItem[];
+  currentUserId: string | null;
 }) {
+  const myCards = currentUserId
+    ? cards.filter((card) => card.user_id === currentUserId)
+    : [];
+  const otherCards = cards.filter((card) => card.user_id !== currentUserId);
+
+  function renderCards(items: PlantExperienceCardItem[], showAuthor: boolean) {
+    if (items.length === 0) {
+      return (
+        <div style={{ padding: 14, color: "#7f8a7b", fontSize: 13 }}>
+          暂无经验卡。
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: "grid", gap: 10 }}>
+        {items.map((card) => (
+          <ExperienceCardListCard
+            key={card.id}
+            item={card}
+            dateValue={card.published_at}
+            showAuthor={showAuthor}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <Section title="经验卡">
-      {cards.length > 0 ? (
-        <div style={{ display: "grid", gap: 10 }}>
-          {cards.map((card) => (
-            <ExperienceCardListCard
-              key={card.id}
-              item={card}
-              dateValue={card.published_at}
-              showAuthor
-            />
-          ))}
-        </div>
-      ) : (
-        <div
-          style={{
-            padding: 18,
-            border: "1px solid #eee",
-            borderRadius: 14,
-            color: "#888",
-            background: "#fff",
-          }}
-        >
-          还没有与这个植物关联的公开经验卡。
-        </div>
-      )}
+      {currentUserId ? (
+        <Subsection title="我的经验卡">{renderCards(myCards, false)}</Subsection>
+      ) : null}
+      <Subsection title="其他人的经验卡">
+        {renderCards(otherCards, true)}
+      </Subsection>
     </Section>
   );
 }
@@ -1193,6 +1197,7 @@ export default function PlantDetailPage() {
   >([]);
   const [activeTab, setActiveTab] = useState<PlantDetailTab>("guide");
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [interestAdded, setInterestAdded] = useState(false);
   const [planAdded, setPlanAdded] = useState(false);
@@ -1223,6 +1228,7 @@ export default function PlantDetailPage() {
         data: { user },
       } = await supabase.auth.getUser();
       setIsSignedIn(Boolean(user));
+      setCurrentUserId(user?.id || null);
 
       const membershipResult = user
         ? await supabase.rpc("get_my_membership")
@@ -2206,7 +2212,10 @@ export default function PlantDetailPage() {
 
       {activeTab === "experience" ? (
         hasCloudAccess ? (
-          <PlantExperienceCardsSection cards={relatedExperienceCards} />
+          <PlantExperienceCardsSection
+            cards={relatedExperienceCards}
+            currentUserId={currentUserId}
+          />
         ) : (
           <PlantTabAccessNotice label="相关经验卡" />
         )

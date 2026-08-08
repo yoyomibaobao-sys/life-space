@@ -5,32 +5,15 @@ import type {
   LightboxImage,
   PlantSpeciesLite,
 } from "@/lib/archive-detail-types";
+import { formatPreciseDateTime } from "@/lib/date-time";
 
 
 export function formatDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 export function formatDateTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 function getLocalDayStartTime(value: string) {

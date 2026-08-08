@@ -1,21 +1,13 @@
 import { getArchiveCategoryLabel, getArchiveNamePlaceholder } from "@/lib/archive-categories";
 import type { FeedItem, UserSection } from "@/lib/discover-types";
+import { formatCardDate } from "@/lib/date-time";
 
 export function categoryLabel(value?: string | null) {
   return getArchiveCategoryLabel(value);
 }
 
 export function formatDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatCardDate(value);
 }
 
 export function shortText(value?: string | null, maxLength = 42) {

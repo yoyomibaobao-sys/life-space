@@ -618,7 +618,7 @@ export default function ProfilePage() {
                 <MetaItem label="注册顺序" value={accountRegistrationSummary} />
               ) : null}
               <MetaItem label="账号等级" value={`Lv.${Number(profile.level || 1)}`} />
-              <MetaItem label="花朵" value={<span><UiIcon name="flower" size={13} /> {Number(profile.flower_count || 0)}</span>} />
+              <MetaItem label="收到有帮助" value={<span><UiIcon name="helpful" size={13} /> {Number(profile.flower_count || 0)}</span>} />
               <MetaItem label="存储" value={storageText} />
               <MetaItem label="加入时间" value={formatProfileDateTime(profile.created_at)} />
             </div>
@@ -878,15 +878,15 @@ export default function ProfilePage() {
                   compact
                 />
                 <StatLinkCard
-                  href="/profile/flowers"
-                  label="收到的花朵"
+                  href="/profile/helpful"
+                  label="收到有帮助"
                   value={String(stats.receivedFlowerCount)}
                   hint=""
                   compact
                 />
                 <StatLinkCard
-                  href="/profile/flowers?tab=sent"
-                  label="我送出的花"
+                  href="/profile/helpful?tab=sent"
+                  label="我标记的帮助"
                   value={String(stats.sentFlowerCount || 0)}
                   hint=""
                   compact
@@ -931,22 +931,22 @@ export default function ProfilePage() {
                   hint="谁在关注我"
                 />
                 <StatLinkCard
-                  href="/profile/flowers"
-                  label="花朵来源"
+                  href="/profile/helpful"
+                  label="收到的帮助标记"
                   value={String(stats.receivedFlowerCount)}
-                  hint="查看谁给我送花"
+                  hint="查看哪些求助回答被确认有帮助"
                 />
                 <StatLinkCard
-                  href="/profile/flowers?tab=sent"
-                  label="花朵送给谁"
+                  href="/profile/helpful?tab=sent"
+                  label="我标记的帮助"
                   value={String(stats.sentFlowerCount || 0)}
-                  hint="查看我送出的花"
+                  hint="查看我确认过的有帮助回答"
                 />
                 <StatLinkCard
                   href="/notifications"
                   label="通知"
                   value="进入"
-                  hint="关注、送花和互动提醒"
+                  hint="关注、评论和有帮助反馈提醒"
                 />
               </>
             )}

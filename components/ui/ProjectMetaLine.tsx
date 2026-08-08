@@ -25,6 +25,8 @@ export default function ProjectMetaLine({
   commentCount,
   photoCount,
   projectCount,
+  bookmarkCount,
+  helpfulCount,
   updatedAt,
   className,
   style,
@@ -37,6 +39,8 @@ export default function ProjectMetaLine({
   commentCount?: number | null;
   photoCount?: number | null;
   projectCount?: number | null;
+  bookmarkCount?: number | null;
+  helpfulCount?: number | null;
   updatedAt?: string | null;
   className?: string;
   style?: CSSProperties;
@@ -58,14 +62,22 @@ export default function ProjectMetaLine({
     });
   };
 
-  addCount("record", "record", "记录", recordCount);
+  if (recordCount !== null && recordCount !== undefined) {
+    const count = Math.max(0, Number(recordCount) || 0);
+    items.push({
+      key: "record",
+      icon: "record",
+      accessibleLabel: `记录 ${count} 条`,
+      value: `${compactNumberFormatter.format(count)}条`,
+    });
+  }
   if (durationDays !== null && durationDays !== undefined) {
     const days = Math.max(1, Math.round(Number(durationDays) || 1));
     items.push({
       key: "duration",
       icon: "duration",
       accessibleLabel: `${ended ? "历时" : "已持续"} ${days} 天`,
-      value: `${compactNumberFormatter.format(days)}d`,
+      value: `${compactNumberFormatter.format(days)}天`,
     });
   }
   addCount("view", "view", "浏览", viewCount);
@@ -73,6 +85,8 @@ export default function ProjectMetaLine({
   addCount("comment", "comment", "评论", commentCount);
   addCount("photo", "image", "照片", photoCount);
   addCount("project", "project", "项目", projectCount);
+  addCount("bookmark", "bookmark", "收藏", bookmarkCount);
+  addCount("helpful", "helpful", "有帮助", helpfulCount);
   if (updatedAt) {
     items.push({
       key: "update",

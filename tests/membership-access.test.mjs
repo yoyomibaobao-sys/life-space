@@ -377,7 +377,7 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /植物指引基础概要 \| — \| ✓ \| ✓/);
   assert.match(docs, /少量核心静态参数 \| — \| ✓ \| ✓/);
   assert.match(docs, /完整参数、生长周期和完整养护指引 \| — \| — \| ✓/);
-  assert.match(docs, /评论、回复、点赞、鲜花和关注 \| — \| — \| ✓/);
+  assert.match(docs, /评论、回复、点赞、有帮助反馈和关注 \| — \| — \| ✓/);
   assert.match(docs, /集市咨询和联系发布者 \| — \| ✓ \| ✓/);
   assert.match(docs, /未来：作者主动公开的单张经验卡.*\| ✓ \| ✓ \| ✓/);
   assert.match(docs, /只有报名时仍有效的云空间会员可以申请试用／试种/);

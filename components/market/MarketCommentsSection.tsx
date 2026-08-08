@@ -6,6 +6,7 @@ import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import type { MarketPostStatus } from "@/lib/market-types";
 import UiIcon from "@/components/ui/UiIcon";
+import { formatPreciseDateTime } from "@/lib/date-time";
 
 type MarketCommentRow = {
   id: string;
@@ -257,7 +258,7 @@ export default function MarketCommentsSection({
                 </button>
               </div>
               <div style={consultationHintStyle}>
-                注册后的本地免费用户也可咨询；社区评论、点赞、鲜花和关注仍属于云空间互动。
+                注册后的本地免费用户也可咨询；社区评论、点赞、有帮助反馈和关注仍属于云空间互动。
               </div>
             </>
         ) : currentUserId && postStatus !== "active" ? (
@@ -271,16 +272,7 @@ export default function MarketCommentsSection({
 }
 
 function formatCommentTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 const sectionStyle: CSSProperties = {

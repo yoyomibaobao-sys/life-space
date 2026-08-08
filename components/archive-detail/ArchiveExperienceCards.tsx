@@ -145,15 +145,21 @@ export default function ArchiveExperienceCards({
               key={item.id}
               item={item}
               dateValue={item.updated_at}
+              showAuthor
               status={
                 isOwner ? (
-                  <span style={statusStyle(item.isPubliclyAvailable)}>
+                  <>
+                    <span style={statusStyle(item.isPubliclyAvailable)}>
                       {item.isPubliclyAvailable
                         ? "已公开"
                         : item.status === "published"
                           ? "公开已暂停"
                           : "私密草稿"}
                     </span>
+                    <span style={{ color: "#788274", fontSize: 11 }}>
+                      被收藏 {item.bookmarkCount}
+                    </span>
+                  </>
                 ) : null
               }
               actions={
@@ -162,16 +168,10 @@ export default function ArchiveExperienceCards({
                   href={`/experience-cards/${item.id}`}
                   style={actionLinkStyle}
                 >
-                  查看
+                  打开
                 </Link>
                 {isOwner ? (
                   <>
-                    <Link
-                      href={`/experience-cards/${item.id}/edit`}
-                      style={actionLinkStyle}
-                    >
-                      编辑
-                    </Link>
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(item)}
@@ -258,28 +258,6 @@ const listStyle: CSSProperties = {
   marginTop: 12,
 };
 
-const cardStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  flexWrap: "wrap",
-  padding: "10px 11px",
-  border: "1px solid #e6ebe3",
-  borderRadius: 12,
-  background: "#fff",
-};
-
-const cardMainStyle: CSSProperties = {
-  minWidth: 0,
-};
-
-const statusRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-};
-
 function statusStyle(isPublic: boolean): CSSProperties {
   return {
     borderRadius: 999,
@@ -290,34 +268,6 @@ function statusStyle(isPublic: boolean): CSSProperties {
     fontWeight: 800,
   };
 }
-
-const dateStyle: CSSProperties = {
-  color: "#8a9387",
-  fontSize: 11,
-};
-
-const titleStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#2b382b",
-  fontSize: 14,
-  fontWeight: 800,
-  overflowWrap: "anywhere",
-};
-
-const metaStyle: CSSProperties = {
-  marginTop: 3,
-  color: "#788274",
-  fontSize: 12,
-};
-
-const actionsStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  gap: 7,
-  flexWrap: "wrap",
-  flexShrink: 0,
-};
 
 const actionLinkStyle: CSSProperties = {
   border: "1px solid #d9e2d5",

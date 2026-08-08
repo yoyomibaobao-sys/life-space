@@ -26,6 +26,7 @@ export type UiIconName =
   | "follow"
   | "heart"
   | "heart-filled"
+  | "helpful"
   | "home"
   | "image"
   | "lock"
@@ -84,8 +85,9 @@ function IconPaths({ name }: { name: UiIconName }) {
     case "chevron-right":
       return <path d="m9 5 7 7-7 7" />;
     case "clock":
-    case "duration":
       return <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>;
+    case "duration":
+      return <><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M8 2.5v5M16 2.5v5M3.5 9.5h17M7.5 15h9M7.5 15l2-2M7.5 15l2 2M16.5 15l-2-2M16.5 15l-2 2" /></>;
     case "cloud":
     case "cloud-off":
       return <><path d="M17.5 18H8a5 5 0 1 1 .7-9.95A6 6 0 0 1 20 10.5a3.75 3.75 0 0 1-2.5 7.5Z" />{name === "cloud-off" ? <path d="M4 4l16 16" /> : null}</>;
@@ -109,6 +111,8 @@ function IconPaths({ name }: { name: UiIconName }) {
     case "heart":
     case "heart-filled":
       return <path d="M20.8 8.7c0 5.1-8.8 10.3-8.8 10.3S3.2 13.8 3.2 8.7A4.7 4.7 0 0 1 12 6.4a4.7 4.7 0 0 1 8.8 2.3Z" fill={name === "heart-filled" ? "currentColor" : "none"} />;
+    case "helpful":
+      return <><path d="M19.5 4.5C12 4.8 7.2 8.6 6.8 14.8c4.6 1.1 9.1-.2 11.3-3.8 1.2-1.9 1.5-4.2 1.4-6.5Z" /><path d="M5 20c1.5-4.7 4.8-8 10-10.2M9.8 15.5l2.2 2.1 4.5-5" /></>;
     case "home":
       return <><path d="m3 11 9-8 9 8" /><path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7" /></>;
     case "image":
@@ -127,7 +131,7 @@ function IconPaths({ name }: { name: UiIconName }) {
     case "project":
       return <><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M8 5V3h8v2M8 10h8M8 14h5" /></>;
     case "record":
-      return <><path d="M6 3h9l3 3v15H6Z" /><path d="M15 3v4h4M9 11h6M9 15h6" /></>;
+      return <><rect x="6.5" y="4" width="13" height="16" rx="2" /><path d="M4.5 7v11M9.5 9h7M9.5 13h7M9.5 17h4.5" /></>;
     case "refresh":
     case "restore":
       return <><path d="M20 7v5h-5" /><path d="M19 12a7 7 0 1 0-2 5" /></>;

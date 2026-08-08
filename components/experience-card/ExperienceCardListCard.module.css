@@ -1,8 +1,9 @@
 .card {
+  position: relative;
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  min-height: 112px;
-  overflow: hidden;
+  grid-template-columns: 136px minmax(0, 1fr);
+  min-height: 124px;
+  overflow: visible;
   color: #2b382a;
   text-decoration: none;
   background: #fff;
@@ -10,11 +11,17 @@
   border-radius: 15px;
 }
 
+.card > a:first-child {
+  display: block;
+  overflow: hidden;
+  border-radius: 14px 0 0 14px;
+}
+
 .cover,
 .placeholder {
-  width: 112px;
-  height: 100%;
-  min-height: 112px;
+  width: 136px;
+  height: 124px;
+  align-self: start;
 }
 
 .cover {
@@ -33,6 +40,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 124px;
   padding: 12px 13px;
 }
 
@@ -69,26 +77,33 @@
 
 .footer {
   justify-content: space-between;
-  margin-top: auto;
+  margin-top: 4px;
   padding-top: 8px;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
 }
 
 @media (max-width: 520px) {
   .card {
-    grid-template-columns: 88px minmax(0, 1fr);
-    min-height: 104px;
+    grid-template-columns: 96px minmax(0, 1fr);
+    min-height: 112px;
   }
 
   .cover,
   .placeholder {
-    width: 88px;
-    min-height: 104px;
+    width: 96px;
+    height: 112px;
+  }
+
+  .content {
+    min-height: 112px;
+    padding: 10px 11px;
+  }
+
+  .title {
+    margin-top: 5px;
+    font-size: 15px;
+  }
+
+  .footer {
+    padding-top: 6px;
   }
 }

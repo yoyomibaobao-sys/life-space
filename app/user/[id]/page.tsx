@@ -696,7 +696,7 @@ export default function UserSpacePage() {
             </div>
 
             <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>
-              Lv.{cardProfile.level || 1} · <UiIcon name="flower" size={13} /> {cardProfile.flower_count || 0}
+              Lv.{cardProfile.level || 1} · <UiIcon name="helpful" size={13} /> 有帮助 {cardProfile.flower_count || 0}
             </div>
 
             <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>

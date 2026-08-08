@@ -1,5 +1,6 @@
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
+import { formatCardDate, formatPreciseDateTime } from "@/lib/date-time";
 
 export type UserProfileStats = {
   archiveCount: number;
@@ -43,16 +44,11 @@ export type PublicUserProfileData = {
 };
 
 export function formatProfileDateTime(value?: string | null) {
-  if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value) || "暂无";
+}
+
+export function formatProfileDate(value?: string | null) {
+  return formatCardDate(value) || "暂无";
 }
 
 function formatStorageNumber(value: number) {

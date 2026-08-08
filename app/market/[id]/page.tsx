@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { formatPreciseDateTime } from "@/lib/date-time";
 import MarketCommentsSection from "@/components/market/MarketCommentsSection";
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import {
-  formatMarketTime,
   getMarketItemCategoryLabel,
   getMarketPostTypeLabel,
   type MarketPostRow,
@@ -321,7 +321,7 @@ export default function MarketDetailPage() {
                 ) : null}
               </div>
 
-              <span style={timeStyle}>{formatMarketTime(item.created_at)}</span>
+              <span style={timeStyle}>{formatPreciseDateTime(item.created_at)}</span>
             </div>
 
             <h1 style={titleStyle}>{item.title}</h1>
@@ -562,17 +562,7 @@ function buildMarketLightboxImages(
 }
 
 function formatSourceRecordTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 const pageStyle: CSSProperties = {

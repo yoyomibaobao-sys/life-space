@@ -778,20 +778,6 @@ function getDurationDays(start?: string | null, end?: string | null) {
   return Math.max(1, Math.floor((safeEnd - startTime) / (1000 * 60 * 60 * 24)) + 1);
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function getProjectStatusLabel(helpStatus?: string | null, status?: string | null) {
   if (helpStatus === "open") return "求助中";
   if (helpStatus === "resolved") return "已解决";

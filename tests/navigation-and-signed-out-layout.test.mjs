@@ -93,10 +93,7 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(discoverCss, /\.imageTitleArea \{[\s\S]*?linear-gradient/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
   assert.match(discoverFormat, /formatCompactActivityTime as formatDiscoveryActivityTime/);
-  assert.match(activityFormat, /Intl\.DateTimeFormat\("en-US"/);
-  assert.match(activityFormat, /elapsed \/ MINUTE_MS\)\)\}m/);
-  assert.match(activityFormat, /elapsed \/ HOUR_MS\)\}h/);
-  assert.match(activityFormat, /elapsed \/ DAY_MS\)\}d/);
+  assert.match(activityFormat, /formatRecentActivityTime/);
   assert.match(projectMeta, /recordCount/);
   assert.match(projectMeta, /durationDays/);
   assert.match(projectMeta, /viewCount/);
@@ -128,7 +125,9 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
   assert.match(detail, /\["experience", "经验卡"\]/);
   assert.match(detail, /\["records", "种植记录"\]/);
   assert.match(detail, /activeTab === "experience"/);
-  assert.match(detail, /<PlantExperienceCardsSection cards=\{relatedExperienceCards\}/);
+  assert.match(detail, /<PlantExperienceCardsSection[\s\S]*?cards=\{relatedExperienceCards\}[\s\S]*?currentUserId=\{currentUserId\}/);
+  assert.match(detail, /title="我的经验卡"/);
+  assert.match(detail, /title="其他人的经验卡"/);
   assert.match(detail, /activeTab === "records"/);
   assert.match(detail, /\.from\("experience_cards"\)/);
   assert.match(detail, /is_experience_card_public/);
@@ -153,6 +152,8 @@ test("discover search separates projects, records, and covered experience cards"
   assert.match(form, /searchKind === "records"/);
   assert.match(results, /<DiscoverProjectCard/);
   assert.match(results, /<ExperienceCardListCard/);
+  assert.match(results, /kind === "projects"[\s\S]*?<DiscoverProjectCard/);
+  assert.match(results, /recordItems\.map[\s\S]*?<ProjectCardRows/);
   assert.match(data, /\.from\("discovery_project_feed_view"\)/);
   assert.match(data, /hydrateExperienceCardListItems/);
   assert.match(data, /is_experience_card_public/);

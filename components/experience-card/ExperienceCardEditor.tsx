@@ -64,8 +64,12 @@ function isSelectableImage(media: ExperienceCardMedia) {
 
 export default function ExperienceCardEditor({
   cardId,
+  onCancel,
+  onSaved,
 }: {
   cardId?: string;
+  onCancel?: () => void;
+  onSaved?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -297,9 +301,13 @@ export default function ExperienceCardEditor({
         showToast(mode === "preview" ? "草稿已保存" : "经验卡草稿已保存");
       }
 
-      router.push(
-        `/experience-cards/${savedCardId}${mode === "preview" ? "?preview=1" : ""}`
-      );
+      if (onSaved) {
+        await onSaved();
+      } else {
+        router.push(
+          `/experience-cards/${savedCardId}${mode === "preview" ? "?preview=1" : ""}`
+        );
+      }
     } catch (error) {
       setErrorText(getExperienceCardErrorText(error));
     } finally {
@@ -351,12 +359,18 @@ export default function ExperienceCardEditor({
     <main style={pageStyle}>
       <header style={headerStyle}>
         <div>
-          <Link
-            href={cardId ? `/experience-cards/${cardId}` : `/archive/${archive?.id}`}
-            style={backLinkStyle}
-          >
-            <UiIcon name="arrow-left" size={15} /> 返回
-          </Link>
+          {onCancel ? (
+            <button type="button" onClick={onCancel} style={backButtonStyle}>
+              <UiIcon name="arrow-left" size={15} /> 返回查看
+            </button>
+          ) : (
+            <Link
+              href={cardId ? `/experience-cards/${cardId}` : `/archive/${archive?.id}`}
+              style={backLinkStyle}
+            >
+              <UiIcon name="arrow-left" size={15} /> 返回
+            </Link>
+          )}
           <h1 style={titleStyle}>{cardId ? "修改经验卡" : "生成经验卡"}</h1>
         </div>
         <Link href="/experience-cards" style={secondaryLinkStyle}>
@@ -520,6 +534,14 @@ const backLinkStyle: CSSProperties = {
   color: "#6c7869",
   textDecoration: "none",
   fontSize: 14,
+};
+
+const backButtonStyle: CSSProperties = {
+  ...backLinkStyle,
+  border: 0,
+  padding: 0,
+  background: "transparent",
+  cursor: "pointer",
 };
 
 const titleStyle: CSSProperties = {

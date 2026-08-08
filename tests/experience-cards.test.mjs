@@ -168,7 +168,8 @@ test("experience cards have a persistent personal-space entry", async () => {
     /profileExtra=\{[\s\S]*?<ArchiveExperienceCards/
   );
   assert.match(archiveCards, /\.eq\("archive_id", archiveId\)/);
-  assert.match(archiveCards, /\/experience-cards\/\$\{item\.id\}\/edit/);
+  assert.match(archiveCards, /href=\{`\/experience-cards\/\$\{item\.id\}`\}/);
+  assert.doesNotMatch(archiveCards, /\/experience-cards\/\$\{item\.id\}\/edit/);
   assert.match(archiveCards, /deleteExperienceCard\(deleteTarget\.id\)/);
   assert.match(archiveCards, /aria-label="项目经验卡"/);
   assert.match(archiveCards, /<div style=\{eyebrowStyle\}>经验卡<\/div>/);
@@ -193,9 +194,42 @@ test("experience card lists use a shared cover with source and archive fallbacks
   assert.match(loader, /mediaByRecord\.get\(recordId\)\?\.\[0\]/);
   assert.match(loader, /archive\.cover_thumb_path/);
   assert.match(timeline, /thumbWrapStyle/);
+  assert.match(timeline, /previewMedia = imageMedia\.slice\(0, 3\)/);
+  assert.match(timeline, /共\{imageMedia\.length\}张/);
+  assert.doesNotMatch(timeline, />\+\{imageMedia\.length - 1\}</);
   assert.match(timeline, /href=\{`\/archive\/\$\{archive\.id\}\?record=\$\{record\.id\}`\}/);
   assert.match(plantDetail, /hydrateExperienceCardListItems\(cardRows\)/);
   assert.match(plantDetail, /<ExperienceCardListCard/);
+});
+
+test("experience card interactions use private collections and restrained helpful feedback", async () => {
+  const [migration, detail, interactions, list, editorRedirect] = await Promise.all([
+    source("supabase/migrations/20260808120000_add_experience_card_interactions.sql"),
+    source("app/experience-cards/[id]/page.tsx"),
+    source("components/experience-card/ExperienceCardInteractions.tsx"),
+    source("app/experience-cards/page.tsx"),
+    source("app/experience-cards/[id]/edit/page.tsx"),
+  ]);
+
+  assert.match(migration, /create table if not exists public\.experience_card_comments/);
+  assert.match(migration, /create table if not exists public\.experience_card_bookmarks/);
+  assert.match(migration, /create table if not exists public\.experience_card_helpful_marks/);
+  assert.match(migration, /enable row level security/g);
+  assert.match(migration, /public\.is_user_membership_active\(\(select auth\.uid\(\)\)\)/);
+  assert.match(migration, /public\.is_experience_card_public\(card_id\)/);
+  assert.match(migration, /get_experience_card_interaction_summaries/);
+  assert.match(migration, /experience_comment/);
+  assert.match(migration, /experience_helpful/);
+  assert.match(interactions, /“有帮助”表示这段真实过程值得参考/);
+  assert.match(interactions, /experience_card_bookmarks/);
+  assert.match(interactions, /experience_card_helpful_marks/);
+  assert.match(interactions, /experience_card_comments/);
+  assert.match(detail, /<ExperienceCardInteractions/);
+  assert.match(detail, /setEditing\(true\)/);
+  assert.match(detail, /<ExperienceCardEditor/);
+  assert.match(editorRedirect, /redirect\(`\/experience-cards\/\$\{id\}\?edit=1`\)/);
+  assert.match(list, /我的收藏/);
+  assert.match(list, /被收藏 \{item\.bookmarkCount\}/);
 });
 
 

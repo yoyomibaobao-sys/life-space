@@ -24,9 +24,8 @@ export default function ExperienceCardTimeline({
         const imageMedia = record.media.filter((media) =>
           Boolean(media.display_thumb_url || media.display_url)
         );
-        const firstImage = imageMedia[0];
-        const firstImageUrl =
-          firstImage?.display_thumb_url || firstImage?.display_url || null;
+        const previewMedia = imageMedia.slice(0, 3);
+        const hasImages = previewMedia.length > 0;
         const tags = Array.from(
           new Set(
             (record.record_tags || [])
@@ -56,23 +55,34 @@ export default function ExperienceCardTimeline({
                 <span style={stageStyle}>
                   {getExperienceCardStageLabel(index, records.length)}
                 </span>
-                <time style={dateStyle}>
+                <time dateTime={record.record_time} style={dateStyle}>
                   {formatExperienceCardDate(record.record_time) || "日期未记录"}
                 </time>
               </div>
 
               <div style={recordRowStyle}>
-                {firstImageUrl ? (
-                  <div style={thumbWrapStyle}>
-                    <img
-                      src={firstImageUrl}
-                      alt={`${formatExperienceCardDate(record.record_time)}的记录照片`}
-                      style={thumbStyle}
-                      loading="lazy"
-                    />
-                    {imageMedia.length > 1 ? (
-                      <span style={mediaCountStyle}>+{imageMedia.length - 1}</span>
-                    ) : null}
+                {hasImages ? (
+                  <div style={thumbWrapStyle(previewMedia.length)}>
+                    {previewMedia.map((media, mediaIndex) => {
+                      const src = media.display_thumb_url || media.display_url;
+                      if (!src) return null;
+                      return (
+                        <span
+                          key={media.id}
+                          style={thumbCellStyle(previewMedia.length, mediaIndex)}
+                        >
+                          <img
+                            src={src}
+                            alt={`${formatExperienceCardDate(record.record_time)}的记录照片 ${mediaIndex + 1}`}
+                            style={thumbStyle}
+                            loading="lazy"
+                          />
+                          {mediaIndex === previewMedia.length - 1 && imageMedia.length > 3 ? (
+                            <span style={mediaCountStyle}>共{imageMedia.length}张</span>
+                          ) : null}
+                        </span>
+                      );
+                    })}
                   </div>
                 ) : null}
 
@@ -91,7 +101,7 @@ export default function ExperienceCardTimeline({
                     <p style={noteStyle}>{record.note}</p>
                   ) : (
                     <p style={emptyNoteStyle}>
-                      {firstImageUrl ? "这条记录以照片为主。" : "这条记录没有文字。"}
+                      {hasImages ? "这条记录以照片为主。" : "这条记录没有文字。"}
                     </p>
                   )}
                 </div>
@@ -216,15 +226,29 @@ const recordRowStyle: CSSProperties = {
   minWidth: 0,
 };
 
-const thumbWrapStyle: CSSProperties = {
-  position: "relative",
-  width: 78,
-  height: 68,
-  flex: "0 0 78px",
-  borderRadius: 9,
-  overflow: "hidden",
-  background: "#eef2eb",
-};
+function thumbWrapStyle(count: number): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: count === 1 ? "1fr" : "repeat(2, 1fr)",
+    gridTemplateRows: count === 3 ? "repeat(2, 1fr)" : "1fr",
+    gap: 2,
+    width: 104,
+    height: 76,
+    flex: "0 0 104px",
+    borderRadius: 9,
+    overflow: "hidden",
+    background: "#eef2eb",
+  };
+}
+
+function thumbCellStyle(count: number, index: number): CSSProperties {
+  return {
+    position: "relative",
+    minWidth: 0,
+    minHeight: 0,
+    gridRow: count === 3 && index === 0 ? "1 / span 2" : undefined,
+  };
+}
 
 const thumbStyle: CSSProperties = {
   width: "100%",

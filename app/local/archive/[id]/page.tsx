@@ -33,6 +33,7 @@ import type {
 import type { MediaItem } from "@/lib/domain-types";
 import { formatLocalCycleDate, isLocalDateBefore } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
+import { formatPreciseDateTime } from "@/lib/date-time";
 import {
   getSystemNameCandidates,
   type SystemNameCandidate,
@@ -70,17 +71,7 @@ import {
 } from "@/lib/record-photo-batches";
 
 function formatDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 function getDayNumber(startValue?: string | null, currentValue?: string | null) {

@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
+import ExperienceCardEditor from "@/components/experience-card/ExperienceCardEditor";
+import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import {
@@ -34,6 +36,7 @@ export default function ExperienceCardPage({
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [editing, setEditing] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -41,7 +44,15 @@ export default function ExperienceCardPage({
       data: { user },
     } = await supabase.auth.getUser();
     setViewerId(user?.id || null);
-    setDetail(await loadExperienceCard(id));
+    const nextDetail = await loadExperienceCard(id);
+    setDetail(nextDetail);
+    if (
+      nextDetail &&
+      user?.id === nextDetail.card.user_id &&
+      new URLSearchParams(window.location.search).get("edit") === "1"
+    ) {
+      setEditing(true);
+    }
     setLoading(false);
   }
 
@@ -51,6 +62,11 @@ export default function ExperienceCardPage({
   }, [id]);
 
   const isOwner = Boolean(detail && viewerId === detail.card.user_id);
+
+  function leaveEditMode() {
+    window.history.replaceState(null, "", `/experience-cards/${id}`);
+    setEditing(false);
+  }
 
   async function runAction(action: Exclude<PendingAction, null>) {
     if (!detail || busy) return;
@@ -127,6 +143,19 @@ export default function ExperienceCardPage({
     );
   }
 
+  if (isOwner && editing) {
+    return (
+      <ExperienceCardEditor
+        cardId={id}
+        onCancel={leaveEditMode}
+        onSaved={async () => {
+          leaveEditMode();
+          await reload();
+        }}
+      />
+    );
+  }
+
   const startDate = formatExperienceCardDate(detail.records[0]?.record_time);
   const endDate = formatExperienceCardDate(
     detail.records[detail.records.length - 1]?.record_time
@@ -152,27 +181,17 @@ export default function ExperienceCardPage({
           {isOwner ? " 我的经验卡" : " 返回发现"}
         </Link>
         {isOwner ? (
-          <Link
-            href={`/experience-cards/${detail.card.id}/edit`}
-            style={secondaryLinkStyle}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            style={{ ...secondaryLinkStyle, cursor: "pointer" }}
           >
-            修改
-          </Link>
+            编辑
+          </button>
         ) : null}
       </header>
 
       <ExperienceCardVideoPanel detail={detail} readOnly={!isOwner} />
-
-      <section style={timelineSectionStyle}>
-        <div style={timelineHeadingStyle}>
-          <strong>来源记录</strong>
-          <span>{detail.records.length} 条 · 按原始时间排列</span>
-        </div>
-        <ExperienceCardTimeline
-          archive={detail.archive}
-          records={detail.records}
-        />
-      </section>
 
       <article style={cardShellStyle}>
         <div style={introStyle}>
@@ -228,6 +247,24 @@ export default function ExperienceCardPage({
           </div>
         </div>
       </article>
+
+      <ExperienceCardInteractions
+        cardId={detail.card.id}
+        cardOwnerId={detail.card.user_id}
+        currentUserId={viewerId}
+        isPublic={detail.isPubliclyAvailable}
+      />
+
+      <section style={timelineSectionStyle}>
+        <div style={timelineHeadingStyle}>
+          <strong>来源记录</strong>
+          <span>{detail.records.length} 条 · 按原始时间排列</span>
+        </div>
+        <ExperienceCardTimeline
+          archive={detail.archive}
+          records={detail.records}
+        />
+      </section>
 
       {isOwner && !detail.sourceIsComplete ? (
         <section style={warningStyle}>
