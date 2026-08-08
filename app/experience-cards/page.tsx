@@ -228,7 +228,7 @@ export default function MyExperienceCardsPage() {
                   href={`/experience-cards/${item.id}`}
                   style={primaryLinkStyle}
                 >
-                  打开
+                  打开并管理
                 </Link>
                 {item.status === "published" ? (
                   <button

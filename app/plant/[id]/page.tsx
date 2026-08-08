@@ -1167,12 +1167,12 @@ function PlantTabAccessNotice({ label }: { label: string }) {
         lineHeight: 1.7,
       }}
     >
-      {label}属于云空间中的完整指引内容。
+      {label}属于云会员的完整指引内容。
       <Link
         href="/membership"
         style={{ marginLeft: 7, color: "#3f6f37", fontWeight: 700 }}
       >
-        查看会员权益
+        了解云会员
       </Link>
     </section>
   );
@@ -1642,7 +1642,7 @@ export default function PlantDetailPage() {
         type: "error",
         text: "加入收藏属于云会员权益。",
         href: "/membership",
-        hrefText: "查看会员权益",
+        hrefText: "了解云会员",
       });
       return;
     }
@@ -1716,7 +1716,7 @@ export default function PlantDetailPage() {
         type: "error",
         text: "云端种植计划属于云会员权益；你仍可新建本地项目。",
         href: "/membership",
-        hrefText: "查看会员权益",
+        hrefText: "了解云会员",
       });
       return;
     }
@@ -1882,7 +1882,7 @@ export default function PlantDetailPage() {
           >
             当前是本地用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云会员开放。
             <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              查看会员权益
+              了解云会员
             </Link>
           </div>
         ) : null}

@@ -106,7 +106,7 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
   );
 });
 
-test("the experience-card UI covers image selection, preview, publication, and sharing", async () => {
+test("the experience-card UI persists source records and cover from the integrated detail", async () => {
   const [editor, detail, list, archiveHeader] = await Promise.all([
     source("components/experience-card/ExperienceCardEditor.tsx"),
     source("app/experience-cards/[id]/page.tsx"),
@@ -114,13 +114,17 @@ test("the experience-card UI covers image selection, preview, publication, and s
     source("components/archive-detail/ArchiveDetailHeader.tsx"),
   ]);
 
-  assert.match(editor, /选择图片/);
-  assert.match(editor, /selectedMediaIds/);
-  assert.match(editor, /请至少选择来自3条记录的图片/);
-  assert.match(editor, /保存草稿/);
+  assert.match(editor, /selectedRecordIds/);
+  assert.match(editor, /toggleRecord\(record\.id\)/);
+  assert.match(editor, /recordIds: selectedRecords\.map/);
+  assert.match(editor, /经验卡封面/);
+  assert.match(editor, /coverMediaId: effectiveCoverMediaId/);
+  assert.match(editor, /保存修改/);
   assert.match(editor, /预览/);
   assert.match(editor, /发布经验卡/);
   assert.match(editor, /项目中其他记录仍保持原来的可见性/);
+  assert.match(editor, /embedded = false/);
+  assert.match(editor, /打开即可查看和编辑/);
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);
   assert.match(detail, /来源记录已经变化/);
@@ -129,6 +133,12 @@ test("the experience-card UI covers image selection, preview, publication, and s
     detail.indexOf("<ExperienceCardVideoPanel") <
       detail.indexOf("<ExperienceCardTimeline")
   );
+  assert.ok(
+    detail.indexOf("<ExperienceCardVideoPanel") <
+      detail.indexOf("<ExperienceCardEditor")
+  );
+  assert.match(detail, /<ExperienceCardEditor cardId=\{id\} embedded onSaved=\{reload\}/);
+  assert.doesNotMatch(detail, /setEditing/);
   assert.match(detail, /detail\.archive\.system_name/);
   assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
   assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
@@ -224,10 +234,14 @@ test("experience card interactions use private collections and restrained helpfu
   assert.match(interactions, /experience_card_bookmarks/);
   assert.match(interactions, /experience_card_helpful_marks/);
   assert.match(interactions, /experience_card_comments/);
+  assert.match(interactions, /id="experience-card-interactions"/);
+  assert.match(interactions, />\s*写评论\s*</);
+  assert.match(interactions, /href=\{currentUserId \? "\/membership" : "\/login"\}/);
+  assert.doesNotMatch(interactions, /if \(!available\) return null/);
   assert.match(detail, /<ExperienceCardInteractions/);
-  assert.match(detail, /setEditing\(true\)/);
-  assert.match(detail, /<ExperienceCardEditor/);
-  assert.match(editorRedirect, /redirect\(`\/experience-cards\/\$\{id\}\?edit=1`\)/);
+  assert.match(detail, /<ExperienceCardEditor cardId=\{id\} embedded/);
+  assert.doesNotMatch(detail, /setEditing\(true\)/);
+  assert.match(editorRedirect, /redirect\(`\/experience-cards\/\$\{id\}`\)/);
   assert.match(list, /我的收藏/);
   assert.match(list, /被收藏 \{item\.bookmarkCount\}/);
 });
@@ -244,7 +258,8 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
 
   assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\}/);
   assert.match(panel, /生成竖屏MP4/);
-  assert.match(panel, /图片与视频/);
+  assert.match(panel, /视频预览与导出/);
+  assert.match(panel, /只保存在当前设备/);
   assert.match(panel, /selectedImageCount.*张图片/s);
   assert.match(panel, /<video[\s\S]*?autoPlay[\s\S]*?muted[\s\S]*?playsInline/);
   assert.match(panel, /onEnded=\{\(event\) => restartGeneratedVideo\(event\.currentTarget\)\}/);
@@ -296,11 +311,11 @@ test("experience card MP4 is shown first, selects individual images, and preserv
     detail.indexOf("<ExperienceCardVideoPanel detail={detail}") <
       detail.indexOf("<article style={cardShellStyle}")
   );
-  assert.match(panel, /已选 \{selectedImageCount\}\/\{totalImageCount\} 张/);
+  assert.match(panel, /视频选图 \{selectedImageCount\}\/\{totalImageCount\} 张/);
   assert.match(panel, /imageOptions\.map/);
   assert.doesNotMatch(panel, /第 \{index \+ 1\} 条记录/);
   assert.match(panel, /selectedImageByRecordId/);
-  assert.match(panel, /设为封面/);
+  assert.match(panel, /设为片头/);
   assert.match(panel, /getRecordImageOptions\(record\)\.map/);
   assert.match(panel, /selectedUrls\.has\(option\.sourceUrl\)/);
   assert.match(renderer, /imageSelection\?: ExperienceCardVideoImageSelection/);

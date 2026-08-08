@@ -524,7 +524,7 @@ function NewMarketPostPageContent() {
             <span>{getMarketPostQuotaHint(membership)}</span>
             {marketBlocked ? (
               <Link href="/membership" style={quotaLinkStyle}>
-                查看会员权益
+                了解云会员
               </Link>
             ) : null}
           </div>

@@ -740,7 +740,7 @@ export default function AddRecord({
         >
           <span>{getCreateContentBlockedText(membership)}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            查看会员权益
+            了解云会员
           </Link>
         </div>
       ) : null}
@@ -760,7 +760,7 @@ export default function AddRecord({
         >
           <span>{membershipNotice}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            查看会员权益
+            了解云会员
           </Link>
         </div>
       ) : null}
@@ -1015,7 +1015,7 @@ export default function AddRecord({
                 <br />
                 空间不足，无法上传。{" "}
                 <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                  查看会员权益
+                  了解云会员
                 </Link>
                 。
               </>

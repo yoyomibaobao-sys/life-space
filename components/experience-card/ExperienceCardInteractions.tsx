@@ -129,6 +129,10 @@ export default function ExperienceCardInteractions({
   }, [cardId, currentUserId]);
 
   function requireWritableAccount() {
+    if (!available) {
+      showToast("评论、收藏和“有用”功能尚未启用");
+      return false;
+    }
     if (!currentUserId) {
       showToast("请先登录");
       return false;
@@ -142,6 +146,11 @@ export default function ExperienceCardInteractions({
       return false;
     }
     return true;
+  }
+
+  function openComposer() {
+    setCommentsOpen(true);
+    setComposerOpen(true);
   }
 
   async function toggleBookmark() {
@@ -221,10 +230,12 @@ export default function ExperienceCardInteractions({
     await Promise.all([loadComments(), loadSummary()]);
   }
 
-  if (!available) return null;
-
   return (
-    <section className={styles.section} aria-label="经验卡互动">
+    <section
+      id="experience-card-interactions"
+      className={styles.section}
+      aria-label="经验卡互动"
+    >
       <div className={styles.actionRow}>
         {isOwner ? (
           <span className={styles.staticMetric} aria-label={`被收藏 ${summary.bookmarkCount}`}>
@@ -258,22 +269,50 @@ export default function ExperienceCardInteractions({
           </button>
         )}
 
-        <button
-          type="button"
-          className={styles.action}
-          aria-expanded={commentsOpen}
-          onClick={() => setCommentsOpen((value) => !value)}
-        >
-          <UiIcon name="comment" size={15} /> 评论 {summary.commentCount}
-        </button>
+        {isPublic ? (
+          <button
+            type="button"
+            className={styles.action}
+            aria-expanded={commentsOpen}
+            onClick={() => setCommentsOpen((value) => !value)}
+          >
+            <UiIcon name="comment" size={15} /> 评论 {summary.commentCount}
+          </button>
+        ) : (
+          <span className={styles.staticMetric}>
+            <UiIcon name="comment" size={15} /> 评论 {summary.commentCount}
+          </span>
+        )}
+
+        {isPublic ? (
+          <button
+            type="button"
+            className={styles.writeAction}
+            onClick={openComposer}
+          >
+            写评论
+          </button>
+        ) : null}
       </div>
 
-      <p className={styles.hint}>“有帮助”表示这段真实过程值得参考，不代表对所有环境都有效。</p>
+      <p className={styles.hint}>
+        {isPublic
+          ? "“有帮助”表示这段真实过程值得参考，不代表对所有环境都有效。"
+          : "经验卡公开后，其他用户才可以收藏、标记“有帮助”和评论。"}
+      </p>
+
+      {!available ? (
+        <div className={styles.unavailable}>
+          评论、收藏和“有用”暂时不可用，请稍后重试。
+        </div>
+      ) : null}
 
       {commentsOpen ? (
         <div className={styles.comments}>
           <div className={styles.commentList}>
-            {comments.length ? comments.map((comment) => (
+            {!available ? (
+              <div className={styles.empty}>互动数据当前不可读取</div>
+            ) : comments.length ? comments.map((comment) => (
               <article className={styles.comment} key={comment.id}>
                 <div className={styles.commentMeta}>
                   <Link href={`/user/${comment.user_id}/profile`} className={styles.commentAuthor}>
@@ -298,7 +337,9 @@ export default function ExperienceCardInteractions({
 
           {composerOpen ? (
             <div className={styles.composer}>
-              {canWrite ? (
+              {!available ? (
+                <div className={styles.empty}>当前预览尚未启用评论写入。</div>
+              ) : canWrite ? (
                 <>
                   <label htmlFor={`experience-comment-${cardId}`} className={styles.empty}>写评论</label>
                   <textarea
@@ -316,8 +357,18 @@ export default function ExperienceCardInteractions({
                   </div>
                 </>
               ) : (
-                <div className={styles.empty}>
-                  {currentUserId ? getCreateContentBlockedText(membership) : "登录后可评论"}
+                <div className={styles.commentGate}>
+                  <span>
+                    {currentUserId
+                      ? getCreateContentBlockedText(membership)
+                      : "登录后可评论"}
+                  </span>
+                  <Link
+                    href={currentUserId ? "/membership" : "/login"}
+                    className={styles.gateLink}
+                  >
+                    {currentUserId ? "了解云会员" : "去登录"}
+                  </Link>
                 </div>
               )}
             </div>
@@ -325,10 +376,7 @@ export default function ExperienceCardInteractions({
             <button
               type="button"
               className={styles.action}
-              onClick={() => {
-                if (!requireWritableAccount()) return;
-                setComposerOpen(true);
-              }}
+              onClick={openComposer}
             >
               写评论
             </button>

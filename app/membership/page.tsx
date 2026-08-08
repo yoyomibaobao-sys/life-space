@@ -88,10 +88,10 @@ export default function MembershipPage() {
   return (
     <main style={pageStyle}>
       <section style={heroStyle}>
-        <div style={eyebrowStyle}>个人会员与云空间</div>
+        <div style={eyebrowStyle}>个人使用方案</div>
         <h1 style={titleStyle}>云会员</h1>
         <p style={subtitleStyle}>
-          本地记录始终免费。开通后获得 1GB 云空间、完整指引、经验互动和集市发布；上传云空间不等于公开，已有记录不会自动公开。
+          本地记录始终免费。开通后获得 1GB 个人云端存储、完整指引、经验互动和集市发布；上传到云端不等于公开，已有记录不会自动公开。
         </p>
       </section>
 
@@ -125,11 +125,11 @@ export default function MembershipPage() {
               }
             />
             <InfoItem
-              label="云空间容量"
+              label="存储容量"
               value={membership ? storageLimitText : "0 B"}
               hint={
                 isSignupTrialAllowance
-                  ? "首批注册体验额度；云会员为1GB"
+                  ? "首批注册体验容量；云会员为1GB"
                   : "云会员为1GB"
               }
             />
@@ -173,7 +173,7 @@ export default function MembershipPage() {
             <div style={sectionLabelStyle}>尚未登录</div>
             <h2 style={sectionTitleStyle}>注册后仍可使用本地项目</h2>
             <p style={mutedTextStyle}>
-              注册是推荐路径，但注册不等于上传云端。本地离线版免费；首批20名正式注册用户在名额和存储安全线允许时可获得30MB云空间体验。
+              注册是推荐路径，但注册不等于上传云端。本地离线版免费；首批20名正式注册用户在名额和存储安全线允许时可获得30MB云端体验容量。
             </p>
           </div>
 
@@ -190,7 +190,7 @@ export default function MembershipPage() {
 
       <section style={trialNoticeStyle}>
         <div style={sectionLabelStyle}>首批注册体验</div>
-        <h2 style={noteTitleStyle}>前20名正式账号可获30MB云空间</h2>
+        <h2 style={noteTitleStyle}>前20名正式账号可获30MB云端体验容量</h2>
         <p style={mutedTextStyle}>
           体验额度不设6个月期限，是否获得以注册成功时的剩余名额和平台存储安全线为准。30MB用完后仍可继续使用本地记录；开通云会员后，容量升级为1GB。内部测试账号不占这20个名额。
         </p>
@@ -227,7 +227,7 @@ export default function MembershipPage() {
           price="¥64 / 年｜US$8 / year"
           description="适合长期保存、完整查阅、交流经验和公开分享。"
           items={[
-            "1GB 云空间",
+            "1GB 云端存储",
             "云端私密空间和多设备同步",
             "记录可设为仅自己可见，也可公开发现",
             "参数、生长周期、完整指引和相关种植记录",
@@ -319,9 +319,9 @@ export default function MembershipPage() {
         <ul style={ruleListStyle}>
           <li>本地离线版免费，数据只保存在当前设备的 App 私有存储中。</li>
           <li>注册不等于上传云端；首批20名正式账号可获30MB体验额度，其他账号仍可免费使用本地功能。</li>
-          <li>上传云空间不等于公开，记录可设为仅自己可见或公开发现。</li>
-          <li>开通云会员后，已有本地记录默认同步为云空间私密，不会自动公开。</li>
-          <li>云会员包含 1GB 云空间，集市最多同时发布中 30 条；暂不提供集市加量包。</li>
+          <li>上传到云端不等于公开，记录可设为仅自己可见或公开发现。</li>
+          <li>开通云会员后，已有本地记录默认同步为云端私密，不会自动公开。</li>
+          <li>云会员包含 1GB 云端存储，集市最多同时发布中 30 条；暂不提供集市加量包。</li>
           <li>当前为首发价 ¥64/年或 US$8/year，不自动续费。</li>
           <li>当前为人工确认付款并手动开通云会员；后续可再接入自动支付或应用商店内购。</li>
         </ul>

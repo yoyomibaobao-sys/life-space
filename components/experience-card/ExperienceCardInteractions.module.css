@@ -14,6 +14,7 @@
 }
 
 .action,
+.writeAction,
 .staticMetric {
   min-height: 36px;
   display: inline-flex;
@@ -33,6 +34,13 @@
   cursor: pointer;
 }
 
+.writeAction {
+  border-color: #6e9468;
+  background: #63885d;
+  color: #fff;
+  cursor: pointer;
+}
+
 .action[aria-pressed="true"] {
   border-color: #a9c5a3;
   background: #edf6e9;
@@ -40,6 +48,7 @@
 }
 
 .action:focus-visible,
+.writeAction:focus-visible,
 .commentDelete:focus-visible,
 .submit:focus-visible,
 .cancel:focus-visible {
@@ -50,6 +59,17 @@
 .hint {
   margin: 9px 0 0;
   color: #7a8676;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.unavailable {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid #eadfbe;
+  border-radius: 10px;
+  background: #fff9e9;
+  color: #7d6a3e;
   font-size: 12px;
   line-height: 1.55;
 }
@@ -109,6 +129,30 @@
 
 .composer {
   margin-top: 10px;
+}
+
+.commentGate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 0;
+  color: #7d8879;
+  font-size: 12px;
+}
+
+.gateLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid #d4dfd0;
+  border-radius: 999px;
+  background: #fff;
+  color: #52664e;
+  font-weight: 750;
+  text-decoration: none;
 }
 
 .textarea {
@@ -176,6 +220,7 @@
   }
 
   .action,
+  .writeAction,
   .staticMetric {
     min-height: 34px;
     padding: 6px 9px;

@@ -168,7 +168,7 @@ export default function ArchiveExperienceCards({
                   href={`/experience-cards/${item.id}`}
                   style={actionLinkStyle}
                 >
-                  打开
+                  {isOwner ? "打开并管理" : "打开"}
                 </Link>
                 {isOwner ? (
                   <>

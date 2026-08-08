@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import {
+  formatExperienceCardDate,
   getExperienceCardErrorText,
   loadExperienceCard,
   publishExperienceCard,
@@ -18,7 +19,6 @@ import type {
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
-import { saveExperienceCardVideoSelection } from "@/lib/experience-card-video-cache";
 import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
@@ -62,13 +62,29 @@ function isSelectableImage(media: ExperienceCardMedia) {
   return true;
 }
 
+function createEditorSnapshot({
+  title,
+  recordIds,
+  coverMediaId,
+}: {
+  title: string;
+  recordIds: string[];
+  coverMediaId: string | null;
+}) {
+  return JSON.stringify({
+    title: title.trim(),
+    recordIds: [...recordIds].sort(),
+    coverMediaId,
+  });
+}
+
 export default function ExperienceCardEditor({
   cardId,
-  onCancel,
+  embedded = false,
   onSaved,
 }: {
   cardId?: string;
-  onCancel?: () => void;
+  embedded?: boolean;
   onSaved?: () => void | Promise<void>;
 }) {
   const router = useRouter();
@@ -78,9 +94,10 @@ export default function ExperienceCardEditor({
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
   const [records, setRecords] = useState<ExperienceCardSourceRecord[]>([]);
   const [membership, setMembership] = useState<MyMembership | null>(null);
-  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [coverMediaId, setCoverMediaId] = useState<string | null>(null);
+  const [initialSnapshot, setInitialSnapshot] = useState("");
   const [wasPublished, setWasPublished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,6 +125,7 @@ export default function ExperienceCardEditor({
       let archiveId = requestedArchiveId;
       let existingRecordIds: string[] = [];
       let existingCoverMediaId: string | null = null;
+      let existingTitle = "";
 
       if (cardId) {
         const detail = await loadExperienceCard(cardId);
@@ -120,7 +138,8 @@ export default function ExperienceCardEditor({
         archiveId = detail.card.archive_id;
         existingRecordIds = detail.records.map((record) => record.id);
         existingCoverMediaId = detail.card.cover_media_id;
-        setTitle(detail.card.title);
+        existingTitle = detail.card.title;
+        setTitle(existingTitle);
         setWasPublished(detail.card.status === "published");
       }
 
@@ -188,20 +207,19 @@ export default function ExperienceCardEditor({
 
       setArchive(archiveData as ExperienceCardArchive);
       setRecords(nextRecords);
-      setSelectedMediaIds(
-        nextRecords
-          .filter((record) => existingRecordIds.includes(record.id))
-          .flatMap((record) =>
-            record.media
-              .filter(isSelectableImage)
-              .filter((media) =>
-                Boolean(media.display_url || media.display_thumb_url)
-              )
-              .map((media) => media.id)
-          )
-      );
+      setSelectedRecordIds(existingRecordIds);
       setCoverMediaId(existingCoverMediaId);
-      if (!cardId) setTitle(`${archiveData.title}的经验`);
+      if (!cardId) {
+        setTitle(`${archiveData.title}的经验`);
+      } else {
+        setInitialSnapshot(
+          createEditorSnapshot({
+            title: existingTitle,
+            recordIds: existingRecordIds,
+            coverMediaId: existingCoverMediaId,
+          })
+        );
+      }
       setLoading(false);
     }
 
@@ -219,86 +237,88 @@ export default function ExperienceCardEditor({
       ),
     [records]
   );
-  const selectedMediaSet = useMemo(
-    () => new Set(selectedMediaIds),
-    [selectedMediaIds]
-  );
-  const selectedImages = imageOptions.filter((media) =>
-    selectedMediaSet.has(media.id)
-  );
-  const selectedRecordIdSet = new Set(
-    selectedImages.map((media) => media.record_id)
+  const selectedRecordIdSet = useMemo(
+    () => new Set(selectedRecordIds),
+    [selectedRecordIds]
   );
   const selectedRecords = records.filter((record) =>
     selectedRecordIdSet.has(record.id)
   );
-  const coverOptions = selectedImages;
+  const coverOptions = imageOptions.filter((media) =>
+    selectedRecordIdSet.has(media.record_id)
+  );
   const effectiveCoverMediaId =
     coverOptions.some((media) => media.id === coverMediaId)
       ? coverMediaId
-      : coverOptions[0]?.id || null;
-  const canSave =
+      : null;
+  const currentSnapshot = createEditorSnapshot({
+    title,
+    recordIds: selectedRecords.map((record) => record.id),
+    coverMediaId: effectiveCoverMediaId,
+  });
+  const hasChanges = !cardId || currentSnapshot !== initialSnapshot;
+  const canPersist =
     Boolean(archive) &&
     canCreateMembershipContent(membership) &&
     title.trim().length >= 1 &&
     title.trim().length <= 120 &&
-    selectedMediaIds.length >= 1 &&
     selectedRecords.length >= 3 &&
     selectedRecords.length <= 12 &&
     !saving;
+  const canSave = canPersist && hasChanges;
+  const canPublish = canPersist && (!wasPublished || hasChanges);
 
-  function toggleImage(media: ExperienceCardMedia) {
-    setSelectedMediaIds((current) => {
-      if (current.includes(media.id)) {
-        return current.filter((id) => id !== media.id);
+  function toggleRecord(recordId: string) {
+    setSelectedRecordIds((current) => {
+      if (current.includes(recordId)) {
+        if (
+          coverMediaId &&
+          records
+            .find((record) => record.id === recordId)
+            ?.media.some((media) => media.id === coverMediaId)
+        ) {
+          setCoverMediaId(null);
+        }
+        return current.filter((id) => id !== recordId);
       }
-      const currentRecordIds = new Set(
-        imageOptions
-          .filter((option) => current.includes(option.id))
-          .map((option) => option.record_id)
-      );
-      if (
-        !currentRecordIds.has(media.record_id) &&
-        currentRecordIds.size >= 12
-      ) {
+      if (current.length >= 12) {
         showToast("一张经验卡最多关联12条来源记录");
         return current;
       }
-      return [...current, media.id];
+      return [...current, recordId];
     });
   }
 
   async function persist(mode: "draft" | "preview" | "publish") {
-    if (!archive || !canSave) return;
+    if (!archive || !canPersist) return;
+    if (mode !== "publish" && !hasChanges) return;
+    if (mode === "publish" && !canPublish) return;
     setSaving(true);
     setErrorText("");
 
     try {
-      const savedCardId = await saveExperienceCard({
-        cardId: cardId || null,
-        archiveId: archive.id,
-        title,
-        recordIds: selectedRecords.map((record) => record.id),
-        coverMediaId: effectiveCoverMediaId,
-      });
-
-      saveExperienceCardVideoSelection(savedCardId, {
-        selectedMediaIdsByRecordId: Object.fromEntries(
-          selectedRecords.map((record) => [
-            record.id,
-            selectedImages
-              .filter((media) => media.record_id === record.id)
-              .map((media) => media.id),
-          ])
-        ),
-        coverMediaId: effectiveCoverMediaId,
-      });
+      const savedCardId =
+        cardId && !hasChanges
+          ? cardId
+          : await saveExperienceCard({
+              cardId: cardId || null,
+              archiveId: archive.id,
+              title,
+              recordIds: selectedRecords.map((record) => record.id),
+              coverMediaId: effectiveCoverMediaId,
+            });
 
       if (mode === "publish") {
         await publishExperienceCard(savedCardId);
         showToast("经验卡已公开");
       } else {
-        showToast(mode === "preview" ? "草稿已保存" : "经验卡草稿已保存");
+        showToast(
+          mode === "preview"
+            ? "草稿已保存"
+            : cardId
+              ? "经验卡修改已保存"
+              : "经验卡草稿已保存"
+        );
       }
 
       if (onSaved) {
@@ -317,76 +337,88 @@ export default function ExperienceCardEditor({
   }
 
   if (loading) {
-    return <main style={pageStyle}>正在读取项目记录...</main>;
+    return embedded ? (
+      <section style={messageCardStyle}>正在读取可编辑内容...</section>
+    ) : (
+      <main style={pageStyle}>正在读取项目记录...</main>
+    );
   }
 
   if (errorText && !archive) {
-    return (
+    const message = (
+      <section style={messageCardStyle}>
+        <h1 style={titleStyle}>无法编辑经验卡</h1>
+        <p style={mutedStyle}>{errorText}</p>
+        <Link href="/experience-cards" style={secondaryLinkStyle}>
+          返回我的经验卡
+        </Link>
+      </section>
+    );
+    return embedded ? message : (
       <main style={pageStyle}>
-        <section style={messageCardStyle}>
-          <h1 style={titleStyle}>无法编辑经验卡</h1>
-          <p style={mutedStyle}>{errorText}</p>
-          <Link href="/experience-cards" style={secondaryLinkStyle}>
-            返回我的经验卡
-          </Link>
-        </section>
+        {message}
       </main>
     );
   }
 
   if (!canCreateMembershipContent(membership)) {
-    return (
-      <main style={pageStyle}>
-        <section style={messageCardStyle}>
-          <h1 style={titleStyle}>需要开通云会员</h1>
-          <p style={mutedStyle}>
-            经验卡引用云端项目与记录，只有云会员可以创建、修改和发布。
-          </p>
-          <div style={actionRowStyle}>
-            <Link href="/membership" style={primaryLinkStyle}>
-              查看会员权益
-            </Link>
+    const membershipMessage = (
+      <section style={messageCardStyle}>
+        <h1 style={titleStyle}>需要开通云会员</h1>
+        <p style={mutedStyle}>
+          经验卡引用云端项目与记录，只有云会员可以创建、修改和发布。
+        </p>
+        <div style={actionRowStyle}>
+          <Link href="/membership" style={primaryLinkStyle}>
+            了解云会员
+          </Link>
+          {!embedded ? (
             <Link href="/experience-cards" style={secondaryLinkStyle}>
               返回
             </Link>
-          </div>
-        </section>
+          ) : null}
+        </div>
+      </section>
+    );
+    return embedded ? membershipMessage : (
+      <main style={pageStyle}>
+        {membershipMessage}
       </main>
     );
   }
 
-  return (
-    <main style={pageStyle}>
-      <header style={headerStyle}>
-        <div>
-          {onCancel ? (
-            <button type="button" onClick={onCancel} style={backButtonStyle}>
-              <UiIcon name="arrow-left" size={15} /> 返回查看
-            </button>
-          ) : (
-            <Link
-              href={cardId ? `/experience-cards/${cardId}` : `/archive/${archive?.id}`}
-              style={backLinkStyle}
-            >
-              <UiIcon name="arrow-left" size={15} /> 返回
-            </Link>
-          )}
-          <h1 style={titleStyle}>{cardId ? "修改经验卡" : "生成经验卡"}</h1>
-        </div>
-        <Link href="/experience-cards" style={secondaryLinkStyle}>
-          我的经验卡
-        </Link>
-      </header>
+  const editorContent = (
+    <>
+      {embedded ? (
+        <section style={integratedIntroStyle}>
+          <div>
+            <div style={eyebrowStyle}>经验卡内容</div>
+            <h2 style={integratedTitleStyle}>打开即可查看和编辑</h2>
+            <p style={mutedStyle}>
+              标题、来源记录和经验卡封面会真实保存；上方视频选图只影响当前设备生成的MP4。
+            </p>
+          </div>
+          <span style={countPillStyle(wasPublished)}>
+            {wasPublished ? "已公开" : "私密草稿"}
+          </span>
+        </section>
+      ) : null}
 
-      {wasPublished ? (
+      {wasPublished && hasChanges ? (
         <section style={noticeStyle}>
-          修改并保存后会先回到私密草稿，需要重新确认发布。
+          只保存修改会先回到私密草稿；也可以选择“保存并重新发布”。
         </section>
       ) : null}
 
       <section style={panelStyle}>
         <div style={eyebrowStyle}>来源项目</div>
-        <h2 style={sectionTitleStyle}>{archive?.title}</h2>
+        <h2 style={sectionTitleStyle}>
+          {archive ? (
+            <Link href={`/archive/${archive.id}`} style={sourceProjectLinkStyle}>
+              {archive.title}
+            </Link>
+          ) : null}
+        </h2>
         <p style={mutedStyle}>
           {archive?.system_name ||
             archive?.species_name_snapshot ||
@@ -411,61 +443,127 @@ export default function ExperienceCardEditor({
       <section style={panelStyle}>
         <div style={sectionHeadingRowStyle}>
           <div>
-            <div style={eyebrowStyle}>选择图片</div>
-            <h2 style={sectionTitleStyle}>
-              已选择 {selectedMediaIds.length} 张
-            </h2>
+            <div style={eyebrowStyle}>来源记录</div>
+            <h2 style={sectionTitleStyle}>选择3～12条真实记录</h2>
           </div>
-          <span style={countPillStyle(selectedRecords.length >= 3)}>
-            来自 {selectedRecords.length} 条记录
+          <span
+            style={countPillStyle(
+              selectedRecords.length >= 3 && selectedRecords.length <= 12
+            )}
+          >
+            已选 {selectedRecords.length} 条
           </span>
         </div>
 
-        {imageOptions.length === 0 ? (
-          <p style={errorStyle}>
-            当前项目还没有可选择的照片。
-          </p>
+        {records.length === 0 ? (
+          <p style={errorStyle}>当前项目还没有可选择的记录。</p>
         ) : (
-          <div style={imageGridStyle}>
-            {imageOptions.map((media, index) => {
-              const selected = selectedMediaSet.has(media.id);
-              const selectedAsCover =
-                selected && effectiveCoverMediaId === media.id;
-              const src = media.display_thumb_url || media.display_url;
-              if (!src) return null;
+          <div style={recordGridStyle}>
+            {records.map((record, index) => {
+              const selected = selectedRecordIdSet.has(record.id);
+              const previewImages = record.media
+                .filter(isSelectableImage)
+                .filter((media) =>
+                  Boolean(media.display_thumb_url || media.display_url)
+                )
+                .slice(0, 3);
               return (
-                <div key={media.id} style={imageOptionWrapStyle}>
-                  <button
-                    type="button"
-                    onClick={() => toggleImage(media)}
-                    aria-pressed={selected}
-                    style={imageOptionStyle(selected)}
-                  >
-                    <img
-                      src={src}
-                      alt={`经验卡可选图片${index + 1}`}
-                      style={imageOptionImageStyle}
-                    />
-                    <span style={imageOptionBadgeStyle(selected)}>
+                <button
+                  key={record.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleRecord(record.id)}
+                  style={recordOptionStyle(selected)}
+                >
+                  <span style={recordMetaStyle}>
+                    <span>
+                      {formatExperienceCardDate(record.record_time) ||
+                        `记录${index + 1}`}
+                    </span>
+                    <span style={recordSelectedStyle(selected)}>
                       {selected ? "已选" : "选择"}
                     </span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!selected}
-                    onClick={() => setCoverMediaId(media.id)}
-                    style={imageCoverButtonStyle(selectedAsCover, selected)}
-                  >
-                    {selectedAsCover ? "当前封面" : "设为封面"}
-                  </button>
-                </div>
+                  </span>
+                  <span style={recordNoteStyle}>
+                    {record.note?.trim() || "无文字记录"}
+                  </span>
+                  {previewImages.length ? (
+                    <span style={recordThumbsStyle}>
+                      {previewImages.map((media) => (
+                        <img
+                          key={media.id}
+                          src={media.display_thumb_url || media.display_url || ""}
+                          alt=""
+                          style={recordThumbStyle}
+                        />
+                      ))}
+                      <span style={recordImageCountStyle}>
+                        共{record.media.filter(isSelectableImage).length}张
+                      </span>
+                    </span>
+                  ) : (
+                    <span style={recordNoImageStyle}>无图片，可作为文字画面</span>
+                  )}
+                </button>
               );
             })}
           </div>
         )}
         {selectedRecords.length > 0 && selectedRecords.length < 3 ? (
-          <p style={selectionHintStyle}>请至少选择来自3条记录的图片。</p>
+          <p style={selectionHintStyle}>还需选择至少3条来源记录。</p>
         ) : null}
+      </section>
+
+      <section style={panelStyle}>
+        <div style={sectionHeadingRowStyle}>
+          <div>
+            <div style={eyebrowStyle}>经验卡封面</div>
+            <h2 style={sectionTitleStyle}>
+              {effectiveCoverMediaId ? "已设置封面" : "尚未设置封面"}
+            </h2>
+          </div>
+          {effectiveCoverMediaId ? (
+            <button
+              type="button"
+              onClick={() => setCoverMediaId(null)}
+              style={clearCoverButtonStyle}
+            >
+              取消封面
+            </button>
+          ) : null}
+        </div>
+
+        {coverOptions.length === 0 ? (
+          <p style={mutedStyle}>
+            所选记录没有可用照片，保存后将使用项目封面或无图占位。
+          </p>
+        ) : (
+          <div style={imageGridStyle}>
+            {coverOptions.map((media, index) => {
+              const selectedAsCover = effectiveCoverMediaId === media.id;
+              const src = media.display_thumb_url || media.display_url;
+              if (!src) return null;
+              return (
+                <button
+                  key={media.id}
+                  type="button"
+                  onClick={() => setCoverMediaId(media.id)}
+                  aria-pressed={selectedAsCover}
+                  style={imageOptionStyle(selectedAsCover)}
+                >
+                  <img
+                    src={src}
+                    alt={`经验卡封面候选${index + 1}`}
+                    style={imageOptionImageStyle}
+                  />
+                  <span style={imageOptionBadgeStyle(selectedAsCover)}>
+                    {selectedAsCover ? "当前封面" : "设为封面"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {errorText ? <section style={errorPanelStyle}>{errorText}</section> : null}
@@ -477,30 +575,36 @@ export default function ExperienceCardEditor({
           onClick={() => void persist("draft")}
           style={secondaryButtonStyle(canSave)}
         >
-          {saving ? "保存中..." : "保存草稿"}
+          {saving ? "保存中..." : cardId ? "保存修改" : "保存草稿"}
         </button>
-        <button
-          type="button"
-          disabled={!canSave}
-          onClick={() => void persist("preview")}
-          style={secondaryButtonStyle(canSave)}
-        >
-          预览
-        </button>
-        <button
-          type="button"
-          disabled={!canSave}
-          onClick={() => setPublishConfirmOpen(true)}
-          style={primaryButtonStyle(canSave)}
-        >
-          发布经验卡
-        </button>
+        {!embedded ? (
+          <button
+            type="button"
+            disabled={!canSave}
+            onClick={() => void persist("preview")}
+            style={secondaryButtonStyle(canSave)}
+          >
+            预览
+          </button>
+        ) : null}
+        {wasPublished && !hasChanges ? (
+          <span style={publishedStateStyle}>当前已公开</span>
+        ) : (
+          <button
+            type="button"
+            disabled={!canPublish}
+            onClick={() => setPublishConfirmOpen(true)}
+            style={primaryButtonStyle(canPublish)}
+          >
+            {wasPublished ? "保存并重新发布" : "发布经验卡"}
+          </button>
+        )}
       </section>
 
       <ConfirmDialog
         open={publishConfirmOpen}
         title="确认公开经验卡"
-        message={`发布后，所选${selectedMediaIds.length}张图片及其来源记录将公开，游客可通过直接链接查看。项目中其他记录仍保持原来的可见性。`}
+        message={`发布后，所选${selectedRecords.length}条来源记录及其照片将公开，游客可通过直接链接查看。项目中其他记录仍保持原来的可见性。`}
         confirmText={saving ? "发布中..." : "确认发布"}
         cancelText="取消"
         confirmDisabled={saving}
@@ -510,6 +614,34 @@ export default function ExperienceCardEditor({
         }}
         onConfirm={() => persist("publish")}
       />
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <section style={embeddedEditorStyle} aria-label="编辑经验卡">
+        {editorContent}
+      </section>
+    );
+  }
+
+  return (
+    <main style={pageStyle}>
+      <header style={headerStyle}>
+        <div>
+          <Link
+            href={cardId ? `/experience-cards/${cardId}` : `/archive/${archive?.id}`}
+            style={backLinkStyle}
+          >
+            <UiIcon name="arrow-left" size={15} /> 返回
+          </Link>
+          <h1 style={titleStyle}>{cardId ? "修改经验卡" : "生成经验卡"}</h1>
+        </div>
+        <Link href="/experience-cards" style={secondaryLinkStyle}>
+          我的经验卡
+        </Link>
+      </header>
+      {editorContent}
     </main>
   );
 }
@@ -536,14 +668,6 @@ const backLinkStyle: CSSProperties = {
   fontSize: 14,
 };
 
-const backButtonStyle: CSSProperties = {
-  ...backLinkStyle,
-  border: 0,
-  padding: 0,
-  background: "transparent",
-  cursor: "pointer",
-};
-
 const titleStyle: CSSProperties = {
   margin: "8px 0 6px",
   fontSize: 28,
@@ -563,6 +687,25 @@ const panelStyle: CSSProperties = {
   background: "#fff",
   padding: 18,
   marginBottom: 14,
+};
+
+const embeddedEditorStyle: CSSProperties = {
+  marginBottom: 14,
+};
+
+const integratedIntroStyle: CSSProperties = {
+  ...panelStyle,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 14,
+  background: "#f7faf5",
+};
+
+const integratedTitleStyle: CSSProperties = {
+  margin: "5px 0 5px",
+  fontSize: 21,
+  lineHeight: 1.35,
 };
 
 const messageCardStyle: CSSProperties = {
@@ -589,6 +732,11 @@ const sectionTitleStyle: CSSProperties = {
   margin: "5px 0 4px",
   fontSize: 19,
   lineHeight: 1.35,
+};
+
+const sourceProjectLinkStyle: CSSProperties = {
+  color: "#344b31",
+  textDecoration: "none",
 };
 
 const labelStyle: CSSProperties = {
@@ -641,11 +789,6 @@ const imageGridStyle: CSSProperties = {
   gap: 10,
 };
 
-const imageOptionWrapStyle: CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
 function imageOptionStyle(selected: boolean): CSSProperties {
   return {
     position: "relative",
@@ -681,23 +824,97 @@ function imageOptionBadgeStyle(selected: boolean): CSSProperties {
   };
 }
 
-function imageCoverButtonStyle(
-  isCover: boolean,
-  enabled: boolean
-): CSSProperties {
+
+const recordGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))",
+  gap: 9,
+};
+
+function recordOptionStyle(selected: boolean): CSSProperties {
   return {
-    minHeight: 32,
-    padding: "5px 8px",
-    border: isCover ? "1px solid #6f9867" : "1px solid #dfe6dc",
-    borderRadius: 9,
-    background: isCover ? "#edf5e9" : "#fff",
-    color: isCover ? "#42653e" : "#6f7b6c",
-    fontSize: 11,
-    fontWeight: 800,
-    cursor: enabled ? "pointer" : "not-allowed",
-    opacity: enabled ? 1 : 0.45,
+    minWidth: 0,
+    display: "grid",
+    gap: 8,
+    padding: 12,
+    border: selected ? "1px solid #7ea276" : "1px solid #dfe7dc",
+    borderRadius: 13,
+    background: selected ? "#f1f7ee" : "#fbfcfa",
+    color: "#334231",
+    textAlign: "left",
+    cursor: "pointer",
   };
 }
+
+const recordMetaStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  color: "#7b8678",
+  fontSize: 12,
+};
+
+function recordSelectedStyle(selected: boolean): CSSProperties {
+  return {
+    flexShrink: 0,
+    padding: "3px 7px",
+    borderRadius: 999,
+    background: selected ? "#557c50" : "#eef2eb",
+    color: selected ? "#fff" : "#667363",
+    fontSize: 10,
+    fontWeight: 800,
+  };
+}
+
+const recordNoteStyle: CSSProperties = {
+  minHeight: "2.9em",
+  display: "-webkit-box",
+  overflow: "hidden",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
+  fontSize: 13,
+  lineHeight: 1.45,
+  overflowWrap: "anywhere",
+};
+
+const recordThumbsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  minWidth: 0,
+};
+
+const recordThumbStyle: CSSProperties = {
+  width: 38,
+  height: 38,
+  borderRadius: 8,
+  objectFit: "cover",
+  background: "#e8ede5",
+};
+
+const recordImageCountStyle: CSSProperties = {
+  marginLeft: "auto",
+  color: "#849080",
+  fontSize: 11,
+};
+
+const recordNoImageStyle: CSSProperties = {
+  color: "#849080",
+  fontSize: 11,
+};
+
+const clearCoverButtonStyle: CSSProperties = {
+  minHeight: 32,
+  padding: "5px 9px",
+  border: "1px solid #d7e1d3",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#697665",
+  fontSize: 11,
+  fontWeight: 750,
+  cursor: "pointer",
+};
 
 const selectionHintStyle: CSSProperties = {
   margin: "12px 0 0",
@@ -732,6 +949,18 @@ const stickyActionsStyle: CSSProperties = {
   border: "1px solid #e1e8de",
   boxShadow: "0 10px 28px rgba(54,74,51,0.1)",
   backdropFilter: "blur(8px)",
+};
+
+const publishedStateStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 42,
+  padding: "9px 15px",
+  borderRadius: 999,
+  background: "#edf6e9",
+  color: "#43683e",
+  fontSize: 13,
+  fontWeight: 800,
 };
 
 const baseButtonStyle: CSSProperties = {

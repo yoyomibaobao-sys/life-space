@@ -524,7 +524,12 @@ export default function ExperienceCardVideoPanel({
       {!readOnly ? (
         <>
           <div style={headerStyle}>
-            <h2 style={titleStyle}>图片与视频</h2>
+            <div>
+              <h2 style={titleStyle}>视频预览与导出</h2>
+              <p style={localOnlyHintStyle}>
+                视频选图和片头只保存在当前设备，不会修改经验卡的来源记录或云端封面。
+              </p>
+            </div>
             <span style={durationStyle}>
               {formatExperienceCardVideoDuration(duration)}
             </span>
@@ -533,7 +538,7 @@ export default function ExperienceCardVideoPanel({
           <div style={imageSelectorStyle}>
             <div style={imageSelectorHeaderStyle}>
               <strong>
-                已选 {selectedImageCount}/{totalImageCount} 张
+                视频选图 {selectedImageCount}/{totalImageCount} 张
               </strong>
               <span style={imageSelectorActionsStyle}>
                 <button
@@ -587,7 +592,7 @@ export default function ExperienceCardVideoPanel({
                       onClick={() => selectCoverImage(option.sourceUrl)}
                       style={coverChoiceButtonStyle(isCover, active)}
                     >
-                      {isCover ? "当前封面" : "设为封面"}
+                      {isCover ? "当前片头" : "设为片头"}
                     </button>
                   </div>
                 );
@@ -712,6 +717,14 @@ const titleStyle: CSSProperties = {
   color: "#2c3a2b",
   fontSize: 21,
   lineHeight: 1.3,
+};
+
+const localOnlyHintStyle: CSSProperties = {
+  maxWidth: 560,
+  margin: "5px 0 0",
+  color: "#788575",
+  fontSize: 12,
+  lineHeight: 1.55,
 };
 
 const durationStyle: CSSProperties = {

@@ -347,7 +347,7 @@ export default function PlantInterestsPage() {
         >
           感兴趣列表属于云会员权益。现有过渡条目仍可查看和移除，但不能修改或新增；你仍可创建本地项目。
           <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-            查看会员权益
+            了解云会员
           </Link>
         </div>
       ) : null}

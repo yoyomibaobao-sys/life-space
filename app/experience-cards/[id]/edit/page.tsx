@@ -6,5 +6,5 @@ export default async function EditExperienceCardPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  redirect(`/experience-cards/${id}?edit=1`);
+  redirect(`/experience-cards/${id}`);
 }

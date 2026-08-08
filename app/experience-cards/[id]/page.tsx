@@ -15,13 +15,12 @@ import {
   formatExperienceCardDate,
   getExperienceCardErrorText,
   loadExperienceCard,
-  publishExperienceCard,
   unpublishExperienceCard,
 } from "@/lib/experience-cards";
 import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 
-type PendingAction = "publish" | "unpublish" | "delete" | null;
+type PendingAction = "unpublish" | "delete" | null;
 
 export default function ExperienceCardPage({
   params,
@@ -36,7 +35,6 @@ export default function ExperienceCardPage({
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [editing, setEditing] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -46,13 +44,6 @@ export default function ExperienceCardPage({
     setViewerId(user?.id || null);
     const nextDetail = await loadExperienceCard(id);
     setDetail(nextDetail);
-    if (
-      nextDetail &&
-      user?.id === nextDetail.card.user_id &&
-      new URLSearchParams(window.location.search).get("edit") === "1"
-    ) {
-      setEditing(true);
-    }
     setLoading(false);
   }
 
@@ -63,22 +54,13 @@ export default function ExperienceCardPage({
 
   const isOwner = Boolean(detail && viewerId === detail.card.user_id);
 
-  function leaveEditMode() {
-    window.history.replaceState(null, "", `/experience-cards/${id}`);
-    setEditing(false);
-  }
-
   async function runAction(action: Exclude<PendingAction, null>) {
     if (!detail || busy) return;
     setBusy(true);
     setErrorText("");
 
     try {
-      if (action === "publish") {
-        await publishExperienceCard(detail.card.id);
-        showToast("经验卡已公开");
-        await reload();
-      } else if (action === "unpublish") {
+      if (action === "unpublish") {
         await unpublishExperienceCard(detail.card.id);
         showToast("经验卡已取消公开");
         await reload();
@@ -143,19 +125,6 @@ export default function ExperienceCardPage({
     );
   }
 
-  if (isOwner && editing) {
-    return (
-      <ExperienceCardEditor
-        cardId={id}
-        onCancel={leaveEditMode}
-        onSaved={async () => {
-          leaveEditMode();
-          await reload();
-        }}
-      />
-    );
-  }
-
   const startDate = formatExperienceCardDate(detail.records[0]?.record_time);
   const endDate = formatExperienceCardDate(
     detail.records[detail.records.length - 1]?.record_time
@@ -180,73 +149,68 @@ export default function ExperienceCardPage({
           <UiIcon name="arrow-left" size={15} />
           {isOwner ? " 我的经验卡" : " 返回发现"}
         </Link>
-        {isOwner ? (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            style={{ ...secondaryLinkStyle, cursor: "pointer" }}
-          >
-            编辑
-          </button>
-        ) : null}
       </header>
 
       <ExperienceCardVideoPanel detail={detail} readOnly={!isOwner} />
 
-      <article style={cardShellStyle}>
-        <div style={introStyle}>
-          <h1 style={titleStyle}>{detail.card.title}</h1>
-          <div style={metaLineStyle}>
-            <span>
-              {startDate && endDate
-                ? startDate === endDate
-                  ? startDate
-                  : `${startDate}—${endDate}`
-                : "暂无日期"}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              {detail.isPubliclyAvailable
-                ? "已公开"
-                : detail.card.status === "published"
-                  ? "公开已暂停"
-                  : "私密草稿"}
-            </span>
-          </div>
-          <div style={sourceLinksStyle} aria-label="经验卡来源">
-            <Link
-              href={`/user/${detail.card.user_id}`}
-              style={sourceLinkStyle}
-            >
-              <span style={sourceLabelStyle}>用户</span>
-              <span style={sourceValueStyle}>{authorName}</span>
-              <UiIcon name="arrow-right" size={14} />
-            </Link>
-            <Link
-              href={`/archive/${detail.archive.id}`}
-              style={sourceLinkStyle}
-            >
-              <span style={sourceLabelStyle}>项目</span>
-              <span style={sourceValueStyle}>
-                {detail.archive.title || "查看项目"}
+      {isOwner ? (
+        <ExperienceCardEditor cardId={id} embedded onSaved={reload} />
+      ) : (
+        <article style={cardShellStyle}>
+          <div style={introStyle}>
+            <h1 style={titleStyle}>{detail.card.title}</h1>
+            <div style={metaLineStyle}>
+              <span>
+                {startDate && endDate
+                  ? startDate === endDate
+                    ? startDate
+                    : `${startDate}—${endDate}`
+                  : "暂无日期"}
               </span>
-              <UiIcon name="arrow-right" size={14} />
-            </Link>
-            {systemNameHref ? (
-              <Link href={systemNameHref} style={sourceLinkStyle}>
-                <span style={sourceLabelStyle}>系统名</span>
-                <span style={sourceValueStyle}>{systemName}</span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {detail.isPubliclyAvailable
+                  ? "已公开"
+                  : detail.card.status === "published"
+                    ? "公开已暂停"
+                    : "私密草稿"}
+              </span>
+            </div>
+            <div style={sourceLinksStyle} aria-label="经验卡来源">
+              <Link
+                href={`/user/${detail.card.user_id}`}
+                style={sourceLinkStyle}
+              >
+                <span style={sourceLabelStyle}>用户</span>
+                <span style={sourceValueStyle}>{authorName}</span>
                 <UiIcon name="arrow-right" size={14} />
               </Link>
-            ) : (
-              <span style={sourceMissingStyle}>
-                <span style={sourceLabelStyle}>系统名</span>
-                <span style={sourceValueStyle}>未填写</span>
-              </span>
-            )}
+              <Link
+                href={`/archive/${detail.archive.id}`}
+                style={sourceLinkStyle}
+              >
+                <span style={sourceLabelStyle}>项目</span>
+                <span style={sourceValueStyle}>
+                  {detail.archive.title || "查看项目"}
+                </span>
+                <UiIcon name="arrow-right" size={14} />
+              </Link>
+              {systemNameHref ? (
+                <Link href={systemNameHref} style={sourceLinkStyle}>
+                  <span style={sourceLabelStyle}>系统名</span>
+                  <span style={sourceValueStyle}>{systemName}</span>
+                  <UiIcon name="arrow-right" size={14} />
+                </Link>
+              ) : (
+                <span style={sourceMissingStyle}>
+                  <span style={sourceLabelStyle}>系统名</span>
+                  <span style={sourceValueStyle}>未填写</span>
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      </article>
+        </article>
+      )}
 
       <ExperienceCardInteractions
         cardId={detail.card.id}
@@ -304,16 +268,6 @@ export default function ExperienceCardPage({
             </>
           ) : null}
 
-          {isOwner && detail.card.status === "draft" ? (
-            <button
-              type="button"
-              onClick={() => setPendingAction("publish")}
-              style={primaryButtonStyle}
-            >
-              发布
-            </button>
-          ) : null}
-
           {isOwner && detail.card.status === "published" ? (
             <button
               type="button"
@@ -335,20 +289,6 @@ export default function ExperienceCardPage({
           ) : null}
         </div>
       </footer>
-
-      <ConfirmDialog
-        open={pendingAction === "publish"}
-        title="确认公开经验卡"
-        message={`发布后，项目基础信息和所选${detail.records.length}条记录及照片将公开；其他未选择的记录不会因此公开。`}
-        confirmText={busy ? "发布中..." : "确认发布"}
-        cancelText="取消"
-        confirmDisabled={busy}
-        cancelDisabled={busy}
-        onClose={() => {
-          if (!busy) setPendingAction(null);
-        }}
-        onConfirm={() => runAction("publish")}
-      />
 
       <ConfirmDialog
         open={pendingAction === "unpublish"}

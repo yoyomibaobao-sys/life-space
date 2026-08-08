@@ -55,10 +55,10 @@ type MobileProfileNavItem = {
 
 const baseMobileProfileModules: MobileProfileNavItem[] = [
   { value: "info", label: "用户信息" },
-  { value: "membership", label: "云会员" },
+  { value: "membership", label: "会员与容量" },
   { value: "space", label: "个人空间" },
   { href: "/profile/trash", label: "回收站" },
-  { value: "account", label: "帐号操作" },
+  { value: "account", label: "数据与安全" },
 ];
 
 const adminMembershipProfileModule: { value: MobileProfileModule; label: string } = {
@@ -183,7 +183,7 @@ export default function ProfilePage() {
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
         setMembership(null);
-        setMembershipError("暂时无法读取会员与云空间信息");
+        setMembershipError("暂时无法读取会员与容量信息");
       } else {
         setMembership(normalizeMembershipRpcResult(membershipResult.data));
         setMembershipError("");
@@ -278,11 +278,12 @@ export default function ProfilePage() {
   const primaryActionStyle = isMobileViewport ? mobilePrimaryButtonStyle : primaryButtonStyle;
   const secondaryActionStyle = isMobileViewport ? mobileSecondaryLinkStyle : secondaryLinkStyle;
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
-  const showInfoModule = !isMobileViewport || mobileProfileModule === "info";
-  const showMembershipModule = !isMobileViewport || mobileProfileModule === "membership";
-  const showAdminMembershipModule = isMobileViewport && isAdmin && mobileProfileModule === "adminMembership";
-  const showSpaceModule = !isMobileViewport || mobileProfileModule === "space";
-  const showAccountModule = !isMobileViewport || mobileProfileModule === "account";
+  const showInfoModule = mobileProfileModule === "info";
+  const showMembershipModule = mobileProfileModule === "membership";
+  const showAdminMembershipModule =
+    isAdmin && mobileProfileModule === "adminMembership";
+  const showSpaceModule = mobileProfileModule === "space";
+  const showAccountModule = mobileProfileModule === "account";
 
   useEffect(() => {
     if (!isAdmin && mobileProfileModule === "adminMembership") {
@@ -571,13 +572,11 @@ export default function ProfilePage() {
           </div>
         ) : null}
 
-        {isMobileViewport ? (
-          <MobileProfileModuleTabs
-            active={mobileProfileModule}
-            modules={visibleMobileProfileModules}
-            onChange={setMobileProfileModule}
-          />
-        ) : null}
+        <MobileProfileModuleTabs
+          active={mobileProfileModule}
+          modules={visibleMobileProfileModules}
+          onChange={setMobileProfileModule}
+        />
 
         {showInfoModule ? (
         <div style={{ display: "grid", gridTemplateColumns: topGridColumns, gap: isMobileViewport ? 10 : 14, marginTop: isMobileViewport ? 10 : 14, alignItems: "start" }}>
@@ -619,7 +618,6 @@ export default function ProfilePage() {
               ) : null}
               <MetaItem label="账号等级" value={`Lv.${Number(profile.level || 1)}`} />
               <MetaItem label="收到有帮助" value={<span><UiIcon name="helpful" size={13} /> {Number(profile.flower_count || 0)}</span>} />
-              <MetaItem label="存储" value={storageText} />
               <MetaItem label="加入时间" value={formatProfileDateTime(profile.created_at)} />
             </div>
           </section>
@@ -673,10 +671,6 @@ export default function ProfilePage() {
               <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? "保存中..." : "保存资料"}</button>
               <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>查看公开资料页</Link>
               <Link href="/archive" style={secondaryActionStyle}>我的项目</Link>
-              <Link href="/membership" style={secondaryActionStyle}>云会员</Link>
-              {isAdmin && !isMobileViewport ? (
-                <Link href="/admin/memberships" style={isMobileViewport ? { ...mobileSecondaryLinkStyle, border: "1px solid #c9d8be", background: "#edf6e8", color: "#2f5a27" } : adminLinkStyle}>会员管理</Link>
-              ) : null}
             </div>
           </section>
         </div>
@@ -687,49 +681,32 @@ export default function ProfilePage() {
         <section style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的会员</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>云会员与云空间</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>账号方案</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>会员与容量</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 {membershipStatusText}
               </p>
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={exporting}
-                style={{
-                  ...secondaryLinkStyle,
-                  cursor: exporting ? "not-allowed" : "pointer",
-                  opacity: exporting ? 0.65 : 1,
-                }}
-              >
-                {exporting ? "正在打包记录和图片..." : "导出我的记录"}
-              </button>
               <Link href="/membership" style={secondaryLinkStyle}>
-                查看会员权益
+                {membership ? "开通与续期说明" : "了解云会员"}
               </Link>
             </div>
-            {exporting ? (
-              <p style={{ margin: "8px 0 0", color: "#7b8676", fontSize: 13, lineHeight: 1.5 }}>
-                正在打包你的记录和图片，图片较多时可能需要 1～3 分钟，请不要关闭页面。导出完成后，文件会保存到浏览器默认下载位置；如果浏览器设置了下载前询问，会弹出保存位置选择。
-              </p>
-            ) : null}
           </div>
 
           {showMembershipNotice ? (
             <div style={membershipNoticeStyle}>
               <div>{membershipNoticeText}</div>
               <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                查看会员权益
+                查看开通与续期
               </Link>
             </div>
           ) : null}
 
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
             <InfoCard
-              label="当前方案"
+              label="账号身份"
               value={membership ? getMembershipPlanLabel(membership.plan) : "本地免费"}
               hint={membership ? getMembershipStatusLabel(membership.status) : "免费使用本地功能"}
             />
@@ -745,9 +722,9 @@ export default function ProfilePage() {
               }
             />
             <InfoCard
-              label="云端容量"
+              label="存储用量"
               value={storageText}
-              hint="容量主要用于照片与媒体文件"
+              hint="用于云端照片与媒体文件"
             />
             <InfoCard
               label="集市发布"
@@ -767,7 +744,7 @@ export default function ProfilePage() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>付款记录</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>云会员开通记录</h2>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>会员开通记录</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 这里只显示管理员已确认的最近付款记录；已取消或退款的记录不会显示。若已付款但未显示，请联系管理员邮箱：yoyomibaobao@gmail.com。
               </p>
@@ -954,7 +931,7 @@ export default function ProfilePage() {
         </section>
         ) : null}
 
-        {!isMobileViewport ? (
+        {showSpaceModule && !isMobileViewport ? (
         <section style={plantInfoSectionStyle}>
           <div style={plantInfoHeaderStyle}>
             <div>
@@ -982,7 +959,7 @@ export default function ProfilePage() {
         </section>
         ) : null}
 
-        {!isMobileViewport ? (
+        {showSpaceModule && !isMobileViewport ? (
         <section style={marketInfoSectionStyle}>
           <div style={marketInfoHeaderStyle}>
             <div>
@@ -1014,7 +991,7 @@ export default function ProfilePage() {
         </section>
         ) : null}
 
-        {!isMobileViewport ? (
+        {showSpaceModule && !isMobileViewport ? (
         <section style={trashEntrySectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#6b7b66" }}>云端内容</div>
@@ -1030,6 +1007,34 @@ export default function ProfilePage() {
         ) : null}
 
         {showAccountModule ? (
+        <>
+        <section style={isMobileViewport ? { ...dataSectionStyle, ...sectionCompactStyle } : dataSectionStyle}>
+          <div>
+            <div style={{ fontSize: 13, color: "#6b7b66" }}>我的数据</div>
+            <h2 style={dataTitleStyle}>导出与备份</h2>
+            <p style={dataDescStyle}>
+              导出自己的项目、记录和图片。导出属于数据管理，不取决于是否开通云会员。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting}
+            style={{
+              ...secondaryLinkStyle,
+              cursor: exporting ? "not-allowed" : "pointer",
+              opacity: exporting ? 0.65 : 1,
+            }}
+          >
+            {exporting ? "正在打包记录和图片..." : "导出我的记录"}
+          </button>
+          {exporting ? (
+            <p style={exportProgressStyle}>
+              正在打包你的记录和图片，图片较多时可能需要 1～3 分钟，请不要关闭页面。完成后请在浏览器下载栏或“下载”文件夹中查看。
+            </p>
+          ) : null}
+        </section>
+
         <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#9a5b55" }}>危险操作</div>
@@ -1046,6 +1051,7 @@ export default function ProfilePage() {
             注销账号
           </button>
         </section>
+        </>
         ) : null}
       </section>
       <ConfirmDialog
@@ -1541,6 +1547,41 @@ const trashEntryLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
+const dataSectionStyle: CSSProperties = {
+  marginTop: 14,
+  background: "#f8fbf6",
+  border: "1px solid #dce8d7",
+  borderRadius: 18,
+  padding: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+  flexWrap: "wrap",
+};
+
+const dataTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  color: "#263326",
+  fontSize: 20,
+};
+
+const dataDescStyle: CSSProperties = {
+  margin: "6px 0 0",
+  color: "#687565",
+  fontSize: 13,
+  lineHeight: 1.6,
+  maxWidth: 640,
+};
+
+const exportProgressStyle: CSSProperties = {
+  flexBasis: "100%",
+  margin: 0,
+  color: "#7b8676",
+  fontSize: 13,
+  lineHeight: 1.55,
+};
+
 const dangerSectionStyle: CSSProperties = {
   marginTop: 14,
   background: "#fffafa",
@@ -1742,13 +1783,6 @@ const mobileFileInputStyle: CSSProperties = {
   maxWidth: "100%",
   fontSize: 12,
   color: "#5e6959",
-};
-
-const adminLinkStyle: CSSProperties = {
-  ...secondaryLinkStyle,
-  border: "1px solid #c9d8be",
-  background: "#edf6e8",
-  color: "#2f5a27",
 };
 
 const statsGridStyle: CSSProperties = {

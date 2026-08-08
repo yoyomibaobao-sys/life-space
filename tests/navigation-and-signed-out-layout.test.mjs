@@ -14,6 +14,30 @@ test("mobile personal space project summary opens the project archive", async ()
   assert.match(profile, /公开 \{publicArchiveCount\}/);
 });
 
+test("account navigation keeps membership contextual and export under data management", async () => {
+  const [profile, navbar, membership] = await Promise.all([
+    source("app/profile/page.tsx"),
+    source("components/navbar.tsx"),
+    source("app/membership/page.tsx"),
+  ]);
+
+  assert.match(profile, /value: "membership", label: "会员与容量"/);
+  assert.match(profile, /value: "account", label: "数据与安全"/);
+  assert.match(profile, /<MobileProfileModuleTabs/);
+  assert.match(profile, /const showInfoModule = mobileProfileModule === "info"/);
+  assert.match(profile, /<h2 style=\{dataTitleStyle\}>导出与备份<\/h2>/);
+  assert.match(profile, /导出属于数据管理，不取决于是否开通云会员/);
+  assert.ok(
+    profile.indexOf("导出我的记录") > profile.indexOf("{showAccountModule ?")
+  );
+  assert.doesNotMatch(profile, /云会员与云空间/);
+  assert.doesNotMatch(navbar, /membershipEntryStyle/);
+  assert.doesNotMatch(navbar, />\s*云会员\s*<\/Link>/);
+  assert.match(membership, /个人使用方案/);
+  assert.match(membership, /1GB 个人云端存储/);
+  assert.doesNotMatch(membership, /查看会员权益/);
+});
+
 test("signed-out market does not repeat login and registration actions inside the page", async () => {
   const market = await source("app/market/page.tsx");
 
