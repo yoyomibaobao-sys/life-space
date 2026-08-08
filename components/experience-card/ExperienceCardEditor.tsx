@@ -4,6 +4,7 @@ import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import {
@@ -29,6 +30,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import type { ArchiveCycle } from "@/lib/archive-detail-types";
 import { supabase } from "@/lib/supabase";
 
 const RECORD_SELECT = [
@@ -58,6 +60,17 @@ const MEDIA_SELECT = [
   "mime_type",
   "width",
   "height",
+].join(", ");
+
+const ACTIVE_CYCLE_SELECT = [
+  "id",
+  "archive_id",
+  "cycle_no",
+  "status",
+  "started_at",
+  "ended_at",
+  "created_at",
+  "updated_at",
 ].join(", ");
 
 function isSelectableImage(media: ExperienceCardMedia) {
@@ -136,6 +149,72 @@ function createEditorSnapshot({
   });
 }
 
+async function loadEditorRecords({
+  archiveId,
+  userId,
+}: {
+  archiveId: string;
+  userId: string;
+}) {
+  const { data: recordData, error: recordError } = await supabase
+    .from("records")
+    .select(RECORD_SELECT)
+    .eq("archive_id", archiveId)
+    .eq("user_id", userId)
+    .is("trashed_at", null)
+    .order("record_time", { ascending: true })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (recordError) throw recordError;
+
+  const baseRecords = (recordData || []) as unknown as Omit<
+    ExperienceCardSourceRecord,
+    "media"
+  >[];
+  const recordIds = baseRecords.map((record) => record.id);
+  const mediaByRecord = new Map<string, ExperienceCardMedia[]>();
+
+  if (recordIds.length > 0) {
+    const { data: mediaData, error: mediaError } = await supabase
+      .from("media")
+      .select(MEDIA_SELECT)
+      .in("record_id", recordIds)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (mediaError) throw mediaError;
+
+    const mediaRows = await attachMediaDisplayUrls(
+      supabase,
+      (mediaData || []) as unknown as ExperienceCardMedia[]
+    );
+
+    mediaRows.forEach((media) => {
+      const list = mediaByRecord.get(media.record_id) || [];
+      list.push(media);
+      mediaByRecord.set(media.record_id, list);
+    });
+  }
+
+  return baseRecords.map((record) => ({
+    ...record,
+    media: mediaByRecord.get(record.id) || [],
+  }));
+}
+
+async function loadActiveArchiveCycles(archiveId: string) {
+  const { data, error } = await supabase
+    .from("archive_cycles")
+    .select(ACTIVE_CYCLE_SELECT)
+    .eq("archive_id", archiveId)
+    .eq("status", "active")
+    .order("cycle_no", { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as unknown as ArchiveCycle[];
+}
+
 export default function ExperienceCardEditor({
   cardId,
   embedded = false,
@@ -155,6 +234,7 @@ export default function ExperienceCardEditor({
 
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
   const [records, setRecords] = useState<ExperienceCardSourceRecord[]>([]);
+  const [activeCycles, setActiveCycles] = useState<ArchiveCycle[]>([]);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [selectedMediaIdsByRecordId, setSelectedMediaIdsByRecordId] = useState<
@@ -166,8 +246,10 @@ export default function ExperienceCardEditor({
   const [wasPublished, setWasPublished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refreshingRecords, setRefreshingRecords] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [addRecordOpen, setAddRecordOpen] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -217,7 +299,7 @@ export default function ExperienceCardEditor({
       const { data: archiveData } = await supabase
         .from("archives")
         .select(
-          "id, user_id, title, category, species_id, system_name, species_name_snapshot, is_public"
+          "id, user_id, title, category, species_id, system_name, species_name_snapshot, is_public, default_record_visibility"
         )
         .eq("id", archiveId)
         .eq("user_id", user.id)
@@ -229,47 +311,19 @@ export default function ExperienceCardEditor({
         return;
       }
 
-      const { data: recordData } = await supabase
-        .from("records")
-        .select(RECORD_SELECT)
-        .eq("archive_id", archiveId)
-        .eq("user_id", user.id)
-        .is("trashed_at", null)
-        .order("record_time", { ascending: true })
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true });
-
-      const baseRecords = (recordData || []) as unknown as Omit<
-        ExperienceCardSourceRecord,
-        "media"
-      >[];
-      const recordIds = baseRecords.map((record) => record.id);
-      const mediaByRecord = new Map<string, ExperienceCardMedia[]>();
-
-      if (recordIds.length > 0) {
-        const { data: mediaData } = await supabase
-          .from("media")
-          .select(MEDIA_SELECT)
-          .in("record_id", recordIds)
-          .order("sort_order", { ascending: true })
-          .order("created_at", { ascending: true });
-
-        const mediaRows = await attachMediaDisplayUrls(
-          supabase,
-          (mediaData || []) as unknown as ExperienceCardMedia[]
-        );
-
-        mediaRows.forEach((media) => {
-          const list = mediaByRecord.get(media.record_id) || [];
-          list.push(media);
-          mediaByRecord.set(media.record_id, list);
-        });
+      let nextRecords: ExperienceCardSourceRecord[];
+      let nextActiveCycles: ArchiveCycle[];
+      try {
+        [nextRecords, nextActiveCycles] = await Promise.all([
+          loadEditorRecords({ archiveId, userId: user.id }),
+          loadActiveArchiveCycles(archiveId),
+        ]);
+      } catch (error) {
+        console.error("load experience card editor records error:", error);
+        setErrorText("项目记录读取失败，请稍后重试。");
+        setLoading(false);
+        return;
       }
-
-      const nextRecords = baseRecords.map((record) => ({
-        ...record,
-        media: mediaByRecord.get(record.id) || [],
-      }));
       const nextSelectedRecordIds = cardId
         ? existingRecordIds
         : nextRecords.map((record) => record.id);
@@ -323,6 +377,7 @@ export default function ExperienceCardEditor({
 
       setArchive(archiveData as ExperienceCardArchive);
       setRecords(nextRecords);
+      setActiveCycles(nextActiveCycles);
       setSelectedRecordIds(nextSelectedRecordIds);
       setSelectedMediaIdsByRecordId(nextMediaSelection);
       setCoverMediaId(nextCoverMediaId);
@@ -379,6 +434,10 @@ export default function ExperienceCardEditor({
     coverOptions.some((media) => media.id === coverMediaId)
       ? coverMediaId
       : null;
+  const unselectedRecordCount = Math.max(
+    0,
+    records.length - selectedRecords.length
+  );
   const currentSnapshot = createEditorSnapshot({
     title,
     recordIds: selectedRecords.map((record) => record.id),
@@ -403,10 +462,12 @@ export default function ExperienceCardEditor({
     nextRecordIds,
     nextMediaSelection,
     preferredCoverMediaId,
+    recordSource = records,
   }: {
     nextRecordIds: string[];
     nextMediaSelection: Record<string, string[]>;
     preferredCoverMediaId: string | null;
+    recordSource?: ExperienceCardSourceRecord[];
   }) {
     const selectedMediaIds = new Set(
       nextRecordIds.flatMap(
@@ -417,7 +478,7 @@ export default function ExperienceCardEditor({
       preferredCoverMediaId && selectedMediaIds.has(preferredCoverMediaId)
         ? preferredCoverMediaId
         : getFirstSelectedMediaId({
-            records,
+            records: recordSource,
             selectedRecordIds: nextRecordIds,
             selectedMediaIdsByRecordId: nextMediaSelection,
           });
@@ -443,6 +504,87 @@ export default function ExperienceCardEditor({
         .finally(() => onVideoSelectionChange?.());
     } else {
       onVideoSelectionChange?.();
+    }
+  }
+
+  async function refreshProjectRecords({
+    selectNewRecords,
+    announce = true,
+  }: {
+    selectNewRecords: boolean;
+    announce?: boolean;
+  }) {
+    if (!archive || refreshingRecords) return;
+    setRefreshingRecords(true);
+    setErrorText("");
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || user.id !== archive.user_id) {
+        throw new Error("experience_card_not_found_or_forbidden");
+      }
+
+      const nextRecords = await loadEditorRecords({
+        archiveId: archive.id,
+        userId: user.id,
+      });
+      const currentRecordIdSet = new Set(records.map((record) => record.id));
+      const validRecordIdSet = new Set(nextRecords.map((record) => record.id));
+      const newlyAddedRecords = nextRecords.filter(
+        (record) => !currentRecordIdSet.has(record.id)
+      );
+      const newRecordIds = selectNewRecords
+        ? newlyAddedRecords.map((record) => record.id)
+        : [];
+      const newRecordIdSet = new Set(newRecordIds);
+      const nextRecordIds = Array.from(
+        new Set([
+          ...selectedRecordIds.filter((recordId) =>
+            validRecordIdSet.has(recordId)
+          ),
+          ...newRecordIds,
+        ])
+      );
+      const nextMediaSelection = Object.fromEntries(
+        nextRecords.map((record) => {
+          const availableIds = getRecordImages(record).map((media) => media.id);
+          if (newRecordIdSet.has(record.id)) {
+            return [record.id, availableIds];
+          }
+
+          const availableIdSet = new Set(availableIds);
+          return [
+            record.id,
+            (selectedMediaIdsByRecordId[record.id] || []).filter((mediaId) =>
+              availableIdSet.has(mediaId)
+            ),
+          ];
+        })
+      );
+
+      setRecords(nextRecords);
+      setSelectedRecordIds(nextRecordIds);
+      persistLocalSelection({
+        nextRecordIds,
+        nextMediaSelection,
+        preferredCoverMediaId: coverMediaId,
+        recordSource: nextRecords,
+      });
+
+      if (announce) {
+        showToast(
+          newlyAddedRecords.length > 0
+            ? `${newlyAddedRecords.length}条新记录已加入经验卡`
+            : "项目记录已是最新"
+        );
+      }
+    } catch (error) {
+      console.error("refresh experience card editor records error:", error);
+      setErrorText("新记录读取失败，请稍后再试。");
+    } finally {
+      setRefreshingRecords(false);
     }
   }
 
@@ -624,23 +766,26 @@ export default function ExperienceCardEditor({
       <section style={panelStyle}>
         <div style={editorHeadingStyle}>
           <div>
-            <div style={eyebrowStyle}>编辑经验卡</div>
-            <h2 style={sectionTitleStyle}>内容与图片</h2>
+            <div style={eyebrowStyle}>内容管理</div>
+            <h2 style={sectionTitleStyle}>编辑经验卡</h2>
           </div>
           {archive ? (
             <Link href={`/archive/${archive.id}`} style={sourceProjectLinkStyle}>
-              来源项目：{archive.title}
+              查看来源项目 · {archive.title}
             </Link>
           ) : null}
         </div>
+        <p style={editorLeadStyle}>
+          记录决定经验卡内容；图片只决定当前设备生成的MP4。封面会随经验卡保存，并作为视频片头。
+        </p>
 
         {wasPublished && hasChanges ? (
           <p style={inlineNoticeStyle}>保存后会同步更新当前公开内容。</p>
         ) : null}
 
-        <div style={editorSectionStyle}>
+        <div style={titleSectionStyle}>
           <label style={labelStyle} htmlFor="experience-card-title">
-            标题
+            经验卡标题
           </label>
           <input
             id="experience-card-title"
@@ -655,19 +800,56 @@ export default function ExperienceCardEditor({
         <div style={editorSectionStyle}>
           <div style={sectionHeadingRowStyle}>
             <div>
-              <div style={eyebrowStyle}>记录与图片</div>
-              <h3 style={compactSectionTitleStyle}>在同一处同步选择</h3>
+              <div style={eyebrowStyle}>来源内容</div>
+              <h3 style={compactSectionTitleStyle}>记录与图片</h3>
             </div>
+            <div style={recordToolbarStyle}>
+              <button
+                type="button"
+                disabled={refreshingRecords}
+                onClick={() =>
+                  void refreshProjectRecords({ selectNewRecords: true })
+                }
+                style={refreshRecordsButtonStyle}
+              >
+                {refreshingRecords ? "刷新中..." : "刷新记录"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddRecordOpen(true)}
+                style={addRecordButtonStyle}
+              >
+                <UiIcon name="plus" size={14} /> 新增项目记录
+              </button>
+            </div>
+          </div>
+          <div style={recordSummaryStyle}>
             <span style={countPillStyle(selectedRecords.length >= 3)}>
-              {selectedRecords.length} 条记录 · {coverOptions.length} 张视频图片
+              已选 {selectedRecords.length} 条
+            </span>
+            <span>项目共 {records.length} 条</span>
+            <span>
+              {unselectedRecordCount > 0
+                ? `${unselectedRecordCount} 条可加入`
+                : "现有记录已全部加入"}
             </span>
           </div>
           <p style={recordSelectionIntroStyle}>
-            选中记录后，该记录的图片默认全选；视频图片选择自动保存在当前设备，封面从已选图片中指定并随经验卡保存。每张经验卡至少选择3条记录，不设累计上限。
+            点记录可加入或移出经验卡；加入时图片默认全选。点图片可调整MP4画面，再从已选图片中指定封面。至少选择3条记录，不设累计上限。
           </p>
 
           {records.length === 0 ? (
-            <p style={errorStyle}>当前项目还没有可选择的记录。</p>
+            <div style={emptyRecordsStyle}>
+              <strong>当前项目还没有记录</strong>
+              <span>先新增项目记录，保存后会自动加入这张经验卡。</span>
+              <button
+                type="button"
+                onClick={() => setAddRecordOpen(true)}
+                style={addRecordButtonStyle}
+              >
+                <UiIcon name="plus" size={14} /> 新增第一条记录
+              </button>
+            </div>
           ) : (
             <div style={recordListStyle}>
               {records.map((record, index) => {
@@ -691,17 +873,20 @@ export default function ExperienceCardEditor({
                       onClick={() => toggleRecord(record.id)}
                       style={recordHeaderButtonStyle}
                     >
-                      <span style={recordMetaStyle}>
-                        <span>
+                      <span style={recordCheckStyle(selected)} aria-hidden="true">
+                        <UiIcon name={selected ? "check" : "plus"} size={14} />
+                      </span>
+                      <span style={recordHeaderTextStyle}>
+                        <span style={recordMetaStyle}>
                           {formatExperienceCardDate(record.record_time) ||
                             `记录${index + 1}`}
                         </span>
-                        <span style={recordSelectedStyle(selected)}>
-                          {selected ? "已选记录" : "+ 选择记录"}
+                        <span style={recordNoteStyle}>
+                          {record.note?.trim() || "无文字记录"}
                         </span>
                       </span>
-                      <span style={recordNoteStyle}>
-                        {record.note?.trim() || "无文字记录"}
+                      <span style={recordSelectedStyle(selected)}>
+                        {selected ? "已加入" : "加入"}
                       </span>
                     </button>
 
@@ -709,7 +894,9 @@ export default function ExperienceCardEditor({
                       <div style={recordMediaHeadingStyle}>
                         <span>
                           {recordImages.length > 0
-                            ? `视频图片 ${selected ? selectedMediaIds.length : 0}/${recordImages.length}`
+                            ? selected
+                              ? `MP4图片 ${selectedMediaIds.length}/${recordImages.length}`
+                              : `${recordImages.length} 张图片 · 加入记录后可选择`
                             : "这条记录没有图片，将使用文字画面"}
                         </span>
                         {selected && recordImages.length > 0 ? (
@@ -756,21 +943,21 @@ export default function ExperienceCardEditor({
                                     loading="lazy"
                                     style={recordThumbnailStyle}
                                   />
-                                  <span style={recordImageBadgeStyle(active)}>
-                                    {active ? "已选" : "未选"}
-                                  </span>
+                                  {active ? (
+                                    <span style={recordImageBadgeStyle}>
+                                      <UiIcon name="check" size={13} />
+                                    </span>
+                                  ) : null}
                                 </button>
-                                <button
-                                  type="button"
-                                  disabled={!active}
-                                  onClick={() => selectCoverMedia(media.id)}
-                                  style={recordCoverButtonStyle(
-                                    isCover,
-                                    active
-                                  )}
-                                >
-                                  {isCover ? "当前封面" : "设为封面"}
-                                </button>
+                                {active ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => selectCoverMedia(media.id)}
+                                    style={recordCoverButtonStyle(isCover)}
+                                  >
+                                    {isCover ? "封面" : "设为封面"}
+                                  </button>
+                                ) : null}
                               </div>
                             );
                           })}
@@ -845,6 +1032,28 @@ export default function ExperienceCardEditor({
         }}
         onConfirm={() => persist("publish")}
       />
+
+      {archive ? (
+        <ArchiveAddRecordSection
+          archiveId={archive.id}
+          archiveCategory={archive.category}
+          archiveIsPublic={Boolean(archive.is_public)}
+          archiveDefaultRecordVisibility={
+            archive.default_record_visibility === "public" ? "public" : "private"
+          }
+          activeCycles={activeCycles}
+          mobileMode
+          open={addRecordOpen}
+          onClose={() => setAddRecordOpen(false)}
+          onRecordCreated={async () => {
+            await refreshProjectRecords({
+              selectNewRecords: true,
+              announce: true,
+            });
+            setAddRecordOpen(false);
+          }}
+        />
+      ) : null}
     </>
   );
 
@@ -878,7 +1087,7 @@ export default function ExperienceCardEditor({
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 820,
+  maxWidth: 880,
   margin: "0 auto",
   padding: "24px 16px 96px",
   color: "#263326",
@@ -913,11 +1122,12 @@ const mutedStyle: CSSProperties = {
 };
 
 const panelStyle: CSSProperties = {
-  border: "1px solid #e1e9de",
-  borderRadius: 18,
+  border: "1px solid #dfe7dc",
+  borderRadius: 20,
   background: "#fff",
-  padding: 18,
+  padding: "18px clamp(14px, 3vw, 22px) 22px",
   marginBottom: 14,
+  boxShadow: "0 10px 28px rgba(54,74,51,0.05)",
 };
 
 const embeddedEditorStyle: CSSProperties = {
@@ -933,9 +1143,25 @@ const editorHeadingStyle: CSSProperties = {
   marginBottom: 2,
 };
 
-const editorSectionStyle: CSSProperties = {
+const editorLeadStyle: CSSProperties = {
+  maxWidth: 650,
+  margin: "8px 0 0",
+  color: "#6f7c6c",
+  fontSize: 13,
+  lineHeight: 1.65,
+};
+
+const titleSectionStyle: CSSProperties = {
   marginTop: 18,
-  paddingTop: 18,
+  padding: 14,
+  border: "1px solid #e5ebe2",
+  borderRadius: 14,
+  background: "#fafcf9",
+};
+
+const editorSectionStyle: CSSProperties = {
+  marginTop: 22,
+  paddingTop: 20,
   borderTop: "1px solid #edf1eb",
 };
 
@@ -1010,6 +1236,53 @@ const sectionHeadingRowStyle: CSSProperties = {
   gap: 12,
   alignItems: "center",
   marginBottom: 12,
+  flexWrap: "wrap",
+};
+
+const recordToolbarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 7,
+  flexWrap: "wrap",
+};
+
+const refreshRecordsButtonStyle: CSSProperties = {
+  minHeight: 34,
+  padding: "6px 11px",
+  border: "1px solid #d6dfd2",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#5e6d5a",
+  fontSize: 12,
+  fontWeight: 750,
+  cursor: "pointer",
+};
+
+const addRecordButtonStyle: CSSProperties = {
+  minHeight: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 5,
+  padding: "6px 12px",
+  border: "1px solid #779772",
+  borderRadius: 999,
+  background: "#eef5eb",
+  color: "#42613e",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const recordSummaryStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "7px 12px",
+  flexWrap: "wrap",
+  margin: "0 0 10px",
+  color: "#778374",
+  fontSize: 12,
 };
 
 function countPillStyle(valid: boolean): CSSProperties {
@@ -1024,10 +1297,26 @@ function countPillStyle(valid: boolean): CSSProperties {
 }
 
 const recordSelectionIntroStyle: CSSProperties = {
-  margin: "-2px 0 13px",
+  margin: "0 0 14px",
   color: "#748071",
   fontSize: 12,
   lineHeight: 1.65,
+};
+
+const emptyRecordsStyle: CSSProperties = {
+  minHeight: 160,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+  padding: 20,
+  border: "1px dashed #ccd9c8",
+  borderRadius: 15,
+  background: "#fafcf9",
+  color: "#687565",
+  fontSize: 13,
+  textAlign: "center",
 };
 
 const recordListStyle: CSSProperties = {
@@ -1038,9 +1327,9 @@ const recordListStyle: CSSProperties = {
 function recordEditorStyle(selected: boolean): CSSProperties {
   return {
     minWidth: 0,
-    border: selected ? "1px solid #7ea276" : "1px solid #dfe7dc",
-    borderRadius: 15,
-    background: selected ? "#f6faf3" : "#fbfcfa",
+    border: selected ? "1px solid #8eaa87" : "1px solid #dfe6dc",
+    borderRadius: 14,
+    background: selected ? "#f7faf5" : "#fbfcfa",
     overflow: "hidden",
   };
 }
@@ -1048,8 +1337,10 @@ function recordEditorStyle(selected: boolean): CSSProperties {
 const recordHeaderButtonStyle: CSSProperties = {
   width: "100%",
   display: "grid",
-  gap: 8,
-  padding: 12,
+  gridTemplateColumns: "28px minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: 10,
+  padding: "11px 12px",
   border: 0,
   background: "transparent",
   color: "#334231",
@@ -1058,22 +1349,41 @@ const recordHeaderButtonStyle: CSSProperties = {
 };
 
 const recordMetaStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 8,
   color: "#7b8678",
-  fontSize: 12,
+  fontSize: 11,
+  lineHeight: 1.35,
+};
+
+function recordCheckStyle(selected: boolean): CSSProperties {
+  return {
+    width: 26,
+    height: 26,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    border: selected ? "1px solid #63865d" : "1px solid #cbd6c8",
+    background: selected ? "#63865d" : "#fff",
+    color: selected ? "#fff" : "#697767",
+    fontSize: 14,
+    fontWeight: 850,
+  };
+}
+
+const recordHeaderTextStyle: CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 4,
 };
 
 function recordSelectedStyle(selected: boolean): CSSProperties {
   return {
     flexShrink: 0,
-    padding: "3px 7px",
+    padding: "4px 8px",
     borderRadius: 999,
-    background: selected ? "#557c50" : "#eef2eb",
-    color: selected ? "#fff" : "#667363",
-    fontSize: 10,
+    background: selected ? "#e7f1e3" : "#f0f3ee",
+    color: selected ? "#44673f" : "#657263",
+    fontSize: 11,
     fontWeight: 800,
   };
 }
@@ -1093,7 +1403,7 @@ function recordMediaAreaStyle(selected: boolean): CSSProperties {
     padding: "10px 12px 12px",
     borderTop: "1px solid #e5ece2",
     background: selected ? "#fff" : "#f7f9f6",
-    opacity: selected ? 1 : 0.62,
+    opacity: selected ? 1 : 0.72,
   };
 }
 
@@ -1122,14 +1432,13 @@ const recordMediaActionStyle: CSSProperties = {
 
 const recordImageGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",
   gap: 8,
 };
 
 const recordImageItemStyle: CSSProperties = {
+  position: "relative",
   minWidth: 0,
-  display: "grid",
-  gap: 5,
 };
 
 function recordImageButtonStyle(
@@ -1157,35 +1466,37 @@ const recordThumbnailStyle: CSSProperties = {
   objectFit: "cover",
 };
 
-function recordImageBadgeStyle(active: boolean): CSSProperties {
+const recordImageBadgeStyle: CSSProperties = {
+  position: "absolute",
+  right: 5,
+  top: 5,
+  width: 21,
+  height: 21,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  background: "rgba(68,105,62,0.92)",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+function recordCoverButtonStyle(isCover: boolean): CSSProperties {
   return {
     position: "absolute",
-    right: 5,
-    bottom: 5,
-    padding: "3px 6px",
+    left: 6,
+    bottom: 6,
+    zIndex: 2,
+    minHeight: 24,
+    padding: "3px 7px",
+    border: isCover ? "1px solid #d7e8d2" : "1px solid rgba(255,255,255,0.78)",
     borderRadius: 999,
-    background: active ? "rgba(68,105,62,0.9)" : "rgba(39,48,38,0.72)",
+    background: isCover ? "rgba(65,103,59,0.94)" : "rgba(28,39,27,0.72)",
     color: "#fff",
     fontSize: 10,
     fontWeight: 800,
-  };
-}
-
-function recordCoverButtonStyle(
-  isCover: boolean,
-  enabled: boolean
-): CSSProperties {
-  return {
-    minHeight: 29,
-    padding: "4px 6px",
-    border: isCover ? "1px solid #668e60" : "1px solid #dbe4d8",
-    borderRadius: 8,
-    background: isCover ? "#eaf4e6" : "#fff",
-    color: isCover ? "#456d41" : "#6f7c6c",
-    fontSize: 10,
-    fontWeight: isCover ? 800 : 600,
-    cursor: enabled ? "pointer" : "not-allowed",
-    opacity: enabled ? 1 : 0.45,
+    cursor: "pointer",
   };
 }
 
@@ -1193,12 +1504,6 @@ const selectionHintStyle: CSSProperties = {
   margin: "12px 0 0",
   color: "#8b7048",
   fontSize: 13,
-};
-
-const errorStyle: CSSProperties = {
-  color: "#a74b47",
-  lineHeight: 1.6,
-  fontSize: 14,
 };
 
 const inlineErrorStyle: CSSProperties = {

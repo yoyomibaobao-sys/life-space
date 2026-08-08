@@ -47,7 +47,12 @@ test("account navigation keeps membership contextual and export under data manag
   assert.doesNotMatch(membership, /查看会员权益/);
   assert.doesNotMatch(login, /href="\/membership"/);
   assert.match(home, /href="\/membership"/);
-  assert.match(home, />\s*会员说明\s*<\/Link>/);
+  assert.match(home, /会员类别与权限/);
+  assert.match(home, /查看免费使用、云端保存与公开互动的区别/);
+  assert.match(
+    navbar,
+    /pathname === "\/"[\s\S]*?href="\/register"[\s\S]*?注册[\s\S]*?href="\/login"[\s\S]*?登录/
+  );
 });
 
 test("signed-out market does not repeat login and registration actions inside the page", async () => {

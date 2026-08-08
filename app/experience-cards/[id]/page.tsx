@@ -193,6 +193,7 @@ export default function ExperienceCardPage({
 
       <article style={cardShellStyle}>
         <div style={introStyle}>
+          <div style={sectionEyebrowStyle}>经验卡信息</div>
           <h1 style={titleStyle}>{detail.card.title}</h1>
           <div style={metaLineStyle}>
             <span>
@@ -204,8 +205,9 @@ export default function ExperienceCardPage({
             </span>
             <span aria-hidden="true">·</span>
             <span>{detail.records.length} 条记录</span>
-            <span aria-hidden="true">·</span>
-            <span>{statusLabel}</span>
+            <span style={statusBadgeStyle(detail.isPubliclyAvailable)}>
+              {statusLabel}
+            </span>
           </div>
           <div style={sourceLinksStyle} aria-label="经验卡来源">
             {!isOwner ? (
@@ -433,7 +435,7 @@ function getSystemNameHref({
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 820,
+  maxWidth: 880,
   margin: "0 auto",
   padding: "20px 16px 70px",
   color: "#283428",
@@ -457,7 +459,7 @@ const cardShellStyle: CSSProperties = {
   border: "1px solid #e1e8de",
   borderRadius: 18,
   background: "#fff",
-  padding: "16px 18px",
+  padding: "17px clamp(14px, 3vw, 20px)",
   marginBottom: 14,
 };
 
@@ -484,6 +486,14 @@ const introStyle: CSSProperties = {
   padding: 0,
 };
 
+const sectionEyebrowStyle: CSSProperties = {
+  marginBottom: 6,
+  color: "#879283",
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.06em",
+};
+
 const titleStyle: CSSProperties = {
   margin: 0,
   fontSize: 26,
@@ -501,6 +511,18 @@ const metaLineStyle: CSSProperties = {
   fontSize: 12,
   lineHeight: 1.5,
 };
+
+function statusBadgeStyle(publiclyAvailable: boolean): CSSProperties {
+  return {
+    marginLeft: 2,
+    padding: "3px 7px",
+    borderRadius: 999,
+    background: publiclyAvailable ? "#eaf4e7" : "#f1f3ef",
+    color: publiclyAvailable ? "#42693d" : "#6e796b",
+    fontSize: 11,
+    fontWeight: 800,
+  };
+}
 
 const sourceLinksStyle: CSSProperties = {
   display: "flex",

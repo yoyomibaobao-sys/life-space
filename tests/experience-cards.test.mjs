@@ -137,8 +137,8 @@ test("experience-card creation and editing share one synchronized record and ima
   assert.match(editor, /getRecordImages\(record\)/);
   assert.match(editor, /toggleRecordImage\(record\.id, media\.id\)/);
   assert.match(editor, /toggleAllRecordImages\(record\)/);
-  assert.match(editor, /选中记录后，该记录的图片默认全选/);
-  assert.match(editor, /视频图片选择自动保存在当前设备/);
+  assert.match(editor, /加入时图片默认全选/);
+  assert.match(editor, /图片只决定当前设备生成的MP4/);
   assert.match(editor, /不设累计上限/);
   assert.match(editor, /\.is\("trashed_at", null\)/);
   assert.doesNotMatch(editor, /selectedRecords\.length <= 12/);
@@ -157,6 +157,11 @@ test("experience-card creation and editing share one synchronized record and ima
   assert.match(editor, /编辑经验卡/);
   assert.match(editor, /记录与图片/);
   assert.match(editor, /recordThumbnailStyle/);
+  assert.match(editor, /<ArchiveAddRecordSection/);
+  assert.match(editor, /新增项目记录/);
+  assert.match(editor, /refreshProjectRecords/);
+  assert.match(editor, /newlyAddedRecords\.map\(\(record\) => record\.id\)/);
+  assert.match(editor, /新记录已加入经验卡/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);

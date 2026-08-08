@@ -65,6 +65,7 @@ export type ExperienceCardArchive = {
   system_name: string | null;
   species_name_snapshot: string | null;
   is_public: boolean | null;
+  default_record_visibility?: string | null;
 };
 
 export type ExperienceCardAuthor = {

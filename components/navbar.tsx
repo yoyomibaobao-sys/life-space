@@ -265,14 +265,16 @@ export default function Navbar() {
           </div>
 
           <div style={mobileTopActionGroupStyle}>
-            <Link
-              href={user ? "/notifications" : "/login"}
-              style={mobileNotificationButtonStyle}
-              aria-label="通知"
-              title="通知"
-            >
-              <UiIcon name="bell" size={18} />
-            </Link>
+            {user ? (
+              <Link
+                href="/notifications"
+                style={mobileNotificationButtonStyle}
+                aria-label="通知"
+                title="通知"
+              >
+                <UiIcon name="bell" size={18} />
+              </Link>
+            ) : null}
 
             {isMobileDiscoverIndexPath(pathname) ? (
               <button
@@ -369,9 +371,16 @@ export default function Navbar() {
                 <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname)}
               </Link>
             ) : !user && shouldShowMobileLoginAction(pathname) ? (
-              <Link href="/login" style={mobileLoginActionStyle}>
-                登录
-              </Link>
+              <>
+                {pathname === "/" ? (
+                  <Link href="/register" style={mobileRegisterActionStyle}>
+                    注册
+                  </Link>
+                ) : null}
+                <Link href="/login" style={mobileLoginActionStyle}>
+                  登录
+                </Link>
+              </>
             ) : null}
           </div>
         </nav>
@@ -918,6 +927,13 @@ const mobileLoginActionStyle: CSSProperties = {
   padding: "0 12px",
   whiteSpace: "nowrap",
   flexShrink: 0,
+};
+
+const mobileRegisterActionStyle: CSSProperties = {
+  ...mobileLoginActionStyle,
+  border: "1px solid #4f7b45",
+  background: "#4f7b45",
+  color: "#fff",
 };
 
 const mobileBottomNavStyle: CSSProperties = {

@@ -90,7 +90,10 @@ export default function Home() {
             <Link href="/api/download/android" style={softActionStyle}>下载 Android</Link>
           </div>
           <Link href="/membership" style={membershipLinkStyle}>
-            会员说明
+            <strong style={membershipLinkTitleStyle}>会员类别与权限</strong>
+            <span style={membershipLinkDescriptionStyle}>
+              查看免费使用、云端保存与公开互动的区别
+            </span>
           </Link>
         </section>
 
@@ -229,12 +232,29 @@ const softActionStyle: CSSProperties = {
 };
 
 const membershipLinkStyle: CSSProperties = {
-  display: "inline-flex",
-  marginTop: 11,
-  color: "#7a8577",
-  fontSize: 12,
-  lineHeight: 1.5,
+  width: "fit-content",
+  maxWidth: "100%",
+  margin: "13px auto 0",
+  padding: "9px 14px",
+  boxSizing: "border-box",
+  display: "grid",
+  gap: 2,
+  border: "1px solid #d8e3d3",
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.78)",
+  color: "#4d6149",
+  lineHeight: 1.45,
   textDecoration: "none",
+};
+
+const membershipLinkTitleStyle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const membershipLinkDescriptionStyle: CSSProperties = {
+  color: "#788575",
+  fontSize: 11,
 };
 
 const categoryGridStyle: CSSProperties = {
