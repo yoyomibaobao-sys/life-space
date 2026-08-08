@@ -38,6 +38,7 @@ export default function ExperienceCardPage({
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [ownerMode, setOwnerMode] = useState<OwnerMode>("view");
   const [editorDirty, setEditorDirty] = useState(false);
+  const [videoPreviewRevision, setVideoPreviewRevision] = useState(0);
 
   async function reload() {
     setLoading(true);
@@ -174,8 +175,20 @@ export default function ExperienceCardPage({
         </Link>
       </header>
 
-      {!isOwner ? (
-        <ExperienceCardVideoPanel detail={detail} readOnly />
+      <ExperienceCardVideoPanel
+        key={`${detail.card.id}-${videoPreviewRevision}`}
+        detail={detail}
+        readOnly={!isOwner}
+        previewOnly={isOwner}
+      />
+
+      {isOwner ? (
+        <ExperienceCardInteractions
+          cardId={detail.card.id}
+          cardOwnerId={detail.card.user_id}
+          currentUserId={viewerId}
+          isPublic={detail.isPubliclyAvailable}
+        />
       ) : null}
 
       <article style={cardShellStyle}>
@@ -241,44 +254,32 @@ export default function ExperienceCardPage({
                 {ownerMode === "edit" ? "返回成品" : "编辑经验卡"}
               </button>
               {detail.isPubliclyAvailable ? (
-                <button
-                  type="button"
-                  onClick={() => void shareCard()}
-                  style={secondaryButtonStyle}
-                >
-                  分享
-                </button>
-              ) : null}
-              <details style={moreActionsStyle}>
-                <summary style={moreSummaryStyle}>更多</summary>
-                <div style={moreMenuStyle}>
-                  {detail.isPubliclyAvailable ? (
-                    <button
-                      type="button"
-                      onClick={() => void copyCardLink()}
-                      style={menuButtonStyle}
-                    >
-                      复制公开链接
-                    </button>
-                  ) : null}
-                  {detail.card.status === "published" ? (
-                    <button
-                      type="button"
-                      onClick={() => setPendingAction("unpublish")}
-                      style={menuButtonStyle}
-                    >
-                      取消公开
-                    </button>
-                  ) : null}
+                <>
                   <button
                     type="button"
-                    onClick={() => setPendingAction("delete")}
-                    style={dangerMenuButtonStyle}
+                    onClick={() => void shareCard()}
+                    style={secondaryButtonStyle}
                   >
-                    删除经验卡
+                    分享
                   </button>
-                </div>
-              </details>
+                  <button
+                    type="button"
+                    onClick={() => void copyCardLink()}
+                    style={secondaryButtonStyle}
+                  >
+                    复制链接
+                  </button>
+                </>
+              ) : null}
+              {detail.card.status === "published" ? (
+                <button
+                  type="button"
+                  onClick={() => setPendingAction("unpublish")}
+                  style={quietButtonStyle}
+                >
+                  取消公开
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -286,7 +287,7 @@ export default function ExperienceCardPage({
 
       {isOwner && !detail.sourceIsComplete ? (
         <section style={warningStyle}>
-          来源记录已经变化。这张经验卡已自动停止公开，请重新选择3～12条有效记录后再发布。
+          来源记录已经变化。这张经验卡已自动停止公开，请重新选择至少3条有效记录后再发布。
         </section>
       ) : null}
 
@@ -306,6 +307,9 @@ export default function ExperienceCardPage({
           cardId={id}
           embedded
           onDirtyChange={setEditorDirty}
+          onVideoSelectionChange={() =>
+            setVideoPreviewRevision((current) => current + 1)
+          }
           onSaved={async () => {
             setEditorDirty(false);
             setOwnerMode("view");
@@ -314,26 +318,26 @@ export default function ExperienceCardPage({
         />
       ) : null}
 
-      {!isOwner || ownerMode === "view" ? (
-        <>
-          <ExperienceCardInteractions
-            cardId={detail.card.id}
-            cardOwnerId={detail.card.user_id}
-            currentUserId={viewerId}
-            isPublic={detail.isPubliclyAvailable}
-          />
+      {!isOwner ? (
+        <ExperienceCardInteractions
+          cardId={detail.card.id}
+          cardOwnerId={detail.card.user_id}
+          currentUserId={viewerId}
+          isPublic={detail.isPubliclyAvailable}
+        />
+      ) : null}
 
-          <section style={timelineSectionStyle}>
-            <div style={timelineHeadingStyle}>
-              <strong>经验过程</strong>
-              <span>按记录时间排列</span>
-            </div>
-            <ExperienceCardTimeline
-              archive={detail.archive}
-              records={detail.records}
-            />
-          </section>
-        </>
+      {!isOwner ? (
+        <section style={timelineSectionStyle}>
+          <div style={timelineHeadingStyle}>
+            <strong>经验过程</strong>
+            <span>按记录时间排列</span>
+          </div>
+          <ExperienceCardTimeline
+            archive={detail.archive}
+            records={detail.records}
+          />
+        </section>
       ) : null}
 
       {!isOwner && detail.isPubliclyAvailable ? (
@@ -355,6 +359,19 @@ export default function ExperienceCardPage({
             </button>
           </div>
         </footer>
+      ) : null}
+
+      {isOwner ? (
+        <section style={dangerZoneStyle} aria-label="删除经验卡">
+          <button
+            type="button"
+            onClick={() => setPendingAction("delete")}
+            style={deleteButtonStyle}
+          >
+            删除经验卡
+          </button>
+          <span style={dangerHintStyle}>原项目、记录和照片不会删除</span>
+        </section>
       ) : null}
 
       <ConfirmDialog
@@ -534,58 +551,6 @@ const ownerActionsStyle: CSSProperties = {
   borderTop: "1px solid #edf1eb",
 };
 
-const moreActionsStyle: CSSProperties = {
-  position: "relative",
-};
-
-const moreSummaryStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  minHeight: 40,
-  padding: "8px 14px",
-  borderRadius: 999,
-  fontSize: 13,
-  fontWeight: 800,
-  cursor: "pointer",
-  border: "1px solid #d3ded0",
-  background: "#fff",
-  color: "#50604d",
-  listStyle: "none",
-  userSelect: "none",
-};
-
-const moreMenuStyle: CSSProperties = {
-  position: "absolute",
-  zIndex: 10,
-  top: "calc(100% + 6px)",
-  right: 0,
-  minWidth: 156,
-  display: "grid",
-  gap: 3,
-  padding: 6,
-  border: "1px solid #dfe7dc",
-  borderRadius: 12,
-  background: "#fff",
-  boxShadow: "0 12px 28px rgba(46, 65, 44, 0.14)",
-};
-
-const menuButtonStyle: CSSProperties = {
-  minHeight: 36,
-  padding: "7px 10px",
-  border: 0,
-  borderRadius: 8,
-  background: "transparent",
-  color: "#50604d",
-  textAlign: "left",
-  fontSize: 13,
-  cursor: "pointer",
-};
-
-const dangerMenuButtonStyle: CSSProperties = {
-  ...menuButtonStyle,
-  color: "#b1534f",
-};
-
 const warningStyle: CSSProperties = {
   padding: 14,
   marginBottom: 14,
@@ -651,6 +616,39 @@ const activeButtonStyle: CSSProperties = {
   borderColor: "#7f9c78",
   background: "#eef5eb",
   color: "#3f613b",
+};
+
+const quietButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
+  border: 0,
+  background: "transparent",
+  color: "#6f7c6c",
+};
+
+const dangerZoneStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  marginTop: 22,
+  paddingTop: 16,
+  borderTop: "1px solid #ecefea",
+};
+
+const deleteButtonStyle: CSSProperties = {
+  minHeight: 36,
+  padding: "7px 0",
+  border: 0,
+  background: "transparent",
+  color: "#a95651",
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const dangerHintStyle: CSSProperties = {
+  color: "#929b90",
+  fontSize: 12,
 };
 
 const secondaryLinkStyle: CSSProperties = {

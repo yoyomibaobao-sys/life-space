@@ -157,7 +157,7 @@ export default function MyExperienceCardsPage() {
       </header>
 
       <section style={guideStyle}>
-        新建经验卡请先进入一个云端项目，选择“生成经验卡”。每张卡选择3～12条记录，系统按原始日期排列。
+        新建经验卡请先进入一个云端项目，选择“生成经验卡”。每张卡至少选择3条记录，之后可以继续补充，系统按原始日期排列。
       </section>
 
       <nav style={tabRowStyle} aria-label="经验卡目录">

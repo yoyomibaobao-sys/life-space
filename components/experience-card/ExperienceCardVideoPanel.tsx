@@ -175,14 +175,20 @@ export default function ExperienceCardVideoPanel({
   detail,
   readOnly = false,
   integrated = false,
+  previewOnly = false,
+  selectionOnly = false,
   coverMediaId,
   onCoverMediaIdChange,
+  onSelectionChange,
 }: {
   detail: ExperienceCardDetail;
   readOnly?: boolean;
   integrated?: boolean;
+  previewOnly?: boolean;
+  selectionOnly?: boolean;
   coverMediaId?: string | null;
   onCoverMediaIdChange?: (mediaId: string | null) => void;
+  onSelectionChange?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -506,6 +512,7 @@ export default function ExperienceCardVideoPanel({
       persistVideoSelectionPreference(detail, next, nextCover);
       return next;
     });
+    onSelectionChange?.();
   }
 
   function selectAllImages() {
@@ -517,6 +524,7 @@ export default function ExperienceCardVideoPanel({
     setSelectedImageByRecordId(next);
     setCoverImageUrl(nextCover);
     persistVideoSelectionPreference(detail, next, nextCover);
+    onSelectionChange?.();
   }
 
   function clearAllImages() {
@@ -530,6 +538,7 @@ export default function ExperienceCardVideoPanel({
     setCoverImageUrl(null);
     onCoverMediaIdChange?.(null);
     persistVideoSelectionPreference(detail, next, null);
+    onSelectionChange?.();
   }
 
   function selectCoverImage(imageUrl: string) {
@@ -545,6 +554,7 @@ export default function ExperienceCardVideoPanel({
     setCoverImageUrl(imageUrl);
     onCoverMediaIdChange?.(getCoverMediaId(detail, imageUrl));
     persistVideoSelectionPreference(detail, selectedImageByRecordId, imageUrl);
+    onSelectionChange?.();
   }
 
   async function handleGenerate() {
@@ -642,7 +652,7 @@ export default function ExperienceCardVideoPanel({
       style={integrated ? integratedPanelStyle : panelStyle}
       aria-label="经验卡图片与视频"
     >
-      {!readOnly ? (
+      {!readOnly && !previewOnly ? (
         <>
           <div style={headerStyle}>
             <div>
@@ -727,96 +737,107 @@ export default function ExperienceCardVideoPanel({
         </>
       ) : null}
 
-      <div style={readOnly ? publicPreviewWrapStyle : contentGridStyle}>
-        <div style={previewShellStyle}>
-          {videoUrl ? (
-            <video
-              src={videoUrl}
-              controls
-              autoPlay
-              muted
-              playsInline
-              onEnded={(event) => restartGeneratedVideo(event.currentTarget)}
-              style={previewStyle}
-            />
-          ) : (
-            <canvas ref={canvasRef} style={previewStyle} aria-label="循环视频预览" />
-          )}
+      {!selectionOnly ? (
+        <div style={readOnly ? publicPreviewWrapStyle : contentGridStyle}>
+          <div style={previewShellStyle}>
+            {videoUrl ? (
+              <video
+                src={videoUrl}
+                controls
+                autoPlay
+                muted
+                playsInline
+                onEnded={(event) => restartGeneratedVideo(event.currentTarget)}
+                style={previewStyle}
+              />
+            ) : (
+              <canvas
+                ref={canvasRef}
+                style={previewStyle}
+                aria-label="循环视频预览"
+              />
+            )}
+            {!readOnly ? (
+              <div style={previewLabelStyle}>
+                {videoUrl ? "MP4循环播放" : "循环预览"}
+              </div>
+            ) : null}
+          </div>
+
           {!readOnly ? (
-            <div style={previewLabelStyle}>
-              {videoUrl ? "MP4循环播放" : "循环预览"}
+            <div style={controlStyle}>
+              <div style={summaryStyle}>
+                {selectedImageCount} 张图片 · 9:16 竖屏 · 静音 H.264 MP4
+              </div>
+
+              {imageLoading ? (
+                <div style={noticeStyle}>正在准备记录照片...</div>
+              ) : null}
+
+              {cacheLoading ? (
+                <div style={noticeStyle}>正在检查本机已生成的MP4...</div>
+              ) : null}
+
+              {generating ? (
+                <div style={progressWrapStyle}>
+                  <div style={progressTextStyle}>
+                    正在本机生成视频 {Math.round(progress * 100)}%
+                  </div>
+                  <div style={progressTrackStyle}>
+                    <div
+                      style={{
+                        ...progressBarStyle,
+                        width: `${Math.max(2, progress * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    style={stopButtonStyle}
+                  >
+                    停止生成
+                  </button>
+                </div>
+              ) : null}
+
+              {errorText ? <div style={errorStyle}>{errorText}</div> : null}
+
+              <div style={actionsStyle}>
+                {!generating ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerate()}
+                    disabled={imageLoading || cacheLoading}
+                    style={primaryButtonStyle}
+                  >
+                    {videoBlob ? "重新生成MP4" : "生成竖屏MP4"}
+                  </button>
+                ) : null}
+
+                {videoBlob ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void shareVideo()}
+                      style={shareButtonStyle}
+                    >
+                      直接分享视频
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadVideo()}
+                      style={secondaryButtonStyle}
+                    >
+                      保存MP4
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>
-
-        {!readOnly ? <div style={controlStyle}>
-          <div style={summaryStyle}>
-            {selectedImageCount} 张图片 · 9:16 竖屏 · 静音 H.264 MP4
-          </div>
-
-          {imageLoading ? (
-            <div style={noticeStyle}>正在准备记录照片...</div>
-          ) : null}
-
-          {cacheLoading ? (
-            <div style={noticeStyle}>正在检查本机已生成的MP4...</div>
-          ) : null}
-
-          {generating ? (
-            <div style={progressWrapStyle}>
-              <div style={progressTextStyle}>
-                正在本机生成视频 {Math.round(progress * 100)}%
-              </div>
-              <div style={progressTrackStyle}>
-                <div
-                  style={{
-                    ...progressBarStyle,
-                    width: `${Math.max(2, progress * 100)}%`,
-                  }}
-                />
-              </div>
-              <button type="button" onClick={handleStop} style={stopButtonStyle}>
-                停止生成
-              </button>
-            </div>
-          ) : null}
-
-          {errorText ? <div style={errorStyle}>{errorText}</div> : null}
-
-          <div style={actionsStyle}>
-            {!generating ? (
-              <button
-                type="button"
-                onClick={() => void handleGenerate()}
-                disabled={imageLoading || cacheLoading}
-                style={primaryButtonStyle}
-              >
-                {videoBlob ? "重新生成MP4" : "生成竖屏MP4"}
-              </button>
-            ) : null}
-
-            {videoBlob ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void shareVideo()}
-                  style={shareButtonStyle}
-                >
-                  直接分享视频
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadVideo()}
-                  style={secondaryButtonStyle}
-                >
-                  保存MP4
-                </button>
-              </>
-            ) : null}
-          </div>
-
-        </div> : null}
-      </div>
+      ) : null}
     </section>
   );
 }

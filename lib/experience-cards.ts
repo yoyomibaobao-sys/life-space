@@ -255,7 +255,7 @@ export function getExperienceCardErrorText(error: unknown) {
     return "需要开通云会员才能创建、修改或发布经验卡。";
   }
   if (message.includes("experience_card_record_count_invalid")) {
-    return "请选择3～12条记录。";
+    return "请至少选择3条记录。";
   }
   if (message.includes("experience_card_records_must_share_archive")) {
     return "所选记录必须来自同一个项目，且不能处于回收站中。";

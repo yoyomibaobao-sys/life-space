@@ -114,6 +114,24 @@ select
   0
 from experience_card_test_context;
 
+insert into public.records (
+  id,
+  archive_id,
+  user_id,
+  note,
+  record_time,
+  visibility
+)
+select
+  gen_random_uuid(),
+  c.archive_id,
+  c.cloud_user,
+  '额外记录' || extra.sequence_no,
+  now() + make_interval(secs => extra.sequence_no),
+  'private'
+from experience_card_test_context as c
+cross join generate_series(1, 9) as extra(sequence_no);
+
 select set_config(
   'request.jwt.claim.sub',
   (select cloud_user::text from experience_card_test_context),
@@ -125,6 +143,8 @@ set local role authenticated;
 do $$
 declare
   c experience_card_test_context%rowtype;
+  v_record_ids uuid[];
+  v_unlimited_card_id uuid;
 begin
   select * into c from experience_card_test_context;
 
@@ -160,6 +180,38 @@ begin
   exception when insufficient_privilege then
     null;
   end;
+
+  select array_agg(r.id order by r.record_time, r.id)
+  into v_record_ids
+  from public.records as r
+  where r.archive_id = c.archive_id
+    and r.user_id = c.cloud_user
+    and r.trashed_at is null;
+
+  if cardinality(v_record_ids) <= 12 then
+    raise exception 'unlimited source test did not prepare more than 12 records';
+  end if;
+
+  v_unlimited_card_id := public.save_experience_card(
+    null,
+    c.archive_id,
+    '超过十二条的长期经验',
+    v_record_ids,
+    c.cover_media_id
+  );
+
+  if not exists (
+    select 1
+    from public.experience_cards as card
+    where card.id = v_unlimited_card_id
+      and card.source_record_count = cardinality(v_record_ids)
+  ) then
+    raise exception 'experience card still rejected more than 12 records';
+  end if;
+
+  if not public.delete_experience_card(v_unlimited_card_id) then
+    raise exception 'unlimited source test card could not be deleted';
+  end if;
 end;
 $$;
 

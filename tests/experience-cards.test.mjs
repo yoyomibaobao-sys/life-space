@@ -8,9 +8,14 @@ async function source(path) {
 
 const migrationPath =
   "supabase/migrations/20260730090616_add_experience_cards_v1.sql";
+const unlimitedSourceMigrationPath =
+  "supabase/migrations/20260808134254_remove_experience_card_source_limit.sql";
 
-test("experience cards reference 3-12 source records without copying content or media", async () => {
-  const migration = await source(migrationPath);
+test("experience cards reference at least three source records without a product cap or copied content", async () => {
+  const [migration, unlimitedSourceMigration] = await Promise.all([
+    source(migrationPath),
+    source(unlimitedSourceMigrationPath),
+  ]);
   const cardTable =
     migration.match(
       /create table if not exists public\.experience_cards[\s\S]*?\n\);/
@@ -22,9 +27,19 @@ test("experience cards reference 3-12 source records without copying content or 
 
   assert.match(cardTable, /archive_id uuid not null/i);
   assert.match(cardTable, /source_record_count smallint not null/i);
-  assert.match(cardTable, /check \(source_record_count between 3 and 12\)/i);
   assert.match(cardTable, /cover_media_id uuid references public\.media/i);
   assert.doesNotMatch(cardTable, /\b(note|body|media_url|photo_url)\b/i);
+  assert.match(
+    unlimitedSourceMigration,
+    /alter column source_record_count type integer/i
+  );
+  assert.match(
+    unlimitedSourceMigration,
+    /check \(source_record_count >= 3\)/i
+  );
+  assert.match(unlimitedSourceMigration, /if v_record_count < 3 then/i);
+  assert.doesNotMatch(unlimitedSourceMigration, /v_record_count > 12/i);
+  assert.doesNotMatch(unlimitedSourceMigration, /between 3 and 12/i);
 
   assert.match(relationTable, /record_id uuid not null/i);
   assert.match(relationTable, /references public\.records\(id\) on delete cascade/i);
@@ -116,9 +131,16 @@ test("the experience-card owner view keeps editing and video tools compact", asy
 
   assert.match(editor, /selectedRecordIds/);
   assert.match(editor, /toggleRecord\(record\.id\)/);
+  assert.match(editor, /availableRecords/);
+  assert.match(editor, /增加记录/);
+  assert.match(editor, /\+ 加入/);
+  assert.match(editor, /\.is\("trashed_at", null\)/);
+  assert.doesNotMatch(editor, /selectedRecords\.length <= 12/);
+  assert.doesNotMatch(editor, /最多关联12条/);
   assert.match(editor, /recordIds: selectedRecords\.map/);
   assert.match(editor, /<ExperienceCardVideoPanel/);
   assert.match(editor, /integrated/);
+  assert.match(editor, /selectionOnly/);
   assert.match(editor, /coverMediaId=\{effectiveCoverMediaId\}/);
   assert.match(editor, /onCoverMediaIdChange=\{setCoverMediaId\}/);
   assert.match(editor, /coverMediaId: effectiveCoverMediaId/);
@@ -138,9 +160,12 @@ test("the experience-card owner view keeps editing and video tools compact", asy
   assert.match(detail, /ownerMode === "edit"/);
   assert.doesNotMatch(detail, /ownerMode === "video"/);
   assert.doesNotMatch(detail, /生成分享视频/);
-  assert.match(detail, /更多/);
+  assert.doesNotMatch(detail, /更多/);
+  assert.match(detail, /复制链接/);
+  assert.match(detail, /删除经验卡/);
   assert.match(detail, /经验过程/);
   assert.match(detail, /ExperienceCardTimeline/);
+  assert.match(detail, /\{!isOwner \? \([\s\S]*?经验过程/);
   assert.ok(
     detail.indexOf("<ExperienceCardVideoPanel") <
       detail.indexOf("<ExperienceCardTimeline")
@@ -149,6 +174,12 @@ test("the experience-card owner view keeps editing and video tools compact", asy
     detail.indexOf("<ExperienceCardVideoPanel") <
       detail.indexOf("<ExperienceCardEditor")
   );
+  assert.ok(
+    detail.indexOf("{isOwner ? (\n        <ExperienceCardInteractions") <
+      detail.indexOf("<article style={cardShellStyle}")
+  );
+  assert.match(detail, /previewOnly=\{isOwner\}/);
+  assert.match(detail, /readOnly=\{!isOwner\}/);
   assert.match(detail, /<ExperienceCardEditor[\s\S]*?cardId=\{id\}[\s\S]*?embedded[\s\S]*?onSaved=/);
   assert.doesNotMatch(detail, /setEditing/);
   assert.match(detail, /detail\.archive\.system_name/);
@@ -268,7 +299,10 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
     source("package.json"),
   ]);
 
-  assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\}/);
+  assert.match(
+    detail,
+    /<ExperienceCardVideoPanel[\s\S]*?detail=\{detail\}[\s\S]*?previewOnly=\{isOwner\}/
+  );
   assert.match(panel, /生成竖屏MP4/);
   assert.match(panel, /选择视频画面与封面/);
   assert.match(panel, /视频选图保存在当前设备/);

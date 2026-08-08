@@ -85,11 +85,13 @@ export default function ExperienceCardEditor({
   cardId,
   embedded = false,
   onDirtyChange,
+  onVideoSelectionChange,
   onSaved,
 }: {
   cardId?: string;
   embedded?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
+  onVideoSelectionChange?: () => void;
   onSaved?: () => void | Promise<void>;
 }) {
   const router = useRouter();
@@ -177,6 +179,7 @@ export default function ExperienceCardEditor({
         .select(RECORD_SELECT)
         .eq("archive_id", archiveId)
         .eq("user_id", user.id)
+        .is("trashed_at", null)
         .order("record_time", { ascending: true })
         .order("created_at", { ascending: true })
         .order("id", { ascending: true });
@@ -252,6 +255,9 @@ export default function ExperienceCardEditor({
   const selectedRecords = records.filter((record) =>
     selectedRecordIdSet.has(record.id)
   );
+  const availableRecords = records.filter(
+    (record) => !selectedRecordIdSet.has(record.id)
+  );
   const coverOptions = imageOptions.filter((media) =>
     selectedRecordIdSet.has(media.record_id)
   );
@@ -271,7 +277,6 @@ export default function ExperienceCardEditor({
     title.trim().length >= 1 &&
     title.trim().length <= 120 &&
     selectedRecords.length >= 3 &&
-    selectedRecords.length <= 12 &&
     !saving;
   const canSave = canPersist && hasChanges;
   const canPublish = canPersist && (!wasPublished || hasChanges);
@@ -323,10 +328,6 @@ export default function ExperienceCardEditor({
           setCoverMediaId(null);
         }
         return current.filter((id) => id !== recordId);
-      }
-      if (current.length >= 12) {
-        showToast("一张经验卡最多关联12条来源记录");
-        return current;
       }
       return [...current, recordId];
     });
@@ -467,13 +468,9 @@ export default function ExperienceCardEditor({
           <div style={sectionHeadingRowStyle}>
             <div>
               <div style={eyebrowStyle}>记录</div>
-              <h3 style={compactSectionTitleStyle}>选择3～12条</h3>
+              <h3 style={compactSectionTitleStyle}>至少选择3条</h3>
             </div>
-            <span
-              style={countPillStyle(
-                selectedRecords.length >= 3 && selectedRecords.length <= 12
-              )}
-            >
+            <span style={countPillStyle(selectedRecords.length >= 3)}>
               已选 {selectedRecords.length} 条
             </span>
           </div>
@@ -481,37 +478,83 @@ export default function ExperienceCardEditor({
           {records.length === 0 ? (
             <p style={errorStyle}>当前项目还没有可选择的记录。</p>
           ) : (
-            <div style={recordGridStyle}>
-              {records.map((record, index) => {
-                const selected = selectedRecordIdSet.has(record.id);
-                const imageCount = record.media.filter(isSelectableImage).length;
-                return (
-                  <button
-                    key={record.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => toggleRecord(record.id)}
-                    style={recordOptionStyle(selected)}
-                  >
-                    <span style={recordMetaStyle}>
-                      <span>
-                        {formatExperienceCardDate(record.record_time) ||
-                          `记录${index + 1}`}
+            <>
+              <div style={recordGroupHeadingStyle}>
+                <strong>已选记录</strong>
+                <span>点击“移除”可取消引用</span>
+              </div>
+              <div style={recordGridStyle}>
+                {selectedRecords.map((record, index) => {
+                  const imageCount = record.media.filter(
+                    isSelectableImage
+                  ).length;
+                  return (
+                    <button
+                      key={record.id}
+                      type="button"
+                      aria-pressed="true"
+                      onClick={() => toggleRecord(record.id)}
+                      style={recordOptionStyle(true)}
+                    >
+                      <span style={recordMetaStyle}>
+                        <span>
+                          {formatExperienceCardDate(record.record_time) ||
+                            `记录${index + 1}`}
+                        </span>
+                        <span style={recordSelectedStyle(true)}>移除</span>
                       </span>
-                      <span style={recordSelectedStyle(selected)}>
-                        {selected ? "已选" : "选择"}
+                      <span style={recordNoteStyle}>
+                        {record.note?.trim() || "无文字记录"}
                       </span>
-                    </span>
-                    <span style={recordNoteStyle}>
-                      {record.note?.trim() || "无文字记录"}
-                    </span>
-                    <span style={recordImageCountStyle}>
-                      {imageCount > 0 ? `${imageCount}张图片` : "无图片"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      <span style={recordImageCountStyle}>
+                        {imageCount > 0 ? `${imageCount}张图片` : "无图片"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={recordGroupHeadingStyle}>
+                <strong>增加记录</strong>
+                <span>
+                  {availableRecords.length > 0
+                    ? `还有 ${availableRecords.length} 条可加入`
+                    : "项目中暂无其他记录"}
+                </span>
+              </div>
+              {availableRecords.length > 0 ? (
+                <div style={recordGridStyle}>
+                  {availableRecords.map((record, index) => {
+                    const imageCount = record.media.filter(
+                      isSelectableImage
+                    ).length;
+                    return (
+                      <button
+                        key={record.id}
+                        type="button"
+                        aria-pressed="false"
+                        onClick={() => toggleRecord(record.id)}
+                        style={recordOptionStyle(false)}
+                      >
+                        <span style={recordMetaStyle}>
+                          <span>
+                            {formatExperienceCardDate(record.record_time) ||
+                              `记录${index + 1}`}
+                          </span>
+                          <span style={recordSelectedStyle(false)}>+ 加入</span>
+                        </span>
+                        <span style={recordNoteStyle}>
+                          {record.note?.trim() || "无文字记录"}
+                        </span>
+                        <span style={recordImageCountStyle}>
+                          {imageCount > 0 ? `${imageCount}张图片` : "无图片"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </>
           )}
           {selectedRecords.length > 0 && selectedRecords.length < 3 ? (
             <p style={selectionHintStyle}>还需选择至少3条记录。</p>
@@ -523,8 +566,10 @@ export default function ExperienceCardEditor({
             <ExperienceCardVideoPanel
               detail={videoDetail}
               integrated
+              selectionOnly
               coverMediaId={effectiveCoverMediaId}
               onCoverMediaIdChange={setCoverMediaId}
+              onSelectionChange={onVideoSelectionChange}
             />
           ) : (
             <div>
@@ -777,6 +822,16 @@ const recordGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))",
   gap: 9,
+};
+
+const recordGroupHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  margin: "13px 0 8px",
+  color: "#768271",
+  fontSize: 12,
 };
 
 function recordOptionStyle(selected: boolean): CSSProperties {
