@@ -252,7 +252,7 @@ export function getExperienceCardErrorText(error: unknown) {
       : String(error || "");
 
   if (message.includes("experience_card_cloud_access_required")) {
-    return "需要有效云空间才能创建、修改或发布经验卡。";
+    return "需要开通云会员才能创建、修改或发布经验卡。";
   }
   if (message.includes("experience_card_record_count_invalid")) {
     return "请选择3～12条记录。";

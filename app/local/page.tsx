@@ -39,7 +39,7 @@ export default function LocalModePage() {
             fontSize: 14,
           }}
         >
-          <li>免费使用，不需要先开通云空间。</li>
+          <li>免费使用，不需要先开通云会员。</li>
           <li>只保存在当前设备，不支持多设备同步。</li>
           <li>不上传云端，不进入发现页，也没有互动或发布入口。</li>
           <li>换设备、卸载 App、清理浏览器数据后，本地数据可能丢失。</li>

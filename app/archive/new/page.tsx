@@ -456,7 +456,7 @@ function NewArchiveContent() {
           <>
             <span>{getCreateContentBlockedText(membership)}</span>{" "}
             <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-              查看云空间
+              查看会员权益
             </Link>
           </>
         ) : null

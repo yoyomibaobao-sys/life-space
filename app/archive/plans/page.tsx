@@ -167,7 +167,7 @@ export default function PlantPlansPage() {
   ) {
     if (!userId) return;
     if (!hasCloudAccess) {
-      showToast("需要有效云空间才能修改种植计划；现有条目仍可移除。");
+      showToast("需要开通云会员才能修改种植计划；现有条目仍可移除。");
       return;
     }
 
@@ -448,9 +448,9 @@ export default function PlantPlansPage() {
             lineHeight: 1.7,
           }}
         >
-          云端种植计划仅对有效云空间开放。现有过渡条目仍可查看和移除，但不能修改；你仍可创建本地项目。
+          云端种植计划属于云会员权益。现有过渡条目仍可查看和移除，但不能修改；你仍可创建本地项目。
           <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-            查看云空间
+            查看会员权益
           </Link>
         </div>
       ) : null}

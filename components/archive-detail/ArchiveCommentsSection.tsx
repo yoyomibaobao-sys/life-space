@@ -552,7 +552,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
           <span style={{ fontSize: 12, color: "#9a6232" }}>
             {getCreateContentBlockedText(membership)}，
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-              查看云空间
+              查看会员权益
             </Link>
           </span>
         ) : !compactMobile ? (
@@ -828,7 +828,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                 <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
                   {getCreateContentBlockedText(membership)}，请{" "}
                   <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-                    查看云空间
+                    查看会员权益
                   </Link>
                   。
                 </div>

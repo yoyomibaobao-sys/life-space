@@ -159,7 +159,7 @@ export default function MyMarketPostsPage() {
 
           {marketBlocked ? (
             <Link href="/membership" style={quotaLinkStyle}>
-              查看云空间
+              查看会员权益
             </Link>
           ) : null}
         </section>

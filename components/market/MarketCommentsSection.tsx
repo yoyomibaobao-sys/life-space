@@ -258,7 +258,7 @@ export default function MarketCommentsSection({
                 </button>
               </div>
               <div style={consultationHintStyle}>
-                注册后的本地免费用户也可咨询；社区评论、点赞、有帮助反馈和关注仍属于云空间互动。
+                注册后的本地用户也可咨询；社区评论、点赞、有用反馈和关注仍属于云会员互动。
               </div>
             </>
         ) : currentUserId && postStatus !== "active" ? (

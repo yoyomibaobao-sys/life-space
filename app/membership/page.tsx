@@ -67,9 +67,9 @@ export default function MembershipPage() {
         (typeof daysRemaining === "number" && daysRemaining <= 14))
   );
   const renewalNoticeText = membership?.can_create_content === false
-    ? "云空间已到期"
+    ? "云会员已到期"
     : typeof daysRemaining === "number" && daysRemaining <= 14
-      ? `云空间还有 ${daysRemaining} 天到期`
+      ? `云会员还有 ${daysRemaining} 天到期`
       : "";
   const storageLimitText = useMemo(() => {
     if (!membership?.storage_limit_bytes) return "暂无";
@@ -88,10 +88,10 @@ export default function MembershipPage() {
   return (
     <main style={pageStyle}>
       <section style={heroStyle}>
-        <div style={eyebrowStyle}>云空间</div>
-        <h1 style={titleStyle}>云空间</h1>
+        <div style={eyebrowStyle}>个人会员与云空间</div>
+        <h1 style={titleStyle}>云会员</h1>
         <p style={subtitleStyle}>
-          本地记录免费。云空间用于同步、备份、多设备使用、公开发现和求助；上传云空间不等于公开，已有记录不会自动公开。
+          本地记录始终免费。开通后获得 1GB 云空间、完整指引、经验互动和集市发布；上传云空间不等于公开，已有记录不会自动公开。
         </p>
       </section>
 
@@ -106,7 +106,7 @@ export default function MembershipPage() {
           </div>
 
           <div style={statusGridStyle}>
-            <InfoItem label="当前方案" value={membership ? getMembershipPlanLabel(membership.plan) : "本地免费"} hint={membership ? getMembershipStatusLabel(membership.status) : "未开通云空间"} />
+            <InfoItem label="当前身份" value={membership ? getMembershipPlanLabel(membership.plan) : "本地用户"} hint={membership ? getMembershipStatusLabel(membership.status) : "免费使用本地功能"} />
             <InfoItem
               label="有效期至"
               value={
@@ -129,26 +129,26 @@ export default function MembershipPage() {
               value={membership ? storageLimitText : "0 B"}
               hint={
                 isSignupTrialAllowance
-                  ? "首批注册体验额度；正式云空间为1GB"
-                  : "正式云空间为1GB"
+                  ? "首批注册体验额度；云会员为1GB"
+                  : "云会员为1GB"
               }
             />
             <InfoItem
               label="集市发布"
               value={marketQuotaText}
-              hint={membership ? "同时在线发布数量" : "本地免费用户不能发布"}
+              hint={membership ? "同时在线发布数量" : "本地用户不能发布"}
             />
           </div>
 
           {isLocalFreeUser ? (
             <div style={localFreeNoticeStyle}>
-              当前账号是本地免费用户：可以在本机记录，查看植物指引的基础概要和少量核心参数，也可在集市咨询发布者；完整参数、社区互动和云端发布需开通云空间。
+              当前账号是本地用户：可以免费在本机记录，查看植物指引的基础概要和少量核心参数，也可在集市咨询发布者；完整参数、社区互动和云端发布需开通云会员。
             </div>
           ) : null}
 
           {shouldShowRenewalNotice ? (
             <div style={renewalNoticeStyle}>
-              <strong>云空间提醒：</strong>{renewalNoticeText}
+              <strong>会员提醒：</strong>{renewalNoticeText}
               <div style={{ marginTop: 8 }}>
                 付款时请备注注册邮箱；有问题可联系管理员邮箱：
                 <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
@@ -159,9 +159,9 @@ export default function MembershipPage() {
           ) : null}
 
           <div style={actionRowStyle}>
-            <button type="button" disabled style={disabledPrimaryButtonStyle}>
-              支付功能准备中
-            </button>
+            <a href="#payment" style={primaryButtonStyle}>
+              {membership ? "查看续费方式" : "查看开通方式"}
+            </a>
             <Link href="/profile" style={secondaryButtonStyle}>
               返回个人资料
             </Link>
@@ -192,7 +192,7 @@ export default function MembershipPage() {
         <div style={sectionLabelStyle}>首批注册体验</div>
         <h2 style={noteTitleStyle}>前20名正式账号可获30MB云空间</h2>
         <p style={mutedTextStyle}>
-          体验额度不设6个月期限，是否获得以注册成功时的剩余名额和平台存储安全线为准。30MB用完后仍可继续使用本地记录；开通正式云空间后，容量升级为1GB。内部测试账号不占这20个名额。
+          体验额度不设6个月期限，是否获得以注册成功时的剩余名额和平台存储安全线为准。30MB用完后仍可继续使用本地记录；开通云会员后，容量升级为1GB。内部测试账号不占这20个名额。
         </p>
       </section>
 
@@ -210,7 +210,7 @@ export default function MembershipPage() {
           ]}
         />
         <PlanCard
-          title="本地免费用户"
+          title="本地用户"
           price="免费"
           description="注册账号，但记录仍只保存在这台设备。"
           items={[
@@ -223,9 +223,9 @@ export default function MembershipPage() {
           ]}
         />
         <PlanCard
-          title="云空间（首发价）"
+          title="云会员（首发价）"
           price="¥64 / 年｜US$8 / year"
-          description="适合同步、备份、多设备使用和公开发现。"
+          description="适合长期保存、完整查阅、交流经验和公开分享。"
           items={[
             "1GB 云空间",
             "云端私密空间和多设备同步",
@@ -239,12 +239,31 @@ export default function MembershipPage() {
         />
       </section>
 
-      <section style={paymentCardStyle}>
+      <section style={businessCardStyle}>
+        <div>
+          <div style={sectionLabelStyle}>团队与经营 · 后续开放</div>
+          <h2 style={sectionTitleStyle}>商业会员</h2>
+          <p style={mutedTextStyle}>
+            面向苗圃、农场、工作室、小型商家和协作团队。商业会员不是多人共用一个登录账号，而是每位成员使用自己的账号进入同一个团队空间。
+          </p>
+        </div>
+        <div style={businessFeatureGridStyle}>
+          <InfoItem label="对外展示" value="商家主页" hint="产品、服务、长期发布与试用／试种招募" />
+          <InfoItem label="共同管理" value="团队空间" hint="项目、记录、产品、发布和咨询归团队所有" />
+          <InfoItem label="成员方式" value="独立登录" hint="所有者邀请成员，并分别设置管理权限" />
+          <InfoItem label="当前状态" value="尚未开放" hint="价格、成员名额和权限细节将在开发前确定" />
+        </div>
+        <p style={businessFootnoteStyle}>
+          商业会员将包含主账号的云会员基础权益；受邀成员获得的是团队管理权限，不自动获得个人云会员权益。
+        </p>
+      </section>
+
+      <section id="payment" style={paymentCardStyle}>
         <div>
           <div style={sectionLabelStyle}>付款方式</div>
-          <h2 style={noteTitleStyle}>当前采用人工确认开通云空间</h2>
+          <h2 style={noteTitleStyle}>当前采用人工确认开通云会员</h2>
           <p style={mutedTextStyle}>
-            自动在线支付暂未接入。付款时请备注注册邮箱；管理员确认后会手动开通对应云空间期限。
+            自动在线支付暂未接入。付款时请备注注册邮箱；管理员确认后会手动开通对应云会员期限。
           </p>
         </div>
 
@@ -301,10 +320,10 @@ export default function MembershipPage() {
           <li>本地离线版免费，数据只保存在当前设备的 App 私有存储中。</li>
           <li>注册不等于上传云端；首批20名正式账号可获30MB体验额度，其他账号仍可免费使用本地功能。</li>
           <li>上传云空间不等于公开，记录可设为仅自己可见或公开发现。</li>
-          <li>已有本地记录开通后默认同步为云空间私密，不会自动公开。</li>
-          <li>云空间包含 1GB 容量，集市最多同时发布中 30 条；暂不提供集市加量包。</li>
+          <li>开通云会员后，已有本地记录默认同步为云空间私密，不会自动公开。</li>
+          <li>云会员包含 1GB 云空间，集市最多同时发布中 30 条；暂不提供集市加量包。</li>
           <li>当前为首发价 ¥64/年或 US$8/year，不自动续费。</li>
-          <li>当前为人工确认付款并手动开通云空间；后续可再接入自动支付或应用商店内购。</li>
+          <li>当前为人工确认付款并手动开通云会员；后续可再接入自动支付或应用商店内购。</li>
         </ul>
       </section>
     </main>
@@ -485,13 +504,6 @@ const primaryButtonStyle: CSSProperties = {
   fontWeight: 700,
 };
 
-const disabledPrimaryButtonStyle: CSSProperties = {
-  ...primaryButtonStyle,
-  border: "none",
-  background: "#9aa398",
-  cursor: "not-allowed",
-};
-
 const secondaryButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -563,6 +575,28 @@ const paymentCardStyle: CSSProperties = {
   gap: 16,
   marginBottom: 20,
   background: "#fffdf7",
+};
+
+const businessCardStyle: CSSProperties = {
+  ...cardStyle,
+  display: "grid",
+  gap: 16,
+  marginBottom: 20,
+  background: "#f6f8f3",
+  borderColor: "#d4dfcf",
+};
+
+const businessFeatureGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 12,
+};
+
+const businessFootnoteStyle: CSSProperties = {
+  margin: 0,
+  color: "#5f6d59",
+  fontSize: 13,
+  lineHeight: 1.7,
 };
 
 const paymentGridStyle: CSSProperties = {

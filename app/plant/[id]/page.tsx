@@ -1172,7 +1172,7 @@ function PlantTabAccessNotice({ label }: { label: string }) {
         href="/membership"
         style={{ marginLeft: 7, color: "#3f6f37", fontWeight: 700 }}
       >
-        查看云空间
+        查看会员权益
       </Link>
     </section>
   );
@@ -1640,9 +1640,9 @@ export default function PlantDetailPage() {
     if (!interestAdded && !hasCloudAccess) {
       setActionMessage({
         type: "error",
-        text: "加入收藏属于云空间功能。",
+        text: "加入收藏属于云会员权益。",
         href: "/membership",
-        hrefText: "查看云空间",
+        hrefText: "查看会员权益",
       });
       return;
     }
@@ -1714,9 +1714,9 @@ export default function PlantDetailPage() {
     if (!planAdded && !hasCloudAccess) {
       setActionMessage({
         type: "error",
-        text: "云端种植计划属于云空间功能；你仍可新建本地项目。",
+        text: "云端种植计划属于云会员权益；你仍可新建本地项目。",
         href: "/membership",
-        hrefText: "查看云空间",
+        hrefText: "查看会员权益",
       });
       return;
     }
@@ -1880,9 +1880,9 @@ export default function PlantDetailPage() {
               lineHeight: 1.7,
             }}
           >
-            当前是本地免费用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云空间会员开放。
+            当前是本地用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云会员开放。
             <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              查看云空间
+              查看会员权益
             </Link>
           </div>
         ) : null}
@@ -2095,7 +2095,7 @@ export default function PlantDetailPage() {
             ))}
           </div>
           <div style={{ marginTop: 12, color: "#6a7566", fontSize: 13, lineHeight: 1.7 }}>
-            地区与季节适配、精确阈值、完整养护方法和多案例比较属于云空间功能。
+            地区与季节适配、精确阈值、完整养护方法和多案例比较属于云会员权益。
           </div>
         </Section>
       ) : null}

@@ -63,7 +63,7 @@ export default function ArchiveToolbar({
               textDecoration: "none",
             }}
           >
-            开通云空间
+            开通云会员
           </Link>
         ) : null}
       </div>

@@ -256,7 +256,7 @@ test("registered local-free users can consult on active marketplace posts", asyn
   assert.doesNotMatch(marketComments, /canCreateMembershipContent/);
   assert.doesNotMatch(marketComments, /get_my_membership/);
   assert.match(marketComments, /咨询与联系/);
-  assert.match(marketComments, /本地免费用户也可咨询/);
+  assert.match(marketComments, /本地用户也可咨询/);
 });
 
 test("record photos are unlimited cumulatively but capped at ten per add operation", async () => {
@@ -348,7 +348,7 @@ test("client-side entitlement checks fail closed when membership is absent", asy
     membership,
     /canAccessMembershipGuidance[\s\S]*?can_create_content === true/
   );
-  assert.match(membership, /需要开通有效云空间/);
+  assert.match(membership, /需要开通云会员/);
 });
 
 test("market activation is serialized for inserts and reactivation", async () => {
@@ -373,14 +373,18 @@ test("market activation is serialized for inserts and reactivation", async () =>
 test("the approved matrix and transition rules are documented", async () => {
   const docs = await source("docs/membership-access.md");
 
-  assert.match(docs, /游客（未注册）.*本地免费用户.*云空间会员/);
+  assert.match(docs, /游客（未注册）.*本地用户（免费）.*云会员/);
   assert.match(docs, /植物指引基础概要 \| — \| ✓ \| ✓/);
   assert.match(docs, /少量核心静态参数 \| — \| ✓ \| ✓/);
   assert.match(docs, /完整参数、生长周期和完整养护指引 \| — \| — \| ✓/);
   assert.match(docs, /评论、回复、点赞、有帮助反馈和关注 \| — \| — \| ✓/);
   assert.match(docs, /集市咨询和联系发布者 \| — \| ✓ \| ✓/);
   assert.match(docs, /未来：作者主动公开的单张经验卡.*\| ✓ \| ✓ \| ✓/);
-  assert.match(docs, /只有报名时仍有效的云空间会员可以申请试用／试种/);
+  assert.match(docs, /只有报名时仍有效的云会员可以申请试用／试种/);
+  assert.match(docs, /商业会员面向个人经营者、苗圃、农场、工作室、小型商家和协作团队/);
+  assert.match(docs, /团队空间＋成员账号/);
+  assert.match(docs, /不允许多人共用同一登录账号和密码/);
+  assert.match(docs, /受邀成员获得的是团队管理权限，不自动获得个人云会员权益/);
   assert.match(docs, /主动公开、或在本次报名中明确授权展示的种植经验/);
   assert.match(docs, /不得读取或披露报名者的私密项目、私密记录/);
   assert.match(docs, /¥64\/年或 US\$8\/year/);

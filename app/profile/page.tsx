@@ -55,7 +55,7 @@ type MobileProfileNavItem = {
 
 const baseMobileProfileModules: MobileProfileNavItem[] = [
   { value: "info", label: "用户信息" },
-  { value: "membership", label: "云空间与付款" },
+  { value: "membership", label: "云会员" },
   { value: "space", label: "个人空间" },
   { href: "/profile/trash", label: "回收站" },
   { value: "account", label: "帐号操作" },
@@ -183,7 +183,7 @@ export default function ProfilePage() {
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
         setMembership(null);
-        setMembershipError("暂时无法读取云空间与额度信息");
+        setMembershipError("暂时无法读取会员与云空间信息");
       } else {
         setMembership(normalizeMembershipRpcResult(membershipResult.data));
         setMembershipError("");
@@ -673,7 +673,7 @@ export default function ProfilePage() {
               <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? "保存中..." : "保存资料"}</button>
               <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>查看公开资料页</Link>
               <Link href="/archive" style={secondaryActionStyle}>我的项目</Link>
-              <Link href="/membership" style={secondaryActionStyle}>云空间</Link>
+              <Link href="/membership" style={secondaryActionStyle}>云会员</Link>
               {isAdmin && !isMobileViewport ? (
                 <Link href="/admin/memberships" style={isMobileViewport ? { ...mobileSecondaryLinkStyle, border: "1px solid #c9d8be", background: "#edf6e8", color: "#2f5a27" } : adminLinkStyle}>会员管理</Link>
               ) : null}
@@ -687,8 +687,8 @@ export default function ProfilePage() {
         <section style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的云空间</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>当前云空间与额度</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>我的会员</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>云会员与云空间</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 {membershipStatusText}
               </p>
@@ -708,7 +708,7 @@ export default function ProfilePage() {
                 {exporting ? "正在打包记录和图片..." : "导出我的记录"}
               </button>
               <Link href="/membership" style={secondaryLinkStyle}>
-                查看云空间
+                查看会员权益
               </Link>
             </div>
             {exporting ? (
@@ -722,7 +722,7 @@ export default function ProfilePage() {
             <div style={membershipNoticeStyle}>
               <div>{membershipNoticeText}</div>
               <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                查看云空间
+                查看会员权益
               </Link>
             </div>
           ) : null}
@@ -731,7 +731,7 @@ export default function ProfilePage() {
             <InfoCard
               label="当前方案"
               value={membership ? getMembershipPlanLabel(membership.plan) : "本地免费"}
-              hint={membership ? getMembershipStatusLabel(membership.status) : "未开通云空间"}
+              hint={membership ? getMembershipStatusLabel(membership.status) : "免费使用本地功能"}
             />
             <InfoCard
               label="有效期至"
@@ -754,7 +754,7 @@ export default function ProfilePage() {
               value={marketQuotaText}
               hint={
                 !membership
-                  ? "本地免费用户不能发布"
+                  ? "本地用户不能发布"
                   : membership.can_create_market_post === false
                     ? "当前不可继续发布"
                     : "同时在线发布数量"
@@ -767,7 +767,7 @@ export default function ProfilePage() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>付款记录</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>我的云空间付款</h2>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>云会员开通记录</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 这里只显示管理员已确认的最近付款记录；已取消或退款的记录不会显示。若已付款但未显示，请联系管理员邮箱：yoyomibaobao@gmail.com。
               </p>

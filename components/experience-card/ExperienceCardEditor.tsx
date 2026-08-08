@@ -338,13 +338,13 @@ export default function ExperienceCardEditor({
     return (
       <main style={pageStyle}>
         <section style={messageCardStyle}>
-          <h1 style={titleStyle}>需要有效云空间</h1>
+          <h1 style={titleStyle}>需要开通云会员</h1>
           <p style={mutedStyle}>
-            经验卡引用云端项目与记录，只有有效云空间用户可以创建、修改和发布。
+            经验卡引用云端项目与记录，只有云会员可以创建、修改和发布。
           </p>
           <div style={actionRowStyle}>
             <Link href="/membership" style={primaryLinkStyle}>
-              查看云空间
+              查看会员权益
             </Link>
             <Link href="/experience-cards" style={secondaryLinkStyle}>
               返回

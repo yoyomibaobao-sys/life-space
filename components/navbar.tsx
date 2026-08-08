@@ -463,6 +463,14 @@ export default function Navbar() {
             </Link>
           ) : null}
 
+          <Link
+            href="/membership"
+            style={membershipEntryStyle(isActive("/membership"))}
+            title="云会员与云空间"
+          >
+            云会员
+          </Link>
+
           <Link href="/profile" style={getProfileLinkStyle(isCompact)}>
             {username || "未设置用户名"}
           </Link>
@@ -483,6 +491,9 @@ export default function Navbar() {
         </div>
       ) : (
         <div style={getGuestAreaStyle(isCompact)}>
+          <Link href="/membership" style={membershipEntryStyle(isActive("/membership"))}>
+            云会员
+          </Link>
           <Link href="/login" style={loginLinkStyle}>
             登录
           </Link>
@@ -660,7 +671,7 @@ function getMobilePageTitle(pathname: string) {
   if (pathname.startsWith("/plant")) return "指引";
   if (pathname.startsWith("/profile")) return "我";
   if (pathname.startsWith("/notifications")) return "通知";
-  if (pathname.startsWith("/membership")) return "云空间";
+  if (pathname.startsWith("/membership")) return "云会员";
   if (pathname.startsWith("/archive/new")) return "新建项目";
   if (pathname.startsWith("/market")) return "集市";
   if (pathname.startsWith("/login")) return "登录";
@@ -1081,6 +1092,20 @@ function adminLinkStyle(active: boolean): CSSProperties {
     borderRadius: 999,
     fontSize: 13,
     fontWeight: 700,
+    whiteSpace: "nowrap",
+  };
+}
+
+function membershipEntryStyle(active: boolean): CSSProperties {
+  return {
+    textDecoration: "none",
+    color: active ? "#274f2a" : "#4d6447",
+    background: active ? "#dcebd5" : "#f4f8f1",
+    border: "1px solid #d7e3cf",
+    padding: "5px 10px",
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: 750,
     whiteSpace: "nowrap",
   };
 }
