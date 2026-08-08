@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
-import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -14,9 +13,13 @@ import {
   publishExperienceCard,
   saveExperienceCard,
 } from "@/lib/experience-cards";
+import {
+  deleteCachedExperienceCardVideo,
+  getExperienceCardVideoSelection,
+  saveExperienceCardVideoSelection,
+} from "@/lib/experience-card-video-cache";
 import type {
   ExperienceCardArchive,
-  ExperienceCardDetail,
   ExperienceCardMedia,
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
@@ -65,6 +68,58 @@ function isSelectableImage(media: ExperienceCardMedia) {
   return true;
 }
 
+function getRecordImages(record: ExperienceCardSourceRecord) {
+  return record.media.filter(
+    (media) =>
+      isSelectableImage(media) &&
+      Boolean(media.display_url || media.display_thumb_url)
+  );
+}
+
+function reconcileMediaSelection(
+  records: ExperienceCardSourceRecord[],
+  storedSelection?: Record<string, string[]> | null
+): Record<string, string[]> {
+  return Object.fromEntries(
+    records.map((record) => {
+      const availableIds = getRecordImages(record).map((media) => media.id);
+      if (!storedSelection || !(record.id in storedSelection)) {
+        return [record.id, availableIds];
+      }
+      const availableIdSet = new Set(availableIds);
+      return [
+        record.id,
+        (storedSelection[record.id] || []).filter((id) =>
+          availableIdSet.has(id)
+        ),
+      ];
+    })
+  );
+}
+
+function getFirstSelectedMediaId({
+  records,
+  selectedRecordIds,
+  selectedMediaIdsByRecordId,
+}: {
+  records: ExperienceCardSourceRecord[];
+  selectedRecordIds: string[];
+  selectedMediaIdsByRecordId: Record<string, string[]>;
+}) {
+  const selectedRecordIdSet = new Set(selectedRecordIds);
+  for (const record of records) {
+    if (!selectedRecordIdSet.has(record.id)) continue;
+    const selectedMediaIdSet = new Set(
+      selectedMediaIdsByRecordId[record.id] || []
+    );
+    const firstSelected = getRecordImages(record).find((media) =>
+      selectedMediaIdSet.has(media.id)
+    );
+    if (firstSelected) return firstSelected.id;
+  }
+  return null;
+}
+
 function createEditorSnapshot({
   title,
   recordIds,
@@ -99,11 +154,12 @@ export default function ExperienceCardEditor({
   const requestedArchiveId = searchParams.get("archiveId");
 
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
-  const [existingDetail, setExistingDetail] =
-    useState<ExperienceCardDetail | null>(null);
   const [records, setRecords] = useState<ExperienceCardSourceRecord[]>([]);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+  const [selectedMediaIdsByRecordId, setSelectedMediaIdsByRecordId] = useState<
+    Record<string, string[]>
+  >({});
   const [title, setTitle] = useState("");
   const [coverMediaId, setCoverMediaId] = useState<string | null>(null);
   const [initialSnapshot, setInitialSnapshot] = useState("");
@@ -145,7 +201,6 @@ export default function ExperienceCardEditor({
         }
 
         archiveId = detail.card.archive_id;
-        setExistingDetail(detail);
         existingRecordIds = detail.records.map((record) => record.id);
         existingCoverMediaId = detail.card.cover_media_id;
         existingTitle = detail.card.title;
@@ -215,11 +270,62 @@ export default function ExperienceCardEditor({
         ...record,
         media: mediaByRecord.get(record.id) || [],
       }));
+      const nextSelectedRecordIds = cardId
+        ? existingRecordIds
+        : nextRecords.map((record) => record.id);
+      const storedSelection = cardId
+        ? getExperienceCardVideoSelection(cardId)
+        : null;
+      const nextMediaSelection = reconcileMediaSelection(
+        nextRecords,
+        storedSelection?.selectedMediaIdsByRecordId
+      );
+      const selectedRecordIdSet = new Set(nextSelectedRecordIds);
+      const coverRecord = existingCoverMediaId
+        ? nextRecords.find((record) =>
+            getRecordImages(record).some(
+              (media) => media.id === existingCoverMediaId
+            )
+          )
+        : null;
+      if (
+        existingCoverMediaId &&
+        coverRecord &&
+        selectedRecordIdSet.has(coverRecord.id) &&
+        !(nextMediaSelection[coverRecord.id] || []).includes(
+          existingCoverMediaId
+        )
+      ) {
+        nextMediaSelection[coverRecord.id] = [
+          ...(nextMediaSelection[coverRecord.id] || []),
+          existingCoverMediaId,
+        ];
+      }
+      const selectedMediaIdSet = new Set(
+        nextSelectedRecordIds.flatMap(
+          (recordId) => nextMediaSelection[recordId] || []
+        )
+      );
+      const preferredCoverMediaId =
+        existingCoverMediaId && selectedMediaIdSet.has(existingCoverMediaId)
+          ? existingCoverMediaId
+          : storedSelection?.coverMediaId &&
+              selectedMediaIdSet.has(storedSelection.coverMediaId)
+            ? storedSelection.coverMediaId
+            : null;
+      const nextCoverMediaId =
+        preferredCoverMediaId ||
+        getFirstSelectedMediaId({
+          records: nextRecords,
+          selectedRecordIds: nextSelectedRecordIds,
+          selectedMediaIdsByRecordId: nextMediaSelection,
+        });
 
       setArchive(archiveData as ExperienceCardArchive);
       setRecords(nextRecords);
-      setSelectedRecordIds(existingRecordIds);
-      setCoverMediaId(existingCoverMediaId);
+      setSelectedRecordIds(nextSelectedRecordIds);
+      setSelectedMediaIdsByRecordId(nextMediaSelection);
+      setCoverMediaId(nextCoverMediaId);
       if (!cardId) {
         setTitle(`${archiveData.title}的经验`);
       } else {
@@ -255,11 +361,19 @@ export default function ExperienceCardEditor({
   const selectedRecords = records.filter((record) =>
     selectedRecordIdSet.has(record.id)
   );
-  const availableRecords = records.filter(
-    (record) => !selectedRecordIdSet.has(record.id)
+  const selectedMediaIdSet = useMemo(
+    () =>
+      new Set(
+        selectedRecords.flatMap(
+          (record) => selectedMediaIdsByRecordId[record.id] || []
+        )
+      ),
+    [selectedMediaIdsByRecordId, selectedRecords]
   );
-  const coverOptions = imageOptions.filter((media) =>
-    selectedRecordIdSet.has(media.record_id)
+  const coverOptions = imageOptions.filter(
+    (media) =>
+      selectedRecordIdSet.has(media.record_id) &&
+      selectedMediaIdSet.has(media.id)
   );
   const effectiveCoverMediaId =
     coverOptions.some((media) => media.id === coverMediaId)
@@ -280,56 +394,120 @@ export default function ExperienceCardEditor({
     !saving;
   const canSave = canPersist && hasChanges;
   const canPublish = canPersist && (!wasPublished || hasChanges);
-  const videoDetail = useMemo<ExperienceCardDetail | null>(() => {
-    if (!cardId || !existingDetail || !archive || selectedRecords.length === 0) {
-      return null;
-    }
-
-    return {
-      ...existingDetail,
-      card: {
-        ...existingDetail.card,
-        title: title.trim() || existingDetail.card.title,
-        cover_media_id: effectiveCoverMediaId,
-        source_record_count: selectedRecords.length,
-      },
-      archive: {
-        ...existingDetail.archive,
-        ...archive,
-      },
-      records: selectedRecords,
-      cover:
-        coverOptions.find((media) => media.id === effectiveCoverMediaId) ||
-        null,
-    };
-  }, [
-    archive,
-    cardId,
-    coverOptions,
-    effectiveCoverMediaId,
-    existingDetail,
-    selectedRecords,
-    title,
-  ]);
 
   useEffect(() => {
     onDirtyChange?.(hasChanges);
   }, [hasChanges, onDirtyChange]);
 
+  function persistLocalSelection({
+    nextRecordIds,
+    nextMediaSelection,
+    preferredCoverMediaId,
+  }: {
+    nextRecordIds: string[];
+    nextMediaSelection: Record<string, string[]>;
+    preferredCoverMediaId: string | null;
+  }) {
+    const selectedMediaIds = new Set(
+      nextRecordIds.flatMap(
+        (recordId) => nextMediaSelection[recordId] || []
+      )
+    );
+    const nextCoverMediaId =
+      preferredCoverMediaId && selectedMediaIds.has(preferredCoverMediaId)
+        ? preferredCoverMediaId
+        : getFirstSelectedMediaId({
+            records,
+            selectedRecordIds: nextRecordIds,
+            selectedMediaIdsByRecordId: nextMediaSelection,
+          });
+
+    setSelectedMediaIdsByRecordId(nextMediaSelection);
+    setCoverMediaId(nextCoverMediaId);
+
+    const selectionStorageKey = cardId || (archive ? `draft:${archive.id}` : null);
+    if (selectionStorageKey) {
+      saveExperienceCardVideoSelection(selectionStorageKey, {
+        selectedMediaIdsByRecordId: Object.fromEntries(
+          nextRecordIds.map((recordId) => [
+            recordId,
+            nextMediaSelection[recordId] || [],
+          ])
+        ),
+        coverMediaId: nextCoverMediaId,
+      });
+    }
+    if (cardId) {
+      void deleteCachedExperienceCardVideo(cardId)
+        .catch(() => undefined)
+        .finally(() => onVideoSelectionChange?.());
+    } else {
+      onVideoSelectionChange?.();
+    }
+  }
+
   function toggleRecord(recordId: string) {
-    setSelectedRecordIds((current) => {
-      if (current.includes(recordId)) {
-        if (
-          coverMediaId &&
-          records
-            .find((record) => record.id === recordId)
-            ?.media.some((media) => media.id === coverMediaId)
-        ) {
-          setCoverMediaId(null);
-        }
-        return current.filter((id) => id !== recordId);
-      }
-      return [...current, recordId];
+    const record = records.find((item) => item.id === recordId);
+    if (!record) return;
+
+    const isSelected = selectedRecordIdSet.has(recordId);
+    const nextRecordIds = isSelected
+      ? selectedRecordIds.filter((id) => id !== recordId)
+      : [...selectedRecordIds, recordId];
+    const nextMediaSelection = {
+      ...selectedMediaIdsByRecordId,
+      [recordId]: isSelected
+        ? []
+        : getRecordImages(record).map((media) => media.id),
+    };
+
+    setSelectedRecordIds(nextRecordIds);
+    persistLocalSelection({
+      nextRecordIds,
+      nextMediaSelection,
+      preferredCoverMediaId: coverMediaId,
+    });
+  }
+
+  function toggleRecordImage(recordId: string, mediaId: string) {
+    if (!selectedRecordIdSet.has(recordId)) return;
+    const currentMediaIds = selectedMediaIdsByRecordId[recordId] || [];
+    const nextMediaIds = currentMediaIds.includes(mediaId)
+      ? currentMediaIds.filter((id) => id !== mediaId)
+      : [...currentMediaIds, mediaId];
+    const nextMediaSelection = {
+      ...selectedMediaIdsByRecordId,
+      [recordId]: nextMediaIds,
+    };
+    persistLocalSelection({
+      nextRecordIds: selectedRecordIds,
+      nextMediaSelection,
+      preferredCoverMediaId: coverMediaId,
+    });
+  }
+
+  function toggleAllRecordImages(record: ExperienceCardSourceRecord) {
+    if (!selectedRecordIdSet.has(record.id)) return;
+    const imageIds = getRecordImages(record).map((media) => media.id);
+    const currentMediaIds = selectedMediaIdsByRecordId[record.id] || [];
+    const nextMediaSelection = {
+      ...selectedMediaIdsByRecordId,
+      [record.id]:
+        currentMediaIds.length === imageIds.length ? [] : imageIds,
+    };
+    persistLocalSelection({
+      nextRecordIds: selectedRecordIds,
+      nextMediaSelection,
+      preferredCoverMediaId: coverMediaId,
+    });
+  }
+
+  function selectCoverMedia(mediaId: string) {
+    if (!selectedMediaIdSet.has(mediaId)) return;
+    persistLocalSelection({
+      nextRecordIds: selectedRecordIds,
+      nextMediaSelection: selectedMediaIdsByRecordId,
+      preferredCoverMediaId: mediaId,
     });
   }
 
@@ -351,6 +529,16 @@ export default function ExperienceCardEditor({
               recordIds: selectedRecords.map((record) => record.id),
               coverMediaId: effectiveCoverMediaId,
             });
+
+      saveExperienceCardVideoSelection(savedCardId, {
+        selectedMediaIdsByRecordId: Object.fromEntries(
+          selectedRecords.map((record) => [
+            record.id,
+            selectedMediaIdsByRecordId[record.id] || [],
+          ])
+        ),
+        coverMediaId: effectiveCoverMediaId,
+      });
 
       if (mode === "publish") {
         await publishExperienceCard(savedCardId);
@@ -467,119 +655,136 @@ export default function ExperienceCardEditor({
         <div style={editorSectionStyle}>
           <div style={sectionHeadingRowStyle}>
             <div>
-              <div style={eyebrowStyle}>记录</div>
-              <h3 style={compactSectionTitleStyle}>至少选择3条</h3>
+              <div style={eyebrowStyle}>记录与图片</div>
+              <h3 style={compactSectionTitleStyle}>在同一处同步选择</h3>
             </div>
             <span style={countPillStyle(selectedRecords.length >= 3)}>
-              已选 {selectedRecords.length} 条
+              {selectedRecords.length} 条记录 · {coverOptions.length} 张视频图片
             </span>
           </div>
+          <p style={recordSelectionIntroStyle}>
+            选中记录后，该记录的图片默认全选；视频图片选择自动保存在当前设备，封面从已选图片中指定并随经验卡保存。每张经验卡至少选择3条记录，不设累计上限。
+          </p>
 
           {records.length === 0 ? (
             <p style={errorStyle}>当前项目还没有可选择的记录。</p>
           ) : (
-            <>
-              <div style={recordGroupHeadingStyle}>
-                <strong>已选记录</strong>
-                <span>点击“移除”可取消引用</span>
-              </div>
-              <div style={recordGridStyle}>
-                {selectedRecords.map((record, index) => {
-                  const imageCount = record.media.filter(
-                    isSelectableImage
-                  ).length;
-                  return (
+            <div style={recordListStyle}>
+              {records.map((record, index) => {
+                const selected = selectedRecordIdSet.has(record.id);
+                const recordImages = getRecordImages(record);
+                const selectedMediaIds =
+                  selectedMediaIdsByRecordId[record.id] || [];
+                const selectedMediaIdSetForRecord = new Set(selectedMediaIds);
+                const allImagesSelected =
+                  recordImages.length > 0 &&
+                  selectedMediaIds.length === recordImages.length;
+
+                return (
+                  <article
+                    key={record.id}
+                    style={recordEditorStyle(selected)}
+                  >
                     <button
-                      key={record.id}
                       type="button"
-                      aria-pressed="true"
+                      aria-pressed={selected}
                       onClick={() => toggleRecord(record.id)}
-                      style={recordOptionStyle(true)}
+                      style={recordHeaderButtonStyle}
                     >
                       <span style={recordMetaStyle}>
                         <span>
                           {formatExperienceCardDate(record.record_time) ||
                             `记录${index + 1}`}
                         </span>
-                        <span style={recordSelectedStyle(true)}>移除</span>
+                        <span style={recordSelectedStyle(selected)}>
+                          {selected ? "已选记录" : "+ 选择记录"}
+                        </span>
                       </span>
                       <span style={recordNoteStyle}>
                         {record.note?.trim() || "无文字记录"}
                       </span>
-                      <span style={recordImageCountStyle}>
-                        {imageCount > 0 ? `${imageCount}张图片` : "无图片"}
-                      </span>
                     </button>
-                  );
-                })}
-              </div>
 
-              <div style={recordGroupHeadingStyle}>
-                <strong>增加记录</strong>
-                <span>
-                  {availableRecords.length > 0
-                    ? `还有 ${availableRecords.length} 条可加入`
-                    : "项目中暂无其他记录"}
-                </span>
-              </div>
-              {availableRecords.length > 0 ? (
-                <div style={recordGridStyle}>
-                  {availableRecords.map((record, index) => {
-                    const imageCount = record.media.filter(
-                      isSelectableImage
-                    ).length;
-                    return (
-                      <button
-                        key={record.id}
-                        type="button"
-                        aria-pressed="false"
-                        onClick={() => toggleRecord(record.id)}
-                        style={recordOptionStyle(false)}
-                      >
-                        <span style={recordMetaStyle}>
-                          <span>
-                            {formatExperienceCardDate(record.record_time) ||
-                              `记录${index + 1}`}
-                          </span>
-                          <span style={recordSelectedStyle(false)}>+ 加入</span>
+                    <div style={recordMediaAreaStyle(selected)}>
+                      <div style={recordMediaHeadingStyle}>
+                        <span>
+                          {recordImages.length > 0
+                            ? `视频图片 ${selected ? selectedMediaIds.length : 0}/${recordImages.length}`
+                            : "这条记录没有图片，将使用文字画面"}
                         </span>
-                        <span style={recordNoteStyle}>
-                          {record.note?.trim() || "无文字记录"}
-                        </span>
-                        <span style={recordImageCountStyle}>
-                          {imageCount > 0 ? `${imageCount}张图片` : "无图片"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </>
-          )}
-          {selectedRecords.length > 0 && selectedRecords.length < 3 ? (
-            <p style={selectionHintStyle}>还需选择至少3条记录。</p>
-          ) : null}
-        </div>
+                        {selected && recordImages.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleAllRecordImages(record)}
+                            style={recordMediaActionStyle}
+                          >
+                            {allImagesSelected ? "清空图片" : "全选图片"}
+                          </button>
+                        ) : null}
+                      </div>
 
-        <div style={editorSectionStyle}>
-          {videoDetail ? (
-            <ExperienceCardVideoPanel
-              detail={videoDetail}
-              integrated
-              selectionOnly
-              coverMediaId={effectiveCoverMediaId}
-              onCoverMediaIdChange={setCoverMediaId}
-              onSelectionChange={onVideoSelectionChange}
-            />
-          ) : (
-            <div>
-              <div style={eyebrowStyle}>图片与视频</div>
-              <h3 style={compactSectionTitleStyle}>先选择来源记录</h3>
-              <p style={mutedStyle}>
-                选择记录后，可从这些记录的图片中选择视频画面和经验卡封面。
-              </p>
+                      {recordImages.length > 0 ? (
+                        <div style={recordImageGridStyle}>
+                          {recordImages.map((media, mediaIndex) => {
+                            const active =
+                              selected &&
+                              selectedMediaIdSetForRecord.has(media.id);
+                            const isCover =
+                              active && effectiveCoverMediaId === media.id;
+                            const previewUrl =
+                              media.display_thumb_url ||
+                              media.display_url ||
+                              "";
+
+                            return (
+                              <div key={media.id} style={recordImageItemStyle}>
+                                <button
+                                  type="button"
+                                  disabled={!selected}
+                                  aria-pressed={active}
+                                  onClick={() =>
+                                    toggleRecordImage(record.id, media.id)
+                                  }
+                                  style={recordImageButtonStyle(
+                                    active,
+                                    selected
+                                  )}
+                                >
+                                  <img
+                                    src={previewUrl}
+                                    alt={`第${index + 1}条记录的图片${mediaIndex + 1}`}
+                                    loading="lazy"
+                                    style={recordThumbnailStyle}
+                                  />
+                                  <span style={recordImageBadgeStyle(active)}>
+                                    {active ? "已选" : "未选"}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!active}
+                                  onClick={() => selectCoverMedia(media.id)}
+                                  style={recordCoverButtonStyle(
+                                    isCover,
+                                    active
+                                  )}
+                                >
+                                  {isCover ? "当前封面" : "设为封面"}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
+          {selectedRecords.length < 3 ? (
+            <p style={selectionHintStyle}>还需选择至少3条记录。</p>
+          ) : null}
         </div>
 
         {errorText ? <div style={inlineErrorStyle}>{errorText}</div> : null}
@@ -818,36 +1023,39 @@ function countPillStyle(valid: boolean): CSSProperties {
   };
 }
 
-const recordGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))",
-  gap: 9,
-};
-
-const recordGroupHeadingStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  margin: "13px 0 8px",
-  color: "#768271",
+const recordSelectionIntroStyle: CSSProperties = {
+  margin: "-2px 0 13px",
+  color: "#748071",
   fontSize: 12,
+  lineHeight: 1.65,
 };
 
-function recordOptionStyle(selected: boolean): CSSProperties {
+const recordListStyle: CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+function recordEditorStyle(selected: boolean): CSSProperties {
   return {
     minWidth: 0,
-    display: "grid",
-    gap: 8,
-    padding: 12,
     border: selected ? "1px solid #7ea276" : "1px solid #dfe7dc",
-    borderRadius: 13,
-    background: selected ? "#f1f7ee" : "#fbfcfa",
-    color: "#334231",
-    textAlign: "left",
-    cursor: "pointer",
+    borderRadius: 15,
+    background: selected ? "#f6faf3" : "#fbfcfa",
+    overflow: "hidden",
   };
 }
+
+const recordHeaderButtonStyle: CSSProperties = {
+  width: "100%",
+  display: "grid",
+  gap: 8,
+  padding: 12,
+  border: 0,
+  background: "transparent",
+  color: "#334231",
+  textAlign: "left",
+  cursor: "pointer",
+};
 
 const recordMetaStyle: CSSProperties = {
   display: "flex",
@@ -880,10 +1088,106 @@ const recordNoteStyle: CSSProperties = {
   overflowWrap: "anywhere",
 };
 
-const recordImageCountStyle: CSSProperties = {
-  color: "#849080",
+function recordMediaAreaStyle(selected: boolean): CSSProperties {
+  return {
+    padding: "10px 12px 12px",
+    borderTop: "1px solid #e5ece2",
+    background: selected ? "#fff" : "#f7f9f6",
+    opacity: selected ? 1 : 0.62,
+  };
+}
+
+const recordMediaHeadingStyle: CSSProperties = {
+  minHeight: 26,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 8,
+  color: "#748071",
   fontSize: 11,
 };
+
+const recordMediaActionStyle: CSSProperties = {
+  flexShrink: 0,
+  minHeight: 28,
+  padding: "4px 9px",
+  border: "1px solid #d6dfd2",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#596956",
+  fontSize: 11,
+  cursor: "pointer",
+};
+
+const recordImageGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))",
+  gap: 8,
+};
+
+const recordImageItemStyle: CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 5,
+};
+
+function recordImageButtonStyle(
+  active: boolean,
+  recordSelected: boolean
+): CSSProperties {
+  return {
+    position: "relative",
+    width: "100%",
+    aspectRatio: "1 / 1",
+    padding: 0,
+    overflow: "hidden",
+    border: active ? "2px solid #668e60" : "1px solid #dce5d9",
+    borderRadius: 10,
+    background: "#edf1eb",
+    cursor: recordSelected ? "pointer" : "not-allowed",
+    opacity: recordSelected ? 1 : 0.72,
+  };
+}
+
+const recordThumbnailStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  display: "block",
+  objectFit: "cover",
+};
+
+function recordImageBadgeStyle(active: boolean): CSSProperties {
+  return {
+    position: "absolute",
+    right: 5,
+    bottom: 5,
+    padding: "3px 6px",
+    borderRadius: 999,
+    background: active ? "rgba(68,105,62,0.9)" : "rgba(39,48,38,0.72)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 800,
+  };
+}
+
+function recordCoverButtonStyle(
+  isCover: boolean,
+  enabled: boolean
+): CSSProperties {
+  return {
+    minHeight: 29,
+    padding: "4px 6px",
+    border: isCover ? "1px solid #668e60" : "1px solid #dbe4d8",
+    borderRadius: 8,
+    background: isCover ? "#eaf4e6" : "#fff",
+    color: isCover ? "#456d41" : "#6f7c6c",
+    fontSize: 10,
+    fontWeight: isCover ? 800 : 600,
+    cursor: enabled ? "pointer" : "not-allowed",
+    opacity: enabled ? 1 : 0.45,
+  };
+}
 
 const selectionHintStyle: CSSProperties = {
   margin: "12px 0 0",

@@ -121,7 +121,7 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
   );
 });
 
-test("the experience-card owner view keeps editing and video tools compact", async () => {
+test("experience-card creation and editing share one synchronized record and image picker", async () => {
   const [editor, detail, list, archiveHeader] = await Promise.all([
     source("components/experience-card/ExperienceCardEditor.tsx"),
     source("app/experience-cards/[id]/page.tsx"),
@@ -131,18 +131,23 @@ test("the experience-card owner view keeps editing and video tools compact", asy
 
   assert.match(editor, /selectedRecordIds/);
   assert.match(editor, /toggleRecord\(record\.id\)/);
-  assert.match(editor, /availableRecords/);
-  assert.match(editor, /增加记录/);
-  assert.match(editor, /\+ 加入/);
+  assert.match(editor, /nextRecords\.map\(\(record\) => record\.id\)/);
+  assert.match(editor, /reconcileMediaSelection/);
+  assert.match(editor, /records\.map\(\(record, index\) =>/);
+  assert.match(editor, /getRecordImages\(record\)/);
+  assert.match(editor, /toggleRecordImage\(record\.id, media\.id\)/);
+  assert.match(editor, /toggleAllRecordImages\(record\)/);
+  assert.match(editor, /选中记录后，该记录的图片默认全选/);
+  assert.match(editor, /视频图片选择自动保存在当前设备/);
+  assert.match(editor, /不设累计上限/);
   assert.match(editor, /\.is\("trashed_at", null\)/);
   assert.doesNotMatch(editor, /selectedRecords\.length <= 12/);
   assert.doesNotMatch(editor, /最多关联12条/);
   assert.match(editor, /recordIds: selectedRecords\.map/);
-  assert.match(editor, /<ExperienceCardVideoPanel/);
-  assert.match(editor, /integrated/);
-  assert.match(editor, /selectionOnly/);
-  assert.match(editor, /coverMediaId=\{effectiveCoverMediaId\}/);
-  assert.match(editor, /onCoverMediaIdChange=\{setCoverMediaId\}/);
+  assert.match(editor, /saveExperienceCardVideoSelection\(savedCardId/);
+  assert.match(editor, /deleteCachedExperienceCardVideo\(cardId\)/);
+  assert.doesNotMatch(editor, /<ExperienceCardVideoPanel/);
+  assert.doesNotMatch(editor, /availableRecords/);
   assert.match(editor, /coverMediaId: effectiveCoverMediaId/);
   assert.match(editor, /保存修改/);
   assert.match(editor, /预览/);
@@ -150,8 +155,8 @@ test("the experience-card owner view keeps editing and video tools compact", asy
   assert.match(editor, /项目中其他记录仍保持原来的可见性/);
   assert.match(editor, /embedded = false/);
   assert.match(editor, /编辑经验卡/);
-  assert.match(editor, /内容与图片/);
-  assert.doesNotMatch(editor, /recordThumbsStyle/);
+  assert.match(editor, /记录与图片/);
+  assert.match(editor, /recordThumbnailStyle/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);
