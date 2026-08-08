@@ -15,11 +15,12 @@ test("mobile personal space project summary opens the project archive", async ()
 });
 
 test("account navigation keeps membership contextual and export under data management", async () => {
-  const [profile, navbar, membership, login] = await Promise.all([
+  const [profile, navbar, membership, login, home] = await Promise.all([
     source("app/profile/page.tsx"),
     source("components/navbar.tsx"),
     source("app/membership/page.tsx"),
     source("app/login/page.tsx"),
+    source("app/page.tsx"),
   ]);
 
   assert.match(profile, /value: "membership", label: "会员与容量"/);
@@ -38,14 +39,15 @@ test("account navigation keeps membership contextual and export under data manag
     navbar.indexOf('<NavItem href="/register"') <
       navbar.indexOf('href="/discover"')
   );
-  assert.match(navbar, /!user && pathname === "\/login"/);
+  assert.match(navbar, /!user && pathname === "\/"/);
   assert.match(navbar, /<Link href="\/login" style=\{loginLinkStyle\}>/);
-  assert.match(navbar, /pathname !== "\/login"/);
+  assert.match(navbar, /pathname !== "\/"/);
   assert.match(membership, /个人使用方案/);
   assert.match(membership, /1GB 个人云端存储/);
   assert.doesNotMatch(membership, /查看会员权益/);
-  assert.match(login, /href="\/membership"/);
-  assert.match(login, />\s*会员说明\s*<\/Link>/);
+  assert.doesNotMatch(login, /href="\/membership"/);
+  assert.match(home, /href="\/membership"/);
+  assert.match(home, />\s*会员说明\s*<\/Link>/);
 });
 
 test("signed-out market does not repeat login and registration actions inside the page", async () => {

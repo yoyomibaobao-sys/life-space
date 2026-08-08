@@ -89,6 +89,9 @@ export default function Home() {
             <Link href="/discover" style={softActionStyle}>浏览发现</Link>
             <Link href="/api/download/android" style={softActionStyle}>下载 Android</Link>
           </div>
+          <Link href="/membership" style={membershipLinkStyle}>
+            会员说明
+          </Link>
         </section>
 
         <section className="home-category-grid" aria-label="自然生活记录范围" style={categoryGridStyle}>
@@ -223,6 +226,15 @@ const softActionStyle: CSSProperties = {
   background: "#eef5e8",
   color: "#496b3f",
   border: "1px solid #d9e6d0",
+};
+
+const membershipLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  marginTop: 11,
+  color: "#7a8577",
+  fontSize: 12,
+  lineHeight: 1.5,
+  textDecoration: "none",
 };
 
 const categoryGridStyle: CSSProperties = {

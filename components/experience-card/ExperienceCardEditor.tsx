@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
+import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -15,6 +16,7 @@ import {
 } from "@/lib/experience-cards";
 import type {
   ExperienceCardArchive,
+  ExperienceCardDetail,
   ExperienceCardMedia,
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
@@ -35,6 +37,7 @@ const RECORD_SELECT = [
   "created_at",
   "visibility",
   "status_tag",
+  "record_tags(tag, tag_type, source, is_active)",
 ].join(", ");
 
 const MEDIA_SELECT = [
@@ -94,6 +97,8 @@ export default function ExperienceCardEditor({
   const requestedArchiveId = searchParams.get("archiveId");
 
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
+  const [existingDetail, setExistingDetail] =
+    useState<ExperienceCardDetail | null>(null);
   const [records, setRecords] = useState<ExperienceCardSourceRecord[]>([]);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
@@ -138,6 +143,7 @@ export default function ExperienceCardEditor({
         }
 
         archiveId = detail.card.archive_id;
+        setExistingDetail(detail);
         existingRecordIds = detail.records.map((record) => record.id);
         existingCoverMediaId = detail.card.cover_media_id;
         existingTitle = detail.card.title;
@@ -154,7 +160,7 @@ export default function ExperienceCardEditor({
       const { data: archiveData } = await supabase
         .from("archives")
         .select(
-          "id, user_id, title, category, system_name, species_name_snapshot, is_public"
+          "id, user_id, title, category, species_id, system_name, species_name_snapshot, is_public"
         )
         .eq("id", archiveId)
         .eq("user_id", user.id)
@@ -269,6 +275,37 @@ export default function ExperienceCardEditor({
     !saving;
   const canSave = canPersist && hasChanges;
   const canPublish = canPersist && (!wasPublished || hasChanges);
+  const videoDetail = useMemo<ExperienceCardDetail | null>(() => {
+    if (!cardId || !existingDetail || !archive || selectedRecords.length === 0) {
+      return null;
+    }
+
+    return {
+      ...existingDetail,
+      card: {
+        ...existingDetail.card,
+        title: title.trim() || existingDetail.card.title,
+        cover_media_id: effectiveCoverMediaId,
+        source_record_count: selectedRecords.length,
+      },
+      archive: {
+        ...existingDetail.archive,
+        ...archive,
+      },
+      records: selectedRecords,
+      cover:
+        coverOptions.find((media) => media.id === effectiveCoverMediaId) ||
+        null,
+    };
+  }, [
+    archive,
+    cardId,
+    coverOptions,
+    effectiveCoverMediaId,
+    existingDetail,
+    selectedRecords,
+    title,
+  ]);
 
   useEffect(() => {
     onDirtyChange?.(hasChanges);
@@ -399,7 +436,7 @@ export default function ExperienceCardEditor({
         <div style={editorHeadingStyle}>
           <div>
             <div style={eyebrowStyle}>编辑经验卡</div>
-            <h2 style={sectionTitleStyle}>内容与封面</h2>
+            <h2 style={sectionTitleStyle}>内容与图片</h2>
           </div>
           {archive ? (
             <Link href={`/archive/${archive.id}`} style={sourceProjectLinkStyle}>
@@ -482,51 +519,20 @@ export default function ExperienceCardEditor({
         </div>
 
         <div style={editorSectionStyle}>
-          <div style={sectionHeadingRowStyle}>
-            <div>
-              <div style={eyebrowStyle}>封面（可选）</div>
-              <h3 style={compactSectionTitleStyle}>
-                {effectiveCoverMediaId ? "已选择封面" : "从记录图片中选择"}
-              </h3>
-            </div>
-            {effectiveCoverMediaId ? (
-              <button
-                type="button"
-                onClick={() => setCoverMediaId(null)}
-                style={clearCoverButtonStyle}
-              >
-                清除
-              </button>
-            ) : null}
-          </div>
-
-          {coverOptions.length === 0 ? (
-            <p style={mutedStyle}>没有可用图片，将使用项目封面或无图占位。</p>
+          {videoDetail ? (
+            <ExperienceCardVideoPanel
+              detail={videoDetail}
+              integrated
+              coverMediaId={effectiveCoverMediaId}
+              onCoverMediaIdChange={setCoverMediaId}
+            />
           ) : (
-            <div style={imageGridStyle}>
-              {coverOptions.map((media, index) => {
-                const selectedAsCover = effectiveCoverMediaId === media.id;
-                const src = media.display_thumb_url || media.display_url;
-                if (!src) return null;
-                return (
-                  <button
-                    key={media.id}
-                    type="button"
-                    onClick={() => setCoverMediaId(media.id)}
-                    aria-pressed={selectedAsCover}
-                    style={imageOptionStyle(selectedAsCover)}
-                  >
-                    <img
-                      src={src}
-                      alt={`经验卡封面候选${index + 1}`}
-                      style={imageOptionImageStyle}
-                    />
-                    <span style={imageOptionBadgeStyle(selectedAsCover)}>
-                      {selectedAsCover ? "当前封面" : "设为封面"}
-                    </span>
-                  </button>
-                );
-              })}
+            <div>
+              <div style={eyebrowStyle}>图片与视频</div>
+              <h3 style={compactSectionTitleStyle}>先选择来源记录</h3>
+              <p style={mutedStyle}>
+                选择记录后，可从这些记录的图片中选择视频画面和经验卡封面。
+              </p>
             </div>
           )}
         </div>
@@ -767,48 +773,6 @@ function countPillStyle(valid: boolean): CSSProperties {
   };
 }
 
-const imageGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(112px, 1fr))",
-  gap: 10,
-};
-
-function imageOptionStyle(selected: boolean): CSSProperties {
-  return {
-    position: "relative",
-    border: selected ? "2px solid #6f9867" : "1px solid #dfe6dc",
-    borderRadius: 13,
-    overflow: "hidden",
-    background: "#eef2eb",
-    padding: 2,
-    cursor: "pointer",
-    aspectRatio: "1 / 1",
-  };
-}
-
-const imageOptionImageStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-  display: "block",
-  borderRadius: 10,
-};
-
-function imageOptionBadgeStyle(selected: boolean): CSSProperties {
-  return {
-    position: "absolute",
-    right: 6,
-    bottom: 6,
-    padding: "3px 7px",
-    borderRadius: 999,
-    background: selected ? "#52784c" : "rgba(255,255,255,0.88)",
-    color: selected ? "#fff" : "#4f5e4b",
-    fontSize: 11,
-    fontWeight: 800,
-  };
-}
-
-
 const recordGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))",
@@ -864,18 +828,6 @@ const recordNoteStyle: CSSProperties = {
 const recordImageCountStyle: CSSProperties = {
   color: "#849080",
   fontSize: 11,
-};
-
-const clearCoverButtonStyle: CSSProperties = {
-  minHeight: 32,
-  padding: "5px 9px",
-  border: "1px solid #d7e1d3",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#697665",
-  fontSize: 11,
-  fontWeight: 750,
-  cursor: "pointer",
 };
 
 const selectionHintStyle: CSSProperties = {

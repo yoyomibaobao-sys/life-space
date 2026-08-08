@@ -77,6 +77,27 @@ function buildDefaultImageSelection(
   );
 }
 
+function reconcileImageSelection(
+  detail: ExperienceCardDetail,
+  current: ExperienceCardVideoImageSelection
+): ExperienceCardVideoImageSelection {
+  return Object.fromEntries(
+    detail.records.map((record) => {
+      const availableUrls = getRecordImageOptions(record).map(
+        (option) => option.sourceUrl
+      );
+      if (!Object.prototype.hasOwnProperty.call(current, record.id)) {
+        return [record.id, availableUrls];
+      }
+      const availableUrlSet = new Set(availableUrls);
+      return [
+        record.id,
+        (current[record.id] || []).filter((url) => availableUrlSet.has(url)),
+      ];
+    })
+  );
+}
+
 function getSelectedImageUrls(
   detail: ExperienceCardDetail,
   selection: ExperienceCardVideoImageSelection
@@ -115,9 +136,16 @@ function getCoverMediaId(
 
 function getDefaultCoverImageUrl(
   detail: ExperienceCardDetail,
-  selection: ExperienceCardVideoImageSelection
+  selection: ExperienceCardVideoImageSelection,
+  preferredCoverMediaId?: string | null
 ) {
   const selectedUrls = getSelectedImageUrls(detail, selection);
+  const preferredCoverUrl = detail.records
+    .flatMap((record) => getRecordImageOptions(record))
+    .find((option) => option.id === preferredCoverMediaId)?.sourceUrl;
+  if (preferredCoverUrl && selectedUrls.includes(preferredCoverUrl)) {
+    return preferredCoverUrl;
+  }
   const savedCoverUrl =
     detail.cover?.display_url || detail.cover?.display_thumb_url || null;
   return savedCoverUrl && selectedUrls.includes(savedCoverUrl)
@@ -125,12 +153,36 @@ function getDefaultCoverImageUrl(
     : selectedUrls[0] || null;
 }
 
+function persistVideoSelectionPreference(
+  detail: ExperienceCardDetail,
+  selection: ExperienceCardVideoImageSelection,
+  coverUrl: string | null
+) {
+  try {
+    saveExperienceCardVideoSelection(detail.card.id, {
+      selectedMediaIdsByRecordId: getSelectedMediaIdsByRecordId(
+        detail,
+        selection
+      ),
+      coverMediaId: getCoverMediaId(detail, coverUrl),
+    });
+  } catch {
+    // Selection persistence is best effort; video generation remains usable.
+  }
+}
+
 export default function ExperienceCardVideoPanel({
   detail,
   readOnly = false,
+  integrated = false,
+  coverMediaId,
+  onCoverMediaIdChange,
 }: {
   detail: ExperienceCardDetail;
   readOnly?: boolean;
+  integrated?: boolean;
+  coverMediaId?: string | null;
+  onCoverMediaIdChange?: (mediaId: string | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -149,7 +201,7 @@ export default function ExperienceCardVideoPanel({
     );
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(() => {
     const selection = buildDefaultImageSelection(detail);
-    return getDefaultCoverImageUrl(detail, selection);
+    return getDefaultCoverImageUrl(detail, selection, coverMediaId);
   });
 
   const imageOptionsByRecordId = useMemo(
@@ -208,12 +260,19 @@ export default function ExperienceCardVideoPanel({
     () => getExperienceCardVideoSourceSignature(detail),
     [detail]
   );
+  const previousSourceSignatureRef = useRef(sourceSignature);
+  const sceneImageSignature = useMemo(
+    () => JSON.stringify(scenes.map((scene) => scene.imageUrl || null)),
+    [scenes]
+  );
 
   useEffect(() => {
     let cancelled = false;
     const nextSelection = buildDefaultImageSelection(detail);
     setSelectedImageByRecordId(nextSelection);
-    setCoverImageUrl(getDefaultCoverImageUrl(detail, nextSelection));
+    setCoverImageUrl(
+      getDefaultCoverImageUrl(detail, nextSelection, coverMediaId)
+    );
     clearGeneratedVideo();
     setErrorText("");
     setCacheLoading(true);
@@ -254,7 +313,13 @@ export default function ExperienceCardVideoPanel({
         const restoredUrls = getSelectedImageUrls(detail, restoredSelection);
         const restoredCoverOption = Array.from(optionsByRecordId.values())
           .flat()
-          .find((option) => option.id === storedSelection.coverMediaId);
+          .find(
+            (option) =>
+              option.id ===
+              (coverMediaId === undefined
+                ? storedSelection.coverMediaId
+                : coverMediaId)
+          );
         const restoredCover =
           restoredCoverOption?.sourceUrl || restoredUrls[0] || null;
 
@@ -273,7 +338,70 @@ export default function ExperienceCardVideoPanel({
     };
     // The signature captures every source field used by the generated video.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail.card.id, sourceSignature]);
+  }, [detail.card.id]);
+
+  useEffect(() => {
+    if (previousSourceSignatureRef.current === sourceSignature) return;
+    previousSourceSignatureRef.current = sourceSignature;
+    clearGeneratedVideo();
+    void deleteCachedExperienceCardVideo(detail.card.id).catch(
+      () => undefined
+    );
+
+    setSelectedImageByRecordId((current) => {
+      const next = reconcileImageSelection(detail, current);
+      const nextSelectedUrls = getSelectedImageUrls(detail, next);
+      const preferredCoverUrl = imageOptions.find(
+        (option) => option.id === coverMediaId
+      )?.sourceUrl;
+      setCoverImageUrl((currentCover) => {
+        const nextCover =
+          preferredCoverUrl && nextSelectedUrls.includes(preferredCoverUrl)
+            ? preferredCoverUrl
+            : currentCover && nextSelectedUrls.includes(currentCover)
+            ? currentCover
+            : nextSelectedUrls[0] || null;
+        persistVideoSelectionPreference(detail, next, nextCover);
+        return nextCover;
+      });
+      return next;
+    });
+    // sourceSignature contains every card, record and media field used by MP4.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceSignature]);
+
+  useEffect(() => {
+    if (coverMediaId === undefined) return;
+    const preferredCoverOption = imageOptions.find(
+      (option) => option.id === coverMediaId
+    );
+    const preferredCoverUrl = preferredCoverOption?.sourceUrl;
+    if (
+      preferredCoverOption &&
+      preferredCoverUrl &&
+      !selectedImageUrls.includes(preferredCoverUrl)
+    ) {
+      setSelectedImageByRecordId((current) => {
+        const currentUrls = current[preferredCoverOption.recordId] || [];
+        const next = {
+          ...current,
+          [preferredCoverOption.recordId]: [
+            ...currentUrls,
+            preferredCoverUrl,
+          ],
+        };
+        persistVideoSelectionPreference(detail, next, preferredCoverUrl);
+        return next;
+      });
+      setCoverImageUrl(preferredCoverUrl);
+      return;
+    }
+    setCoverImageUrl(
+      preferredCoverUrl && selectedImageUrls.includes(preferredCoverUrl)
+        ? preferredCoverUrl
+        : selectedImageUrls[0] || null
+    );
+  }, [coverMediaId, detail, imageOptions, selectedImageUrls]);
 
   useEffect(() => {
     let cancelled = false;
@@ -298,7 +426,9 @@ export default function ExperienceCardVideoPanel({
       cancelled = true;
       releaseExperienceCardVideoImages(loadedImages);
     };
-  }, [detail, scenes]);
+    // sceneImageSignature changes only when the image sources change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail.card.id, sceneImageSignature]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -354,23 +484,6 @@ export default function ExperienceCardVideoPanel({
     );
   }
 
-  function saveSelectionPreference(
-    selection: ExperienceCardVideoImageSelection,
-    coverUrl: string | null
-  ) {
-    try {
-      saveExperienceCardVideoSelection(detail.card.id, {
-        selectedMediaIdsByRecordId: getSelectedMediaIdsByRecordId(
-          detail,
-          selection
-        ),
-        coverMediaId: getCoverMediaId(detail, coverUrl),
-      });
-    } catch {
-      // Selection persistence is best effort; video generation remains usable.
-    }
-  }
-
   function toggleRecordImage(recordId: string, imageUrl: string) {
     if (generating || cacheLoading) return;
     invalidateGeneratedVideo();
@@ -387,7 +500,10 @@ export default function ExperienceCardVideoPanel({
           ? coverImageUrl
           : nextSelectedUrls[0] || null;
       setCoverImageUrl(nextCover);
-      saveSelectionPreference(next, nextCover);
+      if (nextCover !== coverImageUrl) {
+        onCoverMediaIdChange?.(getCoverMediaId(detail, nextCover));
+      }
+      persistVideoSelectionPreference(detail, next, nextCover);
       return next;
     });
   }
@@ -397,10 +513,10 @@ export default function ExperienceCardVideoPanel({
     invalidateGeneratedVideo();
     setErrorText("");
     const next = buildDefaultImageSelection(detail);
-    const nextCover = getDefaultCoverImageUrl(detail, next);
+    const nextCover = getDefaultCoverImageUrl(detail, next, coverMediaId);
     setSelectedImageByRecordId(next);
     setCoverImageUrl(nextCover);
-    saveSelectionPreference(next, nextCover);
+    persistVideoSelectionPreference(detail, next, nextCover);
   }
 
   function clearAllImages() {
@@ -412,7 +528,8 @@ export default function ExperienceCardVideoPanel({
     );
     setSelectedImageByRecordId(next);
     setCoverImageUrl(null);
-    saveSelectionPreference(next, null);
+    onCoverMediaIdChange?.(null);
+    persistVideoSelectionPreference(detail, next, null);
   }
 
   function selectCoverImage(imageUrl: string) {
@@ -426,7 +543,8 @@ export default function ExperienceCardVideoPanel({
     invalidateGeneratedVideo();
     setErrorText("");
     setCoverImageUrl(imageUrl);
-    saveSelectionPreference(selectedImageByRecordId, imageUrl);
+    onCoverMediaIdChange?.(getCoverMediaId(detail, imageUrl));
+    persistVideoSelectionPreference(detail, selectedImageByRecordId, imageUrl);
   }
 
   async function handleGenerate() {
@@ -520,14 +638,18 @@ export default function ExperienceCardVideoPanel({
   }
 
   return (
-    <section style={panelStyle} aria-label="经验卡视频">
+    <section
+      style={integrated ? integratedPanelStyle : panelStyle}
+      aria-label="经验卡图片与视频"
+    >
       {!readOnly ? (
         <>
           <div style={headerStyle}>
             <div>
-              <h2 style={titleStyle}>视频预览与导出</h2>
+              <div style={eyebrowStyle}>图片</div>
+              <h2 style={titleStyle}>选择视频画面与封面</h2>
               <p style={localOnlyHintStyle}>
-                视频选图和片头只保存在当前设备，不会修改经验卡的来源记录或云端封面。
+                视频选图保存在当前设备；经验卡封面随“保存修改”保存，并自动作为视频片头。
               </p>
             </div>
             <span style={durationStyle}>
@@ -565,7 +687,10 @@ export default function ExperienceCardVideoPanel({
                   selectedImageByRecordId[option.recordId] || []
                 ).includes(option.sourceUrl);
                 const isCover =
-                  active && effectiveCoverImageUrl === option.sourceUrl;
+                  active &&
+                  (coverMediaId === undefined
+                    ? effectiveCoverImageUrl === option.sourceUrl
+                    : coverMediaId === option.id);
                 return (
                   <div key={option.id} style={imageChoiceItemStyle}>
                     <button
@@ -592,7 +717,7 @@ export default function ExperienceCardVideoPanel({
                       onClick={() => selectCoverImage(option.sourceUrl)}
                       style={coverChoiceButtonStyle(isCover, active)}
                     >
-                      {isCover ? "当前片头" : "设为片头"}
+                      {isCover ? "当前封面" : "设为封面"}
                     </button>
                   </div>
                 );
@@ -702,6 +827,21 @@ const panelStyle: CSSProperties = {
   border: "1px solid #dfe8db",
   borderRadius: 20,
   background: "#f8fbf6",
+};
+
+const integratedPanelStyle: CSSProperties = {
+  margin: 0,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+};
+
+const eyebrowStyle: CSSProperties = {
+  marginBottom: 4,
+  color: "#768471",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.06em",
 };
 
 const headerStyle: CSSProperties = {

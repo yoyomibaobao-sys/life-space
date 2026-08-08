@@ -393,7 +393,7 @@ export default function Navbar() {
         </Link>
 
         <div style={getNavItemsWrapStyle(isCompact)}>
-          {!user && pathname === "/login" ? (
+          {!user && pathname === "/" ? (
             <NavItem href="/register" active={isActive("/register")}>
               注册
             </NavItem>
@@ -492,7 +492,7 @@ export default function Navbar() {
           <Link href="/login" style={loginLinkStyle}>
             登录
           </Link>
-          {pathname !== "/login" ? (
+          {pathname !== "/" ? (
             <Link href="/register" style={registerLinkStyle}>
               注册
             </Link>

@@ -21,7 +21,7 @@ import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 
 type PendingAction = "unpublish" | "delete" | null;
-type OwnerMode = "view" | "edit" | "video";
+type OwnerMode = "view" | "edit";
 
 export default function ExperienceCardPage({
   params,
@@ -238,16 +238,7 @@ export default function ExperienceCardPage({
                 }
                 style={ownerMode === "edit" ? activeButtonStyle : primaryButtonStyle}
               >
-                {ownerMode === "edit" ? "返回成品" : "编辑内容"}
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  changeOwnerMode(ownerMode === "video" ? "view" : "video")
-                }
-                style={ownerMode === "video" ? activeButtonStyle : secondaryButtonStyle}
-              >
-                {ownerMode === "video" ? "收起视频工具" : "生成分享视频"}
+                {ownerMode === "edit" ? "返回成品" : "编辑经验卡"}
               </button>
               {detail.isPubliclyAvailable ? (
                 <button
@@ -321,10 +312,6 @@ export default function ExperienceCardPage({
             await reload();
           }}
         />
-      ) : null}
-
-      {isOwner && ownerMode === "video" ? (
-        <ExperienceCardVideoPanel detail={detail} />
       ) : null}
 
       {!isOwner || ownerMode === "view" ? (

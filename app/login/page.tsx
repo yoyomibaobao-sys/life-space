@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
@@ -244,19 +243,6 @@ export default function LoginPage() {
             忘记密码？
           </div>
         </form>
-
-        <div style={{ marginTop: 16, textAlign: "center" }}>
-          <Link
-            href="/membership"
-            style={{
-              color: "#7a8577",
-              fontSize: 12,
-              textDecoration: "none",
-            }}
-          >
-            会员说明
-          </Link>
-        </div>
 
         {message && (
           <div

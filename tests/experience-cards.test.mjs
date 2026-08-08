@@ -117,7 +117,10 @@ test("the experience-card owner view keeps editing and video tools compact", asy
   assert.match(editor, /selectedRecordIds/);
   assert.match(editor, /toggleRecord\(record\.id\)/);
   assert.match(editor, /recordIds: selectedRecords\.map/);
-  assert.match(editor, /封面（可选）/);
+  assert.match(editor, /<ExperienceCardVideoPanel/);
+  assert.match(editor, /integrated/);
+  assert.match(editor, /coverMediaId=\{effectiveCoverMediaId\}/);
+  assert.match(editor, /onCoverMediaIdChange=\{setCoverMediaId\}/);
   assert.match(editor, /coverMediaId: effectiveCoverMediaId/);
   assert.match(editor, /保存修改/);
   assert.match(editor, /预览/);
@@ -125,16 +128,16 @@ test("the experience-card owner view keeps editing and video tools compact", asy
   assert.match(editor, /项目中其他记录仍保持原来的可见性/);
   assert.match(editor, /embedded = false/);
   assert.match(editor, /编辑经验卡/);
-  assert.match(editor, /内容与封面/);
+  assert.match(editor, /内容与图片/);
   assert.doesNotMatch(editor, /recordThumbsStyle/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);
   assert.match(detail, /来源记录已经变化/);
-  assert.match(detail, /type OwnerMode = "view" \| "edit" \| "video"/);
+  assert.match(detail, /type OwnerMode = "view" \| "edit"/);
   assert.match(detail, /ownerMode === "edit"/);
-  assert.match(detail, /ownerMode === "video"/);
-  assert.match(detail, /生成分享视频/);
+  assert.doesNotMatch(detail, /ownerMode === "video"/);
+  assert.doesNotMatch(detail, /生成分享视频/);
   assert.match(detail, /更多/);
   assert.match(detail, /经验过程/);
   assert.match(detail, /ExperienceCardTimeline/);
@@ -267,8 +270,9 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
 
   assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\}/);
   assert.match(panel, /生成竖屏MP4/);
-  assert.match(panel, /视频预览与导出/);
-  assert.match(panel, /只保存在当前设备/);
+  assert.match(panel, /选择视频画面与封面/);
+  assert.match(panel, /视频选图保存在当前设备/);
+  assert.match(panel, /自动作为视频片头/);
   assert.match(panel, /selectedImageCount.*张图片/s);
   assert.match(panel, /<video[\s\S]*?autoPlay[\s\S]*?muted[\s\S]*?playsInline/);
   assert.match(panel, /onEnded=\{\(event\) => restartGeneratedVideo\(event\.currentTarget\)\}/);
@@ -324,7 +328,8 @@ test("experience card MP4 is shown first, selects individual images, and preserv
   assert.match(panel, /imageOptions\.map/);
   assert.doesNotMatch(panel, /第 \{index \+ 1\} 条记录/);
   assert.match(panel, /selectedImageByRecordId/);
-  assert.match(panel, /设为片头/);
+  assert.match(panel, /设为封面/);
+  assert.doesNotMatch(panel, /设为片头/);
   assert.match(panel, /getRecordImageOptions\(record\)\.map/);
   assert.match(panel, /selectedUrls\.has\(option\.sourceUrl\)/);
   assert.match(renderer, /imageSelection\?: ExperienceCardVideoImageSelection/);
