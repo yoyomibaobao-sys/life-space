@@ -18,7 +18,8 @@ test("dates use one numeric card and precise-time contract", async () => {
   ]);
 
   assert.match(dateTime, /formatCardDate/);
-  assert.match(dateTime, /`\$\{date\.getFullYear\(\)\}-\$\{pad\(date\.getMonth\(\) \+ 1\)\}-\$\{pad\(date\.getDate\(\)\)\}`/);
+  assert.match(dateTime, /`\$\{date\.getFullYear\(\)\}\/\$\{pad\(date\.getMonth\(\) \+ 1\)\}\/\$\{pad\(date\.getDate\(\)\)\}`/);
+  assert.doesNotMatch(dateTime, /`\$\{date\.getFullYear\(\)\}-\$\{pad\(date\.getMonth\(\) \+ 1\)\}-\$\{pad\(date\.getDate\(\)\)\}`/);
   assert.match(dateTime, /formatPreciseDateTime/);
   assert.match(dateTime, /分钟前|小时前|天前/);
   assert.doesNotMatch(dateTime, /en-US|month: "short"/);

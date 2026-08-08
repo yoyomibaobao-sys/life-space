@@ -17,7 +17,7 @@ function pad(value: number) {
 export function formatCardDate(value?: string | number | Date | null) {
   const date = parseDate(value);
   if (!date) return "";
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
 }
 
 /** Detail, edit history, audit and notification surfaces: minute precision. */
@@ -27,7 +27,7 @@ export function formatPreciseDateTime(value?: string | number | Date | null) {
   return `${formatCardDate(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** Activity metadata may be relative while recent, then falls back to YYYY-MM-DD. */
+/** Activity metadata may be relative while recent, then falls back to YYYY/MM/DD. */
 export function formatRecentActivityTime(
   value?: string | number | Date | null,
   now = Date.now()
