@@ -21,6 +21,7 @@ import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 
 type PendingAction = "unpublish" | "delete" | null;
+type OwnerMode = "view" | "edit" | "video";
 
 export default function ExperienceCardPage({
   params,
@@ -35,6 +36,8 @@ export default function ExperienceCardPage({
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [ownerMode, setOwnerMode] = useState<OwnerMode>("view");
+  const [editorDirty, setEditorDirty] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -105,6 +108,20 @@ export default function ExperienceCardPage({
     }
   }
 
+  function changeOwnerMode(nextMode: OwnerMode) {
+    if (
+      ownerMode === "edit" &&
+      nextMode !== "edit" &&
+      editorDirty &&
+      !window.confirm("修改尚未保存，确定返回吗？")
+    ) {
+      return;
+    }
+
+    if (nextMode !== "edit") setEditorDirty(false);
+    setOwnerMode(nextMode);
+  }
+
   if (loading) {
     return <main style={pageStyle}>正在读取经验卡...</main>;
   }
@@ -139,6 +156,12 @@ export default function ExperienceCardPage({
     speciesId: detail.archive.species_id,
     systemName,
   });
+  const statusLabel = detail.isPubliclyAvailable
+    ? "已公开"
+    : detail.card.status === "published"
+      ? "公开已暂停"
+      : "私密草稿";
+
   return (
     <main style={pageStyle}>
       <header style={topBarStyle}>
@@ -151,32 +174,28 @@ export default function ExperienceCardPage({
         </Link>
       </header>
 
-      <ExperienceCardVideoPanel detail={detail} readOnly={!isOwner} />
+      {!isOwner ? (
+        <ExperienceCardVideoPanel detail={detail} readOnly />
+      ) : null}
 
-      {isOwner ? (
-        <ExperienceCardEditor cardId={id} embedded onSaved={reload} />
-      ) : (
-        <article style={cardShellStyle}>
-          <div style={introStyle}>
-            <h1 style={titleStyle}>{detail.card.title}</h1>
-            <div style={metaLineStyle}>
-              <span>
-                {startDate && endDate
-                  ? startDate === endDate
-                    ? startDate
-                    : `${startDate}—${endDate}`
-                  : "暂无日期"}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {detail.isPubliclyAvailable
-                  ? "已公开"
-                  : detail.card.status === "published"
-                    ? "公开已暂停"
-                    : "私密草稿"}
-              </span>
-            </div>
-            <div style={sourceLinksStyle} aria-label="经验卡来源">
+      <article style={cardShellStyle}>
+        <div style={introStyle}>
+          <h1 style={titleStyle}>{detail.card.title}</h1>
+          <div style={metaLineStyle}>
+            <span>
+              {startDate && endDate
+                ? startDate === endDate
+                  ? startDate
+                  : `${startDate}—${endDate}`
+                : "暂无日期"}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>{detail.records.length} 条记录</span>
+            <span aria-hidden="true">·</span>
+            <span>{statusLabel}</span>
+          </div>
+          <div style={sourceLinksStyle} aria-label="经验卡来源">
+            {!isOwner ? (
               <Link
                 href={`/user/${detail.card.user_id}`}
                 style={sourceLinkStyle}
@@ -185,50 +204,94 @@ export default function ExperienceCardPage({
                 <span style={sourceValueStyle}>{authorName}</span>
                 <UiIcon name="arrow-right" size={14} />
               </Link>
-              <Link
-                href={`/archive/${detail.archive.id}`}
-                style={sourceLinkStyle}
-              >
-                <span style={sourceLabelStyle}>项目</span>
-                <span style={sourceValueStyle}>
-                  {detail.archive.title || "查看项目"}
-                </span>
+            ) : null}
+            <Link
+              href={`/archive/${detail.archive.id}`}
+              style={sourceLinkStyle}
+            >
+              <span style={sourceLabelStyle}>项目</span>
+              <span style={sourceValueStyle}>
+                {detail.archive.title || "查看项目"}
+              </span>
+              <UiIcon name="arrow-right" size={14} />
+            </Link>
+            {systemNameHref ? (
+              <Link href={systemNameHref} style={sourceLinkStyle}>
+                <span style={sourceLabelStyle}>系统名</span>
+                <span style={sourceValueStyle}>{systemName}</span>
                 <UiIcon name="arrow-right" size={14} />
               </Link>
-              {systemNameHref ? (
-                <Link href={systemNameHref} style={sourceLinkStyle}>
-                  <span style={sourceLabelStyle}>系统名</span>
-                  <span style={sourceValueStyle}>{systemName}</span>
-                  <UiIcon name="arrow-right" size={14} />
-                </Link>
-              ) : (
-                <span style={sourceMissingStyle}>
-                  <span style={sourceLabelStyle}>系统名</span>
-                  <span style={sourceValueStyle}>未填写</span>
-                </span>
-              )}
-            </div>
+            ) : (
+              <span style={sourceMissingStyle}>
+                <span style={sourceLabelStyle}>系统名</span>
+                <span style={sourceValueStyle}>未填写</span>
+              </span>
+            )}
           </div>
-        </article>
-      )}
 
-      <ExperienceCardInteractions
-        cardId={detail.card.id}
-        cardOwnerId={detail.card.user_id}
-        currentUserId={viewerId}
-        isPublic={detail.isPubliclyAvailable}
-      />
-
-      <section style={timelineSectionStyle}>
-        <div style={timelineHeadingStyle}>
-          <strong>来源记录</strong>
-          <span>{detail.records.length} 条 · 按原始时间排列</span>
+          {isOwner ? (
+            <div style={ownerActionsStyle} aria-label="经验卡操作">
+              <button
+                type="button"
+                onClick={() =>
+                  changeOwnerMode(ownerMode === "edit" ? "view" : "edit")
+                }
+                style={ownerMode === "edit" ? activeButtonStyle : primaryButtonStyle}
+              >
+                {ownerMode === "edit" ? "返回成品" : "编辑内容"}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  changeOwnerMode(ownerMode === "video" ? "view" : "video")
+                }
+                style={ownerMode === "video" ? activeButtonStyle : secondaryButtonStyle}
+              >
+                {ownerMode === "video" ? "收起视频工具" : "生成分享视频"}
+              </button>
+              {detail.isPubliclyAvailable ? (
+                <button
+                  type="button"
+                  onClick={() => void shareCard()}
+                  style={secondaryButtonStyle}
+                >
+                  分享
+                </button>
+              ) : null}
+              <details style={moreActionsStyle}>
+                <summary style={moreSummaryStyle}>更多</summary>
+                <div style={moreMenuStyle}>
+                  {detail.isPubliclyAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => void copyCardLink()}
+                      style={menuButtonStyle}
+                    >
+                      复制公开链接
+                    </button>
+                  ) : null}
+                  {detail.card.status === "published" ? (
+                    <button
+                      type="button"
+                      onClick={() => setPendingAction("unpublish")}
+                      style={menuButtonStyle}
+                    >
+                      取消公开
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setPendingAction("delete")}
+                    style={dangerMenuButtonStyle}
+                  >
+                    删除经验卡
+                  </button>
+                </div>
+              </details>
+            </div>
+          ) : null}
         </div>
-        <ExperienceCardTimeline
-          archive={detail.archive}
-          records={detail.records}
-        />
-      </section>
+      </article>
 
       {isOwner && !detail.sourceIsComplete ? (
         <section style={warningStyle}>
@@ -247,48 +310,65 @@ export default function ExperienceCardPage({
 
       {errorText ? <section style={errorStyle}>{errorText}</section> : null}
 
-      <footer style={footerStyle}>
-        <div style={footerActionsStyle}>
-          {detail.isPubliclyAvailable ? (
-            <>
-              <button
-                type="button"
-                onClick={() => void shareCard()}
-                style={primaryButtonStyle}
-              >
-                直接分享
-              </button>
-              <button
-                type="button"
-                onClick={() => void copyCardLink()}
-                style={secondaryButtonStyle}
-              >
-                复制链接
-              </button>
-            </>
-          ) : null}
+      {isOwner && ownerMode === "edit" ? (
+        <ExperienceCardEditor
+          cardId={id}
+          embedded
+          onDirtyChange={setEditorDirty}
+          onSaved={async () => {
+            setEditorDirty(false);
+            setOwnerMode("view");
+            await reload();
+          }}
+        />
+      ) : null}
 
-          {isOwner && detail.card.status === "published" ? (
+      {isOwner && ownerMode === "video" ? (
+        <ExperienceCardVideoPanel detail={detail} />
+      ) : null}
+
+      {!isOwner || ownerMode === "view" ? (
+        <>
+          <ExperienceCardInteractions
+            cardId={detail.card.id}
+            cardOwnerId={detail.card.user_id}
+            currentUserId={viewerId}
+            isPublic={detail.isPubliclyAvailable}
+          />
+
+          <section style={timelineSectionStyle}>
+            <div style={timelineHeadingStyle}>
+              <strong>经验过程</strong>
+              <span>按记录时间排列</span>
+            </div>
+            <ExperienceCardTimeline
+              archive={detail.archive}
+              records={detail.records}
+            />
+          </section>
+        </>
+      ) : null}
+
+      {!isOwner && detail.isPubliclyAvailable ? (
+        <footer style={footerStyle}>
+          <div style={footerActionsStyle}>
             <button
               type="button"
-              onClick={() => setPendingAction("unpublish")}
+              onClick={() => void shareCard()}
+              style={primaryButtonStyle}
+            >
+              直接分享
+            </button>
+            <button
+              type="button"
+              onClick={() => void copyCardLink()}
               style={secondaryButtonStyle}
             >
-              取消公开
+              复制链接
             </button>
-          ) : null}
-
-          {isOwner ? (
-            <button
-              type="button"
-              onClick={() => setPendingAction("delete")}
-              style={dangerButtonStyle}
-            >
-              删除
-            </button>
-          ) : null}
-        </div>
-      </footer>
+          </div>
+        </footer>
+      ) : null}
 
       <ConfirmDialog
         open={pendingAction === "unpublish"}
@@ -370,7 +450,10 @@ const backLinkStyle: CSSProperties = {
 };
 
 const cardShellStyle: CSSProperties = {
-  borderBottom: "1px solid #e2e9df",
+  border: "1px solid #e1e8de",
+  borderRadius: 18,
+  background: "#fff",
+  padding: "16px 18px",
   marginBottom: 14,
 };
 
@@ -394,7 +477,7 @@ const timelineHeadingStyle: CSSProperties = {
 };
 
 const introStyle: CSSProperties = {
-  padding: "5px 2px 16px",
+  padding: 0,
 };
 
 const titleStyle: CSSProperties = {
@@ -452,6 +535,68 @@ const sourceValueStyle: CSSProperties = {
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
   fontWeight: 750,
+};
+
+const ownerActionsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 8,
+  marginTop: 16,
+  paddingTop: 14,
+  borderTop: "1px solid #edf1eb",
+};
+
+const moreActionsStyle: CSSProperties = {
+  position: "relative",
+};
+
+const moreSummaryStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 40,
+  padding: "8px 14px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: "pointer",
+  border: "1px solid #d3ded0",
+  background: "#fff",
+  color: "#50604d",
+  listStyle: "none",
+  userSelect: "none",
+};
+
+const moreMenuStyle: CSSProperties = {
+  position: "absolute",
+  zIndex: 10,
+  top: "calc(100% + 6px)",
+  right: 0,
+  minWidth: 156,
+  display: "grid",
+  gap: 3,
+  padding: 6,
+  border: "1px solid #dfe7dc",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 12px 28px rgba(46, 65, 44, 0.14)",
+};
+
+const menuButtonStyle: CSSProperties = {
+  minHeight: 36,
+  padding: "7px 10px",
+  border: 0,
+  borderRadius: 8,
+  background: "transparent",
+  color: "#50604d",
+  textAlign: "left",
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const dangerMenuButtonStyle: CSSProperties = {
+  ...menuButtonStyle,
+  color: "#b1534f",
 };
 
 const warningStyle: CSSProperties = {
@@ -514,10 +659,11 @@ const secondaryButtonStyle: CSSProperties = {
   color: "#50604d",
 };
 
-const dangerButtonStyle: CSSProperties = {
+const activeButtonStyle: CSSProperties = {
   ...secondaryButtonStyle,
-  color: "#b1534f",
-  borderColor: "#ecd1ce",
+  borderColor: "#7f9c78",
+  background: "#eef5eb",
+  color: "#3f613b",
 };
 
 const secondaryLinkStyle: CSSProperties = {

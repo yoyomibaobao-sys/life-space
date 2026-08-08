@@ -106,7 +106,7 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
   );
 });
 
-test("the experience-card UI persists source records and cover from the integrated detail", async () => {
+test("the experience-card owner view keeps editing and video tools compact", async () => {
   const [editor, detail, list, archiveHeader] = await Promise.all([
     source("components/experience-card/ExperienceCardEditor.tsx"),
     source("app/experience-cards/[id]/page.tsx"),
@@ -117,17 +117,26 @@ test("the experience-card UI persists source records and cover from the integrat
   assert.match(editor, /selectedRecordIds/);
   assert.match(editor, /toggleRecord\(record\.id\)/);
   assert.match(editor, /recordIds: selectedRecords\.map/);
-  assert.match(editor, /经验卡封面/);
+  assert.match(editor, /封面（可选）/);
   assert.match(editor, /coverMediaId: effectiveCoverMediaId/);
   assert.match(editor, /保存修改/);
   assert.match(editor, /预览/);
   assert.match(editor, /发布经验卡/);
   assert.match(editor, /项目中其他记录仍保持原来的可见性/);
   assert.match(editor, /embedded = false/);
-  assert.match(editor, /打开即可查看和编辑/);
+  assert.match(editor, /编辑经验卡/);
+  assert.match(editor, /内容与封面/);
+  assert.doesNotMatch(editor, /recordThumbsStyle/);
+  assert.doesNotMatch(editor, /打开即可查看和编辑/);
   assert.match(detail, /直接分享/);
   assert.match(detail, /取消公开/);
   assert.match(detail, /来源记录已经变化/);
+  assert.match(detail, /type OwnerMode = "view" \| "edit" \| "video"/);
+  assert.match(detail, /ownerMode === "edit"/);
+  assert.match(detail, /ownerMode === "video"/);
+  assert.match(detail, /生成分享视频/);
+  assert.match(detail, /更多/);
+  assert.match(detail, /经验过程/);
   assert.match(detail, /ExperienceCardTimeline/);
   assert.ok(
     detail.indexOf("<ExperienceCardVideoPanel") <
@@ -137,7 +146,7 @@ test("the experience-card UI persists source records and cover from the integrat
     detail.indexOf("<ExperienceCardVideoPanel") <
       detail.indexOf("<ExperienceCardEditor")
   );
-  assert.match(detail, /<ExperienceCardEditor cardId=\{id\} embedded onSaved=\{reload\}/);
+  assert.match(detail, /<ExperienceCardEditor[\s\S]*?cardId=\{id\}[\s\S]*?embedded[\s\S]*?onSaved=/);
   assert.doesNotMatch(detail, /setEditing/);
   assert.match(detail, /detail\.archive\.system_name/);
   assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
@@ -239,7 +248,7 @@ test("experience card interactions use private collections and restrained helpfu
   assert.match(interactions, /href=\{currentUserId \? "\/membership" : "\/login"\}/);
   assert.doesNotMatch(interactions, /if \(!available\) return null/);
   assert.match(detail, /<ExperienceCardInteractions/);
-  assert.match(detail, /<ExperienceCardEditor cardId=\{id\} embedded/);
+  assert.match(detail, /<ExperienceCardEditor[\s\S]*?cardId=\{id\}[\s\S]*?embedded/);
   assert.doesNotMatch(detail, /setEditing\(true\)/);
   assert.match(editorRedirect, /redirect\(`\/experience-cards\/\$\{id\}`\)/);
   assert.match(list, /我的收藏/);

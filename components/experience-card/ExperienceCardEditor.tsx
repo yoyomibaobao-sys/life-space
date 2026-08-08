@@ -81,10 +81,12 @@ function createEditorSnapshot({
 export default function ExperienceCardEditor({
   cardId,
   embedded = false,
+  onDirtyChange,
   onSaved,
 }: {
   cardId?: string;
   embedded?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
   onSaved?: () => void | Promise<void>;
 }) {
   const router = useRouter();
@@ -268,6 +270,10 @@ export default function ExperienceCardEditor({
   const canSave = canPersist && hasChanges;
   const canPublish = canPersist && (!wasPublished || hasChanges);
 
+  useEffect(() => {
+    onDirtyChange?.(hasChanges);
+  }, [hasChanges, onDirtyChange]);
+
   function toggleRecord(recordId: string) {
     setSelectedRecordIds((current) => {
       if (current.includes(recordId)) {
@@ -389,223 +395,192 @@ export default function ExperienceCardEditor({
 
   const editorContent = (
     <>
-      {embedded ? (
-        <section style={integratedIntroStyle}>
-          <div>
-            <div style={eyebrowStyle}>经验卡内容</div>
-            <h2 style={integratedTitleStyle}>打开即可查看和编辑</h2>
-            <p style={mutedStyle}>
-              标题、来源记录和经验卡封面会真实保存；上方视频选图只影响当前设备生成的MP4。
-            </p>
-          </div>
-          <span style={countPillStyle(wasPublished)}>
-            {wasPublished ? "已公开" : "私密草稿"}
-          </span>
-        </section>
-      ) : null}
-
-      {wasPublished && hasChanges ? (
-        <section style={noticeStyle}>
-          只保存修改会先回到私密草稿；也可以选择“保存并重新发布”。
-        </section>
-      ) : null}
-
       <section style={panelStyle}>
-        <div style={eyebrowStyle}>来源项目</div>
-        <h2 style={sectionTitleStyle}>
+        <div style={editorHeadingStyle}>
+          <div>
+            <div style={eyebrowStyle}>编辑经验卡</div>
+            <h2 style={sectionTitleStyle}>内容与封面</h2>
+          </div>
           {archive ? (
             <Link href={`/archive/${archive.id}`} style={sourceProjectLinkStyle}>
-              {archive.title}
+              来源项目：{archive.title}
             </Link>
           ) : null}
-        </h2>
-        <p style={mutedStyle}>
-          {archive?.system_name ||
-            archive?.species_name_snapshot ||
-            "未填写系统名"}
-        </p>
-      </section>
-
-      <section style={panelStyle}>
-        <label style={labelStyle} htmlFor="experience-card-title">
-          经验卡标题
-        </label>
-        <input
-          id="experience-card-title"
-          value={title}
-          maxLength={120}
-          onChange={(event) => setTitle(event.target.value)}
-          style={inputStyle}
-        />
-        <div style={counterStyle}>{title.trim().length} / 120</div>
-      </section>
-
-      <section style={panelStyle}>
-        <div style={sectionHeadingRowStyle}>
-          <div>
-            <div style={eyebrowStyle}>来源记录</div>
-            <h2 style={sectionTitleStyle}>选择3～12条真实记录</h2>
-          </div>
-          <span
-            style={countPillStyle(
-              selectedRecords.length >= 3 && selectedRecords.length <= 12
-            )}
-          >
-            已选 {selectedRecords.length} 条
-          </span>
         </div>
 
-        {records.length === 0 ? (
-          <p style={errorStyle}>当前项目还没有可选择的记录。</p>
-        ) : (
-          <div style={recordGridStyle}>
-            {records.map((record, index) => {
-              const selected = selectedRecordIdSet.has(record.id);
-              const previewImages = record.media
-                .filter(isSelectableImage)
-                .filter((media) =>
-                  Boolean(media.display_thumb_url || media.display_url)
-                )
-                .slice(0, 3);
-              return (
-                <button
-                  key={record.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => toggleRecord(record.id)}
-                  style={recordOptionStyle(selected)}
-                >
-                  <span style={recordMetaStyle}>
-                    <span>
-                      {formatExperienceCardDate(record.record_time) ||
-                        `记录${index + 1}`}
-                    </span>
-                    <span style={recordSelectedStyle(selected)}>
-                      {selected ? "已选" : "选择"}
-                    </span>
-                  </span>
-                  <span style={recordNoteStyle}>
-                    {record.note?.trim() || "无文字记录"}
-                  </span>
-                  {previewImages.length ? (
-                    <span style={recordThumbsStyle}>
-                      {previewImages.map((media) => (
-                        <img
-                          key={media.id}
-                          src={media.display_thumb_url || media.display_url || ""}
-                          alt=""
-                          style={recordThumbStyle}
-                        />
-                      ))}
-                      <span style={recordImageCountStyle}>
-                        共{record.media.filter(isSelectableImage).length}张
+        {wasPublished && hasChanges ? (
+          <p style={inlineNoticeStyle}>保存后会同步更新当前公开内容。</p>
+        ) : null}
+
+        <div style={editorSectionStyle}>
+          <label style={labelStyle} htmlFor="experience-card-title">
+            标题
+          </label>
+          <input
+            id="experience-card-title"
+            value={title}
+            maxLength={120}
+            onChange={(event) => setTitle(event.target.value)}
+            style={inputStyle}
+          />
+          <div style={counterStyle}>{title.trim().length} / 120</div>
+        </div>
+
+        <div style={editorSectionStyle}>
+          <div style={sectionHeadingRowStyle}>
+            <div>
+              <div style={eyebrowStyle}>记录</div>
+              <h3 style={compactSectionTitleStyle}>选择3～12条</h3>
+            </div>
+            <span
+              style={countPillStyle(
+                selectedRecords.length >= 3 && selectedRecords.length <= 12
+              )}
+            >
+              已选 {selectedRecords.length} 条
+            </span>
+          </div>
+
+          {records.length === 0 ? (
+            <p style={errorStyle}>当前项目还没有可选择的记录。</p>
+          ) : (
+            <div style={recordGridStyle}>
+              {records.map((record, index) => {
+                const selected = selectedRecordIdSet.has(record.id);
+                const imageCount = record.media.filter(isSelectableImage).length;
+                return (
+                  <button
+                    key={record.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleRecord(record.id)}
+                    style={recordOptionStyle(selected)}
+                  >
+                    <span style={recordMetaStyle}>
+                      <span>
+                        {formatExperienceCardDate(record.record_time) ||
+                          `记录${index + 1}`}
+                      </span>
+                      <span style={recordSelectedStyle(selected)}>
+                        {selected ? "已选" : "选择"}
                       </span>
                     </span>
-                  ) : (
-                    <span style={recordNoImageStyle}>无图片，可作为文字画面</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {selectedRecords.length > 0 && selectedRecords.length < 3 ? (
-          <p style={selectionHintStyle}>还需选择至少3条来源记录。</p>
-        ) : null}
-      </section>
-
-      <section style={panelStyle}>
-        <div style={sectionHeadingRowStyle}>
-          <div>
-            <div style={eyebrowStyle}>经验卡封面</div>
-            <h2 style={sectionTitleStyle}>
-              {effectiveCoverMediaId ? "已设置封面" : "尚未设置封面"}
-            </h2>
-          </div>
-          {effectiveCoverMediaId ? (
-            <button
-              type="button"
-              onClick={() => setCoverMediaId(null)}
-              style={clearCoverButtonStyle}
-            >
-              取消封面
-            </button>
+                    <span style={recordNoteStyle}>
+                      {record.note?.trim() || "无文字记录"}
+                    </span>
+                    <span style={recordImageCountStyle}>
+                      {imageCount > 0 ? `${imageCount}张图片` : "无图片"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {selectedRecords.length > 0 && selectedRecords.length < 3 ? (
+            <p style={selectionHintStyle}>还需选择至少3条记录。</p>
           ) : null}
         </div>
 
-        {coverOptions.length === 0 ? (
-          <p style={mutedStyle}>
-            所选记录没有可用照片，保存后将使用项目封面或无图占位。
-          </p>
-        ) : (
-          <div style={imageGridStyle}>
-            {coverOptions.map((media, index) => {
-              const selectedAsCover = effectiveCoverMediaId === media.id;
-              const src = media.display_thumb_url || media.display_url;
-              if (!src) return null;
-              return (
-                <button
-                  key={media.id}
-                  type="button"
-                  onClick={() => setCoverMediaId(media.id)}
-                  aria-pressed={selectedAsCover}
-                  style={imageOptionStyle(selectedAsCover)}
-                >
-                  <img
-                    src={src}
-                    alt={`经验卡封面候选${index + 1}`}
-                    style={imageOptionImageStyle}
-                  />
-                  <span style={imageOptionBadgeStyle(selectedAsCover)}>
-                    {selectedAsCover ? "当前封面" : "设为封面"}
-                  </span>
-                </button>
-              );
-            })}
+        <div style={editorSectionStyle}>
+          <div style={sectionHeadingRowStyle}>
+            <div>
+              <div style={eyebrowStyle}>封面（可选）</div>
+              <h3 style={compactSectionTitleStyle}>
+                {effectiveCoverMediaId ? "已选择封面" : "从记录图片中选择"}
+              </h3>
+            </div>
+            {effectiveCoverMediaId ? (
+              <button
+                type="button"
+                onClick={() => setCoverMediaId(null)}
+                style={clearCoverButtonStyle}
+              >
+                清除
+              </button>
+            ) : null}
           </div>
-        )}
+
+          {coverOptions.length === 0 ? (
+            <p style={mutedStyle}>没有可用图片，将使用项目封面或无图占位。</p>
+          ) : (
+            <div style={imageGridStyle}>
+              {coverOptions.map((media, index) => {
+                const selectedAsCover = effectiveCoverMediaId === media.id;
+                const src = media.display_thumb_url || media.display_url;
+                if (!src) return null;
+                return (
+                  <button
+                    key={media.id}
+                    type="button"
+                    onClick={() => setCoverMediaId(media.id)}
+                    aria-pressed={selectedAsCover}
+                    style={imageOptionStyle(selectedAsCover)}
+                  >
+                    <img
+                      src={src}
+                      alt={`经验卡封面候选${index + 1}`}
+                      style={imageOptionImageStyle}
+                    />
+                    <span style={imageOptionBadgeStyle(selectedAsCover)}>
+                      {selectedAsCover ? "当前封面" : "设为封面"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {errorText ? <div style={inlineErrorStyle}>{errorText}</div> : null}
       </section>
 
-      {errorText ? <section style={errorPanelStyle}>{errorText}</section> : null}
-
       <section style={stickyActionsStyle}>
-        <button
-          type="button"
-          disabled={!canSave}
-          onClick={() => void persist("draft")}
-          style={secondaryButtonStyle(canSave)}
-        >
-          {saving ? "保存中..." : cardId ? "保存修改" : "保存草稿"}
-        </button>
-        {!embedded ? (
+        {wasPublished && embedded ? (
           <button
             type="button"
-            disabled={!canSave}
-            onClick={() => void persist("preview")}
-            style={secondaryButtonStyle(canSave)}
-          >
-            预览
-          </button>
-        ) : null}
-        {wasPublished && !hasChanges ? (
-          <span style={publishedStateStyle}>当前已公开</span>
-        ) : (
-          <button
-            type="button"
-            disabled={!canPublish}
+            disabled={!canPublish || !hasChanges}
             onClick={() => setPublishConfirmOpen(true)}
-            style={primaryButtonStyle(canPublish)}
+            style={primaryButtonStyle(canPublish && hasChanges)}
           >
-            {wasPublished ? "保存并重新发布" : "发布经验卡"}
+            {saving ? "保存中..." : "保存修改"}
           </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={!canSave}
+              onClick={() => void persist("draft")}
+              style={secondaryButtonStyle(canSave)}
+            >
+              {saving ? "保存中..." : cardId ? "保存修改" : "保存草稿"}
+            </button>
+            {!embedded ? (
+              <button
+                type="button"
+                disabled={!canSave}
+                onClick={() => void persist("preview")}
+                style={secondaryButtonStyle(canSave)}
+              >
+                预览
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={!canPublish}
+              onClick={() => setPublishConfirmOpen(true)}
+              style={primaryButtonStyle(canPublish)}
+            >
+              {wasPublished ? "保存并重新发布" : "发布经验卡"}
+            </button>
+          </>
         )}
       </section>
 
       <ConfirmDialog
         open={publishConfirmOpen}
-        title="确认公开经验卡"
-        message={`发布后，所选${selectedRecords.length}条来源记录及其照片将公开，游客可通过直接链接查看。项目中其他记录仍保持原来的可见性。`}
-        confirmText={saving ? "发布中..." : "确认发布"}
+        title={wasPublished ? "保存经验卡修改" : "确认公开经验卡"}
+        message={`保存后，所选${selectedRecords.length}条来源记录及其照片将作为经验卡内容公开。项目中其他记录仍保持原来的可见性。`}
+        confirmText={saving ? "保存中..." : wasPublished ? "保存修改" : "确认发布"}
         cancelText="取消"
         confirmDisabled={saving}
         cancelDisabled={saving}
@@ -693,19 +668,19 @@ const embeddedEditorStyle: CSSProperties = {
   marginBottom: 14,
 };
 
-const integratedIntroStyle: CSSProperties = {
-  ...panelStyle,
+const editorHeadingStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "center",
+  flexWrap: "wrap",
   gap: 14,
-  background: "#f7faf5",
+  marginBottom: 2,
 };
 
-const integratedTitleStyle: CSSProperties = {
-  margin: "5px 0 5px",
-  fontSize: 21,
-  lineHeight: 1.35,
+const editorSectionStyle: CSSProperties = {
+  marginTop: 18,
+  paddingTop: 18,
+  borderTop: "1px solid #edf1eb",
 };
 
 const messageCardStyle: CSSProperties = {
@@ -713,12 +688,15 @@ const messageCardStyle: CSSProperties = {
   marginTop: 40,
 };
 
-const noticeStyle: CSSProperties = {
-  ...panelStyle,
+const inlineNoticeStyle: CSSProperties = {
+  margin: "14px 0 0",
+  padding: "9px 11px",
+  borderRadius: 10,
   background: "#fff9e9",
-  borderColor: "#eadfbf",
+  border: "1px solid #eadfbf",
   color: "#756436",
-  fontSize: 14,
+  fontSize: 12,
+  lineHeight: 1.6,
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -731,6 +709,12 @@ const eyebrowStyle: CSSProperties = {
 const sectionTitleStyle: CSSProperties = {
   margin: "5px 0 4px",
   fontSize: 19,
+  lineHeight: 1.35,
+};
+
+const compactSectionTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  fontSize: 16,
   lineHeight: 1.35,
 };
 
@@ -868,7 +852,6 @@ function recordSelectedStyle(selected: boolean): CSSProperties {
 }
 
 const recordNoteStyle: CSSProperties = {
-  minHeight: "2.9em",
   display: "-webkit-box",
   overflow: "hidden",
   WebkitBoxOrient: "vertical",
@@ -878,28 +861,7 @@ const recordNoteStyle: CSSProperties = {
   overflowWrap: "anywhere",
 };
 
-const recordThumbsStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 5,
-  minWidth: 0,
-};
-
-const recordThumbStyle: CSSProperties = {
-  width: 38,
-  height: 38,
-  borderRadius: 8,
-  objectFit: "cover",
-  background: "#e8ede5",
-};
-
 const recordImageCountStyle: CSSProperties = {
-  marginLeft: "auto",
-  color: "#849080",
-  fontSize: 11,
-};
-
-const recordNoImageStyle: CSSProperties = {
   color: "#849080",
   fontSize: 11,
 };
@@ -928,11 +890,13 @@ const errorStyle: CSSProperties = {
   fontSize: 14,
 };
 
-const errorPanelStyle: CSSProperties = {
-  ...panelStyle,
+const inlineErrorStyle: CSSProperties = {
+  marginTop: 16,
+  padding: 11,
+  borderRadius: 11,
   color: "#a74b47",
   background: "#fff8f7",
-  borderColor: "#efd8d5",
+  border: "1px solid #efd8d5",
   fontSize: 14,
 };
 
@@ -949,18 +913,6 @@ const stickyActionsStyle: CSSProperties = {
   border: "1px solid #e1e8de",
   boxShadow: "0 10px 28px rgba(54,74,51,0.1)",
   backdropFilter: "blur(8px)",
-};
-
-const publishedStateStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  minHeight: 42,
-  padding: "9px 15px",
-  borderRadius: 999,
-  background: "#edf6e9",
-  color: "#43683e",
-  fontSize: 13,
-  fontWeight: 800,
 };
 
 const baseButtonStyle: CSSProperties = {
