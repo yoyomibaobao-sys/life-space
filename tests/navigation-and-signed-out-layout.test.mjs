@@ -48,7 +48,12 @@ test("account navigation keeps membership contextual and export under data manag
   assert.doesNotMatch(login, /href="\/membership"/);
   assert.match(home, /href="\/membership"/);
   assert.match(home, /会员类别与权限/);
-  assert.match(home, /查看免费使用、云端保存与公开互动的区别/);
+  assert.match(home, /本地免费使用，云会员可云端保存与公开互动/);
+  assert.match(
+    home,
+    /href="\/register"[\s\S]*?注册[\s\S]*?href="\/discover"[\s\S]*?浏览发现/
+  );
+  assert.match(home, /membershipLinkArrowStyle/);
   assert.match(
     navbar,
     /pathname === "\/"[\s\S]*?href="\/register"[\s\S]*?注册[\s\S]*?href="\/login"[\s\S]*?登录/
@@ -70,9 +75,10 @@ test("signed-out home uses a compact viewport-oriented layout", async () => {
   assert.match(home, /minHeight: "calc\(100vh - 70px\)"/);
   assert.match(home, /gridTemplateColumns: "repeat\(4, minmax\(0, 1fr\)\)"/);
   assert.match(home, /@media \(max-height: 720px\)/);
+  assert.match(home, /\.home-actions > a:last-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(home, /记录四时变化，留下发现、收获与成长/);
   assert.match(home, /其他自然生活相关项目/);
-  assert.doesNotMatch(home, /href="\/register"/);
+  assert.match(home, /href="\/register"/);
   assert.doesNotMatch(home, /href="\/login"/);
   assert.doesNotMatch(home, /background: "rgba\(255,255,255,0\.82\)"/);
   assert.doesNotMatch(home, /boxShadow: "0 14px 36px/);

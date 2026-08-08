@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import UiIcon from "@/components/ui/UiIcon";
 
 const copy = {
   brand: "有时·耕作",
@@ -65,6 +66,8 @@ export default function Home() {
           .signed-out-home { min-height: auto !important; padding: 18px 14px 92px !important; align-items: flex-start !important; }
           .home-content { gap: 14px !important; }
           .home-hero { padding: 12px 4px 8px !important; }
+          .home-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .home-actions > a:last-child { grid-column: 1 / -1; }
           .home-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         }
         @media (max-height: 720px) and (min-width: 761px) {
@@ -86,13 +89,19 @@ export default function Home() {
           <div style={spiritStyle}>{copy.spirit}</div>
 
           <div className="home-actions" style={actionsStyle}>
+            <Link href="/register" style={primaryActionStyle}>注册</Link>
             <Link href="/discover" style={softActionStyle}>浏览发现</Link>
             <Link href="/api/download/android" style={softActionStyle}>下载 Android</Link>
           </div>
           <Link href="/membership" style={membershipLinkStyle}>
-            <strong style={membershipLinkTitleStyle}>会员类别与权限</strong>
-            <span style={membershipLinkDescriptionStyle}>
-              查看免费使用、云端保存与公开互动的区别
+            <span style={membershipLinkCopyStyle}>
+              <strong style={membershipLinkTitleStyle}>会员类别与权限</strong>
+              <span style={membershipLinkDescriptionStyle}>
+                本地免费使用，云会员可云端保存与公开互动
+              </span>
+            </span>
+            <span aria-hidden="true" style={membershipLinkArrowStyle}>
+              <UiIcon name="arrow-right" size={16} strokeWidth={2} />
             </span>
           </Link>
         </section>
@@ -203,10 +212,10 @@ const spiritStyle: CSSProperties = {
 };
 
 const actionsStyle: CSSProperties = {
-  maxWidth: 360,
+  maxWidth: 520,
   margin: "15px auto 0",
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: 9,
 };
 
@@ -224,6 +233,13 @@ const actionBaseStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const primaryActionStyle: CSSProperties = {
+  ...actionBaseStyle,
+  background: "#4f7046",
+  color: "#ffffff",
+  border: "1px solid #4f7046",
+};
+
 const softActionStyle: CSSProperties = {
   ...actionBaseStyle,
   background: "#eef5e8",
@@ -232,29 +248,53 @@ const softActionStyle: CSSProperties = {
 };
 
 const membershipLinkStyle: CSSProperties = {
-  width: "fit-content",
-  maxWidth: "100%",
+  width: "min(100%, 520px)",
   margin: "13px auto 0",
-  padding: "9px 14px",
+  padding: "11px 13px 11px 15px",
   boxSizing: "border-box",
-  display: "grid",
-  gap: 2,
-  border: "1px solid #d8e3d3",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  border: "1px solid #cadbc3",
   borderRadius: 12,
-  background: "rgba(255,255,255,0.78)",
+  background: "#f7faf4",
   color: "#4d6149",
   lineHeight: 1.45,
   textDecoration: "none",
+  textAlign: "left",
+  boxShadow: "0 2px 8px rgba(53, 83, 46, 0.07)",
+};
+
+const membershipLinkCopyStyle: CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 2,
 };
 
 const membershipLinkTitleStyle: CSSProperties = {
-  fontSize: 13,
+  color: "#354f31",
+  fontSize: 14,
   fontWeight: 800,
 };
 
 const membershipLinkDescriptionStyle: CSSProperties = {
-  color: "#788575",
-  fontSize: 11,
+  color: "#6d7c69",
+  fontSize: 12,
+};
+
+const membershipLinkArrowStyle: CSSProperties = {
+  flex: "0 0 auto",
+  width: 28,
+  height: 28,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  background: "#e5efdf",
+  color: "#45643e",
+  fontSize: 16,
+  fontWeight: 800,
 };
 
 const categoryGridStyle: CSSProperties = {
