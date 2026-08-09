@@ -46,6 +46,16 @@ type RecordImageOption = {
 
 export type ExperienceCardVideoPanelHandle = {
   generate: () => void;
+  stop: () => void;
+  share: () => void;
+  save: () => void;
+};
+
+export type ExperienceCardVideoPanelStatus = {
+  hasVideo: boolean;
+  generating: boolean;
+  progress: number;
+  loading: boolean;
 };
 
 function isImageMedia(media: ExperienceCardMedia) {
@@ -184,9 +194,11 @@ type ExperienceCardVideoPanelProps = {
   previewOnly?: boolean;
   selectionOnly?: boolean;
   hideGenerateAction?: boolean;
+  externalControls?: boolean;
   coverMediaId?: string | null;
   onCoverMediaIdChange?: (mediaId: string | null) => void;
   onSelectionChange?: () => void;
+  onStatusChange?: (status: ExperienceCardVideoPanelStatus) => void;
 };
 
 const ExperienceCardVideoPanel = forwardRef<
@@ -200,9 +212,11 @@ const ExperienceCardVideoPanel = forwardRef<
     previewOnly = false,
     selectionOnly = false,
     hideGenerateAction = false,
+    externalControls = false,
     coverMediaId,
     onCoverMediaIdChange,
     onSelectionChange,
+    onStatusChange,
   },
   ref
 ) {
@@ -487,6 +501,23 @@ const ExperienceCardVideoPanel = forwardRef<
     []
   );
 
+  useEffect(() => {
+    onStatusChange?.({
+      hasVideo: Boolean(videoBlob && videoUrl),
+      generating,
+      progress,
+      loading: imageLoading || cacheLoading,
+    });
+  }, [
+    cacheLoading,
+    generating,
+    imageLoading,
+    onStatusChange,
+    progress,
+    videoBlob,
+    videoUrl,
+  ]);
+
   function replaceGeneratedVideo(blob: Blob | null) {
     if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current);
     const nextUrl = blob ? URL.createObjectURL(blob) : "";
@@ -671,6 +702,11 @@ const ExperienceCardVideoPanel = forwardRef<
     generate: () => {
       void handleGenerate();
     },
+    stop: handleStop,
+    share: () => {
+      void shareVideo();
+    },
+    save: () => downloadVideo(),
   }));
 
   return (
@@ -804,7 +840,7 @@ const ExperienceCardVideoPanel = forwardRef<
                 <div style={noticeStyle}>正在检查本机已生成的MP4...</div>
               ) : null}
 
-              {generating ? (
+              {!externalControls && generating ? (
                 <div style={progressWrapStyle}>
                   <div style={progressTextStyle}>
                     正在本机生成视频 {Math.round(progress * 100)}%
@@ -829,7 +865,7 @@ const ExperienceCardVideoPanel = forwardRef<
 
               {errorText ? <div style={errorStyle}>{errorText}</div> : null}
 
-              {!hideGenerateAction || videoBlob ? (
+              {!externalControls && (!hideGenerateAction || videoBlob) ? (
                 <div style={actionsStyle}>
                 {!generating && !hideGenerateAction ? (
                   <button

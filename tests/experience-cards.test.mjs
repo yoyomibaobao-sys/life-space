@@ -198,7 +198,7 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editor, /当前共有\$\{nextRecords\.length\}条可供选择/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
   assert.match(detail, />\s*分享\s*</);
-  assert.match(detail, /取消公开/);
+  assert.match(detail, /设为私密/);
   assert.match(detail, /来源记录已经变化/);
   assert.doesNotMatch(detail, /type OwnerMode/);
   assert.doesNotMatch(detail, /ownerMode/);
@@ -208,8 +208,15 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(detail, /复制链接/);
   assert.match(detail, /删除经验卡/);
   assert.match(detail, /生成竖屏MP4/);
+  assert.match(detail, /重新生成竖屏MP4/);
+  assert.match(detail, /externalControls/);
+  assert.match(detail, /onStatusChange=\{setVideoStatus\}/);
+  assert.match(detail, /直接分享视频/);
+  assert.match(detail, /保存MP4/);
+  assert.match(detail, /videoStatus\.progress/);
   assert.match(detail, /aria-label="经验卡公开方式"/);
-  assert.match(detail, />\s*默认\s*</);
+  assert.match(detail, />\s*私密\s*</);
+  assert.doesNotMatch(detail, />\s*默认\s*</);
   assert.match(detail, />\s*公开\s*</);
   assert.match(detail, /requestVisibility\(false\)/);
   assert.match(detail, /requestVisibility\(true\)/);
@@ -266,6 +273,7 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(detail, /params\.set\("type", "projects"\)/);
   assert.match(detail, /return `\/discover\/search\?\$\{params\.toString\(\)\}`/);
   assert.match(detail, /detail\.archive\.title/);
+  assert.doesNotMatch(detail, /\{href \? <UiIcon name="arrow-right"/);
   assert.match(editWorkspace, /<ExperienceCardEditor/);
   assert.match(editWorkspace, /cardId=\{cardId\}/);
   assert.match(editWorkspace, /onSaved=\{handleSaved\}/);
@@ -318,8 +326,10 @@ test("experience cards have a persistent personal-space entry", async () => {
 });
 
 test("experience card lists use a shared cover with source and archive fallbacks", async () => {
-  const [listCard, loader, timeline, plantDetail] = await Promise.all([
+  const [listCard, listCardStyles, searchCardStyles, loader, timeline, plantDetail] = await Promise.all([
     source("components/experience-card/ExperienceCardListCard.tsx"),
+    source("components/experience-card/ExperienceCardListCard.module.css"),
+    source("components/discover-search/DiscoverSearchResultCard.module.css"),
     source("lib/experience-cards.ts"),
     source("components/experience-card/ExperienceCardTimeline.tsx"),
     source("app/plant/[id]/page.tsx"),
@@ -327,6 +337,11 @@ test("experience card lists use a shared cover with source and archive fallbacks
 
   assert.match(listCard, /item\.coverUrl/);
   assert.match(listCard, /alt=\{`\$\{item\.title\}封面`\}/);
+  assert.match(listCardStyles, /\.card > a:first-child \{[\s\S]*?position: relative;/);
+  assert.match(listCardStyles, /\.cover,[\s\S]*?position: absolute;[\s\S]*?inset: 0;[\s\S]*?height: 100%;/);
+  assert.doesNotMatch(listCardStyles, /^\s*height: 124px;/m);
+  assert.match(searchCardStyles, /\.card \{[\s\S]*?overflow: hidden;/);
+  assert.match(searchCardStyles, /\.media \{[\s\S]*?position: relative;[\s\S]*?min-height: 100%;/);
   assert.match(loader, /row\.cover_media_id/);
   assert.match(loader, /mediaByRecord\.get\(recordId\)\?\.\[0\]/);
   assert.doesNotMatch(loader, /cover_thumb_url/);
@@ -401,6 +416,11 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(panel, /forwardRef/);
   assert.match(panel, /useImperativeHandle/);
   assert.match(panel, /generate: \(\) =>/);
+  assert.match(panel, /stop: handleStop/);
+  assert.match(panel, /share: \(\) =>/);
+  assert.match(panel, /save: \(\) => downloadVideo\(\)/);
+  assert.match(panel, /onStatusChange\?\.\(\{/);
+  assert.match(panel, /externalControls/);
   assert.match(panel, /hideGenerateAction/);
   assert.match(panel, /生成竖屏MP4/);
   assert.match(panel, /选择视频画面与封面/);

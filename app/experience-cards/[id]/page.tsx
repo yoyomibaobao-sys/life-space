@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardEditWorkspace from "@/components/experience-card/ExperienceCardEditWorkspace";
 import ExperienceCardVideoPanel, {
   type ExperienceCardVideoPanelHandle,
+  type ExperienceCardVideoPanelStatus,
 } from "@/components/experience-card/ExperienceCardVideoPanel";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
@@ -38,6 +39,13 @@ import { supabase } from "@/lib/supabase";
 
 type PendingAction = "publish" | "unpublish" | "delete" | null;
 
+const initialVideoStatus: ExperienceCardVideoPanelStatus = {
+  hasVideo: false,
+  generating: false,
+  progress: 0,
+  loading: true,
+};
+
 export default function ExperienceCardPage({
   params,
 }: {
@@ -57,6 +65,8 @@ export default function ExperienceCardPage({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
   const [editorRevision, setEditorRevision] = useState(0);
+  const [videoStatus, setVideoStatus] =
+    useState<ExperienceCardVideoPanelStatus>(initialVideoStatus);
   const editorRef = useRef<HTMLElement | null>(null);
   const videoPanelRef = useRef<ExperienceCardVideoPanelHandle | null>(null);
 
@@ -181,7 +191,7 @@ export default function ExperienceCardPage({
         await reload();
       } else if (action === "unpublish") {
         await unpublishExperienceCard(detail.card.id);
-        showToast("经验卡已取消公开");
+        showToast("经验卡已设为私密");
         await reload();
       } else {
         await deleteExperienceCard(detail.card.id);
@@ -213,6 +223,16 @@ export default function ExperienceCardPage({
   function generateVideo() {
     if (!requireSavedEditor()) return;
     videoPanelRef.current?.generate();
+  }
+
+  function shareVideo() {
+    if (!requireSavedEditor()) return;
+    videoPanelRef.current?.share();
+  }
+
+  function saveVideo() {
+    if (!requireSavedEditor()) return;
+    videoPanelRef.current?.save();
   }
 
   async function shareCard() {
@@ -312,6 +332,8 @@ export default function ExperienceCardPage({
               previewOnly
               integrated
               hideGenerateAction
+              externalControls
+              onStatusChange={setVideoStatus}
             />
           ) : (
             <ExperienceCardVideoPanel detail={detail} readOnly integrated />
@@ -432,9 +454,16 @@ export default function ExperienceCardPage({
               <button
                 type="button"
                 onClick={generateVideo}
-                style={primaryButtonStyle}
+                disabled={videoStatus.loading || videoStatus.generating}
+                style={primaryButtonStyle(
+                  videoStatus.loading || videoStatus.generating
+                )}
               >
-                生成竖屏MP4
+                {videoStatus.generating
+                  ? "正在生成竖屏MP4"
+                  : videoStatus.hasVideo
+                    ? "重新生成竖屏MP4"
+                    : "生成竖屏MP4"}
               </button>
             ) : null}
             {detail.isPubliclyAvailable ? (
@@ -467,7 +496,7 @@ export default function ExperienceCardPage({
                   onClick={() => requestVisibility(false)}
                   style={visibilityChoiceStyle(!isPublished)}
                 >
-                  默认
+                  私密
                 </button>
                 <button
                   type="button"
@@ -492,6 +521,51 @@ export default function ExperienceCardPage({
               </button>
             ) : null}
           </div>
+
+          {isOwner && (videoStatus.generating || videoStatus.hasVideo) ? (
+            <div style={videoOutputControlsStyle} aria-label="竖屏MP4文件操作">
+              {videoStatus.generating ? (
+                <div style={videoProgressWrapStyle}>
+                  <div style={videoProgressTextStyle}>
+                    <span>正在本机生成视频</span>
+                    <strong>{Math.round(videoStatus.progress * 100)}%</strong>
+                  </div>
+                  <div style={videoProgressTrackStyle}>
+                    <div
+                      style={{
+                        ...videoProgressBarStyle,
+                        width: `${Math.max(2, videoStatus.progress * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => videoPanelRef.current?.stop()}
+                    style={stopVideoButtonStyle}
+                  >
+                    停止生成
+                  </button>
+                </div>
+              ) : (
+                <div style={videoFileActionsStyle}>
+                  <button
+                    type="button"
+                    onClick={shareVideo}
+                    style={shareVideoButtonStyle}
+                  >
+                    <UiIcon name="share" size={15} /> 直接分享视频
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveVideo}
+                    style={secondaryButtonStyle}
+                  >
+                    保存MP4
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : null}
         </article>
       </section>
 
@@ -579,7 +653,7 @@ export default function ExperienceCardPage({
       <ConfirmDialog
         open={pendingAction === "publish"}
         title="公开经验卡"
-        message={`公开后，所选${detail.records.length}条来源记录及其照片可通过经验卡链接查看；项目中其他记录保持原来的可见性。`}
+        message={`公开后，这张经验卡及所选${detail.records.length}条记录可被他人查看；其他记录不变。`}
         confirmText={busy ? "处理中..." : "确认公开"}
         cancelText="取消"
         confirmDisabled={busy}
@@ -592,10 +666,10 @@ export default function ExperienceCardPage({
 
       <ConfirmDialog
         open={pendingAction === "unpublish"}
-        title="取消公开经验卡"
-        message="公开链接将立即停止访问。来源记录原有的公开状态不会自动改变，可回到项目中单独调整。"
-        confirmText={busy ? "处理中..." : "取消公开"}
-        cancelText="返回"
+        title="设为私密"
+        message="设为私密后，这张经验卡停止公开；原项目和记录状态不变。"
+        confirmText={busy ? "处理中..." : "设为私密"}
+        cancelText="取消"
         confirmDisabled={busy}
         cancelDisabled={busy}
         onClose={() => {
@@ -657,7 +731,6 @@ function OverviewItem({
         <span style={overviewLabelStyle}>{label}</span>
         <strong style={overviewValueStyle}>{value}</strong>
       </span>
-      {href ? <UiIcon name="arrow-right" size={13} /> : null}
     </>
   );
 
@@ -975,15 +1048,19 @@ const baseButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-const primaryButtonStyle: CSSProperties = {
-  ...baseButtonStyle,
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  border: "1px solid #64885e",
-  background: "#64885e",
-  color: "#fff",
-};
+function primaryButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    ...baseButtonStyle,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    border: "1px solid #64885e",
+    background: "#64885e",
+    color: "#fff",
+    opacity: disabled ? 0.58 : 1,
+    cursor: disabled ? "wait" : "pointer",
+  };
+}
 
 const secondaryButtonStyle: CSSProperties = {
   ...baseButtonStyle,
@@ -1027,6 +1104,70 @@ const compactDeleteButtonStyle: CSSProperties = {
   border: "1px solid #ead3d0",
   background: "#fff",
   color: "#a4514d",
+};
+
+const videoOutputControlsStyle: CSSProperties = {
+  marginTop: 12,
+};
+
+const videoFileActionsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 7,
+};
+
+const shareVideoButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  border: "1px solid #4e7650",
+  background: "#4e7650",
+  color: "#fff",
+};
+
+const videoProgressWrapStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+  maxWidth: 430,
+  padding: 11,
+  border: "1px solid #dce7d8",
+  borderRadius: 13,
+  background: "#f8fbf6",
+};
+
+const videoProgressTextStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  color: "#4c6048",
+  fontSize: 12,
+};
+
+const videoProgressTrackStyle: CSSProperties = {
+  height: 8,
+  overflow: "hidden",
+  borderRadius: 999,
+  background: "#e7eee3",
+};
+
+const videoProgressBarStyle: CSSProperties = {
+  height: "100%",
+  borderRadius: 999,
+  background: "#64885e",
+  transition: "width 120ms linear",
+};
+
+const stopVideoButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
+  minHeight: 34,
+  justifySelf: "start",
+  padding: "6px 11px",
+  border: "1px solid #ecd1ce",
+  background: "#fff",
+  color: "#a14d48",
 };
 
 const editorSectionStyle: CSSProperties = {

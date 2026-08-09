@@ -196,7 +196,7 @@ export default function MyExperienceCardsPage() {
                       ? "已公开"
                       : item.status === "published"
                         ? "公开已暂停"
-                        : "私密草稿"}
+                        : "私密"}
                   </span>
                   <span>被收藏 {item.bookmarkCount}</span>
                   </>
