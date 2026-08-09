@@ -10,7 +10,6 @@ import { showToast } from "@/components/Toast";
 import {
   deleteExperienceCard,
   hydrateExperienceCardListItems,
-  unpublishExperienceCard,
 } from "@/lib/experience-cards";
 import type {
   ExperienceCardListItem,
@@ -101,17 +100,6 @@ export default function MyExperienceCardsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleUnpublish(item: CardListItem) {
-    setBusyId(item.id);
-    try {
-      await unpublishExperienceCard(item.id);
-      showToast("经验卡已取消公开");
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function handleDelete() {
     if (!deleteTarget) return;
     setBusyId(deleteTarget.id);
@@ -138,6 +126,30 @@ export default function MyExperienceCardsPage() {
       setSavedItems((current) => current.filter((card) => card.id !== item.id));
     }
     setBusyId(null);
+  }
+
+  async function copyExperienceCardLink(item: CardListItem) {
+    try {
+      await navigator.clipboard.writeText(getExperienceCardShareUrl(item.id));
+      showToast("公开链接已复制");
+    } catch {
+      showToast("暂时无法复制链接");
+    }
+  }
+
+  async function shareExperienceCard(item: CardListItem) {
+    const url = getExperienceCardShareUrl(item.id);
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: item.title, url });
+        return;
+      }
+      await copyExperienceCardLink(item);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      showToast("暂时无法分享，请使用复制链接");
+    }
   }
 
   const visibleItems = activeTab === "mine" ? items : savedItems;
@@ -223,15 +235,23 @@ export default function MyExperienceCardsPage() {
                 >
                   打开并管理
                 </Link>
-                {item.status === "published" ? (
-                  <button
-                    type="button"
-                    disabled={busyId === item.id}
-                    onClick={() => void handleUnpublish(item as CardListItem)}
-                    style={secondaryButtonStyle}
-                  >
-                    取消公开
-                  </button>
+                {(item as CardListItem).isPubliclyAvailable ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void shareExperienceCard(item as CardListItem)}
+                      style={secondaryButtonStyle}
+                    >
+                      分享
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyExperienceCardLink(item as CardListItem)}
+                      style={secondaryButtonStyle}
+                    >
+                      复制链接
+                    </button>
+                  </>
                 ) : null}
                 <button
                   type="button"
@@ -265,6 +285,10 @@ export default function MyExperienceCardsPage() {
       />
     </main>
   );
+}
+
+function getExperienceCardShareUrl(cardId: string) {
+  return new URL(`/experience-cards/${cardId}`, window.location.origin).toString();
 }
 
 const pageStyle: CSSProperties = {

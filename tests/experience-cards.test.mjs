@@ -278,13 +278,16 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(detail, /ownerMode === "video"/);
   assert.doesNotMatch(detail, /生成分享视频/);
   assert.doesNotMatch(detail, /更多/);
-  assert.match(detail, /复制链接/);
+  assert.equal(
+    detail.match(/onClick=\{\(\) => void copyCardLink\(\)\}/g)?.length,
+    1
+  );
   assert.match(detail, /删除经验卡/);
   assert.match(detail, /生成MP4/);
   assert.match(detail, /重新生成MP4/);
   assert.match(detail, /externalControls/);
   assert.match(detail, /onStatusChange=\{setVideoStatus\}/);
-  assert.match(detail, /> 分享\s*</);
+  assert.match(detail, /onClick=\{shareVideo\}[\s\S]*?> 分享MP4\s*</);
   assert.doesNotMatch(detail, /分享视频/);
   assert.doesNotMatch(detail, /直接分享视频/);
   assert.match(detail, /保存MP4/);
@@ -292,7 +295,12 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(detail, /videoStatus\.selectedImageCount/);
   assert.match(detail, /formatStorageBytes\(videoStatus\.sizeBytes\)/);
   assert.match(detail, /aria-label="MP4操作"/);
-  assert.match(detail, /aria-label="公开与管理"/);
+  assert.match(detail, /<span style=\{overviewLabelStyle\}>状态<\/span>/);
+  assert.match(detail, /style=\{overviewStatusItemStyle\}/);
+  assert.match(detail, /<section style=\{deleteSectionStyle\} aria-label="删除经验卡">/);
+  assert.match(detail, /<UiIcon name="trash" size=\{14\} \/> 删除经验卡/);
+  assert.doesNotMatch(detail, /aria-label="删除操作"/);
+  assert.doesNotMatch(detail, /aria-label="公开与管理"/);
   assert.doesNotMatch(detail, /经验卡管理/);
   assert.match(detail, /aria-label="经验卡公开方式"/);
   assert.match(detail, />\s*私密\s*</);
@@ -318,6 +326,10 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.ok(
     detail.indexOf("<ExperienceCardInteractions") <
       detail.indexOf("<ExperienceCardEditWorkspace")
+  );
+  assert.ok(
+    detail.indexOf("<ExperienceCardEditWorkspace") <
+      detail.indexOf('aria-label="删除经验卡"')
   );
   assert.doesNotMatch(detail, /dangerZoneStyle/);
   assert.match(
@@ -374,6 +386,12 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editPage, /redirect\(`\/experience-cards\/\$\{id\}#experience-card-editor`\)/);
   assert.match(list, /我的经验卡/);
   assert.match(list, /ExperienceCardListCard/);
+  assert.match(list, /shareExperienceCard\(item as CardListItem\)/);
+  assert.match(list, /copyExperienceCardLink\(item as CardListItem\)/);
+  assert.match(list, /getExperienceCardShareUrl\(item\.id\)/);
+  assert.match(list, /公开链接已复制/);
+  assert.doesNotMatch(list, /取消公开/);
+  assert.doesNotMatch(list, /unpublishExperienceCard/);
   assert.doesNotMatch(list, /在同一处查看、编辑和管理/);
   assert.doesNotMatch(list, /新建经验卡请先进入/);
   assert.doesNotMatch(archiveHeader, /生成经验卡/);

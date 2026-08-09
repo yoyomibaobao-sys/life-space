@@ -480,6 +480,35 @@ export default function ExperienceCardPage({
               label="创建"
               value={createdDate || "时间暂缺"}
             />
+            <div style={overviewStatusItemStyle}>
+              <span style={overviewLabelStyle}>状态</span>
+              {isOwner ? (
+                <div
+                  style={visibilityToggleStyle}
+                  role="group"
+                  aria-label="经验卡公开方式"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={!isPublished}
+                    onClick={() => requestVisibility(false)}
+                    style={visibilityChoiceStyle(!isPublished)}
+                  >
+                    私密
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={isPublished}
+                    onClick={() => requestVisibility(true)}
+                    style={visibilityChoiceStyle(isPublished)}
+                  >
+                    公开
+                  </button>
+                </div>
+              ) : (
+                <strong style={overviewValueStyle}>公开</strong>
+              )}
+            </div>
             {isOwner || detail.card.description ? (
               <div style={overviewDescriptionItemStyle}>
                 <span style={overviewLabelStyle}>详情描述</span>
@@ -578,7 +607,7 @@ export default function ExperienceCardPage({
                       onClick={shareVideo}
                       style={secondaryButtonStyle}
                     >
-                      <UiIcon name="share" size={15} /> 分享
+                      <UiIcon name="share" size={15} /> 分享MP4
                     </button>
                     <button
                       type="button"
@@ -623,49 +652,6 @@ export default function ExperienceCardPage({
                 </div>
               ) : null}
 
-              <div style={actionButtonRowStyle} aria-label="公开与管理">
-                <div
-                  style={visibilityToggleStyle}
-                  role="group"
-                  aria-label="经验卡公开方式"
-                >
-                  <button
-                    type="button"
-                    aria-pressed={!isPublished}
-                    onClick={() => requestVisibility(false)}
-                    style={visibilityChoiceStyle(!isPublished)}
-                  >
-                    私密
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={isPublished}
-                    onClick={() => requestVisibility(true)}
-                    style={visibilityChoiceStyle(isPublished)}
-                  >
-                    公开
-                  </button>
-                </div>
-                {detail.isPubliclyAvailable ? (
-                  <button
-                    type="button"
-                    onClick={() => void copyCardLink()}
-                    style={secondaryButtonStyle}
-                  >
-                    复制链接
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!requireSavedEditor()) return;
-                    setPendingAction("delete");
-                  }}
-                  style={compactDeleteButtonStyle}
-                >
-                  <UiIcon name="trash" size={14} /> 删除
-                </button>
-              </div>
             </div>
           ) : detail.isPubliclyAvailable ? (
             <div style={readerActionRowStyle} aria-label="经验卡分享">
@@ -765,6 +751,21 @@ export default function ExperienceCardPage({
               onCardSaved={handleEditorSaved}
             />
           ) : null}
+        </section>
+      ) : null}
+
+      {isOwner ? (
+        <section style={deleteSectionStyle} aria-label="删除经验卡">
+          <button
+            type="button"
+            onClick={() => {
+              if (!requireSavedEditor()) return;
+              setPendingAction("delete");
+            }}
+            style={deleteExperienceCardButtonStyle}
+          >
+            <UiIcon name="trash" size={14} /> 删除经验卡
+          </button>
         </section>
       ) : null}
 
@@ -1054,6 +1055,11 @@ const overviewDescriptionItemStyle: CSSProperties = {
   paddingTop: 5,
 };
 
+const overviewStatusItemStyle: CSSProperties = {
+  ...overviewItemStyle,
+  alignItems: "center",
+};
+
 const overviewDescriptionValueStyle: CSSProperties = {
   ...overviewValueStyle,
   margin: 0,
@@ -1224,7 +1230,7 @@ const secondaryButtonStyle: CSSProperties = {
 };
 
 const visibilityToggleStyle: CSSProperties = {
-  minHeight: 40,
+  minHeight: 30,
   display: "inline-flex",
   alignItems: "stretch",
   padding: 2,
@@ -1235,8 +1241,8 @@ const visibilityToggleStyle: CSSProperties = {
 
 function visibilityChoiceStyle(active: boolean): CSSProperties {
   return {
-    minWidth: 54,
-    padding: "6px 11px",
+    minWidth: 46,
+    padding: "4px 9px",
     border: 0,
     borderRadius: 999,
     background: active ? "#64885e" : "transparent",
@@ -1247,7 +1253,15 @@ function visibilityChoiceStyle(active: boolean): CSSProperties {
   };
 }
 
-const compactDeleteButtonStyle: CSSProperties = {
+const deleteSectionStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  marginTop: 14,
+  paddingTop: 14,
+  borderTop: "1px solid #e6ebe3",
+};
+
+const deleteExperienceCardButtonStyle: CSSProperties = {
   ...baseButtonStyle,
   display: "inline-flex",
   alignItems: "center",
