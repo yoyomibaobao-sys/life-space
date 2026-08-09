@@ -242,19 +242,19 @@ export default function MembershipPage() {
       <section style={businessCardStyle}>
         <div>
           <div style={sectionLabelStyle}>团队与经营 · 后续开放</div>
-          <h2 style={sectionTitleStyle}>商业会员</h2>
+          <h2 style={sectionTitleStyle}>商社会员</h2>
           <p style={mutedTextStyle}>
-            面向苗圃、农场、工作室、小型商家和协作团队。商业会员不是多人共用一个登录账号，而是每位成员使用自己的账号进入同一个团队空间。
+            面向个人经营者、苗圃、农场、工作室、小型商家和协作团队。个人也可以开通；有团队时，每位成员使用自己的账号进入同一个商社空间，不多人共用登录账号和密码。
           </p>
         </div>
         <div style={businessFeatureGridStyle}>
           <InfoItem label="对外展示" value="商家主页" hint="产品、服务、长期发布与试用／试种招募" />
-          <InfoItem label="共同管理" value="团队空间" hint="项目、记录、产品、发布和咨询归团队所有" />
+          <InfoItem label="共同管理" value="商社空间" hint="项目、记录、产品、发布和咨询归商社空间所有" />
           <InfoItem label="成员方式" value="独立登录" hint="所有者邀请成员，并分别设置管理权限" />
           <InfoItem label="当前状态" value="尚未开放" hint="价格、成员名额和权限细节将在开发前确定" />
         </div>
         <p style={businessFootnoteStyle}>
-          商业会员将包含主账号的云会员基础权益；受邀成员获得的是团队管理权限，不自动获得个人云会员权益。
+          商社会员将包含主账号的云会员基础权益；受邀成员获得的是商社管理权限，不自动获得个人云会员权益。
         </p>
       </section>
 
