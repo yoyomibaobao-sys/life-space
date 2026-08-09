@@ -207,7 +207,8 @@ test("discover search separates three result types with one shared card format",
   assert.match(resultCard, /<CompactActivityTime/);
   assert.match(resultCard, /className=\{styles\.card\}/);
   assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
-  assert.match(resultCardStyles, /\.card\s*\{[\s\S]*border-radius: 0 14px 14px 0;/);
+  assert.match(resultCardStyles, /\.card\s*\{[\s\S]*padding: 10px;[\s\S]*border-radius: 14px;/);
+  assert.match(resultCardStyles, /\.media\s*\{[\s\S]*width: 120px;[\s\S]*height: 120px;[\s\S]*border-radius: 11px;/);
   assert.match(resultCardStyles, /@media \(min-width: 760px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(data, /\.from\("discovery_project_feed_view"\)/);
   assert.match(data, /hydrateExperienceCardListItems/);

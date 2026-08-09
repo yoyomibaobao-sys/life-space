@@ -286,6 +286,9 @@ export function getExperienceCardErrorText(error: unknown) {
   if (message.includes("experience_card_title_invalid")) {
     return "标题需为1～120个字符。";
   }
+  if (message.includes("experience_card_description_invalid")) {
+    return "详情描述最多500个字符。";
+  }
 
   return "操作失败，请稍后重试。";
 }
@@ -304,6 +307,21 @@ export async function saveExperienceCard(input: ExperienceCardSaveInput) {
     throw new Error("experience_card_save_failed");
   }
   return data;
+}
+
+export async function updateExperienceCardDescription(
+  cardId: string,
+  description: string
+) {
+  const { data, error } = await supabase.rpc(
+    "update_experience_card_description",
+    {
+      p_card_id: cardId,
+      p_description: description.trim(),
+    }
+  );
+  if (error) throw error;
+  return firstBoolean(data);
 }
 
 export async function publishExperienceCard(cardId: string) {

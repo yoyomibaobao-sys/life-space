@@ -1,9 +1,12 @@
 .card {
   position: relative;
   display: grid;
-  grid-template-columns: 136px minmax(0, 1fr);
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px;
   min-height: 124px;
-  overflow: visible;
+  padding: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
   color: #2b382a;
   text-decoration: none;
   background: #fff;
@@ -14,9 +17,11 @@
 .card > a:first-child {
   position: relative;
   display: block;
-  min-height: 124px;
+  width: 104px;
+  height: 104px;
+  align-self: start;
   overflow: hidden;
-  border-radius: 14px 0 0 14px;
+  border-radius: 11px;
 }
 
 .cover,
@@ -43,8 +48,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 124px;
-  padding: 12px 13px;
+  min-height: 104px;
+  padding: 1px 0;
 }
 
 .statusRow,
@@ -86,22 +91,20 @@
 
 @media (max-width: 520px) {
   .card {
-    grid-template-columns: 96px minmax(0, 1fr);
-    min-height: 112px;
-  }
-
-  .cover,
-  .placeholder {
-    min-height: 112px;
+    grid-template-columns: 94px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 110px;
+    padding: 8px;
   }
 
   .card > a:first-child {
-    min-height: 112px;
+    width: 94px;
+    height: 94px;
   }
 
   .content {
-    min-height: 112px;
-    padding: 10px 11px;
+    min-height: 94px;
+    padding: 0;
   }
 
   .title {

@@ -12,6 +12,8 @@ const unlimitedSourceMigrationPath =
   "supabase/migrations/20260808134254_remove_experience_card_source_limit.sql";
 const preserveVisibilityMigrationPath =
   "supabase/migrations/20260809120000_preserve_experience_card_visibility_on_save.sql";
+const descriptionMigrationPath =
+  "supabase/migrations/20260809050320_add_experience_card_description.sql";
 
 test("experience cards reference at least three source records without a product cap or copied content", async () => {
   const [migration, unlimitedSourceMigration] = await Promise.all([
@@ -145,6 +147,57 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
   assert.match(dynamicTest, /saving published content interrupted public availability/i);
 });
 
+test("experience-card detail descriptions are bounded and owner-edited without replacing card content", async () => {
+  const [migration, detail, library, types, dynamicTest] = await Promise.all([
+    source(descriptionMigrationPath),
+    source("app/experience-cards/[id]/page.tsx"),
+    source("lib/experience-cards.ts"),
+    source("lib/experience-card-types.ts"),
+    source("supabase/tests/experience_cards_dynamic.sql"),
+  ]);
+
+  assert.match(migration, /add column if not exists description text/i);
+  assert.match(
+    migration,
+    /description is null[\s\S]*?char_length\(description\) between 1 and 500/i
+  );
+  assert.match(
+    migration,
+    /create or replace function public\.update_experience_card_description/i
+  );
+  assert.match(
+    migration,
+    /not public\.is_user_membership_active\(v_user_id\)[\s\S]*?experience_card_cloud_access_required/i
+  );
+  assert.match(
+    migration,
+    /where card\.id = p_card_id[\s\S]*?card\.user_id = v_user_id/i
+  );
+  assert.match(
+    migration,
+    /grant execute on function public\.update_experience_card_description\(uuid, text\)\s+to authenticated, service_role/i
+  );
+  assert.doesNotMatch(
+    migration,
+    /grant execute on function public\.update_experience_card_description\(uuid, text\)\s+to anon/i
+  );
+
+  assert.match(types, /description: string \| null/);
+  assert.match(library, /export async function updateExperienceCardDescription/);
+  assert.match(library, /"update_experience_card_description"/);
+  assert.match(detail, /label="创建"[\s\S]*?>详情描述</);
+  assert.match(detail, /aria-label="编辑详情描述"/);
+  assert.match(detail, /aria-label="详情描述"/);
+  assert.match(detail, /maxLength=\{500\}/);
+  assert.match(detail, /updateExperienceCardDescription\(/);
+  assert.doesNotMatch(
+    detail,
+    /saveDescription\(\)[\s\S]*?deleteCachedExperienceCardVideo/
+  );
+  assert.match(dynamicTest, /experience-card description was not saved/i);
+  assert.match(dynamicTest, /expired owner modified an experience-card description/i);
+});
+
 test("experience-card creation and editing share one inline full-record picker", async () => {
   const [editor, detail, editWorkspace, editPage, list, archiveHeader] = await Promise.all([
     source("components/experience-card/ExperienceCardEditor.tsx"),
@@ -198,7 +251,7 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(editor, /newlyAddedRecords\.map\(\(record\) => record\.id\)/);
   assert.match(editor, /当前共有\$\{nextRecords\.length\}条可供选择/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
-  assert.match(detail, /分享经验卡/);
+  assert.doesNotMatch(detail, /分享经验卡/);
   assert.match(detail, /设为私密/);
   assert.match(detail, /来源记录已经变化/);
   assert.doesNotMatch(detail, /type OwnerMode/);
@@ -208,18 +261,20 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(detail, /更多/);
   assert.match(detail, /复制链接/);
   assert.match(detail, /删除经验卡/);
-  assert.match(detail, /生成竖屏MP4/);
-  assert.match(detail, /重新生成竖屏MP4/);
+  assert.match(detail, /生成MP4/);
+  assert.match(detail, /重新生成MP4/);
   assert.match(detail, /externalControls/);
   assert.match(detail, /onStatusChange=\{setVideoStatus\}/);
-  assert.match(detail, /分享视频/);
+  assert.match(detail, /> 分享\s*</);
+  assert.doesNotMatch(detail, /分享视频/);
   assert.doesNotMatch(detail, /直接分享视频/);
   assert.match(detail, /保存MP4/);
   assert.match(detail, /videoStatus\.progress/);
   assert.match(detail, /videoStatus\.selectedImageCount/);
   assert.match(detail, /formatStorageBytes\(videoStatus\.sizeBytes\)/);
-  assert.match(detail, /aria-label="竖屏MP4操作"/);
-  assert.match(detail, /aria-label="经验卡管理"/);
+  assert.match(detail, /aria-label="MP4操作"/);
+  assert.match(detail, /aria-label="公开与管理"/);
+  assert.doesNotMatch(detail, /经验卡管理/);
   assert.match(detail, /aria-label="经验卡公开方式"/);
   assert.match(detail, />\s*私密\s*</);
   assert.doesNotMatch(detail, />\s*默认\s*</);
@@ -255,14 +310,16 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(detail, /<ExperienceCardEditWorkspace/);
   assert.doesNotMatch(detail, /detail\.card\.id\}\/edit/);
   assert.doesNotMatch(detail, /setEditing/);
-  assert.match(detail, /经验卡概况/);
-  assert.ok(detail.indexOf('label="项目"') < detail.indexOf('label="记录过程"'));
-  assert.ok(detail.indexOf('label="系统名"') < detail.indexOf('label="记录过程"'));
-  assert.match(detail, /label="记录过程"/);
-  assert.match(detail, /recordPeriod/);
+  assert.doesNotMatch(detail, /经验卡概况/);
+  assert.ok(detail.indexOf('label="项目"') < detail.indexOf('label="记录"'));
+  assert.ok(detail.indexOf('label="系统名"') < detail.indexOf('label="记录"'));
+  assert.ok(detail.indexOf('label="记录"') < detail.indexOf('label="创建"'));
+  assert.match(detail, /label="记录"/);
+  assert.doesNotMatch(detail, /recordPeriod/);
   assert.match(detail, /durationDays \? `\$\{durationDays\}天`/);
-  assert.match(detail, /`\$\{detail\.records\.length\}条记录`/);
-  assert.match(detail, /创建于 \{createdDate/);
+  assert.match(detail, /`\$\{detail\.records\.length\}条`/);
+  assert.match(detail, /value=\{createdDate \|\| "时间暂缺"\}/);
+  assert.doesNotMatch(detail, /创建于 \{createdDate/);
   assert.doesNotMatch(detail, /label="时长"/);
   assert.doesNotMatch(detail, /label="记录数"/);
   assert.doesNotMatch(detail, /label="图片数"/);
@@ -351,11 +408,13 @@ test("experience card lists use a shared cover with source and archive fallbacks
 
   assert.match(listCard, /item\.coverUrl/);
   assert.match(listCard, /alt=\{`\$\{item\.title\}封面`\}/);
-  assert.match(listCardStyles, /\.card > a:first-child \{[\s\S]*?position: relative;/);
+  assert.match(listCardStyles, /\.card \{[\s\S]*?padding: 10px;[\s\S]*?border-radius: 15px;/);
+  assert.match(listCardStyles, /\.card > a:first-child \{[\s\S]*?position: relative;[\s\S]*?width: 104px;[\s\S]*?height: 104px;[\s\S]*?border-radius: 11px;/);
   assert.match(listCardStyles, /\.cover,[\s\S]*?position: absolute;[\s\S]*?inset: 0;[\s\S]*?height: 100%;/);
   assert.doesNotMatch(listCardStyles, /^\s*height: 124px;/m);
-  assert.match(searchCardStyles, /\.card \{[\s\S]*?overflow: hidden;/);
-  assert.match(searchCardStyles, /\.media \{[\s\S]*?position: relative;[\s\S]*?min-height: 100%;/);
+  assert.match(searchCardStyles, /\.card \{[\s\S]*?padding: 10px;[\s\S]*?border-radius: 14px;/);
+  assert.match(searchCardStyles, /\.media \{[\s\S]*?position: relative;[\s\S]*?width: 120px;[\s\S]*?height: 120px;[\s\S]*?border-radius: 11px;/);
+  assert.doesNotMatch(searchCardStyles, /min-height: 100%/);
   assert.match(loader, /row\.cover_media_id/);
   assert.match(loader, /mediaByRecord\.get\(recordId\)\?\.\[0\]/);
   assert.doesNotMatch(loader, /cover_thumb_url/);

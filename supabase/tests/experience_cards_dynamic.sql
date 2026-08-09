@@ -247,6 +247,45 @@ begin
   ) <> 3 then
     raise exception 'card did not retain exactly three source references';
   end if;
+
+  if not public.update_experience_card_description(
+    c.card_id,
+    '从播种到出苗的关键条件与结果。'
+  ) then
+    raise exception 'experience-card description update returned false';
+  end if;
+
+  if not exists (
+    select 1
+    from public.experience_cards card
+    where card.id = c.card_id
+      and card.description = '从播种到出苗的关键条件与结果。'
+      and card.status = 'draft'
+      and card.source_record_count = 3
+  ) then
+    raise exception 'experience-card description was not saved';
+  end if;
+
+  begin
+    update public.experience_cards
+    set description = '绕过描述RPC'
+    where id = c.card_id;
+    raise exception 'authenticated user directly updated a card description';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  begin
+    perform public.update_experience_card_description(
+      c.card_id,
+      repeat('字', 501)
+    );
+    raise exception 'experience-card description accepted more than 500 characters';
+  exception when raise_exception then
+    if sqlerrm <> 'experience_card_description_invalid' then
+      raise;
+    end if;
+  end;
 end;
 $$;
 
@@ -403,6 +442,7 @@ begin
        select 1
        from public.experience_cards card
        where card.id = c.card_id
+         and card.description = '从播种到出苗的关键条件与结果。'
      )
      or (
        select count(*)
@@ -488,6 +528,18 @@ begin
       c.cover_media_id
     );
     raise exception 'expired owner modified an experience card';
+  exception when raise_exception then
+    if sqlerrm <> 'experience_card_cloud_access_required' then
+      raise;
+    end if;
+  end;
+
+  begin
+    perform public.update_experience_card_description(
+      c.card_id,
+      '过期后不应允许修改描述'
+    );
+    raise exception 'expired owner modified an experience-card description';
   exception when raise_exception then
     if sqlerrm <> 'experience_card_cloud_access_required' then
       raise;

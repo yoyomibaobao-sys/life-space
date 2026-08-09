@@ -7,14 +7,17 @@
 .card {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
   min-width: 0;
-  min-height: 132px;
+  min-height: 142px;
+  padding: 10px;
+  box-sizing: border-box;
   overflow: hidden;
   color: #263525;
   text-decoration: none;
   background: #fff;
   border: 1px solid #e1e8de;
-  border-radius: 0 14px 14px 0;
+  border-radius: 14px;
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
@@ -30,8 +33,11 @@
 
 .media {
   position: relative;
-  min-height: 100%;
+  width: 120px;
+  height: 120px;
+  align-self: start;
   overflow: hidden;
+  border-radius: 11px;
   background: #eef3ea;
 }
 
@@ -48,7 +54,6 @@
   display: grid;
   width: 100%;
   height: 100%;
-  min-height: 132px;
   place-items: center;
   color: #879783;
   background: linear-gradient(145deg, #edf4e8, #f8faf5);
@@ -58,7 +63,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 10px 11px;
+  min-height: 120px;
+  padding: 1px 0;
 }
 
 .topRow,
@@ -153,16 +159,20 @@
 
 @media (max-width: 520px) {
   .card {
-    grid-template-columns: 104px minmax(0, 1fr);
-    min-height: 124px;
+    grid-template-columns: 94px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 110px;
+    padding: 8px;
   }
 
-  .placeholder {
-    min-height: 124px;
+  .media {
+    width: 94px;
+    height: 94px;
   }
 
   .content {
-    padding: 9px 10px;
+    min-height: 94px;
+    padding: 0;
   }
 
   .title {

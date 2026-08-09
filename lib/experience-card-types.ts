@@ -7,6 +7,7 @@ export type ExperienceCardRow = {
   user_id: string;
   archive_id: string;
   title: string;
+  description: string | null;
   cover_media_id: string | null;
   status: ExperienceCardStatus | string;
   source_record_count: number;
