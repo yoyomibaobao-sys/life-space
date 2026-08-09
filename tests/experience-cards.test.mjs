@@ -10,6 +10,8 @@ const migrationPath =
   "supabase/migrations/20260730090616_add_experience_cards_v1.sql";
 const unlimitedSourceMigrationPath =
   "supabase/migrations/20260808134254_remove_experience_card_source_limit.sql";
+const preserveVisibilityMigrationPath =
+  "supabase/migrations/20260809120000_preserve_experience_card_visibility_on_save.sql";
 
 test("experience cards reference at least three source records without a product cap or copied content", async () => {
   const [migration, unlimitedSourceMigration] = await Promise.all([
@@ -81,7 +83,11 @@ test("experience-card RLS keeps drafts private and gates public reads on every s
 });
 
 test("card mutations are atomic RPCs with active-cloud and ownership checks", async () => {
-  const migration = await source(migrationPath);
+  const [migration, preserveVisibilityMigration, dynamicTest] = await Promise.all([
+    source(migrationPath),
+    source(preserveVisibilityMigrationPath),
+    source("supabase/tests/experience_cards_dynamic.sql"),
+  ]);
 
   assert.match(
     migration,
@@ -119,6 +125,24 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
     migration,
     /create or replace function public\.delete_experience_card/i
   );
+  assert.match(
+    preserveVisibilityMigration,
+    /v_was_published := v_existing\.status = 'published'/i
+  );
+  assert.match(
+    preserveVisibilityMigration,
+    /update public\.experience_cards as c[\s\S]*?source_record_count = v_record_count[\s\S]*?where c\.id = v_card_id/i
+  );
+  assert.doesNotMatch(
+    preserveVisibilityMigration,
+    /update public\.experience_cards as c[\s\S]*?status = 'draft'/i
+  );
+  assert.match(
+    preserveVisibilityMigration,
+    /if v_was_published then[\s\S]*?set is_public = true[\s\S]*?set visibility = 'public'/i
+  );
+  assert.match(dynamicTest, /saving published content changed its visibility/i);
+  assert.match(dynamicTest, /saving published content interrupted public availability/i);
 });
 
 test("experience-card creation and editing share one inline full-record picker", async () => {
@@ -145,9 +169,8 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editor, /records\.map\(\(record, index\) =>/);
   assert.match(editor, /selectedRecordIdSet\.has\(record\.id\)/);
   assert.match(editor, />全部记录</);
-  assert.match(editor, /项目的全部已有记录/);
-  assert.match(editor, /未选记录可直接加入/);
-  assert.match(editor, /加入时图片默认全选/);
+  assert.match(editor, /renderAvailableRecord/);
+  assert.match(editor, /加入后默认全选/);
   assert.match(editor, /所选图片用于当前设备生成MP4/);
   assert.match(editor, /不设累计上限/);
   assert.match(editor, /\.is\("trashed_at", null\)/);
@@ -162,6 +185,8 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editor, /预览/);
   assert.match(editor, /发布经验卡/);
   assert.match(editor, /项目中其他记录仍保持原来的可见性/);
+  assert.match(editor, /if \(mode === "publish"\)/);
+  assert.doesNotMatch(editor, /cardId && wasPublished/);
   assert.match(editor, /embedded = false/);
   assert.match(editor, /标题、记录与图片/);
   assert.match(editor, /recordThumbnailStyle/);
@@ -182,6 +207,12 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(detail, /更多/);
   assert.match(detail, /复制链接/);
   assert.match(detail, /删除经验卡/);
+  assert.match(detail, /生成竖屏MP4/);
+  assert.match(detail, /aria-label="经验卡公开方式"/);
+  assert.match(detail, />\s*默认\s*</);
+  assert.match(detail, />\s*公开\s*</);
+  assert.match(detail, /requestVisibility\(false\)/);
+  assert.match(detail, /requestVisibility\(true\)/);
   assert.match(detail, /经验过程/);
   assert.match(detail, /ExperienceCardTimeline/);
   assert.match(detail, /\{!isOwner \? \([\s\S]*?经验过程/);
@@ -201,17 +232,19 @@ test("experience-card creation and editing share one inline full-record picker",
     detail.indexOf("<ExperienceCardInteractions") <
       detail.indexOf("<ExperienceCardEditWorkspace")
   );
-  assert.ok(
-    detail.indexOf("<ExperienceCardEditWorkspace") <
-      detail.indexOf("<section style={dangerZoneStyle}")
+  assert.doesNotMatch(detail, /dangerZoneStyle/);
+  assert.match(
+    detail,
+    /<ExperienceCardVideoPanel[\s\S]*?ref=\{videoPanelRef\}[\s\S]*?previewOnly[\s\S]*?hideGenerateAction/
   );
   assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\} readOnly integrated/);
   assert.doesNotMatch(detail, /<ExperienceCardEditor/);
   assert.match(detail, /<ExperienceCardEditWorkspace/);
-  assert.match(detail, /inline/);
   assert.doesNotMatch(detail, /detail\.card\.id\}\/edit/);
   assert.doesNotMatch(detail, /setEditing/);
   assert.match(detail, /经验卡概况/);
+  assert.ok(detail.indexOf('label="项目"') < detail.indexOf('label="时长"'));
+  assert.ok(detail.indexOf('label="系统名"') < detail.indexOf('label="时长"'));
   assert.match(detail, /label="时长"/);
   assert.match(detail, /label="记录数"/);
   assert.match(detail, /label="图片数"/);
@@ -221,14 +254,14 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(detail, /saveExperienceCard\(/);
   assert.match(detail, /publishExperienceCard\(detail\.card\.id\)/);
   assert.match(detail, /deleteCachedExperienceCardVideo\(detail\.card\.id\)/);
-  assert.match(detail, /编辑内容/);
-  assert.match(detail, /与建立经验卡时相同/);
+  assert.doesNotMatch(detail, /编辑内容/);
+  assert.match(detail, /打开编辑/);
   assert.match(detail, /detail\.archive\.system_name/);
   assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
   assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
   assert.match(detail, /<span style=\{sourceLabelStyle\}>用户<\/span>/);
-  assert.match(detail, /<span style=\{sourceLabelStyle\}>项目<\/span>/);
-  assert.match(detail, /<span style=\{sourceLabelStyle\}>系统名<\/span>/);
+  assert.doesNotMatch(detail, /<span style=\{sourceLabelStyle\}>项目<\/span>/);
+  assert.doesNotMatch(detail, /<span style=\{sourceLabelStyle\}>系统名<\/span>/);
   assert.match(detail, /if \(category === "plant" && speciesId\) return `\/plant\/\$\{speciesId\}`/);
   assert.match(detail, /params\.set\("type", "projects"\)/);
   assert.match(detail, /return `\/discover\/search\?\$\{params\.toString\(\)\}`/);
@@ -236,14 +269,15 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editWorkspace, /<ExperienceCardEditor/);
   assert.match(editWorkspace, /cardId=\{cardId\}/);
   assert.match(editWorkspace, /onSaved=\{handleSaved\}/);
-  assert.match(editWorkspace, /showTitleField=\{!inline\}/);
-  assert.match(editWorkspace, /compact=\{inline\}/);
-  assert.match(editWorkspace, /保存后再预览或生成MP4/);
-  assert.match(editWorkspace, /<ExperienceCardVideoPanel[\s\S]*?previewOnly[\s\S]*?integrated/);
-  assert.match(editWorkspace, /先保存上面的修改/);
+  assert.match(editWorkspace, /showTitleField=\{false\}/);
+  assert.match(editWorkspace, /\scompact\s/);
+  assert.doesNotMatch(editWorkspace, /ExperienceCardVideoPanel/);
+  assert.doesNotMatch(editWorkspace, /预览/);
   assert.match(editPage, /redirect\(`\/experience-cards\/\$\{id\}#experience-card-editor`\)/);
   assert.match(list, /我的经验卡/);
   assert.match(list, /ExperienceCardListCard/);
+  assert.doesNotMatch(list, /在同一处查看、编辑和管理/);
+  assert.doesNotMatch(list, /新建经验卡请先进入/);
   assert.doesNotMatch(archiveHeader, /生成经验卡/);
 });
 
@@ -360,9 +394,14 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
     /<ExperienceCardVideoPanel detail=\{detail\} readOnly integrated/
   );
   assert.match(
-    editWorkspace,
-    /<ExperienceCardVideoPanel[\s\S]*?detail=\{detail\}[\s\S]*?previewOnly[\s\S]*?integrated/
+    detail,
+    /<ExperienceCardVideoPanel[\s\S]*?ref=\{videoPanelRef\}[\s\S]*?previewOnly[\s\S]*?hideGenerateAction/
   );
+  assert.doesNotMatch(editWorkspace, /ExperienceCardVideoPanel/);
+  assert.match(panel, /forwardRef/);
+  assert.match(panel, /useImperativeHandle/);
+  assert.match(panel, /generate: \(\) =>/);
+  assert.match(panel, /hideGenerateAction/);
   assert.match(panel, /生成竖屏MP4/);
   assert.match(panel, /选择视频画面与封面/);
   assert.match(panel, /视频选图保存在当前设备/);
@@ -493,6 +532,39 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
   );
   assert.match(discoverStyles, /\.ownerRow/);
   assert.match(discoverStyles, /\.imageTitleArea/);
+});
+
+test("guidance counts and public navigation use compact non-duplicated entries", async () => {
+  const [plantDetail, archiveDetail, archiveHeader, discoverHeader] =
+    await Promise.all([
+      source("app/plant/[id]/page.tsx"),
+      source("app/archive/[id]/page.tsx"),
+      source("components/archive-detail/ArchiveDetailHeader.tsx"),
+      source("components/discover/DiscoverHeader.tsx"),
+    ]);
+
+  assert.match(
+    plantDetail,
+    /experienceCardTabCount = relatedExperienceCards\.length/
+  );
+  assert.match(plantDetail, /plantingRecordTabCount = Array\.from/);
+  assert.match(plantDetail, /experienceCardTabCount > 0/);
+  assert.match(plantDetail, /plantingRecordTabCount > 0/);
+  assert.match(plantDetail, /`经验卡（\$\{experienceCardTabCount\}）`/);
+  assert.match(plantDetail, /`种植记录（\$\{plantingRecordTabCount\}）`/);
+
+  assert.match(
+    archiveDetail,
+    /href=\{`\/user\/\$\{activeArchive\.user_id\}`\}/
+  );
+  assert.match(archiveDetail, /aria-label=\{`进入\$\{username\}的空间`\}/);
+  assert.doesNotMatch(archiveHeader, /进入\{username\}的空间/);
+
+  assert.match(discoverHeader, /href="\/discover\/search"/);
+  assert.match(discoverHeader, /<UiIcon name="search"/);
+  assert.match(discoverHeader, /> 搜索\s*<\/Link>/);
+  assert.doesNotMatch(discoverHeader, /width: "100%"/);
+  assert.doesNotMatch(discoverHeader, /搜索记录/);
 });
 
 test("project details expose details, archive, experience cards, and growth line as peer tabs on every viewport", async () => {

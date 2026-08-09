@@ -1759,6 +1759,19 @@ export default function PlantDetailPage() {
     });
   }
 
+  const experienceCardTabCount = relatedExperienceCards.length;
+  const plantingRecordTabCount = Array.from(
+    new Map(
+      [...ownArchives, ...relatedArchives].map((archive) => [
+        archive.archive_id,
+        archive,
+      ])
+    ).values()
+  ).reduce(
+    (count, archive) => count + Number(archive.public_record_count || 0),
+    0
+  );
+
   if (loading) {
     return <main style={{ padding: 20 }}>加载中...</main>;
   }
@@ -2045,8 +2058,18 @@ export default function PlantDetailPage() {
       >
         {([
           ["guide", "概要与种植办法"],
-          ["experience", "经验卡"],
-          ["records", "种植记录"],
+          [
+            "experience",
+            experienceCardTabCount > 0
+              ? `经验卡（${experienceCardTabCount}）`
+              : "经验卡",
+          ],
+          [
+            "records",
+            plantingRecordTabCount > 0
+              ? `种植记录（${plantingRecordTabCount}）`
+              : "种植记录",
+          ],
         ] as const).map(([value, label]) => (
           <button
             key={value}

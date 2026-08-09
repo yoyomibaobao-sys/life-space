@@ -331,6 +331,63 @@ begin
 end;
 $$;
 
+select set_config(
+  'request.jwt.claim.sub',
+  (select cloud_user::text from experience_card_test_context),
+  true
+);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+set local role authenticated;
+
+do $$
+declare
+  c experience_card_test_context%rowtype;
+  v_published_at timestamptz;
+begin
+  select * into c from experience_card_test_context;
+
+  select card.published_at
+  into v_published_at
+  from public.experience_cards as card
+  where card.id = c.card_id;
+
+  perform public.save_experience_card(
+    c.card_id,
+    c.archive_id,
+    '公开状态下修改后的经验卡',
+    array[c.record_one, c.record_two, c.record_unselected],
+    c.cover_media_id
+  );
+
+  if not exists (
+    select 1
+    from public.experience_cards as card
+    where card.id = c.card_id
+      and card.status = 'published'
+      and card.published_at = v_published_at
+      and card.title = '公开状态下修改后的经验卡'
+      and card.source_record_count = 3
+  ) then
+    raise exception 'saving published content changed its visibility';
+  end if;
+
+  if not exists (
+    select 1
+    from public.records as r
+    where r.id = c.record_unselected
+      and r.visibility = 'public'
+  ) then
+    raise exception 'saving a published card did not publish its newly selected source';
+  end if;
+
+  if not public.is_experience_card_public(c.card_id) then
+    raise exception 'saving published content interrupted public availability';
+  end if;
+end;
+$$;
+
+reset role;
+
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claim.role', 'anon', true);
 set local role anon;

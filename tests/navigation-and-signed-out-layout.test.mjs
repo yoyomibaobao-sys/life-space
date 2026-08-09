@@ -164,8 +164,10 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
 
   assert.match(detail, /type PlantDetailTab = "guide" \| "experience" \| "records"/);
   assert.match(detail, /\["guide", "概要与种植办法"\]/);
-  assert.match(detail, /\["experience", "经验卡"\]/);
-  assert.match(detail, /\["records", "种植记录"\]/);
+  assert.match(detail, /"experience",[\s\S]*?experienceCardTabCount > 0/);
+  assert.match(detail, /"records",[\s\S]*?plantingRecordTabCount > 0/);
+  assert.match(detail, /`经验卡（\$\{experienceCardTabCount\}）`/);
+  assert.match(detail, /`种植记录（\$\{plantingRecordTabCount\}）`/);
   assert.match(detail, /activeTab === "experience"/);
   assert.match(detail, /<PlantExperienceCardsSection[\s\S]*?cards=\{relatedExperienceCards\}[\s\S]*?currentUserId=\{currentUserId\}/);
   assert.match(detail, /title="我的经验卡"/);

@@ -642,6 +642,9 @@ export default function ExperienceCardEditor({
 
       if (mode === "publish") {
         await publishExperienceCard(savedCardId);
+      }
+
+      if (mode === "publish") {
         showToast("经验卡已公开");
       } else {
         showToast(
@@ -875,27 +878,20 @@ export default function ExperienceCardEditor({
   const editorContent = (
     <>
       <section style={compact ? compactPanelStyle : panelStyle}>
-        <div style={editorHeadingStyle}>
-          <div>
-            <div style={eyebrowStyle}>内容编辑</div>
-            <h2 style={sectionTitleStyle}>
-              {showTitleField ? "标题、记录与图片" : "记录、图片与封面"}
-            </h2>
-          </div>
-          {archive ? (
-            <Link href={`/archive/${archive.id}`} style={sourceProjectLinkStyle}>
-              查看来源项目 · {archive.title}
-            </Link>
-          ) : null}
-        </div>
-        <p style={editorLeadStyle}>
-          {showTitleField
-            ? "经验卡只引用项目里的已有记录。记录决定内容；所选图片用于当前设备生成MP4，封面随经验卡保存。"
-            : "只调整同一项目中的已有记录、视频图片和经验卡封面。名称请在页面顶部直接修改。"}
-        </p>
-
-        {wasPublished && hasChanges ? (
-          <p style={inlineNoticeStyle}>保存后会同步更新当前公开内容。</p>
+        {!compact ? (
+          <>
+            <div style={editorHeadingStyle}>
+              <div>
+                <div style={eyebrowStyle}>内容编辑</div>
+                <h2 style={sectionTitleStyle}>
+                  {showTitleField ? "标题、记录与图片" : "记录、图片与封面"}
+                </h2>
+              </div>
+            </div>
+            <p style={editorLeadStyle}>
+              经验卡引用项目里的已有记录；所选图片用于当前设备生成MP4，封面随经验卡保存。
+            </p>
+          </>
         ) : null}
 
         {showTitleField ? (
@@ -916,10 +912,7 @@ export default function ExperienceCardEditor({
 
         <div style={editorSectionStyle}>
           <div style={sectionHeadingRowStyle}>
-            <div>
-              <div style={eyebrowStyle}>来源内容</div>
-              <h3 style={compactSectionTitleStyle}>记录与图片</h3>
-            </div>
+            <h3 style={compactSectionTitleStyle}>全部记录</h3>
             <div style={recordToolbarStyle}>
               <button
                 type="button"
@@ -928,23 +921,20 @@ export default function ExperienceCardEditor({
                 style={refreshRecordsButtonStyle}
               >
                 <UiIcon name="refresh" size={14} />
-                {refreshingRecords ? "刷新中..." : "刷新项目记录"}
+                {refreshingRecords ? "刷新中..." : "刷新记录"}
               </button>
             </div>
           </div>
           <div style={recordSummaryStyle}>
             <span style={countPillStyle(selectedRecords.length >= 3)}>
-              已选 {selectedRecords.length} 条
+              已选 {selectedRecords.length} / {records.length} 条
             </span>
-            <span>项目共 {records.length} 条</span>
-            <span>
-              {unselectedRecordCount > 0
-                ? `${unselectedRecordCount} 条可加入`
-                : "现有记录已全部加入"}
-            </span>
+            {unselectedRecordCount > 0 ? (
+              <span>{unselectedRecordCount} 条可加入</span>
+            ) : null}
           </div>
           <p style={recordSelectionIntroStyle}>
-            这里列出项目的全部已有记录。已选记录可调整图片或取消；未选记录可直接加入，加入时图片默认全选。最后始终按原始时间排序，至少选择3条，不设累计上限。
+            至少选择3条，不设累计上限；记录按原始时间排序。
           </p>
 
           {records.length === 0 ? (
@@ -958,21 +948,13 @@ export default function ExperienceCardEditor({
               ) : null}
             </div>
           ) : (
-            <>
-              <div style={recordGroupHeadingStyle}>
-                <strong>全部记录</strong>
-                <span>
-                  已选{selectedRecords.length}条 · 未选{availableRecords.length}条
-                </span>
-              </div>
-              <div style={recordListStyle}>
-                {records.map((record, index) =>
-                  selectedRecordIdSet.has(record.id)
-                    ? renderSelectedRecord(record, index)
-                    : renderAvailableRecord(record, index)
-                )}
-              </div>
-            </>
+            <div style={recordListStyle}>
+              {records.map((record, index) =>
+                selectedRecordIdSet.has(record.id)
+                  ? renderSelectedRecord(record, index)
+                  : renderAvailableRecord(record, index)
+              )}
+            </div>
           )}
           {selectedRecords.length < 3 ? (
             <p style={selectionHintStyle}>还需选择至少3条记录。</p>
@@ -983,12 +965,12 @@ export default function ExperienceCardEditor({
       </section>
 
       <section style={compact ? compactActionsStyle : stickyActionsStyle}>
-        {wasPublished && embedded ? (
+        {embedded ? (
           <button
             type="button"
-            disabled={!canPublish || !hasChanges}
-            onClick={() => setPublishConfirmOpen(true)}
-            style={primaryButtonStyle(canPublish && hasChanges)}
+            disabled={!canSave}
+            onClick={() => void persist("draft")}
+            style={primaryButtonStyle(canSave)}
           >
             {saving ? "保存中..." : "保存修改"}
           </button>
@@ -1170,17 +1152,6 @@ const messageCardStyle: CSSProperties = {
   marginTop: 40,
 };
 
-const inlineNoticeStyle: CSSProperties = {
-  margin: "14px 0 0",
-  padding: "9px 11px",
-  borderRadius: 10,
-  background: "#fff9e9",
-  border: "1px solid #eadfbf",
-  color: "#756436",
-  fontSize: 12,
-  lineHeight: 1.6,
-};
-
 const eyebrowStyle: CSSProperties = {
   color: "#768471",
   fontSize: 12,
@@ -1198,11 +1169,6 @@ const compactSectionTitleStyle: CSSProperties = {
   margin: "4px 0 0",
   fontSize: 16,
   lineHeight: 1.35,
-};
-
-const sourceProjectLinkStyle: CSSProperties = {
-  color: "#344b31",
-  textDecoration: "none",
 };
 
 const labelStyle: CSSProperties = {
@@ -1288,16 +1254,6 @@ const recordSelectionIntroStyle: CSSProperties = {
   color: "#748071",
   fontSize: 12,
   lineHeight: 1.65,
-};
-
-const recordGroupHeadingStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  margin: "0 0 9px",
-  color: "#52614f",
-  fontSize: 12,
 };
 
 const emptyRecordsStyle: CSSProperties = {

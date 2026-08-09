@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -40,6 +42,10 @@ type RecordImageOption = {
   recordId: string;
   sourceUrl: string;
   previewUrl: string;
+};
+
+export type ExperienceCardVideoPanelHandle = {
+  generate: () => void;
 };
 
 function isImageMedia(media: ExperienceCardMedia) {
@@ -171,25 +177,35 @@ function persistVideoSelectionPreference(
   }
 }
 
-export default function ExperienceCardVideoPanel({
-  detail,
-  readOnly = false,
-  integrated = false,
-  previewOnly = false,
-  selectionOnly = false,
-  coverMediaId,
-  onCoverMediaIdChange,
-  onSelectionChange,
-}: {
+type ExperienceCardVideoPanelProps = {
   detail: ExperienceCardDetail;
   readOnly?: boolean;
   integrated?: boolean;
   previewOnly?: boolean;
   selectionOnly?: boolean;
+  hideGenerateAction?: boolean;
   coverMediaId?: string | null;
   onCoverMediaIdChange?: (mediaId: string | null) => void;
   onSelectionChange?: () => void;
-}) {
+};
+
+const ExperienceCardVideoPanel = forwardRef<
+  ExperienceCardVideoPanelHandle,
+  ExperienceCardVideoPanelProps
+>(function ExperienceCardVideoPanel(
+  {
+    detail,
+    readOnly = false,
+    integrated = false,
+    previewOnly = false,
+    selectionOnly = false,
+    hideGenerateAction = false,
+    coverMediaId,
+    onCoverMediaIdChange,
+    onSelectionChange,
+  },
+  ref
+) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const videoUrlRef = useRef("");
@@ -558,7 +574,11 @@ export default function ExperienceCardVideoPanel({
   }
 
   async function handleGenerate() {
-    if (generating || imageLoading || cacheLoading) return;
+    if (generating) return;
+    if (imageLoading || cacheLoading) {
+      showToast("正在准备记录图片，请稍后再试");
+      return;
+    }
     clearGeneratedVideo();
     setErrorText("");
     setProgress(0);
@@ -646,6 +666,12 @@ export default function ExperienceCardVideoPanel({
     video.currentTime = 0;
     void video.play().catch(() => undefined);
   }
+
+  useImperativeHandle(ref, () => ({
+    generate: () => {
+      void handleGenerate();
+    },
+  }));
 
   return (
     <section
@@ -803,8 +829,9 @@ export default function ExperienceCardVideoPanel({
 
               {errorText ? <div style={errorStyle}>{errorText}</div> : null}
 
-              <div style={actionsStyle}>
-                {!generating ? (
+              {!hideGenerateAction || videoBlob ? (
+                <div style={actionsStyle}>
+                {!generating && !hideGenerateAction ? (
                   <button
                     type="button"
                     onClick={() => void handleGenerate()}
@@ -833,14 +860,17 @@ export default function ExperienceCardVideoPanel({
                     </button>
                   </>
                 ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
       ) : null}
     </section>
   );
-}
+});
+
+export default ExperienceCardVideoPanel;
 
 const panelStyle: CSSProperties = {
   margin: "0 0 14px",

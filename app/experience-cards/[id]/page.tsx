@@ -12,7 +12,9 @@ import {
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardEditWorkspace from "@/components/experience-card/ExperienceCardEditWorkspace";
-import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
+import ExperienceCardVideoPanel, {
+  type ExperienceCardVideoPanelHandle,
+} from "@/components/experience-card/ExperienceCardVideoPanel";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
 import UiIcon from "@/components/ui/UiIcon";
@@ -34,7 +36,7 @@ import type {
 } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 
-type PendingAction = "unpublish" | "delete" | null;
+type PendingAction = "publish" | "unpublish" | "delete" | null;
 
 export default function ExperienceCardPage({
   params,
@@ -56,6 +58,7 @@ export default function ExperienceCardPage({
   const [editorDirty, setEditorDirty] = useState(false);
   const [editorRevision, setEditorRevision] = useState(0);
   const editorRef = useRef<HTMLElement | null>(null);
+  const videoPanelRef = useRef<ExperienceCardVideoPanelHandle | null>(null);
 
   async function reload(showLoading = true) {
     if (showLoading) setLoading(true);
@@ -147,9 +150,6 @@ export default function ExperienceCardPage({
         recordIds: detail.records.map((record) => record.id),
         coverMediaId: detail.card.cover_media_id,
       });
-      if (detail.card.status === "published") {
-        await publishExperienceCard(detail.card.id);
-      }
       await deleteCachedExperienceCardVideo(detail.card.id).catch(
         () => undefined
       );
@@ -175,7 +175,11 @@ export default function ExperienceCardPage({
     setErrorText("");
 
     try {
-      if (action === "unpublish") {
+      if (action === "publish") {
+        await publishExperienceCard(detail.card.id);
+        showToast("经验卡已公开");
+        await reload();
+      } else if (action === "unpublish") {
         await unpublishExperienceCard(detail.card.id);
         showToast("经验卡已取消公开");
         await reload();
@@ -190,6 +194,25 @@ export default function ExperienceCardPage({
       setBusy(false);
       setPendingAction(null);
     }
+  }
+
+  function requireSavedEditor() {
+    if (!editorDirty) return true;
+    showToast("请先保存下面尚未完成的内容修改");
+    scrollToEditor();
+    return false;
+  }
+
+  function requestVisibility(nextPublished: boolean) {
+    if (!detail || !isOwner || !requireSavedEditor()) return;
+    const isPublished = detail.card.status === "published";
+    if (nextPublished === isPublished) return;
+    setPendingAction(nextPublished ? "publish" : "unpublish");
+  }
+
+  function generateVideo() {
+    if (!requireSavedEditor()) return;
+    videoPanelRef.current?.generate();
   }
 
   async function shareCard() {
@@ -264,11 +287,7 @@ export default function ExperienceCardPage({
     speciesId: detail.archive.species_id,
     systemName,
   });
-  const statusLabel = detail.isPubliclyAvailable
-    ? "已公开"
-    : detail.card.status === "published"
-      ? "公开已暂停"
-      : "私密草稿";
+  const isPublished = detail.card.status === "published";
 
   return (
     <main style={pageStyle}>
@@ -285,7 +304,18 @@ export default function ExperienceCardPage({
       <section style={heroStyle} aria-label="经验卡成品与概况">
         <div style={videoColumnStyle}>
           <div style={sectionEyebrowStyle}>MP4</div>
-          <ExperienceCardVideoPanel detail={detail} readOnly integrated />
+          {isOwner ? (
+            <ExperienceCardVideoPanel
+              key={detail.card.updated_at}
+              ref={videoPanelRef}
+              detail={detail}
+              previewOnly
+              integrated
+              hideGenerateAction
+            />
+          ) : (
+            <ExperienceCardVideoPanel detail={detail} readOnly integrated />
+          )}
         </div>
 
         <article style={infoColumnStyle}>
@@ -347,6 +377,18 @@ export default function ExperienceCardPage({
           <div style={overviewHeadingStyle}>经验卡概况</div>
           <div style={overviewGridStyle}>
             <OverviewItem
+              icon="project"
+              label="项目"
+              value={detail.archive.title || "查看项目"}
+              href={`/archive/${detail.archive.id}`}
+            />
+            <OverviewItem
+              icon="sprout"
+              label="系统名"
+              value={systemName || "未填写"}
+              href={systemNameHref}
+            />
+            <OverviewItem
               icon="duration"
               label="时长"
               value={durationDays ? `${durationDays}天` : "暂无"}
@@ -372,8 +414,8 @@ export default function ExperienceCardPage({
               : "记录日期暂缺"}
           </div>
 
-          <div style={sourceLinksStyle} aria-label="经验卡来源">
-            {!isOwner ? (
+          {!isOwner ? (
+            <div style={sourceLinksStyle} aria-label="经验卡作者">
               <Link
                 href={`/user/${detail.card.user_id}`}
                 style={sourceLinkStyle}
@@ -382,36 +424,17 @@ export default function ExperienceCardPage({
                 <span style={sourceValueStyle}>{authorName}</span>
                 <UiIcon name="arrow-right" size={14} />
               </Link>
-            ) : null}
-            <Link href={`/archive/${detail.archive.id}`} style={sourceLinkStyle}>
-              <span style={sourceLabelStyle}>项目</span>
-              <span style={sourceValueStyle}>
-                {detail.archive.title || "查看项目"}
-              </span>
-              <UiIcon name="arrow-right" size={14} />
-            </Link>
-            {systemNameHref ? (
-              <Link href={systemNameHref} style={sourceLinkStyle}>
-                <span style={sourceLabelStyle}>系统名</span>
-                <span style={sourceValueStyle}>{systemName}</span>
-                <UiIcon name="arrow-right" size={14} />
-              </Link>
-            ) : (
-              <span style={sourceMissingStyle}>
-                <span style={sourceLabelStyle}>系统名</span>
-                <span style={sourceValueStyle}>未填写</span>
-              </span>
-            )}
-          </div>
+            </div>
+          ) : null}
 
           <div style={infoActionRowStyle} aria-label="经验卡操作">
             {isOwner ? (
               <button
                 type="button"
-                onClick={scrollToEditor}
+                onClick={generateVideo}
                 style={primaryButtonStyle}
               >
-                <UiIcon name="edit" size={15} /> 编辑内容
+                生成竖屏MP4
               </button>
             ) : null}
             {detail.isPubliclyAvailable ? (
@@ -432,31 +455,41 @@ export default function ExperienceCardPage({
                 </button>
               </>
             ) : null}
-            {isOwner && detail.card.status === "published" ? (
+            {isOwner ? (
+              <div
+                style={visibilityToggleStyle}
+                role="group"
+                aria-label="经验卡公开方式"
+              >
+                <button
+                  type="button"
+                  aria-pressed={!isPublished}
+                  onClick={() => requestVisibility(false)}
+                  style={visibilityChoiceStyle(!isPublished)}
+                >
+                  默认
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={isPublished}
+                  onClick={() => requestVisibility(true)}
+                  style={visibilityChoiceStyle(isPublished)}
+                >
+                  公开
+                </button>
+              </div>
+            ) : null}
+            {isOwner ? (
               <button
                 type="button"
                 onClick={() => {
-                  if (editorDirty) {
-                    showToast("请先保存下面尚未完成的内容修改");
-                    scrollToEditor();
-                    return;
-                  }
-                  setPendingAction("unpublish");
+                  if (!requireSavedEditor()) return;
+                  setPendingAction("delete");
                 }}
-                style={publicStatusButtonStyle(detail.isPubliclyAvailable)}
-                aria-label={`${statusLabel}，点击取消公开`}
+                style={compactDeleteButtonStyle}
               >
-                <UiIcon
-                  name={detail.isPubliclyAvailable ? "check" : "warning"}
-                  size={15}
-                />
-                <span>{statusLabel}</span>
-                <span style={statusActionHintStyle}>取消公开</span>
+                <UiIcon name="trash" size={14} /> 删除经验卡
               </button>
-            ) : isOwner ? (
-              <span style={draftStatusStyle}>
-                <UiIcon name="lock" size={15} /> {statusLabel}
-              </span>
             ) : null}
           </div>
         </article>
@@ -507,13 +540,7 @@ export default function ExperienceCardPage({
           aria-label="经验卡内容编辑"
         >
           <div style={editorSectionHeadingStyle}>
-            <div>
-              <div style={sectionEyebrowStyle}>内容修改</div>
-              <h2 style={editorSectionTitleStyle}>记录、图片与封面</h2>
-              <p style={editorSectionHintStyle}>
-                与建立经验卡时相同：项目全部已有记录都可直接勾选。
-              </p>
-            </div>
+            <h2 style={editorSectionTitleStyle}>记录与图片</h2>
             <button
               type="button"
               aria-expanded={editorOpen}
@@ -540,9 +567,8 @@ export default function ExperienceCardPage({
 
           {editorOpen ? (
             <ExperienceCardEditWorkspace
-              key={`${detail.card.id}-${editorRevision}`}
+              key={`${detail.card.id}-${detail.card.status}-${detail.card.updated_at}-${editorRevision}`}
               cardId={detail.card.id}
-              inline
               onDirtyChange={setEditorDirty}
               onCardSaved={handleEditorSaved}
             />
@@ -550,25 +576,19 @@ export default function ExperienceCardPage({
         </section>
       ) : null}
 
-      {isOwner ? (
-        <section style={dangerZoneStyle} aria-label="删除经验卡">
-          <button
-            type="button"
-            onClick={() => {
-              if (editorDirty) {
-                showToast("请先保存下面尚未完成的内容修改");
-                scrollToEditor();
-                return;
-              }
-              setPendingAction("delete");
-            }}
-            style={deleteButtonStyle}
-          >
-            删除经验卡
-          </button>
-          <span style={dangerHintStyle}>原项目、记录和照片不会删除</span>
-        </section>
-      ) : null}
+      <ConfirmDialog
+        open={pendingAction === "publish"}
+        title="公开经验卡"
+        message={`公开后，所选${detail.records.length}条来源记录及其照片可通过经验卡链接查看；项目中其他记录保持原来的可见性。`}
+        confirmText={busy ? "处理中..." : "确认公开"}
+        cancelText="取消"
+        confirmDisabled={busy}
+        cancelDisabled={busy}
+        onClose={() => {
+          if (!busy) setPendingAction(null);
+        }}
+        onConfirm={() => runAction("publish")}
+      />
 
       <ConfirmDialog
         open={pendingAction === "unpublish"}
@@ -621,13 +641,15 @@ function OverviewItem({
   icon,
   label,
   value,
+  href,
 }: {
-  icon: "duration" | "record" | "image" | "calendar";
+  icon: "project" | "sprout" | "duration" | "record" | "image" | "calendar";
   label: string;
   value: string;
+  href?: string | null;
 }) {
-  return (
-    <div style={overviewItemStyle}>
+  const content = (
+    <>
       <span style={overviewIconStyle}>
         <UiIcon name={icon} size={16} />
       </span>
@@ -635,7 +657,16 @@ function OverviewItem({
         <span style={overviewLabelStyle}>{label}</span>
         <strong style={overviewValueStyle}>{value}</strong>
       </span>
-    </div>
+      {href ? <UiIcon name="arrow-right" size={13} /> : null}
+    </>
+  );
+
+  return href ? (
+    <Link href={href} style={overviewLinkItemStyle}>
+      {content}
+    </Link>
+  ) : (
+    <div style={overviewItemStyle}>{content}</div>
   );
 }
 
@@ -832,6 +863,12 @@ const overviewItemStyle: CSSProperties = {
   padding: "5px 2px",
 };
 
+const overviewLinkItemStyle: CSSProperties = {
+  ...overviewItemStyle,
+  color: "inherit",
+  textDecoration: "none",
+};
+
 const overviewIconStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -885,11 +922,6 @@ const sourceLinkStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.5,
   textDecoration: "none",
-};
-
-const sourceMissingStyle: CSSProperties = {
-  ...sourceLinkStyle,
-  color: "#7b8778",
 };
 
 const sourceLabelStyle: CSSProperties = {
@@ -963,40 +995,38 @@ const secondaryButtonStyle: CSSProperties = {
   color: "#50604d",
 };
 
-function publicStatusButtonStyle(publiclyAvailable: boolean): CSSProperties {
+const visibilityToggleStyle: CSSProperties = {
+  minHeight: 40,
+  display: "inline-flex",
+  alignItems: "stretch",
+  padding: 2,
+  border: "1px solid #d3ded0",
+  borderRadius: 999,
+  background: "#f5f7f3",
+};
+
+function visibilityChoiceStyle(active: boolean): CSSProperties {
   return {
-    ...baseButtonStyle,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-    border: publiclyAvailable
-      ? "1px solid #b9d1b4"
-      : "1px solid #e2d4ab",
-    background: publiclyAvailable ? "#edf6e9" : "#fff8e8",
-    color: publiclyAvailable ? "#42693d" : "#756436",
+    minWidth: 54,
+    padding: "6px 11px",
+    border: 0,
+    borderRadius: 999,
+    background: active ? "#64885e" : "transparent",
+    color: active ? "#fff" : "#677363",
+    fontSize: 12,
+    fontWeight: 800,
+    cursor: "pointer",
   };
 }
 
-const statusActionHintStyle: CSSProperties = {
-  paddingLeft: 6,
-  borderLeft: "1px solid currentColor",
-  opacity: 0.72,
-  fontSize: 11,
-  fontWeight: 700,
-};
-
-const draftStatusStyle: CSSProperties = {
-  minHeight: 40,
+const compactDeleteButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  padding: "8px 13px",
-  border: "1px solid #dfe5dc",
-  borderRadius: 999,
-  background: "#f2f4f0",
-  color: "#6e796b",
-  fontSize: 12,
-  fontWeight: 800,
+  border: "1px solid #ead3d0",
+  background: "#fff",
+  color: "#a4514d",
 };
 
 const editorSectionStyle: CSSProperties = {
@@ -1023,13 +1053,6 @@ const editorSectionTitleStyle: CSSProperties = {
   lineHeight: 1.35,
 };
 
-const editorSectionHintStyle: CSSProperties = {
-  margin: "5px 0 0",
-  color: "#788575",
-  fontSize: 12,
-  lineHeight: 1.55,
-};
-
 const editorToggleButtonStyle: CSSProperties = {
   minHeight: 36,
   display: "inline-flex",
@@ -1043,32 +1066,6 @@ const editorToggleButtonStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
   cursor: "pointer",
-};
-
-const dangerZoneStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  flexWrap: "wrap",
-  marginTop: 22,
-  paddingTop: 16,
-  borderTop: "1px solid #ecefea",
-};
-
-const deleteButtonStyle: CSSProperties = {
-  minHeight: 36,
-  padding: "7px 0",
-  border: 0,
-  background: "transparent",
-  color: "#a95651",
-  fontSize: 13,
-  cursor: "pointer",
-};
-
-const dangerHintStyle: CSSProperties = {
-  color: "#929b90",
-  fontSize: 12,
 };
 
 const secondaryLinkStyle: CSSProperties = {

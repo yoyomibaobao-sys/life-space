@@ -150,15 +150,8 @@ export default function MyExperienceCardsPage() {
             <UiIcon name="arrow-left" size={15} /> 我的项目
           </Link>
           <h1 style={titleStyle}>我的经验卡</h1>
-          <p style={mutedStyle}>
-            在同一处查看、编辑和管理经验时间线。
-          </p>
         </div>
       </header>
-
-      <section style={guideStyle}>
-        新建经验卡请先进入一个云端项目，选择“生成经验卡”。每张卡至少选择3条记录，之后可以继续补充，系统按原始日期排列。
-      </section>
 
       <nav style={tabRowStyle} aria-label="经验卡目录">
         <button type="button" aria-pressed={activeTab === "mine"} style={tabButtonStyle(activeTab === "mine")} onClick={() => setActiveTab("mine")}>
@@ -301,17 +294,6 @@ const mutedStyle: CSSProperties = {
   color: "#738071",
   fontSize: 14,
   lineHeight: 1.65,
-};
-
-const guideStyle: CSSProperties = {
-  padding: 14,
-  marginBottom: 14,
-  borderRadius: 14,
-  background: "#f3f7f0",
-  border: "1px solid #dfe8db",
-  color: "#586d54",
-  fontSize: 14,
-  lineHeight: 1.7,
 };
 
 const listStyle: CSSProperties = {
