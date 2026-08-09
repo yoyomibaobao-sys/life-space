@@ -14,7 +14,7 @@
   text-decoration: none;
   background: #fff;
   border: 1px solid #e1e8de;
-  border-radius: 14px;
+  border-radius: 0 14px 14px 0;
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
