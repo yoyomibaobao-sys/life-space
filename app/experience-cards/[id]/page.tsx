@@ -31,10 +31,8 @@ import {
   unpublishExperienceCard,
 } from "@/lib/experience-cards";
 import { deleteCachedExperienceCardVideo } from "@/lib/experience-card-video-cache";
-import type {
-  ExperienceCardDetail,
-  ExperienceCardMedia,
-} from "@/lib/experience-card-types";
+import type { ExperienceCardDetail } from "@/lib/experience-card-types";
+import { formatStorageBytes } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
 
 type PendingAction = "publish" | "unpublish" | "delete" | null;
@@ -44,6 +42,8 @@ const initialVideoStatus: ExperienceCardVideoPanelStatus = {
   generating: false,
   progress: 0,
   loading: true,
+  selectedImageCount: 0,
+  sizeBytes: null,
 };
 
 export default function ExperienceCardPage({
@@ -291,12 +291,20 @@ export default function ExperienceCardPage({
     detail.records[0]?.record_time,
     detail.records[detail.records.length - 1]?.record_time
   );
-  const imageCount = detail.records.reduce(
-    (count, record) =>
-      count + record.media.filter(isExperienceCardImage).length,
-    0
-  );
   const createdDate = formatExperienceCardDate(detail.card.created_at);
+  const recordPeriod =
+    startDate && endDate
+      ? startDate === endDate
+        ? startDate
+        : `${startDate}—${endDate}`
+      : "日期暂缺";
+  const recordSummary = [
+    recordPeriod,
+    durationDays ? `${durationDays}天` : null,
+    `${detail.records.length}条记录`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const authorName = detail.author?.username || "用户";
   const systemName =
     detail.archive.system_name?.trim() ||
@@ -411,29 +419,16 @@ export default function ExperienceCardPage({
               href={systemNameHref}
             />
             <OverviewItem
-              icon="duration"
-              label="时长"
-              value={durationDays ? `${durationDays}天` : "暂无"}
-            />
-            <OverviewItem
               icon="record"
-              label="记录数"
-              value={`${detail.records.length}条`}
-            />
-            <OverviewItem icon="image" label="图片数" value={`${imageCount}张`} />
-            <OverviewItem
-              icon="calendar"
-              label="创建时间"
-              value={createdDate || "暂无"}
+              label="记录过程"
+              value={recordSummary}
+              wide
             />
           </div>
 
-          <div style={periodStyle}>
-            {startDate && endDate
-              ? startDate === endDate
-                ? startDate
-                : `${startDate}—${endDate}`
-              : "记录日期暂缺"}
+          <div style={createdMetaStyle}>
+            <UiIcon name="calendar" size={14} />
+            创建于 {createdDate || "时间暂缺"}
           </div>
 
           {!isOwner ? (
@@ -449,121 +444,154 @@ export default function ExperienceCardPage({
             </div>
           ) : null}
 
-          <div style={infoActionRowStyle} aria-label="经验卡操作">
-            {isOwner ? (
-              <button
-                type="button"
-                onClick={generateVideo}
-                disabled={videoStatus.loading || videoStatus.generating}
-                style={primaryButtonStyle(
-                  videoStatus.loading || videoStatus.generating
-                )}
-              >
-                {videoStatus.generating
-                  ? "正在生成竖屏MP4"
-                  : videoStatus.hasVideo
-                    ? "重新生成竖屏MP4"
-                    : "生成竖屏MP4"}
-              </button>
-            ) : null}
-            {detail.isPubliclyAvailable ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void shareCard()}
-                  style={secondaryButtonStyle}
-                >
-                  <UiIcon name="share" size={15} /> 分享
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void copyCardLink()}
-                  style={secondaryButtonStyle}
-                >
-                  复制链接
-                </button>
-              </>
-            ) : null}
-            {isOwner ? (
-              <div
-                style={visibilityToggleStyle}
-                role="group"
-                aria-label="经验卡公开方式"
-              >
-                <button
-                  type="button"
-                  aria-pressed={!isPublished}
-                  onClick={() => requestVisibility(false)}
-                  style={visibilityChoiceStyle(!isPublished)}
-                >
-                  私密
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={isPublished}
-                  onClick={() => requestVisibility(true)}
-                  style={visibilityChoiceStyle(isPublished)}
-                >
-                  公开
-                </button>
-              </div>
-            ) : null}
-            {isOwner ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!requireSavedEditor()) return;
-                  setPendingAction("delete");
-                }}
-                style={compactDeleteButtonStyle}
-              >
-                <UiIcon name="trash" size={14} /> 删除经验卡
-              </button>
-            ) : null}
-          </div>
+          {isOwner ? (
+            <div style={ownerActionStackStyle} aria-label="经验卡操作">
+              <section style={actionGroupStyle} aria-label="竖屏MP4操作">
+                <div style={actionGroupHeadingStyle}>
+                  <strong>竖屏MP4</strong>
+                  {!videoStatus.loading ? (
+                    <span style={actionGroupMetaStyle}>
+                      {videoStatus.selectedImageCount}张图片
+                      {videoStatus.hasVideo && videoStatus.sizeBytes
+                        ? ` · ${formatStorageBytes(videoStatus.sizeBytes)}`
+                        : ""}
+                    </span>
+                  ) : null}
+                </div>
+                <div style={actionButtonRowStyle}>
+                  <button
+                    type="button"
+                    onClick={generateVideo}
+                    disabled={videoStatus.loading || videoStatus.generating}
+                    style={primaryButtonStyle(
+                      videoStatus.loading || videoStatus.generating
+                    )}
+                  >
+                    {videoStatus.generating
+                      ? "正在生成竖屏MP4"
+                      : videoStatus.hasVideo
+                        ? "重新生成竖屏MP4"
+                        : "生成竖屏MP4"}
+                  </button>
+                  {videoStatus.hasVideo && !videoStatus.generating ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={shareVideo}
+                        style={shareVideoButtonStyle}
+                      >
+                        <UiIcon name="share" size={15} /> 分享视频
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveVideo}
+                        style={secondaryButtonStyle}
+                      >
+                        保存MP4
+                      </button>
+                    </>
+                  ) : null}
+                </div>
 
-          {isOwner && (videoStatus.generating || videoStatus.hasVideo) ? (
-            <div style={videoOutputControlsStyle} aria-label="竖屏MP4文件操作">
-              {videoStatus.generating ? (
-                <div style={videoProgressWrapStyle}>
-                  <div style={videoProgressTextStyle}>
-                    <span>正在本机生成视频</span>
-                    <strong>{Math.round(videoStatus.progress * 100)}%</strong>
+                {videoStatus.generating ? (
+                  <div style={videoProgressWrapStyle}>
+                    <div style={videoProgressTextStyle}>
+                      <span>正在本机生成视频</span>
+                      <strong>{Math.round(videoStatus.progress * 100)}%</strong>
+                    </div>
+                    <div style={videoProgressTrackStyle}>
+                      <div
+                        style={{
+                          ...videoProgressBarStyle,
+                          width: `${Math.max(2, videoStatus.progress * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => videoPanelRef.current?.stop()}
+                      style={stopVideoButtonStyle}
+                    >
+                      停止生成
+                    </button>
                   </div>
-                  <div style={videoProgressTrackStyle}>
-                    <div
-                      style={{
-                        ...videoProgressBarStyle,
-                        width: `${Math.max(2, videoStatus.progress * 100)}%`,
-                      }}
-                    />
+                ) : null}
+              </section>
+
+              <section style={actionGroupStyle} aria-label="经验卡管理">
+                <div style={actionGroupHeadingStyle}>
+                  <strong>经验卡管理</strong>
+                </div>
+                <div style={actionButtonRowStyle}>
+                  {detail.isPubliclyAvailable ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void shareCard()}
+                        style={secondaryButtonStyle}
+                      >
+                        <UiIcon name="share" size={15} /> 分享经验卡
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void copyCardLink()}
+                        style={secondaryButtonStyle}
+                      >
+                        复制链接
+                      </button>
+                    </>
+                  ) : null}
+                  <div
+                    style={visibilityToggleStyle}
+                    role="group"
+                    aria-label="经验卡公开方式"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={!isPublished}
+                      onClick={() => requestVisibility(false)}
+                      style={visibilityChoiceStyle(!isPublished)}
+                    >
+                      私密
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={isPublished}
+                      onClick={() => requestVisibility(true)}
+                      style={visibilityChoiceStyle(isPublished)}
+                    >
+                      公开
+                    </button>
                   </div>
                   <button
                     type="button"
-                    onClick={() => videoPanelRef.current?.stop()}
-                    style={stopVideoButtonStyle}
+                    onClick={() => {
+                      if (!requireSavedEditor()) return;
+                      setPendingAction("delete");
+                    }}
+                    style={compactDeleteButtonStyle}
                   >
-                    停止生成
+                    <UiIcon name="trash" size={14} /> 删除经验卡
                   </button>
                 </div>
-              ) : (
-                <div style={videoFileActionsStyle}>
-                  <button
-                    type="button"
-                    onClick={shareVideo}
-                    style={shareVideoButtonStyle}
-                  >
-                    <UiIcon name="share" size={15} /> 直接分享视频
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveVideo}
-                    style={secondaryButtonStyle}
-                  >
-                    保存MP4
-                  </button>
-                </div>
-              )}
+              </section>
+            </div>
+          ) : detail.isPubliclyAvailable ? (
+            <div style={readerActionRowStyle} aria-label="经验卡分享">
+              <button
+                type="button"
+                onClick={() => void shareCard()}
+                style={secondaryButtonStyle}
+              >
+                <UiIcon name="share" size={15} /> 分享经验卡
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyCardLink()}
+                style={secondaryButtonStyle}
+              >
+                复制链接
+              </button>
             </div>
           ) : null}
         </article>
@@ -613,8 +641,7 @@ export default function ExperienceCardPage({
           style={editorSectionStyle}
           aria-label="经验卡内容编辑"
         >
-          <div style={editorSectionHeadingStyle}>
-            <h2 style={editorSectionTitleStyle}>记录与图片</h2>
+          <h2 style={editorSectionTitleStyle}>
             <button
               type="button"
               aria-expanded={editorOpen}
@@ -629,15 +656,15 @@ export default function ExperienceCardPage({
                 setEditorOpen((value) => !value);
                 if (editorOpen) setEditorDirty(false);
               }}
-              style={editorToggleButtonStyle}
+              style={editorHeadingButtonStyle}
             >
-              {editorOpen ? "收起编辑" : "打开编辑"}
+              {editorOpen ? "收起编辑" : "编辑经验卡"}
               <UiIcon
                 name={editorOpen ? "chevron-up" : "chevron-down"}
                 size={14}
               />
             </button>
-          </div>
+          </h2>
 
           {editorOpen ? (
             <ExperienceCardEditWorkspace
@@ -703,24 +730,18 @@ function getCardShareUrl() {
   return url.toString();
 }
 
-function isExperienceCardImage(media: ExperienceCardMedia) {
-  const mimeType = String(media.mime_type || "").toLowerCase();
-  const type = String(media.type || "").toLowerCase();
-  if (mimeType) return mimeType.startsWith("image/");
-  if (type) return type === "image" || type === "photo";
-  return true;
-}
-
 function OverviewItem({
   icon,
   label,
   value,
   href,
+  wide = false,
 }: {
-  icon: "project" | "sprout" | "duration" | "record" | "image" | "calendar";
+  icon: "project" | "sprout" | "record";
   label: string;
   value: string;
   href?: string | null;
+  wide?: boolean;
 }) {
   const content = (
     <>
@@ -734,12 +755,14 @@ function OverviewItem({
     </>
   );
 
+  const itemStyle = wide ? overviewWideItemStyle : overviewItemStyle;
+
   return href ? (
-    <Link href={href} style={overviewLinkItemStyle}>
+    <Link href={href} style={{ ...itemStyle, ...overviewLinkItemStyle }}>
       {content}
     </Link>
   ) : (
-    <div style={overviewItemStyle}>{content}</div>
+    <div style={itemStyle}>{content}</div>
   );
 }
 
@@ -937,9 +960,13 @@ const overviewItemStyle: CSSProperties = {
 };
 
 const overviewLinkItemStyle: CSSProperties = {
-  ...overviewItemStyle,
   color: "inherit",
   textDecoration: "none",
+};
+
+const overviewWideItemStyle: CSSProperties = {
+  ...overviewItemStyle,
+  gridColumn: "1 / -1",
 };
 
 const overviewIconStyle: CSSProperties = {
@@ -970,7 +997,10 @@ const overviewValueStyle: CSSProperties = {
   overflowWrap: "anywhere",
 };
 
-const periodStyle: CSSProperties = {
+const createdMetaStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
   marginTop: 9,
   color: "#849080",
   fontSize: 12,
@@ -1011,11 +1041,43 @@ const sourceValueStyle: CSSProperties = {
   fontWeight: 750,
 };
 
-const infoActionRowStyle: CSSProperties = {
+const ownerActionStackStyle: CSSProperties = {
+  display: "grid",
+  gap: 14,
+  marginTop: 15,
+  paddingTop: 13,
+  borderTop: "1px solid #edf1eb",
+};
+
+const actionGroupStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const actionGroupHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  flexWrap: "wrap",
+  gap: "4px 8px",
+  color: "#687565",
+  fontSize: 12,
+};
+
+const actionGroupMetaStyle: CSSProperties = {
+  color: "#8a9587",
+  fontSize: 11,
+  fontWeight: 500,
+};
+
+const actionButtonRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   flexWrap: "wrap",
   gap: 7,
+};
+
+const readerActionRowStyle: CSSProperties = {
+  ...actionButtonRowStyle,
   marginTop: 15,
   paddingTop: 13,
   borderTop: "1px solid #edf1eb",
@@ -1106,17 +1168,6 @@ const compactDeleteButtonStyle: CSSProperties = {
   color: "#a4514d",
 };
 
-const videoOutputControlsStyle: CSSProperties = {
-  marginTop: 12,
-};
-
-const videoFileActionsStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  flexWrap: "wrap",
-  gap: 7,
-};
-
 const shareVideoButtonStyle: CSSProperties = {
   ...baseButtonStyle,
   display: "inline-flex",
@@ -1131,7 +1182,7 @@ const videoProgressWrapStyle: CSSProperties = {
   display: "grid",
   gap: 8,
   maxWidth: 430,
-  padding: 11,
+  padding: 10,
   border: "1px solid #dce7d8",
   borderRadius: 13,
   background: "#f8fbf6",
@@ -1179,32 +1230,20 @@ const editorSectionStyle: CSSProperties = {
   background: "#f8fbf6",
 };
 
-const editorSectionHeadingStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 14,
-  flexWrap: "wrap",
+const editorSectionTitleStyle: CSSProperties = {
+  margin: 0,
 };
 
-const editorSectionTitleStyle: CSSProperties = {
-  margin: "3px 0 0",
+const editorHeadingButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  padding: "3px 0",
+  border: 0,
+  background: "transparent",
   color: "#354432",
   fontSize: 18,
   lineHeight: 1.35,
-};
-
-const editorToggleButtonStyle: CSSProperties = {
-  minHeight: 36,
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  padding: "6px 11px",
-  border: "1px solid #789673",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#456240",
-  fontSize: 12,
   fontWeight: 800,
   cursor: "pointer",
 };

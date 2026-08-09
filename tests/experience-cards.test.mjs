@@ -188,6 +188,7 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editor, /if \(mode === "publish"\)/);
   assert.doesNotMatch(editor, /cardId && wasPublished/);
   assert.match(editor, /embedded = false/);
+  assert.match(editor, /compact \? compactEditorSectionStyle : editorSectionStyle/);
   assert.match(editor, /标题、记录与图片/);
   assert.match(editor, /recordThumbnailStyle/);
   assert.doesNotMatch(editor, /<ArchiveAddRecordSection/);
@@ -197,7 +198,7 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(editor, /newlyAddedRecords\.map\(\(record\) => record\.id\)/);
   assert.match(editor, /当前共有\$\{nextRecords\.length\}条可供选择/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
-  assert.match(detail, />\s*分享\s*</);
+  assert.match(detail, /分享经验卡/);
   assert.match(detail, /设为私密/);
   assert.match(detail, /来源记录已经变化/);
   assert.doesNotMatch(detail, /type OwnerMode/);
@@ -211,9 +212,14 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(detail, /重新生成竖屏MP4/);
   assert.match(detail, /externalControls/);
   assert.match(detail, /onStatusChange=\{setVideoStatus\}/);
-  assert.match(detail, /直接分享视频/);
+  assert.match(detail, /分享视频/);
+  assert.doesNotMatch(detail, /直接分享视频/);
   assert.match(detail, /保存MP4/);
   assert.match(detail, /videoStatus\.progress/);
+  assert.match(detail, /videoStatus\.selectedImageCount/);
+  assert.match(detail, /formatStorageBytes\(videoStatus\.sizeBytes\)/);
+  assert.match(detail, /aria-label="竖屏MP4操作"/);
+  assert.match(detail, /aria-label="经验卡管理"/);
   assert.match(detail, /aria-label="经验卡公开方式"/);
   assert.match(detail, />\s*私密\s*</);
   assert.doesNotMatch(detail, />\s*默认\s*</);
@@ -232,7 +238,7 @@ test("experience-card creation and editing share one inline full-record picker",
       detail.indexOf("<ExperienceCardInteractions")
   );
   assert.ok(
-    detail.indexOf("<div style={infoActionRowStyle}") <
+    detail.indexOf("<div style={ownerActionStackStyle}") <
       detail.indexOf("<ExperienceCardInteractions")
   );
   assert.ok(
@@ -250,19 +256,27 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(detail, /detail\.card\.id\}\/edit/);
   assert.doesNotMatch(detail, /setEditing/);
   assert.match(detail, /经验卡概况/);
-  assert.ok(detail.indexOf('label="项目"') < detail.indexOf('label="时长"'));
-  assert.ok(detail.indexOf('label="系统名"') < detail.indexOf('label="时长"'));
-  assert.match(detail, /label="时长"/);
-  assert.match(detail, /label="记录数"/);
-  assert.match(detail, /label="图片数"/);
-  assert.match(detail, /label="创建时间"/);
+  assert.ok(detail.indexOf('label="项目"') < detail.indexOf('label="记录过程"'));
+  assert.ok(detail.indexOf('label="系统名"') < detail.indexOf('label="记录过程"'));
+  assert.match(detail, /label="记录过程"/);
+  assert.match(detail, /recordPeriod/);
+  assert.match(detail, /durationDays \? `\$\{durationDays\}天`/);
+  assert.match(detail, /`\$\{detail\.records\.length\}条记录`/);
+  assert.match(detail, /创建于 \{createdDate/);
+  assert.doesNotMatch(detail, /label="时长"/);
+  assert.doesNotMatch(detail, /label="记录数"/);
+  assert.doesNotMatch(detail, /label="图片数"/);
+  assert.doesNotMatch(detail, /label="创建时间"/);
   assert.match(detail, /aria-label=\{`修改经验卡名称/);
   assert.match(detail, /aria-label="经验卡名称"/);
   assert.match(detail, /saveExperienceCard\(/);
   assert.match(detail, /publishExperienceCard\(detail\.card\.id\)/);
   assert.match(detail, /deleteCachedExperienceCardVideo\(detail\.card\.id\)/);
   assert.doesNotMatch(detail, /编辑内容/);
-  assert.match(detail, /打开编辑/);
+  assert.match(detail, /editorOpen \? "收起编辑" : "编辑经验卡"/);
+  assert.doesNotMatch(detail, /打开编辑/);
+  assert.doesNotMatch(detail, /记录与图片/);
+  assert.doesNotMatch(detail, /editorSectionHeadingStyle/);
   assert.match(detail, /detail\.archive\.system_name/);
   assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
   assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
@@ -420,6 +434,8 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(panel, /share: \(\) =>/);
   assert.match(panel, /save: \(\) => downloadVideo\(\)/);
   assert.match(panel, /onStatusChange\?\.\(\{/);
+  assert.match(panel, /selectedImageCount,/);
+  assert.match(panel, /sizeBytes: videoBlob\?\.size \|\| null/);
   assert.match(panel, /externalControls/);
   assert.match(panel, /hideGenerateAction/);
   assert.match(panel, /生成竖屏MP4/);
@@ -427,6 +443,9 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(panel, /视频选图保存在当前设备/);
   assert.match(panel, /自动作为视频片头/);
   assert.match(panel, /selectedImageCount.*张图片/s);
+  assert.match(panel, /!previewOnly \? \(/);
+  assert.doesNotMatch(panel, /9:16 竖屏 · 静音 H\.264 MP4/);
+  assert.doesNotMatch(panel, /直接分享视频/);
   assert.match(panel, /<video[\s\S]*?autoPlay[\s\S]*?muted[\s\S]*?playsInline/);
   assert.match(panel, /onEnded=\{\(event\) => restartGeneratedVideo\(event\.currentTarget\)\}/);
   assert.match(panel, /video\.currentTime = 0/);
@@ -504,7 +523,7 @@ test("experience card MP4 is shown first, selects individual images, and preserv
   assert.doesNotMatch(detail, /coverWrapStyle/);
   assert.doesNotMatch(detail, /metaGridStyle/);
   assert.match(detail, /overviewGridStyle/);
-  assert.match(detail, /imageCount/);
+  assert.doesNotMatch(detail, /imageCount/);
 });
 
 test("guidance favorites, plan toggles, and discovery cards use the simplified hierarchy", async () => {

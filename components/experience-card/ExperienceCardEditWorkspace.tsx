@@ -50,7 +50,5 @@ export default function ExperienceCardEditWorkspace({
 }
 
 const workspaceStyle: CSSProperties = {
-  marginTop: 12,
-  paddingTop: 12,
-  borderTop: "1px solid #e4eae1",
+  marginTop: 10,
 };

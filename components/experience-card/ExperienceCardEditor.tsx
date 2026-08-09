@@ -910,7 +910,7 @@ export default function ExperienceCardEditor({
           </div>
         ) : null}
 
-        <div style={editorSectionStyle}>
+        <div style={compact ? compactEditorSectionStyle : editorSectionStyle}>
           <div style={sectionHeadingRowStyle}>
             <h3 style={compactSectionTitleStyle}>全部记录</h3>
             <div style={recordToolbarStyle}>
@@ -1145,6 +1145,10 @@ const editorSectionStyle: CSSProperties = {
   marginTop: 22,
   paddingTop: 20,
   borderTop: "1px solid #edf1eb",
+};
+
+const compactEditorSectionStyle: CSSProperties = {
+  marginTop: 8,
 };
 
 const messageCardStyle: CSSProperties = {

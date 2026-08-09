@@ -56,6 +56,8 @@ export type ExperienceCardVideoPanelStatus = {
   generating: boolean;
   progress: number;
   loading: boolean;
+  selectedImageCount: number;
+  sizeBytes: number | null;
 };
 
 function isImageMedia(media: ExperienceCardMedia) {
@@ -507,6 +509,8 @@ const ExperienceCardVideoPanel = forwardRef<
       generating,
       progress,
       loading: imageLoading || cacheLoading,
+      selectedImageCount,
+      sizeBytes: videoBlob?.size || null,
     });
   }, [
     cacheLoading,
@@ -514,6 +518,7 @@ const ExperienceCardVideoPanel = forwardRef<
     imageLoading,
     onStatusChange,
     progress,
+    selectedImageCount,
     videoBlob,
     videoUrl,
   ]);
@@ -826,11 +831,14 @@ const ExperienceCardVideoPanel = forwardRef<
             ) : null}
           </div>
 
-          {!readOnly ? (
+          {!readOnly &&
+          (!previewOnly || imageLoading || cacheLoading || errorText) ? (
             <div style={controlStyle}>
-              <div style={summaryStyle}>
-                {selectedImageCount} 张图片 · 9:16 竖屏 · 静音 H.264 MP4
-              </div>
+              {!previewOnly ? (
+                <div style={summaryStyle}>
+                  {selectedImageCount} 张图片
+                </div>
+              ) : null}
 
               {imageLoading ? (
                 <div style={noticeStyle}>正在准备记录照片...</div>
@@ -885,7 +893,7 @@ const ExperienceCardVideoPanel = forwardRef<
                       onClick={() => void shareVideo()}
                       style={shareButtonStyle}
                     >
-                      直接分享视频
+                      分享视频
                     </button>
                     <button
                       type="button"
