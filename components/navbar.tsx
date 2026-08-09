@@ -371,16 +371,9 @@ export default function Navbar() {
                 <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname)}
               </Link>
             ) : !user && shouldShowMobileLoginAction(pathname) ? (
-              <>
-                {pathname === "/" ? (
-                  <Link href="/register" style={mobileRegisterActionStyle}>
-                    注册
-                  </Link>
-                ) : null}
-                <Link href="/login" style={mobileLoginActionStyle}>
-                  登录
-                </Link>
-              </>
+              <Link href="/login" style={mobileLoginActionStyle}>
+                登录
+              </Link>
             ) : null}
           </div>
         </nav>
@@ -402,12 +395,6 @@ export default function Navbar() {
         </Link>
 
         <div style={getNavItemsWrapStyle(isCompact)}>
-          {!user && pathname === "/" ? (
-            <NavItem href="/register" active={isActive("/register")}>
-              注册
-            </NavItem>
-          ) : null}
-
           <NavItem
             href="/discover"
             active={isActive("/discover") && desktopDiscoverTab === "feed"}
@@ -927,13 +914,6 @@ const mobileLoginActionStyle: CSSProperties = {
   padding: "0 12px",
   whiteSpace: "nowrap",
   flexShrink: 0,
-};
-
-const mobileRegisterActionStyle: CSSProperties = {
-  ...mobileLoginActionStyle,
-  border: "1px solid #4f7b45",
-  background: "#4f7b45",
-  color: "#fff",
 };
 
 const mobileBottomNavStyle: CSSProperties = {

@@ -35,17 +35,15 @@ test("account navigation keeps membership contextual and export under data manag
   assert.doesNotMatch(profile, /云会员与云空间/);
   assert.doesNotMatch(navbar, /membershipEntryStyle/);
   assert.doesNotMatch(navbar, />\s*云会员\s*<\/Link>/);
-  assert.ok(
-    navbar.indexOf('<NavItem href="/register"') <
-      navbar.indexOf('href="/discover"')
-  );
-  assert.match(navbar, /!user && pathname === "\/"/);
+  assert.doesNotMatch(navbar, /<NavItem href="\/register"/);
+  assert.doesNotMatch(navbar, /mobileRegisterActionStyle/);
   assert.match(navbar, /<Link href="\/login" style=\{loginLinkStyle\}>/);
   assert.match(navbar, /pathname !== "\/"/);
   assert.match(membership, /个人使用方案/);
   assert.match(membership, /1GB 个人云端存储/);
   assert.doesNotMatch(membership, /查看会员权益/);
   assert.doesNotMatch(login, /href="\/membership"/);
+  assert.doesNotMatch(login, /登录后进入我的项目/);
   assert.match(home, /href="\/membership"/);
   assert.match(home, /会员类别与权限/);
   assert.match(home, /本地免费使用，云会员可云端保存与公开互动/);
@@ -54,10 +52,7 @@ test("account navigation keeps membership contextual and export under data manag
     /href="\/register"[\s\S]*?注册[\s\S]*?href="\/discover"[\s\S]*?浏览发现/
   );
   assert.match(home, /membershipLinkArrowStyle/);
-  assert.match(
-    navbar,
-    /pathname === "\/"[\s\S]*?href="\/register"[\s\S]*?注册[\s\S]*?href="\/login"[\s\S]*?登录/
-  );
+  assert.match(navbar, /href="\/login"[\s\S]*?登录/);
 });
 
 test("signed-out market does not repeat login and registration actions inside the page", async () => {
