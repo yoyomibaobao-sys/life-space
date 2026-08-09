@@ -1,16 +1,16 @@
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 9px;
+  gap: 8px;
 }
 
 .card {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 10px;
   min-width: 0;
-  min-height: 142px;
-  padding: 10px;
+  min-height: 124px;
+  padding: 8px;
   box-sizing: border-box;
   overflow: hidden;
   color: #263525;
@@ -33,11 +33,11 @@
 
 .media {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 108px;
+  height: 108px;
   align-self: start;
   overflow: hidden;
-  border-radius: 11px;
+  border-radius: 10px;
   background: #eef3ea;
 }
 
@@ -63,8 +63,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 120px;
-  padding: 1px 0;
+  min-height: 108px;
 }
 
 .topRow,
@@ -95,7 +94,7 @@
 .title {
   display: -webkit-box;
   overflow: hidden;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: #253524;
   font-size: 15px;
   font-weight: 750;
@@ -106,7 +105,7 @@
 }
 
 .detail {
-  margin-top: 3px;
+  margin-top: 2px;
   overflow: hidden;
   color: #647461;
   font-size: 12px;
@@ -118,19 +117,19 @@
 .summary {
   display: -webkit-box;
   overflow: hidden;
-  margin-top: 5px;
+  margin-top: 4px;
   color: #455443;
   font-size: 12px;
   line-height: 1.45;
   word-break: break-word;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
 }
 
 .footer {
   align-items: flex-end;
   margin-top: auto;
-  padding-top: 7px;
+  padding-top: 5px;
   color: #7b8878;
   font-size: 11px;
   line-height: 1.35;
@@ -153,41 +152,39 @@
 @media (min-width: 760px) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 11px;
+    gap: 10px;
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 759px) {
   .card {
-    grid-template-columns: 94px minmax(0, 1fr);
-    gap: 10px;
-    min-height: 110px;
-    padding: 8px;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 9px;
+    min-height: 106px;
+    padding: 7px;
   }
 
   .media {
-    width: 94px;
-    height: 94px;
+    width: 92px;
+    height: 92px;
   }
 
   .content {
-    min-height: 94px;
-    padding: 0;
+    min-height: 92px;
   }
 
   .title {
-    margin-top: 5px;
+    margin-top: 4px;
     font-size: 14px;
     -webkit-line-clamp: 2;
   }
 
   .summary {
-    margin-top: 4px;
-    -webkit-line-clamp: 4;
+    margin-top: 3px;
   }
 
   .footer {
-    padding-top: 5px;
+    padding-top: 4px;
   }
 }
 

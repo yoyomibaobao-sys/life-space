@@ -449,8 +449,8 @@ test("experience card lists use a shared cover with source and archive fallbacks
   assert.match(listCardStyles, /\.card > a:first-child \{[\s\S]*?position: relative;[\s\S]*?width: 104px;[\s\S]*?height: 104px;[\s\S]*?border-radius: 11px;/);
   assert.match(listCardStyles, /\.cover,[\s\S]*?position: absolute;[\s\S]*?inset: 0;[\s\S]*?height: 100%;/);
   assert.doesNotMatch(listCardStyles, /^\s*height: 124px;/m);
-  assert.match(searchCardStyles, /\.card \{[\s\S]*?padding: 10px;[\s\S]*?border-radius: 14px;/);
-  assert.match(searchCardStyles, /\.media \{[\s\S]*?position: relative;[\s\S]*?width: 120px;[\s\S]*?height: 120px;[\s\S]*?border-radius: 11px;/);
+  assert.match(searchCardStyles, /\.card \{[\s\S]*?padding: 8px;[\s\S]*?border-radius: 14px;/);
+  assert.match(searchCardStyles, /\.media \{[\s\S]*?position: relative;[\s\S]*?width: 108px;[\s\S]*?height: 108px;[\s\S]*?border-radius: 10px;/);
   assert.doesNotMatch(searchCardStyles, /min-height: 100%/);
   assert.match(loader, /row\.cover_media_id/);
   assert.match(loader, /mediaByRecord\.get\(recordId\)\?\.\[0\]/);
