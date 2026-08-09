@@ -14,6 +14,8 @@ const preserveVisibilityMigrationPath =
   "supabase/migrations/20260809120000_preserve_experience_card_visibility_on_save.sql";
 const descriptionMigrationPath =
   "supabase/migrations/20260809050320_add_experience_card_description.sql";
+const descriptionHardeningMigrationPath =
+  "supabase/migrations/20260809053213_harden_experience_card_description_update.sql";
 
 test("experience cards reference at least three source records without a product cap or copied content", async () => {
   const [migration, unlimitedSourceMigration] = await Promise.all([
@@ -148,8 +150,9 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
 });
 
 test("experience-card detail descriptions are bounded and owner-edited without replacing card content", async () => {
-  const [migration, detail, library, types, dynamicTest] = await Promise.all([
+  const [migration, hardeningMigration, detail, library, types, dynamicTest] = await Promise.all([
     source(descriptionMigrationPath),
+    source(descriptionHardeningMigrationPath),
     source("app/experience-cards/[id]/page.tsx"),
     source("lib/experience-cards.ts"),
     source("lib/experience-card-types.ts"),
@@ -180,6 +183,22 @@ test("experience-card detail descriptions are bounded and owner-edited without r
   assert.doesNotMatch(
     migration,
     /grant execute on function public\.update_experience_card_description\(uuid, text\)\s+to anon/i
+  );
+  assert.match(
+    hardeningMigration,
+    /create policy experience_cards_update_description_owner_active[\s\S]*?for update[\s\S]*?to authenticated[\s\S]*?user_id = \(select auth\.uid\(\)\)[\s\S]*?is_user_membership_active\(\(select auth\.uid\(\)\)\)[\s\S]*?with check/i
+  );
+  assert.match(
+    hardeningMigration,
+    /grant update \(description\) on table public\.experience_cards\s+to authenticated/i
+  );
+  assert.match(
+    hardeningMigration,
+    /create or replace function public\.update_experience_card_description[\s\S]*?security invoker[\s\S]*?set search_path = ''/i
+  );
+  assert.doesNotMatch(
+    hardeningMigration,
+    /create or replace function public\.update_experience_card_description[\s\S]*?security definer/i
   );
 
   assert.match(types, /description: string \| null/);

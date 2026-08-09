@@ -268,9 +268,9 @@ begin
 
   begin
     update public.experience_cards
-    set description = '绕过描述RPC'
+    set title = '绕过经验卡保存RPC'
     where id = c.card_id;
-    raise exception 'authenticated user directly updated a card description';
+    raise exception 'authenticated user directly updated protected card content';
   exception when insufficient_privilege then
     null;
   end;
@@ -545,6 +545,14 @@ begin
       raise;
     end if;
   end;
+
+  update public.experience_cards
+  set description = '过期后直接修改也不应生效'
+  where id = c.card_id;
+
+  if found then
+    raise exception 'expired owner directly updated an experience-card description';
+  end if;
 
   if not public.delete_experience_card(c.card_id) then
     raise exception 'expired owner could not delete an existing card';
