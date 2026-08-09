@@ -202,11 +202,15 @@ async function loadEditorRecords({
 export default function ExperienceCardEditor({
   cardId,
   embedded = false,
+  showTitleField = true,
+  compact = false,
   onDirtyChange,
   onSaved,
 }: {
   cardId?: string;
   embedded?: boolean;
+  showTitleField?: boolean;
+  compact?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
   onSaved?: () => void | Promise<void>;
 }) {
@@ -230,7 +234,6 @@ export default function ExperienceCardEditor({
   const [refreshingRecords, setRefreshingRecords] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
-  const [availableRecordsOpen, setAvailableRecordsOpen] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -531,7 +534,7 @@ export default function ExperienceCardEditor({
       if (announce) {
         showToast(
           newlyAddedRecords.length > 0
-            ? `${newlyAddedRecords.length}条已有记录可加入经验卡`
+            ? `项目已有记录已更新，当前共有${nextRecords.length}条可供选择`
             : "项目记录已是最新"
         );
       }
@@ -541,11 +544,6 @@ export default function ExperienceCardEditor({
     } finally {
       setRefreshingRecords(false);
     }
-  }
-
-  function openAvailableRecords() {
-    setAvailableRecordsOpen(true);
-    void refreshProjectRecords({ announce: false });
   }
 
   function toggleRecord(recordId: string) {
@@ -876,11 +874,13 @@ export default function ExperienceCardEditor({
 
   const editorContent = (
     <>
-      <section style={panelStyle}>
+      <section style={compact ? compactPanelStyle : panelStyle}>
         <div style={editorHeadingStyle}>
           <div>
             <div style={eyebrowStyle}>内容编辑</div>
-            <h2 style={sectionTitleStyle}>标题、记录与图片</h2>
+            <h2 style={sectionTitleStyle}>
+              {showTitleField ? "标题、记录与图片" : "记录、图片与封面"}
+            </h2>
           </div>
           {archive ? (
             <Link href={`/archive/${archive.id}`} style={sourceProjectLinkStyle}>
@@ -889,26 +889,30 @@ export default function ExperienceCardEditor({
           ) : null}
         </div>
         <p style={editorLeadStyle}>
-          经验卡只引用项目里的已有记录。记录决定内容；所选图片用于当前设备生成MP4，封面随经验卡保存。
+          {showTitleField
+            ? "经验卡只引用项目里的已有记录。记录决定内容；所选图片用于当前设备生成MP4，封面随经验卡保存。"
+            : "只调整同一项目中的已有记录、视频图片和经验卡封面。名称请在页面顶部直接修改。"}
         </p>
 
         {wasPublished && hasChanges ? (
           <p style={inlineNoticeStyle}>保存后会同步更新当前公开内容。</p>
         ) : null}
 
-        <div style={titleSectionStyle}>
-          <label style={labelStyle} htmlFor="experience-card-title">
-            经验卡标题
-          </label>
-          <input
-            id="experience-card-title"
-            value={title}
-            maxLength={120}
-            onChange={(event) => setTitle(event.target.value)}
-            style={inputStyle}
-          />
-          <div style={counterStyle}>{title.trim().length} / 120</div>
-        </div>
+        {showTitleField ? (
+          <div style={titleSectionStyle}>
+            <label style={labelStyle} htmlFor="experience-card-title">
+              经验卡标题
+            </label>
+            <input
+              id="experience-card-title"
+              value={title}
+              maxLength={120}
+              onChange={(event) => setTitle(event.target.value)}
+              style={inputStyle}
+            />
+            <div style={counterStyle}>{title.trim().length} / 120</div>
+          </div>
+        ) : null}
 
         <div style={editorSectionStyle}>
           <div style={sectionHeadingRowStyle}>
@@ -940,7 +944,7 @@ export default function ExperienceCardEditor({
             </span>
           </div>
           <p style={recordSelectionIntroStyle}>
-            已选记录可调整图片或移出；“增加记录”只加入同一项目中尚未选定的已有记录，加入时图片默认全选。至少选择3条，不设累计上限。
+            这里列出项目的全部已有记录。已选记录可调整图片或取消；未选记录可直接加入，加入时图片默认全选。最后始终按原始时间排序，至少选择3条，不设累计上限。
           </p>
 
           {records.length === 0 ? (
@@ -956,54 +960,18 @@ export default function ExperienceCardEditor({
           ) : (
             <>
               <div style={recordGroupHeadingStyle}>
-                <strong>已选记录</strong>
-                <span>{selectedRecords.length}条</span>
+                <strong>全部记录</strong>
+                <span>
+                  已选{selectedRecords.length}条 · 未选{availableRecords.length}条
+                </span>
               </div>
               <div style={recordListStyle}>
-                {selectedRecords.map((record) =>
-                  renderSelectedRecord(record, records.indexOf(record))
+                {records.map((record, index) =>
+                  selectedRecordIdSet.has(record.id)
+                    ? renderSelectedRecord(record, index)
+                    : renderAvailableRecord(record, index)
                 )}
               </div>
-
-              <div style={addExistingRecordsStyle}>
-                {availableRecords.length > 0 ? (
-                  <button
-                    type="button"
-                    aria-expanded={availableRecordsOpen}
-                    onClick={() =>
-                      availableRecordsOpen
-                        ? setAvailableRecordsOpen(false)
-                        : openAvailableRecords()
-                    }
-                    style={addRecordButtonStyle}
-                  >
-                    <UiIcon name="plus" size={14} />
-                    增加记录（{availableRecords.length}）
-                    <UiIcon
-                      name={availableRecordsOpen ? "chevron-up" : "chevron-down"}
-                      size={14}
-                    />
-                  </button>
-                ) : (
-                  <span style={allRecordsSelectedStyle}>
-                    该项目现有记录已全部加入
-                  </span>
-                )}
-              </div>
-
-              {availableRecordsOpen && availableRecords.length > 0 ? (
-                <section style={availableRecordsSectionStyle}>
-                  <div style={recordGroupHeadingStyle}>
-                    <strong>可加入记录</strong>
-                    <span>均为同一项目中的已有记录</span>
-                  </div>
-                  <div style={recordListStyle}>
-                    {availableRecords.map((record) =>
-                      renderAvailableRecord(record, records.indexOf(record))
-                    )}
-                  </div>
-                </section>
-              ) : null}
             </>
           )}
           {selectedRecords.length < 3 ? (
@@ -1014,7 +982,7 @@ export default function ExperienceCardEditor({
         {errorText ? <div style={inlineErrorStyle}>{errorText}</div> : null}
       </section>
 
-      <section style={stickyActionsStyle}>
+      <section style={compact ? compactActionsStyle : stickyActionsStyle}>
         {wasPublished && embedded ? (
           <button
             type="button"
@@ -1075,7 +1043,10 @@ export default function ExperienceCardEditor({
 
   if (embedded) {
     return (
-      <section style={embeddedEditorStyle} aria-label="编辑经验卡">
+      <section
+        style={compact ? compactEmbeddedEditorStyle : embeddedEditorStyle}
+        aria-label="编辑经验卡"
+      >
         {editorContent}
       </section>
     );
@@ -1146,8 +1117,21 @@ const panelStyle: CSSProperties = {
   boxShadow: "0 10px 28px rgba(54,74,51,0.05)",
 };
 
+const compactPanelStyle: CSSProperties = {
+  ...panelStyle,
+  padding: 0,
+  border: 0,
+  borderRadius: 0,
+  background: "transparent",
+  boxShadow: "none",
+};
+
 const embeddedEditorStyle: CSSProperties = {
   marginBottom: 14,
+};
+
+const compactEmbeddedEditorStyle: CSSProperties = {
+  margin: 0,
 };
 
 const editorHeadingStyle: CSSProperties = {
@@ -1278,22 +1262,6 @@ const refreshRecordsButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-const addRecordButtonStyle: CSSProperties = {
-  minHeight: 34,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 5,
-  padding: "6px 12px",
-  border: "1px solid #779772",
-  borderRadius: 999,
-  background: "#eef5eb",
-  color: "#42613e",
-  fontSize: 12,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
 const recordSummaryStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -1330,28 +1298,6 @@ const recordGroupHeadingStyle: CSSProperties = {
   margin: "0 0 9px",
   color: "#52614f",
   fontSize: 12,
-};
-
-const addExistingRecordsStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "center",
-  marginTop: 14,
-};
-
-const allRecordsSelectedStyle: CSSProperties = {
-  padding: "7px 11px",
-  borderRadius: 999,
-  background: "#f2f5f0",
-  color: "#7b8678",
-  fontSize: 12,
-};
-
-const availableRecordsSectionStyle: CSSProperties = {
-  marginTop: 14,
-  padding: 12,
-  border: "1px dashed #cdd9c9",
-  borderRadius: 15,
-  background: "#fafcf9",
 };
 
 const emptyRecordsStyle: CSSProperties = {
@@ -1596,6 +1542,16 @@ const stickyActionsStyle: CSSProperties = {
   border: "1px solid #e1e8de",
   boxShadow: "0 10px 28px rgba(54,74,51,0.1)",
   backdropFilter: "blur(8px)",
+};
+
+const compactActionsStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 9,
+  flexWrap: "wrap",
+  marginTop: 14,
+  paddingTop: 14,
+  borderTop: "1px solid #e4eae1",
 };
 
 const baseButtonStyle: CSSProperties = {

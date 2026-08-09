@@ -121,7 +121,7 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
   );
 });
 
-test("experience-card editing separates selected records from addable existing records", async () => {
+test("experience-card creation and editing share one inline full-record picker", async () => {
   const [editor, detail, editWorkspace, editPage, list, archiveHeader] = await Promise.all([
     source("components/experience-card/ExperienceCardEditor.tsx"),
     source("app/experience-cards/[id]/page.tsx"),
@@ -141,11 +141,12 @@ test("experience-card editing separates selected records from addable existing r
   assert.match(editor, /toggleRecordImage\(record\.id, media\.id\)/);
   assert.match(editor, /toggleAllRecordImages\(record\)/);
   assert.match(editor, /selectedRecords\.map/);
-  assert.match(editor, /availableRecords\.map/);
   assert.match(editor, /availableRecords = records\.filter/);
-  assert.match(editor, /增加记录（\{availableRecords\.length\}）/);
-  assert.match(editor, /可加入记录/);
-  assert.match(editor, /同一项目中的已有记录/);
+  assert.match(editor, /records\.map\(\(record, index\) =>/);
+  assert.match(editor, /selectedRecordIdSet\.has\(record\.id\)/);
+  assert.match(editor, />全部记录</);
+  assert.match(editor, /项目的全部已有记录/);
+  assert.match(editor, /未选记录可直接加入/);
   assert.match(editor, /加入时图片默认全选/);
   assert.match(editor, /所选图片用于当前设备生成MP4/);
   assert.match(editor, /不设累计上限/);
@@ -169,7 +170,7 @@ test("experience-card editing separates selected records from addable existing r
   assert.doesNotMatch(editor, /新增第一条记录/);
   assert.match(editor, /refreshProjectRecords/);
   assert.doesNotMatch(editor, /newlyAddedRecords\.map\(\(record\) => record\.id\)/);
-  assert.match(editor, /已有记录可加入经验卡/);
+  assert.match(editor, /当前共有\$\{nextRecords\.length\}条可供选择/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
   assert.match(detail, />\s*分享\s*</);
   assert.match(detail, /取消公开/);
@@ -193,23 +194,35 @@ test("experience-card editing separates selected records from addable existing r
       detail.indexOf("<ExperienceCardInteractions")
   );
   assert.ok(
-    detail.indexOf("<section style={managementBarStyle}") <
+    detail.indexOf("<div style={infoActionRowStyle}") <
       detail.indexOf("<ExperienceCardInteractions")
   );
   assert.ok(
     detail.indexOf("<ExperienceCardInteractions") <
+      detail.indexOf("<ExperienceCardEditWorkspace")
+  );
+  assert.ok(
+    detail.indexOf("<ExperienceCardEditWorkspace") <
       detail.indexOf("<section style={dangerZoneStyle}")
   );
   assert.match(detail, /<ExperienceCardVideoPanel detail=\{detail\} readOnly integrated/);
   assert.doesNotMatch(detail, /<ExperienceCardEditor/);
-  assert.match(detail, /href=\{`\/experience-cards\/\$\{detail\.card\.id\}\/edit`\}/);
+  assert.match(detail, /<ExperienceCardEditWorkspace/);
+  assert.match(detail, /inline/);
+  assert.doesNotMatch(detail, /detail\.card\.id\}\/edit/);
   assert.doesNotMatch(detail, /setEditing/);
   assert.match(detail, /经验卡概况/);
   assert.match(detail, /label="时长"/);
   assert.match(detail, /label="记录数"/);
   assert.match(detail, /label="图片数"/);
   assert.match(detail, /label="创建时间"/);
-  assert.match(detail, /aria-label=\{`编辑经验卡名称/);
+  assert.match(detail, /aria-label=\{`修改经验卡名称/);
+  assert.match(detail, /aria-label="经验卡名称"/);
+  assert.match(detail, /saveExperienceCard\(/);
+  assert.match(detail, /publishExperienceCard\(detail\.card\.id\)/);
+  assert.match(detail, /deleteCachedExperienceCardVideo\(detail\.card\.id\)/);
+  assert.match(detail, /编辑内容/);
+  assert.match(detail, /与建立经验卡时相同/);
   assert.match(detail, /detail\.archive\.system_name/);
   assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
   assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
@@ -223,11 +236,12 @@ test("experience-card editing separates selected records from addable existing r
   assert.match(editWorkspace, /<ExperienceCardEditor/);
   assert.match(editWorkspace, /cardId=\{cardId\}/);
   assert.match(editWorkspace, /onSaved=\{handleSaved\}/);
+  assert.match(editWorkspace, /showTitleField=\{!inline\}/);
+  assert.match(editWorkspace, /compact=\{inline\}/);
   assert.match(editWorkspace, /保存后再预览或生成MP4/);
   assert.match(editWorkspace, /<ExperienceCardVideoPanel[\s\S]*?previewOnly[\s\S]*?integrated/);
   assert.match(editWorkspace, /先保存上面的修改/);
-  assert.match(editPage, /<ExperienceCardEditWorkspace cardId=\{id\}/);
-  assert.doesNotMatch(editPage, /redirect\(/);
+  assert.match(editPage, /redirect\(`\/experience-cards\/\$\{id\}#experience-card-editor`\)/);
   assert.match(list, /我的经验卡/);
   assert.match(list, /ExperienceCardListCard/);
   assert.doesNotMatch(archiveHeader, /生成经验卡/);
@@ -325,8 +339,7 @@ test("experience card interactions use private collections and restrained helpfu
   assert.match(detail, /<ExperienceCardInteractions/);
   assert.doesNotMatch(detail, /<ExperienceCardEditor/);
   assert.doesNotMatch(detail, /setEditing\(true\)/);
-  assert.match(editorPage, /<ExperienceCardEditWorkspace cardId=\{id\}/);
-  assert.doesNotMatch(editorPage, /redirect\(/);
+  assert.match(editorPage, /redirect\(`\/experience-cards\/\$\{id\}#experience-card-editor`\)/);
   assert.match(list, /我的收藏/);
   assert.match(list, /被收藏 \{item\.bookmarkCount\}/);
 });

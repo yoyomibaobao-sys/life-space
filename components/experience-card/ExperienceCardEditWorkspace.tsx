@@ -16,8 +16,14 @@ import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 
 export default function ExperienceCardEditWorkspace({
   cardId,
+  inline = false,
+  onCardSaved,
+  onDirtyChange,
 }: {
   cardId: string;
+  inline?: boolean;
+  onCardSaved?: () => void | Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [detail, setDetail] = useState<ExperienceCardDetail | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
@@ -70,43 +76,49 @@ export default function ExperienceCardEditWorkspace({
     setDirty(false);
     setSavedNotice("已保存，下面是最新成品预览。");
     await reloadPreview();
+    await onCardSaved?.();
     setEditorRevision((value) => value + 1);
     window.requestAnimationFrame(() => {
       previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
-  return (
-    <main style={pageStyle}>
-      <header style={headerStyle}>
-        <div>
+  const content = (
+    <>
+      {!inline ? (
+        <header style={headerStyle}>
+          <div>
+            <Link
+              href={`/experience-cards/${cardId}`}
+              style={backLinkStyle}
+              onClick={confirmLeave}
+            >
+              <UiIcon name="arrow-left" size={15} /> 返回经验卡
+            </Link>
+            <h1 style={titleStyle}>编辑经验卡</h1>
+            <p style={leadStyle}>
+              选择同一项目中的已有记录、图片和封面；保存后再预览或生成MP4。
+            </p>
+          </div>
           <Link
-            href={`/experience-cards/${cardId}`}
-            style={backLinkStyle}
+            href="/experience-cards"
+            style={directoryLinkStyle}
             onClick={confirmLeave}
           >
-            <UiIcon name="arrow-left" size={15} /> 返回经验卡
+            我的经验卡
           </Link>
-          <h1 style={titleStyle}>编辑经验卡</h1>
-          <p style={leadStyle}>
-            选择同一项目中的已有记录、图片和封面；保存后再预览或生成MP4。
-          </p>
-        </div>
-        <Link
-          href="/experience-cards"
-          style={directoryLinkStyle}
-          onClick={confirmLeave}
-        >
-          我的经验卡
-        </Link>
-      </header>
+        </header>
+      ) : null}
 
       <ExperienceCardEditor
         key={`${cardId}-${editorRevision}`}
         cardId={cardId}
         embedded
+        compact={inline}
+        showTitleField={!inline}
         onDirtyChange={(nextDirty) => {
           setDirty(nextDirty);
+          onDirtyChange?.(nextDirty);
           if (nextDirty) setSavedNotice("");
         }}
         onSaved={handleSaved}
@@ -114,7 +126,7 @@ export default function ExperienceCardEditWorkspace({
 
       <section
         ref={previewRef}
-        style={previewSectionStyle}
+        style={inline ? inlinePreviewSectionStyle : previewSectionStyle}
         aria-label="保存后的经验卡预览与MP4"
       >
         <div style={previewHeadingStyle}>
@@ -122,13 +134,15 @@ export default function ExperienceCardEditWorkspace({
             <div style={eyebrowStyle}>保存后的成品</div>
             <h2 style={previewTitleStyle}>预览与MP4</h2>
           </div>
-          <Link
-            href={`/experience-cards/${cardId}`}
-            style={viewLinkStyle}
-            onClick={confirmLeave}
-          >
-            查看详情 <UiIcon name="arrow-right" size={14} />
-          </Link>
+          {!inline ? (
+            <Link
+              href={`/experience-cards/${cardId}`}
+              style={viewLinkStyle}
+              onClick={confirmLeave}
+            >
+              查看详情 <UiIcon name="arrow-right" size={14} />
+            </Link>
+          ) : null}
         </div>
 
         {savedNotice ? <p style={savedNoticeStyle}>{savedNotice}</p> : null}
@@ -150,7 +164,13 @@ export default function ExperienceCardEditWorkspace({
           />
         ) : null}
       </section>
-    </main>
+    </>
+  );
+
+  return inline ? (
+    <div style={inlineWorkspaceStyle}>{content}</div>
+  ) : (
+    <main style={pageStyle}>{content}</main>
   );
 }
 
@@ -214,6 +234,20 @@ const previewSectionStyle: CSSProperties = {
   border: "1px solid #dfe7dc",
   borderRadius: 20,
   background: "#f8fbf6",
+};
+
+const inlineWorkspaceStyle: CSSProperties = {
+  marginTop: 16,
+  paddingTop: 16,
+  borderTop: "1px solid #e4eae1",
+};
+
+const inlinePreviewSectionStyle: CSSProperties = {
+  ...previewSectionStyle,
+  marginTop: 20,
+  padding: "16px clamp(12px, 2.5vw, 18px) 18px",
+  borderRadius: 16,
+  background: "#fbfdf9",
 };
 
 const previewHeadingStyle: CSSProperties = {

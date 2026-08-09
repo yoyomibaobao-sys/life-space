@@ -1,9 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState, type CSSProperties } from "react";
+import {
+  use,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ExperienceCardEditWorkspace from "@/components/experience-card/ExperienceCardEditWorkspace";
 import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
@@ -15,8 +23,11 @@ import {
   formatExperienceCardDate,
   getExperienceCardErrorText,
   loadExperienceCard,
+  publishExperienceCard,
+  saveExperienceCard,
   unpublishExperienceCard,
 } from "@/lib/experience-cards";
+import { deleteCachedExperienceCardVideo } from "@/lib/experience-card-video-cache";
 import type {
   ExperienceCardDetail,
   ExperienceCardMedia,
@@ -38,16 +49,23 @@ export default function ExperienceCardPage({
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [titleSaving, setTitleSaving] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [editorRevision, setEditorRevision] = useState(0);
+  const editorRef = useRef<HTMLElement | null>(null);
 
-  async function reload() {
-    setLoading(true);
+  async function reload(showLoading = true) {
+    if (showLoading) setLoading(true);
     const {
       data: { user },
     } = await supabase.auth.getUser();
     setViewerId(user?.id || null);
     const nextDetail = await loadExperienceCard(id);
     setDetail(nextDetail);
-    setLoading(false);
+    if (showLoading) setLoading(false);
   }
 
   useEffect(() => {
@@ -56,6 +74,100 @@ export default function ExperienceCardPage({
   }, [id]);
 
   const isOwner = Boolean(detail && viewerId === detail.card.user_id);
+
+  useEffect(() => {
+    if (!detail || !isOwner) return;
+    if (!renaming) setTitleDraft(detail.card.title);
+  }, [detail, isOwner, renaming]);
+
+  useEffect(() => {
+    if (!detail || !isOwner || window.location.hash !== "#experience-card-editor") {
+      return;
+    }
+    setEditorOpen(true);
+    window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [detail, isOwner]);
+
+  function scrollToEditor() {
+    setRenaming(false);
+    setEditorOpen(true);
+    window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function beginRename() {
+    if (!detail || !isOwner) return;
+    if (editorDirty) {
+      showToast("请先保存下面尚未完成的内容修改");
+      scrollToEditor();
+      return;
+    }
+    if (detail.card.status === "published" && !detail.isPubliclyAvailable) {
+      showToast("请先在下方检查来源记录，再修改名称");
+      scrollToEditor();
+      return;
+    }
+    setTitleDraft(detail.card.title);
+    setErrorText("");
+    setRenaming(true);
+  }
+
+  function handleTitleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void saveTitle();
+    } else if (event.key === "Escape") {
+      setTitleDraft(detail?.card.title || "");
+      setRenaming(false);
+    }
+  }
+
+  async function saveTitle() {
+    if (!detail || !isOwner || titleSaving) return;
+    const nextTitle = titleDraft.trim();
+    if (nextTitle.length < 1 || nextTitle.length > 120) {
+      setErrorText("名称需为1～120个字符。");
+      return;
+    }
+    if (nextTitle === detail.card.title.trim()) {
+      setRenaming(false);
+      return;
+    }
+
+    setTitleSaving(true);
+    setErrorText("");
+    try {
+      await saveExperienceCard({
+        cardId: detail.card.id,
+        archiveId: detail.archive.id,
+        title: nextTitle,
+        recordIds: detail.records.map((record) => record.id),
+        coverMediaId: detail.card.cover_media_id,
+      });
+      if (detail.card.status === "published") {
+        await publishExperienceCard(detail.card.id);
+      }
+      await deleteCachedExperienceCardVideo(detail.card.id).catch(
+        () => undefined
+      );
+      setRenaming(false);
+      setEditorRevision((value) => value + 1);
+      await reload(false);
+      showToast("经验卡名称已修改；原MP4可按新名称重新生成");
+    } catch (error) {
+      setErrorText(getExperienceCardErrorText(error));
+    } finally {
+      setTitleSaving(false);
+    }
+  }
+
+  async function handleEditorSaved() {
+    setEditorDirty(false);
+    await reload(false);
+  }
 
   async function runAction(action: Exclude<PendingAction, null>) {
     if (!detail || busy) return;
@@ -82,7 +194,7 @@ export default function ExperienceCardPage({
 
   async function shareCard() {
     if (!detail?.isPubliclyAvailable) return;
-    const url = window.location.href.split("?")[0];
+    const url = getCardShareUrl();
 
     try {
       if (navigator.share) {
@@ -98,7 +210,7 @@ export default function ExperienceCardPage({
 
   async function copyCardLink() {
     if (!detail?.isPubliclyAvailable) return;
-    const url = window.location.href.split("?")[0];
+    const url = getCardShareUrl();
 
     try {
       await navigator.clipboard.writeText(url);
@@ -178,17 +290,58 @@ export default function ExperienceCardPage({
 
         <article style={infoColumnStyle}>
           <div style={sectionEyebrowStyle}>经验卡</div>
-          {isOwner ? (
-            <Link
-              href={`/experience-cards/${detail.card.id}/edit`}
-              style={editableTitleLinkStyle}
-              aria-label={`编辑经验卡名称：${detail.card.title}`}
-            >
-              <h1 style={titleStyle}>{detail.card.title}</h1>
-              <UiIcon name="edit" size={17} />
-            </Link>
+          {isOwner && renaming ? (
+            <div style={renameEditorStyle}>
+              <input
+                autoFocus
+                aria-label="经验卡名称"
+                value={titleDraft}
+                maxLength={120}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                style={renameInputStyle}
+              />
+              <div style={renameActionsStyle}>
+                <span style={renameCounterStyle}>
+                  {titleDraft.trim().length}/120
+                </span>
+                <button
+                  type="button"
+                  disabled={titleSaving}
+                  onClick={() => {
+                    setTitleDraft(detail.card.title);
+                    setRenaming(false);
+                  }}
+                  style={renameCancelButtonStyle}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={titleSaving}
+                  onClick={() => void saveTitle()}
+                  style={renameSaveButtonStyle}
+                >
+                  {titleSaving ? "保存中..." : "保存名称"}
+                </button>
+              </div>
+            </div>
           ) : (
-            <h1 style={titleStyle}>{detail.card.title}</h1>
+            <h1 style={titleStyle}>
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={beginRename}
+                  style={editableTitleButtonStyle}
+                  aria-label={`修改经验卡名称：${detail.card.title}`}
+                >
+                  <span>{detail.card.title}</span>
+                  <UiIcon name="edit" size={17} />
+                </button>
+              ) : (
+                detail.card.title
+              )}
+            </h1>
           )}
 
           <div style={overviewHeadingStyle}>经验卡概况</div>
@@ -250,55 +403,63 @@ export default function ExperienceCardPage({
               </span>
             )}
           </div>
-        </article>
-      </section>
 
-      <section style={managementBarStyle} aria-label="经验卡操作">
-        {isOwner ? (
-          <Link
-            href={`/experience-cards/${detail.card.id}/edit`}
-            style={primaryLinkStyle}
-          >
-            <UiIcon name="edit" size={15} /> 编辑
-          </Link>
-        ) : null}
-        {detail.isPubliclyAvailable ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void shareCard()}
-              style={secondaryButtonStyle}
-            >
-              <UiIcon name="share" size={15} /> 分享
-            </button>
-            <button
-              type="button"
-              onClick={() => void copyCardLink()}
-              style={secondaryButtonStyle}
-            >
-              复制链接
-            </button>
-          </>
-        ) : null}
-        {isOwner && detail.card.status === "published" ? (
-          <button
-            type="button"
-            onClick={() => setPendingAction("unpublish")}
-            style={publicStatusButtonStyle(detail.isPubliclyAvailable)}
-            aria-label={`${statusLabel}，点击取消公开`}
-          >
-            <UiIcon
-              name={detail.isPubliclyAvailable ? "check" : "warning"}
-              size={15}
-            />
-            <span>{statusLabel}</span>
-            <span style={statusActionHintStyle}>取消公开</span>
-          </button>
-        ) : isOwner ? (
-          <span style={draftStatusStyle}>
-            <UiIcon name="lock" size={15} /> {statusLabel}
-          </span>
-        ) : null}
+          <div style={infoActionRowStyle} aria-label="经验卡操作">
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={scrollToEditor}
+                style={primaryButtonStyle}
+              >
+                <UiIcon name="edit" size={15} /> 编辑内容
+              </button>
+            ) : null}
+            {detail.isPubliclyAvailable ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void shareCard()}
+                  style={secondaryButtonStyle}
+                >
+                  <UiIcon name="share" size={15} /> 分享
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyCardLink()}
+                  style={secondaryButtonStyle}
+                >
+                  复制链接
+                </button>
+              </>
+            ) : null}
+            {isOwner && detail.card.status === "published" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (editorDirty) {
+                    showToast("请先保存下面尚未完成的内容修改");
+                    scrollToEditor();
+                    return;
+                  }
+                  setPendingAction("unpublish");
+                }}
+                style={publicStatusButtonStyle(detail.isPubliclyAvailable)}
+                aria-label={`${statusLabel}，点击取消公开`}
+              >
+                <UiIcon
+                  name={detail.isPubliclyAvailable ? "check" : "warning"}
+                  size={15}
+                />
+                <span>{statusLabel}</span>
+                <span style={statusActionHintStyle}>取消公开</span>
+              </button>
+            ) : isOwner ? (
+              <span style={draftStatusStyle}>
+                <UiIcon name="lock" size={15} /> {statusLabel}
+              </span>
+            ) : null}
+          </div>
+        </article>
       </section>
 
       {isOwner && !detail.sourceIsComplete ? (
@@ -339,10 +500,68 @@ export default function ExperienceCardPage({
       ) : null}
 
       {isOwner ? (
+        <section
+          id="experience-card-editor"
+          ref={editorRef}
+          style={editorSectionStyle}
+          aria-label="经验卡内容编辑"
+        >
+          <div style={editorSectionHeadingStyle}>
+            <div>
+              <div style={sectionEyebrowStyle}>内容修改</div>
+              <h2 style={editorSectionTitleStyle}>记录、图片与封面</h2>
+              <p style={editorSectionHintStyle}>
+                与建立经验卡时相同：项目全部已有记录都可直接勾选。
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-expanded={editorOpen}
+              onClick={() => {
+                if (
+                  editorOpen &&
+                  editorDirty &&
+                  !window.confirm("修改尚未保存，确定收起吗？")
+                ) {
+                  return;
+                }
+                setEditorOpen((value) => !value);
+                if (editorOpen) setEditorDirty(false);
+              }}
+              style={editorToggleButtonStyle}
+            >
+              {editorOpen ? "收起编辑" : "打开编辑"}
+              <UiIcon
+                name={editorOpen ? "chevron-up" : "chevron-down"}
+                size={14}
+              />
+            </button>
+          </div>
+
+          {editorOpen ? (
+            <ExperienceCardEditWorkspace
+              key={`${detail.card.id}-${editorRevision}`}
+              cardId={detail.card.id}
+              inline
+              onDirtyChange={setEditorDirty}
+              onCardSaved={handleEditorSaved}
+            />
+          ) : null}
+        </section>
+      ) : null}
+
+      {isOwner ? (
         <section style={dangerZoneStyle} aria-label="删除经验卡">
           <button
             type="button"
-            onClick={() => setPendingAction("delete")}
+            onClick={() => {
+              if (editorDirty) {
+                showToast("请先保存下面尚未完成的内容修改");
+                scrollToEditor();
+                return;
+              }
+              setPendingAction("delete");
+            }}
             style={deleteButtonStyle}
           >
             删除经验卡
@@ -381,6 +600,13 @@ export default function ExperienceCardPage({
       />
     </main>
   );
+}
+
+function getCardShareUrl() {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 function isExperienceCardImage(media: ExperienceCardMedia) {
@@ -516,13 +742,72 @@ const titleStyle: CSSProperties = {
   overflowWrap: "anywhere",
 };
 
-const editableTitleLinkStyle: CSSProperties = {
+const editableTitleButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   maxWidth: "100%",
   gap: 9,
+  padding: 0,
+  border: 0,
+  background: "transparent",
   color: "#283428",
-  textDecoration: "none",
+  font: "inherit",
+  fontWeight: "inherit",
+  lineHeight: "inherit",
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const renameEditorStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const renameInputStyle: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  minHeight: 48,
+  padding: "8px 11px",
+  border: "1px solid #8ea588",
+  borderRadius: 11,
+  background: "#fff",
+  color: "#283428",
+  fontSize: "clamp(21px, 3vw, 27px)",
+  fontWeight: 800,
+  lineHeight: 1.3,
+  outline: "none",
+};
+
+const renameActionsStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  gap: 7,
+};
+
+const renameCounterStyle: CSSProperties = {
+  marginRight: "auto",
+  color: "#8a9587",
+  fontSize: 11,
+};
+
+const renameCancelButtonStyle: CSSProperties = {
+  minHeight: 32,
+  padding: "5px 10px",
+  border: "1px solid #d6dfd2",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#60705d",
+  fontSize: 12,
+  fontWeight: 750,
+  cursor: "pointer",
+};
+
+const renameSaveButtonStyle: CSSProperties = {
+  ...renameCancelButtonStyle,
+  borderColor: "#64885e",
+  background: "#64885e",
+  color: "#fff",
 };
 
 const overviewHeadingStyle: CSSProperties = {
@@ -543,23 +828,18 @@ const overviewItemStyle: CSSProperties = {
   minWidth: 0,
   display: "flex",
   alignItems: "center",
-  gap: 9,
-  padding: "9px 10px",
-  borderRadius: 12,
-  background: "#f6f9f4",
-  border: "1px solid #e8eee5",
+  gap: 7,
+  padding: "5px 2px",
 };
 
 const overviewIconStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 28,
-  height: 28,
+  width: 22,
+  height: 22,
   flex: "0 0 auto",
-  borderRadius: 9,
   color: "#5f7a59",
-  background: "#e9f1e5",
 };
 
 const overviewTextStyle: CSSProperties = {
@@ -626,16 +906,14 @@ const sourceValueStyle: CSSProperties = {
   fontWeight: 750,
 };
 
-const managementBarStyle: CSSProperties = {
+const infoActionRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   flexWrap: "wrap",
-  gap: 8,
-  marginBottom: 14,
-  padding: "11px 12px",
-  border: "1px solid #e1e8de",
-  borderRadius: 15,
-  background: "#fbfdf9",
+  gap: 7,
+  marginTop: 15,
+  paddingTop: 13,
+  borderTop: "1px solid #edf1eb",
 };
 
 const warningStyle: CSSProperties = {
@@ -665,7 +943,7 @@ const baseButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-const primaryLinkStyle: CSSProperties = {
+const primaryButtonStyle: CSSProperties = {
   ...baseButtonStyle,
   display: "inline-flex",
   alignItems: "center",
@@ -673,7 +951,6 @@ const primaryLinkStyle: CSSProperties = {
   border: "1px solid #64885e",
   background: "#64885e",
   color: "#fff",
-  textDecoration: "none",
 };
 
 const secondaryButtonStyle: CSSProperties = {
@@ -720,6 +997,52 @@ const draftStatusStyle: CSSProperties = {
   color: "#6e796b",
   fontSize: 12,
   fontWeight: 800,
+};
+
+const editorSectionStyle: CSSProperties = {
+  scrollMarginTop: 18,
+  marginTop: 18,
+  padding: "15px clamp(13px, 2.5vw, 18px)",
+  border: "1px solid #dfe7dc",
+  borderRadius: 18,
+  background: "#f8fbf6",
+};
+
+const editorSectionHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  flexWrap: "wrap",
+};
+
+const editorSectionTitleStyle: CSSProperties = {
+  margin: "3px 0 0",
+  color: "#354432",
+  fontSize: 18,
+  lineHeight: 1.35,
+};
+
+const editorSectionHintStyle: CSSProperties = {
+  margin: "5px 0 0",
+  color: "#788575",
+  fontSize: 12,
+  lineHeight: 1.55,
+};
+
+const editorToggleButtonStyle: CSSProperties = {
+  minHeight: 36,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  padding: "6px 11px",
+  border: "1px solid #789673",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#456240",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const dangerZoneStyle: CSSProperties = {
