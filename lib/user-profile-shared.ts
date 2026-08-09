@@ -1,6 +1,7 @@
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
 import { formatCardDate, formatPreciseDateTime } from "@/lib/date-time";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type UserProfileStats = {
   archiveCount: number;
@@ -71,7 +72,7 @@ export function formatStorage(bytes?: number | null) {
 }
 
 async function loadUserProfileDataWithProfile(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: string,
   profileSource: "own" | "public"
 ): Promise<PublicUserProfileData> {
@@ -205,10 +206,10 @@ async function loadUserProfileDataWithProfile(
   };
 }
 
-export async function loadUserProfileData(supabase: any, userId: string): Promise<PublicUserProfileData> {
+export async function loadUserProfileData(supabase: SupabaseClient, userId: string): Promise<PublicUserProfileData> {
   return loadUserProfileDataWithProfile(supabase, userId, "own");
 }
 
-export async function loadPublicUserProfileData(supabase: any, userId: string): Promise<PublicUserProfileData> {
+export async function loadPublicUserProfileData(supabase: SupabaseClient, userId: string): Promise<PublicUserProfileData> {
   return loadUserProfileDataWithProfile(supabase, userId, "public");
 }

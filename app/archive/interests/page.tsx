@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -37,9 +37,7 @@ export default function PlantInterestsPage() {
   const [removeInterestTarget, setRemoveInterestTarget] = useState<PlantInterestRow | null>(null);
   const [removingInterestId, setRemovingInterestId] = useState<string | null>(null);
 
-  async function loadInterests() {
-    setLoading(true);
-
+  const loadInterests = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -93,11 +91,15 @@ export default function PlantInterestsPage() {
     setPlanSpeciesIds(new Set((planData || []).map((item: SpeciesRefRow) => String(item.species_id))));
 
     setLoading(false);
-  }
+  }, [router]);
 
   useEffect(() => {
-    loadInterests();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void loadInterests();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadInterests]);
 
   async function updateInterest(id: string, payload: Partial<Pick<PlantInterestRow, "note">>) {
     if (!userId) return;

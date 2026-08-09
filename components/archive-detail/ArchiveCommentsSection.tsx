@@ -166,18 +166,16 @@ export default function ArchiveCommentsSection({
       string,
       Pick<AppProfile, "id" | "username" | "avatar_url">
     >();
-    for (const profile of ((profilesResult as any).data || []) as Pick<
+    for (const profile of (profilesResult.data || []) as Pick<
       AppProfile,
       "id" | "username" | "avatar_url"
     >[]) {
       profileMap.set(profile.id, profile);
     }
 
-    const commentLikes = ((commentLikesResult as any).data ||
-      []) as CommentLikeRow[];
-    const flowers = ((flowersResult as any).data || []) as CommentFlowerRow[];
-    const recordLikes = ((recordLikesResult as any).data ||
-      []) as RecordLikeRow[];
+    const commentLikes = (commentLikesResult.data || []) as CommentLikeRow[];
+    const flowers = (flowersResult.data || []) as CommentFlowerRow[];
+    const recordLikes = (recordLikesResult.data || []) as RecordLikeRow[];
 
     const nextComments: CommentItem[] = commentRows.map((comment) => {
       const likes = commentLikes.filter(

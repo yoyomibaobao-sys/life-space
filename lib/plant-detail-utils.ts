@@ -1,4 +1,15 @@
-import { getPlantCategoryLabel, normalizePlantCategoryKey, uniqueTextList } from "@/lib/plant-shared";
+import { getPlantCategoryLabel, normalizePlantCategoryKey } from "@/lib/plant-shared";
+
+type PlantPhParameters = {
+  ph_sensitivity_score?: unknown;
+  ph_min?: unknown;
+  ph_max?: unknown;
+};
+
+type PlantGuideSource = {
+  category?: string | null;
+  sub_category?: string | null;
+};
 
 const photoperiodLabels: Record<string, string> = {
   long_day: "长日照",
@@ -56,7 +67,7 @@ export function phRequirementLabel(value: unknown) {
   return "很敏感";
 }
 
-export function phRequirementText(parameters: any) {
+export function phRequirementText(parameters?: PlantPhParameters | null) {
   const sensitivity = phRequirementLabel(parameters?.ph_sensitivity_score);
   const phRange = formatRange(parameters?.ph_min, parameters?.ph_max);
 
@@ -83,7 +94,7 @@ export function difficultyMeta(value: unknown) {
 
 export const categoryLabel = getPlantCategoryLabel;
 
-export function guideTitle(plant: any) {
+export function guideTitle(plant?: PlantGuideSource | null) {
   const category = normalizePlantCategoryKey(plant?.category);
   const subCategory = plant?.sub_category;
 

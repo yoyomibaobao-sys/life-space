@@ -29,9 +29,12 @@ export default function EditRecord({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    if (!editing) setText(initialText);
-  }, [initialText]);
+  function autoResize() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
 
   // 自动聚焦 + 自动高度
   useEffect(() => {
@@ -40,13 +43,6 @@ export default function EditRecord({
       autoResize();
     }
   }, [editing]);
-
-  function autoResize() {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = el.scrollHeight + "px";
-  }
 
   async function save() {
     if (loading) return;
@@ -104,8 +100,8 @@ export default function EditRecord({
 
   // 只读模式
   if (readOnly) {
-    if (!text.trim()) return null;
-    return <div style={compact ? mobileReadTextStyle : undefined}>{text}</div>;
+    if (!initialText.trim()) return null;
+    return <div style={compact ? mobileReadTextStyle : undefined}>{initialText}</div>;
   }
 
   // 阅读态
@@ -114,11 +110,12 @@ export default function EditRecord({
       <div
         onClick={() => {
           setError("");
+          setText(initialText);
           setEditing(true);
         }}
         style={compact ? mobileReadTextStyle : desktopReadTextStyle}
       >
-        {text || (
+        {initialText || (
           <span style={compact ? mobilePlaceholderStyle : desktopPlaceholderStyle}>
             {placeholder}
           </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -82,9 +82,7 @@ export default function PlantPlansPage() {
   const [removePlanTarget, setRemovePlanTarget] = useState<PlantPlanRow | null>(null);
   const [removingPlanId, setRemovingPlanId] = useState<string | null>(null);
 
-  async function loadPlans() {
-    setLoading(true);
-
+  const loadPlans = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -130,11 +128,15 @@ export default function PlantPlansPage() {
     }
 
     setLoading(false);
-  }
+  }, [router]);
 
   useEffect(() => {
-    loadPlans();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void loadPlans();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadPlans]);
 
   const groupedPlans = useMemo(() => {
     const groups: Record<PlantPlanStatus, PlantPlanRow[]> = {

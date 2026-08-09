@@ -21,6 +21,7 @@ import {
 } from "@/lib/follow-utils";
 import { getRecentArchiveTitles, getTimeValue, sortRecentArchives } from "@/lib/social-space-shared";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type FollowMediaRow = {
   record_id: string | null;
@@ -30,7 +31,17 @@ type FollowMediaRow = {
   thumb_path: string | null;
 };
 
-export async function loadFollowPageData(supabase: any, userId: string): Promise<FollowPageData> {
+type FollowedUserArchiveRow = Pick<
+  ArchiveRow,
+  "id" | "user_id" | "title" | "last_record_time"
+> & {
+  is_public?: boolean;
+};
+
+export async function loadFollowPageData(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<FollowPageData> {
   const [{ data: archiveFollows }, { data: userFollows }] = await Promise.all([
     supabase
       .from("archive_follows")
@@ -65,7 +76,7 @@ export async function loadFollowPageData(supabase: any, userId: string): Promise
         .select("id, user_id, title, last_record_time, is_public")
         .in("user_id", followedUserIds)
         .eq("is_public", true)
-    : Promise.resolve({ data: [] as any[], error: null });
+    : Promise.resolve({ data: [] as FollowedUserArchiveRow[], error: null });
 
   const recordsPromise = archiveIds.length
     ? supabase
@@ -82,11 +93,7 @@ export async function loadFollowPageData(supabase: any, userId: string): Promise
   ]);
 
   const archives = (archivesResult.data || []) as ArchiveRow[];
-  const followedUsersArchives = (followedUsersArchivesResult.data || []) as Array<
-    Pick<ArchiveRow, "id" | "user_id" | "title" | "last_record_time"> & {
-      is_public?: boolean;
-    }
-  >;
+  const followedUsersArchives = (followedUsersArchivesResult.data || []) as FollowedUserArchiveRow[];
   const records = (recordsResult.data || []) as RecordRow[];
 
   const profileIds = unique([...archives.map((item) => item.user_id), ...followedUserIds]);

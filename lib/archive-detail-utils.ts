@@ -5,6 +5,7 @@ import type {
   LightboxImage,
   PlantSpeciesLite,
 } from "@/lib/archive-detail-types";
+import type { MediaItem } from "@/lib/domain-types";
 import { formatPreciseDateTime } from "@/lib/date-time";
 
 
@@ -53,16 +54,16 @@ export function getDisplayName(
 }
 
 export function buildMediaList(
-  media: any[] | undefined,
+  media: MediaItem[] | undefined,
   archiveTitle: string
 ): LightboxImage[] {
   return (media || [])
-    .map((item: any) => ({
+    .map((item) => ({
       id: item?.id,
       recordId: item?.record_id,
       url: item?.display_url,
     }))
-    .filter((item) => Boolean(item.url))
+    .filter((item): item is typeof item & { url: string } => Boolean(item.url))
     .map((item, index: number) => ({
       id: item.id,
       recordId: item.recordId,

@@ -161,7 +161,7 @@ export function makeRegionSearchText(parts: {
 }
 
 export async function findUserIdsByRegionFilters(
-  supabase: SupabaseClient<any, "public", any>,
+  supabase: SupabaseClient,
   filters: {
     countryCode?: string | null;
     countryName?: string | null;

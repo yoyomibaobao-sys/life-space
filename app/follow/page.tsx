@@ -83,6 +83,13 @@ type GroupTagRow = {
   name: string | null;
 };
 
+type FollowedUserArchiveRow = Pick<
+  ArchiveRow,
+  "id" | "user_id" | "title" | "last_record_time"
+> & {
+  is_public?: boolean;
+};
+
 type FollowProjectCard = {
   id: string;
   title: string;
@@ -192,7 +199,7 @@ export default function FollowPage() {
             )
             .in("user_id", followedUserIds)
             .eq("is_public", true)
-        : Promise.resolve({ data: [] as any[], error: null });
+        : Promise.resolve({ data: [] as FollowedUserArchiveRow[], error: null });
 
       const recordsPromise = archiveIds.length
         ? supabase
@@ -206,11 +213,7 @@ export default function FollowPage() {
         await Promise.all([archivesPromise, followedUsersArchivesPromise, recordsPromise]);
 
       const archives = (archivesResult.data || []) as ArchiveRow[];
-      const followedUsersArchives = (followedUsersArchivesResult.data || []) as Array<
-        Pick<ArchiveRow, "id" | "user_id" | "title" | "last_record_time"> & {
-          is_public?: boolean;
-        }
-      >;
+      const followedUsersArchives = (followedUsersArchivesResult.data || []) as FollowedUserArchiveRow[];
       const records = (recordsResult.data || []) as RecordRow[];
 
       const profileIds = unique([

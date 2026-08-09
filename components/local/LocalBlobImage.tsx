@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 
 export default function LocalBlobImage({
   blob,
@@ -11,22 +11,22 @@ export default function LocalBlobImage({
   alt?: string;
   style?: CSSProperties;
 }) {
-  const [src, setSrc] = useState("");
+  const imageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    if (!blob) {
-      setSrc("");
-      return;
-    }
+    const image = imageRef.current;
+    if (!blob || !image) return;
 
     const objectUrl = URL.createObjectURL(blob);
-    setSrc(objectUrl);
+    image.src = objectUrl;
 
-    return () => URL.revokeObjectURL(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+      image.removeAttribute("src");
+    };
   }, [blob]);
 
-  if (!src) return null;
+  if (!blob) return null;
 
-  return <img src={src} alt={alt} style={style} />;
+  return <img ref={imageRef} alt={alt} style={style} />;
 }
-

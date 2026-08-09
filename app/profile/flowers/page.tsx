@@ -38,6 +38,7 @@ function ProfileFlowersContent() {
   const [tab, setTab] = useState<TabKey>(defaultTab);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<FlowerSourceItem | null>(null);
+  const [itemsLoadedAt, setItemsLoadedAt] = useState(0);
 
   useEffect(() => {
     setTab(defaultTab);
@@ -104,6 +105,7 @@ function ProfileFlowersContent() {
           archive_id: recordMap.get(item.record_id)?.archive_id || null,
         }))
       );
+      setItemsLoadedAt(Date.now());
       setLoading(false);
     }
 
@@ -184,7 +186,7 @@ function ProfileFlowersContent() {
           ) : (
             visibleItems.map((item) => {
               const revokeUntilTime = item.revoke_until ? new Date(item.revoke_until).getTime() : 0;
-              const canRevoke = tab === "sent" && !item.revoked_at && item.sender_user_id === currentUserId && revokeUntilTime > Date.now();
+              const canRevoke = tab === "sent" && !item.revoked_at && item.sender_user_id === currentUserId && revokeUntilTime > itemsLoadedAt;
               const statusText = item.revoked_at ? `已于 ${formatProfileDateTime(item.revoked_at)} 撤回` : "当前有效";
               return (
                 <article key={item.id} style={{ border: "1px solid #e6ece2", borderRadius: 18, padding: 16, background: item.revoked_at ? "#fcfcfb" : "#fffdf7" }}>
