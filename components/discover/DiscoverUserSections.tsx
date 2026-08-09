@@ -206,21 +206,11 @@ function DiscoverUserSectionCard({
               padding: "10px 0 8px 0",
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "flex-end",
               gap: 10,
               flexWrap: "wrap",
             }}
           >
-            <span
-              style={{
-                color: "#8a998a",
-                fontSize: 12,
-                lineHeight: 1.6,
-              }}
-            >
-              更多项目可进入空间查看。
-            </span>
-
             <button
               type="button"
               onClick={() => onGoUser(section.user_id)}

@@ -180,7 +180,6 @@ export default function FollowersPage() {
         </Link>
 
         <h1 style={titleStyle}>粉丝</h1>
-        <div style={subtitleStyle}>正在关注你的用户</div>
 
         {loading ? (
           <section style={emptyStyle}>加载中...</section>
@@ -276,13 +275,6 @@ const titleStyle: CSSProperties = {
   margin: 0,
   fontSize: 26,
   color: "#1f2a1f",
-};
-
-const subtitleStyle: CSSProperties = {
-  marginTop: 6,
-  marginBottom: 16,
-  color: "#6f7b69",
-  fontSize: 14,
 };
 
 const emptyStyle: CSSProperties = {

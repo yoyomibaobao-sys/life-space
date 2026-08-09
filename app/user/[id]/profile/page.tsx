@@ -26,6 +26,7 @@ import {
 } from "@/lib/membership";
 import { getAccountRegistrationSummary } from "@/lib/account-number";
 import UiIcon from "@/components/ui/UiIcon";
+import UserAvatar from "@/components/social/UserAvatar";
 
 type MarketPostDisplayRow = MarketPostRow & {
   display_cover_image_url?: string | null;
@@ -216,46 +217,42 @@ export default function PublicUserProfilePage() {
   }
 
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px 48px" }}>
-      <div style={{ marginBottom: 10 }}>
-        <Link
-          href={isSelf ? "/profile" : "/discover"}
-          style={secondaryLinkStyle}
-        >
+    <main style={{ maxWidth: 960, margin: "0 auto", padding: "20px 16px 48px" }}>
+      <div style={{ marginBottom: 12 }}>
+        <Link href={isSelf ? "/profile" : "/discover"} style={backLinkStyle}>
           <UiIcon name="arrow-left" size={15} />
           {isSelf ? " 返回我的空间" : " 返回发现"}
         </Link>
       </div>
-      <section style={{ ...panelStyle, padding: 24 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 13, color: "#6d7968" }}>用户信息页</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>
-              {profile.username || "未设置用户名"}
-            </h1>
-            <div style={{ marginTop: 8, fontSize: 14, color: "#63705d" }}>
-              所在地区：{formatRegionDisplayFromProfile(profile)}
-            </div>
-            {profile.account_number ? (
-              <div style={{ marginTop: 6, fontSize: 13, color: "#73806d" }}>
-                账号编号：{profile.account_number}
-                {accountRegistrationSummary
-                  ? ` · ${accountRegistrationSummary}`
-                  : ""}
+      <section style={{ ...panelStyle, padding: 18 }}>
+        <div style={profileHeaderStyle}>
+          <div style={profileIdentityStyle}>
+            <UserAvatar
+              avatarUrl={profile.avatar_url ? String(profile.avatar_url) : null}
+              size={64}
+              iconSize={27}
+              style={{ border: "1px solid #dfe9db", flexShrink: 0 }}
+            />
+
+            <div style={{ minWidth: 0 }}>
+              <h1 style={profileNameStyle}>{profile.username || "未设置用户名"}</h1>
+              <div style={profileRegionStyle}>{formatRegionDisplayFromProfile(profile)}</div>
+              {profile.account_number ? (
+                <div style={profileAccountStyle}>
+                  账号编号：{profile.account_number}
+                  {accountRegistrationSummary ? ` · ${accountRegistrationSummary}` : ""}
+                </div>
+              ) : null}
+              <div style={profileLevelStyle}>
+                Lv.{Number(profile.level || 1)} · <UiIcon name="helpful" size={13} /> 有帮助{" "}
+                {Number(profile.flower_count || 0)}
               </div>
-            ) : null}
+            </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={profileActionRowStyle}>
             <Link href={`/user/${userId}`} style={secondaryLinkStyle}>
-              进入空间
+              进入{profile.username ? `${profile.username}的` : ""}空间
             </Link>
 
             {isSelf ? (
@@ -274,123 +271,69 @@ export default function PublicUserProfilePage() {
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 20,
-            marginTop: 20,
-          }}
-        >
-          <section style={panelInnerStyle}>
-            {profile.avatar_url ? (
-              <img
-                src={String(profile.avatar_url)}
-                alt=""
-                style={{
-                  width: 92,
-                  height: 92,
-                  borderRadius: "50%",
-                  objectFit: "cover",
-                  border: "1px solid #e4ebe0",
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: 92,
-                  height: 92,
-                  borderRadius: "50%",
-                  background: "#eef5e9",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 34,
-                }}
-              >
-                <UiIcon name="sprout" size={28} />
-              </div>
-            )}
+        <div style={profileStatsGridStyle}>
+          <MetaItem label="关注" value={String(stats.followingCount)} />
+          <MetaItem label="粉丝" value={String(stats.followerCount)} />
+          <MetaItem label="公开项目" value={String(stats.publicArchiveCount)} />
+          <MetaItem label="最近活跃" value={formatProfileDate(stats.latestRecordTime)} />
+        </div>
 
-            <div style={{ marginTop: 14, fontSize: 13, color: "#6f7b69" }}>
-              Lv.{Number(profile.level || 1)} · <UiIcon name="helpful" size={13} /> 有帮助{" "}
-              {Number(profile.flower_count || 0)}
-            </div>
+        <section style={{ ...panelInnerStyle, marginTop: 16 }}>
+          <div style={sectionTitleStyle}>最近公开项目</div>
 
-            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-              <MetaItem label="关注" value={String(stats.followingCount)} />
-              <MetaItem label="粉丝" value={String(stats.followerCount)} />
-              <MetaItem label="公开项目" value={String(stats.publicArchiveCount)} />
-              <MetaItem
-                label="最近活跃"
-                value={formatProfileDate(stats.latestRecordTime)}
-              />
-            </div>
-          </section>
-
-          <section style={panelInnerStyle}>
-            <div style={sectionTitleStyle}>最近公开项目</div>
-
-            {data.recentArchives.length ? (
-              <div style={{ display: "grid", gap: 12 }}>
-                {data.recentArchives.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={`/archive/${item.id}`}
+          {data.recentArchives.length ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              {data.recentArchives.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/archive/${item.id}`}
+                  style={{
+                    textDecoration: "none",
+                    border: "1px solid #e5ece1",
+                    borderRadius: 14,
+                    padding: 12,
+                    color: "#22301f",
+                    background: "#fff",
+                  }}
+                >
+                  <div
                     style={{
-                      textDecoration: "none",
-                      border: "1px solid #e5ece1",
-                      borderRadius: 16,
-                      padding: 14,
-                      color: "#22301f",
-                      background: "#fff",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        alignItems: "center",
-                      }}
-                    >
-                      <div style={{ fontWeight: 650 }}>
-                        {item.title || "未命名项目"}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#75806f" }}>
-                        {formatProfileDate(item.last_record_time)}
-                      </div>
+                    <div style={{ fontWeight: 650 }}>
+                      {item.title || "未命名项目"}
                     </div>
+                    <div style={{ fontSize: 12, color: "#75806f" }}>
+                      {formatProfileDate(item.last_record_time)}
+                    </div>
+                  </div>
 
-                    <div style={{ marginTop: 6, fontSize: 13, color: "#63705d" }}>
-                      具体名称：{item.system_name || "未填写"} · 分类：
-                      {item.category || "未分类"}
-                    </div>
+                  <div style={{ marginTop: 6, fontSize: 13, color: "#63705d" }}>
+                    具体名称：{item.system_name || "未填写"} · 分类：
+                    {item.category || "未分类"}
+                  </div>
 
-                    <div style={{ marginTop: 6, fontSize: 12, color: "#7a8575" }}>
-                      记录 {Number(item.record_count || 0)} 条 · 浏览{" "}
-                      {Number(item.view_count || 0)}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: "#6d7968", lineHeight: 1.8 }}>
-                还没有公开项目
-              </div>
-            )}
-          </section>
-        </div>
+                  <div style={{ marginTop: 6, fontSize: 12, color: "#7a8575" }}>
+                    记录 {Number(item.record_count || 0)} 条 · 浏览{" "}
+                    {Number(item.view_count || 0)}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: "#6d7968", lineHeight: 1.8 }}>
+              还没有公开项目
+            </div>
+          )}
+        </section>
 
         <section style={marketInfoSectionStyle}>
           <div style={marketInfoHeaderStyle}>
-            <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>集市信息</div>
-              <h2 style={marketInfoTitleStyle}>TA 发布的集市信息</h2>
-              <p style={marketInfoDescStyle}>
-                当前正在进行的交换、赠送、转让或求购信息。
-              </p>
-            </div>
+            <h2 style={marketInfoTitleStyle}>集市信息</h2>
 
             <Link href="/market" style={smallMarketLinkStyle}>
               去集市看看
@@ -446,7 +389,7 @@ export default function PublicUserProfilePage() {
             </div>
           ) : (
             <div style={emptyMarketStyle}>
-              TA 还没有正在进行的集市信息。
+              还没有正在进行的集市信息。
             </div>
           )}
         </section>
@@ -504,15 +447,18 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   return (
     <div
       style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 12,
-        fontSize: 13,
-        color: "#5f6a5b",
+        display: "grid",
+        gap: 4,
+        padding: "10px 12px",
+        border: "1px solid #e5ece1",
+        borderRadius: 12,
+        background: "#f9fcf7",
       }}
     >
-      <span>{label}</span>
-      <span style={{ color: "#1f2a1f", fontWeight: 600 }}>{value}</span>
+      <span style={{ color: "#74806f", fontSize: 12 }}>{label}</span>
+      <span style={{ color: "#1f2a1f", fontSize: 14, fontWeight: 650 }}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -527,8 +473,74 @@ const panelStyle: CSSProperties = {
 const panelInnerStyle: CSSProperties = {
   background: "#f9fcf7",
   border: "1px solid #e5ece1",
-  borderRadius: 18,
-  padding: 18,
+  borderRadius: 16,
+  padding: 16,
+};
+
+const backLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  color: "#5d6c57",
+  textDecoration: "none",
+  fontSize: 14,
+};
+
+const profileHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap",
+};
+
+const profileIdentityStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  minWidth: 0,
+};
+
+const profileNameStyle: CSSProperties = {
+  margin: 0,
+  color: "#1f2a1f",
+  fontSize: 24,
+  lineHeight: 1.2,
+};
+
+const profileRegionStyle: CSSProperties = {
+  marginTop: 6,
+  color: "#5f6d5a",
+  fontSize: 14,
+};
+
+const profileAccountStyle: CSSProperties = {
+  marginTop: 4,
+  color: "#7a8575",
+  fontSize: 12,
+};
+
+const profileLevelStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 3,
+  marginTop: 5,
+  color: "#64715f",
+  fontSize: 12,
+};
+
+const profileActionRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const profileStatsGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+  gap: 8,
+  marginTop: 16,
 };
 
 const sectionTitleStyle: CSSProperties = {
@@ -542,21 +554,23 @@ const primaryButtonStyle: CSSProperties = {
   border: "none",
   background: "#4f7b45",
   color: "#fff",
-  borderRadius: 12,
-  padding: "12px 18px",
+  borderRadius: 999,
+  padding: "9px 13px",
   cursor: "pointer",
-  fontSize: 14,
+  fontSize: 13,
   fontWeight: 600,
 };
 
 const secondaryLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
   textDecoration: "none",
   border: "1px solid #d7e2d2",
   background: "#fff",
   color: "#40583a",
-  borderRadius: 12,
-  padding: "11px 16px",
-  fontSize: 14,
+  borderRadius: 999,
+  padding: "8px 12px",
+  fontSize: 13,
   fontWeight: 600,
 };
 
@@ -578,16 +592,9 @@ const marketInfoHeaderStyle: CSSProperties = {
 };
 
 const marketInfoTitleStyle: CSSProperties = {
-  margin: "4px 0 0",
+  margin: 0,
   color: "#1f2a1f",
-  fontSize: 20,
-};
-
-const marketInfoDescStyle: CSSProperties = {
-  margin: "5px 0 0",
-  color: "#6f7b69",
-  fontSize: 13,
-  lineHeight: 1.6,
+  fontSize: 18,
 };
 
 const smallMarketLinkStyle: CSSProperties = {

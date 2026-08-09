@@ -13,7 +13,7 @@ type Props = {
   backLabel: string;
   eyebrow: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   category: ArchiveCategory;
   onCategoryChange: (category: ArchiveCategory) => void;
   projectTitle: string;
@@ -69,7 +69,7 @@ export default function ArchiveNewProjectFormShell({
         </Link>
         <div style={eyebrowStyle}>{eyebrow}</div>
         <h1 style={titleStyle}>{title}</h1>
-        <p style={subtitleStyle}>{subtitle}</p>
+        {subtitle ? <p style={subtitleStyle}>{subtitle}</p> : null}
 
         {disabledNotice ? <div style={disabledNoticeStyle}>{disabledNotice}</div> : null}
 

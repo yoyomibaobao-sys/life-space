@@ -143,7 +143,6 @@ export default function NewLocalArchivePage() {
       backLabel="返回我的空间"
       eyebrow="本地离线"
       title="新建项目"
-      subtitle="表单结构与云空间一致，只是保存到本地的 App 私有存储。"
       category={category}
       onCategoryChange={handleCategoryChange}
       projectTitle={title}

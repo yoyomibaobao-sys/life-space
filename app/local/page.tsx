@@ -26,8 +26,7 @@ export default function LocalModePage() {
         </div>
         <h1 style={{ margin: "0 0 14px", fontSize: 28 }}>先本地使用</h1>
         <p style={{ margin: 0, lineHeight: 1.9, color: "#4f5d4a" }}>
-          本地离线模式指 App 私有存储中的项目、记录和图片缓存，不会默认写入系统相册，也不会上传云端或进入发现页。
-          你可以先建立本地项目和记录，内容只保存在当前设备。
+          本地数据保存在当前设备的 App 私有存储中，不会默认写入系统相册。
         </p>
 
         <ul

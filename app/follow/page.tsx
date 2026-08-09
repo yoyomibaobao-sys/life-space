@@ -463,11 +463,7 @@ export default function FollowPage() {
     <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
       {!isMobileViewport ? (
         <section style={heroStyle}>
-          <div>
-            <div style={eyebrowStyle}>持续追踪中心</div>
-            <h1 style={titleStyle}>关注</h1>
-            <div style={subtitleStyle}>查看你正在追踪的项目和用户最近发生了什么。</div>
-          </div>
+          <h1 style={titleStyle}>关注</h1>
 
           <div style={summaryWrapStyle}>
             <SummaryCard label="关注项目" value={projectCards.length} />
@@ -823,24 +819,11 @@ const heroStyle: React.CSSProperties = {
   marginBottom: 18,
 };
 
-const eyebrowStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: "#6f8f62",
-  fontWeight: 700,
-  letterSpacing: 1.2,
-};
-
 const titleStyle: React.CSSProperties = {
-  margin: "8px 0 0",
+  margin: 0,
   fontSize: 30,
   lineHeight: 1.2,
   color: "#243024",
-};
-
-const subtitleStyle: React.CSSProperties = {
-  marginTop: 10,
-  color: "#6f786e",
-  fontSize: 14,
 };
 
 const summaryWrapStyle: React.CSSProperties = {

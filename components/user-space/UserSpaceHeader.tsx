@@ -2,11 +2,11 @@ import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
+  userId: string;
   username: string;
-  onOpenCard: () => void;
 };
 
-export default function UserSpaceHeader({ username, onOpenCard }: Props) {
+export default function UserSpaceHeader({ userId, username }: Props) {
   return (
     <section
       style={{
@@ -30,9 +30,8 @@ export default function UserSpaceHeader({ username, onOpenCard }: Props) {
           {username ? `${username} · 空间` : "用户空间"}
         </h1>
 
-        <button
-          type="button"
-          onClick={onOpenCard}
+        <Link
+          href={`/user/${userId}/profile`}
           style={{
             border: "1px solid #dce8d8",
             background: "#f5faf3",
@@ -41,10 +40,11 @@ export default function UserSpaceHeader({ username, onOpenCard }: Props) {
             padding: "4px 10px",
             cursor: "pointer",
             fontSize: 13,
+            textDecoration: "none",
           }}
         >
-          名片
-        </button>
+          用户资料
+        </Link>
       </div>
 
       <Link

@@ -4,27 +4,16 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import ConfirmDialog from "@/components/ConfirmDialog";
-import { showToast } from "@/components/Toast";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
-import {
-  PUBLIC_PROFILE_SELECT,
-  type AppProfile,
-  type MediaItem,
-} from "@/lib/domain-types";
+import { type MediaItem } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   type ArchiveCategory,
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
-import {
-  canCreateMembershipContent,
-  getCreateContentBlockedText,
-  normalizeMembershipRpcResult,
-} from "@/lib/membership";
 
 type Category = "all" | ArchiveCategory;
 
@@ -69,14 +58,6 @@ type ArchiveFollowIdRow = {
   archive_id: string;
 };
 
-type UserSpaceCardProfile = Pick<
-  AppProfile,
-  "username" | "avatar_url" | "level" | "flower_count"
-> & {
-  followingCount: number;
-  followerCount: number;
-};
-
 type UserSpaceArchiveStats = {
   count: number;
   latest: UserSpaceRecord;
@@ -110,12 +91,7 @@ export default function UserSpacePage() {
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
 
-  const [isFollowing, setIsFollowing] = useState(false);
   const [followedArchiveIds, setFollowedArchiveIds] = useState<string[]>([]);
-  const [showCard, setShowCard] = useState(false);
-  const [cardProfile, setCardProfile] = useState<UserSpaceCardProfile | null>(null);
-  const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
-  const [followSubmitting, setFollowSubmitting] = useState(false);
 
   const loadingRef = useRef(false);
 
@@ -220,53 +196,6 @@ export default function UserSpacePage() {
       mediaIndex += mediaCount;
       return { ...record, media };
     });
-  }
-
-  async function openCard() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data } = await supabase
-      .from("public_profiles")
-      .select(PUBLIC_PROFILE_SELECT)
-      .eq("id", userId)
-      .maybeSingle();
-
-    const { count: followingCount } = await supabase
-      .from("follows")
-      .select("*", { count: "exact", head: true })
-      .eq("follower_id", userId);
-
-    const { count: followerCount } = await supabase
-      .from("follows")
-      .select("*", { count: "exact", head: true })
-      .eq("following_id", userId);
-
-    const profile = (data || {}) as Pick<
-      AppProfile,
-      "username" | "avatar_url" | "level" | "flower_count"
-    >;
-    setCardProfile({
-      ...profile,
-      followingCount: followingCount || 0,
-      followerCount: followerCount || 0,
-    });
-
-    if (user) {
-      const { data: follow } = await supabase
-        .from("follows")
-        .select("*")
-        .eq("follower_id", user.id)
-        .eq("following_id", userId)
-        .maybeSingle();
-
-      setIsFollowing(!!follow);
-    } else {
-      setIsFollowing(false);
-    }
-
-    setShowCard(true);
   }
 
   useEffect(() => {
@@ -419,9 +348,8 @@ export default function UserSpacePage() {
             {username ? `${username} · 空间` : "用户空间"}
           </h1>
 
-          <button
-            type="button"
-            onClick={openCard}
+          <Link
+            href={`/user/${userId}/profile`}
             style={{
               border: "1px solid #dce8d8",
               background: "#f5faf3",
@@ -430,10 +358,11 @@ export default function UserSpacePage() {
               padding: "4px 10px",
               cursor: "pointer",
               fontSize: 13,
+              textDecoration: "none",
             }}
           >
-            名片
-          </button>
+            用户资料
+          </Link>
         </div>
 
         <Link
@@ -707,206 +636,6 @@ export default function UserSpacePage() {
           })
         )}
       </section>
-
-      {showCard && cardProfile && (
-        <div
-          onClick={() => setShowCard(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.36)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 9999,
-            padding: 20,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 280,
-              background: "#fff",
-              borderRadius: 18,
-              padding: 22,
-              textAlign: "center",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
-            }}
-          >
-            {cardProfile.avatar_url ? (
-              <img
-                src={cardProfile.avatar_url}
-                alt=""
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: "50%",
-                  objectFit: "cover",
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: "50%",
-                  background: "#edf5e8",
-                  color: "#6f8f62",
-                  margin: "0 auto",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 28,
-                }}
-              >
-                <UiIcon name="sprout" size={26} />
-              </div>
-            )}
-
-            <div style={{ marginTop: 12, fontWeight: 650 }}>
-              {cardProfile.username || "未设置用户名"}
-            </div>
-
-            <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>
-              Lv.{cardProfile.level || 1} · <UiIcon name="helpful" size={13} /> 有帮助 {cardProfile.flower_count || 0}
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
-              关注 {cardProfile.followingCount || 0} · 被关注{" "}
-              {cardProfile.followerCount || 0}
-            </div>
-
-            <div style={{ marginTop: 16, display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (followSubmitting) return;
-                  const {
-                    data: { user },
-                  } = await supabase.auth.getUser();
-
-                  if (!user) {
-                    router.push("/login");
-                    return;
-                  }
-
-                  if (isFollowing) {
-                    setShowUnfollowConfirm(true);
-                    return;
-                  }
-
-                  const { data: membershipData, error: membershipError } =
-                    await supabase.rpc("get_my_membership");
-                  const membership = membershipError
-                    ? null
-                    : normalizeMembershipRpcResult(membershipData);
-
-                  if (!canCreateMembershipContent(membership)) {
-                    showToast(getCreateContentBlockedText(membership));
-                    return;
-                  }
-
-                  setFollowSubmitting(true);
-                  const { error } = await supabase.from("follows").insert([
-                    {
-                      follower_id: user.id,
-                      following_id: userId,
-                    },
-                  ]);
-                  setFollowSubmitting(false);
-
-                  if (error) {
-                    showToast("关注失败");
-                    return;
-                  }
-
-                  setIsFollowing(true);
-                  showToast("已关注该用户");
-                }}
-                style={{
-                  padding: "8px 16px",
-                  background: isFollowing ? "#f2f2f2" : "#4f7b45",
-                  color: isFollowing ? "#333" : "#fff",
-                  borderRadius: 999,
-                  cursor: "pointer",
-                  border: "none",
-                  fontSize: 14,
-                }}
-              >
-                {followSubmitting ? "处理中..." : isFollowing ? "已关注" : "关注"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => router.push(`/user/${userId}/profile`)}
-                style={{
-                  padding: "8px 16px",
-                  background: "#f5faf3",
-                  color: "#4f7b45",
-                  borderRadius: 999,
-                  cursor: "pointer",
-                  border: "1px solid #dce8d8",
-                  fontSize: 14,
-                }}
-              >
-                查看资料
-              </button>
-            </div>
-
-            <div
-              onClick={() => setShowCard(false)}
-              style={{
-                marginTop: 14,
-                fontSize: 12,
-                color: "#999",
-                cursor: "pointer",
-              }}
-            >
-              关闭
-            </div>
-          </div>
-        </div>
-      )}
-      <ConfirmDialog
-        open={showUnfollowConfirm}
-        title="取消关注用户"
-        message={`确定不再关注“${cardProfile?.username || username || "这个用户"}”吗？`}
-        confirmText={followSubmitting ? "处理中..." : "取消关注"}
-        cancelText="保留关注"
-        danger
-        onClose={() => {
-          if (!followSubmitting) setShowUnfollowConfirm(false);
-        }}
-        onConfirm={async () => {
-          if (followSubmitting) return;
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-
-          if (!user) {
-            router.push("/login");
-            return;
-          }
-
-          setFollowSubmitting(true);
-          const { error } = await supabase
-            .from("follows")
-            .delete()
-            .eq("follower_id", user.id)
-            .eq("following_id", userId);
-          setFollowSubmitting(false);
-
-          if (error) {
-            showToast("取消关注失败");
-            return;
-          }
-
-          setIsFollowing(false);
-          setShowUnfollowConfirm(false);
-          showToast("已取消关注该用户");
-        }}
-      />
-
     </main>
   );
 }
