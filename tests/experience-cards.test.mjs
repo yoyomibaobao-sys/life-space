@@ -281,7 +281,12 @@ test("experience card lists use a shared cover with source and archive fallbacks
   assert.match(listCard, /alt=\{`\$\{item\.title\}封面`\}/);
   assert.match(loader, /row\.cover_media_id/);
   assert.match(loader, /mediaByRecord\.get\(recordId\)\?\.\[0\]/);
+  assert.doesNotMatch(loader, /cover_thumb_url/);
   assert.match(loader, /archive\.cover_thumb_path/);
+  assert.match(loader, /thumb_url: null/);
+  assert.match(loader, /sourceState === "error"/);
+  assert.match(loader, /来源读取失败，请稍后重试/);
+  assert.match(loader, /来源项目已不可用/);
   assert.match(timeline, /thumbWrapStyle/);
   assert.match(timeline, /previewMedia = imageMedia\.slice\(0, 3\)/);
   assert.match(timeline, /共\{imageMedia\.length\}张/);

@@ -18,6 +18,7 @@ export type ExperienceCardRow = {
 export type ExperienceCardListItem = ExperienceCardRow & {
   archiveTitle: string;
   sourceAvailable: boolean;
+  sourceState: "available" | "missing" | "error";
   archiveCategory: string | null;
   systemName: string | null;
   coverUrl: string | null;

@@ -180,12 +180,14 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
   assert.match(detail, /is_experience_card_public/);
 });
 
-test("discover search separates projects, records, and covered experience cards", async () => {
-  const [page, tabs, form, results, data, utils] = await Promise.all([
+test("discover search separates three result types with one shared card format", async () => {
+  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils] = await Promise.all([
     source("app/discover/search/page.tsx"),
     source("components/discover-search/DiscoverSearchTabs.tsx"),
     source("components/discover-search/DiscoverSearchForm.tsx"),
     source("components/discover-search/DiscoverSearchResults.tsx"),
+    source("components/discover-search/DiscoverSearchResultCard.tsx"),
+    source("components/discover-search/DiscoverSearchResultCard.module.css"),
     source("lib/discover-search-data.ts"),
     source("lib/discover-search-utils.ts"),
   ]);
@@ -197,10 +199,18 @@ test("discover search separates projects, records, and covered experience cards"
   assert.match(page, /fetchDiscoverSearchResults/);
   assert.match(page, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(form, /searchKind === "records"/);
-  assert.match(results, /<DiscoverProjectCard/);
-  assert.match(results, /<ExperienceCardListCard/);
-  assert.match(results, /kind === "projects"[\s\S]*?<DiscoverProjectCard/);
-  assert.match(results, /recordItems\.map[\s\S]*?<ProjectCardRows/);
+  assert.doesNotMatch(form, /按地区匹配公开/);
+  assert.match(results, /kind === "projects"[\s\S]*?projectItems\.map[\s\S]*?<DiscoverSearchResultCard/);
+  assert.match(results, /kind === "experience"[\s\S]*?experienceItems\.map[\s\S]*?<DiscoverSearchResultCard/);
+  assert.match(results, /recordItems\.map[\s\S]*?<DiscoverSearchResultCard/);
+  assert.doesNotMatch(results, /<DiscoverProjectCard|<ExperienceCardListCard|<ProjectCardRows/);
+  assert.match(results, /imageUrl=\{item\.display_image_url\}/);
+  assert.match(results, /imageUrl=\{item\.coverUrl\}/);
+  assert.match(results, /imageUrl=\{displayImageUrl\}/);
+  assert.match(resultCard, /<CompactActivityTime/);
+  assert.match(resultCard, /className=\{styles\.card\}/);
+  assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(resultCardStyles, /@media \(min-width: 760px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(data, /\.from\("discovery_project_feed_view"\)/);
   assert.match(data, /hydrateExperienceCardListItems/);
   assert.match(data, /is_experience_card_public/);

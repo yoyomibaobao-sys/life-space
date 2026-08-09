@@ -21,7 +21,6 @@ type ExperienceCardListArchiveRow = {
   species_name_snapshot: string | null;
   cover_image_url: string | null;
   cover_image_path: string | null;
-  cover_thumb_url: string | null;
   cover_thumb_path: string | null;
 };
 
@@ -102,7 +101,7 @@ export async function hydrateExperienceCardListItems(
     supabase
       .from("archives")
       .select(
-        "id, title, category, system_name, species_name_snapshot, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
+        "id, title, category, system_name, species_name_snapshot, cover_image_url, cover_image_path, cover_thumb_path"
       )
       .in("id", archiveIds),
     supabase
@@ -119,6 +118,10 @@ export async function hydrateExperienceCardListItems(
       p_card_ids: cardIds,
     }),
   ]);
+
+  if (archiveResult.error) {
+    console.error("experience card source projects load failed:", archiveResult.error);
+  }
 
   const archives = (archiveResult.data || []) as ExperienceCardListArchiveRow[];
   const profiles = (profileResult.data || []) as ExperienceCardListProfileRow[];
@@ -164,7 +167,7 @@ export async function hydrateExperienceCardListItems(
       id: archive.id,
       url: archive.cover_image_url,
       storage_path: archive.cover_image_path,
-      thumb_url: archive.cover_thumb_url,
+      thumb_url: null,
       thumb_path: archive.cover_thumb_path,
     }))
   );
@@ -186,6 +189,11 @@ export async function hydrateExperienceCardListItems(
 
   return rows.map((row) => {
     const archive = archiveById.get(row.archive_id);
+    const sourceState = archiveResult.error
+      ? "error"
+      : archive
+        ? "available"
+        : "missing";
     const profile = profileById.get(row.user_id);
     const relatedRecordIds = recordIdsByCard.get(row.id) || [];
     const relatedMedia = relatedRecordIds.flatMap(
@@ -208,8 +216,11 @@ export async function hydrateExperienceCardListItems(
 
     return {
       ...row,
-      archiveTitle: archive?.title?.trim() || "来源暂不可用",
+      archiveTitle:
+        archive?.title?.trim() ||
+        (sourceState === "error" ? "来源读取失败，请稍后重试" : "来源项目已不可用"),
       sourceAvailable: Boolean(archive),
+      sourceState,
       archiveCategory: archive?.category || null,
       systemName:
         archive?.system_name?.trim() ||

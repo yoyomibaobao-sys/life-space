@@ -315,10 +315,6 @@ export default function DiscoverSearchForm({
         ) : null}
       </div>
 
-      <div style={{ marginTop: 8, fontSize: 12, color: "#6f7f6f", lineHeight: 1.6 }}>
-        按地区匹配公开{searchKind === "projects" ? "项目" : searchKind === "experience" ? "经验卡" : "记录"}
-      </div>
-
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
         {isRecordSearch ? (
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374737", cursor: "pointer" }}>
