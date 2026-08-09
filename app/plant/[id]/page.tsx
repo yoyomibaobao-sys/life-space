@@ -1096,7 +1096,7 @@ function PlantRecordsSection({
       <Subsection title="大家的公开种植记录">
         <PlantArchiveList
           archives={uniquePublicArchives}
-          emptyText="还没有公开种植记录。你可以从自己的项目开始沉淀经验。"
+          emptyText="还没有公开种植记录。"
           entryLabel="查看公开项目"
           hrefForArchive={(archive) => `/archive/${archive.archive_id}?mode=viewer`}
           countLabel="公开记录"

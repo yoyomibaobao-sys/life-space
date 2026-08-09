@@ -129,7 +129,6 @@ export default function RecentBrowsePage() {
               <UiIcon name="arrow-left" size={15} /> 返回个人资料
             </Link>
             <h1 style={titleStyle}>最近浏览</h1>
-            <div style={subtitleStyle}>最近访问过的项目记录页</div>
           </div>
 
           {items.length > 0 && (
@@ -233,12 +232,6 @@ const titleStyle: CSSProperties = {
   margin: 0,
   fontSize: 26,
   color: "#1f2a1f",
-};
-
-const subtitleStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#6f7b69",
-  fontSize: 14,
 };
 
 const clearButtonStyle: CSSProperties = {

@@ -473,18 +473,12 @@ export default function EditMarketPostPage() {
 
         <section style={panelStyle}>
           <h1 style={titleStyle}>编辑集市信息</h1>
-          <p style={subtitleStyle}>可修改标题、说明、地区、图片和封面。</p>
 
           {errorMsg ? <div style={errorStyle}>{errorMsg}</div> : null}
 
           <section style={imageManagerSectionStyle}>
             <div style={imageManagerHeaderStyle}>
-              <div>
-                <div style={sectionTitleStyle}>集市图片</div>
-                <div style={imageHintStyle}>
-                  可上传/拍照补充图片，删除图片，或设置某张图为封面。
-                </div>
-              </div>
+              <div style={sectionTitleStyle}>集市图片</div>
 
               <label style={uploadButtonStyle}>
                 {uploading ? "上传中..." : "上传/拍照"}
@@ -761,13 +755,6 @@ const titleStyle: CSSProperties = {
   color: "#1f2a1f",
 };
 
-const subtitleStyle: CSSProperties = {
-  margin: "6px 0 0",
-  color: "#6f7b69",
-  fontSize: 14,
-  lineHeight: 1.7,
-};
-
 const sectionTitleStyle: CSSProperties = {
   color: "#1f2a1f",
   fontSize: 17,
@@ -789,13 +776,6 @@ const imageManagerHeaderStyle: CSSProperties = {
   alignItems: "flex-start",
   flexWrap: "wrap",
   marginBottom: 12,
-};
-
-const imageHintStyle: CSSProperties = {
-  marginTop: 4,
-  color: "#7b8676",
-  fontSize: 12,
-  lineHeight: 1.5,
 };
 
 const uploadButtonStyle: CSSProperties = {

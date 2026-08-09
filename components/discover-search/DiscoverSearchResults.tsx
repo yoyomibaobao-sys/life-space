@@ -128,7 +128,7 @@ export default function DiscoverSearchResults({
                 }
                 dateValue={item.public_activity_at}
                 detail={systemName}
-                summary={item.card_summary || "项目刚刚开始"}
+                summary={item.card_summary?.trim() || undefined}
                 author={`${ownerName}${region ? ` · ${region}` : ""}`}
                 meta={
                   <ProjectMetaLine
@@ -164,7 +164,7 @@ export default function DiscoverSearchResults({
                   {item.systemName ? ` · ${item.systemName}` : ""}
                 </>
               }
-              summary="查看按原始时间排列的真实记录与照片"
+              summary={item.description?.trim() || undefined}
               author={`${item.authorName}${item.authorRegion ? ` · ${item.authorRegion}` : ""}`}
               meta={
                 <ProjectMetaLine
@@ -225,12 +225,7 @@ export default function DiscoverSearchResults({
                     </span>
                   ) : null
                 }
-                summary={
-                  record.note?.trim() ||
-                  (displayImageUrl
-                    ? "这条记录以照片为主"
-                    : "这条记录没有文字")
-                }
+                summary={record.note?.trim() || undefined}
                 author={`${authorName}${location ? ` · ${location}` : ""}`}
                 meta={
                   <ProjectMetaLine

@@ -18,7 +18,7 @@ type DiscoverSearchResultCardProps = {
   status?: ReactNode;
   dateValue?: string | null;
   detail?: ReactNode;
-  summary: ReactNode;
+  summary?: ReactNode;
   author?: ReactNode;
   meta?: ReactNode;
 };
@@ -75,7 +75,7 @@ export default function DiscoverSearchResultCard({
 
         <h2 className={styles.title}>{title}</h2>
         {detail ? <div className={styles.detail}>{detail}</div> : null}
-        <div className={styles.summary}>{summary}</div>
+        {summary ? <div className={styles.summary}>{summary}</div> : null}
 
         {author || meta ? (
           <div className={styles.footer}>

@@ -86,25 +86,21 @@ export default function ExperienceCardTimeline({
                   </div>
                 ) : null}
 
-                <div style={recordTextStyle}>
-                  {tags.length > 0 ? (
-                    <div style={tagRowStyle}>
-                      {tags.map((tag) => (
-                        <span key={tag} style={tagStyle}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
+                {tags.length > 0 || record.note ? (
+                  <div style={recordTextStyle}>
+                    {tags.length > 0 ? (
+                      <div style={tagRowStyle}>
+                        {tags.map((tag) => (
+                          <span key={tag} style={tagStyle}>
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
 
-                  {record.note ? (
-                    <p style={noteStyle}>{record.note}</p>
-                  ) : (
-                    <p style={emptyNoteStyle}>
-                      {hasImages ? "这条记录以照片为主。" : "这条记录没有文字。"}
-                    </p>
-                  )}
-                </div>
+                    {record.note ? <p style={noteStyle}>{record.note}</p> : null}
+                  </div>
+                ) : null}
               </div>
             </Link>
           </article>
@@ -211,12 +207,6 @@ const noteStyle: CSSProperties = {
   WebkitLineClamp: 3,
   WebkitBoxOrient: "vertical",
   overflow: "hidden",
-};
-
-const emptyNoteStyle: CSSProperties = {
-  ...noteStyle,
-  color: "#8b9388",
-  fontStyle: "italic",
 };
 
 const recordRowStyle: CSSProperties = {

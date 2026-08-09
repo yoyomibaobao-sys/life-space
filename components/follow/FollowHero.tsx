@@ -1,4 +1,9 @@
-import { SummaryCard, eyebrowStyle, heroStyle, subtitleStyle, summaryWrapStyle, titleStyle } from "@/components/follow/FollowShared";
+import {
+  SummaryCard,
+  heroStyle,
+  summaryWrapStyle,
+  titleStyle,
+} from "@/components/follow/FollowShared";
 
 export default function FollowHero({
   projectCount,
@@ -9,11 +14,7 @@ export default function FollowHero({
 }) {
   return (
     <section style={heroStyle}>
-      <div>
-        <div style={eyebrowStyle}>持续追踪中心</div>
-        <h1 style={titleStyle}>关注</h1>
-        <div style={subtitleStyle}>查看你正在追踪的项目和用户最近发生了什么。</div>
-      </div>
+      <h1 style={{ ...titleStyle, marginTop: 0 }}>关注</h1>
 
       <div style={summaryWrapStyle}>
         <SummaryCard label="关注项目" value={projectCount} />

@@ -154,9 +154,10 @@ test("project archive label, following cards, and discover cards use the refined
   assert.doesNotMatch(localProjectView, /浏览 0|关注 0|最新：|· 更新/);
   assert.ok(
     discoverData.indexOf("latestNote ||") <
-      discoverData.indexOf("row.latest_public_primary_image_url")
+      discoverData.indexOf("item.latest_public_primary_image_url")
   );
-  assert.match(discoverData, /archiveSummary \|\| "项目刚刚开始"/);
+  assert.match(discoverData, /card_summary: latestNote \|\| archiveSummary/);
+  assert.doesNotMatch(discoverData, /新增了照片|项目刚刚开始/);
 });
 
 test("plant detail exposes guide, experience cards, and records as peer tabs", async () => {
@@ -204,8 +205,16 @@ test("discover search separates three result types with one shared card format",
   assert.match(results, /imageUrl=\{item\.display_image_url\}/);
   assert.match(results, /imageUrl=\{item\.coverUrl\}/);
   assert.match(results, /imageUrl=\{displayImageUrl\}/);
+  assert.match(results, /summary=\{item\.card_summary\?\.trim\(\) \|\| undefined\}/);
+  assert.match(results, /summary=\{item\.description\?\.trim\(\) \|\| undefined\}/);
+  assert.match(results, /summary=\{record\.note\?\.trim\(\) \|\| undefined\}/);
+  assert.doesNotMatch(
+    results,
+    /查看按原始时间排列|这条记录以照片为主|这条记录没有文字|项目刚刚开始/
+  );
   assert.match(resultCard, /<CompactActivityTime/);
   assert.match(resultCard, /className=\{styles\.card\}/);
+  assert.match(resultCard, /\{summary \? <div className=\{styles\.summary\}>\{summary\}<\/div> : null\}/);
   assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(resultCardStyles, /\.card\s*\{[\s\S]*grid-template-columns: 108px minmax\(0, 1fr\);[\s\S]*padding: 8px;[\s\S]*border-radius: 14px;/);
   assert.match(resultCardStyles, /\.media\s*\{[\s\S]*width: 108px;[\s\S]*height: 108px;[\s\S]*border-radius: 10px;/);
@@ -217,4 +226,47 @@ test("discover search separates three result types with one shared card format",
   assert.match(data, /is_experience_card_public/);
   assert.match(utils, /params\.set\("type", kind\)/);
   assert.match(utils, /return "records"/);
+});
+
+test("user navigation opens a compact profile directly and keeps the space entry obvious", async () => {
+  const [userSpace, publicProfile, archiveDetail] = await Promise.all([
+    source("app/user/[id]/page.tsx"),
+    source("app/user/[id]/profile/page.tsx"),
+    source("app/archive/[id]/page.tsx"),
+  ]);
+
+  assert.match(userSpace, /href=\{`\/user\/\$\{userId\}\/profile`\}/);
+  assert.match(userSpace, />\s*用户资料\s*<\/Link>/);
+  assert.doesNotMatch(userSpace, /名片|showCard|UserProfileCard/);
+
+  assert.match(publicProfile, /<UserAvatar/);
+  assert.match(publicProfile, /profileStatsGridStyle/);
+  assert.match(publicProfile, /进入\{profile\.username \? `\$\{profile\.username\}的` : ""\}空间/);
+  assert.doesNotMatch(publicProfile, /用户信息页|当前正在进行的交换、赠送、转让或求购信息/);
+
+  assert.match(archiveDetail, /进入\{username\}的空间/);
+  assert.match(archiveDetail, /<UiIcon name="arrow-right" size=\{14\} \/>/);
+  assert.match(archiveDetail, /background: "#edf6e9"/);
+  assert.match(archiveDetail, /border: "1px solid #bfd5b8"/);
+});
+
+test("page headings omit copy that only restates the visible interface", async () => {
+  const sources = await Promise.all([
+    source("app/profile/page.tsx"),
+    source("app/profile/recent/page.tsx"),
+    source("app/profile/followers/page.tsx"),
+    source("app/follow/page.tsx"),
+    source("app/market/mine/page.tsx"),
+    source("app/market/[id]/edit/page.tsx"),
+    source("app/archive/new/page.tsx"),
+    source("app/local/archive/new/page.tsx"),
+    source("components/discover/DiscoverEmptyState.tsx"),
+    source("components/discover/DiscoverUserSections.tsx"),
+  ]);
+  const combined = sources.join("\n");
+
+  assert.doesNotMatch(
+    combined,
+    /用户信息页|最近访问过的项目记录页|正在关注你的用户|持续追踪中心|查看你正在追踪的项目和用户最近发生了什么|管理你发布过的交换、赠送、转让和求购信息|可修改标题、说明、地区、图片和封面|表单结构与本地项目一致|表单结构与云空间一致|公开记录会显示在这里|更多项目可进入空间查看/
+  );
 });

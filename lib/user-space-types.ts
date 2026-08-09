@@ -1,4 +1,3 @@
-import type { FollowCountSummary, SocialProfileSummary } from "@/lib/social-space-shared";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 
 export type Category = "all" | ArchiveCategory;
@@ -44,8 +43,6 @@ export type UserSpaceTag = {
   category?: string | null;
   sub_tag_id?: string | null;
 };
-
-export type UserCardProfile = SocialProfileSummary & Partial<FollowCountSummary>;
 
 export type ArchiveStat = {
   count: number;

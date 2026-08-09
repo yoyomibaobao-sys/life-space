@@ -465,6 +465,7 @@ test("experience card lists use a shared cover with source and archive fallbacks
   assert.match(timeline, /共\{imageMedia\.length\}张/);
   assert.doesNotMatch(timeline, />\+\{imageMedia\.length - 1\}</);
   assert.match(timeline, /href=\{`\/archive\/\$\{archive\.id\}\?record=\$\{record\.id\}`\}/);
+  assert.doesNotMatch(timeline, /这条记录以照片为主|这条记录没有文字/);
   assert.match(plantDetail, /hydrateExperienceCardListItems\(cardRows\)/);
   assert.match(plantDetail, /<ExperienceCardListCard/);
 });
@@ -616,6 +617,7 @@ test("experience card MP4 is shown first, selects individual images, and preserv
   assert.match(renderer, /"rgba\(18,31,20,0\.54\)"/);
   assert.doesNotMatch(renderer, /这条记录没有文字。/);
   assert.doesNotMatch(renderer, /scene\.date} · \$\{scene\.subtitle/);
+  assert.doesNotMatch(detail, /按记录时间排列/);
   assert.doesNotMatch(detail, /coverWrapStyle/);
   assert.doesNotMatch(detail, /metaGridStyle/);
   assert.match(detail, /overviewGridStyle/);

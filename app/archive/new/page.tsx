@@ -332,7 +332,6 @@ function NewArchiveContent() {
       backLabel="返回我的空间"
       eyebrow="云空间"
       title="新建项目"
-      subtitle="表单结构与本地项目一致；保存后进入云空间，可用于多设备、公开发现、求助和集市等云端能力。"
       category={category}
       onCategoryChange={(nextCategory) => {
         switchCategory(nextCategory);

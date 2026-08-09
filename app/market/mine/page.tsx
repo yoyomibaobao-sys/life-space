@@ -126,9 +126,6 @@ export default function MyMarketPostsPage() {
               <UiIcon name="arrow-left" size={15} /> 返回集市
             </Link>
             <h1 style={titleStyle}>我的集市发布</h1>
-            <p style={subtitleStyle}>
-              管理你发布过的交换、赠送、转让和求购信息。
-            </p>
           </div>
 
           {marketBlocked ? (
@@ -297,13 +294,6 @@ const titleStyle: CSSProperties = {
   margin: 0,
   fontSize: 28,
   color: "#1f2a1f",
-};
-
-const subtitleStyle: CSSProperties = {
-  margin: "6px 0 0",
-  color: "#6f7b69",
-  fontSize: 14,
-  lineHeight: 1.6,
 };
 
 const publishButtonStyle: CSSProperties = {

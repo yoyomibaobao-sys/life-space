@@ -560,10 +560,7 @@ export default function ProfilePage() {
     <main style={pageStyle}>
       <section style={shellStyle}>
         {!isMobileViewport ? (
-          <div>
-            <div style={{ fontSize: 13, color: "#6b7b66" }}>我的资料</div>
-            <h1 style={{ margin: "4px 0 0", fontSize: 24, color: "#1f2a1f" }}>用户信息页</h1>
-          </div>
+          <h1 style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>我的资料</h1>
         ) : null}
 
         {errorMsg ? (
@@ -887,25 +884,25 @@ export default function ProfilePage() {
                   href="/profile/recent"
                   label="最近浏览"
                   value="进入"
-                  hint="最近看过的项目"
+                  hint=""
                 />
                 <StatLinkCard
                   href="/follow?tab=projects"
                   label="我关注的项目"
                   value={String(stats.projectFollowCount)}
-                  hint="我关注的项目"
+                  hint=""
                 />
                 <StatLinkCard
                   href="/follow?tab=users"
                   label="我关注的用户"
                   value={String(stats.followingCount)}
-                  hint="我在关注谁"
+                  hint=""
                 />
                 <StatLinkCard
                   href="/profile/followers"
                   label="粉丝"
                   value={String(stats.followerCount)}
-                  hint="谁在关注我"
+                  hint=""
                 />
                 <StatLinkCard
                   href="/profile/helpful"

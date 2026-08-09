@@ -1876,7 +1876,8 @@ saveRecentArchiveBrowse({
                 style={desktopProjectOwnerLinkStyle}
                 aria-label={`进入${username}的空间`}
               >
-                {username}
+                进入{username}的空间
+                <UiIcon name="arrow-right" size={14} />
               </Link>
             )}
           </header>
@@ -2649,7 +2650,7 @@ const mobileRecordTopLinkStyle: CSSProperties = {
 
 const desktopProjectIdentityStyle: CSSProperties = {
   display: "flex",
-  alignItems: "baseline",
+  alignItems: "center",
   justifyContent: "space-between",
   gap: 14,
   marginBottom: 12,
@@ -2671,7 +2672,19 @@ const desktopProjectOwnerStyle: CSSProperties = {
 
 const desktopProjectOwnerLinkStyle: CSSProperties = {
   ...desktopProjectOwnerStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  padding: "9px 13px",
+  border: "1px solid #bfd5b8",
+  borderRadius: 999,
+  background: "#edf6e9",
+  color: "#315f2f",
+  fontSize: 14,
+  fontWeight: 700,
   textDecoration: "none",
+  whiteSpace: "nowrap",
+  boxShadow: "0 3px 10px rgba(53, 91, 45, 0.08)",
 };
 
 const archiveDetailTabWrapStyle: CSSProperties = {

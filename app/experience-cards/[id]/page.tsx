@@ -702,7 +702,6 @@ export default function ExperienceCardPage({
         <section style={timelineSectionStyle}>
           <div style={timelineHeadingStyle}>
             <strong>经验过程</strong>
-            <span>按记录时间排列</span>
           </div>
           <ExperienceCardTimeline
             archive={detail.archive}
