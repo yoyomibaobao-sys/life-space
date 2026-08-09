@@ -295,11 +295,13 @@ export default function ExperienceCardInteractions({
         ) : null}
       </div>
 
-      <p className={styles.hint}>
-        {isPublic
-          ? "“有帮助”表示这段真实过程值得参考，不代表对所有环境都有效。"
-          : "经验卡公开后，其他用户才可以收藏、标记“有帮助”和评论。"}
-      </p>
+      {!isOwner ? (
+        <p className={styles.hint}>
+          {isPublic
+            ? "“有帮助”表示这段真实过程值得参考，不代表对所有环境都有效。"
+            : "经验卡公开后，其他用户才可以收藏、标记“有帮助”和评论。"}
+        </p>
+      ) : null}
 
       {!available ? (
         <div className={styles.unavailable}>

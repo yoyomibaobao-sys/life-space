@@ -4,7 +4,6 @@ import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import {
@@ -30,7 +29,6 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
-import type { ArchiveCycle } from "@/lib/archive-detail-types";
 import { supabase } from "@/lib/supabase";
 
 const RECORD_SELECT = [
@@ -60,17 +58,6 @@ const MEDIA_SELECT = [
   "mime_type",
   "width",
   "height",
-].join(", ");
-
-const ACTIVE_CYCLE_SELECT = [
-  "id",
-  "archive_id",
-  "cycle_no",
-  "status",
-  "started_at",
-  "ended_at",
-  "created_at",
-  "updated_at",
 ].join(", ");
 
 function isSelectableImage(media: ExperienceCardMedia) {
@@ -136,15 +123,24 @@ function getFirstSelectedMediaId({
 function createEditorSnapshot({
   title,
   recordIds,
+  selectedMediaIdsByRecordId,
   coverMediaId,
 }: {
   title: string;
   recordIds: string[];
+  selectedMediaIdsByRecordId: Record<string, string[]>;
   coverMediaId: string | null;
 }) {
+  const normalizedRecordIds = [...recordIds].sort();
   return JSON.stringify({
     title: title.trim(),
-    recordIds: [...recordIds].sort(),
+    recordIds: normalizedRecordIds,
+    selectedMediaIdsByRecordId: Object.fromEntries(
+      normalizedRecordIds.map((recordId) => [
+        recordId,
+        [...(selectedMediaIdsByRecordId[recordId] || [])].sort(),
+      ])
+    ),
     coverMediaId,
   });
 }
@@ -203,29 +199,15 @@ async function loadEditorRecords({
   }));
 }
 
-async function loadActiveArchiveCycles(archiveId: string) {
-  const { data, error } = await supabase
-    .from("archive_cycles")
-    .select(ACTIVE_CYCLE_SELECT)
-    .eq("archive_id", archiveId)
-    .eq("status", "active")
-    .order("cycle_no", { ascending: false });
-
-  if (error) throw error;
-  return (data || []) as unknown as ArchiveCycle[];
-}
-
 export default function ExperienceCardEditor({
   cardId,
   embedded = false,
   onDirtyChange,
-  onVideoSelectionChange,
   onSaved,
 }: {
   cardId?: string;
   embedded?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
-  onVideoSelectionChange?: () => void;
   onSaved?: () => void | Promise<void>;
 }) {
   const router = useRouter();
@@ -234,7 +216,6 @@ export default function ExperienceCardEditor({
 
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
   const [records, setRecords] = useState<ExperienceCardSourceRecord[]>([]);
-  const [activeCycles, setActiveCycles] = useState<ArchiveCycle[]>([]);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [selectedMediaIdsByRecordId, setSelectedMediaIdsByRecordId] = useState<
@@ -249,7 +230,7 @@ export default function ExperienceCardEditor({
   const [refreshingRecords, setRefreshingRecords] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
-  const [addRecordOpen, setAddRecordOpen] = useState(false);
+  const [availableRecordsOpen, setAvailableRecordsOpen] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -312,12 +293,8 @@ export default function ExperienceCardEditor({
       }
 
       let nextRecords: ExperienceCardSourceRecord[];
-      let nextActiveCycles: ArchiveCycle[];
       try {
-        [nextRecords, nextActiveCycles] = await Promise.all([
-          loadEditorRecords({ archiveId, userId: user.id }),
-          loadActiveArchiveCycles(archiveId),
-        ]);
+        nextRecords = await loadEditorRecords({ archiveId, userId: user.id });
       } catch (error) {
         console.error("load experience card editor records error:", error);
         setErrorText("项目记录读取失败，请稍后重试。");
@@ -377,7 +354,6 @@ export default function ExperienceCardEditor({
 
       setArchive(archiveData as ExperienceCardArchive);
       setRecords(nextRecords);
-      setActiveCycles(nextActiveCycles);
       setSelectedRecordIds(nextSelectedRecordIds);
       setSelectedMediaIdsByRecordId(nextMediaSelection);
       setCoverMediaId(nextCoverMediaId);
@@ -388,7 +364,8 @@ export default function ExperienceCardEditor({
           createEditorSnapshot({
             title: existingTitle,
             recordIds: existingRecordIds,
-            coverMediaId: existingCoverMediaId,
+            selectedMediaIdsByRecordId: nextMediaSelection,
+            coverMediaId: nextCoverMediaId,
           })
         );
       }
@@ -416,6 +393,9 @@ export default function ExperienceCardEditor({
   const selectedRecords = records.filter((record) =>
     selectedRecordIdSet.has(record.id)
   );
+  const availableRecords = records.filter(
+    (record) => !selectedRecordIdSet.has(record.id)
+  );
   const selectedMediaIdSet = useMemo(
     () =>
       new Set(
@@ -434,13 +414,11 @@ export default function ExperienceCardEditor({
     coverOptions.some((media) => media.id === coverMediaId)
       ? coverMediaId
       : null;
-  const unselectedRecordCount = Math.max(
-    0,
-    records.length - selectedRecords.length
-  );
+  const unselectedRecordCount = availableRecords.length;
   const currentSnapshot = createEditorSnapshot({
     title,
     recordIds: selectedRecords.map((record) => record.id),
+    selectedMediaIdsByRecordId,
     coverMediaId: effectiveCoverMediaId,
   });
   const hasChanges = !cardId || currentSnapshot !== initialSnapshot;
@@ -455,8 +433,8 @@ export default function ExperienceCardEditor({
   const canPublish = canPersist && (!wasPublished || hasChanges);
 
   useEffect(() => {
-    onDirtyChange?.(hasChanges);
-  }, [hasChanges, onDirtyChange]);
+    if (!loading) onDirtyChange?.(hasChanges);
+  }, [hasChanges, loading, onDirtyChange]);
 
   function persistLocalSelection({
     nextRecordIds,
@@ -499,21 +477,11 @@ export default function ExperienceCardEditor({
       });
     }
     if (cardId) {
-      void deleteCachedExperienceCardVideo(cardId)
-        .catch(() => undefined)
-        .finally(() => onVideoSelectionChange?.());
-    } else {
-      onVideoSelectionChange?.();
+      void deleteCachedExperienceCardVideo(cardId).catch(() => undefined);
     }
   }
 
-  async function refreshProjectRecords({
-    selectNewRecords,
-    announce = true,
-  }: {
-    selectNewRecords: boolean;
-    announce?: boolean;
-  }) {
+  async function refreshProjectRecords({ announce = true } = {}) {
     if (!archive || refreshingRecords) return;
     setRefreshingRecords(true);
     setErrorText("");
@@ -535,25 +503,12 @@ export default function ExperienceCardEditor({
       const newlyAddedRecords = nextRecords.filter(
         (record) => !currentRecordIdSet.has(record.id)
       );
-      const newRecordIds = selectNewRecords
-        ? newlyAddedRecords.map((record) => record.id)
-        : [];
-      const newRecordIdSet = new Set(newRecordIds);
-      const nextRecordIds = Array.from(
-        new Set([
-          ...selectedRecordIds.filter((recordId) =>
-            validRecordIdSet.has(recordId)
-          ),
-          ...newRecordIds,
-        ])
+      const nextRecordIds = selectedRecordIds.filter((recordId) =>
+        validRecordIdSet.has(recordId)
       );
       const nextMediaSelection = Object.fromEntries(
         nextRecords.map((record) => {
           const availableIds = getRecordImages(record).map((media) => media.id);
-          if (newRecordIdSet.has(record.id)) {
-            return [record.id, availableIds];
-          }
-
           const availableIdSet = new Set(availableIds);
           return [
             record.id,
@@ -576,7 +531,7 @@ export default function ExperienceCardEditor({
       if (announce) {
         showToast(
           newlyAddedRecords.length > 0
-            ? `${newlyAddedRecords.length}条新记录已加入经验卡`
+            ? `${newlyAddedRecords.length}条已有记录可加入经验卡`
             : "项目记录已是最新"
         );
       }
@@ -586,6 +541,11 @@ export default function ExperienceCardEditor({
     } finally {
       setRefreshingRecords(false);
     }
+  }
+
+  function openAvailableRecords() {
+    setAvailableRecordsOpen(true);
+    void refreshProjectRecords({ announce: false });
   }
 
   function toggleRecord(recordId: string) {
@@ -761,13 +721,166 @@ export default function ExperienceCardEditor({
     );
   }
 
+  function renderSelectedRecord(
+    record: ExperienceCardSourceRecord,
+    index: number
+  ) {
+    const recordImages = getRecordImages(record);
+    const selectedMediaIds = selectedMediaIdsByRecordId[record.id] || [];
+    const selectedMediaIdSetForRecord = new Set(selectedMediaIds);
+    const allImagesSelected =
+      recordImages.length > 0 && selectedMediaIds.length === recordImages.length;
+
+    return (
+      <article key={record.id} style={recordEditorStyle(true)}>
+        <button
+          type="button"
+          aria-pressed="true"
+          onClick={() => toggleRecord(record.id)}
+          style={recordHeaderButtonStyle}
+          aria-label={`从经验卡移出第${index + 1}条记录`}
+        >
+          <span style={recordCheckStyle(true)} aria-hidden="true">
+            <UiIcon name="check" size={14} />
+          </span>
+          <span style={recordHeaderTextStyle}>
+            <span style={recordMetaStyle}>
+              {formatExperienceCardDate(record.record_time) || `记录${index + 1}`}
+            </span>
+            <span style={recordNoteStyle}>
+              {record.note?.trim() || "无文字记录"}
+            </span>
+          </span>
+          <span style={recordSelectedStyle(false)}>移出</span>
+        </button>
+
+        <div style={recordMediaAreaStyle(true)}>
+          <div style={recordMediaHeadingStyle}>
+            <span>
+              {recordImages.length > 0
+                ? `MP4图片 ${selectedMediaIds.length}/${recordImages.length}`
+                : "这条记录没有图片，将使用文字画面"}
+            </span>
+            {recordImages.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => toggleAllRecordImages(record)}
+                style={recordMediaActionStyle}
+              >
+                {allImagesSelected ? "清空图片" : "全选图片"}
+              </button>
+            ) : null}
+          </div>
+
+          {recordImages.length > 0 ? (
+            <div style={recordImageGridStyle}>
+              {recordImages.map((media, mediaIndex) => {
+                const active = selectedMediaIdSetForRecord.has(media.id);
+                const isCover = active && effectiveCoverMediaId === media.id;
+                const previewUrl =
+                  media.display_thumb_url || media.display_url || "";
+
+                return (
+                  <div key={media.id} style={recordImageItemStyle}>
+                    <button
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => toggleRecordImage(record.id, media.id)}
+                      style={recordImageButtonStyle(active, true)}
+                    >
+                      <img
+                        src={previewUrl}
+                        alt={`第${index + 1}条记录的图片${mediaIndex + 1}`}
+                        loading="lazy"
+                        style={recordThumbnailStyle}
+                      />
+                      {active ? (
+                        <span style={recordImageBadgeStyle}>
+                          <UiIcon name="check" size={13} />
+                        </span>
+                      ) : null}
+                    </button>
+                    {active ? (
+                      <button
+                        type="button"
+                        onClick={() => selectCoverMedia(media.id)}
+                        style={recordCoverButtonStyle(isCover)}
+                      >
+                        {isCover ? "封面" : "设为封面"}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
+
+  function renderAvailableRecord(
+    record: ExperienceCardSourceRecord,
+    index: number
+  ) {
+    const recordImages = getRecordImages(record);
+
+    return (
+      <article key={record.id} style={recordEditorStyle(false)}>
+        <button
+          type="button"
+          aria-pressed="false"
+          onClick={() => toggleRecord(record.id)}
+          style={recordHeaderButtonStyle}
+          aria-label={`把第${index + 1}条已有记录加入经验卡`}
+        >
+          <span style={recordCheckStyle(false)} aria-hidden="true">
+            <UiIcon name="plus" size={14} />
+          </span>
+          <span style={recordHeaderTextStyle}>
+            <span style={recordMetaStyle}>
+              {formatExperienceCardDate(record.record_time) || `记录${index + 1}`}
+            </span>
+            <span style={recordNoteStyle}>
+              {record.note?.trim() || "无文字记录"}
+            </span>
+          </span>
+          <span style={recordSelectedStyle(false)}>加入</span>
+        </button>
+
+        <div style={recordMediaAreaStyle(false)}>
+          <div style={recordMediaHeadingStyle}>
+            <span>
+              {recordImages.length > 0
+                ? `${recordImages.length}张图片 · 加入后默认全选`
+                : "这条记录没有图片，将使用文字画面"}
+            </span>
+          </div>
+          {recordImages.length > 0 ? (
+            <div style={availableImageGridStyle}>
+              {recordImages.map((media, mediaIndex) => (
+                <img
+                  key={media.id}
+                  src={media.display_thumb_url || media.display_url || ""}
+                  alt={`可加入的第${index + 1}条记录图片${mediaIndex + 1}`}
+                  loading="lazy"
+                  style={availableRecordThumbnailStyle}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
+
   const editorContent = (
     <>
       <section style={panelStyle}>
         <div style={editorHeadingStyle}>
           <div>
-            <div style={eyebrowStyle}>内容管理</div>
-            <h2 style={sectionTitleStyle}>编辑经验卡</h2>
+            <div style={eyebrowStyle}>内容编辑</div>
+            <h2 style={sectionTitleStyle}>标题、记录与图片</h2>
           </div>
           {archive ? (
             <Link href={`/archive/${archive.id}`} style={sourceProjectLinkStyle}>
@@ -776,7 +889,7 @@ export default function ExperienceCardEditor({
           ) : null}
         </div>
         <p style={editorLeadStyle}>
-          记录决定经验卡内容；图片只决定当前设备生成的MP4。封面会随经验卡保存，并作为视频片头。
+          经验卡只引用项目里的已有记录。记录决定内容；所选图片用于当前设备生成MP4，封面随经验卡保存。
         </p>
 
         {wasPublished && hasChanges ? (
@@ -807,19 +920,11 @@ export default function ExperienceCardEditor({
               <button
                 type="button"
                 disabled={refreshingRecords}
-                onClick={() =>
-                  void refreshProjectRecords({ selectNewRecords: true })
-                }
+                onClick={() => void refreshProjectRecords()}
                 style={refreshRecordsButtonStyle}
               >
-                {refreshingRecords ? "刷新中..." : "刷新记录"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddRecordOpen(true)}
-                style={addRecordButtonStyle}
-              >
-                <UiIcon name="plus" size={14} /> 新增项目记录
+                <UiIcon name="refresh" size={14} />
+                {refreshingRecords ? "刷新中..." : "刷新项目记录"}
               </button>
             </div>
           </div>
@@ -835,139 +940,71 @@ export default function ExperienceCardEditor({
             </span>
           </div>
           <p style={recordSelectionIntroStyle}>
-            点记录可加入或移出经验卡；加入时图片默认全选。点图片可调整MP4画面，再从已选图片中指定封面。至少选择3条记录，不设累计上限。
+            已选记录可调整图片或移出；“增加记录”只加入同一项目中尚未选定的已有记录，加入时图片默认全选。至少选择3条，不设累计上限。
           </p>
 
           {records.length === 0 ? (
             <div style={emptyRecordsStyle}>
-              <strong>当前项目还没有记录</strong>
-              <span>先新增项目记录，保存后会自动加入这张经验卡。</span>
-              <button
-                type="button"
-                onClick={() => setAddRecordOpen(true)}
-                style={addRecordButtonStyle}
-              >
-                <UiIcon name="plus" size={14} /> 新增第一条记录
-              </button>
+              <strong>当前项目还没有可用记录</strong>
+              <span>请先回到来源项目添加记录，再返回这里刷新。</span>
+              {archive ? (
+                <Link href={`/archive/${archive.id}`} style={secondaryLinkStyle}>
+                  返回来源项目
+                </Link>
+              ) : null}
             </div>
           ) : (
-            <div style={recordListStyle}>
-              {records.map((record, index) => {
-                const selected = selectedRecordIdSet.has(record.id);
-                const recordImages = getRecordImages(record);
-                const selectedMediaIds =
-                  selectedMediaIdsByRecordId[record.id] || [];
-                const selectedMediaIdSetForRecord = new Set(selectedMediaIds);
-                const allImagesSelected =
-                  recordImages.length > 0 &&
-                  selectedMediaIds.length === recordImages.length;
+            <>
+              <div style={recordGroupHeadingStyle}>
+                <strong>已选记录</strong>
+                <span>{selectedRecords.length}条</span>
+              </div>
+              <div style={recordListStyle}>
+                {selectedRecords.map((record) =>
+                  renderSelectedRecord(record, records.indexOf(record))
+                )}
+              </div>
 
-                return (
-                  <article
-                    key={record.id}
-                    style={recordEditorStyle(selected)}
+              <div style={addExistingRecordsStyle}>
+                {availableRecords.length > 0 ? (
+                  <button
+                    type="button"
+                    aria-expanded={availableRecordsOpen}
+                    onClick={() =>
+                      availableRecordsOpen
+                        ? setAvailableRecordsOpen(false)
+                        : openAvailableRecords()
+                    }
+                    style={addRecordButtonStyle}
                   >
-                    <button
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => toggleRecord(record.id)}
-                      style={recordHeaderButtonStyle}
-                    >
-                      <span style={recordCheckStyle(selected)} aria-hidden="true">
-                        <UiIcon name={selected ? "check" : "plus"} size={14} />
-                      </span>
-                      <span style={recordHeaderTextStyle}>
-                        <span style={recordMetaStyle}>
-                          {formatExperienceCardDate(record.record_time) ||
-                            `记录${index + 1}`}
-                        </span>
-                        <span style={recordNoteStyle}>
-                          {record.note?.trim() || "无文字记录"}
-                        </span>
-                      </span>
-                      <span style={recordSelectedStyle(selected)}>
-                        {selected ? "已加入" : "加入"}
-                      </span>
-                    </button>
+                    <UiIcon name="plus" size={14} />
+                    增加记录（{availableRecords.length}）
+                    <UiIcon
+                      name={availableRecordsOpen ? "chevron-up" : "chevron-down"}
+                      size={14}
+                    />
+                  </button>
+                ) : (
+                  <span style={allRecordsSelectedStyle}>
+                    该项目现有记录已全部加入
+                  </span>
+                )}
+              </div>
 
-                    <div style={recordMediaAreaStyle(selected)}>
-                      <div style={recordMediaHeadingStyle}>
-                        <span>
-                          {recordImages.length > 0
-                            ? selected
-                              ? `MP4图片 ${selectedMediaIds.length}/${recordImages.length}`
-                              : `${recordImages.length} 张图片 · 加入记录后可选择`
-                            : "这条记录没有图片，将使用文字画面"}
-                        </span>
-                        {selected && recordImages.length > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleAllRecordImages(record)}
-                            style={recordMediaActionStyle}
-                          >
-                            {allImagesSelected ? "清空图片" : "全选图片"}
-                          </button>
-                        ) : null}
-                      </div>
-
-                      {recordImages.length > 0 ? (
-                        <div style={recordImageGridStyle}>
-                          {recordImages.map((media, mediaIndex) => {
-                            const active =
-                              selected &&
-                              selectedMediaIdSetForRecord.has(media.id);
-                            const isCover =
-                              active && effectiveCoverMediaId === media.id;
-                            const previewUrl =
-                              media.display_thumb_url ||
-                              media.display_url ||
-                              "";
-
-                            return (
-                              <div key={media.id} style={recordImageItemStyle}>
-                                <button
-                                  type="button"
-                                  disabled={!selected}
-                                  aria-pressed={active}
-                                  onClick={() =>
-                                    toggleRecordImage(record.id, media.id)
-                                  }
-                                  style={recordImageButtonStyle(
-                                    active,
-                                    selected
-                                  )}
-                                >
-                                  <img
-                                    src={previewUrl}
-                                    alt={`第${index + 1}条记录的图片${mediaIndex + 1}`}
-                                    loading="lazy"
-                                    style={recordThumbnailStyle}
-                                  />
-                                  {active ? (
-                                    <span style={recordImageBadgeStyle}>
-                                      <UiIcon name="check" size={13} />
-                                    </span>
-                                  ) : null}
-                                </button>
-                                {active ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => selectCoverMedia(media.id)}
-                                    style={recordCoverButtonStyle(isCover)}
-                                  >
-                                    {isCover ? "封面" : "设为封面"}
-                                  </button>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+              {availableRecordsOpen && availableRecords.length > 0 ? (
+                <section style={availableRecordsSectionStyle}>
+                  <div style={recordGroupHeadingStyle}>
+                    <strong>可加入记录</strong>
+                    <span>均为同一项目中的已有记录</span>
+                  </div>
+                  <div style={recordListStyle}>
+                    {availableRecords.map((record) =>
+                      renderAvailableRecord(record, records.indexOf(record))
+                    )}
+                  </div>
+                </section>
+              ) : null}
+            </>
           )}
           {selectedRecords.length < 3 ? (
             <p style={selectionHintStyle}>还需选择至少3条记录。</p>
@@ -1033,27 +1070,6 @@ export default function ExperienceCardEditor({
         onConfirm={() => persist("publish")}
       />
 
-      {archive ? (
-        <ArchiveAddRecordSection
-          archiveId={archive.id}
-          archiveCategory={archive.category}
-          archiveIsPublic={Boolean(archive.is_public)}
-          archiveDefaultRecordVisibility={
-            archive.default_record_visibility === "public" ? "public" : "private"
-          }
-          activeCycles={activeCycles}
-          mobileMode
-          open={addRecordOpen}
-          onClose={() => setAddRecordOpen(false)}
-          onRecordCreated={async () => {
-            await refreshProjectRecords({
-              selectNewRecords: true,
-              announce: true,
-            });
-            setAddRecordOpen(false);
-          }}
-        />
-      ) : null}
     </>
   );
 
@@ -1249,6 +1265,9 @@ const recordToolbarStyle: CSSProperties = {
 
 const refreshRecordsButtonStyle: CSSProperties = {
   minHeight: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
   padding: "6px 11px",
   border: "1px solid #d6dfd2",
   borderRadius: 999,
@@ -1301,6 +1320,38 @@ const recordSelectionIntroStyle: CSSProperties = {
   color: "#748071",
   fontSize: 12,
   lineHeight: 1.65,
+};
+
+const recordGroupHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  margin: "0 0 9px",
+  color: "#52614f",
+  fontSize: 12,
+};
+
+const addExistingRecordsStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  marginTop: 14,
+};
+
+const allRecordsSelectedStyle: CSSProperties = {
+  padding: "7px 11px",
+  borderRadius: 999,
+  background: "#f2f5f0",
+  color: "#7b8678",
+  fontSize: 12,
+};
+
+const availableRecordsSectionStyle: CSSProperties = {
+  marginTop: 14,
+  padding: 12,
+  border: "1px dashed #cdd9c9",
+  borderRadius: 15,
+  background: "#fafcf9",
 };
 
 const emptyRecordsStyle: CSSProperties = {
@@ -1434,6 +1485,22 @@ const recordImageGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",
   gap: 8,
+};
+
+const availableImageGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(68px, 92px))",
+  gap: 7,
+};
+
+const availableRecordThumbnailStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  aspectRatio: "1 / 1",
+  objectFit: "cover",
+  border: "1px solid #dce5d9",
+  borderRadius: 9,
+  background: "#edf1eb",
 };
 
 const recordImageItemStyle: CSSProperties = {

@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ExperienceCardVideoPanel from "@/components/experience-card/ExperienceCardVideoPanel";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
-import ExperienceCardEditor from "@/components/experience-card/ExperienceCardEditor";
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
+import { getInclusiveDaySpan } from "@/lib/date-time";
 import {
   deleteExperienceCard,
   formatExperienceCardDate,
@@ -17,11 +17,13 @@ import {
   loadExperienceCard,
   unpublishExperienceCard,
 } from "@/lib/experience-cards";
-import type { ExperienceCardDetail } from "@/lib/experience-card-types";
+import type {
+  ExperienceCardDetail,
+  ExperienceCardMedia,
+} from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
 
 type PendingAction = "unpublish" | "delete" | null;
-type OwnerMode = "view" | "edit";
 
 export default function ExperienceCardPage({
   params,
@@ -36,9 +38,6 @@ export default function ExperienceCardPage({
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [ownerMode, setOwnerMode] = useState<OwnerMode>("view");
-  const [editorDirty, setEditorDirty] = useState(false);
-  const [videoPreviewRevision, setVideoPreviewRevision] = useState(0);
 
   async function reload() {
     setLoading(true);
@@ -109,20 +108,6 @@ export default function ExperienceCardPage({
     }
   }
 
-  function changeOwnerMode(nextMode: OwnerMode) {
-    if (
-      ownerMode === "edit" &&
-      nextMode !== "edit" &&
-      editorDirty &&
-      !window.confirm("修改尚未保存，确定返回吗？")
-    ) {
-      return;
-    }
-
-    if (nextMode !== "edit") setEditorDirty(false);
-    setOwnerMode(nextMode);
-  }
-
   if (loading) {
     return <main style={pageStyle}>正在读取经验卡...</main>;
   }
@@ -147,6 +132,16 @@ export default function ExperienceCardPage({
   const endDate = formatExperienceCardDate(
     detail.records[detail.records.length - 1]?.record_time
   );
+  const durationDays = getInclusiveDaySpan(
+    detail.records[0]?.record_time,
+    detail.records[detail.records.length - 1]?.record_time
+  );
+  const imageCount = detail.records.reduce(
+    (count, record) =>
+      count + record.media.filter(isExperienceCardImage).length,
+    0
+  );
+  const createdDate = formatExperienceCardDate(detail.card.created_at);
   const authorName = detail.author?.username || "用户";
   const systemName =
     detail.archive.system_name?.trim() ||
@@ -175,40 +170,55 @@ export default function ExperienceCardPage({
         </Link>
       </header>
 
-      <ExperienceCardVideoPanel
-        key={`${detail.card.id}-${videoPreviewRevision}`}
-        detail={detail}
-        readOnly={!isOwner}
-        previewOnly={isOwner}
-      />
+      <section style={heroStyle} aria-label="经验卡成品与概况">
+        <div style={videoColumnStyle}>
+          <div style={sectionEyebrowStyle}>MP4</div>
+          <ExperienceCardVideoPanel detail={detail} readOnly integrated />
+        </div>
 
-      {isOwner ? (
-        <ExperienceCardInteractions
-          cardId={detail.card.id}
-          cardOwnerId={detail.card.user_id}
-          currentUserId={viewerId}
-          isPublic={detail.isPubliclyAvailable}
-        />
-      ) : null}
+        <article style={infoColumnStyle}>
+          <div style={sectionEyebrowStyle}>经验卡</div>
+          {isOwner ? (
+            <Link
+              href={`/experience-cards/${detail.card.id}/edit`}
+              style={editableTitleLinkStyle}
+              aria-label={`编辑经验卡名称：${detail.card.title}`}
+            >
+              <h1 style={titleStyle}>{detail.card.title}</h1>
+              <UiIcon name="edit" size={17} />
+            </Link>
+          ) : (
+            <h1 style={titleStyle}>{detail.card.title}</h1>
+          )}
 
-      <article style={cardShellStyle}>
-        <div style={introStyle}>
-          <div style={sectionEyebrowStyle}>经验卡信息</div>
-          <h1 style={titleStyle}>{detail.card.title}</h1>
-          <div style={metaLineStyle}>
-            <span>
-              {startDate && endDate
-                ? startDate === endDate
-                  ? startDate
-                  : `${startDate}—${endDate}`
-                : "暂无日期"}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>{detail.records.length} 条记录</span>
-            <span style={statusBadgeStyle(detail.isPubliclyAvailable)}>
-              {statusLabel}
-            </span>
+          <div style={overviewHeadingStyle}>经验卡概况</div>
+          <div style={overviewGridStyle}>
+            <OverviewItem
+              icon="duration"
+              label="时长"
+              value={durationDays ? `${durationDays}天` : "暂无"}
+            />
+            <OverviewItem
+              icon="record"
+              label="记录数"
+              value={`${detail.records.length}条`}
+            />
+            <OverviewItem icon="image" label="图片数" value={`${imageCount}张`} />
+            <OverviewItem
+              icon="calendar"
+              label="创建时间"
+              value={createdDate || "暂无"}
+            />
           </div>
+
+          <div style={periodStyle}>
+            {startDate && endDate
+              ? startDate === endDate
+                ? startDate
+                : `${startDate}—${endDate}`
+              : "记录日期暂缺"}
+          </div>
+
           <div style={sourceLinksStyle} aria-label="经验卡来源">
             {!isOwner ? (
               <Link
@@ -220,10 +230,7 @@ export default function ExperienceCardPage({
                 <UiIcon name="arrow-right" size={14} />
               </Link>
             ) : null}
-            <Link
-              href={`/archive/${detail.archive.id}`}
-              style={sourceLinkStyle}
-            >
+            <Link href={`/archive/${detail.archive.id}`} style={sourceLinkStyle}>
               <span style={sourceLabelStyle}>项目</span>
               <span style={sourceValueStyle}>
                 {detail.archive.title || "查看项目"}
@@ -243,49 +250,56 @@ export default function ExperienceCardPage({
               </span>
             )}
           </div>
+        </article>
+      </section>
 
-          {isOwner ? (
-            <div style={ownerActionsStyle} aria-label="经验卡操作">
-              <button
-                type="button"
-                onClick={() =>
-                  changeOwnerMode(ownerMode === "edit" ? "view" : "edit")
-                }
-                style={ownerMode === "edit" ? activeButtonStyle : primaryButtonStyle}
-              >
-                {ownerMode === "edit" ? "返回成品" : "编辑经验卡"}
-              </button>
-              {detail.isPubliclyAvailable ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void shareCard()}
-                    style={secondaryButtonStyle}
-                  >
-                    分享
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyCardLink()}
-                    style={secondaryButtonStyle}
-                  >
-                    复制链接
-                  </button>
-                </>
-              ) : null}
-              {detail.card.status === "published" ? (
-                <button
-                  type="button"
-                  onClick={() => setPendingAction("unpublish")}
-                  style={quietButtonStyle}
-                >
-                  取消公开
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </article>
+      <section style={managementBarStyle} aria-label="经验卡操作">
+        {isOwner ? (
+          <Link
+            href={`/experience-cards/${detail.card.id}/edit`}
+            style={primaryLinkStyle}
+          >
+            <UiIcon name="edit" size={15} /> 编辑
+          </Link>
+        ) : null}
+        {detail.isPubliclyAvailable ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void shareCard()}
+              style={secondaryButtonStyle}
+            >
+              <UiIcon name="share" size={15} /> 分享
+            </button>
+            <button
+              type="button"
+              onClick={() => void copyCardLink()}
+              style={secondaryButtonStyle}
+            >
+              复制链接
+            </button>
+          </>
+        ) : null}
+        {isOwner && detail.card.status === "published" ? (
+          <button
+            type="button"
+            onClick={() => setPendingAction("unpublish")}
+            style={publicStatusButtonStyle(detail.isPubliclyAvailable)}
+            aria-label={`${statusLabel}，点击取消公开`}
+          >
+            <UiIcon
+              name={detail.isPubliclyAvailable ? "check" : "warning"}
+              size={15}
+            />
+            <span>{statusLabel}</span>
+            <span style={statusActionHintStyle}>取消公开</span>
+          </button>
+        ) : isOwner ? (
+          <span style={draftStatusStyle}>
+            <UiIcon name="lock" size={15} /> {statusLabel}
+          </span>
+        ) : null}
+      </section>
 
       {isOwner && !detail.sourceIsComplete ? (
         <section style={warningStyle}>
@@ -304,30 +318,12 @@ export default function ExperienceCardPage({
 
       {errorText ? <section style={errorStyle}>{errorText}</section> : null}
 
-      {isOwner && ownerMode === "edit" ? (
-        <ExperienceCardEditor
-          cardId={id}
-          embedded
-          onDirtyChange={setEditorDirty}
-          onVideoSelectionChange={() =>
-            setVideoPreviewRevision((current) => current + 1)
-          }
-          onSaved={async () => {
-            setEditorDirty(false);
-            setOwnerMode("view");
-            await reload();
-          }}
-        />
-      ) : null}
-
-      {!isOwner ? (
-        <ExperienceCardInteractions
-          cardId={detail.card.id}
-          cardOwnerId={detail.card.user_id}
-          currentUserId={viewerId}
-          isPublic={detail.isPubliclyAvailable}
-        />
-      ) : null}
+      <ExperienceCardInteractions
+        cardId={detail.card.id}
+        cardOwnerId={detail.card.user_id}
+        currentUserId={viewerId}
+        isPublic={detail.isPubliclyAvailable}
+      />
 
       {!isOwner ? (
         <section style={timelineSectionStyle}>
@@ -340,27 +336,6 @@ export default function ExperienceCardPage({
             records={detail.records}
           />
         </section>
-      ) : null}
-
-      {!isOwner && detail.isPubliclyAvailable ? (
-        <footer style={footerStyle}>
-          <div style={footerActionsStyle}>
-            <button
-              type="button"
-              onClick={() => void shareCard()}
-              style={primaryButtonStyle}
-            >
-              直接分享
-            </button>
-            <button
-              type="button"
-              onClick={() => void copyCardLink()}
-              style={secondaryButtonStyle}
-            >
-              复制链接
-            </button>
-          </div>
-        </footer>
       ) : null}
 
       {isOwner ? (
@@ -408,6 +383,36 @@ export default function ExperienceCardPage({
   );
 }
 
+function isExperienceCardImage(media: ExperienceCardMedia) {
+  const mimeType = String(media.mime_type || "").toLowerCase();
+  const type = String(media.type || "").toLowerCase();
+  if (mimeType) return mimeType.startsWith("image/");
+  if (type) return type === "image" || type === "photo";
+  return true;
+}
+
+function OverviewItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: "duration" | "record" | "image" | "calendar";
+  label: string;
+  value: string;
+}) {
+  return (
+    <div style={overviewItemStyle}>
+      <span style={overviewIconStyle}>
+        <UiIcon name={icon} size={16} />
+      </span>
+      <span style={overviewTextStyle}>
+        <span style={overviewLabelStyle}>{label}</span>
+        <strong style={overviewValueStyle}>{value}</strong>
+      </span>
+    </div>
+  );
+}
+
 function getSystemNameHref({
   category,
   speciesId,
@@ -435,7 +440,7 @@ function getSystemNameHref({
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 880,
+  maxWidth: 980,
   margin: "0 auto",
   padding: "20px 16px 70px",
   color: "#283428",
@@ -455,12 +460,26 @@ const backLinkStyle: CSSProperties = {
   fontSize: 14,
 };
 
-const cardShellStyle: CSSProperties = {
+const heroStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+  alignItems: "start",
+  gap: "clamp(20px, 4vw, 38px)",
   border: "1px solid #e1e8de",
-  borderRadius: 18,
+  borderRadius: 22,
   background: "#fff",
-  padding: "17px clamp(14px, 3vw, 20px)",
+  padding: "clamp(15px, 3vw, 24px)",
   marginBottom: 14,
+  boxShadow: "0 12px 34px rgba(55, 75, 52, 0.05)",
+};
+
+const videoColumnStyle: CSSProperties = {
+  minWidth: 0,
+};
+
+const infoColumnStyle: CSSProperties = {
+  minWidth: 0,
+  paddingTop: 2,
 };
 
 const timelineSectionStyle: CSSProperties = {
@@ -482,10 +501,6 @@ const timelineHeadingStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
-const introStyle: CSSProperties = {
-  padding: 0,
-};
-
 const sectionEyebrowStyle: CSSProperties = {
   marginBottom: 6,
   color: "#879283",
@@ -496,40 +511,88 @@ const sectionEyebrowStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   margin: 0,
-  fontSize: 26,
+  fontSize: "clamp(24px, 4vw, 31px)",
   lineHeight: 1.25,
   overflowWrap: "anywhere",
 };
 
-const metaLineStyle: CSSProperties = {
+const editableTitleLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  maxWidth: "100%",
+  gap: 9,
+  color: "#283428",
+  textDecoration: "none",
+};
+
+const overviewHeadingStyle: CSSProperties = {
+  marginTop: 22,
+  marginBottom: 9,
+  color: "#687565",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const overviewGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+};
+
+const overviewItemStyle: CSSProperties = {
+  minWidth: 0,
   display: "flex",
   alignItems: "center",
-  flexWrap: "wrap",
-  gap: 6,
-  marginTop: 10,
-  color: "#7b8778",
+  gap: 9,
+  padding: "9px 10px",
+  borderRadius: 12,
+  background: "#f6f9f4",
+  border: "1px solid #e8eee5",
+};
+
+const overviewIconStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 28,
+  height: 28,
+  flex: "0 0 auto",
+  borderRadius: 9,
+  color: "#5f7a59",
+  background: "#e9f1e5",
+};
+
+const overviewTextStyle: CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 1,
+};
+
+const overviewLabelStyle: CSSProperties = {
+  color: "#879283",
+  fontSize: 10,
+};
+
+const overviewValueStyle: CSSProperties = {
+  color: "#42513f",
+  fontSize: 13,
+  lineHeight: 1.35,
+  overflowWrap: "anywhere",
+};
+
+const periodStyle: CSSProperties = {
+  marginTop: 9,
+  color: "#849080",
   fontSize: 12,
   lineHeight: 1.5,
 };
 
-function statusBadgeStyle(publiclyAvailable: boolean): CSSProperties {
-  return {
-    marginLeft: 2,
-    padding: "3px 7px",
-    borderRadius: 999,
-    background: publiclyAvailable ? "#eaf4e7" : "#f1f3ef",
-    color: publiclyAvailable ? "#42693d" : "#6e796b",
-    fontSize: 11,
-    fontWeight: 800,
-  };
-}
-
 const sourceLinksStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  flexWrap: "wrap",
-  gap: "7px 14px",
-  marginTop: 11,
+  display: "grid",
+  gap: 7,
+  marginTop: 15,
+  paddingTop: 13,
+  borderTop: "1px solid #edf1eb",
 };
 
 const sourceLinkStyle: CSSProperties = {
@@ -563,14 +626,16 @@ const sourceValueStyle: CSSProperties = {
   fontWeight: 750,
 };
 
-const ownerActionsStyle: CSSProperties = {
+const managementBarStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   flexWrap: "wrap",
   gap: 8,
-  marginTop: 16,
-  paddingTop: 14,
-  borderTop: "1px solid #edf1eb",
+  marginBottom: 14,
+  padding: "11px 12px",
+  border: "1px solid #e1e8de",
+  borderRadius: 15,
+  background: "#fbfdf9",
 };
 
 const warningStyle: CSSProperties = {
@@ -591,25 +656,6 @@ const errorStyle: CSSProperties = {
   color: "#a14d48",
 };
 
-const footerStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  alignItems: "center",
-  gap: 16,
-  flexWrap: "wrap",
-  marginTop: 14,
-  padding: 16,
-  borderRadius: 18,
-  background: "#f3f7f0",
-  border: "1px solid #dfe8db",
-};
-
-const footerActionsStyle: CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
 const baseButtonStyle: CSSProperties = {
   minHeight: 40,
   padding: "8px 14px",
@@ -619,32 +665,61 @@ const baseButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-const primaryButtonStyle: CSSProperties = {
+const primaryLinkStyle: CSSProperties = {
   ...baseButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
   border: "1px solid #64885e",
   background: "#64885e",
   color: "#fff",
+  textDecoration: "none",
 };
 
 const secondaryButtonStyle: CSSProperties = {
   ...baseButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
   border: "1px solid #d3ded0",
   background: "#fff",
   color: "#50604d",
 };
 
-const activeButtonStyle: CSSProperties = {
-  ...secondaryButtonStyle,
-  borderColor: "#7f9c78",
-  background: "#eef5eb",
-  color: "#3f613b",
+function publicStatusButtonStyle(publiclyAvailable: boolean): CSSProperties {
+  return {
+    ...baseButtonStyle,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    border: publiclyAvailable
+      ? "1px solid #b9d1b4"
+      : "1px solid #e2d4ab",
+    background: publiclyAvailable ? "#edf6e9" : "#fff8e8",
+    color: publiclyAvailable ? "#42693d" : "#756436",
+  };
+}
+
+const statusActionHintStyle: CSSProperties = {
+  paddingLeft: 6,
+  borderLeft: "1px solid currentColor",
+  opacity: 0.72,
+  fontSize: 11,
+  fontWeight: 700,
 };
 
-const quietButtonStyle: CSSProperties = {
-  ...baseButtonStyle,
-  border: 0,
-  background: "transparent",
-  color: "#6f7c6c",
+const draftStatusStyle: CSSProperties = {
+  minHeight: 40,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "8px 13px",
+  border: "1px solid #dfe5dc",
+  borderRadius: 999,
+  background: "#f2f4f0",
+  color: "#6e796b",
+  fontSize: 12,
+  fontWeight: 800,
 };
 
 const dangerZoneStyle: CSSProperties = {
