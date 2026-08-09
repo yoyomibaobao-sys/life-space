@@ -4,6 +4,7 @@ import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import { SimpleZipBuilder } from "@/lib/export-zip";
 import { getMediaStoragePathFromUrl } from "@/lib/media-urls";
 import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
+import { formatPreciseDateTime } from "@/lib/date-time";
 
 type ProfileRow = {
   id: string;
@@ -142,9 +143,7 @@ function padNumber(value: number, length = 2) {
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "未记录时间";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString("zh-CN", { hour12: false });
+  return formatPreciseDateTime(value) || String(value);
 }
 
 function formatDateForFile(value = new Date()) {
@@ -591,7 +590,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const exportedAt = new Date().toLocaleString("zh-CN", { hour12: false });
+  const exportedAt = formatPreciseDateTime(new Date());
 
   for (const archive of archives) {
     const archiveDir = archiveDirs.get(archive.id) || `项目档案/${archive.id}/`;

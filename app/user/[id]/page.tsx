@@ -9,7 +9,11 @@ import { showToast } from "@/components/Toast";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
-import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
+import {
+  PUBLIC_PROFILE_SELECT,
+  type AppProfile,
+  type MediaItem,
+} from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   type ArchiveCategory,
@@ -24,15 +28,70 @@ import {
 
 type Category = "all" | ArchiveCategory;
 
+type UserSpaceArchive = {
+  id: string;
+  title: string | null;
+  category: string | null;
+  system_name: string | null;
+  species_name_snapshot: string | null;
+  sub_tag_id: string | null;
+  group_tag_id: string | null;
+  status: string | null;
+  record_count: number | null;
+  view_count: number | null;
+};
+
+type UserSpaceRecord = {
+  id: string;
+  archive_id: string;
+  note: string | null;
+  record_time: string;
+  primary_image_url: string | null;
+  display_primary_image_url?: string | null;
+  status?: string | null;
+  status_tag?: string | null;
+  media?: MediaItem[];
+};
+
+type UserSpaceSubTag = {
+  id: string;
+  name: string | null;
+  category: string | null;
+};
+
+type UserSpaceGroupTag = {
+  id: string;
+  name: string | null;
+  sub_tag_id: string | null;
+};
+
+type ArchiveFollowIdRow = {
+  archive_id: string;
+};
+
+type UserSpaceCardProfile = Pick<
+  AppProfile,
+  "username" | "avatar_url" | "level" | "flower_count"
+> & {
+  followingCount: number;
+  followerCount: number;
+};
+
+type UserSpaceArchiveStats = {
+  count: number;
+  latest: UserSpaceRecord;
+  hasHelp: boolean;
+};
+
 function categoryLabel(category?: string | null) {
   return getArchiveCategoryLabel(category);
 }
 
-function getMediaUrl(media: any) {
+function getMediaUrl(media?: MediaItem | null) {
   return media?.display_url || "";
 }
 
-function getMediaPreviewUrl(media: any) {
+function getMediaPreviewUrl(media?: MediaItem | null) {
   return media?.display_thumb_url || getMediaUrl(media);
 }
 
@@ -42,10 +101,10 @@ export default function UserSpacePage() {
   const userId = params.id as string;
 
   const [username, setUsername] = useState("");
-  const [archives, setArchives] = useState<any[]>([]);
-  const [records, setRecords] = useState<any[]>([]);
-  const [subTags, setSubTags] = useState<any[]>([]);
-  const [groupTags, setGroupTags] = useState<any[]>([]);
+  const [archives, setArchives] = useState<UserSpaceArchive[]>([]);
+  const [records, setRecords] = useState<UserSpaceRecord[]>([]);
+  const [subTags, setSubTags] = useState<UserSpaceSubTag[]>([]);
+  const [groupTags, setGroupTags] = useState<UserSpaceGroupTag[]>([]);
 
   const [activeCategory, setActiveCategory] = useState<Category>("all");
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
@@ -54,7 +113,7 @@ export default function UserSpacePage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followedArchiveIds, setFollowedArchiveIds] = useState<string[]>([]);
   const [showCard, setShowCard] = useState(false);
-  const [cardProfile, setCardProfile] = useState<any>(null);
+  const [cardProfile, setCardProfile] = useState<UserSpaceCardProfile | null>(null);
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [followSubmitting, setFollowSubmitting] = useState(false);
 
@@ -80,7 +139,7 @@ export default function UserSpacePage() {
         .eq("is_public", true)
         .order("created_at", { ascending: false });
 
-      const safeArchives = archivesData || [];
+      const safeArchives = (archivesData || []) as UserSpaceArchive[];
       setArchives(safeArchives);
 
       const archiveIds = safeArchives.map((a) => a.id);
@@ -100,7 +159,7 @@ export default function UserSpacePage() {
             p_user_id: userId,
           }),
           archiveIds.length === 0
-            ? Promise.resolve({ data: [] as any[] })
+            ? Promise.resolve({ data: [] as UserSpaceRecord[] })
             : supabase
                 .from("records")
                 .select("*, media(*)")
@@ -113,21 +172,29 @@ export default function UserSpacePage() {
                 .select("archive_id")
                 .eq("user_id", user.id)
                 .in("archive_id", archiveIds)
-            : Promise.resolve({ data: [] as any[] }),
+            : Promise.resolve({ data: [] as ArchiveFollowIdRow[] }),
         ]);
 
-      setSubTags(subTagResult.data || []);
-      setGroupTags(groupTagResult.data || []);
-      setRecords(await attachRecordMediaDisplayUrls(recordsResult.data || []));
+      setSubTags((subTagResult.data || []) as UserSpaceSubTag[]);
+      setGroupTags((groupTagResult.data || []) as UserSpaceGroupTag[]);
+      setRecords(
+        await attachRecordMediaDisplayUrls(
+          (recordsResult.data || []) as UserSpaceRecord[]
+        )
+      );
       setFollowedArchiveIds(
-        (followsResult.data || []).map((row: any) => row.archive_id)
+        ((followsResult.data || []) as ArchiveFollowIdRow[]).map(
+          (row) => row.archive_id
+        )
       );
     } finally {
       loadingRef.current = false;
     }
   }
 
-  async function attachRecordMediaDisplayUrls(nextRecords: any[]) {
+  async function attachRecordMediaDisplayUrls(
+    nextRecords: UserSpaceRecord[]
+  ): Promise<UserSpaceRecord[]> {
     const allMedia = nextRecords.flatMap((record) => record.media || []);
     const primarySourceCount = nextRecords.length;
     const displayPairs = await resolveMediaDisplayPairs(supabase, [
@@ -176,10 +243,14 @@ export default function UserSpacePage() {
       .select("*", { count: "exact", head: true })
       .eq("following_id", userId);
 
+    const profile = (data || {}) as Pick<
+      AppProfile,
+      "username" | "avatar_url" | "level" | "flower_count"
+    >;
     setCardProfile({
-      ...data,
-      followingCount,
-      followerCount,
+      ...profile,
+      followingCount: followingCount || 0,
+      followerCount: followerCount || 0,
     });
 
     if (user) {
@@ -230,7 +301,7 @@ export default function UserSpacePage() {
   }, [activeSubTag, archives, groupTags, publicArchiveIds]);
 
   const statsMap = useMemo(() => {
-    const map: Record<string, any> = {};
+    const map: Record<string, UserSpaceArchiveStats> = {};
 
     records.forEach((record) => {
       if (!map[record.archive_id]) {
@@ -264,11 +335,12 @@ export default function UserSpacePage() {
     records.forEach((record) => {
       if (map[record.archive_id]) return;
 
-      if (record.media?.length > 0) {
-        const primaryMedia = record.media.find(
-          (media: any) => media.url && record.primary_image_url && media.url === record.primary_image_url
+      const media = record.media || [];
+      if (media.length > 0) {
+        const primaryMedia = media.find(
+          (media) => media.url && record.primary_image_url && media.url === record.primary_image_url
         );
-        const previewUrl = getMediaPreviewUrl(primaryMedia || record.media[0]);
+        const previewUrl = getMediaPreviewUrl(primaryMedia || media[0]);
         if (previewUrl) {
           map[record.archive_id] = previewUrl;
           return;
@@ -307,7 +379,7 @@ export default function UserSpacePage() {
     setActiveGroupTag(null);
   }
 
-  function selectSubTag(tag: any) {
+  function selectSubTag(tag: UserSpaceSubTag) {
     setActiveCategory((tag.category || "plant") as ArchiveCategory);
     setActiveSubTag(tag.id);
     setActiveGroupTag(null);
@@ -696,7 +768,7 @@ export default function UserSpacePage() {
             </div>
 
             <div style={{ fontSize: 12, color: "#777", marginTop: 4 }}>
-              Lv.{cardProfile.level || 1} · <UiIcon name="flower" size={13} /> {cardProfile.flower_count || 0}
+              Lv.{cardProfile.level || 1} · <UiIcon name="helpful" size={13} /> 有帮助 {cardProfile.flower_count || 0}
             </div>
 
             <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>

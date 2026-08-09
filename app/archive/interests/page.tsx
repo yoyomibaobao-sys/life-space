@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -37,9 +37,7 @@ export default function PlantInterestsPage() {
   const [removeInterestTarget, setRemoveInterestTarget] = useState<PlantInterestRow | null>(null);
   const [removingInterestId, setRemovingInterestId] = useState<string | null>(null);
 
-  async function loadInterests() {
-    setLoading(true);
-
+  const loadInterests = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -93,16 +91,20 @@ export default function PlantInterestsPage() {
     setPlanSpeciesIds(new Set((planData || []).map((item: SpeciesRefRow) => String(item.species_id))));
 
     setLoading(false);
-  }
+  }, [router]);
 
   useEffect(() => {
-    loadInterests();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void loadInterests();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadInterests]);
 
   async function updateInterest(id: string, payload: Partial<Pick<PlantInterestRow, "note">>) {
     if (!userId) return;
     if (!hasCloudAccess) {
-      showToast("需要有效云空间才能修改感兴趣列表；现有条目仍可移除。");
+      showToast("需要开通云会员才能修改感兴趣列表；现有条目仍可移除。");
       return;
     }
 
@@ -156,7 +158,7 @@ export default function PlantInterestsPage() {
   async function addToPlan(speciesId: string) {
     if (!userId) return;
     if (!hasCloudAccess) {
-      showToast("加入云端种植计划需要有效云空间。");
+      showToast("加入云端种植计划需要开通云会员。");
       return;
     }
 
@@ -345,9 +347,9 @@ export default function PlantInterestsPage() {
             lineHeight: 1.7,
           }}
         >
-          感兴趣列表属于云空间功能。现有过渡条目仍可查看和移除，但不能修改或新增；你仍可创建本地项目。
+          感兴趣列表属于云会员权益。现有过渡条目仍可查看和移除，但不能修改或新增；你仍可创建本地项目。
           <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-            查看云空间
+            了解云会员
           </Link>
         </div>
       ) : null}

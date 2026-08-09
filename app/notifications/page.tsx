@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { SupabaseUser } from "@/lib/domain-types";
 import UiIcon from "@/components/ui/UiIcon";
+import { formatPreciseDateTime } from "@/lib/date-time";
 
 type NotificationItem = {
   id: string;
@@ -128,7 +129,7 @@ export default function NotificationsPage() {
             </Link>
             <h1 style={titleStyle}>通知</h1>
             <div style={subtitleStyle}>
-              关注、评论、送花和项目更新提醒
+              关注、评论、有帮助反馈和项目更新提醒
             </div>
           </div>
 
@@ -185,7 +186,9 @@ function getNotificationTypeLabel(type: string) {
     comment: "评论",
     user_follow: "关注",
     archive_follow: "项目关注",
-    flower: "花朵",
+    flower: "有帮助",
+    experience_comment: "经验卡评论",
+    experience_helpful: "经验卡有帮助",
     followed_archive_record: "项目更新",
   };
 
@@ -193,15 +196,7 @@ function getNotificationTypeLabel(type: string) {
 }
 
 function formatNotificationTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 const pageStyle: CSSProperties = {

@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
-  formatProfileDateTime,
+  formatProfileDate,
   loadPublicUserProfileData,
   type PublicUserProfileData,
 } from "@/lib/user-profile-shared";
@@ -313,7 +313,7 @@ export default function PublicUserProfilePage() {
             )}
 
             <div style={{ marginTop: 14, fontSize: 13, color: "#6f7b69" }}>
-              Lv.{Number(profile.level || 1)} · <UiIcon name="flower" size={13} />{" "}
+              Lv.{Number(profile.level || 1)} · <UiIcon name="helpful" size={13} /> 有帮助{" "}
               {Number(profile.flower_count || 0)}
             </div>
 
@@ -323,7 +323,7 @@ export default function PublicUserProfilePage() {
               <MetaItem label="公开项目" value={String(stats.publicArchiveCount)} />
               <MetaItem
                 label="最近活跃"
-                value={formatProfileDateTime(stats.latestRecordTime)}
+                value={formatProfileDate(stats.latestRecordTime)}
               />
             </div>
           </section>
@@ -358,7 +358,7 @@ export default function PublicUserProfilePage() {
                         {item.title || "未命名项目"}
                       </div>
                       <div style={{ fontSize: 12, color: "#75806f" }}>
-                        {formatProfileDateTime(item.last_record_time)}
+                        {formatProfileDate(item.last_record_time)}
                       </div>
                     </div>
 

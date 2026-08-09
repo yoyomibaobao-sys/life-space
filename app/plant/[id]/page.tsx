@@ -7,6 +7,7 @@ import ExperienceCardListCard from "@/components/experience-card/ExperienceCardL
 import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { formatCardDate } from "@/lib/date-time";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import type { ExperienceCardListItem, ExperienceCardRow } from "@/lib/experience-card-types";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
@@ -495,15 +496,7 @@ function splitGuideItems(...values: Array<unknown>) {
 }
 
 function formatShortDate(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
+  return formatCardDate(value) || null;
 }
 
 function Card({
@@ -1116,35 +1109,46 @@ function PlantRecordsSection({
 
 function PlantExperienceCardsSection({
   cards,
+  currentUserId,
 }: {
   cards: PlantExperienceCardItem[];
+  currentUserId: string | null;
 }) {
+  const myCards = currentUserId
+    ? cards.filter((card) => card.user_id === currentUserId)
+    : [];
+  const otherCards = cards.filter((card) => card.user_id !== currentUserId);
+
+  function renderCards(items: PlantExperienceCardItem[], showAuthor: boolean) {
+    if (items.length === 0) {
+      return (
+        <div style={{ padding: 14, color: "#7f8a7b", fontSize: 13 }}>
+          暂无经验卡。
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: "grid", gap: 10 }}>
+        {items.map((card) => (
+          <ExperienceCardListCard
+            key={card.id}
+            item={card}
+            dateValue={card.published_at}
+            showAuthor={showAuthor}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <Section title="经验卡">
-      {cards.length > 0 ? (
-        <div style={{ display: "grid", gap: 10 }}>
-          {cards.map((card) => (
-            <ExperienceCardListCard
-              key={card.id}
-              item={card}
-              dateValue={card.published_at}
-              showAuthor
-            />
-          ))}
-        </div>
-      ) : (
-        <div
-          style={{
-            padding: 18,
-            border: "1px solid #eee",
-            borderRadius: 14,
-            color: "#888",
-            background: "#fff",
-          }}
-        >
-          还没有与这个植物关联的公开经验卡。
-        </div>
-      )}
+      {currentUserId ? (
+        <Subsection title="我的经验卡">{renderCards(myCards, false)}</Subsection>
+      ) : null}
+      <Subsection title="其他人的经验卡">
+        {renderCards(otherCards, true)}
+      </Subsection>
     </Section>
   );
 }
@@ -1163,12 +1167,12 @@ function PlantTabAccessNotice({ label }: { label: string }) {
         lineHeight: 1.7,
       }}
     >
-      {label}属于云空间中的完整指引内容。
+      {label}属于云会员的完整指引内容。
       <Link
         href="/membership"
         style={{ marginLeft: 7, color: "#3f6f37", fontWeight: 700 }}
       >
-        查看云空间
+        了解云会员
       </Link>
     </section>
   );
@@ -1193,6 +1197,7 @@ export default function PlantDetailPage() {
   >([]);
   const [activeTab, setActiveTab] = useState<PlantDetailTab>("guide");
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [interestAdded, setInterestAdded] = useState(false);
   const [planAdded, setPlanAdded] = useState(false);
@@ -1223,6 +1228,7 @@ export default function PlantDetailPage() {
         data: { user },
       } = await supabase.auth.getUser();
       setIsSignedIn(Boolean(user));
+      setCurrentUserId(user?.id || null);
 
       const membershipResult = user
         ? await supabase.rpc("get_my_membership")
@@ -1634,9 +1640,9 @@ export default function PlantDetailPage() {
     if (!interestAdded && !hasCloudAccess) {
       setActionMessage({
         type: "error",
-        text: "加入收藏属于云空间功能。",
+        text: "加入收藏属于云会员权益。",
         href: "/membership",
-        hrefText: "查看云空间",
+        hrefText: "了解云会员",
       });
       return;
     }
@@ -1708,9 +1714,9 @@ export default function PlantDetailPage() {
     if (!planAdded && !hasCloudAccess) {
       setActionMessage({
         type: "error",
-        text: "云端种植计划属于云空间功能；你仍可新建本地项目。",
+        text: "云端种植计划属于云会员权益；你仍可新建本地项目。",
         href: "/membership",
-        hrefText: "查看云空间",
+        hrefText: "了解云会员",
       });
       return;
     }
@@ -1752,6 +1758,19 @@ export default function PlantDetailPage() {
       hrefText: nextPlanAdded ? "查看计划" : undefined,
     });
   }
+
+  const experienceCardTabCount = relatedExperienceCards.length;
+  const plantingRecordTabCount = Array.from(
+    new Map(
+      [...ownArchives, ...relatedArchives].map((archive) => [
+        archive.archive_id,
+        archive,
+      ])
+    ).values()
+  ).reduce(
+    (count, archive) => count + Number(archive.public_record_count || 0),
+    0
+  );
 
   if (loading) {
     return <main style={{ padding: 20 }}>加载中...</main>;
@@ -1874,9 +1893,9 @@ export default function PlantDetailPage() {
               lineHeight: 1.7,
             }}
           >
-            当前是本地免费用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云空间会员开放。
+            当前是本地用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云会员开放。
             <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              查看云空间
+              了解云会员
             </Link>
           </div>
         ) : null}
@@ -2039,8 +2058,18 @@ export default function PlantDetailPage() {
       >
         {([
           ["guide", "概要与种植办法"],
-          ["experience", "经验卡"],
-          ["records", "种植记录"],
+          [
+            "experience",
+            experienceCardTabCount > 0
+              ? `经验卡（${experienceCardTabCount}）`
+              : "经验卡",
+          ],
+          [
+            "records",
+            plantingRecordTabCount > 0
+              ? `种植记录（${plantingRecordTabCount}）`
+              : "种植记录",
+          ],
         ] as const).map(([value, label]) => (
           <button
             key={value}
@@ -2089,7 +2118,7 @@ export default function PlantDetailPage() {
             ))}
           </div>
           <div style={{ marginTop: 12, color: "#6a7566", fontSize: 13, lineHeight: 1.7 }}>
-            地区与季节适配、精确阈值、完整养护方法和多案例比较属于云空间功能。
+            地区与季节适配、精确阈值、完整养护方法和多案例比较属于云会员权益。
           </div>
         </Section>
       ) : null}
@@ -2206,7 +2235,10 @@ export default function PlantDetailPage() {
 
       {activeTab === "experience" ? (
         hasCloudAccess ? (
-          <PlantExperienceCardsSection cards={relatedExperienceCards} />
+          <PlantExperienceCardsSection
+            cards={relatedExperienceCards}
+            currentUserId={currentUserId}
+          />
         ) : (
           <PlantTabAccessNotice label="相关经验卡" />
         )

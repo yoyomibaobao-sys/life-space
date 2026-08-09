@@ -1122,12 +1122,12 @@ export default function PlantIndexPage() {
               </Link>
             </>
           ) : hasCloudAccess ? (
-            "当前云空间可查看完整参数、环境筛选、养护指引和相关种植记录。"
+            "当前账号可查看完整参数、环境筛选、养护指引和相关种植记录。"
           ) : (
             <>
-              当前是本地免费用户，可以查看基础概要和少量核心参数；完整参数、环境筛选和完整指引需
+              当前是本地用户，可以查看基础概要和少量核心参数；完整参数、环境筛选和完整指引需
               <Link href="/membership" style={{ marginLeft: 4, color: "#3f6f37", fontWeight: 700 }}>
-                开通云空间
+                开通云会员
               </Link>
               。
             </>

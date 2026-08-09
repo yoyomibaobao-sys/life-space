@@ -3,6 +3,7 @@ import {
   isNonPlantArchiveCategory,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type SystemNameCandidateSource =
   | "plant_species"
@@ -26,9 +27,7 @@ export type SystemNameCandidate = {
 
 export type SystemNameCandidateMode = "cloud" | "local";
 
-export type SystemNameCandidateSupabase = {
-  from: (table: string) => any;
-};
+export type SystemNameCandidateSupabase = Pick<SupabaseClient, "from">;
 
 type PlantSpeciesCandidateRow = {
   id?: string | null;

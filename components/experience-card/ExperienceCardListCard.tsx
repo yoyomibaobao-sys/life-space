@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import styles from "@/components/experience-card/ExperienceCardListCard.module.css";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import ResponsiveActionMenu from "@/components/ui/ResponsiveActionMenu";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
 
 export default function ExperienceCardListCard({
@@ -54,8 +55,14 @@ export default function ExperienceCardListCard({
           {showAuthor ? ` · ${item.authorName}` : ""}
         </p>
         <div className={styles.footer}>
-          <ProjectMetaLine recordCount={item.source_record_count} />
-          {actions ? <div className={styles.actions}>{actions}</div> : null}
+          <ProjectMetaLine
+            recordCount={item.source_record_count}
+            durationDays={item.durationDays}
+            commentCount={item.commentCount}
+            bookmarkCount={item.bookmarkCount}
+            helpfulCount={item.helpfulCount}
+          />
+          {actions ? <ResponsiveActionMenu label="经验卡操作">{actions}</ResponsiveActionMenu> : null}
         </div>
       </div>
     </div>

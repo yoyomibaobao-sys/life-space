@@ -1,3 +1,5 @@
+import { formatCardDate } from "@/lib/date-time";
+
 export type MarketPostType = "offer" | "exchange" | "gift" | "wanted";
 
 export type MarketItemCategory =
@@ -78,14 +80,5 @@ export function getMarketItemCategoryLabel(value?: string | null) {
 }
 
 export function formatMarketTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatCardDate(value);
 }

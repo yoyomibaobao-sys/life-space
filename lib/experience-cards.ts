@@ -1,10 +1,12 @@
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { supabase } from "@/lib/supabase";
+import { formatCardDate, getInclusiveDaySpan } from "@/lib/date-time";
 import type {
   ExperienceCardArchive,
   ExperienceCardAuthor,
   ExperienceCardDetail,
   ExperienceCardMedia,
+  ExperienceCardInteractionSummary,
   ExperienceCardListItem,
   ExperienceCardRow,
   ExperienceCardSaveInput,
@@ -19,7 +21,6 @@ type ExperienceCardListArchiveRow = {
   species_name_snapshot: string | null;
   cover_image_url: string | null;
   cover_image_path: string | null;
-  cover_thumb_url: string | null;
   cover_thumb_path: string | null;
 };
 
@@ -36,6 +37,11 @@ type ExperienceCardListProfileRow = {
 type ExperienceCardListRelationRow = {
   card_id: string;
   record_id: string;
+};
+
+type ExperienceCardRecordTimeRow = {
+  id: string;
+  record_time: string | null;
 };
 
 const CARD_RECORD_SELECT = [
@@ -73,14 +79,7 @@ function firstBoolean(data: unknown) {
 }
 
 export function formatExperienceCardDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
+  return formatCardDate(value);
 }
 
 function joinExperienceCardRegion(profile?: ExperienceCardListProfileRow) {
@@ -98,11 +97,11 @@ export async function hydrateExperienceCardListItems(
   const authorIds = Array.from(new Set(rows.map((row) => row.user_id)));
   const cardIds = rows.map((row) => row.id);
 
-  const [archiveResult, profileResult, relationResult] = await Promise.all([
+  const [archiveResult, profileResult, relationResult, interactionResult] = await Promise.all([
     supabase
       .from("archives")
       .select(
-        "id, title, category, system_name, species_name_snapshot, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
+        "id, title, category, system_name, species_name_snapshot, cover_image_url, cover_image_path, cover_thumb_path"
       )
       .in("id", archiveIds),
     supabase
@@ -115,23 +114,41 @@ export async function hydrateExperienceCardListItems(
       .from("experience_card_records")
       .select("card_id, record_id")
       .in("card_id", cardIds),
+    supabase.rpc("get_experience_card_interaction_summaries", {
+      p_card_ids: cardIds,
+    }),
   ]);
+
+  if (archiveResult.error) {
+    console.error("experience card source projects load failed:", archiveResult.error);
+  }
 
   const archives = (archiveResult.data || []) as ExperienceCardListArchiveRow[];
   const profiles = (profileResult.data || []) as ExperienceCardListProfileRow[];
   const relations = (relationResult.data || []) as ExperienceCardListRelationRow[];
+  const interactionRows = (interactionResult.data || []) as ExperienceCardInteractionSummary[];
   const archiveById = new Map(archives.map((archive) => [archive.id, archive]));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const recordIds = Array.from(new Set(relations.map((row) => row.record_id)));
   const mediaByRecord = new Map<string, ExperienceCardMedia[]>();
+  const recordTimeById = new Map<string, string>();
 
   if (recordIds.length > 0) {
-    const { data: mediaData } = await supabase
-      .from("media")
-      .select(CARD_MEDIA_SELECT)
-      .in("record_id", recordIds)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true });
+    const [{ data: recordTimeData }, { data: mediaData }] = await Promise.all([
+      supabase
+        .from("records")
+        .select("id, record_time")
+        .in("id", recordIds),
+      supabase
+        .from("media")
+        .select(CARD_MEDIA_SELECT)
+        .in("record_id", recordIds)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    ((recordTimeData || []) as ExperienceCardRecordTimeRow[]).forEach((record) => {
+      if (record.record_time) recordTimeById.set(record.id, record.record_time);
+    });
     const mediaRows = await attachMediaDisplayUrls(
       supabase,
       (mediaData || []) as unknown as ExperienceCardMedia[]
@@ -150,7 +167,7 @@ export async function hydrateExperienceCardListItems(
       id: archive.id,
       url: archive.cover_image_url,
       storage_path: archive.cover_image_path,
-      thumb_url: archive.cover_thumb_url,
+      thumb_url: null,
       thumb_path: archive.cover_thumb_path,
     }))
   );
@@ -166,9 +183,17 @@ export async function hydrateExperienceCardListItems(
     list.push(relation.record_id);
     recordIdsByCard.set(relation.card_id, list);
   });
+  const interactionByCard = new Map(
+    interactionRows.map((summary) => [summary.card_id, summary])
+  );
 
   return rows.map((row) => {
     const archive = archiveById.get(row.archive_id);
+    const sourceState = archiveResult.error
+      ? "error"
+      : archive
+        ? "available"
+        : "missing";
     const profile = profileById.get(row.user_id);
     const relatedRecordIds = recordIdsByCard.get(row.id) || [];
     const relatedMedia = relatedRecordIds.flatMap(
@@ -181,10 +206,21 @@ export async function hydrateExperienceCardListItems(
       .map((recordId) => mediaByRecord.get(recordId)?.[0])
       .find(Boolean);
     const cover = preferredCover || firstSourceCover;
+    const sortedRecordTimes = relatedRecordIds
+      .map((recordId) => recordTimeById.get(recordId))
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const periodStart = sortedRecordTimes[0] || null;
+    const periodEnd = sortedRecordTimes[sortedRecordTimes.length - 1] || null;
+    const interaction = interactionByCard.get(row.id);
 
     return {
       ...row,
-      archiveTitle: archive?.title?.trim() || "来源项目已删除",
+      archiveTitle:
+        archive?.title?.trim() ||
+        (sourceState === "error" ? "来源读取失败，请稍后重试" : "来源项目已不可用"),
+      sourceAvailable: Boolean(archive),
+      sourceState,
       archiveCategory: archive?.category || null,
       systemName:
         archive?.system_name?.trim() ||
@@ -202,6 +238,14 @@ export async function hydrateExperienceCardListItems(
       authorCountryName: profile?.country_name || null,
       authorRegionName: profile?.region_name || null,
       authorCityName: profile?.city_name || null,
+      durationDays: getInclusiveDaySpan(periodStart, periodEnd),
+      periodStart,
+      periodEnd,
+      commentCount: Number(interaction?.comment_count || 0),
+      bookmarkCount: Number(interaction?.bookmark_count || 0),
+      helpfulCount: Number(interaction?.helpful_count || 0),
+      bookmarkedByMe: Boolean(interaction?.bookmarked_by_me),
+      helpfulByMe: Boolean(interaction?.helpful_by_me),
     };
   });
 }
@@ -219,10 +263,10 @@ export function getExperienceCardErrorText(error: unknown) {
       : String(error || "");
 
   if (message.includes("experience_card_cloud_access_required")) {
-    return "需要有效云空间才能创建、修改或发布经验卡。";
+    return "需要开通云会员才能创建、修改或发布经验卡。";
   }
   if (message.includes("experience_card_record_count_invalid")) {
-    return "请选择3～12条记录。";
+    return "请至少选择3条记录。";
   }
   if (message.includes("experience_card_records_must_share_archive")) {
     return "所选记录必须来自同一个项目，且不能处于回收站中。";
@@ -242,6 +286,9 @@ export function getExperienceCardErrorText(error: unknown) {
   if (message.includes("experience_card_title_invalid")) {
     return "标题需为1～120个字符。";
   }
+  if (message.includes("experience_card_description_invalid")) {
+    return "详情描述最多500个字符。";
+  }
 
   return "操作失败，请稍后重试。";
 }
@@ -260,6 +307,21 @@ export async function saveExperienceCard(input: ExperienceCardSaveInput) {
     throw new Error("experience_card_save_failed");
   }
   return data;
+}
+
+export async function updateExperienceCardDescription(
+  cardId: string,
+  description: string
+) {
+  const { data, error } = await supabase.rpc(
+    "update_experience_card_description",
+    {
+      p_card_id: cardId,
+      p_description: description.trim(),
+    }
+  );
+  if (error) throw error;
+  return firstBoolean(data);
 }
 
 export async function publishExperienceCard(cardId: string) {

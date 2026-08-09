@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { formatPreciseDateTime } from "@/lib/date-time";
 import {
   MARKET_ITEM_CATEGORY_OPTIONS,
   MARKET_POST_TYPE_OPTIONS,
@@ -523,7 +524,7 @@ function NewMarketPostPageContent() {
             <span>{getMarketPostQuotaHint(membership)}</span>
             {marketBlocked ? (
               <Link href="/membership" style={quotaLinkStyle}>
-                查看云空间
+                了解云会员
               </Link>
             ) : null}
           </div>
@@ -773,16 +774,7 @@ function normalizeExternalUrl(value: string) {
 }
 
 function formatSourceRecordTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 function buildLocationText(profile?: ProfileLocation | null) {

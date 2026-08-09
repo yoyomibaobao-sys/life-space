@@ -22,6 +22,7 @@ import {
   type CloudTrashItem,
 } from "@/lib/cloud-trash";
 import { supabase } from "@/lib/supabase";
+import { formatPreciseDateTime } from "@/lib/date-time";
 
 type LoadOptions = {
   silent?: boolean;
@@ -443,17 +444,8 @@ function getPurgeConfirmMessage(type: CloudTrashItem["type"]) {
 }
 
 function formatDeletedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "删除时间未知";
-
-  return `${new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date)} 移入`;
+  const text = formatPreciseDateTime(value);
+  return text ? `${text} 移入` : "删除时间未知";
 }
 
 const pageStyle: CSSProperties = {

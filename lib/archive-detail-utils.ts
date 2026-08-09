@@ -5,32 +5,16 @@ import type {
   LightboxImage,
   PlantSpeciesLite,
 } from "@/lib/archive-detail-types";
+import type { MediaItem } from "@/lib/domain-types";
+import { formatPreciseDateTime } from "@/lib/date-time";
 
 
 export function formatDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 export function formatDateTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 function getLocalDayStartTime(value: string) {
@@ -70,16 +54,16 @@ export function getDisplayName(
 }
 
 export function buildMediaList(
-  media: any[] | undefined,
+  media: MediaItem[] | undefined,
   archiveTitle: string
 ): LightboxImage[] {
   return (media || [])
-    .map((item: any) => ({
+    .map((item) => ({
       id: item?.id,
       recordId: item?.record_id,
       url: item?.display_url,
     }))
-    .filter((item) => Boolean(item.url))
+    .filter((item): item is typeof item & { url: string } => Boolean(item.url))
     .map((item, index: number) => ({
       id: item.id,
       recordId: item.recordId,

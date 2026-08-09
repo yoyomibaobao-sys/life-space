@@ -114,6 +114,24 @@ select
   0
 from experience_card_test_context;
 
+insert into public.records (
+  id,
+  archive_id,
+  user_id,
+  note,
+  record_time,
+  visibility
+)
+select
+  gen_random_uuid(),
+  c.archive_id,
+  c.cloud_user,
+  '额外记录' || extra.sequence_no,
+  now() + make_interval(secs => extra.sequence_no),
+  'private'
+from experience_card_test_context as c
+cross join generate_series(1, 9) as extra(sequence_no);
+
 select set_config(
   'request.jwt.claim.sub',
   (select cloud_user::text from experience_card_test_context),
@@ -125,6 +143,8 @@ set local role authenticated;
 do $$
 declare
   c experience_card_test_context%rowtype;
+  v_record_ids uuid[];
+  v_unlimited_card_id uuid;
 begin
   select * into c from experience_card_test_context;
 
@@ -160,6 +180,38 @@ begin
   exception when insufficient_privilege then
     null;
   end;
+
+  select array_agg(r.id order by r.record_time, r.id)
+  into v_record_ids
+  from public.records as r
+  where r.archive_id = c.archive_id
+    and r.user_id = c.cloud_user
+    and r.trashed_at is null;
+
+  if cardinality(v_record_ids) <= 12 then
+    raise exception 'unlimited source test did not prepare more than 12 records';
+  end if;
+
+  v_unlimited_card_id := public.save_experience_card(
+    null,
+    c.archive_id,
+    '超过十二条的长期经验',
+    v_record_ids,
+    c.cover_media_id
+  );
+
+  if not exists (
+    select 1
+    from public.experience_cards as card
+    where card.id = v_unlimited_card_id
+      and card.source_record_count = cardinality(v_record_ids)
+  ) then
+    raise exception 'experience card still rejected more than 12 records';
+  end if;
+
+  if not public.delete_experience_card(v_unlimited_card_id) then
+    raise exception 'unlimited source test card could not be deleted';
+  end if;
 end;
 $$;
 
@@ -195,6 +247,45 @@ begin
   ) <> 3 then
     raise exception 'card did not retain exactly three source references';
   end if;
+
+  if not public.update_experience_card_description(
+    c.card_id,
+    '从播种到出苗的关键条件与结果。'
+  ) then
+    raise exception 'experience-card description update returned false';
+  end if;
+
+  if not exists (
+    select 1
+    from public.experience_cards card
+    where card.id = c.card_id
+      and card.description = '从播种到出苗的关键条件与结果。'
+      and card.status = 'draft'
+      and card.source_record_count = 3
+  ) then
+    raise exception 'experience-card description was not saved';
+  end if;
+
+  begin
+    update public.experience_cards
+    set title = '绕过经验卡保存RPC'
+    where id = c.card_id;
+    raise exception 'authenticated user directly updated protected card content';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  begin
+    perform public.update_experience_card_description(
+      c.card_id,
+      repeat('字', 501)
+    );
+    raise exception 'experience-card description accepted more than 500 characters';
+  exception when raise_exception then
+    if sqlerrm <> 'experience_card_description_invalid' then
+      raise;
+    end if;
+  end;
 end;
 $$;
 
@@ -279,6 +370,63 @@ begin
 end;
 $$;
 
+select set_config(
+  'request.jwt.claim.sub',
+  (select cloud_user::text from experience_card_test_context),
+  true
+);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+set local role authenticated;
+
+do $$
+declare
+  c experience_card_test_context%rowtype;
+  v_published_at timestamptz;
+begin
+  select * into c from experience_card_test_context;
+
+  select card.published_at
+  into v_published_at
+  from public.experience_cards as card
+  where card.id = c.card_id;
+
+  perform public.save_experience_card(
+    c.card_id,
+    c.archive_id,
+    '公开状态下修改后的经验卡',
+    array[c.record_one, c.record_two, c.record_unselected],
+    c.cover_media_id
+  );
+
+  if not exists (
+    select 1
+    from public.experience_cards as card
+    where card.id = c.card_id
+      and card.status = 'published'
+      and card.published_at = v_published_at
+      and card.title = '公开状态下修改后的经验卡'
+      and card.source_record_count = 3
+  ) then
+    raise exception 'saving published content changed its visibility';
+  end if;
+
+  if not exists (
+    select 1
+    from public.records as r
+    where r.id = c.record_unselected
+      and r.visibility = 'public'
+  ) then
+    raise exception 'saving a published card did not publish its newly selected source';
+  end if;
+
+  if not public.is_experience_card_public(c.card_id) then
+    raise exception 'saving published content interrupted public availability';
+  end if;
+end;
+$$;
+
+reset role;
+
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claim.role', 'anon', true);
 set local role anon;
@@ -294,6 +442,7 @@ begin
        select 1
        from public.experience_cards card
        where card.id = c.card_id
+         and card.description = '从播种到出苗的关键条件与结果。'
      )
      or (
        select count(*)
@@ -384,6 +533,26 @@ begin
       raise;
     end if;
   end;
+
+  begin
+    perform public.update_experience_card_description(
+      c.card_id,
+      '过期后不应允许修改描述'
+    );
+    raise exception 'expired owner modified an experience-card description';
+  exception when raise_exception then
+    if sqlerrm <> 'experience_card_cloud_access_required' then
+      raise;
+    end if;
+  end;
+
+  update public.experience_cards
+  set description = '过期后直接修改也不应生效'
+  where id = c.card_id;
+
+  if found then
+    raise exception 'expired owner directly updated an experience-card description';
+  end if;
 
   if not public.delete_experience_card(c.card_id) then
     raise exception 'expired owner could not delete an existing card';

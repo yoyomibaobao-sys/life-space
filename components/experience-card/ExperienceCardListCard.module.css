@@ -1,7 +1,11 @@
 .card {
+  position: relative;
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  min-height: 112px;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 124px;
+  padding: 10px;
+  box-sizing: border-box;
   overflow: hidden;
   color: #2b382a;
   text-decoration: none;
@@ -10,11 +14,22 @@
   border-radius: 15px;
 }
 
+.card > a:first-child {
+  position: relative;
+  display: block;
+  width: 104px;
+  height: 104px;
+  align-self: start;
+  overflow: hidden;
+  border-radius: 11px;
+}
+
 .cover,
 .placeholder {
-  width: 112px;
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  min-height: 112px;
 }
 
 .cover {
@@ -33,7 +48,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 12px 13px;
+  min-height: 104px;
+  padding: 1px 0;
 }
 
 .statusRow,
@@ -69,26 +85,34 @@
 
 .footer {
   justify-content: space-between;
-  margin-top: auto;
+  margin-top: 4px;
   padding-top: 8px;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
 }
 
 @media (max-width: 520px) {
   .card {
-    grid-template-columns: 88px minmax(0, 1fr);
-    min-height: 104px;
+    grid-template-columns: 94px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 110px;
+    padding: 8px;
   }
 
-  .cover,
-  .placeholder {
-    width: 88px;
-    min-height: 104px;
+  .card > a:first-child {
+    width: 94px;
+    height: 94px;
+  }
+
+  .content {
+    min-height: 94px;
+    padding: 0;
+  }
+
+  .title {
+    margin-top: 5px;
+    font-size: 15px;
+  }
+
+  .footer {
+    padding-top: 6px;
   }
 }

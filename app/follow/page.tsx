@@ -83,6 +83,13 @@ type GroupTagRow = {
   name: string | null;
 };
 
+type FollowedUserArchiveRow = Pick<
+  ArchiveRow,
+  "id" | "user_id" | "title" | "last_record_time"
+> & {
+  is_public?: boolean;
+};
+
 type FollowProjectCard = {
   id: string;
   title: string;
@@ -192,7 +199,7 @@ export default function FollowPage() {
             )
             .in("user_id", followedUserIds)
             .eq("is_public", true)
-        : Promise.resolve({ data: [] as any[], error: null });
+        : Promise.resolve({ data: [] as FollowedUserArchiveRow[], error: null });
 
       const recordsPromise = archiveIds.length
         ? supabase
@@ -206,11 +213,7 @@ export default function FollowPage() {
         await Promise.all([archivesPromise, followedUsersArchivesPromise, recordsPromise]);
 
       const archives = (archivesResult.data || []) as ArchiveRow[];
-      const followedUsersArchives = (followedUsersArchivesResult.data || []) as Array<
-        Pick<ArchiveRow, "id" | "user_id" | "title" | "last_record_time"> & {
-          is_public?: boolean;
-        }
-      >;
+      const followedUsersArchives = (followedUsersArchivesResult.data || []) as FollowedUserArchiveRow[];
       const records = (recordsResult.data || []) as RecordRow[];
 
       const profileIds = unique([
@@ -776,20 +779,6 @@ function getDurationDays(start?: string | null, end?: string | null) {
   if (!startTime) return 0;
   const safeEnd = endTime || Date.now();
   return Math.max(1, Math.floor((safeEnd - startTime) / (1000 * 60 * 60 * 24)) + 1);
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function getProjectStatusLabel(helpStatus?: string | null, status?: string | null) {

@@ -1868,9 +1868,17 @@ saveRecentArchiveBrowse({
         {!isMobileViewport ? (
           <header style={desktopProjectIdentityStyle}>
             <h1 style={desktopProjectTitleStyle}>{activeArchive.title}</h1>
-            <span style={desktopProjectOwnerStyle}>
-              {isOwner ? "我的项目" : username}
-            </span>
+            {isOwner ? (
+              <span style={desktopProjectOwnerStyle}>我的项目</span>
+            ) : (
+              <Link
+                href={`/user/${activeArchive.user_id}`}
+                style={desktopProjectOwnerLinkStyle}
+                aria-label={`进入${username}的空间`}
+              >
+                {username}
+              </Link>
+            )}
           </header>
         ) : null}
 
@@ -2659,6 +2667,11 @@ const desktopProjectOwnerStyle: CSSProperties = {
   flexShrink: 0,
   color: "#7a8677",
   fontSize: 13,
+};
+
+const desktopProjectOwnerLinkStyle: CSSProperties = {
+  ...desktopProjectOwnerStyle,
+  textDecoration: "none",
 };
 
 const archiveDetailTabWrapStyle: CSSProperties = {

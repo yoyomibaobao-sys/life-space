@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -42,6 +44,22 @@ type RecordImageOption = {
   previewUrl: string;
 };
 
+export type ExperienceCardVideoPanelHandle = {
+  generate: () => void;
+  stop: () => void;
+  share: () => void;
+  save: () => void;
+};
+
+export type ExperienceCardVideoPanelStatus = {
+  hasVideo: boolean;
+  generating: boolean;
+  progress: number;
+  loading: boolean;
+  selectedImageCount: number;
+  sizeBytes: number | null;
+};
+
 function isImageMedia(media: ExperienceCardMedia) {
   const mimeType = String(media.mime_type || "").toLowerCase();
   const type = String(media.type || "").toLowerCase();
@@ -74,6 +92,27 @@ function buildDefaultImageSelection(
       record.id,
       getRecordImageOptions(record).map((option) => option.sourceUrl),
     ])
+  );
+}
+
+function reconcileImageSelection(
+  detail: ExperienceCardDetail,
+  current: ExperienceCardVideoImageSelection
+): ExperienceCardVideoImageSelection {
+  return Object.fromEntries(
+    detail.records.map((record) => {
+      const availableUrls = getRecordImageOptions(record).map(
+        (option) => option.sourceUrl
+      );
+      if (!Object.prototype.hasOwnProperty.call(current, record.id)) {
+        return [record.id, availableUrls];
+      }
+      const availableUrlSet = new Set(availableUrls);
+      return [
+        record.id,
+        (current[record.id] || []).filter((url) => availableUrlSet.has(url)),
+      ];
+    })
   );
 }
 
@@ -115,9 +154,16 @@ function getCoverMediaId(
 
 function getDefaultCoverImageUrl(
   detail: ExperienceCardDetail,
-  selection: ExperienceCardVideoImageSelection
+  selection: ExperienceCardVideoImageSelection,
+  preferredCoverMediaId?: string | null
 ) {
   const selectedUrls = getSelectedImageUrls(detail, selection);
+  const preferredCoverUrl = detail.records
+    .flatMap((record) => getRecordImageOptions(record))
+    .find((option) => option.id === preferredCoverMediaId)?.sourceUrl;
+  if (preferredCoverUrl && selectedUrls.includes(preferredCoverUrl)) {
+    return preferredCoverUrl;
+  }
   const savedCoverUrl =
     detail.cover?.display_url || detail.cover?.display_thumb_url || null;
   return savedCoverUrl && selectedUrls.includes(savedCoverUrl)
@@ -125,13 +171,57 @@ function getDefaultCoverImageUrl(
     : selectedUrls[0] || null;
 }
 
-export default function ExperienceCardVideoPanel({
-  detail,
-  readOnly = false,
-}: {
+function persistVideoSelectionPreference(
+  detail: ExperienceCardDetail,
+  selection: ExperienceCardVideoImageSelection,
+  coverUrl: string | null
+) {
+  try {
+    saveExperienceCardVideoSelection(detail.card.id, {
+      selectedMediaIdsByRecordId: getSelectedMediaIdsByRecordId(
+        detail,
+        selection
+      ),
+      coverMediaId: getCoverMediaId(detail, coverUrl),
+    });
+  } catch {
+    // Selection persistence is best effort; video generation remains usable.
+  }
+}
+
+type ExperienceCardVideoPanelProps = {
   detail: ExperienceCardDetail;
   readOnly?: boolean;
-}) {
+  integrated?: boolean;
+  previewOnly?: boolean;
+  selectionOnly?: boolean;
+  hideGenerateAction?: boolean;
+  externalControls?: boolean;
+  coverMediaId?: string | null;
+  onCoverMediaIdChange?: (mediaId: string | null) => void;
+  onSelectionChange?: () => void;
+  onStatusChange?: (status: ExperienceCardVideoPanelStatus) => void;
+};
+
+const ExperienceCardVideoPanel = forwardRef<
+  ExperienceCardVideoPanelHandle,
+  ExperienceCardVideoPanelProps
+>(function ExperienceCardVideoPanel(
+  {
+    detail,
+    readOnly = false,
+    integrated = false,
+    previewOnly = false,
+    selectionOnly = false,
+    hideGenerateAction = false,
+    externalControls = false,
+    coverMediaId,
+    onCoverMediaIdChange,
+    onSelectionChange,
+    onStatusChange,
+  },
+  ref
+) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const videoUrlRef = useRef("");
@@ -149,7 +239,7 @@ export default function ExperienceCardVideoPanel({
     );
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(() => {
     const selection = buildDefaultImageSelection(detail);
-    return getDefaultCoverImageUrl(detail, selection);
+    return getDefaultCoverImageUrl(detail, selection, coverMediaId);
   });
 
   const imageOptionsByRecordId = useMemo(
@@ -208,12 +298,19 @@ export default function ExperienceCardVideoPanel({
     () => getExperienceCardVideoSourceSignature(detail),
     [detail]
   );
+  const previousSourceSignatureRef = useRef(sourceSignature);
+  const sceneImageSignature = useMemo(
+    () => JSON.stringify(scenes.map((scene) => scene.imageUrl || null)),
+    [scenes]
+  );
 
   useEffect(() => {
     let cancelled = false;
     const nextSelection = buildDefaultImageSelection(detail);
     setSelectedImageByRecordId(nextSelection);
-    setCoverImageUrl(getDefaultCoverImageUrl(detail, nextSelection));
+    setCoverImageUrl(
+      getDefaultCoverImageUrl(detail, nextSelection, coverMediaId)
+    );
     clearGeneratedVideo();
     setErrorText("");
     setCacheLoading(true);
@@ -254,7 +351,13 @@ export default function ExperienceCardVideoPanel({
         const restoredUrls = getSelectedImageUrls(detail, restoredSelection);
         const restoredCoverOption = Array.from(optionsByRecordId.values())
           .flat()
-          .find((option) => option.id === storedSelection.coverMediaId);
+          .find(
+            (option) =>
+              option.id ===
+              (coverMediaId === undefined
+                ? storedSelection.coverMediaId
+                : coverMediaId)
+          );
         const restoredCover =
           restoredCoverOption?.sourceUrl || restoredUrls[0] || null;
 
@@ -273,7 +376,70 @@ export default function ExperienceCardVideoPanel({
     };
     // The signature captures every source field used by the generated video.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail.card.id, sourceSignature]);
+  }, [detail.card.id]);
+
+  useEffect(() => {
+    if (previousSourceSignatureRef.current === sourceSignature) return;
+    previousSourceSignatureRef.current = sourceSignature;
+    clearGeneratedVideo();
+    void deleteCachedExperienceCardVideo(detail.card.id).catch(
+      () => undefined
+    );
+
+    setSelectedImageByRecordId((current) => {
+      const next = reconcileImageSelection(detail, current);
+      const nextSelectedUrls = getSelectedImageUrls(detail, next);
+      const preferredCoverUrl = imageOptions.find(
+        (option) => option.id === coverMediaId
+      )?.sourceUrl;
+      setCoverImageUrl((currentCover) => {
+        const nextCover =
+          preferredCoverUrl && nextSelectedUrls.includes(preferredCoverUrl)
+            ? preferredCoverUrl
+            : currentCover && nextSelectedUrls.includes(currentCover)
+            ? currentCover
+            : nextSelectedUrls[0] || null;
+        persistVideoSelectionPreference(detail, next, nextCover);
+        return nextCover;
+      });
+      return next;
+    });
+    // sourceSignature contains every card, record and media field used by MP4.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceSignature]);
+
+  useEffect(() => {
+    if (coverMediaId === undefined) return;
+    const preferredCoverOption = imageOptions.find(
+      (option) => option.id === coverMediaId
+    );
+    const preferredCoverUrl = preferredCoverOption?.sourceUrl;
+    if (
+      preferredCoverOption &&
+      preferredCoverUrl &&
+      !selectedImageUrls.includes(preferredCoverUrl)
+    ) {
+      setSelectedImageByRecordId((current) => {
+        const currentUrls = current[preferredCoverOption.recordId] || [];
+        const next = {
+          ...current,
+          [preferredCoverOption.recordId]: [
+            ...currentUrls,
+            preferredCoverUrl,
+          ],
+        };
+        persistVideoSelectionPreference(detail, next, preferredCoverUrl);
+        return next;
+      });
+      setCoverImageUrl(preferredCoverUrl);
+      return;
+    }
+    setCoverImageUrl(
+      preferredCoverUrl && selectedImageUrls.includes(preferredCoverUrl)
+        ? preferredCoverUrl
+        : selectedImageUrls[0] || null
+    );
+  }, [coverMediaId, detail, imageOptions, selectedImageUrls]);
 
   useEffect(() => {
     let cancelled = false;
@@ -298,7 +464,9 @@ export default function ExperienceCardVideoPanel({
       cancelled = true;
       releaseExperienceCardVideoImages(loadedImages);
     };
-  }, [detail, scenes]);
+    // sceneImageSignature changes only when the image sources change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail.card.id, sceneImageSignature]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -335,6 +503,26 @@ export default function ExperienceCardVideoPanel({
     []
   );
 
+  useEffect(() => {
+    onStatusChange?.({
+      hasVideo: Boolean(videoBlob && videoUrl),
+      generating,
+      progress,
+      loading: imageLoading || cacheLoading,
+      selectedImageCount,
+      sizeBytes: videoBlob?.size || null,
+    });
+  }, [
+    cacheLoading,
+    generating,
+    imageLoading,
+    onStatusChange,
+    progress,
+    selectedImageCount,
+    videoBlob,
+    videoUrl,
+  ]);
+
   function replaceGeneratedVideo(blob: Blob | null) {
     if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current);
     const nextUrl = blob ? URL.createObjectURL(blob) : "";
@@ -354,23 +542,6 @@ export default function ExperienceCardVideoPanel({
     );
   }
 
-  function saveSelectionPreference(
-    selection: ExperienceCardVideoImageSelection,
-    coverUrl: string | null
-  ) {
-    try {
-      saveExperienceCardVideoSelection(detail.card.id, {
-        selectedMediaIdsByRecordId: getSelectedMediaIdsByRecordId(
-          detail,
-          selection
-        ),
-        coverMediaId: getCoverMediaId(detail, coverUrl),
-      });
-    } catch {
-      // Selection persistence is best effort; video generation remains usable.
-    }
-  }
-
   function toggleRecordImage(recordId: string, imageUrl: string) {
     if (generating || cacheLoading) return;
     invalidateGeneratedVideo();
@@ -387,9 +558,13 @@ export default function ExperienceCardVideoPanel({
           ? coverImageUrl
           : nextSelectedUrls[0] || null;
       setCoverImageUrl(nextCover);
-      saveSelectionPreference(next, nextCover);
+      if (nextCover !== coverImageUrl) {
+        onCoverMediaIdChange?.(getCoverMediaId(detail, nextCover));
+      }
+      persistVideoSelectionPreference(detail, next, nextCover);
       return next;
     });
+    onSelectionChange?.();
   }
 
   function selectAllImages() {
@@ -397,10 +572,11 @@ export default function ExperienceCardVideoPanel({
     invalidateGeneratedVideo();
     setErrorText("");
     const next = buildDefaultImageSelection(detail);
-    const nextCover = getDefaultCoverImageUrl(detail, next);
+    const nextCover = getDefaultCoverImageUrl(detail, next, coverMediaId);
     setSelectedImageByRecordId(next);
     setCoverImageUrl(nextCover);
-    saveSelectionPreference(next, nextCover);
+    persistVideoSelectionPreference(detail, next, nextCover);
+    onSelectionChange?.();
   }
 
   function clearAllImages() {
@@ -412,7 +588,9 @@ export default function ExperienceCardVideoPanel({
     );
     setSelectedImageByRecordId(next);
     setCoverImageUrl(null);
-    saveSelectionPreference(next, null);
+    onCoverMediaIdChange?.(null);
+    persistVideoSelectionPreference(detail, next, null);
+    onSelectionChange?.();
   }
 
   function selectCoverImage(imageUrl: string) {
@@ -426,11 +604,17 @@ export default function ExperienceCardVideoPanel({
     invalidateGeneratedVideo();
     setErrorText("");
     setCoverImageUrl(imageUrl);
-    saveSelectionPreference(selectedImageByRecordId, imageUrl);
+    onCoverMediaIdChange?.(getCoverMediaId(detail, imageUrl));
+    persistVideoSelectionPreference(detail, selectedImageByRecordId, imageUrl);
+    onSelectionChange?.();
   }
 
   async function handleGenerate() {
-    if (generating || imageLoading || cacheLoading) return;
+    if (generating) return;
+    if (imageLoading || cacheLoading) {
+      showToast("正在准备记录图片，请稍后再试");
+      return;
+    }
     clearGeneratedVideo();
     setErrorText("");
     setProgress(0);
@@ -519,12 +703,32 @@ export default function ExperienceCardVideoPanel({
     void video.play().catch(() => undefined);
   }
 
+  useImperativeHandle(ref, () => ({
+    generate: () => {
+      void handleGenerate();
+    },
+    stop: handleStop,
+    share: () => {
+      void shareVideo();
+    },
+    save: () => downloadVideo(),
+  }));
+
   return (
-    <section style={panelStyle} aria-label="经验卡视频">
-      {!readOnly ? (
+    <section
+      style={integrated ? integratedPanelStyle : panelStyle}
+      aria-label="经验卡图片与视频"
+    >
+      {!readOnly && !previewOnly ? (
         <>
           <div style={headerStyle}>
-            <h2 style={titleStyle}>图片与视频</h2>
+            <div>
+              <div style={eyebrowStyle}>图片</div>
+              <h2 style={titleStyle}>选择视频画面与封面</h2>
+              <p style={localOnlyHintStyle}>
+                视频选图保存在当前设备；经验卡封面随“保存修改”保存，并自动作为视频片头。
+              </p>
+            </div>
             <span style={durationStyle}>
               {formatExperienceCardVideoDuration(duration)}
             </span>
@@ -533,7 +737,7 @@ export default function ExperienceCardVideoPanel({
           <div style={imageSelectorStyle}>
             <div style={imageSelectorHeaderStyle}>
               <strong>
-                已选 {selectedImageCount}/{totalImageCount} 张
+                视频选图 {selectedImageCount}/{totalImageCount} 张
               </strong>
               <span style={imageSelectorActionsStyle}>
                 <button
@@ -560,7 +764,10 @@ export default function ExperienceCardVideoPanel({
                   selectedImageByRecordId[option.recordId] || []
                 ).includes(option.sourceUrl);
                 const isCover =
-                  active && effectiveCoverImageUrl === option.sourceUrl;
+                  active &&
+                  (coverMediaId === undefined
+                    ? effectiveCoverImageUrl === option.sourceUrl
+                    : coverMediaId === option.id);
                 return (
                   <div key={option.id} style={imageChoiceItemStyle}>
                     <button
@@ -597,99 +804,117 @@ export default function ExperienceCardVideoPanel({
         </>
       ) : null}
 
-      <div style={readOnly ? publicPreviewWrapStyle : contentGridStyle}>
-        <div style={previewShellStyle}>
-          {videoUrl ? (
-            <video
-              src={videoUrl}
-              controls
-              autoPlay
-              muted
-              playsInline
-              onEnded={(event) => restartGeneratedVideo(event.currentTarget)}
-              style={previewStyle}
-            />
-          ) : (
-            <canvas ref={canvasRef} style={previewStyle} aria-label="循环视频预览" />
-          )}
-          {!readOnly ? (
-            <div style={previewLabelStyle}>
-              {videoUrl ? "MP4循环播放" : "循环预览"}
+      {!selectionOnly ? (
+        <div style={readOnly ? publicPreviewWrapStyle : contentGridStyle}>
+          <div style={previewShellStyle}>
+            {videoUrl ? (
+              <video
+                src={videoUrl}
+                controls
+                autoPlay
+                muted
+                playsInline
+                onEnded={(event) => restartGeneratedVideo(event.currentTarget)}
+                style={previewStyle}
+              />
+            ) : (
+              <canvas
+                ref={canvasRef}
+                style={previewStyle}
+                aria-label="循环视频预览"
+              />
+            )}
+            {!readOnly ? (
+              <div style={previewLabelStyle}>
+                {videoUrl ? "MP4循环播放" : "循环预览"}
+              </div>
+            ) : null}
+          </div>
+
+          {!readOnly &&
+          (!previewOnly || imageLoading || cacheLoading || errorText) ? (
+            <div style={controlStyle}>
+              {!previewOnly ? (
+                <div style={summaryStyle}>
+                  {selectedImageCount} 张图片
+                </div>
+              ) : null}
+
+              {imageLoading ? (
+                <div style={noticeStyle}>正在准备记录照片...</div>
+              ) : null}
+
+              {cacheLoading ? (
+                <div style={noticeStyle}>正在检查本机已生成的MP4...</div>
+              ) : null}
+
+              {!externalControls && generating ? (
+                <div style={progressWrapStyle}>
+                  <div style={progressTextStyle}>
+                    正在本机生成视频 {Math.round(progress * 100)}%
+                  </div>
+                  <div style={progressTrackStyle}>
+                    <div
+                      style={{
+                        ...progressBarStyle,
+                        width: `${Math.max(2, progress * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    style={stopButtonStyle}
+                  >
+                    停止生成
+                  </button>
+                </div>
+              ) : null}
+
+              {errorText ? <div style={errorStyle}>{errorText}</div> : null}
+
+              {!externalControls && (!hideGenerateAction || videoBlob) ? (
+                <div style={actionsStyle}>
+                {!generating && !hideGenerateAction ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerate()}
+                    disabled={imageLoading || cacheLoading}
+                    style={primaryButtonStyle}
+                  >
+                    {videoBlob ? "重新生成MP4" : "生成竖屏MP4"}
+                  </button>
+                ) : null}
+
+                {videoBlob ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void shareVideo()}
+                      style={shareButtonStyle}
+                    >
+                      分享视频
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadVideo()}
+                      style={secondaryButtonStyle}
+                    >
+                      保存MP4
+                    </button>
+                  </>
+                ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
-
-        {!readOnly ? <div style={controlStyle}>
-          <div style={summaryStyle}>
-            {selectedImageCount} 张图片 · 9:16 竖屏 · 静音 H.264 MP4
-          </div>
-
-          {imageLoading ? (
-            <div style={noticeStyle}>正在准备记录照片...</div>
-          ) : null}
-
-          {cacheLoading ? (
-            <div style={noticeStyle}>正在检查本机已生成的MP4...</div>
-          ) : null}
-
-          {generating ? (
-            <div style={progressWrapStyle}>
-              <div style={progressTextStyle}>
-                正在本机生成视频 {Math.round(progress * 100)}%
-              </div>
-              <div style={progressTrackStyle}>
-                <div
-                  style={{
-                    ...progressBarStyle,
-                    width: `${Math.max(2, progress * 100)}%`,
-                  }}
-                />
-              </div>
-              <button type="button" onClick={handleStop} style={stopButtonStyle}>
-                停止生成
-              </button>
-            </div>
-          ) : null}
-
-          {errorText ? <div style={errorStyle}>{errorText}</div> : null}
-
-          <div style={actionsStyle}>
-            {!generating ? (
-              <button
-                type="button"
-                onClick={() => void handleGenerate()}
-                disabled={imageLoading || cacheLoading}
-                style={primaryButtonStyle}
-              >
-                {videoBlob ? "重新生成MP4" : "生成竖屏MP4"}
-              </button>
-            ) : null}
-
-            {videoBlob ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void shareVideo()}
-                  style={shareButtonStyle}
-                >
-                  直接分享视频
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadVideo()}
-                  style={secondaryButtonStyle}
-                >
-                  保存MP4
-                </button>
-              </>
-            ) : null}
-          </div>
-
-        </div> : null}
-      </div>
+      ) : null}
     </section>
   );
-}
+});
+
+export default ExperienceCardVideoPanel;
 
 const panelStyle: CSSProperties = {
   margin: "0 0 14px",
@@ -697,6 +922,21 @@ const panelStyle: CSSProperties = {
   border: "1px solid #dfe8db",
   borderRadius: 20,
   background: "#f8fbf6",
+};
+
+const integratedPanelStyle: CSSProperties = {
+  margin: 0,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+};
+
+const eyebrowStyle: CSSProperties = {
+  marginBottom: 4,
+  color: "#768471",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.06em",
 };
 
 const headerStyle: CSSProperties = {
@@ -712,6 +952,14 @@ const titleStyle: CSSProperties = {
   color: "#2c3a2b",
   fontSize: 21,
   lineHeight: 1.3,
+};
+
+const localOnlyHintStyle: CSSProperties = {
+  maxWidth: 560,
+  margin: "5px 0 0",
+  color: "#788575",
+  fontSize: 12,
+  lineHeight: 1.55,
 };
 
 const durationStyle: CSSProperties = {

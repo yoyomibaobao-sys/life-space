@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type SocialProfileSummary = {
   id?: string;
   username?: string | null;
@@ -37,7 +39,7 @@ export function getTimeValue(value?: string | null) {
 }
 
 export async function loadFollowCountSummary(
-  supabase: any,
+  supabase: SupabaseClient,
   targetUserId: string
 ): Promise<FollowCountSummary> {
   const [{ count: followingCount }, { count: followerCount }] = await Promise.all([
@@ -58,7 +60,7 @@ export async function loadFollowCountSummary(
 }
 
 export async function loadUserFollowState(
-  supabase: any,
+  supabase: SupabaseClient,
   viewerId: string,
   targetUserId: string
 ): Promise<boolean> {

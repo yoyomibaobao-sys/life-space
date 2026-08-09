@@ -7,6 +7,7 @@ export type ExperienceCardRow = {
   user_id: string;
   archive_id: string;
   title: string;
+  description: string | null;
   cover_media_id: string | null;
   status: ExperienceCardStatus | string;
   source_record_count: number;
@@ -17,6 +18,8 @@ export type ExperienceCardRow = {
 
 export type ExperienceCardListItem = ExperienceCardRow & {
   archiveTitle: string;
+  sourceAvailable: boolean;
+  sourceState: "available" | "missing" | "error";
   archiveCategory: string | null;
   systemName: string | null;
   coverUrl: string | null;
@@ -27,6 +30,32 @@ export type ExperienceCardListItem = ExperienceCardRow & {
   authorCountryName: string | null;
   authorRegionName: string | null;
   authorCityName: string | null;
+  durationDays: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  commentCount: number;
+  bookmarkCount: number;
+  helpfulCount: number;
+  bookmarkedByMe: boolean;
+  helpfulByMe: boolean;
+};
+
+export type ExperienceCardCommentRow = {
+  id: string;
+  card_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type ExperienceCardInteractionSummary = {
+  card_id: string;
+  comment_count: number | string | null;
+  bookmark_count: number | string | null;
+  helpful_count: number | string | null;
+  bookmarked_by_me: boolean | null;
+  helpful_by_me: boolean | null;
 };
 
 export type ExperienceCardArchive = {
@@ -38,6 +67,7 @@ export type ExperienceCardArchive = {
   system_name: string | null;
   species_name_snapshot: string | null;
   is_public: boolean | null;
+  default_record_visibility?: string | null;
 };
 
 export type ExperienceCardAuthor = {

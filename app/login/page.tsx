@@ -147,21 +147,6 @@ export default function LoginPage() {
       <div style={{ width: "100%", maxWidth: 320 }}>
         <h1 style={{ marginBottom: 10 }}>登录</h1>
 
-        <div
-          style={{
-            marginBottom: 20,
-            padding: 12,
-            borderRadius: 12,
-            background: "#f6faf3",
-            border: "1px solid #e1ecd9",
-            color: "#5f6f58",
-            fontSize: 13,
-            lineHeight: 1.7,
-          }}
-        >
-          登录后进入我的项目。
-        </div>
-
         <form onSubmit={handleLogin}>
           <p>邮箱</p>
           <input

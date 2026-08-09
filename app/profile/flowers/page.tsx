@@ -38,6 +38,7 @@ function ProfileFlowersContent() {
   const [tab, setTab] = useState<TabKey>(defaultTab);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<FlowerSourceItem | null>(null);
+  const [itemsLoadedAt, setItemsLoadedAt] = useState(0);
 
   useEffect(() => {
     setTab(defaultTab);
@@ -104,6 +105,7 @@ function ProfileFlowersContent() {
           archive_id: recordMap.get(item.record_id)?.archive_id || null,
         }))
       );
+      setItemsLoadedAt(Date.now());
       setLoading(false);
     }
 
@@ -136,13 +138,13 @@ function ProfileFlowersContent() {
       .eq("sender_user_id", currentUserId);
 
     if (error) {
-      showToast("撤回送花失败");
+      showToast("撤回标记失败");
       return;
     }
 
     setItems((prev) => prev.map((item) => (item.id === target.id ? { ...item, revoked_at: new Date().toISOString() } : item)));
     setRevokeTarget(null);
-    showToast("已撤回送花");
+    showToast("已撤回“有帮助”");
   }
 
   return (
@@ -150,10 +152,10 @@ function ProfileFlowersContent() {
       <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: 13, color: "#6d7968" }}>我的花朵</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>花朵来源</h1>
+            <div style={{ fontSize: 13, color: "#6d7968" }}>真实反馈</div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>帮助标记记录</h1>
             <div style={{ marginTop: 8, fontSize: 14, color: "#62705d" }}>
-              这里会显示你收到和送出的花朵来源。已撤回的花朵也会保留记录，便于追溯。
+              这里记录求助回答的“有帮助”反馈。已撤回标记仍会保留，便于追溯。
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -163,12 +165,12 @@ function ProfileFlowersContent() {
         </div>
 
         <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <TabButton active={tab === "received"} onClick={() => setTab("received")}>收到的花朵（{receivedItems.length}）</TabButton>
-          <TabButton active={tab === "sent"} onClick={() => setTab("sent")}>送出的花朵（{sentItems.length}）</TabButton>
+          <TabButton active={tab === "received"} onClick={() => setTab("received")}>收到的帮助标记（{receivedItems.length}）</TabButton>
+          <TabButton active={tab === "sent"} onClick={() => setTab("sent")}>我标记的回答（{sentItems.length}）</TabButton>
         </div>
 
         <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <StatPill label={tab === "received" ? "有效花朵" : "有效送花"} value={<span><UiIcon name="flower" size={13} /> {activeCount}</span>} />
+          <StatPill label={tab === "received" ? "有效标记" : "当前有效"} value={<span><UiIcon name="helpful" size={13} /> {activeCount}</span>} />
           <StatPill label="当前列表" value={String(visibleItems.length)} />
         </div>
 
@@ -178,26 +180,26 @@ function ProfileFlowersContent() {
           ) : visibleItems.length === 0 ? (
             <div style={{ color: "#6f7b69", lineHeight: 1.8 }}>
               {tab === "received"
-                ? "还没有花朵"
-                : "还没有送花"}
+                ? "还没有收到帮助标记"
+                : "还没有标记过回答"}
             </div>
           ) : (
             visibleItems.map((item) => {
               const revokeUntilTime = item.revoke_until ? new Date(item.revoke_until).getTime() : 0;
-              const canRevoke = tab === "sent" && !item.revoked_at && item.sender_user_id === currentUserId && revokeUntilTime > Date.now();
-              const statusText = item.revoked_at ? `已于 ${formatProfileDateTime(item.revoked_at)} 撤回` : "有效花朵";
+              const canRevoke = tab === "sent" && !item.revoked_at && item.sender_user_id === currentUserId && revokeUntilTime > itemsLoadedAt;
+              const statusText = item.revoked_at ? `已于 ${formatProfileDateTime(item.revoked_at)} 撤回` : "当前有效";
               return (
                 <article key={item.id} style={{ border: "1px solid #e6ece2", borderRadius: 18, padding: 16, background: item.revoked_at ? "#fcfcfb" : "#fffdf7" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "#233022" }}>
-                        {tab === "received" ? `${item.sender_name} 送来了一朵花` : `你送给 ${item.receiver_name} 一朵花`}
+                        {tab === "received" ? `${item.sender_name} 认为这条回答有帮助` : `你把 ${item.receiver_name} 的回答标为有帮助`}
                       </div>
                       <div style={{ marginTop: 6, fontSize: 12, color: "#768271" }}>{formatProfileDateTime(item.created_at)} · {statusText}</div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {item.archive_id ? <Link href={`/archive/${item.archive_id}?record=${item.record_id}`} style={linkStyle}>查看原记录</Link> : null}
-                      {canRevoke ? <button type="button" onClick={() => setRevokeTarget(item)} style={dangerButtonStyle}>撤回送花</button> : null}
+                      {canRevoke ? <button type="button" onClick={() => setRevokeTarget(item)} style={dangerButtonStyle}>撤回标记</button> : null}
                     </div>
                   </div>
 
@@ -220,8 +222,8 @@ function ProfileFlowersContent() {
 
       <ConfirmDialog
         open={Boolean(revokeTarget)}
-        title="撤回送花"
-        message="确定撤回这朵花吗？撤回后对方的花朵统计会同步减少。"
+        title="撤回帮助标记"
+        message="确定撤回这次“有帮助”标记吗？撤回后对方收到的帮助统计会同步减少。"
         confirmText="撤回"
         danger
         onClose={() => setRevokeTarget(null)}
@@ -238,8 +240,8 @@ export default function ProfileFlowersPage() {
       fallback={
         <main style={{ maxWidth: 920, margin: "0 auto", padding: "24px 16px 48px" }}>
           <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
-            <div style={{ fontSize: 13, color: "#6d7968" }}>我的花朵</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>花朵来源</h1>
+            <div style={{ fontSize: 13, color: "#6d7968" }}>真实反馈</div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>帮助标记记录</h1>
             <div style={{ marginTop: 18, color: "#6f7b69" }}>加载中...</div>
           </section>
         </main>

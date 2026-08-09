@@ -1,12 +1,21 @@
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
-import { DiscoverProjectCard } from "@/components/discover/DiscoverProjectCard";
-import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
+import DiscoverSearchResultCard from "@/components/discover-search/DiscoverSearchResultCard";
+import searchCardStyles from "@/components/discover-search/DiscoverSearchResultCard.module.css";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import type { DiscoverSearchKind } from "@/lib/discover-search-types";
 import type { FeedItem } from "@/lib/discover-types";
-import { ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
-import UiIcon from "@/components/ui/UiIcon";
+import {
+  CategoryBadge,
+  EndedBadge,
+  HelpBadge,
+  RecordTagPill,
+  ResolvedBadge,
+  getFeedItemDisplayImageUrl,
+} from "@/components/discover/DiscoverShared";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
+import { getDurationDays } from "@/lib/follow-utils";
 
 type Props = {
   kind: DiscoverSearchKind;
@@ -22,6 +31,18 @@ const kindLabels: Record<DiscoverSearchKind, { title: string; unit: string }> = 
   records: { title: "记录", unit: "条" },
   experience: { title: "经验卡", unit: "张" },
 };
+
+function getProjectSystemName(item: DiscoveryProjectFeedItem) {
+  return item.category === "plant"
+    ? item.species_name_snapshot || item.system_name
+    : item.system_name || item.species_name_snapshot;
+}
+
+function getRecordSystemName(record: FeedItem) {
+  return record.archive_category === "plant"
+    ? record.species_name_snapshot || record.system_name
+    : record.system_name || record.species_name_snapshot;
+}
 
 export default function DiscoverSearchResults({
   kind,
@@ -82,112 +103,146 @@ export default function DiscoverSearchResults({
           没有找到符合条件的公开{labels.title}
         </div>
       ) : kind === "projects" ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 210px), 1fr))",
-            gap: 12,
-          }}
-        >
-          {projectItems.map((item, index) => (
-            <DiscoverProjectCard
-              key={item.archive_id}
-              item={item}
-              eager={index < 4}
-            />
-          ))}
+        <div className={searchCardStyles.grid}>
+          {projectItems.map((item) => {
+            const title = item.archive_title?.trim() || "未命名项目";
+            const systemName = getProjectSystemName(item);
+            const ownerName = item.profile_display_name?.trim() || "一位种植者";
+            const region = item.profile_region?.trim();
+
+            return (
+              <DiscoverSearchResultCard
+                key={item.archive_id}
+                href={`/archive/${item.archive_id}`}
+                ariaLabel={`查看项目：${title}`}
+                title={title}
+                imageUrl={item.display_image_url}
+                imageAlt={title}
+                fallbackIcon={getArchiveCategoryIcon(item.category)}
+                category={<CategoryBadge category={item.category} />}
+                status={
+                  <>
+                    {item.has_public_help ? <HelpBadge /> : null}
+                    {item.archive_ended_at ? <EndedBadge /> : null}
+                  </>
+                }
+                dateValue={item.public_activity_at}
+                detail={systemName}
+                summary={item.card_summary || "项目刚刚开始"}
+                author={`${ownerName}${region ? ` · ${region}` : ""}`}
+                meta={
+                  <ProjectMetaLine
+                    recordCount={item.public_record_count}
+                    durationDays={getDurationDays(
+                      item.archive_created_at,
+                      item.archive_ended_at
+                    )}
+                    ended={Boolean(item.archive_ended_at)}
+                    style={{ fontSize: 11, gap: "4px 8px" }}
+                  />
+                }
+              />
+            );
+          })}
         </div>
       ) : kind === "experience" ? (
-        <div style={{ display: "grid", gap: 9 }}>
+        <div className={searchCardStyles.grid}>
           {experienceItems.map((item) => (
-            <ExperienceCardListCard
+            <DiscoverSearchResultCard
               key={item.id}
-              item={item}
+              href={`/experience-cards/${item.id}`}
+              ariaLabel={`查看经验卡：${item.title}`}
+              title={item.title}
+              imageUrl={item.coverUrl}
+              imageAlt={`${item.title}封面`}
+              fallbackIcon={getArchiveCategoryIcon(item.archiveCategory)}
+              category={<CategoryBadge category={item.archiveCategory} />}
               dateValue={item.published_at}
-              showAuthor
+              detail={
+                <>
+                  来源：{item.archiveTitle}
+                  {item.systemName ? ` · ${item.systemName}` : ""}
+                </>
+              }
+              summary="查看按原始时间排列的真实记录与照片"
+              author={`${item.authorName}${item.authorRegion ? ` · ${item.authorRegion}` : ""}`}
+              meta={
+                <ProjectMetaLine
+                  recordCount={item.source_record_count}
+                  durationDays={item.durationDays}
+                  style={{ fontSize: 11, gap: "4px 8px" }}
+                />
+              }
             />
           ))}
         </div>
       ) : (
-        recordItems.map((record) => {
-          const isHelp = record.status_tag === "help";
-          const isResolved = record.status_tag === "resolved";
-          const displayImageUrl = getFeedItemDisplayImageUrl(record);
+        <div className={searchCardStyles.grid}>
+          {recordItems.map((record) => {
+            const isHelp = record.status_tag === "help";
+            const isResolved = record.status_tag === "resolved";
+            const isEnded = getArchiveLifecycleStatus(record) === "ended";
+            const displayImageUrl = getFeedItemDisplayImageUrl(record);
+            const title = record.archive_title?.trim() || "未命名项目";
+            const systemName = getRecordSystemName(record);
+            const tags = Array.isArray(record.display_tags)
+              ? record.display_tags.slice(0, 2)
+              : [];
+            const authorName = record.username?.trim() || "用户";
+            const location = record.user_location?.trim();
 
-          return (
-            <a
-              key={record.record_id}
-              href={`/archive/${record.archive_id}?record=${record.record_id}`}
-              style={{
-                display: "block",
-                textDecoration: "none",
-                color: "#1f2d1f",
-                background: isHelp ? "#fffaf6" : isResolved ? "#f5fbf6" : "#fff",
-                border: isHelp
-                  ? "1px solid #f0ddd4"
-                  : isResolved
-                  ? "1px solid #d7eadc"
-                  : "1px solid #e8eee5",
-                boxShadow: isHelp
-                  ? "inset 0 0 0 1px rgba(166, 95, 69, 0.04)"
-                  : isResolved
-                  ? "inset 0 0 0 1px rgba(77, 124, 91, 0.04)"
-                  : "none",
-                borderRadius: 13,
-                padding: 9,
-                marginBottom: 8,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 8,
-                }}
-              >
-                {displayImageUrl ? (
-                  <img
-                    src={displayImageUrl}
-                    alt={record.archive_title || "record image"}
-                    loading="lazy"
-                    style={{
-                      width: 58,
-                      height: 58,
-                      objectFit: "cover",
-                      borderRadius: 9,
-                      flexShrink: 0,
-                    }}
+            return (
+              <DiscoverSearchResultCard
+                key={record.record_id}
+                href={`/archive/${record.archive_id}?record=${record.record_id}`}
+                ariaLabel={`查看记录：${title}`}
+                title={title}
+                imageUrl={displayImageUrl}
+                imageAlt={`${title}记录图片`}
+                fallbackIcon={getArchiveCategoryIcon(record.archive_category)}
+                category={<CategoryBadge category={record.archive_category} />}
+                status={
+                  <>
+                    {isHelp ? <HelpBadge /> : null}
+                    {isResolved ? <ResolvedBadge /> : null}
+                    {isEnded ? <EndedBadge /> : null}
+                  </>
+                }
+                dateValue={record.record_time}
+                detail={
+                  systemName || tags.length > 0 ? (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      {systemName ? <span>{systemName}</span> : null}
+                      {tags.map((tag) => (
+                        <RecordTagPill key={tag} record={record} tag={tag} />
+                      ))}
+                    </span>
+                  ) : null
+                }
+                summary={
+                  record.note?.trim() ||
+                  (displayImageUrl
+                    ? "这条记录以照片为主"
+                    : "这条记录没有文字")
+                }
+                author={`${authorName}${location ? ` · ${location}` : ""}`}
+                meta={
+                  <ProjectMetaLine
+                    photoCount={record.media_count}
+                    commentCount={record.comment_count}
+                    style={{ fontSize: 11, gap: "4px 8px" }}
                   />
-                ) : (
-                  <div
-                    style={{
-                      width: 58,
-                      height: 58,
-                      borderRadius: 9,
-                      flexShrink: 0,
-                      background: "#f5f8f4",
-                      color: "#9aaa9a",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 18,
-                    }}
-                  >
-                    <UiIcon name={getArchiveCategoryIcon(record.archive_category)} size={20} />
-                  </div>
-                )}
-
-                <ProjectCardRows
-                  record={record}
-                  imageHeight={58}
-                  titleFontSize={14}
-                  noteMaxLength={96}
-                  showUsername
-                />
-              </div>
-            </a>
-          );
-        })
+                }
+              />
+            );
+          })}
+        </div>
       )}
     </section>
   );

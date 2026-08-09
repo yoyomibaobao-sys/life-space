@@ -1,17 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { Suspense, use } from "react";
-import ExperienceCardEditor from "@/components/experience-card/ExperienceCardEditor";
-
-export default function EditExperienceCardPage({
+export default async function EditExperienceCardPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
-  return (
-    <Suspense fallback={<main style={{ padding: 24 }}>正在准备经验卡...</main>}>
-      <ExperienceCardEditor cardId={id} />
-    </Suspense>
-  );
+  const { id } = await params;
+  redirect(`/experience-cards/${id}#experience-card-editor`);
 }

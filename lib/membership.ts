@@ -1,3 +1,5 @@
+import { formatCardDate } from "@/lib/date-time";
+
 export type MembershipPlan = "trial" | "basic" | "large" | "seller" | "admin";
 export type MembershipStatus = "trialing" | "active" | "past_due" | "expired" | "canceled";
 
@@ -26,11 +28,11 @@ export function getMembershipPlanLabel(plan?: string | null) {
     case "trial":
       return "云空间体验";
     case "basic":
-      return "云空间";
+      return "云会员";
     case "large":
       return "大空间";
     case "seller":
-      return "商家";
+      return "商业会员";
     case "admin":
       return "管理账号";
     default:
@@ -56,14 +58,7 @@ export function getMembershipStatusLabel(status?: string | null) {
 }
 
 export function formatMembershipDate(value?: string | null) {
-  if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
+  return formatCardDate(value) || "暂无";
 }
 
 export function getDaysRemaining(value?: string | null) {
@@ -81,7 +76,7 @@ export function getMembershipEndDate(membership?: MyMembership | null) {
 }
 
 export function getMembershipSummary(membership?: MyMembership | null) {
-  if (!membership) return "本地免费用户 · 未开通云空间";
+  if (!membership) return "本地用户 · 免费使用本地功能";
 
   const label = getMembershipPlanLabel(membership.plan);
   const status = getMembershipStatusLabel(membership.status);
@@ -113,7 +108,7 @@ export function canAccessMembershipGuidance(membership?: MyMembership | null) {
 
 export function getCreateContentBlockedText(membership?: MyMembership | null) {
   if (!membership) {
-    return "需要开通有效云空间";
+    return "需要开通云会员";
   }
 
   if (membership.can_create_content === false) {
@@ -125,7 +120,7 @@ export function getCreateContentBlockedText(membership?: MyMembership | null) {
 
 export function getCreateMarketPostBlockedText(membership?: MyMembership | null) {
   if (!membership) {
-    return "需要开通有效云空间";
+    return "需要开通云会员";
   }
 
   if (membership.can_create_content === false) {
@@ -154,14 +149,14 @@ export function getMarketPostQuotaLabel(membership?: MyMembership | null) {
 
 export function getMarketPostQuotaHint(membership?: MyMembership | null) {
   if (!membership) {
-    return "本地免费用户不能发布集市信息；云空间可同时发布 30 条。";
+    return "本地用户不能发布集市信息；云会员可同时发布 30 条。";
   }
 
   if (membership.can_create_market_post === false) {
     return getCreateMarketPostBlockedText(membership);
   }
 
-  return `${getMarketPostQuotaLabel(membership)}。本地免费用户不能发布集市；云空间基础额度 30 条。`;
+  return `${getMarketPostQuotaLabel(membership)}。本地用户不能发布集市；云会员基础额度 30 条。`;
 }
 
 

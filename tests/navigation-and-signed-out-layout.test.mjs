@@ -14,6 +14,47 @@ test("mobile personal space project summary opens the project archive", async ()
   assert.match(profile, /公开 \{publicArchiveCount\}/);
 });
 
+test("account navigation keeps membership contextual and export under data management", async () => {
+  const [profile, navbar, membership, login, home] = await Promise.all([
+    source("app/profile/page.tsx"),
+    source("components/navbar.tsx"),
+    source("app/membership/page.tsx"),
+    source("app/login/page.tsx"),
+    source("app/page.tsx"),
+  ]);
+
+  assert.match(profile, /value: "membership", label: "会员与容量"/);
+  assert.match(profile, /value: "account", label: "数据与安全"/);
+  assert.match(profile, /<MobileProfileModuleTabs/);
+  assert.match(profile, /const showInfoModule = mobileProfileModule === "info"/);
+  assert.match(profile, /<h2 style=\{dataTitleStyle\}>导出与备份<\/h2>/);
+  assert.match(profile, /导出属于数据管理，不取决于是否开通云会员/);
+  assert.ok(
+    profile.indexOf("导出我的记录") > profile.indexOf("{showAccountModule ?")
+  );
+  assert.doesNotMatch(profile, /云会员与云空间/);
+  assert.doesNotMatch(navbar, /membershipEntryStyle/);
+  assert.doesNotMatch(navbar, />\s*云会员\s*<\/Link>/);
+  assert.doesNotMatch(navbar, /<NavItem href="\/register"/);
+  assert.doesNotMatch(navbar, /mobileRegisterActionStyle/);
+  assert.match(navbar, /<Link href="\/login" style=\{loginLinkStyle\}>/);
+  assert.match(navbar, /pathname !== "\/"/);
+  assert.match(membership, /个人使用方案/);
+  assert.match(membership, /1GB 个人云端存储/);
+  assert.doesNotMatch(membership, /查看会员权益/);
+  assert.doesNotMatch(login, /href="\/membership"/);
+  assert.doesNotMatch(login, /登录后进入我的项目/);
+  assert.match(home, /href="\/membership"/);
+  assert.match(home, /会员类别与权限/);
+  assert.match(home, /本地免费使用，云会员可云端保存与公开互动/);
+  assert.match(
+    home,
+    /href="\/register"[\s\S]*?注册[\s\S]*?href="\/discover"[\s\S]*?浏览发现/
+  );
+  assert.match(home, /membershipLinkArrowStyle/);
+  assert.match(navbar, /href="\/login"[\s\S]*?登录/);
+});
+
 test("signed-out market does not repeat login and registration actions inside the page", async () => {
   const market = await source("app/market/page.tsx");
 
@@ -29,9 +70,10 @@ test("signed-out home uses a compact viewport-oriented layout", async () => {
   assert.match(home, /minHeight: "calc\(100vh - 70px\)"/);
   assert.match(home, /gridTemplateColumns: "repeat\(4, minmax\(0, 1fr\)\)"/);
   assert.match(home, /@media \(max-height: 720px\)/);
+  assert.match(home, /\.home-actions > a:last-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(home, /记录四时变化，留下发现、收获与成长/);
   assert.match(home, /其他自然生活相关项目/);
-  assert.doesNotMatch(home, /href="\/register"/);
+  assert.match(home, /href="\/register"/);
   assert.doesNotMatch(home, /href="\/login"/);
   assert.doesNotMatch(home, /background: "rgba\(255,255,255,0\.82\)"/);
   assert.doesNotMatch(home, /boxShadow: "0 14px 36px/);
@@ -93,10 +135,7 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(discoverCss, /\.imageTitleArea \{[\s\S]*?linear-gradient/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
   assert.match(discoverFormat, /formatCompactActivityTime as formatDiscoveryActivityTime/);
-  assert.match(activityFormat, /Intl\.DateTimeFormat\("en-US"/);
-  assert.match(activityFormat, /elapsed \/ MINUTE_MS\)\)\}m/);
-  assert.match(activityFormat, /elapsed \/ HOUR_MS\)\}h/);
-  assert.match(activityFormat, /elapsed \/ DAY_MS\)\}d/);
+  assert.match(activityFormat, /formatRecentActivityTime/);
   assert.match(projectMeta, /recordCount/);
   assert.match(projectMeta, /durationDays/);
   assert.match(projectMeta, /viewCount/);
@@ -125,21 +164,27 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
 
   assert.match(detail, /type PlantDetailTab = "guide" \| "experience" \| "records"/);
   assert.match(detail, /\["guide", "概要与种植办法"\]/);
-  assert.match(detail, /\["experience", "经验卡"\]/);
-  assert.match(detail, /\["records", "种植记录"\]/);
+  assert.match(detail, /"experience",[\s\S]*?experienceCardTabCount > 0/);
+  assert.match(detail, /"records",[\s\S]*?plantingRecordTabCount > 0/);
+  assert.match(detail, /`经验卡（\$\{experienceCardTabCount\}）`/);
+  assert.match(detail, /`种植记录（\$\{plantingRecordTabCount\}）`/);
   assert.match(detail, /activeTab === "experience"/);
-  assert.match(detail, /<PlantExperienceCardsSection cards=\{relatedExperienceCards\}/);
+  assert.match(detail, /<PlantExperienceCardsSection[\s\S]*?cards=\{relatedExperienceCards\}[\s\S]*?currentUserId=\{currentUserId\}/);
+  assert.match(detail, /title="我的经验卡"/);
+  assert.match(detail, /title="其他人的经验卡"/);
   assert.match(detail, /activeTab === "records"/);
   assert.match(detail, /\.from\("experience_cards"\)/);
   assert.match(detail, /is_experience_card_public/);
 });
 
-test("discover search separates projects, records, and covered experience cards", async () => {
-  const [page, tabs, form, results, data, utils] = await Promise.all([
+test("discover search separates three result types with one shared card format", async () => {
+  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils] = await Promise.all([
     source("app/discover/search/page.tsx"),
     source("components/discover-search/DiscoverSearchTabs.tsx"),
     source("components/discover-search/DiscoverSearchForm.tsx"),
     source("components/discover-search/DiscoverSearchResults.tsx"),
+    source("components/discover-search/DiscoverSearchResultCard.tsx"),
+    source("components/discover-search/DiscoverSearchResultCard.module.css"),
     source("lib/discover-search-data.ts"),
     source("lib/discover-search-utils.ts"),
   ]);
@@ -151,8 +196,22 @@ test("discover search separates projects, records, and covered experience cards"
   assert.match(page, /fetchDiscoverSearchResults/);
   assert.match(page, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(form, /searchKind === "records"/);
-  assert.match(results, /<DiscoverProjectCard/);
-  assert.match(results, /<ExperienceCardListCard/);
+  assert.doesNotMatch(form, /按地区匹配公开/);
+  assert.match(results, /kind === "projects"[\s\S]*?projectItems\.map[\s\S]*?<DiscoverSearchResultCard/);
+  assert.match(results, /kind === "experience"[\s\S]*?experienceItems\.map[\s\S]*?<DiscoverSearchResultCard/);
+  assert.match(results, /recordItems\.map[\s\S]*?<DiscoverSearchResultCard/);
+  assert.doesNotMatch(results, /<DiscoverProjectCard|<ExperienceCardListCard|<ProjectCardRows/);
+  assert.match(results, /imageUrl=\{item\.display_image_url\}/);
+  assert.match(results, /imageUrl=\{item\.coverUrl\}/);
+  assert.match(results, /imageUrl=\{displayImageUrl\}/);
+  assert.match(resultCard, /<CompactActivityTime/);
+  assert.match(resultCard, /className=\{styles\.card\}/);
+  assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(resultCardStyles, /\.card\s*\{[\s\S]*grid-template-columns: 108px minmax\(0, 1fr\);[\s\S]*padding: 8px;[\s\S]*border-radius: 14px;/);
+  assert.match(resultCardStyles, /\.media\s*\{[\s\S]*width: 108px;[\s\S]*height: 108px;[\s\S]*border-radius: 10px;/);
+  assert.match(resultCardStyles, /\.summary\s*\{[\s\S]*-webkit-line-clamp: 2;/);
+  assert.match(resultCardStyles, /@media \(min-width: 760px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 92px minmax\(0, 1fr\);/);
   assert.match(data, /\.from\("discovery_project_feed_view"\)/);
   assert.match(data, /hydrateExperienceCardListItems/);
   assert.match(data, /is_experience_card_public/);

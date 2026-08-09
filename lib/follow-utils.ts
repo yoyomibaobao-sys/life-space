@@ -1,4 +1,5 @@
 import type { FollowProjectCard } from "@/lib/follow-types";
+import { formatCardDate } from "@/lib/date-time";
 
 export function unique<T>(items: T[]) {
   return Array.from(new Set(items));
@@ -19,15 +20,7 @@ export function getDurationDays(start?: string | null, end?: string | null) {
 }
 
 export function formatDateTime(value?: string | null) {
-  if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无";
-
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
+  return formatCardDate(value) || "暂无";
 }
 
 export function getProjectStatusLabel(helpStatus?: string | null, status?: string | null) {

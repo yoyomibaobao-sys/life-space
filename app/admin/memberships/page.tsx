@@ -89,11 +89,11 @@ const PLAN_PRESETS: PlanPreset[] = [
   },
   {
     key: "basic",
-    label: "云空间",
+    label: "云会员",
     storageLimitBytes: 1_000_000_000,
     baseMarketPostLimit: 30,
     paidMonths: 12,
-    note: "正式首发云空间：1GB，集市同时发布中最多 30 条。",
+    note: "正式首发云会员：1GB云空间，集市同时发布中最多 30 条。",
   },
   {
     key: "large",
@@ -105,11 +105,11 @@ const PLAN_PRESETS: PlanPreset[] = [
   },
   {
     key: "seller",
-    label: "商家版",
+    label: "商业会员（兼容）",
     storageLimitBytes: 10_000_000_000,
     baseMarketPostLimit: 100,
     paidMonths: 12,
-    note: "适合长期发布交换/求购/出售内容的账号。",
+    note: "仅兼容旧数据；商业会员的团队空间与成员权限尚未开发，不用于新销售。",
   },
   {
     key: "admin",
@@ -903,10 +903,10 @@ export default function AdminMembershipsPage() {
           <div style={eyebrowStyle}>后台管理</div>
           <h1 style={titleStyle}>会员管理</h1>
           <p style={mutedTextStyle}>
-            当前用于人工开通年费、大空间或商家版。真实支付接入前，可先用这里处理测试账号和人工付款用户。
+            当前用于人工开通云会员及处理测试账号。商业会员仍在规划中，旧方案只保留数据库兼容。
           </p>
         </div>
-        <Link href="/membership" style={secondaryButtonStyle}>查看云空间说明页</Link>
+        <Link href="/membership" style={secondaryButtonStyle}>查看云会员说明页</Link>
       </section>
 
       <section style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}>

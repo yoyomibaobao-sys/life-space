@@ -32,6 +32,53 @@ export default function Navbar() {
     "feed" | "following"
   >("feed");
 
+  async function loadProfile(userId: string) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const profile = (data as AppProfile | null) || null;
+    setUsername(profile?.username || "");
+  }
+
+  async function loadAdminFlag(userId: string) {
+    const { data, error } = await supabase.rpc("is_app_admin", {
+      p_user_id: userId,
+    });
+
+    if (error) {
+      console.error("load admin flag error:", error);
+      setIsAdmin(false);
+      return;
+    }
+
+    setIsAdmin(Boolean(data));
+  }
+
+  async function loadUnreadCount(userId: string) {
+    const requestId = unreadRequestSeq.current + 1;
+    unreadRequestSeq.current = requestId;
+
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_read", false);
+
+    if (requestId !== unreadRequestSeq.current) return;
+
+    if (error) {
+      // 通知数量不是核心功能；开发环境里 Supabase auth/fetch 偶尔会因重复请求出现 AbortError。
+      // 这里降级为 0，避免每次后台操作都刷一条控制台错误。
+      setUnreadCount(0);
+      return;
+    }
+
+    setUnreadCount(count || 0);
+  }
+
   useEffect(() => {
     function updateCompact() {
       setIsCompact(window.innerWidth < 760);
@@ -120,18 +167,9 @@ export default function Navbar() {
   useEffect(() => {
     let cancelled = false;
     const archiveDetailPath = getArchiveDetailPath(pathname);
-    setMobileMeMenuOpen(false);
-    setMobilePlantMenuOpen(false);
 
     async function loadMobileTitle() {
-      if (!archiveDetailPath) {
-        setMobileArchiveTitleInfo(null);
-        setMobileTitle(getMobilePageTitle(pathname));
-        return;
-      }
-
-      setMobileArchiveTitleInfo(null);
-      setMobileTitle("项目");
+      if (!archiveDetailPath) return;
       const archiveId = archiveDetailPath.split("/").pop();
       if (!archiveId) return;
 
@@ -160,60 +198,27 @@ export default function Navbar() {
       }
     }
 
-    void loadMobileTitle();
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+
+      setMobileMeMenuOpen(false);
+      setMobilePlantMenuOpen(false);
+      setMobileArchiveTitleInfo(null);
+
+      if (!archiveDetailPath) {
+        setMobileTitle(getMobilePageTitle(pathname));
+        return;
+      }
+
+      setMobileTitle("项目");
+      void loadMobileTitle();
+    }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
     };
   }, [pathname]);
-
-  async function loadProfile(userId: string) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", userId)
-      .maybeSingle();
-
-    const profile = (data as AppProfile | null) || null;
-    setUsername(profile?.username || "");
-  }
-
-
-  async function loadAdminFlag(userId: string) {
-    const { data, error } = await supabase.rpc("is_app_admin", {
-      p_user_id: userId,
-    });
-
-    if (error) {
-      console.error("load admin flag error:", error);
-      setIsAdmin(false);
-      return;
-    }
-
-    setIsAdmin(Boolean(data));
-  }
-
-  async function loadUnreadCount(userId: string) {
-    const requestId = unreadRequestSeq.current + 1;
-    unreadRequestSeq.current = requestId;
-
-    const { count, error } = await supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_read", false);
-
-    if (requestId !== unreadRequestSeq.current) return;
-
-    if (error) {
-      // 通知数量不是核心功能；开发环境里 Supabase auth/fetch 偶尔会因重复请求出现 AbortError。
-      // 这里降级为 0，避免每次后台操作都刷一条控制台错误。
-      setUnreadCount(0);
-      return;
-    }
-
-    setUnreadCount(count || 0);
-  }
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -265,14 +270,16 @@ export default function Navbar() {
           </div>
 
           <div style={mobileTopActionGroupStyle}>
-            <Link
-              href={user ? "/notifications" : "/login"}
-              style={mobileNotificationButtonStyle}
-              aria-label="通知"
-              title="通知"
-            >
-              <UiIcon name="bell" size={18} />
-            </Link>
+            {user ? (
+              <Link
+                href="/notifications"
+                style={mobileNotificationButtonStyle}
+                aria-label="通知"
+                title="通知"
+              >
+                <UiIcon name="bell" size={18} />
+              </Link>
+            ) : null}
 
             {isMobileDiscoverIndexPath(pathname) ? (
               <button
@@ -486,10 +493,11 @@ export default function Navbar() {
           <Link href="/login" style={loginLinkStyle}>
             登录
           </Link>
-
-          <Link href="/register" style={registerLinkStyle}>
-            注册
-          </Link>
+          {pathname !== "/" ? (
+            <Link href="/register" style={registerLinkStyle}>
+              注册
+            </Link>
+          ) : null}
         </div>
       )}
     </nav>
@@ -660,7 +668,7 @@ function getMobilePageTitle(pathname: string) {
   if (pathname.startsWith("/plant")) return "指引";
   if (pathname.startsWith("/profile")) return "我";
   if (pathname.startsWith("/notifications")) return "通知";
-  if (pathname.startsWith("/membership")) return "云空间";
+  if (pathname.startsWith("/membership")) return "云会员";
   if (pathname.startsWith("/archive/new")) return "新建项目";
   if (pathname.startsWith("/market")) return "集市";
   if (pathname.startsWith("/login")) return "登录";

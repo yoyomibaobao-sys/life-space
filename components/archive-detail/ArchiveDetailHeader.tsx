@@ -13,7 +13,6 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { ArchiveDetailArchive, ArchiveMode } from "@/lib/archive-detail-types";
-import UiIcon from "@/components/ui/UiIcon";
 
 export default function ArchiveDetailHeader({
   mode,
@@ -195,14 +194,6 @@ export default function ArchiveDetailHeader({
         </button>
       )}
 
-      {mode === "viewer" ? (
-        <a
-          href={`/user/${archive.user_id}`}
-          style={{ fontSize: 14, color: "#4CAF50", textDecoration: "none" }}
-        >
-          进入{username}的空间 <UiIcon name="arrow-right" size={14} />
-        </a>
-      ) : null}
     </>
   );
 

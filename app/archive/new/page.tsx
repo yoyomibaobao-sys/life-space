@@ -52,8 +52,23 @@ export default function NewArchivePage() {
 }
 
 function NewArchiveContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedSpeciesId = searchParams.get("species");
+  const selectedPlanId = searchParams.get("plan");
+  const preselectedCategory = searchParams.get("category");
+  const validPreselectedCategory = archiveCategoryOptions.some(
+    (option) => option.value === preselectedCategory
+  )
+    ? (preselectedCategory as ArchiveCategory)
+    : null;
+
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<ArchiveCategory>("plant");
+  const [category, setCategory] = useState<ArchiveCategory>(
+    validPreselectedCategory && !preselectedSpeciesId
+      ? validPreselectedCategory
+      : "plant"
+  );
 
   const [systemCandidates, setSystemCandidates] = useState<SystemNameCandidate[]>([]);
   const [speciesId, setSpeciesId] = useState<string | null>(null);
@@ -73,22 +88,6 @@ function NewArchiveContent() {
   const [loading, setLoading] = useState(false);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(true);
-
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const preselectedSpeciesId = searchParams.get("species");
-  const selectedPlanId = searchParams.get("plan");
-  const preselectedCategory = searchParams.get("category");
-  const validPreselectedCategory = archiveCategoryOptions.some(
-    (option) => option.value === preselectedCategory
-  )
-    ? (preselectedCategory as ArchiveCategory)
-    : null;
-
-  useEffect(() => {
-    if (!validPreselectedCategory || preselectedSpeciesId) return;
-    switchCategory(validPreselectedCategory);
-  }, [validPreselectedCategory, preselectedSpeciesId]);
 
   useEffect(() => {
     async function loadCandidates() {
@@ -456,7 +455,7 @@ function NewArchiveContent() {
           <>
             <span>{getCreateContentBlockedText(membership)}</span>{" "}
             <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-              查看云空间
+              了解云会员
             </Link>
           </>
         ) : null

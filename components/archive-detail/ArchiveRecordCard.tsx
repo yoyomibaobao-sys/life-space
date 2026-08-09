@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
@@ -1223,11 +1223,6 @@ function MobileRecordEditPanel({
   const [note, setNote] = useState(item.note || "");
   const [timeValue, setTimeValue] = useState(toDateTimeLocalValue(item.record_time));
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setNote(item.note || "");
-    setTimeValue(toDateTimeLocalValue(item.record_time));
-  }, [item.id, item.note, item.record_time]);
 
   async function save() {
     if (saving) return;

@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { formatPreciseDateTime } from "@/lib/date-time";
 import MarketCommentsSection from "@/components/market/MarketCommentsSection";
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import {
-  formatMarketTime,
   getMarketItemCategoryLabel,
   getMarketPostTypeLabel,
   type MarketPostRow,
@@ -230,7 +230,7 @@ export default function MarketDetailPage() {
       if (message.includes("market_post_limit_reached")) {
         window.alert("集市同时发布中的条目已达上限，请先结束一条再重新发布。");
       } else if (message.includes("membership_inactive")) {
-        window.alert("需要有效云空间才能重新发布集市信息。");
+        window.alert("需要开通云会员才能重新发布集市信息。");
       } else {
         window.alert("更新集市状态失败，请稍后重试。");
       }
@@ -321,7 +321,7 @@ export default function MarketDetailPage() {
                 ) : null}
               </div>
 
-              <span style={timeStyle}>{formatMarketTime(item.created_at)}</span>
+              <span style={timeStyle}>{formatPreciseDateTime(item.created_at)}</span>
             </div>
 
             <h1 style={titleStyle}>{item.title}</h1>
@@ -562,17 +562,7 @@ function buildMarketLightboxImages(
 }
 
 function formatSourceRecordTime(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPreciseDateTime(value);
 }
 
 const pageStyle: CSSProperties = {
