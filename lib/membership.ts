@@ -32,7 +32,7 @@ export function getMembershipPlanLabel(plan?: string | null) {
     case "large":
       return "大空间";
     case "seller":
-      return "商业会员";
+      return "商社会员";
     case "admin":
       return "管理账号";
     default:
