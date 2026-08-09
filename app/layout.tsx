@@ -1,4 +1,6 @@
 import Navbar from "@/components/navbar";
+import SiteUtilityBar from "@/components/SiteUtilityBar";
+import SiteFooter from "@/components/SiteFooter";
 import StatusBarTheme from "@/components/StatusBarTheme";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import Toast from "@/components/Toast";
@@ -36,8 +38,10 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <StatusBarTheme />
         <AnalyticsTracker />
+        <SiteUtilityBar />
         <Navbar />
         <main className="app-main">{children}</main>
+        <SiteFooter />
         <Toast />
       </body>
     </html>
