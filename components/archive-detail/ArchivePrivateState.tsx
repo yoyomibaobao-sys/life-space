@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ArchivePrivateState() {
+  const { t } = useLanguage();
+
   return (
     <main style={{ padding: "16px", maxWidth: 680, margin: "0 auto" }}>
       <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
-        <UiIcon name="arrow-left" size={15} /> 返回发现页
+        <UiIcon name="arrow-left" size={15} /> {t.archive.back_to_discover}
       </Link>
 
       <div
@@ -20,7 +23,7 @@ export default function ArchivePrivateState() {
           color: "#666",
         }}
       >
-        该项目仅自己可见。
+        {t.archive.private_project_message}
       </div>
     </main>
   );

@@ -32,6 +32,16 @@ const marketEdit = readFileSync(
   "utf8"
 );
 
+const zhCopy = readFileSync(
+  new URL("../lib/i18n/zh.ts", import.meta.url),
+  "utf8"
+);
+
+const enCopy = readFileSync(
+  new URL("../lib/i18n/en.ts", import.meta.url),
+  "utf8"
+);
+
 test("maintenance check remains safe before the compatibility RPC exists", () => {
   assert.match(helper, /is_storage_upload_accepting/);
   assert.match(helper, /PGRST202/);
@@ -41,12 +51,9 @@ test("maintenance check remains safe before the compatibility RPC exists", () =>
 
 test("record uploads distinguish saved text from unavailable images", () => {
   assert.match(addRecord, /upload_maintenance/);
-  assert.match(
-    addRecord,
-    /STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE/
-  );
-  assert.match(addRecord, /STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE/);
-  assert.match(archiveDetail, /STORAGE_UPLOAD_MAINTENANCE_MESSAGE/);
+  assert.match(addRecord, /copy\.maintenance_record_not_saved/);
+  assert.match(addRecord, /copy\.maintenance_text_saved/);
+  assert.match(archiveDetail, /recordCopy\.maintenance_upload/);
   assert.match(localSync, /STORAGE_UPLOAD_MAINTENANCE_SYNC_NOT_STARTED_MESSAGE/);
   assert.match(localSync, /STORAGE_UPLOAD_MAINTENANCE_SYNC_MESSAGE/);
 });
@@ -58,11 +65,10 @@ test("market uploads preflight maintenance before writing a new post", () => {
   assert.ok(checkIndex >= 0);
   assert.ok(insertIndex >= 0);
   assert.ok(checkIndex < insertIndex);
-  assert.match(
-    marketNew,
-    /STORAGE_UPLOAD_MAINTENANCE_MARKET_NOT_SAVED_MESSAGE/
-  );
-  assert.match(marketEdit, /STORAGE_UPLOAD_MAINTENANCE_MESSAGE/);
+  assert.match(marketNew, /t\.market\.upload_maintenance/);
+  assert.match(marketEdit, /t\.market\.image_upload_maintenance/);
+  assert.match(zhCopy, /upload_maintenance: "图片上传功能正在维护，本次集市发布尚未保存，请稍后再试。"/);
+  assert.match(enCopy, /upload_maintenance: "Image uploads are under maintenance, so this Market post was not saved/);
 });
 
 test("storage upload races recheck the maintenance switch", () => {

@@ -30,18 +30,26 @@ export function formatPreciseDateTime(value?: string | number | Date | null) {
 /** Activity metadata may be relative while recent, then falls back to YYYY/MM/DD. */
 export function formatRecentActivityTime(
   value?: string | number | Date | null,
-  now = Date.now()
+  now = Date.now(),
+  language: Language = "zh"
 ) {
   const date = parseDate(value);
   if (!date) return "";
 
   const elapsed = now - date.getTime();
   if (elapsed < 0) return formatCardDate(date);
-  if (elapsed < MINUTE_MS) return "刚刚";
-  if (elapsed < HOUR_MS) return `${Math.floor(elapsed / MINUTE_MS)}分钟前`;
-  if (elapsed < DAY_MS) return `${Math.floor(elapsed / HOUR_MS)}小时前`;
+  if (elapsed < MINUTE_MS) return language === "en" ? "Just now" : "刚刚";
+  if (elapsed < HOUR_MS) {
+    const minutes = Math.floor(elapsed / MINUTE_MS);
+    return language === "en" ? `${minutes}m ago` : `${minutes}分钟前`;
+  }
+  if (elapsed < DAY_MS) {
+    const hours = Math.floor(elapsed / HOUR_MS);
+    return language === "en" ? `${hours}h ago` : `${hours}小时前`;
+  }
   if (elapsed < RECENT_DAY_LIMIT * DAY_MS) {
-    return `${Math.floor(elapsed / DAY_MS)}天前`;
+    const days = Math.floor(elapsed / DAY_MS);
+    return language === "en" ? `${days}d ago` : `${days}天前`;
   }
   return formatCardDate(date);
 }
@@ -57,3 +65,4 @@ export function getInclusiveDaySpan(
   if (elapsed < 0) return null;
   return Math.max(1, Math.floor(elapsed / DAY_MS) + 1);
 }
+import type { Language } from "@/lib/i18n";

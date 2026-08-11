@@ -7,6 +7,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { SubTagItem } from "@/lib/archive-page-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   value: string;
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export default function ArchiveCategoryDropdown({ value, subTags, onChange, compact = false }: Props) {
+  const { language } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -41,8 +43,8 @@ export default function ArchiveCategoryDropdown({ value, subTags, onChange, comp
   const currentLabel = useMemo(() => {
     const subTag = subTags.find((tag) => tag.id === value);
     if (subTag) return subTag.name;
-    return getArchiveCategoryLabel(value);
-  }, [subTags, value]);
+    return getArchiveCategoryLabel(value, language);
+  }, [language, subTags, value]);
 
   return (
     <div ref={wrapRef} style={{ position: "relative", display: "inline-flex" }}>
@@ -134,7 +136,7 @@ export default function ArchiveCategoryDropdown({ value, subTags, onChange, comp
                     lineHeight: 1.15,
                   }}
                 >
-                  {category.label}
+                  {getArchiveCategoryLabel(category.value, language)}
                 </button>
 
                 {categoryTags.length > 0 ? (

@@ -17,6 +17,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CommentItem = ExperienceCardCommentRow & {
   username: string;
@@ -49,6 +50,7 @@ export default function ExperienceCardInteractions({
   currentUserId: string | null;
   isPublic: boolean;
 }) {
+  const { language, t } = useLanguage();
   const [summary, setSummary] = useState<Summary>(emptySummary);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [membership, setMembership] = useState<MyMembership | null>(null);
@@ -104,11 +106,11 @@ export default function ExperienceCardInteractions({
       : { data: [] as Array<{ id: string; username: string | null }> };
     const names = new Map(
       ((profiles || []) as Array<{ id: string; username: string | null }>).map(
-        (profile) => [profile.id, profile.username?.trim() || "用户"]
+        (profile) => [profile.id, profile.username?.trim() || t.experience.default_user]
       )
     );
     setComments(
-      rows.map((row) => ({ ...row, username: names.get(row.user_id) || "用户" }))
+      rows.map((row) => ({ ...row, username: names.get(row.user_id) || t.experience.default_user }))
     );
   }
 
@@ -126,23 +128,23 @@ export default function ExperienceCardInteractions({
     }
     void init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardId, currentUserId]);
+  }, [cardId, currentUserId, language]);
 
   function requireWritableAccount() {
     if (!available) {
-      showToast("评论、收藏和“有用”功能尚未启用");
+      showToast(t.experience.interactions_unavailable_toast);
       return false;
     }
     if (!currentUserId) {
-      showToast("请先登录");
+      showToast(t.experience.login_first);
       return false;
     }
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return false;
     }
     if (!isPublic) {
-      showToast("经验卡公开后才能互动");
+      showToast(t.experience.publish_before_interact);
       return false;
     }
     return true;
@@ -161,8 +163,8 @@ export default function ExperienceCardInteractions({
         .delete()
         .eq("card_id", cardId)
         .eq("user_id", currentUserId);
-      if (error) return showToast("取消收藏失败");
-      showToast("已取消收藏");
+      if (error) return showToast(t.experience.remove_bookmark_failed);
+      showToast(t.experience.bookmark_removed);
       await loadSummary();
       return;
     }
@@ -171,8 +173,8 @@ export default function ExperienceCardInteractions({
       card_id: cardId,
       user_id: currentUserId,
     });
-    if (error) return showToast("收藏失败");
-    showToast("已收藏经验卡");
+    if (error) return showToast(t.experience.bookmark_failed);
+    showToast(t.experience.bookmarked);
     await loadSummary();
   }
 
@@ -184,8 +186,8 @@ export default function ExperienceCardInteractions({
         .delete()
         .eq("card_id", cardId)
         .eq("user_id", currentUserId);
-      if (error) return showToast("取消标记失败");
-      showToast("已取消“有帮助”");
+      if (error) return showToast(t.experience.unmark_failed);
+      showToast(t.experience.helpful_unmarked);
       await loadSummary();
       return;
     }
@@ -194,14 +196,14 @@ export default function ExperienceCardInteractions({
       card_id: cardId,
       user_id: currentUserId,
     });
-    if (error) return showToast("标记失败");
-    showToast("已标记为有帮助");
+    if (error) return showToast(t.experience.mark_failed);
+    showToast(t.experience.helpful_marked);
     await loadSummary();
   }
 
   async function submitComment() {
     const content = commentText.trim();
-    if (!content) return showToast("请输入评论");
+    if (!content) return showToast(t.experience.comment_required);
     if (!requireWritableAccount()) return;
     setSubmitting(true);
     const { error } = await supabase.from("experience_card_comments").insert({
@@ -210,10 +212,10 @@ export default function ExperienceCardInteractions({
       content,
     });
     setSubmitting(false);
-    if (error) return showToast("评论发送失败");
+    if (error) return showToast(t.experience.comment_send_failed);
     setCommentText("");
     setComposerOpen(false);
-    showToast("评论已发送");
+    showToast(t.experience.comment_sent);
     await Promise.all([loadComments(), loadSummary()]);
   }
 
@@ -225,8 +227,8 @@ export default function ExperienceCardInteractions({
       .delete()
       .eq("id", comment.id);
     setDeletingId(null);
-    if (error) return showToast("评论删除失败");
-    showToast("评论已删除");
+    if (error) return showToast(t.experience.comment_delete_failed);
+    showToast(t.experience.comment_deleted);
     await Promise.all([loadComments(), loadSummary()]);
   }
 
@@ -234,12 +236,12 @@ export default function ExperienceCardInteractions({
     <section
       id="experience-card-interactions"
       className={styles.section}
-      aria-label="经验卡互动"
+      aria-label={t.experience.interactions_aria}
     >
       <div className={styles.actionRow}>
         {isOwner ? (
-          <span className={styles.staticMetric} aria-label={`被收藏 ${summary.bookmarkCount}`}>
-            <UiIcon name="bookmark" size={15} /> 被收藏 {summary.bookmarkCount}
+          <span className={styles.staticMetric} aria-label={`${t.experience.bookmarked_metric} ${summary.bookmarkCount}`}>
+            <UiIcon name="bookmark" size={15} /> {t.experience.bookmarked_metric} {summary.bookmarkCount}
           </span>
         ) : (
           <button
@@ -249,13 +251,13 @@ export default function ExperienceCardInteractions({
             onClick={() => void toggleBookmark()}
           >
             <UiIcon name={summary.bookmarkedByMe ? "bookmark-filled" : "bookmark"} size={15} />
-            {summary.bookmarkedByMe ? "已收藏" : "收藏"} {summary.bookmarkCount}
+            {summary.bookmarkedByMe ? t.experience.saved : t.experience.bookmark} {summary.bookmarkCount}
           </button>
         )}
 
         {isOwner ? (
-          <span className={styles.staticMetric} aria-label={`有帮助 ${summary.helpfulCount}`}>
-            <UiIcon name="helpful" size={15} /> 有帮助 {summary.helpfulCount}
+          <span className={styles.staticMetric} aria-label={`${t.experience.helpful} ${summary.helpfulCount}`}>
+            <UiIcon name="helpful" size={15} /> {t.experience.helpful} {summary.helpfulCount}
           </span>
         ) : (
           <button
@@ -265,7 +267,7 @@ export default function ExperienceCardInteractions({
             onClick={() => void toggleHelpful()}
           >
             <UiIcon name="helpful" size={15} />
-            {summary.helpfulByMe ? "已标记" : "有帮助"} {summary.helpfulCount}
+            {summary.helpfulByMe ? t.experience.marked : t.experience.helpful} {summary.helpfulCount}
           </button>
         )}
 
@@ -276,11 +278,11 @@ export default function ExperienceCardInteractions({
             aria-expanded={commentsOpen}
             onClick={() => setCommentsOpen((value) => !value)}
           >
-            <UiIcon name="comment" size={15} /> 评论 {summary.commentCount}
+            <UiIcon name="comment" size={15} /> {t.experience.comments} {summary.commentCount}
           </button>
         ) : (
           <span className={styles.staticMetric}>
-            <UiIcon name="comment" size={15} /> 评论 {summary.commentCount}
+            <UiIcon name="comment" size={15} /> {t.experience.comments} {summary.commentCount}
           </span>
         )}
 
@@ -290,7 +292,7 @@ export default function ExperienceCardInteractions({
             className={styles.writeAction}
             onClick={openComposer}
           >
-            写评论
+            {t.experience.write_comment}
           </button>
         ) : null}
       </div>
@@ -298,14 +300,14 @@ export default function ExperienceCardInteractions({
       {!isOwner ? (
         <p className={styles.hint}>
           {isPublic
-            ? "“有帮助”表示这段真实过程值得参考，不代表对所有环境都有效。"
-            : "经验卡公开后，其他用户才可以收藏、标记“有帮助”和评论。"}
+            ? t.experience.helpful_hint
+            : t.experience.private_interaction_hint}
         </p>
       ) : null}
 
       {!available ? (
         <div className={styles.unavailable}>
-          评论、收藏和“有用”暂时不可用，请稍后重试。
+          {t.experience.interactions_temporarily_unavailable}
         </div>
       ) : null}
 
@@ -313,7 +315,7 @@ export default function ExperienceCardInteractions({
         <div className={styles.comments}>
           <div className={styles.commentList}>
             {!available ? (
-              <div className={styles.empty}>互动数据当前不可读取</div>
+              <div className={styles.empty}>{t.experience.interactions_unreadable}</div>
             ) : comments.length ? comments.map((comment) => (
               <article className={styles.comment} key={comment.id}>
                 <div className={styles.commentMeta}>
@@ -328,22 +330,22 @@ export default function ExperienceCardInteractions({
                       disabled={deletingId === comment.id}
                       onClick={() => void deleteComment(comment)}
                     >
-                      {deletingId === comment.id ? "删除中" : "删除"}
+                      {deletingId === comment.id ? t.experience.deleting_short : t.experience.delete}
                     </button>
                   ) : null}
                 </div>
                 <p className={styles.commentContent}>{comment.content}</p>
               </article>
-            )) : <div className={styles.empty}>还没有评论</div>}
+            )) : <div className={styles.empty}>{t.experience.no_comments}</div>}
           </div>
 
           {composerOpen ? (
             <div className={styles.composer}>
               {!available ? (
-                <div className={styles.empty}>当前预览尚未启用评论写入。</div>
+                <div className={styles.empty}>{t.experience.preview_comments_disabled}</div>
               ) : canWrite ? (
                 <>
-                  <label htmlFor={`experience-comment-${cardId}`} className={styles.empty}>写评论</label>
+                  <label htmlFor={`experience-comment-${cardId}`} className={styles.empty}>{t.experience.write_comment}</label>
                   <textarea
                     id={`experience-comment-${cardId}`}
                     className={styles.textarea}
@@ -352,9 +354,9 @@ export default function ExperienceCardInteractions({
                     onChange={(event) => setCommentText(event.target.value)}
                   />
                   <div className={styles.composerActions}>
-                    <button type="button" className={styles.cancel} onClick={() => setComposerOpen(false)}>取消</button>
+                    <button type="button" className={styles.cancel} onClick={() => setComposerOpen(false)}>{t.experience.cancel}</button>
                     <button type="button" className={styles.submit} disabled={submitting} onClick={() => void submitComment()}>
-                      {submitting ? "发送中..." : "发布评论"}
+                      {submitting ? t.experience.sending : t.experience.send_comment}
                     </button>
                   </div>
                 </>
@@ -362,14 +364,14 @@ export default function ExperienceCardInteractions({
                 <div className={styles.commentGate}>
                   <span>
                     {currentUserId
-                      ? getCreateContentBlockedText(membership)
-                      : "登录后可评论"}
+                      ? getCreateContentBlockedText(membership, language)
+                      : t.experience.login_to_comment}
                   </span>
                   <Link
                     href={currentUserId ? "/membership" : "/login"}
                     className={styles.gateLink}
                   >
-                    {currentUserId ? "了解云会员" : "去登录"}
+                    {currentUserId ? t.experience.learn_membership : t.experience.go_login}
                   </Link>
                 </div>
               )}
@@ -380,7 +382,7 @@ export default function ExperienceCardInteractions({
               className={styles.action}
               onClick={openComposer}
             >
-              写评论
+              {t.experience.write_comment}
             </button>
           )}
         </div>

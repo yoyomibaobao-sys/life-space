@@ -22,6 +22,8 @@ import {
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
+import type { TranslationDictionary } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import type {
   ActionMessage,
   PlantAliasRow,
@@ -83,67 +85,10 @@ type PlantAliasSearchRow = PlantAliasRow & {
 type PlantDetailTab = "guide" | "experience" | "records";
 
 type PlantExperienceCardItem = ExperienceCardListItem;
+type PlantCopy = TranslationDictionary["plant"];
+type PlantDetailCopy = PlantCopy["detail"];
 
 const RELATED_ARCHIVE_LIMIT = 24;
-
-const categoryLabels: Record<string, string> = {
-  vegetable: "蔬菜 / 蔬果",
-  fruit: "果树 / 果类",
-  herb: "香草 / 药草",
-  flower: "花卉",
-  houseplant: "观叶植物",
-  succulent: "多肉 / 仙人掌",
-  grain: "谷物 / 作物",
-  field_crop: "谷物 / 作物",
-  tree: "乔木 / 灌木",
-};
-
-const subCategoryLabels: Record<string, string> = {
-  leafy_vegetable: "叶菜类",
-  leafy: "叶菜类",
-  fruiting_vegetable: "茄果 / 瓜果类",
-  root_vegetable: "根茎 / 块茎类",
-  root: "根茎类",
-  legume: "豆类",
-  allium: "葱蒜类",
-  cucurbit: "瓜类",
-  citrus: "柑橘类",
-  berry: "浆果类",
-  berry_vine_fruit: "浆果 / 藤本果类",
-  pome_stone_fruit: "仁果 / 核果类",
-  tropical_subtropical_fruit: "热带 / 亚热带果类",
-  tree_fruit: "果树类",
-  herb: "香草类",
-  flowering_shrub: "花灌木",
-  flowering_tree: "观花树木",
-  annual_flower: "一年生花卉",
-  perennial_flower: "多年生花卉",
-  flower: "花卉类",
-  houseplant: "观叶类",
-  foliage: "观叶",
-  succulent: "多肉类",
-  cactus: "仙人掌",
-  field_crop: "田园作物",
-  grain: "谷物类",
-};
-
-const photoperiodLabels: Record<string, string> = {
-  long_day: "长日照",
-  short_day: "短日照",
-  day_neutral: "日中性",
-  intermediate_day: "中日照",
-  cultivar_dependent: "品种相关",
-};
-
-const stageLabels: Record<string, string> = {
-  flowering: "开花",
-  fruiting: "结果",
-  bolting: "抽薹",
-  tuberization: "块茎形成",
-  bulb_formation: "鳞茎膨大",
-  dormancy: "休眠",
-  flower_bud_init: "花芽分化",
-};
 
 function isEmpty(value: unknown) {
   return value === null || value === undefined || value === "";
@@ -153,7 +98,12 @@ function hasText(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function formatRange(min: unknown, max: unknown, suffix = "") {
+function formatRange(
+  min: unknown,
+  max: unknown,
+  copy: PlantDetailCopy,
+  suffix = ""
+) {
   if (isEmpty(min) && isEmpty(max)) return null;
 
   if (!isEmpty(min) && !isEmpty(max)) {
@@ -161,8 +111,10 @@ function formatRange(min: unknown, max: unknown, suffix = "") {
     return `${min}–${max}${suffix}`;
   }
 
-  if (!isEmpty(min)) return `${min}${suffix}以上`;
-  return `${max}${suffix}以下`;
+  if (!isEmpty(min)) {
+    return `${copy.range_min_prefix}${min}${suffix}${copy.range_min_suffix}`;
+  }
+  return `${copy.range_max_prefix}${max}${suffix}${copy.range_max_suffix}`;
 }
 
 function scoreLabel(value: unknown) {
@@ -170,52 +122,66 @@ function scoreLabel(value: unknown) {
   return `${value}/10`;
 }
 
-function phRequirementLabel(value: unknown) {
+function phRequirementLabel(value: unknown, copy: PlantDetailCopy) {
   if (isEmpty(value)) return null;
 
   const score = Number(value);
   if (Number.isNaN(score)) return null;
 
-  if (score <= 2) return "适应范围很宽";
-  if (score <= 4) return "适应范围较宽";
-  if (score <= 6) return "中等敏感";
-  if (score <= 8) return "较敏感";
-  return "很敏感";
+  if (score <= 2) return copy.ph_very_broad;
+  if (score <= 4) return copy.ph_broad;
+  if (score <= 6) return copy.ph_moderate;
+  if (score <= 8) return copy.ph_sensitive;
+  return copy.ph_very_sensitive;
 }
 
-function phRequirementText(parameters: PlantParametersRow | null | undefined) {
-  const sensitivity = phRequirementLabel(parameters?.ph_sensitivity_score);
-  const phRange = formatRange(parameters?.ph_min, parameters?.ph_max);
+function phRequirementText(
+  parameters: PlantParametersRow | null | undefined,
+  copy: PlantDetailCopy
+) {
+  const sensitivity = phRequirementLabel(parameters?.ph_sensitivity_score, copy);
+  const phRange = formatRange(parameters?.ph_min, parameters?.ph_max, copy);
 
   if (!sensitivity && !phRange) return null;
   if (sensitivity && phRange) return `${sensitivity}（pH ${phRange}）`;
   if (sensitivity) return sensitivity;
-  return `适宜 pH ${phRange}`;
+  return `${copy.suitable_ph} ${phRange}`;
 }
 
-function difficultyMeta(value: unknown) {
+function difficultyMeta(value: unknown, copy: PlantDetailCopy) {
   if (isEmpty(value)) return null;
 
   const score = Number(value);
   if (Number.isNaN(score)) return null;
 
-  if (score <= 1) return { rating: 0, label: "野生级", detail: `${score}/10` };
-  if (score <= 3) return { rating: 1, label: "非常容易", detail: `${score}/10` };
-  if (score <= 5) return { rating: 2, label: "容易", detail: `${score}/10` };
-  if (score <= 7) return { rating: 3, label: "中等", detail: `${score}/10` };
-  if (score <= 9) return { rating: 4, label: "较难", detail: `${score}/10` };
+  if (score <= 1) return { rating: 0, label: copy.difficulty_wild, detail: `${score}/10` };
+  if (score <= 3) return { rating: 1, label: copy.difficulty_very_easy, detail: `${score}/10` };
+  if (score <= 5) return { rating: 2, label: copy.difficulty_easy, detail: `${score}/10` };
+  if (score <= 7) return { rating: 3, label: copy.difficulty_moderate, detail: `${score}/10` };
+  if (score <= 9) return { rating: 4, label: copy.difficulty_hard, detail: `${score}/10` };
 
-  return { rating: 5, label: "专业种植", detail: `${score}/10` };
+  return { rating: 5, label: copy.difficulty_professional, detail: `${score}/10` };
 }
 
-function categoryLabel(value?: string | null) {
-  if (!value) return "未分类";
-  return categoryLabels[value] || value;
+function localizedMapValue(labels: object, value: string) {
+  return (labels as Record<string, string>)[value] || value;
 }
 
-function subCategoryLabel(value?: string | null) {
+function categoryLabel(
+  value: string | null | undefined,
+  labels: PlantCopy["categories"],
+  uncategorized: string
+) {
+  if (!value) return uncategorized;
+  return localizedMapValue(labels, value);
+}
+
+function subCategoryLabel(
+  value: string | null | undefined,
+  labels: PlantCopy["subcategories"]
+) {
   if (!value) return "";
-  return subCategoryLabels[value] || value;
+  return localizedMapValue(labels, value);
 }
 
 function uniqueTextList(items: unknown[]) {
@@ -679,33 +645,39 @@ function toPositiveDay(value: unknown) {
   return Math.round(numberValue);
 }
 
-function GrowthCycleBlock({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
+function GrowthCycleBlock({
+  cycle,
+  copy,
+}: {
+  cycle: PlantGrowthCycleRow | null;
+  copy: PlantDetailCopy;
+}) {
   const rawStages = [
     {
-      label: "发芽期",
+      label: copy.growth_stages.germination,
       days: toPositiveDay(cycle?.germination_days),
     },
     {
-      label: "幼苗期",
+      label: copy.growth_stages.seedling,
       days: toPositiveDay(cycle?.seedling_days),
     },
     {
-      label: "营养生长期",
+      label: copy.growth_stages.vegetative,
       days: toPositiveDay(cycle?.vegetative_days),
     },
     {
-      label: "开花期",
+      label: copy.growth_stages.flowering,
       days: toPositiveDay(cycle?.flowering_days),
     },
     {
-      label: "采收期",
+      label: copy.growth_stages.harvest,
       days: toPositiveDay(cycle?.harvest_days),
     },
   ].filter((stage) => stage.days !== null);
 
   if (rawStages.length === 0) {
     return (
-      <div style={{ color: "#888", fontSize: 15 }}>暂无完整生长周期数据</div>
+      <div style={{ color: "#888", fontSize: 15 }}>{copy.no_growth_cycle}</div>
     );
   }
 
@@ -727,7 +699,7 @@ function GrowthCycleBlock({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
   const totalDays = stages[stages.length - 1]?.end || 0;
   if (totalDays <= 0) {
     return (
-      <div style={{ color: "#888", fontSize: 15 }}>暂无完整生长周期数据</div>
+      <div style={{ color: "#888", fontSize: 15 }}>{copy.no_growth_cycle}</div>
     );
   }
 
@@ -745,9 +717,9 @@ function GrowthCycleBlock({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
           fontSize: 15,
         }}
       >
-        <span>总周期：</span>
+        <span>{copy.total_cycle}</span>
         <strong style={{ color: "#315a2f", fontSize: 18 }}>
-          约 {totalDays} 天
+          {copy.approx_prefix}{totalDays}{copy.day_unit}
         </strong>
       </div>
 
@@ -815,7 +787,7 @@ function GrowthCycleBlock({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
                       lineHeight: 1.5,
                     }}
                   >
-                    （{stage.duration}天）
+                    {copy.duration_prefix}{stage.duration}{copy.duration_suffix}
                   </div>
                 </td>
               ))}
@@ -837,9 +809,9 @@ function GrowthCycleBlock({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {stage.start === 0
-                    ? `第0–${stage.end}天`
-                    : `第${stage.start + 1}–${stage.end}天`}
+                  {copy.day_range_prefix}
+                  {stage.start === 0 ? 0 : stage.start + 1}–{stage.end}
+                  {copy.day_range_suffix}
                 </td>
               ))}
             </tr>
@@ -853,9 +825,11 @@ function GrowthCycleBlock({ cycle }: { cycle: PlantGrowthCycleRow | null }) {
 function PlantingGuideSection({
   parameters,
   careGuide,
+  copy,
 }: {
   parameters: PlantParametersRow | null;
   careGuide: PlantCareGuideRow | null;
+  copy: PlantDetailCopy;
 }) {
   const startItems = splitGuideItems(
     careGuide?.summary,
@@ -880,29 +854,29 @@ function PlantingGuideSection({
   if (!hasGuide) return null;
 
   return (
-    <Section title="种植要点">
+    <Section title={copy.planting_guide}>
       {startItems.length > 0 && (
-        <Subsection title="开始种">
+        <Subsection title={copy.start_growing}>
           <GuideList items={startItems} />
         </Subsection>
       )}
       {careItems.length > 0 && (
-        <Subsection title="日常养">
+        <Subsection title={copy.daily_care}>
           <GuideList items={careItems} />
         </Subsection>
       )}
       {harvestItems.length > 0 && (
-        <Subsection title="采收判断">
+        <Subsection title={copy.harvest_signs}>
           <GuideList items={harvestItems} />
         </Subsection>
       )}
       {problemItems.length > 0 && (
-        <Subsection title="常见问题">
+        <Subsection title={copy.common_problems}>
           <GuideList items={problemItems} />
         </Subsection>
       )}
       {rotationItems.length > 0 && (
-        <Subsection title="轮作与伴生">
+        <Subsection title={copy.rotation_companions}>
           <GuideList items={rotationItems} />
         </Subsection>
       )}
@@ -918,6 +892,7 @@ function PlantArchiveList({
   countLabel,
   showOwner,
   showVisibility,
+  copy,
 }: {
   archives: PlantRelatedArchiveItem[];
   emptyText: string;
@@ -926,6 +901,7 @@ function PlantArchiveList({
   countLabel: string;
   showOwner?: boolean;
   showVisibility?: boolean;
+  copy: PlantDetailCopy;
 }) {
   if (archives.length === 0) {
     return (
@@ -951,9 +927,13 @@ function PlantArchiveList({
           archive.display_last_public_record_image_url;
         const latestDate = formatShortDate(archive.last_public_record_time);
         const metaParts = [
-          showVisibility ? (archive.archive_is_public ? "公开发现" : "仅自己可见") : null,
+          showVisibility
+            ? archive.archive_is_public
+              ? copy.public_discovery
+              : copy.private_only
+            : null,
           `${countLabel} ${Number(archive.public_record_count || 0)}`,
-          latestDate ? `最近 ${latestDate}` : "暂无记录",
+          latestDate ? `${copy.latest_prefix}${latestDate}` : copy.no_records,
         ].filter(Boolean);
 
         return (
@@ -996,7 +976,7 @@ function PlantArchiveList({
                 }}
               >
                 <div style={{ fontWeight: 700, color: "#263326" }}>
-                  {archive.archive_title || "种植项目"}
+                  {archive.archive_title || copy.planting_project}
                 </div>
                 <span
                   style={{
@@ -1024,11 +1004,11 @@ function PlantArchiveList({
                   overflow: "hidden",
                 }}
               >
-                {archive.last_public_record_note || "还没有记录摘要"}
+                {archive.last_public_record_note || copy.no_record_summary}
               </div>
               {showOwner && archive.username ? (
                 <div style={{ marginTop: 8, color: "#8a9584", fontSize: 12 }}>
-                  来自 {archive.username}
+                  {copy.from_prefix}{archive.username}
                 </div>
               ) : null}
             </div>
@@ -1044,11 +1024,13 @@ function PlantRecordsSection({
   ownArchives,
   publicArchives,
   isLoggedIn,
+  copy,
 }: {
   parameters: PlantParametersRow | null;
   ownArchives: PlantRelatedArchiveItem[];
   publicArchives: PlantRelatedArchiveItem[];
   isLoggedIn: boolean;
+  copy: PlantDetailCopy;
 }) {
   const recordFocus = textValue(parameters?.record_focus);
   const uniqueOwnArchives = Array.from(
@@ -1059,16 +1041,16 @@ function PlantRecordsSection({
   );
 
   return (
-    <Section title="种植记录">
+    <Section title={copy.growing_records}>
       {recordFocus && (
-        <Subsection title="记录重点">
+        <Subsection title={copy.record_focus}>
           <div style={{ color: "#555", fontSize: 15, lineHeight: 1.85 }}>
-            种植时可以重点记录：{recordFocus}
+            {copy.record_focus_prefix}{recordFocus}
           </div>
         </Subsection>
       )}
 
-      <Subsection title="我的相关项目">
+      <Subsection title={copy.my_related_projects}>
         {!isLoggedIn ? (
           <div
             style={{
@@ -1079,28 +1061,30 @@ function PlantRecordsSection({
               background: "#fff",
             }}
           >
-            登录后可查看自己的种植项目。
+            {copy.login_to_view_projects}
           </div>
         ) : (
           <PlantArchiveList
             archives={uniqueOwnArchives}
-            emptyText="你还没有种过它。可以新建一个项目开始记录。"
-            entryLabel="查看项目"
+            emptyText={copy.own_projects_empty}
+            entryLabel={copy.view_project}
             hrefForArchive={(archive) => `/archive/${archive.archive_id}`}
-            countLabel="记录"
+            countLabel={copy.record_count_label}
             showVisibility
+            copy={copy}
           />
         )}
       </Subsection>
 
-      <Subsection title="大家的公开种植记录">
+      <Subsection title={copy.public_growing_records}>
         <PlantArchiveList
           archives={uniquePublicArchives}
-          emptyText="还没有公开种植记录。"
-          entryLabel="查看公开项目"
+          emptyText={copy.public_records_empty}
+          entryLabel={copy.view_public_project}
           hrefForArchive={(archive) => `/archive/${archive.archive_id}?mode=viewer`}
-          countLabel="公开记录"
+          countLabel={copy.public_record_count_label}
           showOwner
+          copy={copy}
         />
       </Subsection>
     </Section>
@@ -1110,9 +1094,11 @@ function PlantRecordsSection({
 function PlantExperienceCardsSection({
   cards,
   currentUserId,
+  copy,
 }: {
   cards: PlantExperienceCardItem[];
   currentUserId: string | null;
+  copy: PlantDetailCopy;
 }) {
   const myCards = currentUserId
     ? cards.filter((card) => card.user_id === currentUserId)
@@ -1123,7 +1109,7 @@ function PlantExperienceCardsSection({
     if (items.length === 0) {
       return (
         <div style={{ padding: 14, color: "#7f8a7b", fontSize: 13 }}>
-          暂无经验卡。
+          {copy.no_experience_cards}
         </div>
       );
     }
@@ -1142,18 +1128,24 @@ function PlantExperienceCardsSection({
   }
 
   return (
-    <Section title="经验卡">
+    <Section title={copy.experience_cards}>
       {currentUserId ? (
-        <Subsection title="我的经验卡">{renderCards(myCards, false)}</Subsection>
+        <Subsection title={copy.my_experience_cards}>{renderCards(myCards, false)}</Subsection>
       ) : null}
-      <Subsection title="其他人的经验卡">
+      <Subsection title={copy.others_experience_cards}>
         {renderCards(otherCards, true)}
       </Subsection>
     </Section>
   );
 }
 
-function PlantTabAccessNotice({ label }: { label: string }) {
+function PlantTabAccessNotice({
+  label,
+  copy,
+}: {
+  label: string;
+  copy: PlantDetailCopy;
+}) {
   return (
     <section
       style={{
@@ -1167,12 +1159,12 @@ function PlantTabAccessNotice({ label }: { label: string }) {
         lineHeight: 1.7,
       }}
     >
-      {label}属于云会员的完整指引内容。
+      {label}{copy.complete_content_suffix}
       <Link
         href="/membership"
         style={{ marginLeft: 7, color: "#3f6f37", fontWeight: 700 }}
       >
-        了解云会员
+        {copy.learn_membership}
       </Link>
     </section>
   );
@@ -1181,6 +1173,8 @@ function PlantTabAccessNotice({ label }: { label: string }) {
 export default function PlantDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+  const { language, t } = useLanguage();
+  const copy = t.plant.detail;
   const id = params?.id;
 
   const [plant, setPlant] = useState<PlantSpeciesRow | null>(null);
@@ -1387,7 +1381,7 @@ export default function PlantDetailPage() {
           );
 
           setRelatedExperienceCards(
-            await hydrateExperienceCardListItems(cardRows)
+            await hydrateExperienceCardListItems(cardRows, language)
           );
         } else {
           setRelatedExperienceCards([]);
@@ -1425,7 +1419,7 @@ export default function PlantDetailPage() {
     }
 
     load();
-  }, [id]);
+  }, [id, language]);
 
   const zh = useMemo(
     () => i18n.find((item: PlantSpeciesI18nRow) => item.language_code === "zh"),
@@ -1442,8 +1436,14 @@ export default function PlantDetailPage() {
     [aliases]
   );
 
+  const localizedPlant = language === "en" ? en : zh;
   const displayName =
-    zh?.common_name || plant?.common_name || plant?.scientific_name || "植物指引";
+    localizedPlant?.common_name ||
+    (language === "en" ? plant?.scientific_name : plant?.common_name) ||
+    plant?.common_name ||
+    plant?.scientific_name ||
+    copy.default_title;
+  const displayFamily = localizedPlant?.family || plant?.family;
   const fromArchive = searchParams.get("fromArchive");
   const fromRecord = searchParams.get("fromRecord");
   const returnRecordHref = fromArchive
@@ -1457,40 +1457,45 @@ export default function PlantDetailPage() {
         plant?.id || id || ""
       )}&system_name=${encodeURIComponent(displayName)}`;
 
-  const difficulty = difficultyMeta(parameters?.management_difficulty_score);
-  const environmentTags = getEnvironmentTags(parameters, { includeIndoor: true });
-  const environmentCards = getEnvironmentDetailItems(parameters);
+  const difficulty = difficultyMeta(parameters?.management_difficulty_score, copy);
+  const environmentTags = getEnvironmentTags(
+    parameters,
+    { includeIndoor: true },
+    language
+  );
+  const environmentCards = getEnvironmentDetailItems(parameters, language);
   const localCoreParameterCards = [
     ...environmentCards.filter((item) =>
-      ["光照", "栽培场景", "室内"].includes(item.label)
+      ["light", "scene", "indoor"].includes(item.key)
     ),
     {
-      label: "搭架",
+      key: "trellis",
+      label: copy.trellis,
       value:
         typeof parameters?.need_trellis === "boolean"
           ? parameters.need_trellis
-            ? "需要"
-            : "通常不需要"
+            ? copy.trellis_needed
+            : copy.trellis_not_usually_needed
           : null,
     },
   ].filter((item) => item.value);
 
   const parameterCards = [
-    { label: "日照强度", value: scoreLabel(parameters?.sun_score) },
-    { label: "空气湿度", value: scoreLabel(parameters?.air_humidity_score) },
-    { label: "空气通风", value: scoreLabel(parameters?.air_flow_score) },
-    { label: "土壤湿度", value: scoreLabel(parameters?.soil_moisture_score) },
-    { label: "土壤通气", value: scoreLabel(parameters?.soil_aeration_score) },
-    { label: "土壤肥沃度", value: scoreLabel(parameters?.soil_fertility_score) },
-    { label: "土壤酸碱要求", value: phRequirementText(parameters) },
-    { label: "耐旱能力", value: scoreLabel(parameters?.drought_score) },
-    { label: "生长速度", value: scoreLabel(parameters?.growth_speed_score) },
-    { label: "病虫害风险", value: scoreLabel(parameters?.disease_risk_score) },
-    { label: "盆栽适配", value: scoreLabel(parameters?.container_friendly_score) },
-    { label: "室内适配", value: scoreLabel(parameters?.indoor_friendly_score) },
-    { label: "阳台适配", value: scoreLabel(parameters?.balcony_friendly_score) },
+    { label: copy.parameter_labels.sunlight, value: scoreLabel(parameters?.sun_score) },
+    { label: copy.parameter_labels.air_humidity, value: scoreLabel(parameters?.air_humidity_score) },
+    { label: copy.parameter_labels.airflow, value: scoreLabel(parameters?.air_flow_score) },
+    { label: copy.parameter_labels.soil_moisture, value: scoreLabel(parameters?.soil_moisture_score) },
+    { label: copy.parameter_labels.soil_aeration, value: scoreLabel(parameters?.soil_aeration_score) },
+    { label: copy.parameter_labels.soil_fertility, value: scoreLabel(parameters?.soil_fertility_score) },
+    { label: copy.parameter_labels.soil_ph, value: phRequirementText(parameters, copy) },
+    { label: copy.parameter_labels.drought, value: scoreLabel(parameters?.drought_score) },
+    { label: copy.parameter_labels.growth_speed, value: scoreLabel(parameters?.growth_speed_score) },
+    { label: copy.parameter_labels.disease_risk, value: scoreLabel(parameters?.disease_risk_score) },
+    { label: copy.parameter_labels.container_fit, value: scoreLabel(parameters?.container_friendly_score) },
+    { label: copy.parameter_labels.indoor_fit, value: scoreLabel(parameters?.indoor_friendly_score) },
+    { label: copy.parameter_labels.balcony_fit, value: scoreLabel(parameters?.balcony_friendly_score) },
     {
-      label: "管理难度",
+      label: copy.parameter_labels.management_difficulty,
       value: difficulty
         ? <span><StarRating rating={difficulty.rating} />（{difficulty.detail}，{difficulty.label}）</span>
         : null,
@@ -1499,65 +1504,67 @@ export default function PlantDetailPage() {
 
   const temperatureCards = [
     {
-      label: "最佳发芽温度",
+      label: copy.temperature_labels.germination,
       value: formatRange(
         parameters?.best_germ_temp_min,
         parameters?.best_germ_temp_max,
+        copy,
         "℃"
       ),
     },
     {
-      label: "适宜生长温度",
+      label: copy.temperature_labels.optimal_growth,
       value: formatRange(
         parameters?.optimal_growth_temp_min,
         parameters?.optimal_growth_temp_max,
+        copy,
         "℃"
       ),
     },
     {
-      label: "旺盛生长点",
+      label: copy.temperature_labels.vigorous_growth,
       value: isEmpty(parameters?.vigorous_growth_temp)
         ? null
         : `${parameters?.vigorous_growth_temp}℃`,
     },
     {
-      label: "生长减缓点",
+      label: copy.temperature_labels.growth_slow,
       value: isEmpty(parameters?.growth_slow_temp)
         ? null
         : `${parameters?.growth_slow_temp}℃`,
     },
     {
-      label: "冻害触发",
+      label: copy.temperature_labels.frost_damage,
       value: isEmpty(parameters?.frost_damage_temp)
         ? null
         : `${parameters?.frost_damage_temp}℃`,
     },
     {
-      label: "致死低温",
+      label: copy.temperature_labels.lethal_low,
       value: isEmpty(parameters?.lethal_low_temp)
         ? null
         : `${parameters?.lethal_low_temp}℃`,
     },
     {
-      label: "低温停长",
+      label: copy.temperature_labels.stop_low,
       value: isEmpty(parameters?.stop_low_temp)
         ? null
         : `${parameters?.stop_low_temp}℃`,
     },
     {
-      label: "高温停长",
+      label: copy.temperature_labels.stop_high,
       value: isEmpty(parameters?.stop_high_temp)
         ? null
         : `${parameters?.stop_high_temp}℃`,
     },
     {
-      label: "高温灼伤风险",
+      label: copy.temperature_labels.heat_scorch,
       value: isEmpty(parameters?.heat_scorch_temp)
         ? null
         : `${parameters?.heat_scorch_temp}℃`,
     },
     {
-      label: "致死高温",
+      label: copy.temperature_labels.lethal_high,
       value: isEmpty(parameters?.lethal_high_temp)
         ? null
         : `${parameters?.lethal_high_temp}℃`,
@@ -1578,31 +1585,31 @@ export default function PlantDetailPage() {
   const photoperiodType =
     parameters?.photoperiod_type &&
     parameters.photoperiod_type !== "unknown"
-      ? photoperiodLabels[parameters.photoperiod_type] || parameters.photoperiod_type
+      ? localizedMapValue(copy.photoperiod_types, parameters.photoperiod_type)
       : null;
 
   const photoperiodStages =
     Array.isArray(parameters?.photoperiod_trigger_stage) &&
     parameters.photoperiod_trigger_stage.length > 0
       ? parameters.photoperiod_trigger_stage
-          .map((stage: string) => stageLabels[stage] || stage)
-          .join("、")
+          .map((stage: string) => localizedMapValue(copy.photoperiod_stages, stage))
+          .join(t.plant.alias_separator)
       : null;
 
   const photoperiodCards = [
-    { label: "类型", value: photoperiodType },
+    { label: copy.photoperiod_labels.type, value: photoperiodType },
     {
-      label: "敏感度",
+      label: copy.photoperiod_labels.sensitivity,
       value: scoreLabel(parameters?.photoperiod_sensitivity_score),
     },
     {
-      label: "临界日长",
+      label: copy.photoperiod_labels.critical_day_length,
       value: isEmpty(parameters?.critical_day_length_hours)
         ? null
-        : `${parameters?.critical_day_length_hours} 小时`,
+        : `${parameters?.critical_day_length_hours}${copy.hour_unit}`,
     },
     {
-      label: "触发阶段",
+      label: copy.photoperiod_labels.trigger_stage,
       value: photoperiodStages,
     },
   ].filter((item) => item.value);
@@ -1616,9 +1623,9 @@ export default function PlantDetailPage() {
     if (!isSignedIn) {
       setActionMessage({
         type: "error",
-        text: "请先登录，再加入感兴趣的植物。",
+        text: copy.login_before_interest,
         href: "/login",
-        hrefText: "去登录",
+        hrefText: copy.go_login,
       });
       return;
     }
@@ -1630,9 +1637,9 @@ export default function PlantDetailPage() {
     if (!user) {
       setActionMessage({
         type: "error",
-        text: "请先登录，再加入感兴趣的植物。",
+        text: copy.login_before_interest,
         href: "/login",
-        hrefText: "去登录",
+        hrefText: copy.go_login,
       });
       return;
     }
@@ -1640,9 +1647,9 @@ export default function PlantDetailPage() {
     if (!interestAdded && !hasCloudAccess) {
       setActionMessage({
         type: "error",
-        text: "加入收藏属于云会员权益。",
+        text: copy.save_cloud_only,
         href: "/membership",
-        hrefText: "了解云会员",
+        hrefText: copy.learn_membership,
       });
       return;
     }
@@ -1669,7 +1676,7 @@ export default function PlantDetailPage() {
     if (error) {
       setActionMessage({
         type: "error",
-        text: `${interestAdded ? "取消" : "加入"}失败：${error.message}`,
+        text: `${interestAdded ? copy.cancel_action : copy.add_action}${copy.action_failed_separator}${error.message}`,
       });
       return;
     }
@@ -1678,9 +1685,9 @@ export default function PlantDetailPage() {
     setInterestAdded(nextInterestAdded);
     setActionMessage({
       type: "success",
-      text: nextInterestAdded ? "已加入我的收藏。" : "已取消收藏。",
+      text: nextInterestAdded ? copy.saved_added : copy.saved_removed,
       href: nextInterestAdded ? "/archive/interests" : undefined,
-      hrefText: nextInterestAdded ? "查看收藏" : undefined,
+      hrefText: nextInterestAdded ? copy.view_saved : undefined,
     });
   }
 
@@ -1690,9 +1697,9 @@ export default function PlantDetailPage() {
     if (!isSignedIn) {
       setActionMessage({
         type: "error",
-        text: "请先登录，再加入种植计划。",
+        text: copy.login_before_plan,
         href: "/login",
-        hrefText: "去登录",
+        hrefText: copy.go_login,
       });
       return;
     }
@@ -1704,9 +1711,9 @@ export default function PlantDetailPage() {
     if (!user) {
       setActionMessage({
         type: "error",
-        text: "请先登录，再加入种植计划。",
+        text: copy.login_before_plan,
         href: "/login",
-        hrefText: "去登录",
+        hrefText: copy.go_login,
       });
       return;
     }
@@ -1714,9 +1721,9 @@ export default function PlantDetailPage() {
     if (!planAdded && !hasCloudAccess) {
       setActionMessage({
         type: "error",
-        text: "云端种植计划属于云会员权益；你仍可新建本地项目。",
+        text: copy.cloud_plan_only,
         href: "/membership",
-        hrefText: "了解云会员",
+        hrefText: copy.learn_membership,
       });
       return;
     }
@@ -1744,7 +1751,7 @@ export default function PlantDetailPage() {
     if (error) {
       setActionMessage({
         type: "error",
-        text: `${planAdded ? "取消" : "加入"}失败：${error.message}`,
+        text: `${planAdded ? copy.cancel_action : copy.add_action}${copy.action_failed_separator}${error.message}`,
       });
       return;
     }
@@ -1753,9 +1760,9 @@ export default function PlantDetailPage() {
     setPlanAdded(nextPlanAdded);
     setActionMessage({
       type: "success",
-      text: nextPlanAdded ? "已添加种植计划。" : "已取消种植计划。",
+      text: nextPlanAdded ? copy.plan_added : copy.plan_removed,
       href: nextPlanAdded ? "/archive/plans" : undefined,
-      hrefText: nextPlanAdded ? "查看计划" : undefined,
+      hrefText: nextPlanAdded ? copy.view_plan : undefined,
     });
   }
 
@@ -1773,14 +1780,14 @@ export default function PlantDetailPage() {
   );
 
   if (loading) {
-    return <main style={{ padding: 20 }}>加载中...</main>;
+    return <main style={{ padding: 20 }}>{t.plant.loading}</main>;
   }
 
   if (!plant) {
     return (
       <main style={{ padding: "16px", maxWidth: 760, margin: "0 auto" }}>
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          <UiIcon name="arrow-left" size={15} /> 返回指引
+          <UiIcon name="arrow-left" size={15} /> {t.plant.back_to_guide}
         </Link>
         <div
           style={{
@@ -1791,7 +1798,7 @@ export default function PlantDetailPage() {
             background: "#fff",
           }}
         >
-          没有找到这个植物条目。
+          {copy.not_found}
         </div>
       </main>
     );
@@ -1802,15 +1809,15 @@ export default function PlantDetailPage() {
       <div style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
         {isMobileViewport && returnRecordHref ? (
           <Link href={returnRecordHref} style={{ color: "#4d7044", fontSize: 14, fontWeight: 700 }}>
-            返回原记录
+            {copy.back_to_record}
           </Link>
         ) : null}
         <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
-          <UiIcon name="arrow-left" size={15} /> 返回指引
+          <UiIcon name="arrow-left" size={15} /> {t.plant.back_to_guide}
         </Link>
         {!isMobileViewport ? (
           <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-            返回我的空间
+            {copy.back_to_space}
           </Link>
         ) : null}
       </div>
@@ -1844,22 +1851,28 @@ export default function PlantDetailPage() {
               fontWeight: 700,
             }}
           >
-            植物档案
+            {copy.plant_archive}
           </span>
         </div>
 
         <h1 style={{ margin: 0, fontSize: 30 }}>{displayName}</h1>
 
         <div style={{ marginTop: 10, color: "#666", lineHeight: 1.85 }}>
-          {plant.scientific_name && <div>学名：{plant.scientific_name}</div>}
-          {aliasNames.length > 0 && <div>别名：{aliasNames.join("、")}</div>}
-          {(zh?.family || plant.family) && <div>科属：{zh?.family || plant.family}</div>}
+          {plant.scientific_name && <div>{t.plant.scientific_name}{plant.scientific_name}</div>}
+          {aliasNames.length > 0 && <div>{t.plant.aliases}{aliasNames.join(t.plant.alias_separator)}</div>}
+          {displayFamily && <div>{copy.family}{displayFamily}</div>}
           <div>
-            分类：{categoryLabel(plant.category)}
-            {plant.sub_category ? ` · ${subCategoryLabel(plant.sub_category)}` : ""}
+            {copy.classification}{categoryLabel(
+              plant.category,
+              t.plant.categories,
+              t.plant.uncategorized
+            )}
+            {plant.sub_category
+              ? ` · ${subCategoryLabel(plant.sub_category, t.plant.subcategories)}`
+              : ""}
           </div>
-          {plant.growth_type && <div>生长型：{plant.growth_type}</div>}
-          {en?.common_name && <div>英文名：{en.common_name}</div>}
+          {plant.growth_type && <div>{copy.growth_type}{plant.growth_type}</div>}
+          {en?.common_name && <div>{copy.english_name}{en.common_name}</div>}
         </div>
 
         {!isSignedIn ? (
@@ -1875,9 +1888,9 @@ export default function PlantDetailPage() {
               lineHeight: 1.7,
             }}
           >
-            游客可以查看目录、名称和分类。
+            {copy.visitor_detail_notice}
             <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              注册后查看基础概要
+              {copy.register_basic_summary}
             </Link>
           </div>
         ) : !hasCloudAccess ? (
@@ -1893,9 +1906,9 @@ export default function PlantDetailPage() {
               lineHeight: 1.7,
             }}
           >
-            当前是本地用户，可以查看基础概要和少量核心适种参数。完整参数、生长周期、完整养护指引、经验卡库和聚合比较仅对云会员开放。
+            {copy.local_detail_notice}
             <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              了解云会员
+              {copy.learn_membership}
             </Link>
           </div>
         ) : null}
@@ -1956,7 +1969,7 @@ export default function PlantDetailPage() {
               boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
             }}
           >
-            {hasCloudAccess ? "新建云端种植项目" : "新建本地种植项目"}
+            {hasCloudAccess ? copy.new_cloud_project : copy.new_local_project}
           </Link>
 
           {hasCloudAccess || planAdded ? (
@@ -1978,10 +1991,10 @@ export default function PlantDetailPage() {
                 }}
               >
                 {planAdded
-                  ? "已添加计划"
+                  ? copy.plan_already_added
                   : actionLoading === "plan"
-                    ? "加入中..."
-                    : "加入种植计划"}
+                    ? copy.adding
+                    : copy.add_to_plan}
               </button>
           ) : null}
 
@@ -2004,10 +2017,10 @@ export default function PlantDetailPage() {
                 }}
               >
                 {interestAdded
-                  ? "已收藏"
+                  ? copy.saved
                   : actionLoading === "interest"
-                    ? "加入中..."
-                    : "加入收藏"}
+                    ? copy.adding
+                    : copy.add_to_saved}
               </button>
           ) : null}
         </div>
@@ -2040,7 +2053,7 @@ export default function PlantDetailPage() {
                   textDecoration: "none",
                 }}
               >
-                {actionMessage.hrefText || "查看"}
+                {actionMessage.hrefText || copy.view}
               </Link>
             )}
           </div>
@@ -2048,7 +2061,7 @@ export default function PlantDetailPage() {
       </section>
 
       <nav
-        aria-label="指引详情内容"
+        aria-label={copy.content_aria}
         style={{
           marginTop: 16,
           display: "grid",
@@ -2057,18 +2070,18 @@ export default function PlantDetailPage() {
         }}
       >
         {([
-          ["guide", "概要与种植办法"],
+          ["guide", copy.guide_tab],
           [
             "experience",
             experienceCardTabCount > 0
-              ? `经验卡（${experienceCardTabCount}）`
-              : "经验卡",
+              ? `${copy.experience_cards} (${experienceCardTabCount})`
+              : copy.experience_cards,
           ],
           [
             "records",
             plantingRecordTabCount > 0
-              ? `种植记录（${plantingRecordTabCount}）`
-              : "种植记录",
+              ? `${copy.growing_records} (${plantingRecordTabCount})`
+              : copy.growing_records,
           ],
         ] as const).map(([value, label]) => (
           <button
@@ -2099,13 +2112,13 @@ export default function PlantDetailPage() {
       {activeTab === "guide" ? (
         <>
       {isSignedIn && basicOverview ? (
-        <Section title="概要">
+        <Section title={copy.summary}>
           <TextBlock text={basicOverview} />
         </Section>
       ) : null}
 
       {isSignedIn && !hasCloudAccess && localCoreParameterCards.length > 0 ? (
-        <Section title="基础适种参数">
+        <Section title={copy.basic_parameters}>
           <div
             style={{
               display: "grid",
@@ -2118,7 +2131,7 @@ export default function PlantDetailPage() {
             ))}
           </div>
           <div style={{ marginTop: 12, color: "#6a7566", fontSize: 13, lineHeight: 1.7 }}>
-            地区与季节适配、精确阈值、完整养护方法和多案例比较属于云会员权益。
+            {copy.local_parameter_notice}
           </div>
         </Section>
       ) : null}
@@ -2126,9 +2139,9 @@ export default function PlantDetailPage() {
       {hasCloudAccess && (environmentCards.length > 0 ||
         hasText(climateTimingNote) ||
         hasTemperatureSection) && (
-        <Section title="气候环境">
+        <Section title={copy.climate_environment}>
           {environmentCards.length > 0 && (
-            <Subsection title="环境与场景">
+            <Subsection title={copy.environment_setting}>
               <div
                 style={{
                   display: "grid",
@@ -2145,13 +2158,13 @@ export default function PlantDetailPage() {
           )}
 
           {hasText(climateTimingNote) && (
-            <Subsection title="气候与时机">
+            <Subsection title={copy.climate_timing}>
               <TextBlock text={climateTimingNote} />
             </Subsection>
           )}
 
           {hasTemperatureSection && (
-            <Subsection title="温度节点">
+            <Subsection title={copy.temperature_nodes}>
               {temperatureCards.length > 0 && (
                 <div
                   style={{
@@ -2177,13 +2190,13 @@ export default function PlantDetailPage() {
       )}
 
       {hasCloudAccess && (growthCycle || parameterCards.length > 0 || hasPhotoperiodSection) && (
-        <Section title="生长与参数">
-          <Subsection title="生长周期">
-            <GrowthCycleBlock cycle={growthCycle} />
+        <Section title={copy.growth_parameters}>
+          <Subsection title={copy.growth_cycle}>
+            <GrowthCycleBlock cycle={growthCycle} copy={copy} />
           </Subsection>
 
           {parameterCards.length > 0 && (
-            <Subsection title="参数细项">
+            <Subsection title={copy.parameter_details}>
               <div
                 style={{
                   display: "grid",
@@ -2199,7 +2212,7 @@ export default function PlantDetailPage() {
           )}
 
           {hasPhotoperiodSection && (
-            <Subsection title="光周期">
+            <Subsection title={copy.photoperiod}>
               {photoperiodCards.length > 0 && (
                 <div
                   style={{
@@ -2228,6 +2241,7 @@ export default function PlantDetailPage() {
         <PlantingGuideSection
           parameters={parameters}
           careGuide={careGuide}
+          copy={copy}
         />
       ) : null}
         </>
@@ -2238,9 +2252,10 @@ export default function PlantDetailPage() {
           <PlantExperienceCardsSection
             cards={relatedExperienceCards}
             currentUserId={currentUserId}
+            copy={copy}
           />
         ) : (
-          <PlantTabAccessNotice label="相关经验卡" />
+          <PlantTabAccessNotice label={copy.related_experience_cards} copy={copy} />
         )
       ) : null}
 
@@ -2251,9 +2266,10 @@ export default function PlantDetailPage() {
             ownArchives={ownArchives}
             publicArchives={relatedArchives}
             isLoggedIn={isSignedIn}
+            copy={copy}
           />
         ) : (
-          <PlantTabAccessNotice label="相关种植记录" />
+          <PlantTabAccessNotice label={copy.related_growing_records} copy={copy} />
         )
       ) : null}
     </main>

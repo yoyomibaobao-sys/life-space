@@ -14,6 +14,7 @@ import type { SupabaseUser } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import UiIcon from "@/components/ui/UiIcon";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type RecentArchiveRow = {
   id: string;
@@ -34,6 +35,7 @@ type RecentArchiveRow = {
 
 export default function RecentBrowsePage() {
   const router = useRouter();
+  const { language, t } = useLanguage();
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [items, setItems] = useState<RecentArchiveRow[]>([]);
@@ -126,27 +128,27 @@ export default function RecentBrowsePage() {
         <div style={topBarStyle}>
           <div>
             <Link href="/profile" style={backLinkStyle}>
-              <UiIcon name="arrow-left" size={15} /> 返回个人资料
+              <UiIcon name="arrow-left" size={15} /> {t.profile.recent.back}
             </Link>
-            <h1 style={titleStyle}>最近浏览</h1>
+            <h1 style={titleStyle}>{t.profile.recent.title}</h1>
           </div>
 
           {items.length > 0 && (
             <button type="button" onClick={handleClear} style={clearButtonStyle}>
-              清空
+              {t.profile.recent.clear}
             </button>
           )}
         </div>
 
         {loading ? (
-          <section style={emptyStyle}>加载中...</section>
+          <section style={emptyStyle}>{t.profile.loading}</section>
         ) : items.length === 0 ? (
-          <section style={emptyStyle}>还没有最近浏览的项目</section>
+          <section style={emptyStyle}>{t.profile.recent.empty}</section>
         ) : (
           <section style={listStyle}>
             {items.map((item) => {
               const fallback = fallbackMap.get(item.id);
-              const title = item.title || fallback?.title || "未命名项目";
+              const title = item.title || fallback?.title || t.profile.public_profile.unnamed_project;
               const systemName =
                 item.system_name ||
                 item.species_name_snapshot ||
@@ -167,14 +169,14 @@ export default function RecentBrowsePage() {
                     />
                   ) : (
                     <div style={coverPlaceholderStyle}>
-                      {getArchiveCategoryLabel(item.category)}
+                      {getArchiveCategoryLabel(item.category, language)}
                     </div>
                   )}
 
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={firstLineStyle}>
                       <span style={categoryStyle}>
-                        {getArchiveCategoryLabel(item.category)}
+                        {getArchiveCategoryLabel(item.category, language)}
                       </span>
                       <span style={titleTextStyle}>{title}</span>
                     </div>

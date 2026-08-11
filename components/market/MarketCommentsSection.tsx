@@ -7,6 +7,7 @@ import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import type { MarketPostStatus } from "@/lib/market-types";
 import UiIcon from "@/components/ui/UiIcon";
 import { formatPreciseDateTime } from "@/lib/date-time";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type MarketCommentRow = {
   id: string;
@@ -32,6 +33,7 @@ export default function MarketCommentsSection({
   postStatus: MarketPostStatus;
   currentUserId: string | null | undefined;
 }) {
+  const { t } = useLanguage();
   const [comments, setComments] = useState<MarketCommentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
@@ -100,22 +102,22 @@ export default function MarketCommentsSection({
     const content = commentText.trim();
 
     if (!currentUserId) {
-      showToast("请先登录后再咨询");
+      showToast(t.market.comment_login_required);
       return;
     }
 
     if (postStatus !== "active") {
-      showToast("这条集市信息已结束，不能继续咨询");
+      showToast(t.market.comment_ended);
       return;
     }
 
     if (!content) {
-      showToast("请输入咨询内容");
+      showToast(t.market.comment_required);
       return;
     }
 
     if (content.length > 1000) {
-      showToast("咨询不能超过 1000 字");
+      showToast(t.market.comment_too_long);
       return;
     }
 
@@ -131,12 +133,12 @@ export default function MarketCommentsSection({
 
     if (error) {
       console.error("submit market comment error:", error);
-      showToast("咨询发送失败");
+      showToast(t.market.comment_send_failed);
       return;
     }
 
     setCommentText("");
-    showToast("咨询已发送");
+    showToast(t.market.comment_sent);
     await loadComments();
   }
 
@@ -147,11 +149,11 @@ export default function MarketCommentsSection({
       currentUserId === comment.user_id || currentUserId === postOwnerId;
 
     if (!canDelete) {
-      showToast("不能删除这条留言");
+      showToast(t.market.comment_delete_forbidden);
       return;
     }
 
-    const ok = window.confirm("确定删除这条留言吗？");
+    const ok = window.confirm(t.market.comment_delete_confirm);
     if (!ok) return;
 
     setDeletingId(comment.id);
@@ -165,26 +167,26 @@ export default function MarketCommentsSection({
 
     if (error) {
       console.error("delete market comment error:", error);
-      showToast("删除失败");
+      showToast(t.market.comment_delete_failed);
       return;
     }
 
-    showToast("留言已删除");
+    showToast(t.market.comment_deleted);
     await loadComments();
   }
 
   return (
     <section style={sectionStyle}>
       <div style={headerRowStyle}>
-        <h2 style={titleStyle}>咨询与联系</h2>
-        <span style={countStyle}>{comments.length} 条</span>
+        <h2 style={titleStyle}>{t.market.comments_title}</h2>
+        <span style={countStyle}>{comments.length}{t.market.count_suffix}</span>
       </div>
 
       <div style={listStyle}>
         {loading ? (
-          <div style={emptyStyle}>咨询加载中...</div>
+          <div style={emptyStyle}>{t.market.comments_loading}</div>
         ) : comments.length === 0 ? (
-          <div style={emptyStyle}>暂无咨询</div>
+          <div style={emptyStyle}>{t.market.no_comments}</div>
         ) : (
           comments.map((comment) => {
             const canDelete =
@@ -206,9 +208,9 @@ export default function MarketCommentsSection({
 
                     <div style={{ minWidth: 0 }}>
                       <div style={nameStyle}>
-                        {comment.profile?.username || "用户"}
+                        {comment.profile?.username || t.discover.default_user}
                         {comment.user_id === postOwnerId ? (
-                          <span style={ownerBadgeStyle}>发布者</span>
+                          <span style={ownerBadgeStyle}>{t.market.publisher_badge}</span>
                         ) : null}
                       </div>
                       <div style={timeStyle}>
@@ -224,7 +226,7 @@ export default function MarketCommentsSection({
                       disabled={deletingId === comment.id}
                       style={deleteButtonStyle}
                     >
-                      {deletingId === comment.id ? "删除中..." : "删除"}
+                      {deletingId === comment.id ? t.market.deleting : t.market.delete}
                     </button>
                   ) : null}
                 </div>
@@ -242,7 +244,7 @@ export default function MarketCommentsSection({
               <textarea
                 value={commentText}
                 onChange={(event) => setCommentText(event.target.value)}
-                placeholder="询问产品、交换方式或联系发布者…"
+                placeholder={t.market.comment_placeholder}
                 rows={3}
                 style={textareaStyle}
               />
@@ -254,17 +256,17 @@ export default function MarketCommentsSection({
                   disabled={submitting}
                   style={submitButtonStyle}
                 >
-                  {submitting ? "发送中..." : "发送咨询"}
+                  {submitting ? t.market.sending : t.market.send_comment}
                 </button>
               </div>
               <div style={consultationHintStyle}>
-                注册后的本地用户也可咨询；社区评论、点赞、有用反馈和关注仍属于云会员互动。
+                {t.market.comment_permission_hint}
               </div>
             </>
         ) : currentUserId && postStatus !== "active" ? (
-          <div style={closedNoticeStyle}>这条集市信息已结束，不能继续咨询。</div>
+          <div style={closedNoticeStyle}>{t.market.comments_closed}</div>
         ) : (
-          <div style={closedNoticeStyle}>注册或登录后可以咨询发布者。</div>
+          <div style={closedNoticeStyle}>{t.market.login_to_comment}</div>
         )}
       </div>
     </section>

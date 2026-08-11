@@ -1,4 +1,5 @@
 import { formatCardDate } from "@/lib/date-time";
+import type { Language } from "@/lib/i18n";
 
 export type MembershipPlan = "trial" | "basic" | "large" | "seller" | "admin";
 export type MembershipStatus = "trialing" | "active" | "past_due" | "expired" | "canceled";
@@ -23,7 +24,26 @@ export function normalizeMembershipRpcResult(data: unknown): MyMembership | null
   return (data || null) as MyMembership | null;
 }
 
-export function getMembershipPlanLabel(plan?: string | null) {
+export function getMembershipPlanLabel(
+  plan?: string | null,
+  language: Language = "zh"
+) {
+  if (language === "en") {
+    switch (plan) {
+      case "trial":
+        return "Cloud trial";
+      case "basic":
+        return "Cloud Membership";
+      case "large":
+        return "Large storage";
+      case "seller":
+        return "Business Membership";
+      case "admin":
+        return "Administrator account";
+      default:
+        return "Not set";
+    }
+  }
   switch (plan) {
     case "trial":
       return "云空间体验";
@@ -40,7 +60,26 @@ export function getMembershipPlanLabel(plan?: string | null) {
   }
 }
 
-export function getMembershipStatusLabel(status?: string | null) {
+export function getMembershipStatusLabel(
+  status?: string | null,
+  language: Language = "zh"
+) {
+  if (language === "en") {
+    switch (status) {
+      case "trialing":
+        return "Available";
+      case "active":
+        return "Active";
+      case "past_due":
+        return "Renewal due";
+      case "expired":
+        return "Expired";
+      case "canceled":
+        return "Canceled";
+      default:
+        return "Unknown";
+    }
+  }
   switch (status) {
     case "trialing":
       return "可用";
@@ -57,8 +96,11 @@ export function getMembershipStatusLabel(status?: string | null) {
   }
 }
 
-export function formatMembershipDate(value?: string | null) {
-  return formatCardDate(value) || "暂无";
+export function formatMembershipDate(
+  value?: string | null,
+  language: Language = "zh"
+) {
+  return formatCardDate(value) || (language === "en" ? "None" : "暂无");
 }
 
 export function getDaysRemaining(value?: string | null) {
@@ -75,20 +117,31 @@ export function getMembershipEndDate(membership?: MyMembership | null) {
   return membership.paid_until || membership.trial_ends_at;
 }
 
-export function getMembershipSummary(membership?: MyMembership | null) {
-  if (!membership) return "本地用户 · 免费使用本地功能";
+export function getMembershipSummary(
+  membership?: MyMembership | null,
+  language: Language = "zh"
+) {
+  if (!membership) {
+    return language === "en"
+      ? "Local user · Free local features"
+      : "本地用户 · 免费使用本地功能";
+  }
 
-  const label = getMembershipPlanLabel(membership.plan);
-  const status = getMembershipStatusLabel(membership.status);
+  const label = getMembershipPlanLabel(membership.plan, language);
+  const status = getMembershipStatusLabel(membership.status, language);
   const endDate = getMembershipEndDate(membership);
   const days = getDaysRemaining(endDate);
 
   if (membership.can_create_content === false) {
-    return `${label} · ${status}。已有内容仍可查看、导出和删除。`;
+    return language === "en"
+      ? `${label} · ${status}. Existing content can still be viewed, exported, and deleted.`
+      : `${label} · ${status}。已有内容仍可查看、导出和删除。`;
   }
 
   if (typeof days === "number") {
-    return `${label} · ${status}，还剩 ${days} 天。`;
+    return language === "en"
+      ? `${label} · ${status}, ${days} days remaining.`
+      : `${label} · ${status}，还剩 ${days} 天。`;
   }
 
   return `${label} · ${status}`;
@@ -106,57 +159,77 @@ export function canAccessMembershipGuidance(membership?: MyMembership | null) {
   return membership?.can_create_content === true;
 }
 
-export function getCreateContentBlockedText(membership?: MyMembership | null) {
+export function getCreateContentBlockedText(
+  membership?: MyMembership | null,
+  language: Language = "zh"
+) {
   if (!membership) {
-    return "需要开通云会员";
+    return language === "en" ? "Cloud Membership is required" : "需要开通云会员";
   }
 
   if (membership.can_create_content === false) {
-    return "暂不能新增内容";
+    return language === "en" ? "New content is currently unavailable" : "暂不能新增内容";
   }
 
-  return "可新增内容";
+  return language === "en" ? "New content is available" : "可新增内容";
 }
 
-export function getCreateMarketPostBlockedText(membership?: MyMembership | null) {
+export function getCreateMarketPostBlockedText(
+  membership?: MyMembership | null,
+  language: Language = "zh"
+) {
   if (!membership) {
-    return "需要开通云会员";
+    return language === "en" ? "Cloud Membership is required" : "需要开通云会员";
   }
 
   if (membership.can_create_content === false) {
-    return "暂不能发布集市信息";
+    return language === "en" ? "Market posting is currently unavailable" : "暂不能发布集市信息";
   }
 
   if (membership.can_create_market_post === false) {
-    return "集市发布已达上限";
+    return language === "en" ? "Market posting limit reached" : "集市发布已达上限";
   }
 
-  return "可发布集市信息";
+  return language === "en" ? "Market posting available" : "可发布集市信息";
 }
 
-export function getMarketPostQuotaLabel(membership?: MyMembership | null) {
-  if (!membership) return "集市发布额度暂未读取";
+export function getMarketPostQuotaLabel(
+  membership?: MyMembership | null,
+  language: Language = "zh"
+) {
+  if (!membership) {
+    return language === "en" ? "Market quota unavailable" : "集市发布额度暂未读取";
+  }
 
   const active = Number(membership.active_market_post_count || 0);
   const limit = Number(membership.market_post_limit || 0);
 
   if (!Number.isFinite(limit) || limit <= 0) {
-    return `当前在线发布：${active} 条`;
+    return language === "en" ? `Active posts: ${active}` : `当前在线发布：${active} 条`;
   }
 
-  return `当前在线发布：${active} / ${limit} 条`;
+  return language === "en"
+    ? `Active posts: ${active} / ${limit}`
+    : `当前在线发布：${active} / ${limit} 条`;
 }
 
-export function getMarketPostQuotaHint(membership?: MyMembership | null) {
+export function getMarketPostQuotaHint(
+  membership?: MyMembership | null,
+  language: Language = "zh"
+) {
   if (!membership) {
-    return "本地用户不能发布集市信息；云会员可同时发布 30 条。";
+    return language === "en"
+      ? "Local users cannot publish Market posts; Cloud Members can keep up to 30 active posts."
+      : "本地用户不能发布集市信息；云会员可同时发布 30 条。";
   }
 
   if (membership.can_create_market_post === false) {
-    return getCreateMarketPostBlockedText(membership);
+    return getCreateMarketPostBlockedText(membership, language);
   }
 
-  return `${getMarketPostQuotaLabel(membership)}。本地用户不能发布集市；云会员基础额度 30 条。`;
+  return language === "en"
+    ? `${getMarketPostQuotaLabel(membership, language)}. Local users cannot publish; the base Cloud Membership quota is 30 active posts.`
+    : `${getMarketPostQuotaLabel(membership, language)}。本地用户不能发布集市；云会员基础额度 30 条。`;
 }
 
 
@@ -202,10 +275,13 @@ export function canUploadWithinStorageLimit(params: {
   return used + upload <= limit;
 }
 
-export function getStorageLimitExceededText(_params: {
+export function getStorageLimitExceededText(params: {
   usedBytes?: number | null;
   limitBytes?: number | null;
   uploadBytes?: number | null;
+  language?: Language;
 }) {
-  return "存储空间不足，请删除部分图片或升级云空间容量。";
+  return params.language === "en"
+    ? "Not enough storage. Delete some photos or increase your cloud-space capacity."
+    : "存储空间不足，请删除部分图片或升级云空间容量。";
 }

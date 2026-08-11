@@ -59,7 +59,6 @@ import {
 } from "@/lib/local-offline-db";
 import {
   getArchiveCategoryIcon,
-  getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -69,6 +68,7 @@ import {
   MAX_RECORD_PHOTOS_PER_ADD,
   type TimedRecordPhoto,
 } from "@/lib/record-photo-batches";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function formatDate(value?: string | null) {
   return formatPreciseDateTime(value);
@@ -107,6 +107,9 @@ function fileListToArray(files: FileList | null) {
 }
 
 export default function LocalArchiveDetailPage() {
+  const { language, t } = useLanguage();
+  const archiveCopy = t.archive;
+  const recordCopy = t.record;
   const params = useParams<{ id: string }>();
   const archiveId = params?.id;
   const router = useRouter();
@@ -143,7 +146,7 @@ export default function LocalArchiveDetailPage() {
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
   const localRecordObjectUrlsRef = useRef<string[]>([]);
-  const cycleTerminology = getArchiveCycleTerminology(detail?.archive.category);
+  const cycleTerminology = getArchiveCycleTerminology(detail?.archive.category, language);
 
   const selectedSizeLabel = useMemo(() => {
     const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -164,9 +167,9 @@ export default function LocalArchiveDetailPage() {
       const nextDetail = await getLocalArchiveDetail(archiveId, ownerContext);
       setDetail(nextDetail);
       setLocalRecordItems(nextDetail ? buildLocalRecordItems(nextDetail.records) : []);
-      setError(nextDetail ? "" : "没有找到这个本地项目");
+      setError(nextDetail ? "" : archiveCopy.local_not_found);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "读取本地项目失败");
+      setError(err instanceof Error ? err.message : archiveCopy.local_read_failed);
     } finally {
       setLoading(false);
     }
@@ -263,7 +266,7 @@ export default function LocalArchiveDetailPage() {
         id: item.id,
         recordId: item.record_id,
         url: item.display_url || item.url || item.file_url || "",
-        alt: item.original_filename || `本地记录图片 ${index + 1}`,
+        alt: item.original_filename || `${recordCopy.local_image_alt} ${index + 1}`,
       }))
       .filter((item) => Boolean(item.url));
 
@@ -287,7 +290,7 @@ export default function LocalArchiveDetailPage() {
 
     if (rejectedCount > 0) {
       showToast(
-        `每次最多添加 ${MAX_RECORD_PHOTOS_PER_ADD} 张，已加入前 ${MAX_RECORD_PHOTOS_PER_ADD} 张；可以再次添加。`,
+        `${recordCopy.photo_batch_trimmed_prefix} ${MAX_RECORD_PHOTOS_PER_ADD} ${recordCopy.photo_batch_trimmed_suffix}`,
       );
     }
 
@@ -302,7 +305,7 @@ export default function LocalArchiveDetailPage() {
     const customRecordTime =
       timeMode === "custom" && customTime ? new Date(customTime) : null;
     if (customRecordTime && Number.isNaN(customRecordTime.getTime())) {
-      showToast("记录时间无效");
+      showToast(recordCopy.invalid_time);
       return;
     }
 
@@ -381,12 +384,12 @@ export default function LocalArchiveDetailPage() {
       setAddRecordOpen(false);
       showToast(
         groupsToSave.length > 1
-          ? `已按照片日期保存为 ${groupsToSave.length} 条本地记录`
-          : "本地记录已保存",
+          ? `${recordCopy.local_saved_split_prefix} ${groupsToSave.length} ${recordCopy.local_saved_split_suffix}`
+          : recordCopy.local_saved,
       );
       await loadDetail();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "保存本地记录失败");
+      showToast(err instanceof Error ? err.message : recordCopy.local_save_failed);
     } finally {
       setSaving(false);
     }
@@ -436,7 +439,7 @@ export default function LocalArchiveDetailPage() {
       showToast(cycleTerminology.datesUpdated(cycle.cycle_no));
       await loadDetail();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "调整日期失败，请稍后重试。");
+      showToast(err instanceof Error ? err.message : recordCopy.adjust_failed);
     } finally {
       setCycleBusy(false);
     }
@@ -460,7 +463,7 @@ export default function LocalArchiveDetailPage() {
       return true;
     } catch (err) {
       console.error("delete local archive cycle failed", err);
-      showToast("删除失败，请稍后重试。");
+      showToast(recordCopy.delete_failed);
       return false;
     } finally {
       setCycleBusy(false);
@@ -473,14 +476,14 @@ export default function LocalArchiveDetailPage() {
     try {
       const deletedRecordId = recordToDelete.id;
       await deleteLocalRecord(recordToDelete.id);
-      showToast("本地记录已删除");
+      showToast(recordCopy.local_record_deleted);
       setRecordToDelete(null);
       if (localLightboxRecord?.id === deletedRecordId) {
         closeLocalLightbox();
       }
       await loadDetail();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "删除本地记录失败");
+      showToast(err instanceof Error ? err.message : recordCopy.local_record_delete_failed);
     }
   }
 
@@ -489,16 +492,16 @@ export default function LocalArchiveDetailPage() {
 
     try {
       await deleteLocalArchive(archiveId);
-      showToast("本地项目已删除");
+      showToast(archiveCopy.local_project_deleted);
       router.push("/archive?source=local");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "删除本地项目失败");
+      showToast(err instanceof Error ? err.message : archiveCopy.local_project_delete_failed);
     }
   }
 
   async function markCurrentLocalArchiveAsMine() {
     if (!archiveId || !ownerContext?.userId) {
-      showToast("请先登录后再标记本地项目归属");
+      showToast(archiveCopy.ownership_login_required);
       return;
     }
 
@@ -507,10 +510,10 @@ export default function LocalArchiveDetailPage() {
         userId: ownerContext.userId,
         email: ownerContext.email || null,
       });
-      showToast("已标记为我的本地项目");
+      showToast(archiveCopy.ownership_marked);
       await loadDetail();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "标记本地项目失败");
+      showToast(err instanceof Error ? err.message : archiveCopy.ownership_failed);
     }
   }
 
@@ -522,25 +525,25 @@ export default function LocalArchiveDetailPage() {
     setShowTransferErrorReason(false);
 
     if (!ownerContext?.userId) {
-      setTransferError("请先登录，再转到云空间。");
+      setTransferError(archiveCopy.transfer_login_required);
       setTransferPromptOpen(false);
       return;
     }
 
     if (!detail.archive.title?.trim()) {
-      setTransferError("项目名称不能为空。");
+      setTransferError(`${archiveCopy.project_name_empty}.`);
       setTransferPromptOpen(false);
       return;
     }
 
     if (!(detail.archive.system_name || detail.archive.species_name)?.trim()) {
-      setTransferError("系统名不能为空。");
+      setTransferError(`${archiveCopy.system_name_empty}.`);
       setTransferPromptOpen(false);
       return;
     }
 
     if (detail.archive.migration_status === "migrating") {
-      setTransferError("这个本地项目正在转到云空间，请稍后再试。");
+      setTransferError(archiveCopy.transfer_migrating);
       setTransferPromptOpen(false);
       return;
     }
@@ -552,7 +555,7 @@ export default function LocalArchiveDetailPage() {
   async function confirmTransferToCloud() {
     if (!archiveId || !ownerContext?.userId || transferRunning) {
       if (!ownerContext?.userId) {
-        setTransferError("请先登录，再转到云空间。");
+        setTransferError(archiveCopy.transfer_login_required);
       }
       return;
     }
@@ -575,19 +578,17 @@ export default function LocalArchiveDetailPage() {
         setDetail(null);
         setLocalRecordItems([]);
         revokeLocalRecordUrls();
-        showToast("已转到云空间");
+        showToast(archiveCopy.transferred_to_cloud);
         return;
       }
 
-      setTransferError(
-        "转到云空间未完成，请稍后重试。"
-      );
+      setTransferError(archiveCopy.transfer_incomplete);
       setTransferErrorDetail(result.error);
       await loadDetail();
     } catch (err) {
-      setTransferError("转到云空间未完成，请稍后重试。");
+      setTransferError(archiveCopy.transfer_incomplete);
       setTransferErrorDetail(
-        err instanceof Error ? err.message : "转到云空间失败，请稍后重试。"
+        err instanceof Error ? err.message : archiveCopy.transfer_failed
       );
       await loadDetail();
     } finally {
@@ -613,7 +614,7 @@ export default function LocalArchiveDetailPage() {
       );
       showToast(successMessage);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "更新本地项目失败");
+      showToast(err instanceof Error ? err.message : archiveCopy.local_update_failed);
     }
   }
 
@@ -624,7 +625,7 @@ export default function LocalArchiveDetailPage() {
 
     if (change.field === "title") {
       const cleanTitle = change.value.trim();
-      if (!cleanTitle) throw new Error("项目名称不能为空");
+      if (!cleanTitle) throw new Error(archiveCopy.project_name_empty);
       if (cleanTitle !== (detail.archive.title || "")) updates.title = cleanTitle;
     }
 
@@ -636,7 +637,7 @@ export default function LocalArchiveDetailPage() {
 
     if (change.field === "systemName") {
       const cleanName = change.value.name.trim();
-      if (!cleanName) throw new Error("系统名不能为空");
+      if (!cleanName) throw new Error(archiveCopy.system_name_empty);
       if (cleanName !== (detail.archive.system_name || detail.archive.species_name || "")) {
         updates.system_name = cleanName;
       }
@@ -664,24 +665,24 @@ export default function LocalArchiveDetailPage() {
     }
 
     if (Object.keys(updates).length === 0) return;
-    await updateLocalArchiveProfile(updates, "本地项目档案已更新");
+    await updateLocalArchiveProfile(updates, archiveCopy.local_profile_updated);
   }
 
   if (loading) {
-    return <main style={pageStyle}>正在读取本地项目...</main>;
+    return <main style={pageStyle}>{archiveCopy.local_reading}</main>;
   }
 
   if (transferredCloudArchiveId) {
     return (
       <main style={pageStyle}>
         <section style={transferSuccessPanelStyle}>
-          <h1 style={transferSuccessTitleStyle}>已转到云空间</h1>
+          <h1 style={transferSuccessTitleStyle}>{archiveCopy.transferred_to_cloud}</h1>
           <div style={transferSuccessActionsStyle}>
             <Link
               href={`/archive/${transferredCloudArchiveId}`}
               style={transferPrimaryLinkStyle}
             >
-              查看云端项目
+              {archiveCopy.view_cloud_project}
             </Link>
           </div>
         </section>
@@ -693,9 +694,9 @@ export default function LocalArchiveDetailPage() {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={{ margin: 0 }}>{error || "本地项目不存在"}</p>
+          <p style={{ margin: 0 }}>{error || archiveCopy.local_not_found}</p>
           <Link href="/archive?source=local" style={backButtonStyle}>
-            返回本地项目
+            {archiveCopy.back_to_local_projects}
           </Link>
         </section>
       </main>
@@ -719,71 +720,85 @@ export default function LocalArchiveDetailPage() {
     .sort((a, b) => b.cycle_no - a.cycle_no)
     .map((cycle) => ({
       id: cycle.id,
-      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)}（${cycle.status === "active" ? "进行中" : "已结束"} · ${formatLocalCycleDate(cycle.started_at)}）`,
+      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
     }));
   const startTime = records.length
     ? records[records.length - 1]?.record_time || archive.created_at
     : archive.created_at;
   const latestUpdate = records[0]?.record_time || archive.updated_at || archive.created_at;
   const ongoingDays = getOngoingDays(archive.created_at);
-  const localSystemNameLabel = archive.category === "plant" ? "系统植物名 *" : "系统名 *";
+  const localSystemNameLabel =
+    archive.category === "plant"
+      ? archiveCopy.system_plant_name_required
+      : archiveCopy.system_name_required;
+  const localCategoryLabel =
+    archive.category === "plant"
+      ? archiveCopy.categories.plant_label
+      : archive.category === "system"
+        ? archiveCopy.categories.system_label
+        : archive.category === "insect_fish"
+          ? archiveCopy.categories.insect_fish_label
+          : archiveCopy.categories.other_label;
+  const durationText = ongoingDays
+    ? `${archiveCopy.ongoing_days_prefix} ${ongoingDays} ${archiveCopy.days_suffix}`
+    : archiveCopy.none;
   const projectView: ArchiveProjectView = {
     id: archive.id,
     mode: "local",
-    title: archive.title || "未命名项目",
+    title: archive.title || archiveCopy.unnamed_project,
     category: archive.category,
     plantId: archive.plant_id,
     plantSlug: archive.plant_slug,
-    categoryLabel: getArchiveCategoryLabel(archive.category),
+    categoryLabel: localCategoryLabel,
     categoryIcon: getArchiveCategoryIcon(archive.category),
-    systemName: archive.system_name || archive.species_name || "未填写",
+    systemName: archive.system_name || archive.species_name || archiveCopy.not_filled,
     subcategoryLabel: archive.subcategory,
     groupLabel: archive.group_name,
     visibilityLabel: null,
     visibilityTone: "neutral",
-    storageLabel: "本机",
+    storageLabel: archiveCopy.device,
     storageTone: "device",
   };
   const localProfileRows = [
     {
-      label: "项目名称 *",
-      value: archive.title || "未命名项目",
+      label: archiveCopy.project_name_required,
+      value: archive.title || archiveCopy.unnamed_project,
       field: "title" as const,
     },
     {
-      label: "种类",
-      value: getArchiveCategoryLabel(archive.category),
+      label: archiveCopy.category,
+      value: localCategoryLabel,
       field: "category" as const,
     },
     {
       label: localSystemNameLabel,
-      value: archive.system_name || archive.species_name || "未填写",
+      value: archive.system_name || archive.species_name || archiveCopy.not_filled,
       field: "systemName" as const,
     },
     {
-      label: "来源",
-      value: archive.source || "未填写",
+      label: archiveCopy.source,
+      value: archive.source || archiveCopy.not_filled,
       field: "source" as const,
     },
     {
-      label: "备注",
-      value: archive.note || "未填写",
+      label: archiveCopy.note,
+      value: archive.note || archiveCopy.not_filled,
       field: "note" as const,
     },
     {
-      label: "项目摘要",
-      value: archive.archive_summary || "未填写",
+      label: archiveCopy.summary,
+      value: archive.archive_summary || archiveCopy.not_filled,
       field: "archiveSummary" as const,
     },
-    { label: "创建时间", value: formatDate(archive.created_at) || "暂无" },
-    { label: "最近更新", value: formatDate(latestUpdate) || "暂无" },
-    { label: "记录数", value: `${records.length}` },
-    { label: "持续天数", value: ongoingDays ? `已持续 ${ongoingDays} 天` : "暂无" },
+    { label: archiveCopy.created_time, value: formatDate(archive.created_at) || archiveCopy.none },
+    { label: archiveCopy.latest_update, value: formatDate(latestUpdate) || archiveCopy.none },
+    { label: archiveCopy.record_count, value: `${records.length}` },
+    { label: archiveCopy.duration_days, value: durationText },
   ];
   const localArchiveRecordShell: ArchiveDetailArchive = {
     id: archive.id,
     user_id: archive.local_owner_user_id || "local",
-    title: archive.title || "本地项目",
+    title: archive.title || archiveCopy.local_project,
     category: archive.category,
     created_at: archive.created_at,
     last_record_time: archive.updated_at,
@@ -803,10 +818,10 @@ export default function LocalArchiveDetailPage() {
     ? localRecordItems.findIndex((record) => record.id === localLightboxRecord.id)
     : -1;
   const localLightboxMetaText = localLightboxRecord
-    ? `${localLightboxRecordIndex === 0 ? "最新进展 · " : ""}第 ${getDayNumber(
+    ? `${localLightboxRecordIndex === 0 ? `${archiveCopy.latest_update} · ` : ""}${recordCopy.day_prefix} ${getDayNumber(
         startTime,
         localLightboxRecord.record_time
-      )} 天 · ${formatDate(localLightboxRecord.record_time)}`
+      )}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""} · ${formatDate(localLightboxRecord.record_time)}`
     : "";
   const localSystemNameUsesCandidates =
     archive.category === "plant" ||
@@ -819,17 +834,17 @@ export default function LocalArchiveDetailPage() {
     <main style={pageStyle}>
       <section style={headerStyle}>
         <Link href="/archive?source=local" style={backLinkStyle}>
-          返回本地项目
+          {archiveCopy.back_to_local_projects}
         </Link>
         <ArchiveDetailHeaderView
           project={projectView}
-          eyebrow="本地档案"
+          eyebrow={archiveCopy.local_archive}
           latestUpdateText={
-            `最近更新 ${formatDate(latestUpdate) || "暂无"}`
+            `${archiveCopy.latest_update} ${formatDate(latestUpdate) || archiveCopy.none}`
           }
-          recordCountText={`记录 ${records.length}`}
-          durationText={ongoingDays ? `已持续 ${ongoingDays} 天` : undefined}
-          hint="只保存在这台设备，不上传云端。本地分类独立于云空间。"
+          recordCountText={`${archiveCopy.records} ${records.length}`}
+          durationText={ongoingDays ? durationText : undefined}
+          hint={archiveCopy.local_hint}
           actionSlot={
             <div style={headerActionSlotStyle}>
               {!archive.local_owner_user_id && ownerContext?.userId ? (
@@ -838,7 +853,7 @@ export default function LocalArchiveDetailPage() {
                   onClick={markCurrentLocalArchiveAsMine}
                   style={markOwnerButtonStyle}
                 >
-                  标记归属
+                  {archiveCopy.mark_owner}
                 </button>
               ) : null}
               <button
@@ -857,7 +872,7 @@ export default function LocalArchiveDetailPage() {
                       : "pointer",
                 }}
               >
-                转到云空间
+                {archiveCopy.transfer_to_cloud}
               </button>
             </div>
           }
@@ -875,13 +890,13 @@ export default function LocalArchiveDetailPage() {
             systemNameMode: localSystemNameUsesCandidates ? "candidate" : "text",
             systemNameCandidates: localSystemNameCandidates,
             systemNameHint: localSystemNameUsesCandidates
-              ? "本地系统名只保存在这台设备；无匹配时可使用当前输入。"
-              : "其他种类没有预设系统名，可直接输入。",
+              ? archiveCopy.local_system_candidate_hint
+              : archiveCopy.other_system_hint,
           }}
           profileActions={
             <div style={localProfileActionsStyle}>
               <button type="button" onClick={() => setDeleteArchiveOpen(true)} style={localProfileDangerButtonStyle}>
-                删除本地项目
+                {archiveCopy.delete_local_project}
               </button>
             </div>
           }
@@ -898,7 +913,7 @@ export default function LocalArchiveDetailPage() {
                 onClick={() => setShowTransferErrorReason((current) => !current)}
                 style={transferReasonButtonStyle}
               >
-                {showTransferErrorReason ? "收起原因" : "查看原因"}
+                {showTransferErrorReason ? archiveCopy.hide_reason : archiveCopy.view_reason}
               </button>
               {showTransferErrorReason ? (
                 <div style={transferReasonTextStyle}>{transferErrorDetail}</div>
@@ -908,13 +923,13 @@ export default function LocalArchiveDetailPage() {
         </div>
       ) : archive.migration_status === "failed" && archive.migration_error ? (
         <div style={transferErrorStyle}>
-          <div>转到云空间未完成，请稍后重试。</div>
+          <div>{archiveCopy.transfer_incomplete}</div>
           <button
             type="button"
             onClick={() => setShowTransferErrorReason((current) => !current)}
             style={transferReasonButtonStyle}
           >
-            {showTransferErrorReason ? "收起原因" : "查看原因"}
+            {showTransferErrorReason ? archiveCopy.hide_reason : archiveCopy.view_reason}
           </button>
           {showTransferErrorReason ? (
             <div style={transferReasonTextStyle}>{archive.migration_error}</div>
@@ -938,15 +953,15 @@ export default function LocalArchiveDetailPage() {
           >
             <div style={transferPanelHeaderStyle}>
               <h2 id="local-to-cloud-title" style={transferTitleStyle}>
-                转到云空间
+                {archiveCopy.transfer_to_cloud}
               </h2>
             </div>
             <p style={transferTextStyle}>
-              转成功后，本地项目会从本地列表移除。
+              {archiveCopy.transfer_description}
               <br />
-              手机相册和本地照片不会删除。
+              {archiveCopy.transfer_photos_safe}
             </p>
-            <div style={transferVisibilityGroupStyle} aria-label="云端可见性">
+            <div style={transferVisibilityGroupStyle} aria-label={archiveCopy.cloud_visibility}>
               <label style={transferVisibilityOptionStyle}>
                 <input
                   type="radio"
@@ -957,7 +972,7 @@ export default function LocalArchiveDetailPage() {
                   disabled={transferRunning}
                 />
                 <span>
-                  <strong>仅自己可见</strong>
+                  <strong>{archiveCopy.private_only}</strong>
                 </span>
               </label>
               <label style={transferVisibilityOptionStyle}>
@@ -970,8 +985,8 @@ export default function LocalArchiveDetailPage() {
                   disabled={transferRunning}
                 />
                 <span>
-                  <strong>公开发现</strong>
-                  <small>公开后别人可以在发现页看到，不会自动发布到集市或求助。</small>
+                  <strong>{archiveCopy.public_discover}</strong>
+                  <small>{archiveCopy.transfer_public_hint}</small>
                 </span>
               </label>
             </div>
@@ -982,7 +997,7 @@ export default function LocalArchiveDetailPage() {
                 disabled={transferRunning}
                 style={transferPrimaryButtonStyle}
               >
-                {transferRunning ? "正在转到云空间…" : "转到云空间"}
+                {transferRunning ? archiveCopy.transferring_to_cloud : archiveCopy.transfer_to_cloud}
               </button>
               <button
                 type="button"
@@ -990,7 +1005,7 @@ export default function LocalArchiveDetailPage() {
                 disabled={transferRunning}
                 style={transferSecondaryButtonStyle}
               >
-                取消
+                {t.cancel}
               </button>
             </div>
           </section>
@@ -1006,7 +1021,7 @@ export default function LocalArchiveDetailPage() {
             <input
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="记录今天的变化"
+              placeholder={recordCopy.placeholder}
               style={recordInputStyle}
             />
 
@@ -1023,7 +1038,7 @@ export default function LocalArchiveDetailPage() {
                 >
                   {activeCycles.map((cycle) => (
                     <option key={cycle.id} value={cycle.id}>
-                      {cycleTerminology.cycleLabel(cycle.cycle_no)}（{formatLocalCycleDate(cycle.started_at)}开始）
+                      {cycleTerminology.cycleLabel(cycle.cycle_no)} ({formatLocalCycleDate(cycle.started_at)} {cycleTerminology.startDateSuffix})
                     </option>
                   ))}
                   <option value="">{cycleTerminology.unassignedOption}</option>
@@ -1057,9 +1072,9 @@ export default function LocalArchiveDetailPage() {
                 }}
                 style={recordSelectStyle}
               >
-                <option value="exif">照片时间</option>
-                <option value="now">当前时间</option>
-                <option value="custom">自定义时间</option>
+                <option value="exif">{t.photo_time}</option>
+                <option value="now">{t.current_time}</option>
+                <option value="custom">{t.custom_time}</option>
               </select>
 
               {timeMode === "custom" ? (
@@ -1074,7 +1089,7 @@ export default function LocalArchiveDetailPage() {
 
             <div style={imageActionRowStyle}>
               <label style={imagePickerStyle}>
-                选择照片
+                {recordCopy.choose_photos}
                 <input
                   type="file"
                   accept="image/*"
@@ -1087,7 +1102,7 @@ export default function LocalArchiveDetailPage() {
                 />
               </label>
               <label style={imagePickerStyle}>
-                拍照
+                {recordCopy.take_photo}
                 <input
                   type="file"
                   accept="image/*"
@@ -1105,19 +1120,19 @@ export default function LocalArchiveDetailPage() {
                   onClick={() => setSelectedFiles([])}
                   style={clearFilesButtonStyle}
                 >
-                  清空图片
+                  {recordCopy.clear_photos}
                 </button>
               ) : null}
             </div>
 
             {selectedFiles.length > 0 ? (
               <div style={selectedFilesStyle}>
-                已选择 {selectedFiles.length} 张图片
-                {selectedSizeLabel ? ` · 原始大小 ${selectedSizeLabel}` : ""}
+                {recordCopy.selected_photos_prefix} {selectedFiles.length} {recordCopy.selected_photos_suffix}
+                {selectedSizeLabel ? ` · ${recordCopy.raw_size} ${selectedSizeLabel}` : ""}
                 <br />
-                每次最多添加 {MAX_RECORD_PHOTOS_PER_ADD} 张，可分多次继续添加；单条记录累计照片不设上限。
+                {recordCopy.photo_limit_prefix} {MAX_RECORD_PHOTOS_PER_ADD} {recordCopy.photo_limit_suffix}
                 <br />
-                保存时会生成最长边不超过 1800px、质量 82% 的 App 内部标准版；小图不放大，默认不写入系统相册。
+                {recordCopy.local_standard_photo_hint}
               </div>
             ) : null}
 
@@ -1129,12 +1144,12 @@ export default function LocalArchiveDetailPage() {
                     checked={mergeMode}
                     onChange={(event) => setMergeMode(event.target.checked)}
                   />{" "}
-                  不按照片日期拆分，合并为一条记录（采用最新照片日期）
+                  {recordCopy.merge_photos}
                 </label>
                 {!mergeMode ? (
                   <>
                     <br />
-                    将按照片日期生成记录；同一天的照片归入同一条记录。
+                    {recordCopy.split_photos_hint}
                   </>
                 ) : null}
               </div>
@@ -1142,7 +1157,7 @@ export default function LocalArchiveDetailPage() {
 
             <div style={submitRowStyle}>
               <button type="submit" disabled={saving} style={submitButtonStyle}>
-                {saving ? "保存中..." : "保存记录"}
+                {saving ? t.saving : recordCopy.save_record}
               </button>
             </div>
           </form>
@@ -1161,7 +1176,7 @@ export default function LocalArchiveDetailPage() {
         onDeleteCycle={deleteLocalCycle}
         emptyState={
           <div style={emptyRecordsStyle}>
-            <div>还没有本地记录，添加第一条记录</div>
+            <div>{recordCopy.no_local_records}</div>
           </div>
         }
         renderRecord={(record, index) => (
@@ -1212,7 +1227,7 @@ export default function LocalArchiveDetailPage() {
                   showToast(
                     err instanceof Error
                       ? err.message
-                      : `${cycleTerminology.adjustLabel}失败，请稍后重试。`
+                      : recordCopy.adjust_failed
                   );
                 }
               }}
@@ -1239,15 +1254,15 @@ export default function LocalArchiveDetailPage() {
           onClick={() => setAddRecordOpen(true)}
           style={mobileFloatingAddButtonStyle}
         >
-          + 记录
+          {recordCopy.add_record_short}
         </button>
       ) : null}
 
       <ConfirmDialog
         open={Boolean(recordToDelete)}
-        title="删除本地记录"
-        message="确定要删除这条本地记录吗？这会删除 App 内部缓存的记录图片，不会影响系统相册中的原图。"
-        confirmText="确认删除"
+        title={recordCopy.delete_local_record_title}
+        message={recordCopy.delete_local_record_message}
+        confirmText={recordCopy.confirm_delete}
         danger
         onClose={() => setRecordToDelete(null)}
         onConfirm={confirmDeleteRecord}
@@ -1255,9 +1270,9 @@ export default function LocalArchiveDetailPage() {
 
       <ConfirmDialog
         open={deleteArchiveOpen}
-        title="删除本地项目"
-        message="确定要删除这个本地项目吗？项目下的本地记录和 App 内图片缓存会一起删除，不会删除系统相册里的原图。"
-        confirmText="确认删除项目"
+        title={archiveCopy.delete_local_project}
+        message={archiveCopy.delete_local_project_message}
+        confirmText={archiveCopy.confirm_delete_project}
         danger
         onClose={() => setDeleteArchiveOpen(false)}
         onConfirm={confirmDeleteArchive}

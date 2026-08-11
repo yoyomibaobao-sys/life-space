@@ -14,6 +14,7 @@ import type {
   ExperienceCardRow,
 } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type ArchiveExperienceCardsProps = {
   archiveId: string;
@@ -30,6 +31,7 @@ export default function ArchiveExperienceCards({
   isOwner,
   onCountChange,
 }: ArchiveExperienceCardsProps) {
+  const { t } = useLanguage();
   const [items, setItems] = useState<ArchiveExperienceCardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] =
@@ -97,12 +99,12 @@ export default function ArchiveExperienceCards({
     setDeleting(true);
     try {
       await deleteExperienceCard(deleteTarget.id);
-      showToast("经验卡已删除，原记录不受影响");
+      showToast(t.experience.archive_deleted);
       setDeleteTarget(null);
       await load();
     } catch (error) {
       console.error("delete archive experience card error:", error);
-      showToast("删除经验卡失败");
+      showToast(t.experience.archive_delete_failed);
     } finally {
       setDeleting(false);
     }
@@ -111,13 +113,15 @@ export default function ArchiveExperienceCards({
   return (
     <section
       style={sectionStyle}
-      aria-label="项目经验卡"
+      aria-label={t.experience.archive_panel_aria}
     >
       <div style={headerStyle}>
         <div>
-          <div style={eyebrowStyle}>经验卡</div>
+          <div style={eyebrowStyle}>{t.experience.archive_panel_title}</div>
           <div style={summaryStyle}>
-            {loading ? "正在读取..." : `共 ${items.length} 张`}
+            {loading
+              ? t.experience.reading_short
+              : `${t.experience.count_prefix}${items.length}${t.experience.count_suffix}`}
           </div>
         </div>
         {isOwner ? (
@@ -125,7 +129,7 @@ export default function ArchiveExperienceCards({
             href={`/experience-cards/new?archiveId=${archiveId}`}
             style={createLinkStyle}
           >
-            生成经验卡
+            {t.experience.create_card}
           </Link>
         ) : null}
       </div>
@@ -133,8 +137,8 @@ export default function ArchiveExperienceCards({
       {!loading && items.length === 0 ? (
         <div style={emptyStyle}>
           {isOwner
-            ? "还没有经验卡。项目已有起点、过程和结果记录后，可以从这里生成。"
-            : "这个项目暂时没有公开经验卡。"}
+            ? t.experience.empty_owner
+            : t.experience.empty_public}
         </div>
       ) : null}
 
@@ -151,36 +155,34 @@ export default function ArchiveExperienceCards({
                   <>
                     <span style={statusStyle(item.isPubliclyAvailable)}>
                       {item.isPubliclyAvailable
-                        ? "已公开"
+                        ? t.experience.published
                         : item.status === "published"
-                          ? "公开已暂停"
-                          : "私密草稿"}
+                          ? t.experience.public_paused
+                          : t.experience.private_draft}
                     </span>
                     <span style={{ color: "#788274", fontSize: 11 }}>
-                      被收藏 {item.bookmarkCount}
+                      {t.experience.bookmarked_prefix}{item.bookmarkCount}
                     </span>
                   </>
                 ) : null
               }
               actions={
                 <>
-                <Link
-                  href={`/experience-cards/${item.id}`}
-                  style={actionLinkStyle}
-                >
-                  {isOwner ? "打开并管理" : "打开"}
-                </Link>
-                {isOwner ? (
-                  <>
+                  <Link
+                    href={`/experience-cards/${item.id}`}
+                    style={actionLinkStyle}
+                  >
+                    {isOwner ? t.experience.open_manage : t.experience.open}
+                  </Link>
+                  {isOwner ? (
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(item)}
                       style={deleteButtonStyle}
                     >
-                      删除
+                      {t.experience.delete}
                     </button>
-                  </>
-                ) : null}
+                  ) : null}
                 </>
               }
             />
@@ -190,10 +192,12 @@ export default function ArchiveExperienceCards({
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="删除经验卡"
-        message="只删除经验卡及其引用关系，原项目、原记录和照片不会删除。"
-        confirmText={deleting ? "删除中..." : "确认删除"}
-        cancelText="取消"
+        title={t.experience.delete_title}
+        message={t.experience.delete_message}
+        confirmText={
+          deleting ? t.experience.deleting : t.experience.confirm_delete
+        }
+        cancelText={t.experience.cancel}
         danger
         confirmDisabled={deleting}
         cancelDisabled={deleting}

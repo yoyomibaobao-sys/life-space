@@ -17,6 +17,7 @@ import type { LightboxImage } from "@/lib/archive-detail-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { requestMarketPostDeletion } from "@/lib/market-media-storage";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type ProfileBrief = {
   id: string;
@@ -60,6 +61,7 @@ type MarketPostDisplayRow = MarketPostRow & {
 };
 
 export default function MarketDetailPage() {
+  const { language, t } = useLanguage();
   const params = useParams();
   const router = useRouter();
   const id = String(params?.id || "");
@@ -228,11 +230,11 @@ export default function MarketDetailPage() {
       console.error("update market status error:", error);
       const message = String(error.message || "");
       if (message.includes("market_post_limit_reached")) {
-        window.alert("集市同时发布中的条目已达上限，请先结束一条再重新发布。");
+        window.alert(t.market.post_limit_alert);
       } else if (message.includes("membership_inactive")) {
-        window.alert("需要开通云会员才能重新发布集市信息。");
+        window.alert(t.market.membership_required_alert);
       } else {
-        window.alert("更新集市状态失败，请稍后重试。");
+        window.alert(t.market.status_update_failed);
       }
       return;
     }
@@ -246,7 +248,7 @@ export default function MarketDetailPage() {
   async function deletePost() {
     if (!item || !isOwner || working) return;
 
-    const ok = window.confirm("确定删除这条集市信息吗？");
+    const ok = window.confirm(t.market.delete_confirm);
     if (!ok) return;
 
     setWorking(true);
@@ -264,7 +266,12 @@ export default function MarketDetailPage() {
   function openMarketLightbox(targetUrl: string) {
     if (!item) return;
 
-    const images = buildMarketLightboxImages(item, marketMedia);
+    const images = buildMarketLightboxImages(
+      item,
+      marketMedia,
+      t.market.market_image,
+      t.market.market_cover
+    );
     const nextIndex = images.findIndex((image) => image.url === targetUrl);
 
     if (!images.length || nextIndex < 0) return;
@@ -274,7 +281,7 @@ export default function MarketDetailPage() {
   }
 
   if (loading) {
-    return <main style={pageStyle}>加载中...</main>;
+    return <main style={pageStyle}>{t.market.loading}</main>;
   }
 
   if (!item) {
@@ -282,9 +289,9 @@ export default function MarketDetailPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href="/market" style={backLinkStyle}>
-            <UiIcon name="arrow-left" size={15} /> 返回集市
+            <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
           </Link>
-          <section style={emptyStyle}>这条集市信息不存在或已不可见</section>
+          <section style={emptyStyle}>{t.market.not_found}</section>
         </div>
       </main>
     );
@@ -297,27 +304,29 @@ export default function MarketDetailPage() {
   const sourceNoteText = sourceRecord?.note?.trim() || "";
   const hasSource = Boolean(archive || sourceRecord);
   const externalUrl = normalizeExternalUrl(item.external_url || "");
-  const externalLabel = item.external_label?.trim() || getExternalLinkLabel(externalUrl);
+  const externalLabel =
+    item.external_label?.trim() ||
+    getExternalLinkLabel(externalUrl, t.market.open_external_link);
 
   return (
     <>
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href="/market" style={backLinkStyle}>
-            <UiIcon name="arrow-left" size={15} /> 返回集市
+            <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
           </Link>
 
           <section style={panelStyle}>
             <div style={topRowStyle}>
               <div style={badgeRowStyle}>
                 <span style={typeBadgeStyle}>
-                  {getMarketPostTypeLabel(item.post_type)}
+                  {getMarketPostTypeLabel(item.post_type, language)}
                 </span>
                 <span style={categoryBadgeStyle}>
-                  {getMarketItemCategoryLabel(item.item_category)}
+                  {getMarketItemCategoryLabel(item.item_category, language)}
                 </span>
                 {item.status === "ended" ? (
-                  <span style={endedBadgeStyle}>已结束</span>
+                  <span style={endedBadgeStyle}>{t.market.ended}</span>
                 ) : null}
               </div>
 
@@ -328,26 +337,26 @@ export default function MarketDetailPage() {
 
             <section style={summaryInlineStyle}>
               <span style={summaryInlineItemStyle}>
-                <span style={summaryLabelStyle}>发布人</span>
+                <span style={summaryLabelStyle}>{t.market.publisher}</span>
                 <Link
                   href={`/user/${item.user_id}/profile`}
                   style={publisherLinkStyle}
                 >
-                  {profile?.username || "未设置用户名"}
+                  {profile?.username || t.market.unset_username}
                 </Link>
               </span>
 
               <span style={summarySeparatorStyle}>·</span>
 
               <span style={summaryInlineItemStyle}>
-                <span style={summaryLabelStyle}>地点</span>
-                <span style={summaryValueStyle}>{item.location_text || "未填写"}</span>
+                <span style={summaryLabelStyle}>{t.market.location}</span>
+                <span style={summaryValueStyle}>{item.location_text || t.market.not_provided}</span>
               </span>
 
               <span style={summarySeparatorStyle}>·</span>
 
               <span style={summaryInlineItemStyle}>
-                <span style={summaryLabelStyle}>记录来源</span>
+                <span style={summaryLabelStyle}>{t.market.record_source}</span>
                 {hasSource && sourceArchiveId ? (
                   <>
                     <Link
@@ -362,7 +371,7 @@ export default function MarketDetailPage() {
                         {archiveName ? (
                           <span style={sourceDetailArchiveStyle}>{archiveName}</span>
                         ) : (
-                          <span style={sourceDetailMissingStyle}>查看来源记录</span>
+                          <span style={sourceDetailMissingStyle}>{t.market.view_source_record}</span>
                         )}
                         {systemName ? (
                           <span style={sourceDetailSystemStyle}>{systemName}</span>
@@ -377,14 +386,14 @@ export default function MarketDetailPage() {
                     ) : null}
                   </>
                 ) : (
-                  <span style={summaryValueStyle}>未关联记录</span>
+                  <span style={summaryValueStyle}>{t.market.no_linked_record}</span>
                 )}
               </span>
             </section>
 
             {externalUrl ? (
               <section style={externalLinkBarStyle}>
-                <span style={externalLinkLabelStyle}>外链</span>
+                <span style={externalLinkLabelStyle}>{t.market.external_link}</span>
                 <a
                   href={externalUrl}
                   target="_blank"
@@ -400,7 +409,7 @@ export default function MarketDetailPage() {
               <button
                 type="button"
                 onClick={() => openMarketLightbox(coverImageUrl)}
-                aria-label="打开封面图片预览"
+                aria-label={t.market.open_cover_preview}
                 style={coverButtonStyle}
               >
                 <img
@@ -413,7 +422,7 @@ export default function MarketDetailPage() {
 
             {marketMedia.length > 0 ? (
               <section style={marketMediaSectionStyle}>
-                <div style={marketMediaTitleStyle}>图片</div>
+                <div style={marketMediaTitleStyle}>{t.market.images}</div>
                 <div style={marketMediaGridStyle}>
                   {marketMedia.map((media) => {
                     const mediaImageUrl = media.display_url;
@@ -430,7 +439,7 @@ export default function MarketDetailPage() {
                         key={media.id}
                         type="button"
                         onClick={() => openMarketLightbox(mediaImageUrl)}
-                        aria-label="打开集市图片预览"
+                        aria-label={t.market.open_image_preview}
                         style={marketMediaItemStyle}
                       >
                         <img
@@ -440,7 +449,7 @@ export default function MarketDetailPage() {
                           loading="lazy"
                         />
                         {isCover ? (
-                          <span style={marketMediaCoverBadgeStyle}>封面</span>
+                          <span style={marketMediaCoverBadgeStyle}>{t.market.cover}</span>
                         ) : null}
                       </button>
                     );
@@ -463,7 +472,7 @@ export default function MarketDetailPage() {
             {isOwner ? (
               <div style={ownerButtonRowStyle}>
                 <Link href={`/market/${item.id}/edit`} style={editLinkStyle}>
-                  编辑
+                  {t.market.edit}
                 </Link>
 
                 {item.status === "ended" ? (
@@ -473,7 +482,7 @@ export default function MarketDetailPage() {
                     disabled={working}
                     style={primaryButtonStyle}
                   >
-                    恢复进行中
+                    {t.market.resume}
                   </button>
                 ) : (
                   <button
@@ -482,7 +491,7 @@ export default function MarketDetailPage() {
                     disabled={working}
                     style={secondaryButtonStyle}
                   >
-                    标记已结束
+                    {t.market.mark_ended}
                   </button>
                 )}
 
@@ -492,7 +501,7 @@ export default function MarketDetailPage() {
                   disabled={working}
                   style={dangerButtonStyle}
                 >
-                  删除
+                  {t.market.delete}
                 </button>
               </div>
             ) : null}
@@ -528,20 +537,22 @@ function normalizeExternalUrl(value?: string | null) {
   }
 }
 
-function getExternalLinkLabel(url: string) {
-  if (!url) return "打开外部链接";
+function getExternalLinkLabel(url: string, fallback: string) {
+  if (!url) return fallback;
 
   try {
     const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./, "") || "打开外部链接";
+    return parsed.hostname.replace(/^www\./, "") || fallback;
   } catch {
-    return "打开外部链接";
+    return fallback;
   }
 }
 
 function buildMarketLightboxImages(
   item: MarketPostDisplayRow,
-  marketMedia: MarketMediaRow[]
+  marketMedia: MarketMediaRow[],
+  imageFallback: string,
+  coverFallback: string
 ): LightboxImage[] {
   const seen = new Set<string>();
   const images: LightboxImage[] = [];
@@ -549,13 +560,13 @@ function buildMarketLightboxImages(
   function add(url?: string | null, alt?: string | null) {
     if (!url || seen.has(url)) return;
     seen.add(url);
-    images.push({ url, alt: alt || item.title || "集市图片" });
+    images.push({ url, alt: alt || item.title || imageFallback });
   }
 
-  add(item.display_cover_image_url, item.title || "集市封面");
+  add(item.display_cover_image_url, item.title || coverFallback);
 
   marketMedia.forEach((media, index) => {
-    add(media.display_url, `${item.title || "集市图片"} ${index + 1}`);
+    add(media.display_url, `${item.title || imageFallback} ${index + 1}`);
   });
 
   return images;

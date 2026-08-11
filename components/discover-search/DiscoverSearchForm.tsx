@@ -6,11 +6,13 @@ import type {
 } from "@/lib/discover-search-types";
 import { commonSearchTags } from "@/lib/discover-search-types";
 import {
-  countryOptions,
+  getLocalizedCountryOptions,
   getCountryName,
   getRegionOptions,
   hasPresetRegions,
 } from "@/lib/region-shared";
+import { useLanguage } from "@/lib/i18n/useLanguage";
+import { getBehaviorTagLabel } from "@/lib/record-tags";
 
 type Props = {
   searchKind: DiscoverSearchKind;
@@ -27,20 +29,21 @@ export default function DiscoverSearchForm({
   onSubmit,
   onReset,
 }: Props) {
+  const { language, t } = useLanguage();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const isRecordSearch = searchKind === "records";
   const keywordLabel =
     searchKind === "projects"
-      ? "项目搜索"
+      ? t.discover.search_ui.project_search
       : searchKind === "experience"
-        ? "经验卡搜索"
-        : "记录搜索";
+        ? t.discover.search_ui.experience_search
+        : t.discover.search_ui.record_search;
   const keywordPlaceholder =
     searchKind === "projects"
-      ? "项目名 / 系统名 / 用户名"
+      ? t.discover.search_ui.project_placeholder
       : searchKind === "experience"
-        ? "经验卡标题 / 项目名 / 系统名 / 用户名"
-        : "项目名 / 记录内容 / 系统名";
+        ? t.discover.search_ui.experience_placeholder
+        : t.discover.search_ui.record_placeholder;
   const hasCustomTag =
     filters.tag.trim() && !commonSearchTags.includes(filters.tag.trim() as (typeof commonSearchTags)[number]);
 
@@ -74,7 +77,7 @@ export default function DiscoverSearchForm({
       >
         <div style={mobileGridStyle}>
           <label style={fieldLabelStyle}>
-            地区搜索
+            {t.discover.search_ui.region_search}
             <input
               value={filters.locationQuery || ""}
               onChange={(event) =>
@@ -86,7 +89,7 @@ export default function DiscoverSearchForm({
                   city: "",
                 })
               }
-              placeholder="国家 / 地域 / 城市"
+              placeholder={t.discover.search_ui.region_search_placeholder}
               style={inputStyle}
             />
           </label>
@@ -109,33 +112,33 @@ export default function DiscoverSearchForm({
           </label>
 
           <label style={fieldLabelStyle}>
-            类别
+            {t.discover.search_ui.category}
             <select
               value={filters.category}
               onChange={(event) => patch({ category: event.target.value as SearchCategory })}
               style={inputStyle}
             >
-              <option value="all">全部</option>
-              <option value="plant">种植</option>
-              <option value="system">农法设施</option>
-              <option value="insect_fish">虫鱼生态</option>
-              <option value="other">其他</option>
+              <option value="all">{t.discover.filters.all}</option>
+              <option value="plant">{t.discover.filters.plant}</option>
+              <option value="system">{t.discover.filters.system}</option>
+              <option value="insect_fish">{t.discover.filters.insect_fish}</option>
+              <option value="other">{t.discover.filters.other}</option>
             </select>
           </label>
 
           {isRecordSearch ? (
             <label style={fieldLabelStyle}>
-              标签
+              {t.discover.search_ui.tag}
               <select
                 value={filters.tag}
                 onChange={(event) => patch({ tag: event.target.value })}
                 style={inputStyle}
               >
-                <option value="">全部标签</option>
+                <option value="">{t.discover.search_ui.all_tags}</option>
                 {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
                 {commonSearchTags.map((tag) => (
                   <option key={tag} value={tag}>
-                    {tag}
+                    {getBehaviorTagLabel(tag, language)}
                   </option>
                 ))}
               </select>
@@ -151,16 +154,16 @@ export default function DiscoverSearchForm({
                 checked={filters.helpOnly}
                 onChange={(event) => patch({ helpOnly: event.target.checked })}
               />
-              只看求助
+              {t.discover.search_ui.help_only}
             </label>
           ) : <span />}
 
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={onReset} style={secondaryButtonStyle}>
-              重置
+              {t.discover.search_ui.reset}
             </button>
             <button type="submit" style={primaryButtonStyle}>
-              搜索
+              {t.discover.search_ui.search}
             </button>
           </div>
         </div>
@@ -195,21 +198,21 @@ export default function DiscoverSearchForm({
         }}
       >
         <label style={fieldLabelStyle}>
-          国家 / 地区
+          {t.discover.search_ui.country_region}
           <select
             value={filters.countryCode}
             onChange={(e) =>
               patch({
                 countryCode: e.target.value,
-                countryName: getCountryName(e.target.value, filters.countryName),
+                countryName: getCountryName(e.target.value, filters.countryName, language),
                 region: "",
                 city: filters.city,
               })
             }
             style={inputStyle}
           >
-            <option value="">全部地区</option>
-            {countryOptions.map((item) => (
+            <option value="">{t.discover.search_ui.all_regions}</option>
+            {getLocalizedCountryOptions(language).map((item) => (
               <option key={item.code} value={item.code}>
                 {item.name}
               </option>
@@ -219,20 +222,20 @@ export default function DiscoverSearchForm({
 
         {customCountry ? (
           <label style={fieldLabelStyle}>
-            自定义国家 / 地区
+            {t.discover.search_ui.custom_country_region}
             <input
               value={filters.countryName}
               onChange={(e) => patch({ countryName: e.target.value })}
-              placeholder="例如：巴西"
+              placeholder={t.discover.search_ui.country_example}
               style={inputStyle}
             />
           </label>
         ) : (
           <label style={fieldLabelStyle}>
-            省 / 州 / 地域
+            {t.discover.search_ui.region}
             {useRegionSelect ? (
               <select value={filters.region} onChange={(e) => patch({ region: e.target.value })} style={inputStyle}>
-                <option value="">全部</option>
+                <option value="">{t.discover.search_ui.all}</option>
                 {regionOptions.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
@@ -243,7 +246,7 @@ export default function DiscoverSearchForm({
               <input
                 value={filters.region}
                 onChange={(e) => patch({ region: e.target.value })}
-                placeholder="例如：浙江 / California"
+                placeholder={t.discover.search_ui.region_example}
                 style={inputStyle}
               />
             )}
@@ -251,27 +254,27 @@ export default function DiscoverSearchForm({
         )}
 
         <label style={fieldLabelStyle}>
-          城市
+          {t.discover.search_ui.city}
           <input
             value={filters.city}
             onChange={(e) => patch({ city: e.target.value })}
-            placeholder="例如：宁波 / Tokyo"
+            placeholder={t.discover.search_ui.city_example}
             style={inputStyle}
           />
         </label>
 
         <label style={fieldLabelStyle}>
-          类别
+          {t.discover.search_ui.category}
           <select
             value={filters.category}
             onChange={(e) => patch({ category: e.target.value as SearchCategory })}
             style={inputStyle}
           >
-            <option value="all">全部</option>
-            <option value="plant">种植</option>
-            <option value="system">农法设施</option>
-            <option value="insect_fish">虫鱼生态</option>
-            <option value="other">其他</option>
+            <option value="all">{t.discover.filters.all}</option>
+            <option value="plant">{t.discover.filters.plant}</option>
+            <option value="system">{t.discover.filters.system}</option>
+            <option value="insect_fish">{t.discover.filters.insect_fish}</option>
+            <option value="other">{t.discover.filters.other}</option>
           </select>
         </label>
 
@@ -288,26 +291,26 @@ export default function DiscoverSearchForm({
         {isRecordSearch ? (
           <>
             <label style={fieldLabelStyle}>
-              标签
+              {t.discover.search_ui.tag}
               <select
                 value={filters.tag}
                 onChange={(e) => patch({ tag: e.target.value })}
                 style={inputStyle}
               >
-                <option value="">全部标签</option>
+                <option value="">{t.discover.search_ui.all_tags}</option>
                 {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
                 {commonSearchTags.map((tag) => (
-                  <option key={tag} value={tag}>{tag}</option>
+                  <option key={tag} value={tag}>{getBehaviorTagLabel(tag, language)}</option>
                 ))}
               </select>
             </label>
 
             <label style={fieldLabelStyle}>
-              内容
+              {t.discover.search_ui.content}
               <input
                 value={filters.content}
                 onChange={(e) => patch({ content: e.target.value })}
-                placeholder="记录内容"
+                placeholder={t.discover.search_ui.record_content}
                 style={inputStyle}
               />
             </label>
@@ -319,13 +322,13 @@ export default function DiscoverSearchForm({
         {isRecordSearch ? (
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374737", cursor: "pointer" }}>
             <input type="checkbox" checked={filters.helpOnly} onChange={(e) => patch({ helpOnly: e.target.checked })} />
-            只看求助
+            {t.discover.search_ui.help_only}
           </label>
         ) : <span />}
 
         <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={onReset} style={secondaryButtonStyle}>重置</button>
-          <button type="submit" style={primaryButtonStyle}>搜索</button>
+          <button type="button" onClick={onReset} style={secondaryButtonStyle}>{t.discover.search_ui.reset}</button>
+          <button type="submit" style={primaryButtonStyle}>{t.discover.search_ui.search}</button>
         </div>
       </div>
     </form>

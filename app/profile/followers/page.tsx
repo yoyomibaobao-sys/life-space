@@ -23,6 +23,7 @@ import {
 import { formatDateTime, getTimeValue } from "@/lib/follow-utils";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type FollowRow = {
   follower_id: string;
@@ -44,15 +45,16 @@ type PublicArchiveRow = {
 
 type FollowerItem = {
   id: string;
-  username: string;
+  username: string | null;
   avatarUrl: string | null;
   latestRecordTime: string | null;
   publicArchiveCount: number;
-  recentArchiveTitles: string[];
+  recentArchiveTitles: Array<string | null>;
 };
 
 export default function FollowersPage() {
   const router = useRouter();
+  const { language, t } = useLanguage();
 
   const [loading, setLoading] = useState(true);
   const [followers, setFollowers] = useState<FollowerItem[]>([]);
@@ -151,13 +153,13 @@ export default function FollowersPage() {
 
           return {
             id: followerId,
-            username: profile?.username || "未设置用户名",
+            username: profile?.username || null,
             avatarUrl: profile?.avatar_url || null,
             latestRecordTime: archivesOfUser[0]?.last_record_time || null,
             publicArchiveCount: archivesOfUser.length,
             recentArchiveTitles: archivesOfUser
               .slice(0, 5)
-              .map((archive) => archive.title || "未命名项目"),
+              .map((archive) => archive.title || null),
           };
         })
         .sort(
@@ -176,15 +178,15 @@ export default function FollowersPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href="/profile" style={backLinkStyle}>
-          <UiIcon name="arrow-left" size={15} /> 返回个人资料
+          <UiIcon name="arrow-left" size={15} /> {t.profile.followers_page.back}
         </Link>
 
-        <h1 style={titleStyle}>粉丝</h1>
+        <h1 style={titleStyle}>{t.profile.followers_page.title}</h1>
 
         {loading ? (
-          <section style={emptyStyle}>加载中...</section>
+          <section style={emptyStyle}>{t.profile.loading}</section>
         ) : followers.length === 0 ? (
-          <section style={emptyStyle}>还没有关注者</section>
+          <section style={emptyStyle}>{t.profile.followers_page.empty}</section>
         ) : (
           <section style={listStyle}>
             {followers.map((item) => (
@@ -199,7 +201,7 @@ export default function FollowersPage() {
 
                 <div style={cardBodyStyle}>
                   <div style={cardTopRowStyle}>
-                    <div style={projectTitleStyle}>{item.username}</div>
+                    <div style={projectTitleStyle}>{item.username || t.profile.unset_username}</div>
                   </div>
 
                   <div
@@ -211,10 +213,12 @@ export default function FollowersPage() {
                       lineHeight: 1.6,
                     }}
                   >
-                    最近更新：
+                    {t.profile.followers_page.recent_update}
                     {item.recentArchiveTitles.length
-                      ? item.recentArchiveTitles.join("、")
-                      : "最近还没有公开项目更新"}
+                      ? item.recentArchiveTitles
+                          .map((title) => title || t.profile.public_profile.unnamed_project)
+                          .join(language === "en" ? ", " : "、")
+                      : t.profile.followers_page.no_recent_update}
                   </div>
 
                   <div style={statsLineStyle}>
@@ -230,7 +234,7 @@ export default function FollowersPage() {
                       onClick={() => router.push(`/user/${item.id}`)}
                       style={primaryButtonStyle}
                     >
-                      进入空间
+                      {t.profile.followers_page.enter_space}
                     </button>
 
                     <button
@@ -238,7 +242,7 @@ export default function FollowersPage() {
                       onClick={() => router.push(`/user/${item.id}/profile`)}
                       style={ghostButtonStyle}
                     >
-                      查看资料
+                      {t.profile.followers_page.view_profile}
                     </button>
                   </div>
                 </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function isNetworkError(message: string) {
   const text = message.toLowerCase();
@@ -16,22 +17,30 @@ function isNetworkError(message: string) {
   ].some((part) => text.includes(part));
 }
 
-function getLoginErrorMessage(message: string) {
+function getLoginErrorMessage(
+  message: string,
+  copy: {
+    invalid_credentials: string;
+    email_not_confirmed: string;
+    login_failed_prefix: string;
+  }
+) {
   const text = message.toLowerCase();
 
   if (text.includes("invalid login credentials")) {
-    return "邮箱或密码不正确；刚注册请先确认邮箱";
+    return copy.invalid_credentials;
   }
 
   if (text.includes("email not confirmed")) {
-    return "邮箱未确认，请查找来自“有时·耕作”的邮件";
+    return copy.email_not_confirmed;
   }
 
-  return `登录失败：${message}`;
+  return `${copy.login_failed_prefix}${message}`;
 }
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,7 +64,7 @@ export default function LoginPage() {
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
-      setMessage("请输入邮箱和密码");
+      setMessage(t.auth.enter_email_password);
       return;
     }
 
@@ -70,14 +79,12 @@ export default function LoginPage() {
 
       if (error) {
         if (isNetworkError(error.message)) {
-          setMessage(
-            "当前网络不稳定，暂时无法登录。你可以先本地记录，稍后再登录绑定账号。",
-          );
+          setMessage(t.auth.network_local_fallback);
           setShowLocalFallback(true);
           return;
         }
 
-        setMessage(getLoginErrorMessage(error.message));
+        setMessage(getLoginErrorMessage(error.message, t.auth));
         return;
       }
 
@@ -89,9 +96,7 @@ export default function LoginPage() {
 
       router.replace("/archive");
     } catch {
-      setMessage(
-        "当前网络不稳定，暂时无法登录。你可以先本地记录，稍后再登录绑定账号。",
-      );
+      setMessage(t.auth.network_local_fallback);
       setShowLocalFallback(true);
     } finally {
       setLoading(false);
@@ -103,14 +108,14 @@ export default function LoginPage() {
     const now = Date.now();
 
     if (now - lastSentTime < 30000) {
-      setMessage("30 秒后再试");
+      setMessage(t.auth.retry_after_30_seconds);
       return;
     }
 
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail) {
-      setMessage("请输入邮箱");
+      setMessage(t.auth.enter_email);
       return;
     }
 
@@ -123,14 +128,14 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setMessage(`发送失败：${error.message}`);
+        setMessage(`${t.auth.send_failed_prefix}${error.message}`);
         return;
       }
 
       setLastSentTime(now);
-      setMessage("重置邮件已发送，请查找来自“有时·耕作”的邮件");
+      setMessage(t.auth.reset_email_sent);
     } catch {
-      setMessage("网络异常");
+      setMessage(t.auth.network_error);
     } finally {
       setLoading(false);
     }
@@ -145,14 +150,14 @@ export default function LoginPage() {
       }}
     >
       <div style={{ width: "100%", maxWidth: 320 }}>
-        <h1 style={{ marginBottom: 10 }}>登录</h1>
+        <h1 style={{ marginBottom: 10 }}>{t.auth.login_title}</h1>
 
         <form onSubmit={handleLogin}>
-          <p>邮箱</p>
+          <p>{t.auth.email}</p>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="请输入邮箱"
+            placeholder={t.auth.email_placeholder}
             autoComplete="email"
             style={{
               padding: "12px",
@@ -163,7 +168,7 @@ export default function LoginPage() {
             }}
           />
 
-          <p style={{ marginTop: 16 }}>密码</p>
+          <p style={{ marginTop: 16 }}>{t.auth.password}</p>
           <PasswordInput value={password} onChange={setPassword} />
 
           <div style={{ marginTop: 10, fontSize: 12 }}>
@@ -174,7 +179,7 @@ export default function LoginPage() {
                 onChange={(e) => setRemember(e.target.checked)}
                 style={{ marginRight: 6 }}
               />
-              记住邮箱
+              {t.auth.remember_email}
             </label>
           </div>
 
@@ -193,7 +198,7 @@ export default function LoginPage() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? "处理中..." : "登录"}
+            {loading ? t.auth.processing : t.auth.login}
           </button>
 
           <button
@@ -212,7 +217,7 @@ export default function LoginPage() {
               fontWeight: 500,
             }}
           >
-            注册账号
+            {t.auth.register_account}
           </button>
 
           <div
@@ -225,7 +230,7 @@ export default function LoginPage() {
               textAlign: "right",
             }}
           >
-            忘记密码？
+            {t.auth.forgot_password}
           </div>
         </form>
 
@@ -261,7 +266,7 @@ export default function LoginPage() {
               fontWeight: 500,
             }}
           >
-            先本地记录
+            {t.auth.local_first}
           </button>
         ) : null}
       </div>

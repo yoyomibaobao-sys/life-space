@@ -1,4 +1,5 @@
 import type { UiIconName } from "@/components/ui/UiIcon";
+import type { Language } from "@/lib/i18n";
 
 export type ArchiveCategory = "plant" | "system" | "insect_fish" | "other";
 
@@ -60,7 +61,17 @@ export const defaultSystemNamesByCategory: Record<
   other: [],
 };
 
-export function getArchiveCategoryLabel(value?: string | null) {
+export function getArchiveCategoryLabel(
+  value?: string | null,
+  language: Language = "zh"
+) {
+  if (language === "en") {
+    if (value === "plant") return "Cultivation";
+    if (value === "system") return "Methods & facilities";
+    if (value === "insect_fish") return "Insects & aquatic life";
+    if (value === "other") return "Other";
+    return "Project";
+  }
   const match = archiveCategoryOptions.find((item) => item.value === value);
 
   return match?.label || "项目";
@@ -83,14 +94,39 @@ export function isNonPlantArchiveCategory(
   return value === "system" || value === "insect_fish" || value === "other";
 }
 
-export function getArchiveNamePlaceholder(value?: string | null) {
+export function getArchiveNamePlaceholder(
+  value?: string | null,
+  language: Language = "zh"
+) {
+  if (language === "en") {
+    if (value === "system") return "Methods & facilities";
+    if (value === "insect_fish") return "Insects & aquatic life";
+    if (value === "other") return "Other";
+    return "Cultivation";
+  }
   if (value === "system") return "农法设施";
   if (value === "insect_fish") return "虫鱼生态";
   if (value === "other") return "其他";
   return "种植";
 }
 
-export function getArchiveCategoryDescription(value?: string | null) {
+export function getArchiveCategoryDescription(
+  value?: string | null,
+  language: Language = "zh"
+) {
+  if (language === "en") {
+    if (value === "plant") {
+      return "Cultivation records for flowers, vegetables, fruit, trees, fungi, mosses, and aquatic plants";
+    }
+    if (value === "system") {
+      return "Methods and facilities such as composting, irrigation, greenhouses, hydroponics, and no-till practice";
+    }
+    if (value === "insect_fish") {
+      return "Insects, fish, shrimp, small aquatic ecosystems, and miniature habitats";
+    }
+    if (value === "other") return "Other projects related to natural living";
+    return "Create an archive for something you care for over time";
+  }
   const match = archiveCategoryOptions.find((item) => item.value === value);
 
   return match?.description || "为一个长期照料的项目建立档案";

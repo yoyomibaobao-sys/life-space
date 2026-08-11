@@ -1,6 +1,7 @@
 "use client";
 
 import type { SubTagItem } from "@/lib/archive-page-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
@@ -20,6 +21,8 @@ export default function ArchiveSubTagChip({
   onRename,
   onDelete,
 }: Props) {
+  const { t } = useLanguage();
+
   return (
     <span
       style={{
@@ -46,7 +49,7 @@ export default function ArchiveSubTagChip({
           lineHeight: compact ? 1.15 : 1.3,
           boxShadow: active ? "0 6px 14px rgba(63,125,61,0.18)" : "none",
         }}
-        title="双击可修改名称"
+        title={t.archive_workspace.double_click_edit}
       >
         {tag.name}
       </button>
@@ -63,7 +66,7 @@ export default function ArchiveSubTagChip({
           padding: compact ? "2px 1px" : 0,
           lineHeight: 1,
         }}
-        title="删除分类"
+        title={t.archive_workspace.delete_category}
       >
         <UiIcon name="close" size={12} />
       </button>

@@ -1,12 +1,10 @@
+"use client";
+
 import type { CSSProperties } from "react";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
 import { formatCompactActivityTime } from "@/lib/activity-time";
-
-const compactNumberFormatter = new Intl.NumberFormat("zh-CN", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type MetaItem = {
   key: string;
@@ -45,6 +43,11 @@ export default function ProjectMetaLine({
   className?: string;
   style?: CSSProperties;
 }) {
+  const { language, t } = useLanguage();
+  const compactNumberFormatter = new Intl.NumberFormat(
+    language === "en" ? "en" : "zh-CN",
+    { notation: "compact", maximumFractionDigits: 1 }
+  );
   const items: MetaItem[] = [];
   const addCount = (
     key: string,
@@ -67,8 +70,8 @@ export default function ProjectMetaLine({
     items.push({
       key: "record",
       icon: "record",
-      accessibleLabel: `记录 ${count} 条`,
-      value: `${compactNumberFormatter.format(count)}条`,
+      accessibleLabel: `${t.meta.records} ${count}`,
+      value: `${compactNumberFormatter.format(count)}${t.meta.record_suffix}`,
     });
   }
   if (durationDays !== null && durationDays !== undefined) {
@@ -76,22 +79,22 @@ export default function ProjectMetaLine({
     items.push({
       key: "duration",
       icon: "duration",
-      accessibleLabel: `${ended ? "历时" : "已持续"} ${days} 天`,
-      value: `${compactNumberFormatter.format(days)}天`,
+      accessibleLabel: `${ended ? t.meta.duration_ended : t.meta.duration_ongoing} ${days} ${t.meta.day_suffix}`,
+      value: `${compactNumberFormatter.format(days)}${t.meta.day_suffix}`,
     });
   }
-  addCount("view", "view", "浏览", viewCount);
-  addCount("follow", "follow", "关注", followerCount);
-  addCount("comment", "comment", "评论", commentCount);
-  addCount("photo", "image", "照片", photoCount);
-  addCount("project", "project", "项目", projectCount);
-  addCount("bookmark", "bookmark", "收藏", bookmarkCount);
-  addCount("helpful", "helpful", "有帮助", helpfulCount);
+  addCount("view", "view", t.meta.views, viewCount);
+  addCount("follow", "follow", t.meta.follows, followerCount);
+  addCount("comment", "comment", t.meta.comments, commentCount);
+  addCount("photo", "image", t.meta.photos, photoCount);
+  addCount("project", "project", t.meta.projects, projectCount);
+  addCount("bookmark", "bookmark", t.meta.bookmarks, bookmarkCount);
+  addCount("helpful", "helpful", t.meta.helpful, helpfulCount);
   if (updatedAt) {
     items.push({
       key: "update",
       icon: "clock",
-      accessibleLabel: `更新 ${formatCompactActivityTime(updatedAt)}`,
+      accessibleLabel: `${t.meta.updated} ${formatCompactActivityTime(updatedAt, undefined, language)}`,
       value: "",
       dateValue: updatedAt,
     });

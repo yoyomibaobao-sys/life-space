@@ -13,6 +13,7 @@ import { getDurationDays } from "@/lib/follow-utils";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
 import styles from "@/components/discover/DiscoverProjectFeed.module.css";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export function DiscoverProjectCard({
   item,
@@ -21,23 +22,28 @@ export function DiscoverProjectCard({
   item: DiscoveryProjectFeedItem;
   eager?: boolean;
 }) {
+  const { language, t } = useLanguage();
   const [imageFailed, setImageFailed] = useState(false);
-  const title = item.archive_title?.trim() || "未命名项目";
-  const categoryLabel = getArchiveCategoryLabel(item.category);
+  const title = item.archive_title?.trim() || t.discover.unnamed_project;
+  const categoryLabel = getArchiveCategoryLabel(item.category, language);
   const categoryIcon = getArchiveCategoryIcon(item.category);
-  const activityTime = formatDiscoveryActivityTime(item.public_activity_at);
+  const activityTime = formatDiscoveryActivityTime(
+    item.public_activity_at,
+    undefined,
+    language
+  );
   const durationDays = getDurationDays(
     item.archive_created_at,
     item.archive_ended_at
   );
-  const ownerName = item.profile_display_name?.trim() || "一位种植者";
+  const ownerName = item.profile_display_name?.trim() || t.discover.default_grower;
   const region = item.profile_region?.trim() || null;
   const showImage = Boolean(item.display_image_url) && !imageFailed;
 
   return (
     <Link
       href={`/archive/${item.archive_id}`}
-      aria-label={`查看项目：${title}`}
+      aria-label={`${t.discover.view_project_prefix}${title}`}
       className={styles.card}
     >
       <div className={styles.imageRegion}>
@@ -67,7 +73,7 @@ export function DiscoverProjectCard({
           </span>
           {item.has_public_help ? (
             <span className={styles.helpChip}>
-              求助
+              {t.discover.help_badge}
             </span>
           ) : null}
         </div>

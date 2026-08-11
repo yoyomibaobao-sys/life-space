@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { SupabaseUser } from "@/lib/domain-types";
 import UiIcon from "@/components/ui/UiIcon";
 import { formatPreciseDateTime } from "@/lib/date-time";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type NotificationItem = {
   id: string;
@@ -20,6 +21,7 @@ type NotificationItem = {
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -125,11 +127,11 @@ export default function NotificationsPage() {
         <div style={topBarStyle}>
           <div>
             <Link href="/profile" style={backLinkStyle}>
-              <UiIcon name="arrow-left" size={15} /> 返回个人资料
+              <UiIcon name="arrow-left" size={15} /> {t.notifications.back_to_profile}
             </Link>
-            <h1 style={titleStyle}>通知</h1>
+            <h1 style={titleStyle}>{t.notifications.title}</h1>
             <div style={subtitleStyle}>
-              关注、评论、有帮助反馈和项目更新提醒
+              {t.notifications.subtitle}
             </div>
           </div>
 
@@ -140,15 +142,17 @@ export default function NotificationsPage() {
               disabled={markingAll}
               style={markAllButtonStyle}
             >
-              {markingAll ? "处理中..." : `全部已读（${unreadCount}）`}
+              {markingAll
+                ? t.notifications.processing
+                : `${t.notifications.mark_all_read_prefix}${unreadCount}${t.notifications.mark_all_read_suffix}`}
             </button>
           )}
         </div>
 
         {loading ? (
-          <section style={emptyStyle}>加载中...</section>
+          <section style={emptyStyle}>{t.notifications.loading}</section>
         ) : items.length === 0 ? (
-          <section style={emptyStyle}>还没有通知</section>
+          <section style={emptyStyle}>{t.notifications.empty}</section>
         ) : (
           <section style={listStyle}>
             {items.map((item) => (
@@ -163,8 +167,8 @@ export default function NotificationsPage() {
                 }}
               >
                 <div style={cardHeaderStyle}>
-                  <span style={typeBadgeStyle}>{getNotificationTypeLabel(item.type)}</span>
-                  {!item.is_read && <span style={unreadBadgeStyle}>未读</span>}
+                  <span style={typeBadgeStyle}>{getNotificationTypeLabel(item.type, t.notifications.types)}</span>
+                  {!item.is_read && <span style={unreadBadgeStyle}>{t.notifications.unread}</span>}
                 </div>
 
                 <div style={itemTitleStyle}>{item.title}</div>
@@ -181,18 +185,11 @@ export default function NotificationsPage() {
   );
 }
 
-function getNotificationTypeLabel(type: string) {
-  const map: Record<string, string> = {
-    comment: "评论",
-    user_follow: "关注",
-    archive_follow: "项目关注",
-    flower: "有帮助",
-    experience_comment: "经验卡评论",
-    experience_helpful: "经验卡有帮助",
-    followed_archive_record: "项目更新",
-  };
-
-  return map[type] || "通知";
+function getNotificationTypeLabel(
+  type: string,
+  labels: Record<string, string>
+) {
+  return labels[type] || labels.fallback;
 }
 
 function formatNotificationTime(value: string) {

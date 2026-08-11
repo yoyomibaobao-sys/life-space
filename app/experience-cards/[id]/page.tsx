@@ -35,6 +35,7 @@ import { deleteCachedExperienceCardVideo } from "@/lib/experience-card-video-cac
 import type { ExperienceCardDetail } from "@/lib/experience-card-types";
 import { formatStorageBytes } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type PendingAction = "publish" | "unpublish" | "delete" | null;
 
@@ -54,6 +55,7 @@ export default function ExperienceCardPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const { language, t } = useLanguage();
   const [detail, setDetail] = useState<ExperienceCardDetail | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,12 +125,12 @@ export default function ExperienceCardPage({
   function beginRename() {
     if (!detail || !isOwner) return;
     if (editorDirty) {
-      showToast("请先保存下面尚未完成的内容修改");
+      showToast(t.experience.save_pending_first);
       scrollToEditor();
       return;
     }
     if (detail.card.status === "published" && !detail.isPubliclyAvailable) {
-      showToast("请先在下方检查来源记录，再修改名称");
+      showToast(t.experience.inspect_source_first);
       scrollToEditor();
       return;
     }
@@ -151,7 +153,7 @@ export default function ExperienceCardPage({
     if (!detail || !isOwner || titleSaving) return;
     const nextTitle = titleDraft.trim();
     if (nextTitle.length < 1 || nextTitle.length > 120) {
-      setErrorText("名称需为1～120个字符。");
+      setErrorText(t.experience.title_length_error);
       return;
     }
     if (nextTitle === detail.card.title.trim()) {
@@ -175,9 +177,9 @@ export default function ExperienceCardPage({
       setRenaming(false);
       setEditorRevision((value) => value + 1);
       await reload(false);
-      showToast("经验卡名称已修改；原MP4可按新名称重新生成");
+      showToast(t.experience.title_saved_video_hint);
     } catch (error) {
-      setErrorText(getExperienceCardErrorText(error));
+      setErrorText(getExperienceCardErrorText(error, language));
     } finally {
       setTitleSaving(false);
     }
@@ -208,7 +210,7 @@ export default function ExperienceCardPage({
     if (!detail || !isOwner || descriptionSaving) return;
     const nextDescription = descriptionDraft.trim();
     if (nextDescription.length > 500) {
-      setErrorText("详情描述最多500个字符。");
+      setErrorText(t.experience.description_length_error);
       return;
     }
     if (nextDescription === (detail.card.description || "").trim()) {
@@ -236,9 +238,9 @@ export default function ExperienceCardPage({
           : current
       );
       setDescriptionEditing(false);
-      showToast(nextDescription ? "详情描述已保存" : "详情描述已清空");
+      showToast(nextDescription ? t.experience.description_saved : t.experience.description_cleared);
     } catch (error) {
-      setErrorText(getExperienceCardErrorText(error));
+      setErrorText(getExperienceCardErrorText(error, language));
     } finally {
       setDescriptionSaving(false);
     }
@@ -257,19 +259,19 @@ export default function ExperienceCardPage({
     try {
       if (action === "publish") {
         await publishExperienceCard(detail.card.id);
-        showToast("经验卡已公开");
+        showToast(t.experience.card_published);
         await reload();
       } else if (action === "unpublish") {
         await unpublishExperienceCard(detail.card.id);
-        showToast("经验卡已设为私密");
+        showToast(t.experience.card_private);
         await reload();
       } else {
         await deleteExperienceCard(detail.card.id);
-        showToast("经验卡已删除，原记录不受影响");
+        showToast(t.experience.deleted_toast);
         router.replace("/experience-cards");
       }
     } catch (error) {
-      setErrorText(getExperienceCardErrorText(error));
+      setErrorText(getExperienceCardErrorText(error, language));
     } finally {
       setBusy(false);
       setPendingAction(null);
@@ -278,7 +280,7 @@ export default function ExperienceCardPage({
 
   function requireSavedEditor() {
     if (!editorDirty) return true;
-    showToast("请先保存下面尚未完成的内容修改");
+    showToast(t.experience.save_pending_first);
     scrollToEditor();
     return false;
   }
@@ -317,7 +319,7 @@ export default function ExperienceCardPage({
       await copyCardLink();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      showToast("暂时无法分享，请复制浏览器地址");
+      showToast(t.experience.share_failed_browser);
     }
   }
 
@@ -327,26 +329,26 @@ export default function ExperienceCardPage({
 
     try {
       await navigator.clipboard.writeText(url);
-      showToast("公开链接已复制");
+      showToast(t.experience.public_link_copied);
     } catch {
-      showToast("暂时无法复制，请复制浏览器地址");
+      showToast(t.experience.copy_failed_browser);
     }
   }
 
   if (loading) {
-    return <main style={pageStyle}>正在读取经验卡...</main>;
+    return <main style={pageStyle}>{t.experience.reading_card}</main>;
   }
 
   if (!detail) {
     return (
       <main style={pageStyle}>
         <section style={emptyStyle}>
-          <h1 style={titleStyle}>经验卡当前不可查看</h1>
+          <h1 style={titleStyle}>{t.experience.unavailable_title}</h1>
           <p style={mutedStyle}>
-            它可能尚未公开，或其中一条来源记录已经改为私密、进入回收站或被删除。
+            {t.experience.unavailable_hint}
           </p>
           <Link href="/discover" style={secondaryLinkStyle}>
-            返回发现
+            {t.experience.back_to_discover}
           </Link>
         </section>
       </main>
@@ -359,12 +361,12 @@ export default function ExperienceCardPage({
   );
   const createdDate = formatExperienceCardDate(detail.card.created_at);
   const recordSummary = [
-    durationDays ? `${durationDays}天` : null,
-    `${detail.records.length}条`,
+    durationDays ? `${durationDays}${t.experience.day_suffix}` : null,
+    `${detail.records.length}${t.experience.record_suffix}`,
   ]
     .filter(Boolean)
     .join(" · ");
-  const authorName = detail.author?.username || "用户";
+  const authorName = detail.author?.username || t.experience.default_user;
   const systemName =
     detail.archive.system_name?.trim() ||
     detail.archive.species_name_snapshot?.trim() ||
@@ -384,11 +386,11 @@ export default function ExperienceCardPage({
           style={backLinkStyle}
         >
           <UiIcon name="arrow-left" size={15} />
-          {isOwner ? " 我的经验卡" : " 返回发现"}
+          {isOwner ? ` ${t.experience.back_my_cards}` : ` ${t.experience.back_to_discover}`}
         </Link>
       </header>
 
-      <section style={heroStyle} aria-label="经验卡成品与概况">
+      <section style={heroStyle} aria-label={t.experience.finished_aria}>
         <div style={videoColumnStyle}>
           {isOwner ? (
             <ExperienceCardVideoPanel
@@ -411,7 +413,7 @@ export default function ExperienceCardPage({
             <div style={renameEditorStyle}>
               <input
                 autoFocus
-                aria-label="经验卡名称"
+                aria-label={t.experience.card_name_aria}
                 value={titleDraft}
                 maxLength={120}
                 onChange={(event) => setTitleDraft(event.target.value)}
@@ -431,7 +433,7 @@ export default function ExperienceCardPage({
                   }}
                   style={renameCancelButtonStyle}
                 >
-                  取消
+                  {t.experience.cancel}
                 </button>
                 <button
                   type="button"
@@ -439,7 +441,7 @@ export default function ExperienceCardPage({
                   onClick={() => void saveTitle()}
                   style={renameSaveButtonStyle}
                 >
-                  {titleSaving ? "保存中..." : "保存名称"}
+                  {titleSaving ? t.experience.saving : t.experience.save_name}
                 </button>
               </div>
             </div>
@@ -450,7 +452,7 @@ export default function ExperienceCardPage({
                   type="button"
                   onClick={beginRename}
                   style={editableTitleButtonStyle}
-                  aria-label={`修改经验卡名称：${detail.card.title}`}
+                  aria-label={`${t.experience.edit_name_prefix}${detail.card.title}`}
                 >
                   <span>{detail.card.title}</span>
                   <UiIcon name="edit" size={17} />
@@ -463,30 +465,30 @@ export default function ExperienceCardPage({
 
           <div style={overviewGridStyle}>
             <OverviewItem
-              label="项目"
-              value={detail.archive.title || "查看项目"}
+              label={t.experience.project}
+              value={detail.archive.title || t.experience.view_project}
               href={`/archive/${detail.archive.id}`}
             />
             <OverviewItem
-              label="系统名"
-              value={systemName || "未填写"}
+              label={t.experience.system_name}
+              value={systemName || t.experience.not_filled}
               href={systemNameHref}
             />
             <OverviewItem
-              label="记录"
+              label={t.experience.records}
               value={recordSummary}
             />
             <OverviewItem
-              label="创建"
-              value={createdDate || "时间暂缺"}
+              label={t.experience.created}
+              value={createdDate || t.experience.time_missing}
             />
             <div style={overviewStatusItemStyle}>
-              <span style={overviewLabelStyle}>状态</span>
+              <span style={overviewLabelStyle}>{t.experience.status}</span>
               {isOwner ? (
                 <div
                   style={visibilityToggleStyle}
                   role="group"
-                  aria-label="经验卡公开方式"
+                  aria-label={t.experience.visibility_aria}
                 >
                   <button
                     type="button"
@@ -494,7 +496,7 @@ export default function ExperienceCardPage({
                     onClick={() => requestVisibility(false)}
                     style={visibilityChoiceStyle(!isPublished)}
                   >
-                    私密
+                    {t.experience.private}
                   </button>
                   <button
                     type="button"
@@ -502,25 +504,25 @@ export default function ExperienceCardPage({
                     onClick={() => requestVisibility(true)}
                     style={visibilityChoiceStyle(isPublished)}
                   >
-                    公开
+                    {t.experience.public}
                   </button>
                 </div>
               ) : (
-                <strong style={overviewValueStyle}>公开</strong>
+                <strong style={overviewValueStyle}>{t.experience.public}</strong>
               )}
             </div>
             {isOwner || detail.card.description ? (
               <div style={overviewDescriptionItemStyle}>
-                <span style={overviewLabelStyle}>详情描述</span>
+                <span style={overviewLabelStyle}>{t.experience.description}</span>
                 {isOwner && descriptionEditing ? (
                   <div style={descriptionEditorStyle}>
                     <textarea
                       autoFocus
-                      aria-label="详情描述"
+                      aria-label={t.experience.description}
                       value={descriptionDraft}
                       maxLength={500}
                       rows={3}
-                      placeholder="补充这张经验卡的背景、结果或注意事项"
+                      placeholder={t.experience.description_placeholder}
                       onChange={(event) =>
                         setDescriptionDraft(event.target.value)
                       }
@@ -537,7 +539,7 @@ export default function ExperienceCardPage({
                         onClick={cancelDescriptionEdit}
                         style={renameCancelButtonStyle}
                       >
-                        取消
+                        {t.experience.cancel}
                       </button>
                       <button
                         type="button"
@@ -545,7 +547,7 @@ export default function ExperienceCardPage({
                         onClick={() => void saveDescription()}
                         style={renameSaveButtonStyle}
                       >
-                        {descriptionSaving ? "保存中..." : "保存"}
+                        {descriptionSaving ? t.experience.saving : t.experience.save}
                       </button>
                     </div>
                   </div>
@@ -554,10 +556,10 @@ export default function ExperienceCardPage({
                     type="button"
                     onClick={beginDescriptionEdit}
                     style={editableDescriptionButtonStyle}
-                    aria-label="编辑详情描述"
+                    aria-label={t.experience.edit_description_aria}
                   >
                     <span>
-                      {detail.card.description?.trim() || "点击添加描述"}
+                      {detail.card.description?.trim() || t.experience.add_description}
                     </span>
                     <UiIcon name="edit" size={13} />
                   </button>
@@ -571,12 +573,12 @@ export default function ExperienceCardPage({
           </div>
 
           {!isOwner ? (
-            <div style={sourceLinksStyle} aria-label="经验卡作者">
+            <div style={sourceLinksStyle} aria-label={t.experience.author_aria}>
               <Link
                 href={`/user/${detail.card.user_id}`}
                 style={sourceLinkStyle}
               >
-                <span style={sourceLabelStyle}>用户</span>
+                <span style={sourceLabelStyle}>{t.experience.user}</span>
                 <span style={sourceValueStyle}>{authorName}</span>
                 <UiIcon name="arrow-right" size={14} />
               </Link>
@@ -584,8 +586,8 @@ export default function ExperienceCardPage({
           ) : null}
 
           {isOwner ? (
-            <div style={ownerActionStackStyle} aria-label="经验卡操作">
-              <div style={actionButtonRowStyle} aria-label="MP4操作">
+            <div style={ownerActionStackStyle} aria-label={t.experience.card_actions_aria}>
+              <div style={actionButtonRowStyle} aria-label={t.experience.mp4_actions_aria}>
                 <button
                   type="button"
                   onClick={generateVideo}
@@ -595,10 +597,10 @@ export default function ExperienceCardPage({
                   )}
                 >
                   {videoStatus.generating
-                    ? "生成中..."
+                    ? t.experience.generating
                     : videoStatus.hasVideo
-                      ? "重新生成MP4"
-                      : "生成MP4"}
+                      ? t.experience.regenerate_mp4
+                      : t.experience.generate_mp4}
                 </button>
                 {videoStatus.hasVideo && !videoStatus.generating ? (
                   <>
@@ -607,20 +609,20 @@ export default function ExperienceCardPage({
                       onClick={shareVideo}
                       style={secondaryButtonStyle}
                     >
-                      <UiIcon name="share" size={15} /> 分享MP4
+                      <UiIcon name="share" size={15} /> {t.experience.share_mp4}
                     </button>
                     <button
                       type="button"
                       onClick={saveVideo}
                       style={secondaryButtonStyle}
                     >
-                      保存MP4
+                      {t.experience.save_mp4}
                     </button>
                   </>
                 ) : null}
                 {!videoStatus.loading ? (
                   <span style={videoMetaStyle}>
-                    {videoStatus.selectedImageCount}张
+                    {videoStatus.selectedImageCount}{t.experience.image_suffix}
                     {videoStatus.hasVideo && videoStatus.sizeBytes
                       ? ` · ${formatStorageBytes(videoStatus.sizeBytes)}`
                       : ""}
@@ -631,7 +633,7 @@ export default function ExperienceCardPage({
               {videoStatus.generating ? (
                 <div style={videoProgressWrapStyle}>
                   <div style={videoProgressTextStyle}>
-                    <span>正在本机生成视频</span>
+                    <span>{t.experience.generating_local_video}</span>
                     <strong>{Math.round(videoStatus.progress * 100)}%</strong>
                   </div>
                   <div style={videoProgressTrackStyle}>
@@ -647,27 +649,27 @@ export default function ExperienceCardPage({
                     onClick={() => videoPanelRef.current?.stop()}
                     style={stopVideoButtonStyle}
                   >
-                    停止生成
+                    {t.experience.stop_generating}
                   </button>
                 </div>
               ) : null}
 
             </div>
           ) : detail.isPubliclyAvailable ? (
-            <div style={readerActionRowStyle} aria-label="经验卡分享">
+            <div style={readerActionRowStyle} aria-label={t.experience.card_share_aria}>
               <button
                 type="button"
                 onClick={() => void shareCard()}
                 style={secondaryButtonStyle}
               >
-                <UiIcon name="share" size={15} /> 分享
+                <UiIcon name="share" size={15} /> {t.experience.share}
               </button>
               <button
                 type="button"
                 onClick={() => void copyCardLink()}
                 style={secondaryButtonStyle}
               >
-                复制链接
+                {t.experience.copy_link}
               </button>
             </div>
           ) : null}
@@ -676,7 +678,7 @@ export default function ExperienceCardPage({
 
       {isOwner && !detail.sourceIsComplete ? (
         <section style={warningStyle}>
-          来源记录已经变化。这张经验卡已自动停止公开，请重新选择至少3条有效记录后再发布。
+          {t.experience.source_changed_warning}
         </section>
       ) : null}
 
@@ -685,7 +687,7 @@ export default function ExperienceCardPage({
       !detail.isPubliclyAvailable &&
       detail.sourceIsComplete ? (
         <section style={warningStyle}>
-          项目或其中一条来源记录当前不是公开状态，因此游客暂时无法查看这张经验卡。
+          {t.experience.source_private_warning}
         </section>
       ) : null}
 
@@ -701,7 +703,7 @@ export default function ExperienceCardPage({
       {!isOwner ? (
         <section style={timelineSectionStyle}>
           <div style={timelineHeadingStyle}>
-            <strong>经验过程</strong>
+            <strong>{t.experience.process}</strong>
           </div>
           <ExperienceCardTimeline
             archive={detail.archive}
@@ -715,7 +717,7 @@ export default function ExperienceCardPage({
           id="experience-card-editor"
           ref={editorRef}
           style={editorSectionStyle}
-          aria-label="经验卡内容编辑"
+          aria-label={t.experience.editor_aria}
         >
           <h2 style={editorSectionTitleStyle}>
             <button
@@ -725,7 +727,7 @@ export default function ExperienceCardPage({
                 if (
                   editorOpen &&
                   editorDirty &&
-                  !window.confirm("修改尚未保存，确定收起吗？")
+                  !window.confirm(t.experience.unsaved_collapse_confirm)
                 ) {
                   return;
                 }
@@ -734,7 +736,7 @@ export default function ExperienceCardPage({
               }}
               style={editorHeadingButtonStyle}
             >
-              {editorOpen ? "收起编辑" : "编辑经验卡"}
+              {editorOpen ? t.experience.collapse_editor : t.experience.edit_card}
               <UiIcon
                 name={editorOpen ? "chevron-up" : "chevron-down"}
                 size={14}
@@ -754,7 +756,7 @@ export default function ExperienceCardPage({
       ) : null}
 
       {isOwner ? (
-        <section style={deleteSectionStyle} aria-label="删除经验卡">
+        <section style={deleteSectionStyle} aria-label={t.experience.delete_aria}>
           <button
             type="button"
             onClick={() => {
@@ -763,17 +765,17 @@ export default function ExperienceCardPage({
             }}
             style={deleteExperienceCardButtonStyle}
           >
-            <UiIcon name="trash" size={14} /> 删除经验卡
+            <UiIcon name="trash" size={14} /> {t.experience.delete_title}
           </button>
         </section>
       ) : null}
 
       <ConfirmDialog
         open={pendingAction === "publish"}
-        title="公开经验卡"
-        message={`公开后，这张经验卡及所选${detail.records.length}条记录可被他人查看；其他记录不变。`}
-        confirmText={busy ? "处理中..." : "确认公开"}
-        cancelText="取消"
+        title={t.experience.publish_title}
+        message={`${t.experience.publish_message_prefix}${detail.records.length}${t.experience.publish_message_suffix}`}
+        confirmText={busy ? t.experience.processing : t.experience.confirm_publish}
+        cancelText={t.experience.cancel}
         confirmDisabled={busy}
         cancelDisabled={busy}
         onClose={() => {
@@ -784,10 +786,10 @@ export default function ExperienceCardPage({
 
       <ConfirmDialog
         open={pendingAction === "unpublish"}
-        title="设为私密"
-        message="设为私密后，这张经验卡停止公开；原项目和记录状态不变。"
-        confirmText={busy ? "处理中..." : "设为私密"}
-        cancelText="取消"
+        title={t.experience.make_private_title}
+        message={t.experience.make_private_message}
+        confirmText={busy ? t.experience.processing : t.experience.make_private}
+        cancelText={t.experience.cancel}
         confirmDisabled={busy}
         cancelDisabled={busy}
         onClose={() => {
@@ -798,10 +800,10 @@ export default function ExperienceCardPage({
 
       <ConfirmDialog
         open={pendingAction === "delete"}
-        title="删除经验卡"
-        message="只删除经验卡及其引用关系，原项目、原记录和照片不会删除。"
-        confirmText={busy ? "删除中..." : "确认删除"}
-        cancelText="取消"
+        title={t.experience.delete_title}
+        message={t.experience.delete_message}
+        confirmText={busy ? t.experience.deleting : t.experience.confirm_delete}
+        cancelText={t.experience.cancel}
         danger
         confirmDisabled={busy}
         cancelDisabled={busy}

@@ -26,6 +26,7 @@ import UiIcon from "@/components/ui/UiIcon";
 import type { MediaItem } from "@/lib/domain-types";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type ArchiveRecordCardProps = {
   archive: ArchiveDetailArchive;
@@ -93,9 +94,11 @@ export default function ArchiveRecordCard({
   onCycleChange,
   isMobileViewport = false,
 }: ArchiveRecordCardProps) {
+  const { language, t } = useLanguage();
+  const copy = t.record;
   const isLocalMode = variant === "local";
-  const cycleTerminology = getArchiveCycleTerminology(archive.category);
-  const mediaList = buildMediaList(item.media, archive.title || "项目");
+  const cycleTerminology = getArchiveCycleTerminology(archive.category, language);
+  const mediaList = buildMediaList(item.media, archive.title || t.archive.categories.fallback_label);
   const isPlantArchive = archive.category === "plant";
   const isHelpRecord = item.status_tag === "help";
   const isResolvedRecord = item.status_tag === "resolved";
@@ -114,9 +117,9 @@ export default function ArchiveRecordCard({
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
 
   const statusBadge = isHelpRecord
-    ? { label: "求助中", kind: "help" as const }
+    ? { label: copy.help_in_progress, kind: "help" as const }
     : isResolvedRecord
-      ? { label: "已解决", kind: "resolved" as const }
+      ? { label: copy.resolved, kind: "resolved" as const }
       : null;
 
   async function handleAddMediaFiles(fileList: FileList | null) {
@@ -183,8 +186,9 @@ export default function ArchiveRecordCard({
   const recordMetaText =
     archive && startTime ? (
       <>
-        {index === 0 ? "最新进展 · " : ""}第{" "}
-        {getDayNumber(startTime, item.record_time)} 天 ·{" "}
+        {index === 0 ? `${copy.latest_progress} · ` : ""}
+        {copy.day_prefix} {getDayNumber(startTime, item.record_time)}
+        {copy.day_suffix ? ` ${copy.day_suffix}` : ""} ·{" "}
         {formatDateTime(item.record_time)}
       </>
     ) : null;
@@ -241,7 +245,7 @@ export default function ArchiveRecordCard({
                   initialText={item.note || ""}
                   readOnly={mode !== "owner"}
                   compact
-                  placeholder="添加文字"
+                  placeholder={copy.add_text}
                   onSaveOverride={
                     isLocalMode
                       ? async (nextText) =>
@@ -264,7 +268,7 @@ export default function ArchiveRecordCard({
                       setHelpMenuOpen(false);
                       setVisibilityMenuOpen(false);
                     }}
-                    aria-label="更多记录操作"
+                    aria-label={copy.more_actions}
                     style={mobileRecordMoreButtonStyle}
                   >
                     <UiIcon name="more" size={20} />
@@ -571,6 +575,9 @@ function DesktopAndMobileRecordActions({
   onAddMediaFiles: (fileList: FileList | null) => Promise<void>;
   onRecordDeleted?: (recordId: string) => void;
 }) {
+  const { t } = useLanguage();
+  const copy = t.record;
+
   if (isMobileViewport) return null;
 
   return (
@@ -598,11 +605,11 @@ function DesktopAndMobileRecordActions({
               background: "#fff",
             }}
           >
-            <option value="public">公开发现</option>
-            <option value="private">仅自己可见</option>
+            <option value="public">{copy.public_discover}</option>
+            <option value="private">{copy.private_only}</option>
           </select>
         ) : (
-          <ArchiveStatusBadge>项目和记录仅自己可见</ArchiveStatusBadge>
+          <ArchiveStatusBadge>{copy.project_private}</ArchiveStatusBadge>
         )
       ) : null}
 
@@ -622,7 +629,7 @@ function DesktopAndMobileRecordActions({
               item.status_tag === "help" ? "#e1a77d" : "#efd8cc",
             )}
           >
-            {item.status_tag === "help" ? "求助中 · 取消" : "求助"}
+            {item.status_tag === "help" ? copy.help_cancel : copy.help}
           </button>
 
           <button
@@ -634,7 +641,7 @@ function DesktopAndMobileRecordActions({
               item.status_tag === "resolved" ? "#acd7b5" : "#dfe7de",
             )}
           >
-            已解决 {item.status_tag === "resolved" ? <UiIcon name="check" size={13} /> : null}
+            {copy.resolved} {item.status_tag === "resolved" ? <UiIcon name="check" size={13} /> : null}
           </button>
         </>
       ) : null}
@@ -662,7 +669,7 @@ function DesktopAndMobileRecordActions({
         disabled={addingMedia}
         style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
       >
-        {addingMedia ? "添加中..." : "添加图片"}
+        {addingMedia ? copy.adding : copy.add_photos}
       </button>
       <button
         type="button"
@@ -670,7 +677,7 @@ function DesktopAndMobileRecordActions({
         disabled={addingMedia}
         style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
       >
-        拍照
+        {copy.take_photo}
       </button>
 
       {!isMobileViewport ? (
@@ -681,7 +688,7 @@ function DesktopAndMobileRecordActions({
             textDecoration: "none",
           }}
         >
-          发布到集市
+          {copy.publish_to_market}
         </Link>
       ) : null}
 
@@ -695,6 +702,8 @@ function DesktopAndMobileRecordActions({
 }
 
 function DesktopLocalRecordActions({ onDelete }: { onDelete: () => void }) {
+  const { t } = useLanguage();
+
   return (
     <div
       style={{
@@ -705,7 +714,7 @@ function DesktopLocalRecordActions({ onDelete }: { onDelete: () => void }) {
         marginBottom: 10,
       }}
     >
-      <ArchiveStatusBadge>本地</ArchiveStatusBadge>
+      <ArchiveStatusBadge>{t.record.local}</ArchiveStatusBadge>
       <button
         type="button"
         onClick={onDelete}
@@ -714,7 +723,7 @@ function DesktopLocalRecordActions({ onDelete }: { onDelete: () => void }) {
           marginLeft: "auto",
         }}
       >
-        删除本地记录
+        {t.record.delete_local_record_title}
       </button>
     </div>
   );
@@ -731,6 +740,8 @@ function DesktopRecordTags({
   onRemoveTag: (recordId: string, tag: string) => void;
   onAddTag: (recordId: string, tag: string) => Promise<void>;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div
       style={{
@@ -771,7 +782,7 @@ function DesktopRecordTags({
             background: "#fff",
           }}
         >
-          <option value="">添加标签</option>
+          <option value="">{t.record.add_tag}</option>
           {RECORD_TAG_OPTIONS.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -788,6 +799,8 @@ function DesktopSameTagLinks({
 }: {
   sameTagLinks: Array<{ tag: string; count: number; href: string }>;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div
       style={{
@@ -800,7 +813,7 @@ function DesktopSameTagLinks({
         alignItems: "center",
       }}
     >
-      <span style={{ fontSize: 12, color: "#9aa59a" }}>同类记录：</span>
+      <span style={{ fontSize: 12, color: "#9aa59a" }}>{t.record.similar_records}</span>
       {sameTagLinks.map((linkItem) => (
         <a
           key={linkItem.tag}
@@ -873,6 +886,8 @@ function MobileRecordMediaGrid({
   mediaItems: MediaItem[];
   onOpen: (mediaIndex: number) => void;
 }) {
+  const { t } = useLanguage();
+
   if (mediaList.length === 0) return null;
 
   return (
@@ -884,7 +899,7 @@ function MobileRecordMediaGrid({
           <button
             key={media.url}
             type="button"
-            aria-label="打开图片预览"
+            aria-label={t.record.open_image_preview}
             onClick={() => onOpen(mediaIndex)}
             style={mobileRecordMediaButtonStyle}
           >
@@ -919,6 +934,8 @@ function DesktopRecordMediaGrid({
   onOpen: (mediaIndex: number) => void;
   onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div
       style={{
@@ -935,7 +952,7 @@ function DesktopRecordMediaGrid({
             key={media.url}
             role="button"
             tabIndex={0}
-            aria-label="打开图片预览"
+            aria-label={t.record.open_image_preview}
             onClick={() => onOpen(mediaIndex)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -1016,39 +1033,41 @@ function MobileRecordMoreMenu({
   onSetVisibility: (nextVisibility: string) => Promise<void>;
   onEdit: () => void;
 }) {
+  const { t } = useLanguage();
+  const copy = t.record;
   const visibility =
     item.visibility === "private" || !archive.is_public ? "private" : "public";
   const nextHelp =
     item.status_tag === "help"
-      ? { label: "标记已解决", value: "resolved" as const }
+      ? { label: copy.mark_resolved, value: "resolved" as const }
       : item.status_tag === "resolved"
-        ? { label: "取消求助", value: null }
-        : { label: "发起求助", value: "help" as const };
+        ? { label: copy.cancel_help, value: null }
+        : { label: copy.start_help, value: "help" as const };
   const nextVisibility =
     visibility === "public"
-      ? { label: "设为私密", value: "private" }
-      : { label: "设为公开发现", value: "public" };
+      ? { label: copy.set_private, value: "private" }
+      : { label: copy.set_public, value: "public" };
 
   return (
     <div style={mobileRecordMenuStyle}>
       <button type="button" onClick={onCamera} style={mobileRecordMenuItemStyle}>
-        拍照
+        {copy.take_photo}
       </button>
       <button type="button" onClick={onAlbum} style={mobileRecordMenuItemStyle}>
-        从相册添加
+        {copy.add_from_album}
       </button>
       <Link
         href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
         style={mobileRecordMenuLinkStyle}
       >
-        转发到集市
+        {copy.forward_to_market}
       </Link>
       <button
         type="button"
         onClick={onToggleHelpMenu}
         style={mobileRecordMenuItemStyle}
       >
-        求助状态
+        {copy.help_status}
       </button>
       {helpMenuOpen ? (
         <button
@@ -1064,7 +1083,7 @@ function MobileRecordMoreMenu({
         onClick={onToggleVisibilityMenu}
         style={mobileRecordMenuItemStyle}
       >
-        公开设置
+        {copy.visibility_settings}
       </button>
       {visibilityMenuOpen ? (
         <button
@@ -1073,11 +1092,11 @@ function MobileRecordMoreMenu({
           disabled={!archive.is_public}
           style={mobileRecordSubMenuItemStyle}
         >
-          {archive.is_public ? nextVisibility.label : "项目私密"}
+          {archive.is_public ? nextVisibility.label : copy.project_private_short}
         </button>
       ) : null}
       <button type="button" onClick={onEdit} style={mobileRecordMenuItemStyle}>
-        编辑
+        {copy.edit}
       </button>
     </div>
   );
@@ -1090,27 +1109,31 @@ function MobileRecordLocalMenu({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div style={mobileRecordMenuStyle}>
       <button type="button" onClick={onEdit} style={mobileRecordMenuItemStyle}>
-        编辑文字
+        {t.record.edit_text}
       </button>
       <button
         type="button"
         onClick={onDelete}
         style={mobileRecordMenuDangerItemStyle}
       >
-        删除本地记录
+        {t.record.delete_local_record_title}
       </button>
     </div>
   );
 }
 
 function MobileLocalRecordMetaRow() {
+  const { t } = useLanguage();
+
   return (
     <div style={mobileRecordMetaWrapStyle}>
       <div style={mobileRecordMetaRowStyle}>
-        <span style={mobileRecordMetaTextStyle}>本地</span>
+        <span style={mobileRecordMetaTextStyle}>{t.record.local}</span>
       </div>
     </div>
   );
@@ -1137,9 +1160,13 @@ function MobileRecordMetaRow({
   onRemoveTag: (recordId: string, tag: string) => void;
   onAddTag: (tag: string) => Promise<void>;
 }) {
+  const { t } = useLanguage();
+  const copy = t.record;
   const tags = Array.isArray(item.display_tags) ? item.display_tags : [];
   const visibility =
-    item.visibility === "private" || !archive.is_public ? "仅自己可见" : "公开发现";
+    item.visibility === "private" || !archive.is_public
+      ? copy.private_only
+      : copy.public_discover;
 
   return (
     <div style={mobileRecordMetaWrapStyle}>
@@ -1166,7 +1193,7 @@ function MobileRecordMetaRow({
             onClick={onToggleTagEditor}
             style={mobileRecordAddTagButtonStyle}
           >
-            添加标签
+            {copy.add_tag}
           </button>
         ) : null}
 
@@ -1175,7 +1202,7 @@ function MobileRecordMetaRow({
             {statusBadge.label}
           </span>
         ) : (
-          <span style={mobileRecordMetaTextStyle}>无求助</span>
+          <span style={mobileRecordMetaTextStyle}>{copy.no_help}</span>
         )}
         <span style={mobileRecordMetaTextStyle}>{visibility}</span>
       </div>
@@ -1191,9 +1218,9 @@ function MobileRecordMetaRow({
           }}
           defaultValue=""
           style={mobileRecordTagEditorSelectStyle}
-          aria-label="选择标签"
+          aria-label={copy.select_tag}
         >
-          <option value="">选择标签</option>
+          <option value="">{copy.select_tag}</option>
           {RECORD_TAG_OPTIONS.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -1220,6 +1247,8 @@ function MobileRecordEditPanel({
   onSaveOverride?: (patch: Partial<RecordItem>) => Promise<void> | void;
   onDeleteRequest?: () => void;
 }) {
+  const { t } = useLanguage();
+  const copy = t.record;
   const [note, setNote] = useState(item.note || "");
   const [timeValue, setTimeValue] = useState(toDateTimeLocalValue(item.record_time));
   const [saving, setSaving] = useState(false);
@@ -1229,7 +1258,7 @@ function MobileRecordEditPanel({
 
     const recordTime = timeValue ? new Date(timeValue) : new Date(item.record_time);
     if (Number.isNaN(recordTime.getTime())) {
-      showToast("记录时间无效");
+      showToast(copy.invalid_time);
       return;
     }
 
@@ -1256,11 +1285,11 @@ function MobileRecordEditPanel({
     setSaving(false);
 
     if (error) {
-      showToast("保存记录失败");
+      showToast(copy.save_failed);
       return;
     }
 
-    showToast("记录已更新");
+    showToast(copy.updated);
     onSaved(patch);
   }
 
@@ -1269,19 +1298,19 @@ function MobileRecordEditPanel({
       <section
         style={mobileEditPanelStyle}
         onClick={(event) => event.stopPropagation()}
-        aria-label="编辑记录"
+        aria-label={copy.edit_record}
       >
         <div style={mobileEditHeaderStyle}>
           <div style={{ fontSize: 16, fontWeight: 800, color: "#233223" }}>
-            编辑记录
+            {copy.edit_record}
           </div>
           <button type="button" onClick={onClose} style={mobileEditCloseButtonStyle}>
-            取消
+            {t.cancel}
           </button>
         </div>
 
         <label style={mobileEditFieldStyle}>
-          <span style={mobileEditLabelStyle}>记录时间</span>
+          <span style={mobileEditLabelStyle}>{copy.record_time}</span>
           <input
             type="datetime-local"
             value={timeValue}
@@ -1291,7 +1320,7 @@ function MobileRecordEditPanel({
         </label>
 
         <label style={mobileEditFieldStyle}>
-          <span style={mobileEditLabelStyle}>记录内容</span>
+          <span style={mobileEditLabelStyle}>{copy.record_content}</span>
           <textarea
             value={note}
             onChange={(event) => setNote(event.target.value)}
@@ -1301,19 +1330,19 @@ function MobileRecordEditPanel({
         </label>
 
         <label style={mobileEditFieldStyle}>
-          <span style={mobileEditLabelStyle}>记录地点</span>
+          <span style={mobileEditLabelStyle}>{copy.record_location}</span>
           <input
-            value="暂不保存地点"
+            value={copy.location_not_saved}
             disabled
             style={mobileEditDisabledInputStyle}
-            aria-label="记录地点预留"
+            aria-label={copy.location_reserved}
           />
         </label>
 
         <div style={mobileEditFieldStyle}>
-          <span style={mobileEditLabelStyle}>图片排序</span>
+          <span style={mobileEditLabelStyle}>{copy.image_order}</span>
           <div style={mobileEditHintStyle}>
-            当前媒体数据没有可安全持久化的排序字段，本轮不保存排序。
+            {copy.image_order_hint}
           </div>
         </div>
 
@@ -1323,7 +1352,7 @@ function MobileRecordEditPanel({
           disabled={saving}
           style={mobileEditSaveButtonStyle}
         >
-          {saving ? "保存中..." : "保存"}
+          {saving ? t.saving : t.save}
         </button>
 
         <div style={mobileEditDeleteWrapStyle}>
@@ -1333,7 +1362,7 @@ function MobileRecordEditPanel({
               onClick={onDeleteRequest}
               style={mobileEditDeleteButtonStyle}
             >
-              删除本地记录
+              {copy.delete_local_record_title}
             </button>
           ) : (
             <DeleteRecordButton

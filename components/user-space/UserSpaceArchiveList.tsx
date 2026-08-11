@@ -14,6 +14,7 @@ import { getArchiveDisplayName } from "@/lib/social-space-shared";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   archives: UserSpaceArchive[];
@@ -25,10 +26,6 @@ type Props = {
   onOpenArchive: (archiveId: string) => void;
 };
 
-function categoryLabel(category?: string | null) {
-  return getArchiveCategoryLabel(category);
-}
-
 export default function UserSpaceArchiveList({
   archives,
   subTags,
@@ -38,6 +35,7 @@ export default function UserSpaceArchiveList({
   followedArchiveIds,
   onOpenArchive,
 }: Props) {
+  const { language, t } = useLanguage();
   if (archives.length === 0) {
     return (
       <div
@@ -50,7 +48,7 @@ export default function UserSpaceArchiveList({
           background: "#fff",
         }}
       >
-        还没有公开项目
+        {t.profile.space.no_public_projects}
       </div>
     );
   }
@@ -61,7 +59,7 @@ export default function UserSpaceArchiveList({
         const stat = statsMap[archive.id];
         const latest = stat?.latest;
         const cover = coverMap[archive.id];
-        const subTagName = getSubTagName(subTags, archive.sub_tag_id);
+        const subTagName = getSubTagName(subTags, archive.sub_tag_id, language);
         const groupTagName = getGroupTagName(groupTags, archive.group_tag_id);
         const isEnded = archive.status === "ended";
         const hasHelp = stat?.hasHelp;
@@ -132,14 +130,14 @@ export default function UserSpaceArchiveList({
                   minWidth: 0,
                 }}
               >
-                <span style={typeBadgeStyle}>{categoryLabel(archive.category)}</span>
+                <span style={typeBadgeStyle}>{getArchiveCategoryLabel(archive.category, language)}</span>
 
-                {hasHelp && <span style={helpBadgeStyle}>求助</span>}
+                {hasHelp && <span style={helpBadgeStyle}>{t.profile.space.help}</span>}
 
-                {isEnded && <span style={endedBadgeStyle}>已结束</span>}
+                {isEnded && <span style={endedBadgeStyle}>{t.profile.space.ended}</span>}
 
                 {followedArchiveIds.includes(archive.id) && (
-                  <span style={followedBadgeStyle}>已关注</span>
+                  <span style={followedBadgeStyle}>{t.profile.space.followed}</span>
                 )}
 
                 <span
@@ -152,7 +150,7 @@ export default function UserSpaceArchiveList({
                     color: "#263326",
                   }}
                 >
-                  {getArchiveDisplayName(archive.title, archive.system_name || archive.species_name_snapshot)}
+                  {getArchiveDisplayName(archive.title, archive.system_name || archive.species_name_snapshot, language)}
                 </span>
               </div>
 
@@ -166,7 +164,7 @@ export default function UserSpaceArchiveList({
                   fontSize: 14,
                 }}
               >
-                {latest?.note || "还没有公开记录"}
+                {latest?.note || t.profile.space.no_public_records}
                 {latest?.record_time ? (
                   <span style={{ color: "#9a9f94" }}>
                     <span aria-hidden="true"> · </span>

@@ -13,6 +13,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { ArchiveDetailArchive, ArchiveMode } from "@/lib/archive-detail-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ArchiveDetailHeader({
   mode,
@@ -65,30 +66,43 @@ export default function ArchiveDetailHeader({
   onSaveArchiveSummary?: (value: string) => Promise<void> | void;
   profileExtra?: ReactNode;
 }) {
+  const { language, t } = useLanguage();
+  const copy = t.archive;
   const archiveCategory = normalizeArchiveCategory(archive.category);
-  const createdAtText = formatDate(archive.created_at) || "暂无";
-  const latestUpdateDisplay = formatDate(latestUpdate) || "暂无";
+  const createdAtText = formatDate(archive.created_at) || copy.none;
+  const latestUpdateDisplay = formatDate(latestUpdate) || copy.none;
   const ongoingDays = getOngoingDays(archive.created_at);
-  const durationText = ongoingDays ? `已持续 ${ongoingDays} 天` : "暂无";
-  const systemNameText = archiveDisplayName || "未填写";
-  const systemNameLabel = archiveCategory === "plant" ? "系统植物名 *" : "系统名 *";
+  const durationText = ongoingDays
+    ? language === "en"
+      ? `${copy.ongoing_days_prefix} ${ongoingDays} ${copy.days_suffix}`
+      : `${copy.ongoing_days_prefix} ${ongoingDays} ${copy.days_suffix}`
+    : copy.none;
+  const systemNameText = archiveDisplayName || copy.not_filled;
+  const systemNameLabel =
+    archiveCategory === "plant"
+      ? copy.system_plant_name_required
+      : copy.system_name_required;
+  const localizedCategoryLabel =
+    language === "zh" && archiveCategoryLabel
+      ? archiveCategoryLabel
+      : getLocalizedCategoryLabel(archiveCategory, copy);
 
   const projectView = {
     id: archive.id,
     mode: "cloud" as const,
-    title: archive.title || "未命名项目",
+    title: archive.title || copy.unnamed_project,
     category: archiveCategory,
     plantId: archive.species_id,
-    categoryLabel: archiveCategoryLabel,
+    categoryLabel: localizedCategoryLabel,
     categoryIcon: getArchiveCategoryIcon(archiveCategory),
     systemName: systemNameText,
     subcategoryLabel: archiveSubcategoryLabel,
     groupLabel: archiveGroupLabel,
-    badges: archive.status === "ended" ? ["已结束"] : [],
-    footerItems: [`创建于 ${createdAtText}`],
+    badges: archive.status === "ended" ? [copy.ended] : [],
+    footerItems: [`${copy.created_on} ${createdAtText}`],
     visibilityLabel: null,
     visibilityTone: archive.is_public ? ("public" as const) : ("private" as const),
-    storageLabel: "云端",
+    storageLabel: copy.cloud,
     storageTone: "cloud" as const,
     recordCount,
     durationDays: ongoingDays,
@@ -97,30 +111,30 @@ export default function ArchiveDetailHeader({
   };
 
   const profileRows = [
-    { label: "项目名称 *", value: archive.title || "未命名项目", field: "title" as const },
-    { label: "种类", value: archiveCategoryLabel || "其他", field: "category" as const },
+    { label: copy.project_name_required, value: archive.title || copy.unnamed_project, field: "title" as const },
+    { label: copy.category, value: localizedCategoryLabel, field: "category" as const },
     {
       label: systemNameLabel,
       value: systemNameText,
       field: "systemName" as const,
     },
-    { label: "来源", value: archive.source || "未填写", field: "source" as const },
-    { label: "备注", value: archive.note || "未填写", field: "note" as const },
+    { label: copy.source, value: archive.source || copy.not_filled, field: "source" as const },
+    { label: copy.note, value: archive.note || copy.not_filled, field: "note" as const },
     {
-      label: "项目摘要",
-      value: archive.archive_summary || "未填写",
+      label: copy.summary,
+      value: archive.archive_summary || copy.not_filled,
       field: "archiveSummary" as const,
     },
-    { label: "创建时间", value: createdAtText },
-    { label: "最近更新", value: latestUpdateDisplay },
-    { label: "记录数", value: `${recordCount}` },
-    { label: "持续天数", value: durationText },
+    { label: copy.created_time, value: createdAtText },
+    { label: copy.latest_update, value: latestUpdateDisplay },
+    { label: copy.record_count, value: `${recordCount}` },
+    { label: copy.duration_days, value: durationText },
   ];
 
   async function saveProfileField(change: ArchiveProfileFieldSave) {
     if (change.field === "title") {
       const cleanValue = change.value.trim();
-      if (!cleanValue) throw new Error("项目名称不能为空");
+      if (!cleanValue) throw new Error(copy.project_name_empty);
       if (cleanValue !== (archive.title || "")) await onSaveTitle?.(cleanValue);
       return;
     }
@@ -132,7 +146,7 @@ export default function ArchiveDetailHeader({
 
     if (change.field === "systemName") {
       const cleanValue = change.value.name.trim();
-      if (!cleanValue) throw new Error("系统名不能为空");
+      if (!cleanValue) throw new Error(copy.system_name_empty);
       if (cleanValue !== systemNameText || change.value.candidateId) {
         await onSaveSystemName?.({ ...change.value, name: cleanValue });
       }
@@ -173,7 +187,7 @@ export default function ArchiveDetailHeader({
             cursor: "pointer",
           }}
         >
-          {archive.is_public ? "公开发现" : "仅自己可见"}
+          {archive.is_public ? copy.public_discover : copy.private_only}
         </button>
       ) : (
         <button
@@ -190,7 +204,7 @@ export default function ArchiveDetailHeader({
             whiteSpace: "nowrap",
           }}
         >
-          {isProjectFollowed ? "已关注该项目" : "关注该项目"}
+          {isProjectFollowed ? copy.followed_project : copy.follow_project}
         </button>
       )}
 
@@ -202,15 +216,19 @@ export default function ArchiveDetailHeader({
       project={projectView}
       eyebrow={
         <>
-          <span>{mode === "owner" ? "项目档案" : `${username}的项目档案`}</span>
+          <span>
+            {mode === "owner"
+              ? copy.project_archive
+              : `${username}${copy.user_project_archive_suffix}`}
+          </span>
           {archive.status === "ended" ? (
-            <ArchiveStatusBadge kind="ended">已结束</ArchiveStatusBadge>
+            <ArchiveStatusBadge kind="ended">{copy.ended}</ArchiveStatusBadge>
           ) : null}
         </>
       }
-      latestUpdateText={`最近更新 ${latestUpdateDisplay}`}
-      recordCountText={`记录 ${recordCount}`}
-      durationText={ongoingDays ? `已持续 ${ongoingDays} 天` : undefined}
+      latestUpdateText={`${copy.latest_update} ${latestUpdateDisplay}`}
+      recordCountText={`${copy.records} ${recordCount}`}
+      durationText={ongoingDays ? durationText : undefined}
       encyclopediaHref={encyclopediaHref}
       actionSlot={actionSlot}
       profileRows={profileRows}
@@ -230,8 +248,8 @@ export default function ArchiveDetailHeader({
               systemNameCandidates,
               systemNameHint:
                 systemNameMode === "text"
-                  ? "其他种类没有预设系统名，可直接输入。"
-                  : "输入关键词搜索候选名；无匹配时可使用当前输入作为新的系统名。",
+                  ? copy.other_system_hint
+                  : copy.candidate_system_hint,
             }
           : undefined
       }
@@ -239,13 +257,13 @@ export default function ArchiveDetailHeader({
         mode === "owner" ? (
           <>
             <button type="button" onClick={onToggleArchiveStatus} style={profileActionButtonStyle}>
-              {archive.status === "ended" ? "恢复" : "结束"}
+              {archive.status === "ended" ? copy.restore : copy.end}
             </button>
             <button type="button" onClick={onToggleArchiveVisibility} style={profileActionButtonStyle}>
-              {archive.is_public ? "设为仅自己可见" : "设为公开发现"}
+              {archive.is_public ? copy.set_private : copy.set_public}
             </button>
             <button type="button" onClick={onDeleteArchive} style={profileDangerButtonStyle}>
-              移入回收站
+              {copy.move_to_trash}
             </button>
           </>
         ) : null
@@ -254,6 +272,16 @@ export default function ArchiveDetailHeader({
       profileAlwaysOpen
     />
   );
+}
+
+function getLocalizedCategoryLabel(
+  category: ArchiveCategory,
+  copy: ReturnType<typeof useLanguage>["t"]["archive"]
+) {
+  if (category === "plant") return copy.categories.plant_label;
+  if (category === "system") return copy.categories.system_label;
+  if (category === "insect_fish") return copy.categories.insect_fish_label;
+  return copy.categories.other_label;
 }
 
 function normalizeArchiveCategory(value?: string | null): ArchiveCategory {

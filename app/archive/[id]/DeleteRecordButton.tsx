@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { requestCloudTrash } from "@/lib/cloud-trash";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function DeleteRecordButton({
   id,
@@ -16,6 +17,8 @@ export default function DeleteRecordButton({
   style?: CSSProperties;
   onDeleted?: (id: string) => void;
 }) {
+  const { t } = useLanguage();
+  const copy = t.archive;
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -28,16 +31,16 @@ export default function DeleteRecordButton({
       const trashed = await requestCloudTrash("records", id);
 
       if (!trashed) {
-        showToast("移入回收站失败");
+        showToast(copy.trash_failed);
         return;
       }
 
-      showToast("已移入回收站");
+      showToast(copy.moved_to_trash);
       setOpen(false);
       onDeleted?.(id);
       router.refresh();
     } catch {
-      showToast("操作失败");
+      showToast(copy.action_failed);
     } finally {
       setIsDeleting(false);
     }
@@ -64,14 +67,14 @@ export default function DeleteRecordButton({
         ...style,
       }}
     >
-      移入回收站
+      {copy.move_to_trash}
     </button>
     <ConfirmDialog
       open={open}
-      title="移入回收站"
-      message="记录和照片将移入回收站。与该记录相关的评论、点赞等互动信息将立即删除，无法恢复。"
-      confirmText={isDeleting ? "移入中..." : "移入回收站"}
-      cancelText="取消"
+      title={copy.trash_title}
+      message={copy.record_trash_message}
+      confirmText={isDeleting ? copy.moving_to_trash : copy.move_to_trash}
+      cancelText={t.cancel}
       onClose={() => { if (!isDeleting) setOpen(false); }}
       onConfirm={handleDelete}
       confirmDisabled={isDeleting}

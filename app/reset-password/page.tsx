@@ -4,16 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [checkingSession, setCheckingSession] = useState(true);
   const [canReset, setCanReset] = useState(false);
   const [saving, setSaving] = useState(false);
-  const isSuccessMessage = message.includes("已更新");
+  const [updateSucceeded, setUpdateSucceeded] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -58,14 +60,14 @@ export default function ResetPasswordPage() {
           setMessage("");
         } else {
           setCanReset(false);
-          setMessage("重置链接无效或已过期");
+          setMessage(t.auth.reset_link_invalid);
         }
 
         setCheckingSession(false);
         return;
       } else {
         setCanReset(false);
-        setMessage("请从重置邮件打开此页面");
+        setMessage(t.auth.open_from_reset_email);
       }
 
       setCheckingSession(false);
@@ -77,11 +79,12 @@ export default function ResetPasswordPage() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [t.auth]);
 
   async function handleUpdate() {
     if (!canReset) {
-      setMessage("请从重置邮件打开此页面");
+      setUpdateSucceeded(false);
+      setMessage(t.auth.open_from_reset_email);
       return;
     }
 
@@ -89,32 +92,37 @@ export default function ResetPasswordPage() {
     const nextConfirmPassword = confirmPassword.trim();
 
     if (!nextPassword || !nextConfirmPassword) {
-      setMessage("请输入并确认新密码");
+      setUpdateSucceeded(false);
+      setMessage(t.auth.enter_confirm_new_password);
       return;
     }
 
     if (nextPassword.length < 6) {
-      setMessage("密码长度至少 6 位");
+      setUpdateSucceeded(false);
+      setMessage(t.auth.password_length_error);
       return;
     }
 
     if (nextPassword !== nextConfirmPassword) {
-      setMessage("两次输入的密码不一致");
+      setUpdateSucceeded(false);
+      setMessage(t.auth.password_mismatch);
       return;
     }
 
     setSaving(true);
+    setUpdateSucceeded(false);
     setMessage("");
 
     try {
       const { error } = await supabase.auth.updateUser({ password: nextPassword });
 
       if (error) {
-        setMessage("密码更新失败");
+        setMessage(t.auth.password_update_failed);
         return;
       }
 
-      setMessage("密码已更新，请重新登录");
+      setUpdateSucceeded(true);
+      setMessage(t.auth.password_updated);
 
       setTimeout(() => {
         router.push("/login");
@@ -126,23 +134,23 @@ export default function ResetPasswordPage() {
 
   return (
     <main style={{ padding: "40px 20px", maxWidth: 420, margin: "0 auto", color: "#1f2d1f" }}>
-      <h2 style={{ marginBottom: 8 }}>重置密码</h2>
+      <h2 style={{ marginBottom: 8 }}>{t.auth.reset_title}</h2>
       <p style={{ marginTop: 0, marginBottom: 22, color: "#6f7f6f", fontSize: 14 }}>
-        从重置邮件打开后，设置新密码。
+        {t.auth.reset_intro}
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <label style={{ fontSize: 13, color: "#536553" }}>
-          新密码
+          {t.auth.new_password}
           <div style={{ marginTop: 6 }}>
-            <PasswordInput value={password} onChange={setPassword} placeholder="输入新密码" />
+            <PasswordInput value={password} onChange={setPassword} placeholder={t.auth.new_password_placeholder} />
           </div>
         </label>
 
         <label style={{ fontSize: 13, color: "#536553" }}>
-          确认新密码
+          {t.auth.confirm_new_password}
           <div style={{ marginTop: 6 }}>
-            <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder="再次输入新密码" />
+            <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder={t.auth.confirm_new_password_placeholder} />
           </div>
         </label>
 
@@ -162,7 +170,7 @@ export default function ResetPasswordPage() {
             fontWeight: 700,
           }}
         >
-          {checkingSession ? "确认链接中..." : saving ? "更新中..." : "更新密码"}
+          {checkingSession ? t.auth.checking_link : saving ? t.auth.updating : t.auth.update_password}
         </button>
       </div>
 
@@ -172,9 +180,9 @@ export default function ResetPasswordPage() {
             marginTop: 14,
             padding: "10px 12px",
             borderRadius: 10,
-            background: isSuccessMessage ? "#f0fff4" : "#fff7f7",
-            border: isSuccessMessage ? "1px solid #cae9ca" : "1px solid #e6c9c9",
-            color: isSuccessMessage ? "#2e7d32" : "#8a4a4a",
+            background: updateSucceeded ? "#f0fff4" : "#fff7f7",
+            border: updateSucceeded ? "1px solid #cae9ca" : "1px solid #e6c9c9",
+            color: updateSucceeded ? "#2e7d32" : "#8a4a4a",
             fontSize: 13,
           }}
         >

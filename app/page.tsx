@@ -5,24 +5,11 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import UiIcon from "@/components/ui/UiIcon";
-
-const copy = {
-  brand: "有时·耕作",
-  englishBrand: "LifeSpace",
-  spaceTitle: "自然生活空间",
-  subtitle: "一个围绕耕作、生态与自然生活展开的空间。",
-  poem: "记录四时变化，留下发现、收获与成长。\n让生命被看见，让生活有迹可循。",
-  spirit: "留其间，守其度，顺其时，共生长。",
-  cards: [
-    ["种植", "花草、蔬菜、果树与庭院植物"],
-    ["农法设施", "堆肥、灌溉、水培与工具系统"],
-    ["虫鱼生态", "鱼缸、昆虫、小动物与小生态"],
-    ["其他", "其他自然生活相关项目"],
-  ],
-};
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function Home() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
@@ -56,7 +43,7 @@ export default function Home() {
   }, [router]);
 
   if (checkingSession) {
-    return <section style={loadingStyle}>正在进入...</section>;
+    return <section style={loadingStyle}>{t.home.entering}</section>;
   }
 
   return (
@@ -79,25 +66,25 @@ export default function Home() {
       <div className="home-content" style={contentStyle}>
         <section className="home-hero" style={heroStyle}>
           <h1 style={brandStyle}>
-            <span>{copy.brand}</span>
-            <span style={englishBrandStyle}>{copy.englishBrand}</span>
+            <span>{t.home.brand}</span>
+            <span style={englishBrandStyle}>{t.home.english_brand}</span>
           </h1>
 
-          <div style={spaceTitleStyle}>{copy.spaceTitle}</div>
-          <p style={subtitleStyle}>{copy.subtitle}</p>
-          <p style={poemStyle}>{copy.poem}</p>
-          <div style={spiritStyle}>{copy.spirit}</div>
+          <div style={spaceTitleStyle}>{t.home.space_title}</div>
+          <p style={subtitleStyle}>{t.home.subtitle}</p>
+          <p style={poemStyle}>{t.home.poem}</p>
+          <div style={spiritStyle}>{t.home.spirit}</div>
 
           <div className="home-actions" style={actionsStyle}>
-            <Link href="/register" style={primaryActionStyle}>注册</Link>
-            <Link href="/discover" style={softActionStyle}>浏览发现</Link>
-            <Link href="/api/download/android" style={softActionStyle}>下载 Android</Link>
+            <Link href="/register" style={primaryActionStyle}>{t.register}</Link>
+            <Link href="/discover" style={softActionStyle}>{t.home.browse_discover}</Link>
+            <Link href="/api/download/android" style={softActionStyle}>{t.home.download_android}</Link>
           </div>
           <Link href="/membership" style={membershipLinkStyle}>
             <span style={membershipLinkCopyStyle}>
-              <strong style={membershipLinkTitleStyle}>会员类别与权限</strong>
+              <strong style={membershipLinkTitleStyle}>{t.home.membership_title}</strong>
               <span style={membershipLinkDescriptionStyle}>
-                本地免费使用，云会员可云端保存与公开互动
+                {t.home.membership_description}
               </span>
             </span>
             <span aria-hidden="true" style={membershipLinkArrowStyle}>
@@ -106,11 +93,11 @@ export default function Home() {
           </Link>
         </section>
 
-        <section className="home-category-grid" aria-label="自然生活记录范围" style={categoryGridStyle}>
-          {copy.cards.map(([title, description]) => (
-            <article key={title} style={categoryCardStyle}>
-              <strong style={categoryTitleStyle}>{title}</strong>
-              <span style={categoryDescriptionStyle}>{description}</span>
+        <section className="home-category-grid" aria-label={t.home.category_aria} style={categoryGridStyle}>
+          {t.home.cards.map((card) => (
+            <article key={card.title} style={categoryCardStyle}>
+              <strong style={categoryTitleStyle}>{card.title}</strong>
+              <span style={categoryDescriptionStyle}>{card.description}</span>
             </article>
           ))}
         </section>

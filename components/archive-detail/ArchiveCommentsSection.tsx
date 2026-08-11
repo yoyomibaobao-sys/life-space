@@ -22,6 +22,7 @@ import {
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CommentItem = RecordComment & {
   profile: Pick<AppProfile, "id" | "username" | "avatar_url"> | null;
@@ -50,6 +51,7 @@ export default function ArchiveCommentsSection({
   showStatusHint?: boolean;
   compactMobile?: boolean;
 }) {
+  const { language, t } = useLanguage();
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
@@ -211,7 +213,7 @@ export default function ArchiveCommentsSection({
 
   async function handleToggleRecordLike() {
     if (!currentUserId) {
-      showToast("请先登录");
+      showToast(t.archive_comments.login_required);
       return;
     }
 
@@ -223,7 +225,7 @@ export default function ArchiveCommentsSection({
         .eq("user_id", currentUserId);
 
       if (error) {
-        showToast("取消点赞失败");
+        showToast(t.archive_comments.unlike_failed);
         return;
       }
 
@@ -233,12 +235,12 @@ export default function ArchiveCommentsSection({
     }
 
     if (membershipLoading) {
-      showToast("状态读取中");
+      showToast(t.archive_comments.membership_loading);
       return;
     }
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -248,7 +250,7 @@ export default function ArchiveCommentsSection({
     });
 
     if (error) {
-      showToast("点赞失败");
+      showToast(t.archive_comments.like_failed);
       return;
     }
 
@@ -259,21 +261,21 @@ export default function ArchiveCommentsSection({
   async function handleSubmitComment() {
     const content = commentText.trim();
     if (!currentUserId) {
-      showToast("请先登录");
+      showToast(t.archive_comments.login_required);
       return;
     }
     if (!content) {
-      showToast("请输入评论");
+      showToast(t.archive_comments.comment_required);
       return;
     }
 
     if (membershipLoading) {
-      showToast("状态读取中");
+      showToast(t.archive_comments.membership_loading);
       return;
     }
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -286,20 +288,20 @@ export default function ArchiveCommentsSection({
     setSubmitting(false);
 
     if (error) {
-      showToast("评论发送失败");
+      showToast(t.archive_comments.send_failed);
       return;
     }
 
     setCommentText("");
     setCommentsExpanded(true);
     setComposerOpen(false);
-    showToast("评论已发送");
+    showToast(t.archive_comments.sent);
     await loadData();
   }
 
   async function handleToggleCommentLike(comment: CommentItem) {
     if (!currentUserId) {
-      showToast("请先登录");
+      showToast(t.archive_comments.login_required);
       return;
     }
 
@@ -311,7 +313,7 @@ export default function ArchiveCommentsSection({
         .eq("user_id", currentUserId);
 
       if (error) {
-        showToast("取消点赞失败");
+        showToast(t.archive_comments.unlike_failed);
         return;
       }
 
@@ -330,12 +332,12 @@ export default function ArchiveCommentsSection({
     }
 
     if (membershipLoading) {
-      showToast("状态读取中");
+      showToast(t.archive_comments.membership_loading);
       return;
     }
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -345,7 +347,7 @@ export default function ArchiveCommentsSection({
     });
 
     if (error) {
-      showToast("点赞失败");
+      showToast(t.archive_comments.like_failed);
       return;
     }
 
@@ -377,11 +379,11 @@ function mobileCommentActionButtonStyle(active: boolean) {
     );
 
     if (!canDelete) {
-      showToast("你没有权限删除这条评论");
+      showToast(t.archive_comments.delete_forbidden);
       return;
     }
 
-    const ok = window.confirm("确定删除这条评论吗？");
+    const ok = window.confirm(t.archive_comments.delete_confirm);
     if (!ok) return;
 
     setDeletingCommentId(comment.id);
@@ -392,35 +394,35 @@ function mobileCommentActionButtonStyle(active: boolean) {
     setDeletingCommentId(null);
 
     if (error) {
-      showToast("评论删除失败");
+      showToast(t.archive_comments.delete_failed);
       return;
     }
 
     setComments((prev) => prev.filter((item) => item.id !== comment.id));
-    showToast("评论已删除");
+    showToast(t.archive_comments.deleted);
   }
 
   async function handleSendFlower(comment: CommentItem) {
     if (!currentUserId || !canAwardFlowers) {
-      showToast("只有求助记录的主人才能标记有帮助");
+      showToast(t.archive_comments.owner_only_helpful);
       return;
     }
     if (comment.user_id === currentUserId) {
-      showToast("不能把自己的回答标为有帮助");
+      showToast(t.archive_comments.self_helpful_forbidden);
       return;
     }
     if (comment.myFlower && !comment.myFlower.revoked_at) {
-      showToast("这条回答已经标记为有帮助");
+      showToast(t.archive_comments.already_helpful);
       return;
     }
 
     if (membershipLoading) {
-      showToast("状态读取中");
+      showToast(t.archive_comments.membership_loading);
       return;
     }
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -433,11 +435,11 @@ function mobileCommentActionButtonStyle(active: boolean) {
     });
 
     if (error) {
-      showToast("标记失败");
+      showToast(t.archive_comments.mark_failed);
       return;
     }
 
-    showToast("已标记为有帮助");
+    showToast(t.archive_comments.marked_helpful);
     await loadData();
   }
 
@@ -449,7 +451,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
       ? new Date(flower.revoke_until).getTime()
       : 0;
     if (!revokeUntil || Date.now() > revokeUntil) {
-      showToast("已超过撤回时间");
+      showToast(t.archive_comments.revoke_expired);
       return;
     }
 
@@ -460,21 +462,21 @@ function mobileCommentActionButtonStyle(active: boolean) {
       .eq("sender_user_id", currentUserId);
 
     if (error) {
-      showToast("撤回标记失败");
+      showToast(t.archive_comments.revoke_failed);
       return;
     }
 
-    showToast("已撤回“有帮助”");
+    showToast(t.archive_comments.revoked);
     await loadData();
   }
 
   const commentHint = useMemo(() => {
     if (recordStatusTag === "help")
-      return "记录主人可把真正解决问题的回答标为“有帮助”。";
+      return t.archive_comments.help_hint;
     if (recordStatusTag === "resolved")
-      return "仍可补充标记有帮助的回答。";
+      return t.archive_comments.resolved_hint;
     return "";
-  }, [recordStatusTag]);
+  }, [recordStatusTag, t]);
 
   return (
     <section
@@ -504,7 +506,11 @@ function mobileCommentActionButtonStyle(active: boolean) {
                   recordLikedByMe ? "#efc4c4" : "#dfe5dc",
                 )
           }
-          aria-label={recordLikedByMe ? "取消喜欢" : "喜欢"}
+          aria-label={
+            recordLikedByMe
+              ? t.archive_comments.unlike_aria
+              : t.archive_comments.like_aria
+          }
         >
           <UiIcon name={recordLikedByMe ? "heart-filled" : "heart"} size={14} /> {recordLikeCount}
         </button>
@@ -529,8 +535,12 @@ function mobileCommentActionButtonStyle(active: boolean) {
           }
         >
           {compactMobile
-            ? `评论 ${commentCount}`
-            : `${commentsExpanded ? "收起评论" : "评论"} · ${commentCount}`}
+            ? `${t.archive_comments.comments} ${commentCount}`
+            : `${
+                commentsExpanded
+                  ? t.archive_comments.collapse_comments
+                  : t.archive_comments.comments
+              } · ${commentCount}`}
         </button>
 
         {!compactMobile && canWrite ? (
@@ -542,19 +552,25 @@ function mobileCommentActionButtonStyle(active: boolean) {
             }}
             style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
           >
-            写评论
+            {t.archive_comments.write_comment}
           </button>
         ) : !compactMobile && membershipLoading && currentUserId ? (
-          <span style={{ fontSize: 12, color: "#8b9688" }}>状态读取中...</span>
+          <span style={{ fontSize: 12, color: "#8b9688" }}>
+            {t.archive_comments.membership_loading}{t.archive_comments.loading_suffix}
+          </span>
         ) : !compactMobile && membershipBlocked ? (
           <span style={{ fontSize: 12, color: "#9a6232" }}>
-            {getCreateContentBlockedText(membership)}，
+            {getCreateContentBlockedText(membership, language)}
+            {t.archive_comments.membership_link_prefix}
             <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-              了解云会员
+              {t.archive_comments.learn_membership}
             </Link>
+            {t.archive_comments.membership_link_suffix}
           </span>
         ) : !compactMobile ? (
-          <span style={{ fontSize: 12, color: "#8b9688" }}>登录后可评论</span>
+          <span style={{ fontSize: 12, color: "#8b9688" }}>
+            {t.archive_comments.login_to_comment}
+          </span>
         ) : null}
 
         {showStatusHint && commentHint && !commentsExpanded ? (
@@ -564,7 +580,9 @@ function mobileCommentActionButtonStyle(active: boolean) {
               color: recordStatusTag === "help" ? "#9a6232" : "#4f7a55",
             }}
           >
-            {recordStatusTag === "help" ? "求助中" : "已解决"}
+            {recordStatusTag === "help"
+              ? t.archive_comments.help_open
+              : t.archive_comments.resolved}
           </span>
         ) : null}
       </div>
@@ -587,10 +605,12 @@ function mobileCommentActionButtonStyle(active: boolean) {
           <div style={{ display: "grid", gap: 0 }}>
             {loading ? (
               <div style={{ fontSize: 12, color: "#7c8878" }}>
-                评论加载中...
+                {t.archive_comments.comments_loading}
               </div>
             ) : comments.length === 0 ? (
-              <div style={{ fontSize: 12, color: "#8b9688" }}>暂无评论</div>
+              <div style={{ fontSize: 12, color: "#8b9688" }}>
+                {t.archive_comments.no_comments}
+              </div>
             ) : (
               comments.map((comment) => {
                 const revokeUntilTime = comment.myFlower?.revoke_until
@@ -601,7 +621,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                   !comment.myFlower.revoked_at &&
                   revokeUntilTime > Date.now(),
                 );
-                const username = comment.profile?.username || "用户";
+                const username = comment.profile?.username || t.archive_comments.default_user;
                 const canDeleteComment = Boolean(
                   currentUserId &&
                     (currentUserId === comment.user_id ||
@@ -658,7 +678,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                     </span>
                     {comment.flowerCount > 0 ? (
                       <span style={{ color: "#9d6f1f", whiteSpace: "nowrap" }}>
-                        <UiIcon name="helpful" size={13} /> 有帮助 {comment.flowerCount}
+                        <UiIcon name="helpful" size={13} /> {t.archive_comments.helpful} {comment.flowerCount}
                       </span>
                     ) : null}
                     <button
@@ -673,7 +693,11 @@ function mobileCommentActionButtonStyle(active: boolean) {
                         cursor: "pointer",
                         whiteSpace: "nowrap",
                       }}
-                      aria-label={comment.likedByMe ? "取消喜欢" : "喜欢评论"}
+                      aria-label={
+                        comment.likedByMe
+                          ? t.archive_comments.unlike_aria
+                          : t.archive_comments.like_comment_aria
+                      }
                     >
                       <UiIcon name={comment.likedByMe ? "heart-filled" : "heart"} size={13} /> {comment.likeCount}
                     </button>
@@ -696,7 +720,9 @@ function mobileCommentActionButtonStyle(active: boolean) {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {deletingCommentId === comment.id ? "删除中" : "删除"}
+                        {deletingCommentId === comment.id
+                          ? t.archive_comments.deleting
+                          : t.archive_comments.delete}
                       </button>
                     ) : null}
 
@@ -715,13 +741,15 @@ function mobileCommentActionButtonStyle(active: boolean) {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {canRevoke ? "已标记 · 撤回" : "已标记"}
+                          {canRevoke
+                            ? t.archive_comments.marked_revoke
+                            : t.archive_comments.marked}
                         </button>
                       ) : comment.myFlower?.revoked_at ? (
                         <span
                           style={{ color: "#9b8771", whiteSpace: "nowrap" }}
                         >
-                          已撤回标记
+                          {t.archive_comments.mark_revoked}
                         </span>
                       ) : (
                         <button
@@ -737,7 +765,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          有帮助
+                          {t.archive_comments.helpful}
                         </button>
                       )
                     ) : null}
@@ -754,7 +782,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                   <textarea
                     value={commentText}
                     onChange={(event) => setCommentText(event.target.value)}
-                    placeholder="写评论"
+                    placeholder={t.archive_comments.composer_placeholder}
                     rows={2}
                     style={{
                       width: "100%",
@@ -778,14 +806,14 @@ function mobileCommentActionButtonStyle(active: boolean) {
                     }}
                   >
                     <div style={{ fontSize: 11, color: "#7b8776" }}>
-                      帮助标记可在{" "}
+                      {t.archive_comments.trace_prefix}{" "}
                       <Link
                         href="/profile/helpful"
                         style={{ color: "#4c7b3f" }}
                       >
-                        帮助标记记录
+                        {t.archive_comments.trace_link}
                       </Link>{" "}
-                      中追溯。
+                      {t.archive_comments.trace_suffix}
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
@@ -797,7 +825,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
                           "#dfe5dc",
                         )}
                       >
-                        取消
+                        {t.archive_comments.cancel}
                       </button>
                       <button
                         type="button"
@@ -813,26 +841,29 @@ function mobileCommentActionButtonStyle(active: boolean) {
                           cursor: "pointer",
                         }}
                       >
-                        {submitting ? "发送中..." : "发布评论"}
+                        {submitting
+                          ? t.archive_comments.sending
+                          : t.archive_comments.publish_comment}
                       </button>
                     </div>
                   </div>
                 </>
               ) : membershipLoading && currentUserId ? (
                 <div style={{ fontSize: 12, color: "#7b8776" }}>
-                  状态读取中...
+                  {t.archive_comments.membership_loading}{t.archive_comments.loading_suffix}
                 </div>
               ) : membershipBlocked ? (
                 <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
-                  {getCreateContentBlockedText(membership)}，请{" "}
+                  {getCreateContentBlockedText(membership, language)}
+                  {t.archive_comments.membership_link_prefix}{" "}
                   <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
-                    了解云会员
+                    {t.archive_comments.learn_membership}
                   </Link>
-                  。
+                  {t.archive_comments.membership_link_suffix}
                 </div>
               ) : (
                 <div style={{ fontSize: 12, color: "#7b8776" }}>
-                  登录后可评论。
+                  {t.archive_comments.login_to_comment}
                 </div>
               )}
             </div>

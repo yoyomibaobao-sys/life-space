@@ -2,6 +2,7 @@ import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
 import { formatCardDate, formatPreciseDateTime } from "@/lib/date-time";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Language } from "@/lib/i18n";
 
 export type UserProfileStats = {
   archiveCount: number;
@@ -44,12 +45,18 @@ export type PublicUserProfileData = {
   recentArchives: UserProfileArchiveItem[];
 };
 
-export function formatProfileDateTime(value?: string | null) {
-  return formatPreciseDateTime(value) || "暂无";
+export function formatProfileDateTime(
+  value?: string | null,
+  language: Language = "zh"
+) {
+  return formatPreciseDateTime(value) || (language === "en" ? "None" : "暂无");
 }
 
-export function formatProfileDate(value?: string | null) {
-  return formatCardDate(value) || "暂无";
+export function formatProfileDate(
+  value?: string | null,
+  language: Language = "zh"
+) {
+  return formatCardDate(value) || (language === "en" ? "None" : "暂无");
 }
 
 function formatStorageNumber(value: number) {

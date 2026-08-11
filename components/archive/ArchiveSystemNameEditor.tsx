@@ -1,6 +1,7 @@
 "use client";
 
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   value: string;
@@ -25,6 +26,8 @@ export default function ArchiveSystemNameEditor({
   onSave,
   onCancel,
 }: Props) {
+  const { t } = useLanguage();
+
   return (
     <span
       onClick={(e) => e.stopPropagation()}
@@ -44,17 +47,19 @@ export default function ArchiveSystemNameEditor({
         hasExactMatch={hasExactMatch}
         onChange={onChange}
         onSelect={(candidate) => onSelect(candidate.label)}
-        placeholder="输入关键词后点选"
-        emptyText="没有找到匹配具体名称"
-        customActionLabel={(inputValue) => `+ 新增为具体名称：${inputValue}`}
+        placeholder={t.archive_workspace.input_then_select}
+        emptyText={t.archive_workspace.no_matching_specific_name}
+        customActionLabel={(inputValue) =>
+          `+ ${t.archive_workspace.add_as_specific_name}${inputValue}`
+        }
       />
 
       <button type="button" onClick={onSave} style={{ fontSize: 12 }}>
-        保存
+        {t.archive_workspace.save}
       </button>
 
       <button type="button" onClick={onCancel} style={{ fontSize: 12 }}>
-        取消
+        {t.archive_workspace.cancel}
       </button>
     </span>
   );

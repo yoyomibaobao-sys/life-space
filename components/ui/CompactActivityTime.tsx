@@ -1,4 +1,7 @@
+"use client";
+
 import { formatCompactActivityTime, formatFullActivityTime } from "@/lib/activity-time";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function CompactActivityTime({
   value,
@@ -9,7 +12,8 @@ export default function CompactActivityTime({
   fallback?: string | null;
   className?: string;
 }) {
-  const text = formatCompactActivityTime(value) || fallback;
+  const { language } = useLanguage();
+  const text = formatCompactActivityTime(value, undefined, language) || fallback;
   if (!text) return null;
 
   const dateTime = value

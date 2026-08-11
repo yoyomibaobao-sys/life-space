@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlantInterestItem, PlantPlanItem } from "@/lib/archive-page-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   plantPlans: PlantPlanItem[];
@@ -15,6 +16,7 @@ export default function ArchiveOverviewCards({
   onOpenPlans,
   onOpenInterests,
 }: Props) {
+  const { t } = useLanguage();
   const activePlanCount = plantPlans.filter((item) => item.status !== "abandoned").length;
   const startedPlanCount = plantPlans.filter(
     (item) => item.status === "started" || item.created_archive_id
@@ -43,10 +45,11 @@ export default function ArchiveOverviewCards({
         }}
       >
         <div style={{ fontSize: 17, marginBottom: 6, color: "#1f2d1f" }}>
-          我的种植计划
+          {t.archive_workspace.plans_title}
         </div>
         <div style={{ fontSize: 13, color: "#5f7f5f", lineHeight: 1.6 }}>
-          {activePlanCount} 个计划 · {startedPlanCount} 个已开始
+          {activePlanCount} {t.archive_workspace.plans_count_prefix} {startedPlanCount}{" "}
+          {t.archive_workspace.plans_started_suffix}
         </div>
       </button>
 
@@ -64,10 +67,10 @@ export default function ArchiveOverviewCards({
         }}
       >
         <div style={{ fontSize: 17, marginBottom: 6, color: "#1f2d1f" }}>
-          我感兴趣的植物
+          {t.archive_workspace.interests_title}
         </div>
         <div style={{ fontSize: 13, color: "#777", lineHeight: 1.6 }}>
-          {plantInterests.length} 个植物
+          {plantInterests.length} {t.archive_workspace.plants_count_suffix}
         </div>
       </button>
     </section>

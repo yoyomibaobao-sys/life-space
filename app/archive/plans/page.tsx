@@ -27,13 +27,8 @@ import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
-
-const statusLabels: Record<PlantPlanStatus, string> = {
-  want: "想种",
-  preparing: "准备中",
-  started: "已开始",
-  abandoned: "已放弃",
-};
+import { formatCardDate } from "@/lib/date-time";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 const statusStyles: Record<
   PlantPlanStatus,
@@ -61,18 +56,30 @@ const statusStyles: Record<
   },
 };
 
-const locationLabels: Record<PlantPlanLocationType, string> = {
-  indoor: "室内",
-  balcony: "阳台",
-  garden: "花园",
-  terrace: "露台",
-  greenhouse: "温室",
-  field: "田地",
-  other: "其他",
-};
-
 export default function PlantPlansPage() {
   const router = useRouter();
+  const { t } = useLanguage();
+  const statusLabels = useMemo<Record<PlantPlanStatus, string>>(
+    () => ({
+      want: t.plant_lists.status_want,
+      preparing: t.plant_lists.status_preparing,
+      started: t.plant_lists.status_started,
+      abandoned: t.plant_lists.status_abandoned,
+    }),
+    [t]
+  );
+  const locationLabels = useMemo<Record<PlantPlanLocationType, string>>(
+    () => ({
+      indoor: t.plant_lists.location_indoor,
+      balcony: t.plant_lists.location_balcony,
+      garden: t.plant_lists.location_garden,
+      terrace: t.plant_lists.location_terrace,
+      greenhouse: t.plant_lists.location_greenhouse,
+      field: t.plant_lists.location_field,
+      other: t.plant_lists.location_other,
+    }),
+    [t]
+  );
 
   const [userId, setUserId] = useState("");
   const [plans, setPlans] = useState<PlantPlanRow[]>([]);
@@ -121,14 +128,14 @@ export default function PlantPlansPage() {
     setHasCloudAccess(canCreateMembershipContent(membership));
 
     if (error) {
-      showToast("读取种植计划失败：" + error.message);
+      showToast(t.plant_lists.read_plans_failed + error.message);
       setPlans([]);
     } else {
       setPlans(data || []);
     }
 
     setLoading(false);
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -169,7 +176,7 @@ export default function PlantPlansPage() {
   ) {
     if (!userId) return;
     if (!hasCloudAccess) {
-      showToast("需要开通云会员才能修改种植计划；现有条目仍可移除。");
+      showToast(t.plant_lists.plans_edit_membership);
       return;
     }
 
@@ -184,7 +191,7 @@ export default function PlantPlansPage() {
     setSavingId(null);
 
     if (error) {
-      showToast("保存失败：" + error.message);
+      showToast(t.plant_lists.save_failed_prefix + error.message);
       return;
     }
 
@@ -213,24 +220,28 @@ export default function PlantPlansPage() {
     setRemovingPlanId(null);
 
     if (error) {
-      showToast("移除失败：" + error.message);
+      showToast(t.plant_lists.remove_failed_prefix + error.message);
       return;
     }
 
     setPlans((prev) => prev.filter((item) => item.id !== removePlanTarget.id));
     setRemovePlanTarget(null);
-    showToast("已从种植计划中移除");
+    showToast(t.plant_lists.plan_removed);
   }
 
   function renderPlanCard(plan: PlantPlanRow) {
     const status = (plan.status || "want") as PlantPlanStatus;
     const statusStyle = statusStyles[status] || statusStyles.want;
     const metaItems = [
-      plan.planned_start_date ? `计划：${plan.planned_start_date}` : null,
-      plan.location_type
-        ? `位置：${locationLabels[plan.location_type as PlantPlanLocationType] || plan.location_type}`
+      plan.planned_start_date
+        ? `${t.plant_lists.planned_prefix}${formatCardDate(plan.planned_start_date)}`
         : null,
-      plan.created_archive_id ? "已创建项目" : null,
+      plan.location_type
+        ? `${t.plant_lists.location_prefix}${
+            locationLabels[plan.location_type as PlantPlanLocationType] || plan.location_type
+          }`
+        : null,
+      plan.created_archive_id ? t.plant_lists.project_created : null,
     ].filter(Boolean) as string[];
 
     return (
@@ -238,7 +249,7 @@ export default function PlantPlansPage() {
         <ArchivePlantCardHeader
           speciesId={plan.species_id}
           plant={plan.plant_species}
-          badgeText={plan.created_archive_id ? "已开始 · 有项目" : statusLabels[status]}
+          badgeText={plan.created_archive_id ? t.plant_lists.started_with_project : statusLabels[status]}
           badgeStyle={statusStyle}
           metaItems={metaItems}
         />
@@ -252,7 +263,7 @@ export default function PlantPlansPage() {
           }}
         >
           <label style={{ fontSize: 13, color: "#666" }}>
-            状态
+            {t.plant_lists.status}
             <select
               value={plan.status || "want"}
               disabled={!hasCloudAccess || savingId === plan.id}
@@ -277,7 +288,7 @@ export default function PlantPlansPage() {
           </label>
 
           <label style={{ fontSize: 13, color: "#666" }}>
-            计划开始时间
+            {t.plant_lists.planned_start}
             <input
               type="date"
               value={plan.planned_start_date || ""}
@@ -299,7 +310,7 @@ export default function PlantPlansPage() {
           </label>
 
           <label style={{ fontSize: 13, color: "#666" }}>
-            计划位置
+            {t.plant_lists.planned_location}
             <select
               value={plan.location_type || ""}
               disabled={!hasCloudAccess || savingId === plan.id}
@@ -317,7 +328,7 @@ export default function PlantPlansPage() {
                 background: "#fff",
               }}
             >
-              <option value="">未设置</option>
+              <option value="">{t.plant_lists.not_set}</option>
               {Object.entries(locationLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -335,7 +346,7 @@ export default function PlantPlansPage() {
             color: "#666",
           }}
         >
-          备注
+          {t.plant_lists.note}
           <textarea
             value={plan.note || ""}
             disabled={!hasCloudAccess || savingId === plan.id}
@@ -347,7 +358,7 @@ export default function PlantPlansPage() {
               )
             }
             onBlur={(event) => updatePlan(plan.id, { note: event.target.value })}
-            placeholder="比如：等春天播种、先买苗、想试试阳台盆栽..."
+            placeholder={t.plant_lists.plan_note_placeholder}
             rows={3}
             style={subtleTextareaStyle}
           />
@@ -376,7 +387,7 @@ export default function PlantPlansPage() {
                 border: "1px solid #cdeccd",
               }}
             >
-              查看植物项目
+              {t.plant_lists.view_project}
             </Link>
           ) : (
             <Link
@@ -399,42 +410,46 @@ export default function PlantPlansPage() {
                 textDecoration: "none",
               }}
             >
-              {hasCloudAccess ? "创建云端项目" : "创建本地项目"}
+              {hasCloudAccess
+                ? t.plant_lists.create_cloud_project
+                : t.plant_lists.create_local_project}
             </Link>
           )}
 
           <Link href={`/plant/${plan.species_id}`} style={neutralActionLinkStyle}>
-            查看植物指引
+            {t.plant_lists.view_guide}
           </Link>
 
           <button type="button" onClick={() => removePlan(plan.id)} style={dangerActionButtonStyle}>
-            移除
+            {t.plant_lists.remove}
           </button>
 
-          {savingId === plan.id && <span style={{ color: "#888", fontSize: 13 }}>保存中...</span>}
+          {savingId === plan.id && (
+            <span style={{ color: "#888", fontSize: 13 }}>{t.plant_lists.saving}</span>
+          )}
         </div>
       </article>
     );
   }
 
   if (loading) {
-    return <main style={{ padding: 20 }}>加载中...</main>;
+    return <main style={{ padding: 20 }}>{t.loading}</main>;
   }
 
   return (
     <main style={{ padding: "16px", maxWidth: 980, margin: "0 auto" }}>
       <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-        <UiIcon name="arrow-left" size={15} /> 返回空间
+        <UiIcon name="arrow-left" size={15} /> {t.plant_lists.back_to_space}
       </Link>
 
       <ArchivePlantPageHero
-        badge="个人种植路径"
-        title="我的种植计划"
-        description="这里保存准备种、等待季节、正在筹备的植物。真正开始种植后，再创建正式项目并长期记录。"
+        badge={t.plant_lists.personal_path}
+        title={t.plant_lists.plans_title}
+        description={t.plant_lists.plans_description}
         primaryHref="/plant"
-        primaryLabel="去指引选择植物"
+        primaryLabel={t.plant_lists.guide_choose}
         secondaryHref="/archive/interests"
-        secondaryLabel="查看感兴趣植物"
+        secondaryLabel={t.plant_lists.view_interests}
       />
 
       {!hasCloudAccess ? (
@@ -450,19 +465,19 @@ export default function PlantPlansPage() {
             lineHeight: 1.7,
           }}
         >
-          云端种植计划属于云会员权益。现有过渡条目仍可查看和移除，但不能修改；你仍可创建本地项目。
+          {t.plant_lists.plans_membership_notice}
           <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-            了解云会员
+            {t.plant_lists.learn_membership}
           </Link>
         </div>
       ) : null}
 
       {plans.length === 0 ? (
         <ArchivePlantEmptyState
-          title="还没有种植计划"
-          description="看到想尝试的植物，可以先加入计划；等真的开始种，再转成正式项目。"
+          title={t.plant_lists.no_plans}
+          description={t.plant_lists.no_plans_description}
           href="/plant"
-          label="去指引看看"
+          label={t.plant_lists.guide_browse}
         />
       ) : (
         <div style={{ marginTop: 16, display: "grid", gap: 18 }}>
@@ -487,10 +502,14 @@ export default function PlantPlansPage() {
 
       <ConfirmDialog
         open={Boolean(removePlanTarget)}
-        title="移除种植计划"
-        message={`确定将“${removePlanTarget ? plantDisplayName(removePlanTarget.plant_species) : "这株植物"}”从种植计划中移除吗？`}
-        confirmText={removingPlanId ? "移除中..." : "移除"}
-        cancelText="取消"
+        title={t.plant_lists.remove_plan_title}
+        message={`${t.plant_lists.remove_plan_prefix}${
+          removePlanTarget
+            ? plantDisplayName(removePlanTarget.plant_species)
+            : t.plant_lists.fallback_plant
+        }${t.plant_lists.remove_plan_suffix}`}
+        confirmText={removingPlanId ? t.plant_lists.removing : t.plant_lists.remove}
+        cancelText={t.cancel}
         danger
         onClose={() => {
           if (!removingPlanId) setRemovePlanTarget(null);

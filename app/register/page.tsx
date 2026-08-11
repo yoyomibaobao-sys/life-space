@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 import { trackAnalyticsEvent } from "@/lib/analytics-events";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -21,22 +22,30 @@ function isNetworkError(message: string) {
   ].some((part) => text.includes(part));
 }
 
-function getErrorMessage(message: string) {
+function getErrorMessage(
+  message: string,
+  copy: {
+    already_registered: string;
+    register_failed_password: string;
+    register_failed_prefix: string;
+  }
+) {
   const text = message.toLowerCase();
 
   if (text.includes("already registered") || text.includes("been registered")) {
-    return "该邮箱已注册，请直接登录";
+    return copy.already_registered;
   }
 
   if (text.includes("password")) {
-    return "注册失败：密码至少需要 6 位";
+    return copy.register_failed_password;
   }
 
-  return `注册失败：${message}`;
+  return `${copy.register_failed_prefix}${message}`;
 }
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,17 +60,17 @@ export default function RegisterPage() {
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
-      setMessage("请输入邮箱和密码");
+      setMessage(t.auth.enter_email_password);
       return;
     }
 
     if (!isEmail(cleanEmail)) {
-      setMessage("请输入正确的邮箱地址");
+      setMessage(t.auth.invalid_email);
       return;
     }
 
     if (password.length < 6) {
-      setMessage("密码至少需要 6 位");
+      setMessage(t.auth.password_minimum);
       return;
     }
 
@@ -79,20 +88,18 @@ export default function RegisterPage() {
 
       if (error) {
         if (isNetworkError(error.message)) {
-          setMessage(
-            "当前网络不稳定，暂时无法注册。你可以先本地记录，稍后再登录绑定账号。",
-          );
+          setMessage(t.auth.network_local_fallback);
           setShowLocalFallback(true);
           return;
         }
 
-        setMessage(getErrorMessage(error.message));
+        setMessage(getErrorMessage(error.message, t.auth));
         return;
       }
 
       const identities = data.user?.identities ?? [];
       if (data.user && identities.length === 0) {
-        setMessage("该邮箱已注册，请直接登录");
+        setMessage(t.auth.already_registered);
         return;
       }
 
@@ -105,9 +112,7 @@ export default function RegisterPage() {
 
       router.push(`/check-email?email=${encodeURIComponent(cleanEmail)}&type=signup`);
     } catch {
-      setMessage(
-        "当前网络不稳定，暂时无法注册。你可以先本地记录，稍后再登录绑定账号。",
-      );
+      setMessage(t.auth.network_local_fallback);
       setShowLocalFallback(true);
     } finally {
       setLoading(false);
@@ -117,7 +122,7 @@ export default function RegisterPage() {
   return (
     <main style={{ padding: "32px 20px", display: "flex", justifyContent: "center" }}>
       <div style={{ width: "100%", maxWidth: 320 }}>
-        <h1 style={{ marginBottom: 10 }}>注册账号</h1>
+        <h1 style={{ marginBottom: 10 }}>{t.auth.register_title}</h1>
 
         <div
           style={{
@@ -131,15 +136,15 @@ export default function RegisterPage() {
             lineHeight: 1.7,
           }}
         >
-          注册成功后会获得永久账号编号。首批20名正式注册用户，在体验名额和平台存储安全线允许时，可自动获得30MB云空间体验；名额以注册成功时为准。30MB用完后仍可继续本地记录，开通云会员后升级为1GB。注册和获得体验额度都不会自动上传或公开已有本地内容。
+          {t.auth.registration_intro}
         </div>
 
         <form onSubmit={handleRegister}>
-          <p>邮箱</p>
+          <p>{t.auth.email}</p>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="请输入邮箱"
+            placeholder={t.auth.email_placeholder}
             autoComplete="email"
             style={{
               width: "100%",
@@ -150,7 +155,7 @@ export default function RegisterPage() {
             }}
           />
 
-          <p style={{ marginTop: 16 }}>密码</p>
+          <p style={{ marginTop: 16 }}>{t.auth.password}</p>
           <PasswordInput value={password} onChange={setPassword} />
 
           <button
@@ -168,7 +173,7 @@ export default function RegisterPage() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-          {loading ? "处理中..." : "注册"}
+          {loading ? t.auth.processing : t.register}
           </button>
         </form>
 
@@ -185,7 +190,7 @@ export default function RegisterPage() {
             cursor: "pointer",
           }}
         >
-          已有账号？去登录
+          {t.auth.existing_account_login}
         </button>
 
         {message && (
@@ -220,7 +225,7 @@ export default function RegisterPage() {
               fontWeight: 500,
             }}
           >
-            先本地记录
+            {t.auth.local_first}
           </button>
         ) : null}
       </div>

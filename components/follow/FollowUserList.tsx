@@ -1,7 +1,10 @@
+"use client";
+
 import { EmptyState, buttonRowStyle, cardBodyStyle, cardTopRowStyle, ghostButtonStyle, listStyle, noteLineStyle, primaryButtonStyle, projectTitleStyle, statsLineStyle, userAvatarWrapStyle, userCardStyle } from "@/components/follow/FollowShared";
 import type { FollowUserCard } from "@/lib/follow-types";
 import UserAvatar from "@/components/social/UserAvatar";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function FollowUserList({
   items,
@@ -12,12 +15,15 @@ export default function FollowUserList({
   onOpenUser: (userId: string) => void;
   onUnfollow: (userId: string) => void;
 }) {
+  const { language, t } = useLanguage();
+  const followT = t.follow;
+
   if (!items.length) {
     return (
       <EmptyState
-        title="还没有关注的用户"
-        description="去别人的空间页点“关注用户”后，这里就会出现。"
-        actionLabel="去发现页看看"
+        title={followT.empty_users}
+        description={followT.empty_users_intro}
+        actionLabel={followT.browse_discover}
         href="/discover"
       />
     );
@@ -37,10 +43,10 @@ export default function FollowUserList({
             </div>
 
             <div style={noteLineStyle}>
-              最近更新：
+              {followT.latest_update}
               {item.recentArchiveTitles.length
-                ? item.recentArchiveTitles.join("、")
-                : "最近还没有公开项目更新"}
+                ? item.recentArchiveTitles.join(language === "zh" ? "、" : ", ")
+                : followT.no_recent_update}
             </div>
 
             <div style={statsLineStyle}>
@@ -52,10 +58,10 @@ export default function FollowUserList({
 
             <div style={buttonRowStyle}>
               <button type="button" onClick={() => onOpenUser(item.id)} style={primaryButtonStyle}>
-                进入空间
+                {followT.enter_space}
               </button>
               <button type="button" onClick={() => onUnfollow(item.id)} style={ghostButtonStyle}>
-                取消关注
+                {followT.unfollow}
               </button>
             </div>
           </div>

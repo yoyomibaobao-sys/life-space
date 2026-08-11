@@ -19,84 +19,7 @@ import {
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
 import UiIcon from "@/components/ui/UiIcon";
-
-const categoryLabels: Record<string, string> = {
-  all: "全部",
-  vegetable: "蔬菜 / 蔬果",
-  fruit: "果树 / 果类",
-  herb: "香草 / 药草",
-  medicinal: "香草 / 药草",
-  flower: "花卉",
-  houseplant: "观叶植物",
-  succulent: "多肉 / 仙人掌",
-  grain: "谷物 / 作物",
-  field_crop: "谷物 / 作物",
-  tree: "乔木 / 灌木",
-};
-
-const subCategoryLabels: Record<string, string> = {
-  leafy_vegetable: "叶菜类",
-  leafy: "叶菜类",
-  fruiting_vegetable: "茄果 / 瓜果类",
-  root_vegetable: "根茎 / 块茎类",
-  root: "根茎类",
-  legume: "豆类",
-  allium: "葱蒜类",
-  cucurbit: "瓜类",
-  citrus: "柑橘类",
-  berry: "浆果类",
-  berry_vine_fruit: "浆果 / 藤本果类",
-  pome_stone_fruit: "仁果 / 核果类",
-  tropical_subtropical_fruit: "热带 / 亚热带果类",
-  tree_fruit: "果树类",
-  herb: "香草类",
-  flowering_shrub: "花灌木",
-  flowering_tree: "观花树木",
-  annual_flower: "一年生花卉",
-  perennial_flower: "多年生花卉",
-  flower: "花卉类",
-  houseplant: "观叶类",
-  foliage: "观叶",
-  succulent: "多肉类",
-  cactus: "仙人掌",
-  field_crop: "田园作物",
-  grain: "谷物类",
-};
-
-const lightOptions = [
-  { value: "all", label: "全部光照" },
-  { value: "sun", label: "喜阳" },
-  { value: "part_shade", label: "半阴可种" },
-  { value: "shade", label: "耐阴" },
-];
-
-const waterOptions = [
-  { value: "all", label: "全部水分" },
-  { value: "moist", label: "喜湿" },
-  { value: "drought", label: "耐旱" },
-];
-
-const temperatureOptions = [
-  { value: "all", label: "全部温度" },
-  { value: "heat", label: "喜热" },
-  { value: "cool", label: "喜凉" },
-  { value: "cold", label: "耐寒" },
-  { value: "frost_sensitive", label: "怕霜冻" },
-];
-
-const sceneOptions = [
-  { value: "all", label: "全部场景" },
-  { value: "container", label: "可盆栽" },
-  { value: "balcony", label: "阳台友好" },
-];
-
-const indoorOptions = [
-  { value: "all", label: "全部室内参考" },
-  { value: "not_indoor", label: "不适合室内" },
-  { value: "temporary_only", label: "可短期室内" },
-  { value: "winter_only", label: "可室内过冬" },
-  { value: "long_term_ok", label: "可长期室内" },
-];
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
 const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
@@ -158,15 +81,14 @@ function normalizePlantCategoryKey(value?: string | null) {
   return key;
 }
 
-function categoryLabel(value?: string | null) {
-  if (!value) return "未分类";
+function categoryLabel(
+  value: string | null | undefined,
+  labels: Record<string, string>,
+  uncategorized: string
+) {
+  if (!value) return uncategorized;
   const key = normalizePlantCategoryKey(value);
-  return categoryLabels[key] || key || "未分类";
-}
-
-function subCategoryLabel(value?: string | null) {
-  if (!value) return "";
-  return subCategoryLabels[value] || value;
+  return labels[key] || key || uncategorized;
 }
 
 function uniqueTextList(items: unknown[]) {
@@ -250,6 +172,13 @@ function FilterSelect({
 }
 
 export default function PlantIndexPage() {
+  const { language, t } = useLanguage();
+  const categoryLabels = t.plant.categories as Record<string, string>;
+  const lightOptions = t.plant.light_options;
+  const waterOptions = t.plant.water_options;
+  const temperatureOptions = t.plant.temperature_options;
+  const sceneOptions = t.plant.scene_options;
+  const indoorOptions = t.plant.indoor_options;
   const [plants, setPlants] = useState<PlantItem[]>([]);
   const [aliases, setAliases] = useState<AliasItem[]>([]);
   const [basicOverviews, setBasicOverviews] = useState<BasicOverview[]>([]);
@@ -538,8 +467,11 @@ export default function PlantIndexPage() {
   }, [plants]);
 
   const categoryFilterOptions = useMemo(
-    () => categories.map((category) => ({ value: category, label: categoryLabel(category) })),
-    [categories]
+    () => categories.map((category) => ({
+      value: category,
+      label: categoryLabel(category, categoryLabels, t.plant.uncategorized),
+    })),
+    [categories, categoryLabels, t.plant.uncategorized]
   );
 
   const filteredPlants = useMemo(() => {
@@ -706,11 +638,11 @@ export default function PlantIndexPage() {
       return (
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ color: "#71806d", fontSize: 12, fontWeight: 700 }}>
-            名称联想
+            {t.plant.name_suggestions}
           </div>
           {searchSuggestions.length > 0 ? (
             searchSuggestions.map((plant) => {
-              const displayName = plant.common_name || plant.scientific_name || "未命名植物";
+              const displayName = plant.common_name || plant.scientific_name || t.plant.unnamed;
 
               return (
                 <Link
@@ -757,7 +689,7 @@ export default function PlantIndexPage() {
             })
           ) : (
             <div style={{ color: "#7b8578", fontSize: 13, lineHeight: 1.6 }}>
-              没有匹配的名称联想，仍可点击“搜索”查看完整结果。
+              {t.plant.no_suggestions}
             </div>
           )}
         </div>
@@ -774,7 +706,7 @@ export default function PlantIndexPage() {
             gap: 12,
           }}
         >
-          <span style={{ color: "#71806d", fontSize: 12, fontWeight: 700 }}>最近搜索</span>
+          <span style={{ color: "#71806d", fontSize: 12, fontWeight: 700 }}>{t.plant.recent_searches}</span>
           {recentSearches.length > 0 ? (
             <button
               type="button"
@@ -788,7 +720,7 @@ export default function PlantIndexPage() {
                 fontSize: 12,
               }}
             >
-              清空
+              {t.plant.clear}
             </button>
           ) : null}
         </div>
@@ -823,7 +755,7 @@ export default function PlantIndexPage() {
                 </button>
                 <button
                   type="button"
-                  aria-label={`删除最近搜索：${item}`}
+                  aria-label={`${t.plant.delete_recent_prefix}${item}`}
                   onClick={() => removeRecentSearch(item)}
                   style={{
                     border: 0,
@@ -841,7 +773,7 @@ export default function PlantIndexPage() {
             ))}
           </div>
         ) : (
-          <div style={{ color: "#929990", fontSize: 13 }}>最近还没有搜索。</div>
+          <div style={{ color: "#929990", fontSize: 13 }}>{t.plant.no_recent_searches}</div>
         )}
       </div>
     );
@@ -853,7 +785,7 @@ export default function PlantIndexPage() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="搜索植物"
+          aria-label={t.plant.search_aria}
           style={{
             position: "fixed",
             inset: 0,
@@ -877,7 +809,7 @@ export default function PlantIndexPage() {
           >
             <button
               type="button"
-              aria-label="返回植物指引"
+              aria-label={t.plant.back_to_guide}
               onClick={() => setIsMobileSearchOpen(false)}
               style={{
                 width: 36,
@@ -903,8 +835,8 @@ export default function PlantIndexPage() {
                 ref={mobileSearchInputRef}
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="搜索植物名、别名或拉丁名"
-                aria-label="搜索植物名、别名或拉丁名"
+                placeholder={t.plant.search_placeholder}
+                aria-label={t.plant.search_placeholder}
                 style={{
                   width: "100%",
                   minWidth: 0,
@@ -933,7 +865,7 @@ export default function PlantIndexPage() {
                   fontWeight: 700,
                 }}
               >
-                搜索
+                {t.plant.search}
               </button>
             </form>
           </div>
@@ -968,7 +900,7 @@ export default function PlantIndexPage() {
               whiteSpace: "nowrap",
             }}
           >
-            植物指引
+            {t.plant.title}
           </h1>
           <Link
             href={isSignedIn ? "/archive/interests" : "/login"}
@@ -988,7 +920,7 @@ export default function PlantIndexPage() {
             }}
           >
             <UiIcon name="bookmark" size={14} style={{ marginRight: 5 }} />
-            我的收藏{isSignedIn && interestCount !== null ? `（${interestCount}）` : ""}
+            {t.plant.my_saved}{isSignedIn && interestCount !== null ? `（${interestCount}）` : ""}
           </Link>
         </div>
 
@@ -1010,8 +942,8 @@ export default function PlantIndexPage() {
               onKeyDown={(event) => {
                 if (event.key === "Escape") setSearchPanelOpen(false);
               }}
-              placeholder="搜索植物名、别名或拉丁名"
-              aria-label="搜索植物名、别名或拉丁名"
+              placeholder={t.plant.search_placeholder}
+              aria-label={t.plant.search_placeholder}
               style={{
                 width: "100%",
                 minWidth: 0,
@@ -1040,7 +972,7 @@ export default function PlantIndexPage() {
                 fontWeight: 700,
               }}
             >
-              搜索
+              {t.plant.search}
             </button>
           </form>
 
@@ -1096,7 +1028,7 @@ export default function PlantIndexPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {categoryLabel(category)}
+                {categoryLabel(category, categoryLabels, t.plant.uncategorized)}
               </button>
             ))}
           </div>
@@ -1116,20 +1048,20 @@ export default function PlantIndexPage() {
         >
           {!isSignedIn ? (
             <>
-              游客可以查看植物目录、名称和分类。
+              {t.plant.visitor_notice}
               <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-                注册后查看基础概要
+                {t.plant.register_for_summary}
               </Link>
             </>
           ) : hasCloudAccess ? (
-            "当前账号可查看完整参数、环境筛选、养护指引和相关种植记录。"
+            t.plant.cloud_notice
           ) : (
             <>
-              当前是本地用户，可以查看基础概要和少量核心参数；完整参数、环境筛选和完整指引需
+              {t.plant.local_notice_prefix}
               <Link href="/membership" style={{ marginLeft: 4, color: "#3f6f37", fontWeight: 700 }}>
-                开通云会员
+                {t.plant.open_membership}
               </Link>
-              。
+              {t.plant.local_notice_suffix}
             </>
           )}
         </div>
@@ -1153,7 +1085,7 @@ export default function PlantIndexPage() {
             }}
           >
             <div style={{ fontSize: isMobileViewport ? 13 : 14, fontWeight: 600 }}>
-              {hasCloudAccess ? "类别与环境筛选" : "类别筛选"}
+              {hasCloudAccess ? t.plant.category_environment_filters : t.plant.category_filter}
             </div>
             {hasActiveEnvironmentFilters && (
               <button
@@ -1169,7 +1101,7 @@ export default function PlantIndexPage() {
                   cursor: "pointer",
                 }}
               >
-                清空环境筛选
+                {t.plant.clear_environment_filters}
               </button>
             )}
           </div>
@@ -1185,7 +1117,7 @@ export default function PlantIndexPage() {
             }}
           >
             <FilterSelect
-              label="类别"
+              label={t.plant.category}
               value={activeCategory}
               onChange={setActiveCategory}
               options={categoryFilterOptions}
@@ -1194,35 +1126,35 @@ export default function PlantIndexPage() {
             {hasCloudAccess ? (
               <>
                 <FilterSelect
-                  label="光照"
+                  label={t.plant.light}
                   value={filters.light}
                   onChange={(value) => updateFilter("light", value)}
                   options={lightOptions}
                   compact={isMobileViewport}
                 />
                 <FilterSelect
-                  label="水分"
+                  label={t.plant.water}
                   value={filters.water}
                   onChange={(value) => updateFilter("water", value)}
                   options={waterOptions}
                   compact={isMobileViewport}
                 />
                 <FilterSelect
-                  label="温度"
+                  label={t.plant.temperature}
                   value={filters.temperature}
                   onChange={(value) => updateFilter("temperature", value)}
                   options={temperatureOptions}
                   compact={isMobileViewport}
                 />
                 <FilterSelect
-                  label="场景"
+                  label={t.plant.scene}
                   value={filters.scene}
                   onChange={(value) => updateFilter("scene", value)}
                   options={sceneOptions}
                   compact={isMobileViewport}
                 />
                 <FilterSelect
-                  label="室内辅助参考"
+                  label={t.plant.indoor_reference}
                   value={filters.indoor}
                   onChange={(value) => updateFilter("indoor", value)}
                   options={indoorOptions}
@@ -1247,13 +1179,15 @@ export default function PlantIndexPage() {
         >
           {!isMobileViewport || query ? (
             <h2 style={{ margin: 0, fontSize: isMobileViewport ? 16 : 18 }}>
-              {query ? `“${query}”的搜索结果` : "全部植物"}
+              {query
+                ? `${t.plant.results_prefix}${query}${t.plant.results_suffix}`
+                : t.plant.all_plants}
             </h2>
           ) : null}
 
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
             <span style={{ fontSize: 13, color: "#888" }}>
-              {loading ? "加载中..." : `${filteredPlants.length} 个结果`}
+              {loading ? t.plant.loading : `${filteredPlants.length}${t.plant.result_suffix}`}
             </span>
             {query ? (
               <button
@@ -1268,7 +1202,7 @@ export default function PlantIndexPage() {
                   fontSize: 13,
                 }}
               >
-                清除搜索
+                {t.plant.clear_search}
               </button>
             ) : null}
           </div>
@@ -1284,7 +1218,7 @@ export default function PlantIndexPage() {
               color: "#888",
             }}
           >
-            加载中...
+            {t.plant.loading}
           </div>
         ) : filteredPlants.length === 0 ? (
           <div
@@ -1297,7 +1231,7 @@ export default function PlantIndexPage() {
               lineHeight: 1.75,
             }}
           >
-            没有找到匹配植物。可以放宽环境条件，或先在创建项目时提交候选植物。
+            {t.plant.no_results}
           </div>
         ) : (
           <div
@@ -1311,9 +1245,11 @@ export default function PlantIndexPage() {
               const plantAliases = uniqueTextList(aliasMap[plant.id] || []);
               const summary = isSignedIn ? guideMap[plant.id]?.summary : null;
               const envTags = isSignedIn
-                ? getEnvironmentTags(parameterMap[plant.id], {
-                    includeIndoor: true,
-                  }).slice(0, 6)
+                ? getEnvironmentTags(
+                    parameterMap[plant.id],
+                    { includeIndoor: true },
+                    language
+                  ).slice(0, 6)
                 : [];
 
               return (
@@ -1344,7 +1280,7 @@ export default function PlantIndexPage() {
                     <h3 style={{ margin: 0, fontSize: 18, lineHeight: 1.35 }}>
                       {plant.common_name ||
                         plant.scientific_name ||
-                        "未命名植物"}
+                        t.plant.unnamed}
                     </h3>
 
                     <span
@@ -1358,7 +1294,7 @@ export default function PlantIndexPage() {
                         flexShrink: 0,
                       }}
                     >
-                      {categoryLabel(plant.category)}
+                      {categoryLabel(plant.category, categoryLabels, t.plant.uncategorized)}
                     </span>
                   </div>
 
@@ -1372,7 +1308,7 @@ export default function PlantIndexPage() {
                         lineHeight: 1.6,
                       }}
                     >
-                      学名：{plant.scientific_name}
+                      {t.plant.scientific_name}{plant.scientific_name}
                     </div>
                   )}
 
@@ -1385,7 +1321,7 @@ export default function PlantIndexPage() {
                         lineHeight: 1.6,
                       }}
                     >
-                      别名：{plantAliases.join("、")}
+                      {t.plant.aliases}{plantAliases.join(t.plant.alias_separator)}
                     </div>
                   )}
 
@@ -1427,8 +1363,8 @@ export default function PlantIndexPage() {
                   >
                     {summary ||
                       (isSignedIn
-                        ? "基础概要待补充。"
-                        : "注册后可查看基础概要。")}
+                        ? t.plant.summary_pending
+                        : t.plant.register_for_basic_summary)}
                   </p>
                 </Link>
               );

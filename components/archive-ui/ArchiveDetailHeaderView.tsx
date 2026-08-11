@@ -7,6 +7,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
@@ -93,6 +94,8 @@ export default function ArchiveDetailHeaderView({
   profileEditor,
   profileAlwaysOpen = false,
 }: Props) {
+  const { t } = useLanguage();
+  const copy = t.archive;
   const [profileOpen, setProfileOpen] = useState(profileAlwaysOpen);
   const [editingField, setEditingField] = useState<ArchiveProfileEditableField | null>(null);
   const [textDraft, setTextDraft] = useState("");
@@ -182,7 +185,7 @@ export default function ArchiveDetailHeaderView({
       if (activeField === "title") {
         const value = textDraft.trim();
         if (!value) {
-          setFieldError("项目名称不能为空");
+          setFieldError(copy.project_name_empty);
           return;
         }
         await profileEditor.onSaveField({ field: "title", value });
@@ -196,7 +199,7 @@ export default function ArchiveDetailHeaderView({
           overrideCandidate !== undefined ? overrideCandidate : selectedSystemCandidate;
         const value = (nextCandidate?.label || overrideValue || textDraft).trim();
         if (!value) {
-          setFieldError("系统名不能为空");
+          setFieldError(copy.system_name_empty);
           return;
         }
         await profileEditor.onSaveField({
@@ -217,7 +220,7 @@ export default function ArchiveDetailHeaderView({
 
       cancelFieldEdit();
     } catch (err) {
-      setFieldError(err instanceof Error ? err.message : "保存失败");
+      setFieldError(err instanceof Error ? err.message : t.error);
     } finally {
       setSavingField(null);
     }
@@ -316,16 +319,18 @@ export default function ArchiveDetailHeaderView({
             onKeyDown={handleTextKeyDown}
             autoFocus
             placeholder={
-                systemNameMode === "text" ? "输入系统名" : "输入关键词搜索系统名候选"
+                systemNameMode === "text"
+                  ? copy.input_system_name
+                  : copy.search_system_candidates
             }
             inputStyle={profileInputStyle}
             panelStyle={candidatePanelStyle}
             optionStyle={(candidate, selected) => candidateButtonStyle(selected)}
             customOptionStyle={candidateNewButtonStyle}
             emptyStyle={candidateEmptyStyle}
-            idleText="输入关键词后搜索系统名候选"
-            emptyText="没有找到匹配候选，可使用当前输入。"
-            customActionLabel={(inputValue) => `使用“${inputValue}”作为新的系统名`}
+            idleText={copy.candidate_idle}
+            emptyText={copy.candidate_empty}
+            customActionLabel={(inputValue) => `${copy.use_as_system_name}: ${inputValue}`}
           />
           {systemNameMode === "text" && profileEditor?.systemNameHint ? (
             <span style={profileFloatingHintStyle}>{profileEditor.systemNameHint}</span>
@@ -385,7 +390,7 @@ export default function ArchiveDetailHeaderView({
                 }}
                 style={eyebrowButtonStyle}
                 aria-expanded={profileOpen}
-                title="打开项目档案"
+                title={copy.open_project_archive}
               >
                 {eyebrow}
               </button>
@@ -406,8 +411,8 @@ export default function ArchiveDetailHeaderView({
             {project.storageLabel ? (
               <span
                 role="img"
-                aria-label={project.storageTone === "device" ? "本地项目" : "云端项目"}
-                title={project.storageTone === "device" ? "本地项目" : "云端项目"}
+                aria-label={project.storageTone === "device" ? copy.local_project : copy.cloud_project}
+                title={project.storageTone === "device" ? copy.local_project : copy.cloud_project}
                 style={storageIconStyle(project.storageTone)}
               >
                 <ArchiveStorageIcon tone={project.storageTone} />
@@ -498,12 +503,12 @@ export default function ArchiveDetailHeaderView({
                         ...(meta ? profileMetaValueStyle : {}),
                       }}
                     >
-                      {row.value || "未填写"}
+                      {row.value || copy.not_filled}
                     </span>
                   )}
                   {editing && fieldError ? <span style={profileErrorStyle}>{fieldError}</span> : null}
                   {editing && savingField === row.field ? (
-                    <span style={profileSavingStyle}>保存中...</span>
+                    <span style={profileSavingStyle}>{copy.saving}</span>
                   ) : null}
                 </div>
               );

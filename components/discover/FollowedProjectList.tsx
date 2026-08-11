@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import { FollowedProjectCard } from "@/components/discover/FollowedProjectCard";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import styles from "@/components/discover/FollowedProjects.module.css";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   items: DiscoveryProjectFeedItem[];
@@ -63,19 +64,21 @@ export function FollowedProjectList({
   onRetryInitial,
   onRetryMore,
 }: Props) {
+  const { t } = useLanguage();
+
   return (
     <div ref={listAnchorRef} className={styles.listAnchor}>
       {initialLoading && items.length === 0 ? <SkeletonList /> : null}
 
       {!initialLoading && initialError && items.length === 0 ? (
         <div className={styles.statePanel}>
-          <p className={styles.stateText}>加载失败，请稍后重试。</p>
+          <p className={styles.stateText}>{t.discover.grid.load_failed}</p>
           <button
             type="button"
             className={styles.retryButton}
             onClick={onRetryInitial}
           >
-            重新加载
+            {t.discover.grid.reload}
           </button>
         </div>
       ) : null}
@@ -110,20 +113,20 @@ export function FollowedProjectList({
       ) : null}
 
       {loadingMore ? (
-        <div className={styles.loadingMore} aria-label="正在加载更多公开项目">
+        <div className={styles.loadingMore} aria-label={t.discover.grid.loading_more_aria}>
           <SkeletonList count={2} />
         </div>
       ) : null}
 
       {loadMoreError ? (
         <div className={styles.moreError}>
-          <span>加载更多失败，请稍后重试。</span>
+          <span>{t.discover.grid.load_more_failed}</span>
           <button
             type="button"
             className={styles.moreRetryButton}
             onClick={onRetryMore}
           >
-            重试
+            {t.discover.grid.retry}
           </button>
         </div>
       ) : null}
@@ -131,7 +134,7 @@ export function FollowedProjectList({
       {loaderRef ? (
         <div ref={loaderRef} className={styles.loader} aria-live="polite">
           {items.length > 0 && !hasMore && !loadingMore && !loadMoreError ? (
-            <span className={styles.endText}>已到底</span>
+            <span className={styles.endText}>{t.discover.grid.end}</span>
           ) : null}
         </div>
       ) : null}

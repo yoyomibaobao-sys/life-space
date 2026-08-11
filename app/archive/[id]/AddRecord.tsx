@@ -5,7 +5,7 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { t } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import {
@@ -30,8 +30,6 @@ import {
 } from "@/lib/storage-usage";
 import {
   isStorageUploadMaintenance,
-  STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE,
-  STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
 import type { ArchiveCycle } from "@/lib/archive-detail-types";
 import {
@@ -85,7 +83,9 @@ export default function AddRecord({
   onRecordCreated,
   mobileMode = false,
 }: Props) {
-  const terminology = getArchiveCycleTerminology(archiveCategory);
+  const { language, t } = useLanguage();
+  const copy = t.record;
+  const terminology = getArchiveCycleTerminology(archiveCategory, language);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<SelectedPreview[]>([]);
@@ -249,7 +249,7 @@ export default function AddRecord({
 
     if (rejectedCount > 0) {
       showToast(
-        `每次最多添加 ${MAX_RECORD_PHOTOS_PER_ADD} 张，已加入前 ${MAX_RECORD_PHOTOS_PER_ADD} 张；可以再次添加。`,
+        `${copy.photo_batch_trimmed_prefix} ${MAX_RECORD_PHOTOS_PER_ADD} ${copy.photo_batch_trimmed_suffix}`,
       );
     }
 
@@ -374,19 +374,20 @@ export default function AddRecord({
           usedBytes: reserveResult.storage_used,
           limitBytes: reserveResult.storage_limit_bytes,
           uploadBytes: reservedBytes,
+          language,
         });
         setMembershipNotice(message);
         showToast(message);
       } else if (reserveResult.message === "membership_inactive") {
-        const message = getCreateContentBlockedText(membership);
+        const message = getCreateContentBlockedText(membership, language);
         setMembershipNotice(message);
         showToast(message);
       } else if (reserveResult.message === "upload_maintenance") {
-        setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
-        showToast(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
+        setMembershipNotice(copy.maintenance_text_saved);
+        showToast(copy.maintenance_text_saved);
       } else {
-        setMembershipNotice("容量检查失败");
-        showToast("容量检查失败");
+        setMembershipNotice(copy.capacity_check_failed);
+        showToast(copy.capacity_check_failed);
       }
 
       return 0;
@@ -416,8 +417,8 @@ export default function AddRecord({
       const cancelResult = await cancelStorageUploadReservation(reservation);
       setStorageUsedBytes(cancelResult.storage_used);
       if (await isStorageUploadMaintenance()) {
-        setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
-        showToast(STORAGE_UPLOAD_MAINTENANCE_TEXT_SAVED_MESSAGE);
+        setMembershipNotice(copy.maintenance_text_saved);
+        showToast(copy.maintenance_text_saved);
       }
       return 0;
     }
@@ -503,7 +504,7 @@ export default function AddRecord({
         setStorageUsedBytes(cancelResult.storage_used);
         return 0;
       } else {
-        showToast("图片保存状态待确认，请刷新后查看。为避免误删，已保留上传内容。");
+        showToast(copy.save_state_pending);
         return 0;
       }
     }
@@ -524,14 +525,14 @@ export default function AddRecord({
     if (!text.trim() && files.length === 0) return;
 
     if (files.length > 0 && (await isStorageUploadMaintenance())) {
-      setMembershipNotice(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
-      showToast(STORAGE_UPLOAD_MAINTENANCE_RECORD_NOT_SAVED_MESSAGE);
+      setMembershipNotice(copy.maintenance_record_not_saved);
+      showToast(copy.maintenance_record_not_saved);
       return;
     }
     setMembershipNotice("");
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -541,6 +542,7 @@ export default function AddRecord({
           usedBytes: storageUsedBytes,
           limitBytes: storageLimitBytes,
           uploadBytes: selectedFileBytes,
+          language,
         })
       );
       return;
@@ -597,7 +599,7 @@ export default function AddRecord({
 
       if (finalStatusTag === "help" && finalVisibility !== "public") {
         const confirmed = confirm(
-          "求助需要公开这条记录和相关图片。你的其他记录不会公开。确认后，这条记录会进入公开发现和求助流。"
+          copy.help_public_confirm
         );
 
         if (!confirmed) {
@@ -612,7 +614,7 @@ export default function AddRecord({
           .eq("user_id", user.id);
 
         if (archiveError) {
-          showToast("公开项目壳失败，暂不能发起求助");
+          showToast(copy.publish_shell_failed);
           setLoading(false);
           return;
         }
@@ -738,9 +740,9 @@ export default function AddRecord({
             lineHeight: 1.7,
           }}
         >
-          <span>{getCreateContentBlockedText(membership)}</span>{" "}
+          <span>{getCreateContentBlockedText(membership, language)}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            了解云会员
+            {t.archive.learn_cloud_membership}
           </Link>
         </div>
       ) : null}
@@ -760,7 +762,7 @@ export default function AddRecord({
         >
           <span>{membershipNotice}</span>{" "}
           <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-            了解云会员
+            {t.archive.learn_cloud_membership}
           </Link>
         </div>
       ) : null}
@@ -789,7 +791,7 @@ export default function AddRecord({
           >
             {sortedActiveCycles.map((cycle) => (
               <option key={cycle.id} value={cycle.id}>
-                {terminology.cycleLabel(cycle.cycle_no)}（{formatLocalCycleDate(cycle.started_at)}开始）
+                {terminology.cycleLabel(cycle.cycle_no)} ({formatLocalCycleDate(cycle.started_at)} {terminology.startDateSuffix})
               </option>
             ))}
             <option value="">{terminology.unassignedOption}</option>
@@ -813,9 +815,9 @@ export default function AddRecord({
         onChange={(e) => setTimeMode(e.target.value)}
         style={{ marginTop: "10px", padding: "6px" }}
       >
-        <option value="exif">{t.photo_time ?? "照片时间"}</option>
-        <option value="custom">{t.custom_time ?? "自定义时间"}</option>
-        <option value="now">{t.current_time ?? "当前时间"}</option>
+        <option value="exif">{t.photo_time}</option>
+        <option value="custom">{t.custom_time}</option>
+        <option value="now">{t.current_time}</option>
       </select>
 
       {archiveIsPublic ? (
@@ -826,12 +828,12 @@ export default function AddRecord({
           }
           style={{ marginTop: "10px", marginLeft: 8, padding: "6px" }}
         >
-          <option value="public">公开发现</option>
-          <option value="private">仅自己可见</option>
+          <option value="public">{copy.public_discover}</option>
+          <option value="private">{copy.private_only}</option>
         </select>
       ) : (
         <span style={{ marginLeft: 8, fontSize: 12, color: "#888" }}>
-          项目和记录仅自己可见
+          {copy.project_private}
         </span>
       )}
 
@@ -843,7 +845,7 @@ export default function AddRecord({
             onChange={(e) => setIsHelpRecord(e.target.checked)}
             style={{ marginRight: 6 }}
           />
-          求助！
+          {copy.ask_for_help}
         </label>
       </div>
 
@@ -864,8 +866,8 @@ export default function AddRecord({
             type="button"
             onClick={() => chooseInputRef.current?.click()}
             disabled={loading || membershipLoading || contentBlocked}
-            aria-label="添加图片或拍照"
-            title="添加图片或拍照"
+            aria-label={copy.add_photo_or_camera}
+            title={copy.add_photo_or_camera}
             style={{
               width: 38,
               height: 38,
@@ -895,7 +897,7 @@ export default function AddRecord({
                 cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
               }}
             >
-              选择照片
+              {copy.choose_photos}
             </button>
             <button
               type="button"
@@ -910,7 +912,7 @@ export default function AddRecord({
                 cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
               }}
             >
-              拍照
+              {copy.take_photo}
             </button>
           </div>
         )}
@@ -939,9 +941,9 @@ export default function AddRecord({
         />
 
         <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.6 }}>
-          每次最多添加 {MAX_RECORD_PHOTOS_PER_ADD} 张，可分多次继续添加；单条记录累计照片不设上限。
+          {copy.photo_limit_prefix} {MAX_RECORD_PHOTOS_PER_ADD} {copy.photo_limit_suffix}
           <br />
-          保存前自动生成最长边不超过 1800px、质量 82% 的标准版；小图不放大。
+          {copy.standard_photo_hint}
         </div>
 
         {filePreviews.length > 0 ? (
@@ -960,7 +962,7 @@ export default function AddRecord({
               >
                 <Image
                   src={preview.url}
-                  alt={preview.name || `待上传图片 ${index + 1}`}
+                  alt={preview.name || `${copy.pending_photo_alt} ${index + 1}`}
                   fill
                   unoptimized
                   sizes="(max-width: 760px) 25vw, 120px"
@@ -975,7 +977,7 @@ export default function AddRecord({
                 <button
                   type="button"
                   onClick={() => removeSelectedFile(index)}
-                  aria-label="移除这张图片"
+                  aria-label={copy.remove_photo}
                   style={{
                     position: "absolute",
                     top: 5,
@@ -1006,18 +1008,18 @@ export default function AddRecord({
               lineHeight: 1.6,
             }}
           >
-            本次原图约 {formatStorageBytes(selectedFileBytes)}，上传时会自动压缩后再占用容量。
+            {copy.original_size_prefix} {formatStorageBytes(selectedFileBytes)}{copy.compression_storage_hint}
             {storageRemainingBytes !== null
-              ? ` 当前剩余约 ${formatStorageBytes(storageRemainingBytes)}。`
+              ? ` ${copy.remaining_prefix} ${formatStorageBytes(storageRemainingBytes)}.`
               : ""}
             {uploadWouldExceedStorage ? (
               <>
                 <br />
-                空间不足，无法上传。{" "}
+                {copy.no_storage}{" "}
                 <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                  了解云会员
+                  {t.archive.learn_cloud_membership}
                 </Link>
-                。
+                {language === "zh" ? "。" : "."}
               </>
             ) : null}
           </div>
@@ -1032,11 +1034,11 @@ export default function AddRecord({
               checked={mergeMode}
               onChange={(e) => setMergeMode(e.target.checked)}
             />{" "}
-            不按照片日期拆分，合并为一条记录（采用最新照片日期）
+            {copy.merge_photos}
           </label>
           {!mergeMode ? (
             <div style={{ marginTop: 4, fontSize: 12, color: "#777", lineHeight: 1.6 }}>
-              将按照片日期生成记录；同一天的照片归入同一条记录。
+              {copy.split_photos_hint}
             </div>
           ) : null}
         </div>
@@ -1057,7 +1059,7 @@ export default function AddRecord({
               : "pointer",
         }}
       >
-        {loading ? (t.submitting ?? "提交中...") : t.submit ?? "发布记录"}
+        {loading ? t.submitting : t.submit}
       </button>
     </div>
   );

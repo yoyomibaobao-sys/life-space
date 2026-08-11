@@ -3,8 +3,11 @@
 import Link from "next/link";
 import {
   archiveCategoryOptions,
+  getArchiveCategoryDescription,
+  getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   onCreateArchive: (category: ArchiveCategory) => void;
@@ -19,6 +22,8 @@ export default function ArchiveToolbar({
   createDisabledTitle,
   createDisabledHref,
 }: Props) {
+  const { language, t } = useLanguage();
+
   return (
     <section
       style={{
@@ -39,10 +44,10 @@ export default function ArchiveToolbar({
       >
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#263326" }}>
-            新建项目
+            {t.archive_workspace.new_project}
           </div>
           <div style={{ marginTop: 3, fontSize: 12, color: "#7d8a75" }}>
-            选择大类，填写项目名称。
+            {t.archive_workspace.choose_category_hint}
           </div>
         </div>
 
@@ -63,7 +68,7 @@ export default function ArchiveToolbar({
               textDecoration: "none",
             }}
           >
-            开通云会员
+            {t.archive_workspace.open_membership}
           </Link>
         ) : null}
       </div>
@@ -86,7 +91,10 @@ export default function ArchiveToolbar({
                 onCreateArchive(option.value);
               }}
               disabled={disabled}
-              title={createDisabledTitle || option.description}
+              title={
+                createDisabledTitle ||
+                getArchiveCategoryDescription(option.value, language)
+              }
               style={{
                 minHeight: 66,
                 textAlign: "left",
@@ -99,7 +107,9 @@ export default function ArchiveToolbar({
                 boxShadow: disabled ? "none" : "0 6px 16px rgba(44, 74, 38, 0.04)",
               }}
             >
-              <div style={{ fontSize: 15, fontWeight: 800 }}>{option.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>
+                {getArchiveCategoryLabel(option.value, language)}
+              </div>
               <div
                 style={{
                   marginTop: 4,
@@ -108,7 +118,7 @@ export default function ArchiveToolbar({
                   color: disabled ? "#9aa398" : "#6f7b6a",
                 }}
               >
-                {option.description}
+                {getArchiveCategoryDescription(option.value, language)}
               </div>
             </button>
           );

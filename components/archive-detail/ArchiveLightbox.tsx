@@ -9,6 +9,7 @@ import {
   setAppStatusBarTheme,
 } from "@/components/StatusBarTheme";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type PanOffset = {
   x: number;
@@ -24,8 +25,8 @@ export default function ArchiveLightbox({
   metaText = "",
   note = "",
   onDeleteCurrentImage,
-  deleteActionLabel = "删除当前图片",
-  deleteConfirmMessage = "确定删除当前图片吗？",
+  deleteActionLabel,
+  deleteConfirmMessage,
 }: {
   images: LightboxImage[];
   index: number;
@@ -41,6 +42,11 @@ export default function ArchiveLightbox({
   deleteActionLabel?: string;
   deleteConfirmMessage?: string;
 }) {
+  const { t } = useLanguage();
+  const copy = t.record;
+  const resolvedDeleteActionLabel = deleteActionLabel || copy.delete_current_image;
+  const resolvedDeleteConfirmMessage =
+    deleteConfirmMessage || copy.delete_current_image_confirm;
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState<PanOffset>({ x: 0, y: 0 });
   const [mobileToolbarVisible, setMobileToolbarVisible] = useState(false);
@@ -224,7 +230,7 @@ export default function ArchiveLightbox({
   async function deleteCurrentMobileImage() {
     if (!onDeleteCurrentImage || isDeletingCurrentImage) return;
 
-    const ok = window.confirm(deleteConfirmMessage);
+    const ok = window.confirm(resolvedDeleteConfirmMessage);
     if (!ok) return;
 
     setIsDeletingCurrentImage(true);
@@ -410,7 +416,7 @@ export default function ArchiveLightbox({
                 }}
                 style={mobileLightboxBackButtonStyle}
               >
-                返回
+                {copy.back}
               </button>
               <div style={mobileMetaTextStyle}>{metaText}</div>
               {onDeleteCurrentImage ? (
@@ -420,7 +426,7 @@ export default function ArchiveLightbox({
                     event.stopPropagation();
                     setMobileMenuOpen((open) => !open);
                   }}
-                  aria-label="图片更多操作"
+                  aria-label={copy.image_more_actions}
                   style={mobileLightboxMoreButtonStyle}
                 >
                   <UiIcon name="more" size={20} />
@@ -434,7 +440,7 @@ export default function ArchiveLightbox({
                     disabled={isDeletingCurrentImage}
                     style={mobileLightboxDangerItemStyle}
                   >
-                    {isDeletingCurrentImage ? "处理中..." : deleteActionLabel}
+                    {isDeletingCurrentImage ? t.archive.processing : resolvedDeleteActionLabel}
                   </button>
                 </div>
               ) : null}
@@ -572,7 +578,7 @@ export default function ArchiveLightbox({
           event.stopPropagation();
           go(-1);
         }}
-        aria-label="上一张"
+        aria-label={copy.previous_image}
         style={navButtonStyle("left")}
       >
         <UiIcon name="chevron-left" size={26} />
@@ -632,7 +638,7 @@ export default function ArchiveLightbox({
           event.stopPropagation();
           go(1);
         }}
-        aria-label="下一张"
+        aria-label={copy.next_image}
         style={navButtonStyle("right")}
       >
         <UiIcon name="chevron-right" size={26} />
@@ -645,7 +651,7 @@ export default function ArchiveLightbox({
             event.stopPropagation();
             onClose();
           }}
-          aria-label="关闭图片预览"
+          aria-label={copy.close_preview}
           style={{
             position: "fixed",
             top: "calc(12px + env(safe-area-inset-top))",
@@ -672,7 +678,7 @@ export default function ArchiveLightbox({
           event.stopPropagation();
           onClose();
         }}
-        aria-label="关闭图片预览"
+        aria-label={copy.close_preview}
         style={{
           position: "fixed",
           left: "50%",
@@ -691,7 +697,7 @@ export default function ArchiveLightbox({
           backdropFilter: "blur(8px)",
         }}
       >
-        {isMobileViewport ? "返回" : "关闭"}
+        {isMobileViewport ? copy.back : copy.close}
       </button>
     </div>
   );

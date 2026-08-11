@@ -11,6 +11,7 @@ import {
 } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CycleDateUpdate = {
   startedAt: string;
@@ -49,7 +50,9 @@ export default function ArchiveCycleTimeline({
   onUpdateCycleDates,
   onDeleteCycle,
 }: Props) {
-  const terminology = getArchiveCycleTerminology(category);
+  const { language, t } = useLanguage();
+  const copy = t.archive;
+  const terminology = getArchiveCycleTerminology(category, language);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [startDate, setStartDate] = useState("");
@@ -152,9 +155,13 @@ export default function ArchiveCycleTimeline({
                   >
                     <span style={cycleTitleStyle}>{terminology.cycleLabel(cycle.cycle_no)}</span>
                     <span style={cycleStatusStyle(cycle.status)}>
-                      {cycle.status === "active" ? "进行中" : "已结束"}
+                      {cycle.status === "active" ? copy.ongoing : copy.ended}
                     </span>
-                    <span style={cycleCountStyle}>{cycleRecords.length}条记录</span>
+                    <span style={cycleCountStyle}>
+                      {language === "en"
+                        ? `${cycleRecords.length} ${copy.record_unit}`
+                        : `${cycleRecords.length}${copy.record_unit}`}
+                    </span>
                     <span aria-hidden="true" style={cycleChevronStyle}><UiIcon name={isExpanded ? "chevron-up" : "chevron-down"} size={15} /></span>
                   </button>
                   {canManage ? (
@@ -166,7 +173,7 @@ export default function ArchiveCycleTimeline({
                           disabled={busy}
                           style={adjustDateButtonStyle}
                         >
-                          调整日期
+                          {copy.adjust_date}
                         </button>
                       ) : null}
                       {cycle.status === "active" && onEndCycle ? (
@@ -194,8 +201,10 @@ export default function ArchiveCycleTimeline({
                 </div>
                 <div style={cycleDateStyle}>
                   {cycle.status === "ended" && endedText
-                    ? `${startedText || "开始时间未知"}—${endedText}`
-                    : `${startedText || "今天"}开始`}
+                    ? `${startedText || copy.start_time_unknown}—${endedText}`
+                    : language === "en"
+                      ? `${startedText || copy.today} ${copy.started_suffix}`
+                      : `${startedText || copy.today}${copy.started_suffix}`}
                 </div>
 
                 {isExpanded ? (
@@ -223,7 +232,11 @@ export default function ArchiveCycleTimeline({
                 style={cycleHeaderStyle}
               >
                 <span style={cycleTitleStyle}>{terminology.unassignedTitle}</span>
-                <span style={cycleCountStyle}>{ungroupedRecords.length}条</span>
+                <span style={cycleCountStyle}>
+                  {language === "en"
+                    ? `${ungroupedRecords.length} ${copy.item_unit}`
+                    : `${ungroupedRecords.length}${copy.item_unit}`}
+                </span>
                 <span aria-hidden="true" style={cycleChevronStyle}><UiIcon name={expanded.ungrouped ? "chevron-up" : "chevron-down"} size={15} /></span>
               </button>
               {expanded.ungrouped ? (
@@ -256,7 +269,7 @@ export default function ArchiveCycleTimeline({
       >
         {dateFields(dateError, (
           <label style={dateFieldStyle}>
-            <span>开始日期</span>
+            <span>{copy.start_date}</span>
             <input
               type="date"
               value={startDate}
@@ -275,7 +288,7 @@ export default function ArchiveCycleTimeline({
         open={Boolean(cycleToEnd)}
         title={terminology.endAction}
         message={terminology.endDialogMessage}
-        confirmText="确认结束"
+        confirmText={copy.confirm_end}
         confirmDisabled={busy || !endDate}
         cancelDisabled={busy}
         onClose={() => {
@@ -285,7 +298,7 @@ export default function ArchiveCycleTimeline({
           if (!cycleToEnd || !onEndCycle || !endDate) return;
           const startedDate = toLocalDateInputValue(cycleToEnd.started_at);
           if (endDate < startedDate) {
-            setDateError("结束日期不能早于开始日期。");
+            setDateError(copy.end_before_start);
             return;
           }
           await onEndCycle(cycleToEnd, localDateInputToIso(endDate, "end"));
@@ -294,7 +307,7 @@ export default function ArchiveCycleTimeline({
       >
         {dateFields(dateError, (
           <label style={dateFieldStyle}>
-            <span>结束日期</span>
+            <span>{copy.end_date}</span>
             <input
               type="date"
               min={cycleToEnd ? toLocalDateInputValue(cycleToEnd.started_at) : undefined}
@@ -312,9 +325,9 @@ export default function ArchiveCycleTimeline({
 
       <ConfirmDialog
         open={Boolean(cycleToAdjust)}
-        title="调整日期"
+        title={copy.adjust_dates}
         message={terminology.adjustDialogMessage}
-        confirmText="保存日期"
+        confirmText={copy.save_dates}
         confirmDisabled={busy || !adjustStartDate || (cycleToAdjust?.status === "ended" && !adjustEndDate)}
         cancelDisabled={busy}
         onClose={() => {
@@ -323,7 +336,7 @@ export default function ArchiveCycleTimeline({
         onConfirm={async () => {
           if (!cycleToAdjust || !onUpdateCycleDates || !adjustStartDate) return;
           if (cycleToAdjust.status === "ended" && adjustEndDate < adjustStartDate) {
-            setDateError("结束日期不能早于开始日期。");
+            setDateError(copy.end_before_start);
             return;
           }
           await onUpdateCycleDates(cycleToAdjust, {
@@ -339,7 +352,7 @@ export default function ArchiveCycleTimeline({
         {dateFields(dateError, (
           <>
             <label style={dateFieldStyle}>
-              <span>开始日期</span>
+              <span>{copy.start_date}</span>
               <input
                 type="date"
                 value={adjustStartDate}
@@ -353,7 +366,7 @@ export default function ArchiveCycleTimeline({
             </label>
             {cycleToAdjust?.status === "ended" ? (
               <label style={dateFieldStyle}>
-                <span>结束日期</span>
+                <span>{copy.end_date}</span>
                 <input
                   type="date"
                   min={adjustStartDate || undefined}

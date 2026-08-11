@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { EmptyState, StatusBadge, buttonRowStyle, cardBodyStyle, cardStyle, coverImageStyle, coverStyle, ghostButtonStyle, listStyle, metaLineStyle, noteLineStyle, primaryButtonStyle, projectInlineMetaStyle, projectStatsPillStyle, projectTitleStyle, textLinkStyle } from "@/components/follow/FollowShared";
 import type { FollowProjectCard } from "@/lib/follow-types";
@@ -5,6 +7,7 @@ import { getArchiveDisplayName } from "@/lib/social-space-shared";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function FollowProjectList({
   items,
@@ -15,12 +18,15 @@ export default function FollowProjectList({
   onOpenArchive: (archiveId: string) => void;
   onUnfollow: (archiveId: string) => void;
 }) {
+  const { language, t } = useLanguage();
+  const followT = t.follow;
+
   if (!items.length) {
     return (
       <EmptyState
-        title="还没有关注的项目"
-        description="去别人的项目页点“关注项目”后，这里就会出现。"
-        actionLabel="去发现页看看"
+        title={followT.empty_projects}
+        description={followT.empty_projects_intro}
+        actionLabel={followT.browse_discover}
         href="/discover"
       />
     );
@@ -75,7 +81,7 @@ export default function FollowProjectList({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {getArchiveDisplayName(item.title, item.displaySystemName)}
+                  {getArchiveDisplayName(item.title, item.displaySystemName, language)}
                 </span>
                 <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} />
                 {item.statusKind !== "normal" ? (
@@ -83,7 +89,7 @@ export default function FollowProjectList({
                 ) : null}
               </div>
 
-              <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || "关注项目"}</div>
+              <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || followT.projects}</div>
               <div style={noteLineStyle}>
                 {item.latestNote}
                 {item.latestRecordTime ? (
@@ -96,13 +102,13 @@ export default function FollowProjectList({
 
               <div style={{ ...buttonRowStyle, gap: 5, flexWrap: "nowrap", overflow: "hidden", marginTop: 0 }}>
                 <button type="button" onClick={() => onOpenArchive(item.id)} style={{ ...primaryButtonStyle, padding: "4px 8px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
-                  查看记录
+                  {followT.view_records}
                 </button>
                 <button type="button" onClick={() => onUnfollow(item.id)} style={{ ...ghostButtonStyle, padding: "4px 8px", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
-                  取消关注
+                  {followT.unfollow}
                 </button>
                 <Link href={`/user/${item.ownerId}`} style={{ ...textLinkStyle, fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>
-                  进入空间
+                  {followT.enter_space}
                 </Link>
               </div>
             </div>

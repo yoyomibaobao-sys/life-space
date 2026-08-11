@@ -9,6 +9,7 @@ import { showToast } from "@/components/Toast";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { formatProfileDateTime } from "@/lib/user-profile-shared";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type FlowerSourceItem = {
   id: string;
@@ -32,6 +33,8 @@ type TabKey = "received" | "sent";
 function ProfileFlowersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { language, t } = useLanguage();
+  const helpfulT = t.profile.helpful_page;
   const defaultTab = searchParams.get("tab") === "sent" ? "sent" : "received";
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FlowerSourceItem[]>([]);
@@ -82,7 +85,7 @@ function ProfileFlowersContent() {
 
       const profileMap = new Map<string, string>();
       for (const item of (profilesResult.data || []) as Array<{ id: string; username?: string | null }>) {
-        profileMap.set(item.id, item.username || "用户");
+        profileMap.set(item.id, item.username || "");
       }
 
       const commentMap = new Map<string, string>();
@@ -98,8 +101,8 @@ function ProfileFlowersContent() {
       setItems(
         flowers.map((item) => ({
           ...item,
-          sender_name: profileMap.get(item.sender_user_id) || "用户",
-          receiver_name: profileMap.get(item.receiver_user_id) || "用户",
+          sender_name: profileMap.get(item.sender_user_id) || "",
+          receiver_name: profileMap.get(item.receiver_user_id) || "",
           comment_content: commentMap.get(item.comment_id) || "",
           record_note: recordMap.get(item.record_id)?.note || "",
           archive_id: recordMap.get(item.record_id)?.archive_id || null,
@@ -126,7 +129,7 @@ function ProfileFlowersContent() {
 
     const revokeUntil = target.revoke_until ? new Date(target.revoke_until).getTime() : 0;
     if (!revokeUntil || Date.now() > revokeUntil) {
-      showToast("已超过撤回时间");
+      showToast(helpfulT.revoke_expired);
       setRevokeTarget(null);
       return;
     }
@@ -138,13 +141,13 @@ function ProfileFlowersContent() {
       .eq("sender_user_id", currentUserId);
 
     if (error) {
-      showToast("撤回标记失败");
+      showToast(helpfulT.revoke_failed);
       return;
     }
 
     setItems((prev) => prev.map((item) => (item.id === target.id ? { ...item, revoked_at: new Date().toISOString() } : item)));
     setRevokeTarget(null);
-    showToast("已撤回“有帮助”");
+    showToast(helpfulT.revoked);
   }
 
   return (
@@ -152,65 +155,76 @@ function ProfileFlowersContent() {
       <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: 13, color: "#6d7968" }}>真实反馈</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>帮助标记记录</h1>
+            <div style={{ fontSize: 13, color: "#6d7968" }}>{helpfulT.eyebrow}</div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>{helpfulT.title}</h1>
             <div style={{ marginTop: 8, fontSize: 14, color: "#62705d" }}>
-              这里记录求助回答的“有帮助”反馈。已撤回标记仍会保留，便于追溯。
+              {helpfulT.intro}
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/profile" style={linkStyle}>返回资料页</Link>
-            <Link href="/follow" style={linkStyle}>关注</Link>
+            <Link href="/profile" style={linkStyle}>{helpfulT.back}</Link>
+            <Link href="/follow" style={linkStyle}>{helpfulT.following}</Link>
           </div>
         </div>
 
         <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <TabButton active={tab === "received"} onClick={() => setTab("received")}>收到的帮助标记（{receivedItems.length}）</TabButton>
-          <TabButton active={tab === "sent"} onClick={() => setTab("sent")}>我标记的回答（{sentItems.length}）</TabButton>
+          <TabButton active={tab === "received"} onClick={() => setTab("received")}>{helpfulT.received_tab} ({receivedItems.length})</TabButton>
+          <TabButton active={tab === "sent"} onClick={() => setTab("sent")}>{helpfulT.sent_tab} ({sentItems.length})</TabButton>
         </div>
 
         <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <StatPill label={tab === "received" ? "有效标记" : "当前有效"} value={<span><UiIcon name="helpful" size={13} /> {activeCount}</span>} />
-          <StatPill label="当前列表" value={String(visibleItems.length)} />
+          <StatPill label={tab === "received" ? helpfulT.active_marks : helpfulT.current_active} value={<span><UiIcon name="helpful" size={13} /> {activeCount}</span>} />
+          <StatPill label={helpfulT.current_list} value={String(visibleItems.length)} />
         </div>
 
         <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
           {loading ? (
-            <div style={{ color: "#6f7b69" }}>加载中...</div>
+            <div style={{ color: "#6f7b69" }}>{t.archive.loading}</div>
           ) : visibleItems.length === 0 ? (
             <div style={{ color: "#6f7b69", lineHeight: 1.8 }}>
               {tab === "received"
-                ? "还没有收到帮助标记"
-                : "还没有标记过回答"}
+                ? helpfulT.empty_received
+                : helpfulT.empty_sent}
             </div>
           ) : (
             visibleItems.map((item) => {
               const revokeUntilTime = item.revoke_until ? new Date(item.revoke_until).getTime() : 0;
               const canRevoke = tab === "sent" && !item.revoked_at && item.sender_user_id === currentUserId && revokeUntilTime > itemsLoadedAt;
-              const statusText = item.revoked_at ? `已于 ${formatProfileDateTime(item.revoked_at)} 撤回` : "当前有效";
+              const statusText = item.revoked_at
+                ? language === "en"
+                  ? `${helpfulT.revoked_prefix} ${formatProfileDateTime(item.revoked_at, language)}`
+                  : `${helpfulT.revoked_prefix} ${formatProfileDateTime(item.revoked_at, language)} ${helpfulT.revoked_suffix}`
+                : helpfulT.active;
+              const senderName = item.sender_name || helpfulT.default_user;
+              const receiverName = item.receiver_name || helpfulT.default_user;
+              const activityText = tab === "received"
+                ? `${senderName} ${helpfulT.thinks_helpful}`
+                : language === "en"
+                  ? `${helpfulT.you_marked_prefix} ${receiverName}'s ${helpfulT.you_marked_suffix}`
+                  : `${helpfulT.you_marked_prefix}${receiverName}${helpfulT.you_marked_suffix}`;
               return (
                 <article key={item.id} style={{ border: "1px solid #e6ece2", borderRadius: 18, padding: 16, background: item.revoked_at ? "#fcfcfb" : "#fffdf7" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "#233022" }}>
-                        {tab === "received" ? `${item.sender_name} 认为这条回答有帮助` : `你把 ${item.receiver_name} 的回答标为有帮助`}
+                        {activityText}
                       </div>
-                      <div style={{ marginTop: 6, fontSize: 12, color: "#768271" }}>{formatProfileDateTime(item.created_at)} · {statusText}</div>
+                      <div style={{ marginTop: 6, fontSize: 12, color: "#768271" }}>{formatProfileDateTime(item.created_at, language)} · {statusText}</div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {item.archive_id ? <Link href={`/archive/${item.archive_id}?record=${item.record_id}`} style={linkStyle}>查看原记录</Link> : null}
-                      {canRevoke ? <button type="button" onClick={() => setRevokeTarget(item)} style={dangerButtonStyle}>撤回标记</button> : null}
+                      {item.archive_id ? <Link href={`/archive/${item.archive_id}?record=${item.record_id}`} style={linkStyle}>{helpfulT.view_record}</Link> : null}
+                      {canRevoke ? <button type="button" onClick={() => setRevokeTarget(item)} style={dangerButtonStyle}>{helpfulT.revoke}</button> : null}
                     </div>
                   </div>
 
                   <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                     <div>
-                      <div style={labelStyle}>对应评论</div>
-                      <div style={contentStyle}>{item.comment_content || "评论内容已不可见"}</div>
+                      <div style={labelStyle}>{helpfulT.related_comment}</div>
+                      <div style={contentStyle}>{item.comment_content || helpfulT.comment_unavailable}</div>
                     </div>
                     <div>
-                      <div style={labelStyle}>对应求助记录</div>
-                      <div style={contentStyle}>{item.record_note || "记录文字为空"}</div>
+                      <div style={labelStyle}>{helpfulT.related_help_record}</div>
+                      <div style={contentStyle}>{item.record_note || helpfulT.record_empty}</div>
                     </div>
                   </div>
                 </article>
@@ -222,9 +236,9 @@ function ProfileFlowersContent() {
 
       <ConfirmDialog
         open={Boolean(revokeTarget)}
-        title="撤回帮助标记"
-        message="确定撤回这次“有帮助”标记吗？撤回后对方收到的帮助统计会同步减少。"
-        confirmText="撤回"
+        title={helpfulT.revoke_title}
+        message={helpfulT.revoke_message}
+        confirmText={helpfulT.revoke}
         danger
         onClose={() => setRevokeTarget(null)}
         onConfirm={handleConfirmRevoke}
@@ -235,14 +249,17 @@ function ProfileFlowersContent() {
 
 
 export default function ProfileFlowersPage() {
+  const { t } = useLanguage();
+  const helpfulT = t.profile.helpful_page;
+
   return (
     <Suspense
       fallback={
         <main style={{ maxWidth: 920, margin: "0 auto", padding: "24px 16px 48px" }}>
           <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
-            <div style={{ fontSize: 13, color: "#6d7968" }}>真实反馈</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>帮助标记记录</h1>
-            <div style={{ marginTop: 18, color: "#6f7b69" }}>加载中...</div>
+            <div style={{ fontSize: 13, color: "#6d7968" }}>{helpfulT.eyebrow}</div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>{helpfulT.title}</h1>
+            <div style={{ marginTop: 18, color: "#6f7b69" }}>{t.archive.loading}</div>
           </section>
         </main>
       }

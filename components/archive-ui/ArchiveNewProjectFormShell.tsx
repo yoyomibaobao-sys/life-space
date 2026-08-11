@@ -4,9 +4,9 @@ import Link from "next/link";
 import type { CSSProperties, FormEvent, ReactNode } from "react";
 import {
   archiveCategoryOptions,
-  getArchiveCategoryDescription,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   backHref: string;
@@ -53,13 +53,41 @@ export default function ArchiveNewProjectFormShell({
   disabledNotice,
   onSubmit,
 }: Props) {
-  const systemNameLabel = category === "plant" ? "系统植物名 *" : "系统名 *";
+  const { t } = useLanguage();
+  const copy = t.archive;
+  const translatedCategoryOptions = archiveCategoryOptions.map((option) => {
+    const categoryCopy = {
+      plant: {
+        label: copy.categories.plant_label,
+        description: copy.categories.plant_description,
+      },
+      system: {
+        label: copy.categories.system_label,
+        description: copy.categories.system_description,
+      },
+      insect_fish: {
+        label: copy.categories.insect_fish_label,
+        description: copy.categories.insect_fish_description,
+      },
+      other: {
+        label: copy.categories.other_label,
+        description: copy.categories.other_description,
+      },
+    }[option.value];
+
+    return { ...option, ...categoryCopy };
+  });
+  const selectedCategoryDescription =
+    translatedCategoryOptions.find((option) => option.value === category)?.description ||
+    copy.categories.fallback_description;
+  const systemNameLabel =
+    category === "plant" ? copy.system_plant_name_required : copy.system_name_required;
   const systemNameHelper =
     category === "plant"
-      ? "系统植物名用于和植物指引、项目档案关联，例如：蓝莓 · 薄雾、月季、小麦。"
+      ? copy.system_plant_helper
       : category === "other"
-        ? "其他种类没有预设系统名，直接输入。"
-      : "系统名用于项目档案归类，例如：滴灌架、生态缸、蚯蚓塔。";
+        ? copy.other_system_helper
+        : copy.system_name_helper;
 
   return (
     <main style={pageStyle}>
@@ -74,9 +102,9 @@ export default function ArchiveNewProjectFormShell({
         {disabledNotice ? <div style={disabledNoticeStyle}>{disabledNotice}</div> : null}
 
         <form onSubmit={onSubmit} style={formStyle}>
-          <ArchiveNewProjectField label="大类 *">
+          <ArchiveNewProjectField label={copy.category_required}>
             <div style={categoryGridStyle}>
-              {archiveCategoryOptions.map((option) => (
+              {translatedCategoryOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -91,14 +119,14 @@ export default function ArchiveNewProjectFormShell({
                 </button>
               ))}
             </div>
-            <span style={helperTextStyle}>{getArchiveCategoryDescription(category)}</span>
+            <span style={helperTextStyle}>{selectedCategoryDescription}</span>
           </ArchiveNewProjectField>
 
-          <ArchiveNewProjectField label="项目名称 *">
+          <ArchiveNewProjectField label={copy.project_name_required}>
             <input
               value={projectTitle}
               onChange={(event) => onProjectTitleChange(event.target.value)}
-              placeholder="例如：阳台蓝莓、南院育苗架"
+              placeholder={copy.project_name_placeholder}
               style={archiveNewProjectInputStyle}
             />
           </ArchiveNewProjectField>
@@ -110,15 +138,15 @@ export default function ArchiveNewProjectFormShell({
             {systemControl}
           </ArchiveNewProjectField>
 
-          <ArchiveNewProjectField label="来源">
+          <ArchiveNewProjectField label={copy.source}>
             {sourceControl}
           </ArchiveNewProjectField>
 
-          <ArchiveNewProjectField label="位置备注 / 项目备注">
+          <ArchiveNewProjectField label={copy.note_label}>
             <textarea
               value={note}
               onChange={(event) => onNoteChange(event.target.value)}
-              placeholder="例如：南阳台、东侧花盆、院子里的种植床"
+              placeholder={copy.note_placeholder}
               rows={4}
               style={archiveNewProjectTextareaStyle}
             />
@@ -128,7 +156,7 @@ export default function ArchiveNewProjectFormShell({
 
           <div style={actionRowStyle}>
             <Link href={backHref} style={cancelButtonStyle}>
-              取消
+              {copy.cancel}
             </Link>
             <button
               type="submit"

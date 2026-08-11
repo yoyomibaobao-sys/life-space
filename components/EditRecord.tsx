@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function EditRecord({
   id,
   initialText,
   readOnly = false,
-  placeholder = "点击添加内容",
+  placeholder,
   compact = false,
   onSaved,
   onSaveOverride,
@@ -21,6 +22,8 @@ export default function EditRecord({
   onSaved?: (nextText: string) => void;
   onSaveOverride?: (nextText: string) => Promise<void> | void;
 }) {
+  const { t } = useLanguage();
+  const resolvedPlaceholder = placeholder || t.record.click_add_content;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(initialText);
   const [loading, setLoading] = useState(false);
@@ -79,7 +82,7 @@ export default function EditRecord({
     setLoading(false);
 
     if (saveError) {
-      setError("保存失败，请稍后重试");
+      setError(t.record.save_failed);
       return;
     }
 
@@ -117,7 +120,7 @@ export default function EditRecord({
       >
         {initialText || (
           <span style={compact ? mobilePlaceholderStyle : desktopPlaceholderStyle}>
-            {placeholder}
+            {resolvedPlaceholder}
           </span>
         )}
       </div>
@@ -136,7 +139,7 @@ export default function EditRecord({
         }}
         onBlur={save}
         autoFocus
-        placeholder="输入内容..."
+        placeholder={t.record.input_content}
         style={{
           width: "100%",
           border: "none",
@@ -173,7 +176,7 @@ export default function EditRecord({
             color: "#999",
           }}
         >
-          保存中...
+          {t.saving}
         </div>
       )}
 

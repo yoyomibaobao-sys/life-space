@@ -22,7 +22,6 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   archiveCategoryOptions,
-  getArchiveCategoryLabel,
   getDefaultSystemNames,
   isNonPlantArchiveCategory,
   type ArchiveCategory,
@@ -68,7 +67,6 @@ import {
 } from "@/lib/storage-usage";
 import {
   isStorageUploadMaintenance,
-  STORAGE_UPLOAD_MAINTENANCE_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { requestCloudTrash } from "@/lib/cloud-trash";
@@ -81,6 +79,7 @@ import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ArchiveDetail({
   params,
@@ -105,6 +104,9 @@ type MobileArchiveEditableField =
   | "archiveSummary";
 
 function Content({ id }: { id: string }) {
+  const { language, t } = useLanguage();
+  const archiveCopy = t.archive;
+  const recordCopy = t.record;
   const router = useRouter();
   const [archive, setArchive] = useState<ArchiveDetailArchive | null>(null);
   const [species, setSpecies] = useState<PlantSpeciesLite | null>(null);
@@ -112,7 +114,7 @@ function Content({ id }: { id: string }) {
   const [cycles, setCycles] = useState<ArchiveCycle[]>([]);
   const [cycleBusy, setCycleBusy] = useState(false);
   const [me, setMe] = useState<string | null | undefined>(undefined);
-  const [username, setUsername] = useState("用户");
+  const [username, setUsername] = useState("");
   const [sameTagCounts, setSameTagCounts] = useState<Record<string, number>>({});
   const [archiveSubcategoryLabel, setArchiveSubcategoryLabel] = useState<string | null>(null);
   const [archiveGroupLabel, setArchiveGroupLabel] = useState<string | null>(null);
@@ -271,7 +273,7 @@ saveRecentArchiveBrowse({
         .eq("id", archiveData.user_id)
         .maybeSingle();
 
-      setUsername(profile?.username || "用户");
+      setUsername(profile?.username || "");
 
       if (currentUserId && !isOwnerView) {
         const { data: archiveFollow } = await supabase
@@ -404,7 +406,7 @@ saveRecentArchiveBrowse({
 
       const list: PlantSpeciesOption[] = ((speciesData || []) as PlantSpeciesOption[]).map((item) => {
         const aliases = Array.from(new Set(aliasesBySpecies.get(item.id) || []));
-        const displayName = item.common_name || item.scientific_name || "未命名植物";
+        const displayName = item.common_name || item.scientific_name || archiveCopy.unnamed_plant;
 
         return {
           ...item,
@@ -644,11 +646,12 @@ saveRecentArchiveBrowse({
   }, []);
 
   if (!archive || me === undefined) {
-    return <div style={{ padding: 20 }}>加载中...</div>;
+    return <div style={{ padding: 20 }}>{archiveCopy.loading}</div>;
   }
 
   const activeArchive = archive;
-  const cycleTerminology = getArchiveCycleTerminology(activeArchive.category);
+  const displayUsername = username || archiveCopy.default_user;
+  const cycleTerminology = getArchiveCycleTerminology(activeArchive.category, language);
   const isOwner = me === activeArchive.user_id;
   const mode: ArchiveMode = isOwner ? ((modeParam as ArchiveMode | null) || "owner") : "viewer";
   const activeCycles = cycles
@@ -658,20 +661,27 @@ saveRecentArchiveBrowse({
     .sort((a, b) => b.cycle_no - a.cycle_no)
     .map((cycle) => ({
       id: cycle.id,
-      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)}（${cycle.status === "active" ? "进行中" : "已结束"} · ${formatLocalCycleDate(cycle.started_at)}）`,
+      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
     }));
   const archiveDisplayName = getDisplayName(activeArchive, species);
   const latestUpdate = records[0]?.record_time || activeArchive.last_record_time || activeArchive.created_at;
-  const archiveCategoryLabel = getArchiveCategoryLabel(activeArchive.category);
+  const archiveCategoryLabel =
+    activeArchive.category === "plant"
+      ? archiveCopy.categories.plant_label
+      : activeArchive.category === "system"
+        ? archiveCopy.categories.system_label
+        : activeArchive.category === "insect_fish"
+          ? archiveCopy.categories.insect_fish_label
+          : archiveCopy.categories.other_label;
   const encyclopediaHref = activeArchive.category === "plant" && species?.id ? `/plant/${species.id}` : null;
   const mobileEncyclopediaHref = encyclopediaHref
     ? `${encyclopediaHref}?fromArchive=${encodeURIComponent(activeArchive.id)}`
     : null;
   const lightboxMetaText = lightboxRecord
-    ? `${formatDateTime(lightboxRecord.record_time)} · 第 ${getDayNumber(
+    ? `${formatDateTime(lightboxRecord.record_time)} · ${recordCopy.day_prefix} ${getDayNumber(
         startTime || lightboxRecord.record_time,
         lightboxRecord.record_time,
-      )} 天`
+      )}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""}`
     : "";
   const mobilePlantSearchKeyword = mobileArchiveName.trim().toLowerCase();
   const mobilePlantSearchResults = (
@@ -770,7 +780,7 @@ saveRecentArchiveBrowse({
 
     if (shouldPublishForHelp) {
       const confirmed = confirm(
-        "求助需要公开这条记录和相关图片。你的其他记录不会公开。确认后，这条记录会进入公开发现和求助流。"
+        recordCopy.help_public_confirm
       );
 
       if (!confirmed) return;
@@ -783,7 +793,7 @@ saveRecentArchiveBrowse({
           .eq("user_id", activeArchive.user_id);
 
         if (archiveError) {
-          showToast("公开项目壳失败，暂不能发起求助");
+          showToast(recordCopy.publish_shell_failed);
           return;
         }
 
@@ -806,7 +816,7 @@ saveRecentArchiveBrowse({
       .eq("archive_id", activeArchive.id);
 
     if (error) {
-      showToast("更新求助状态失败");
+      showToast(recordCopy.help_status_update_failed);
       return;
     }
 
@@ -825,10 +835,10 @@ saveRecentArchiveBrowse({
 
     showToast(
       nextStatus === "help"
-        ? "已标记为求助"
+        ? recordCopy.marked_help
         : nextStatus === "resolved"
-        ? "已标记为已解决"
-        : "已取消求助"
+        ? recordCopy.marked_resolved
+        : recordCopy.canceled_help
     );
   }
 
@@ -845,7 +855,7 @@ saveRecentArchiveBrowse({
       .eq("id", activeArchive.id);
 
     if (error) {
-      showToast("更新可见状态失败");
+      showToast(recordCopy.visibility_update_failed);
       return;
     }
 
@@ -856,7 +866,7 @@ saveRecentArchiveBrowse({
         .eq("archive_id", activeArchive.id);
 
       if (recordsError) {
-        showToast("记录同步失败");
+        showToast(recordCopy.sync_failed);
         return;
       }
 
@@ -870,7 +880,11 @@ saveRecentArchiveBrowse({
 
     setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
 
-    showToast(nextValue ? "项目壳已公开，旧记录不会自动公开" : "项目和记录仅自己可见");
+    showToast(
+      nextValue
+        ? archiveCopy.project_shell_public_old_private
+        : archiveCopy.project_and_records_private
+    );
   }
 
   async function applyArchiveStatus(nextStatus: "active" | "ended") {
@@ -883,12 +897,12 @@ saveRecentArchiveBrowse({
     );
 
     if (error) {
-      showToast(isEnding ? "标记结束失败" : "恢复失败");
+      showToast(isEnding ? archiveCopy.end_failed : archiveCopy.restore_failed);
       return;
     }
 
     setArchive((prev) => (prev ? { ...prev, status: nextStatus } : prev));
-    showToast(isEnding ? "已标记为结束" : "已恢复为进行中");
+    showToast(isEnding ? archiveCopy.marked_ended : archiveCopy.restored_ongoing);
   }
 
   async function updateArchiveStatus(nextStatus: "active" | "ended") {
@@ -908,12 +922,12 @@ saveRecentArchiveBrowse({
     setIsDeletingArchive(false);
 
     if (!trashed) {
-      showToast("移入回收站失败");
+      showToast(archiveCopy.trash_failed);
       return;
     }
 
     setDeleteArchiveDialogOpen(false);
-    showToast("已移入回收站");
+    showToast(archiveCopy.moved_to_trash);
     router.replace("/archive");
     router.refresh();
   }
@@ -937,7 +951,7 @@ saveRecentArchiveBrowse({
   async function saveMobileArchivePatch(
     field: MobileArchiveEditableField,
     patch: Partial<ArchiveDetailArchive>,
-    successMessage = "已保存"
+    successMessage = archiveCopy.saved
   ) {
     if (!isOwner || mobileArchiveSavingField) return false;
 
@@ -953,8 +967,8 @@ saveRecentArchiveBrowse({
     setMobileArchiveSavingField(null);
 
     if (error) {
-      setMobileArchiveError("保存失败，请稍后重试");
-      showToast("保存失败");
+      setMobileArchiveError(archiveCopy.save_retry);
+      showToast(archiveCopy.save_retry);
       return false;
     }
 
@@ -970,8 +984,8 @@ saveRecentArchiveBrowse({
     const nextTitle = mobileArchiveTitle.trim();
 
     if (!nextTitle) {
-      setMobileArchiveError("项目名称不能为空");
-      showToast("项目名称不能为空");
+      setMobileArchiveError(archiveCopy.project_name_empty);
+      showToast(archiveCopy.project_name_empty);
       return;
     }
 
@@ -998,7 +1012,7 @@ saveRecentArchiveBrowse({
       system_name: null,
     };
 
-    const saved = await saveMobileArchivePatch("category", patch, "种类已更新");
+    const saved = await saveMobileArchivePatch("category", patch, archiveCopy.category_updated);
     if (!saved) return;
 
     setSpecies(null);
@@ -1010,8 +1024,8 @@ saveRecentArchiveBrowse({
     const nextName = name.trim();
 
     if (!nextName) {
-      setMobileArchiveError("系统名不能为空");
-      showToast("系统名不能为空");
+      setMobileArchiveError(archiveCopy.system_name_empty);
+      showToast(archiveCopy.system_name_empty);
       return;
     }
 
@@ -1021,7 +1035,7 @@ saveRecentArchiveBrowse({
       return;
     }
 
-    await saveMobileArchivePatch("name", { system_name: nextName }, "系统名已更新");
+    await saveMobileArchivePatch("name", { system_name: nextName }, archiveCopy.system_name_updated);
   }
 
   async function saveMobileArchiveSpecies(selectedSpecies: PlantSpeciesOption) {
@@ -1029,7 +1043,7 @@ saveRecentArchiveBrowse({
       selectedSpecies.display_name ||
       selectedSpecies.common_name ||
       selectedSpecies.scientific_name ||
-      "未命名植物";
+      archiveCopy.unnamed_plant;
 
     setMobileArchiveName(speciesName);
     setMobileSelectedSpeciesId(selectedSpecies.id);
@@ -1041,7 +1055,7 @@ saveRecentArchiveBrowse({
         species_name_snapshot: speciesName,
         system_name: null,
       },
-      "系统植物名已更新"
+      archiveCopy.system_plant_name_updated
     );
 
     if (!saved) return;
@@ -1061,7 +1075,10 @@ saveRecentArchiveBrowse({
     const nextName = selection.name.trim();
 
     if (!nextName) {
-      const emptyText = activeArchive.category === "plant" ? "系统植物名不能为空" : "系统名不能为空";
+      const emptyText =
+        activeArchive.category === "plant"
+          ? archiveCopy.system_plant_name_empty
+          : archiveCopy.system_name_empty;
       showToast(emptyText);
       throw new Error(emptyText);
     }
@@ -1087,7 +1104,7 @@ saveRecentArchiveBrowse({
           {
             user_id: user.id,
             submitted_name: nextName,
-            language_code: "zh",
+            language_code: language,
             status: "pending",
           },
         ]);
@@ -1100,14 +1117,14 @@ saveRecentArchiveBrowse({
           species_name_snapshot: nextName,
           system_name: null,
         },
-        "系统植物名已更新"
+        archiveCopy.system_plant_name_updated
       );
 
       if (saved) setSpecies(null);
       return;
     }
 
-    await saveMobileArchivePatch("name", { system_name: nextName }, "系统名已更新");
+    await saveMobileArchivePatch("name", { system_name: nextName }, archiveCopy.system_name_updated);
   }
 
   async function saveMobileArchiveSource() {
@@ -1191,7 +1208,7 @@ saveRecentArchiveBrowse({
       : normalizeMembershipRpcResult(membershipData);
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -1205,12 +1222,12 @@ saveRecentArchiveBrowse({
     setProjectFollowSubmitting(false);
 
     if (error) {
-      showToast("关注项目失败");
+      showToast(archiveCopy.follow_failed);
       return;
     }
 
     setIsProjectFollowed(true);
-    showToast("已关注该项目");
+    showToast(archiveCopy.followed);
   }
 
   async function confirmUnfollowProject() {
@@ -1234,17 +1251,17 @@ saveRecentArchiveBrowse({
     setProjectFollowSubmitting(false);
 
     if (error) {
-      showToast("取消关注失败");
+      showToast(archiveCopy.unfollow_failed);
       return;
     }
 
     setIsProjectFollowed(false);
     setShowUnfollowProjectConfirm(false);
-    showToast("已取消关注该项目");
+    showToast(archiveCopy.unfollowed);
   }
 
   function openLightbox(media: MediaItem[], index: number, record: RecordItem) {
-    const images = buildMediaList(media, activeArchive.title || "项目");
+    const images = buildMediaList(media, activeArchive.title || archiveCopy.categories.fallback_label);
     if (!images.length) return;
     setLightboxRecord(record);
     setLightboxImages(images);
@@ -1283,7 +1300,7 @@ saveRecentArchiveBrowse({
   async function deleteMediaFromRecord(
     recordId: string,
     mediaId: string,
-    successMessage: string | null = "已移入回收站",
+    successMessage: string | null = archiveCopy.moved_to_trash,
   ) {
     if (deletingMediaIdsRef.current.has(mediaId)) return false;
     deletingMediaIdsRef.current.add(mediaId);
@@ -1292,7 +1309,7 @@ saveRecentArchiveBrowse({
       const trashed = await requestCloudTrash("media", mediaId);
 
       if (!trashed) {
-        showToast("移入回收站失败");
+        showToast(archiveCopy.trash_failed);
         return false;
       }
 
@@ -1341,7 +1358,7 @@ saveRecentArchiveBrowse({
 
     if (rejectedCount > 0) {
       showToast(
-        `每次最多添加 ${MAX_RECORD_PHOTOS_PER_ADD} 张，本次只处理前 ${MAX_RECORD_PHOTOS_PER_ADD} 张；可以再次添加。`,
+        `${recordCopy.photo_batch_trimmed_prefix} ${MAX_RECORD_PHOTOS_PER_ADD} ${recordCopy.photo_batch_trimmed_suffix}`,
       );
     }
 
@@ -1350,7 +1367,7 @@ saveRecentArchiveBrowse({
     } = await supabase.auth.getUser();
 
     if (!user || user.id !== activeArchive.user_id) {
-      showToast("请先登录后再添加图片");
+      showToast(recordCopy.login_to_add_photos);
       return [];
     }
 
@@ -1361,12 +1378,12 @@ saveRecentArchiveBrowse({
       : normalizeMembershipRpcResult(membershipData);
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return [];
     }
 
     if (await isStorageUploadMaintenance()) {
-      showToast(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
+      showToast(recordCopy.maintenance_upload);
       return [];
     }
 
@@ -1420,14 +1437,15 @@ saveRecentArchiveBrowse({
               usedBytes: reserveResult.storage_used,
               limitBytes: reserveResult.storage_limit_bytes,
               uploadBytes: item.reservedBytes,
+              language,
             })
           );
         } else if (reserveResult.message === "membership_inactive") {
-          showToast(getCreateContentBlockedText(membership));
+          showToast(getCreateContentBlockedText(membership, language));
         } else if (reserveResult.message === "upload_maintenance") {
-          showToast(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
+          showToast(recordCopy.maintenance_upload);
         } else {
-          showToast("容量检查失败");
+          showToast(recordCopy.capacity_check_failed);
         }
         break;
       }
@@ -1454,8 +1472,8 @@ saveRecentArchiveBrowse({
         await cancelStorageUploadReservation(reservation);
         showToast(
           (await isStorageUploadMaintenance())
-            ? STORAGE_UPLOAD_MAINTENANCE_MESSAGE
-            : "部分图片上传失败"
+            ? recordCopy.maintenance_upload
+            : recordCopy.partial_upload_failed
         );
         continue;
       }
@@ -1540,7 +1558,7 @@ saveRecentArchiveBrowse({
 
           if (reconcileReadError || !reconciledMedia) {
             console.error("add record reconciled media read error:", reconcileReadError);
-            showToast("图片保存状态待确认，请刷新后查看。为避免误删，已保留上传内容。");
+            showToast(recordCopy.save_state_pending);
             continue;
           }
           committedMedia = reconciledMedia as MediaItem;
@@ -1549,10 +1567,10 @@ saveRecentArchiveBrowse({
             .from("media")
             .remove([fileName, uploadedThumbPath].filter((path): path is string => Boolean(path)));
           await cancelStorageUploadReservation(reservation);
-          showToast("部分图片保存失败");
+          showToast(recordCopy.partial_save_failed);
           continue;
         } else {
-          showToast("图片保存状态待确认，请刷新后查看。为避免误删，已保留上传内容。");
+          showToast(recordCopy.save_state_pending);
           continue;
         }
       }
@@ -1580,11 +1598,11 @@ saveRecentArchiveBrowse({
         )
       );
       if (options.successMessage !== null) {
-        showToast(options.successMessage ?? "图片已添加");
+        showToast(options.successMessage ?? recordCopy.photo_added);
       }
     } else {
       if (options.emptyMessage !== null) {
-        showToast(options.emptyMessage ?? "没有图片成功上传");
+        showToast(options.emptyMessage ?? recordCopy.no_photo_uploaded);
       }
     }
 
@@ -1598,25 +1616,25 @@ saveRecentArchiveBrowse({
   ) {
     const uploadedMedia = await handleAddMediaToRecord(recordId, files.slice(0, 1), {
       successMessage: null,
-      emptyMessage: "替换图片失败",
+      emptyMessage: recordCopy.replace_failed,
     });
 
     if (!uploadedMedia.length) return;
 
     const trashed = await deleteMediaFromRecord(recordId, mediaId, null);
-    showToast(trashed ? "图片已替换" : "新图片已添加，旧图片移入回收站失败");
+    showToast(trashed ? recordCopy.photo_replaced : recordCopy.photo_added_old_trash_failed);
   }
 
   async function handleDeleteLightboxImage(image: LightboxImage, currentIndex: number) {
     if (!image.id || !lightboxRecord?.id) {
-      showToast("无法定位当前图片");
+      showToast(recordCopy.locate_image_failed);
       return lightboxImages.length;
     }
 
     const trashed = await deleteMediaFromRecord(lightboxRecord.id, image.id, null);
     if (!trashed) return lightboxImages.length;
 
-    showToast("已移入回收站");
+    showToast(archiveCopy.moved_to_trash);
 
     const nextImages = lightboxImages.filter((item) => item.id !== image.id);
     setLightboxImages(nextImages);
@@ -1671,7 +1689,7 @@ saveRecentArchiveBrowse({
         setReloadKey((value) => value + 1);
         showToast(
           error.code === "23505"
-            ? "周期状态刚刚发生变化，已重新读取，请再试一次。"
+            ? recordCopy.cycle_changed_retry
             : cycleTerminology.startFailure
         );
         return;
@@ -1687,7 +1705,7 @@ saveRecentArchiveBrowse({
   async function endArchiveCycle(cycle: ArchiveCycle, endedAt: string) {
     if (!isOwner || cycleBusy || cycle.status !== "active") return;
     if (new Date(endedAt).getTime() < new Date(cycle.started_at).getTime()) {
-      showToast("结束日期不能早于开始日期。");
+      showToast(archiveCopy.end_before_start);
       return;
     }
 
@@ -1722,7 +1740,7 @@ saveRecentArchiveBrowse({
       cycle.status === "ended" &&
       (!dates.endedAt || new Date(dates.endedAt).getTime() < new Date(dates.startedAt).getTime())
     ) {
-      showToast("结束日期不能早于开始日期。");
+      showToast(archiveCopy.end_before_start);
       return;
     }
 
@@ -1740,7 +1758,7 @@ saveRecentArchiveBrowse({
 
       if (error) {
         console.error("update archive cycle dates failed", error);
-        showToast("调整日期失败，请稍后重试。");
+        showToast(recordCopy.adjust_failed);
         return;
       }
 
@@ -1767,7 +1785,7 @@ saveRecentArchiveBrowse({
           details: error.details,
           hint: error.hint,
         });
-        showToast("删除失败，请稍后重试。");
+        showToast(recordCopy.delete_failed);
         return false;
       }
 
@@ -1800,7 +1818,7 @@ saveRecentArchiveBrowse({
 
     if (error) {
       console.error("update record cycle failed", error);
-      showToast(`${cycleTerminology.adjustLabel}失败，请稍后重试。`);
+      showToast(recordCopy.adjust_failed);
       return;
     }
 
@@ -1833,12 +1851,12 @@ saveRecentArchiveBrowse({
     ]);
 
     if (error) {
-      showToast("添加标签失败");
+      showToast(recordCopy.add_tag_failed);
       return;
     }
 
     updateRecordTagState(recordId, newTag, "add");
-    showToast("已添加标签");
+    showToast(recordCopy.tag_added);
   }
 
   return (
@@ -1860,7 +1878,9 @@ saveRecentArchiveBrowse({
               style={{ fontSize: 14, color: "#666", textDecoration: "none" }}
             >
               <UiIcon name="arrow-left" size={15} />
-              {mode === "owner" ? " 我的项目" : " 返回发现"}
+              {mode === "owner"
+                ? ` ${archiveCopy.back_to_my_projects}`
+                : ` ${archiveCopy.back_to_discover}`}
             </Link>
           </div>
         ) : null}
@@ -1869,48 +1889,49 @@ saveRecentArchiveBrowse({
           <header style={desktopProjectIdentityStyle}>
             <h1 style={desktopProjectTitleStyle}>{activeArchive.title}</h1>
             {isOwner ? (
-              <span style={desktopProjectOwnerStyle}>我的项目</span>
+              <span style={desktopProjectOwnerStyle}>{archiveCopy.back_to_my_projects}</span>
             ) : (
               <Link
                 href={`/user/${activeArchive.user_id}`}
                 style={desktopProjectOwnerLinkStyle}
-                aria-label={`进入${username}的空间`}
+                aria-label={`${archiveCopy.enter_user_space_prefix}${displayUsername}${archiveCopy.enter_user_space_suffix}`}
               >
-                进入{username}的空间
+                {archiveCopy.enter_user_space_prefix}{displayUsername}{archiveCopy.enter_user_space_suffix}
                 <UiIcon name="arrow-right" size={14} />
               </Link>
             )}
           </header>
         ) : null}
 
-        <nav style={archiveDetailTabWrapStyle} aria-label="项目详情导航">
+        <nav style={archiveDetailTabWrapStyle} aria-label={archiveCopy.detail_navigation}>
           <button
             type="button"
             onClick={() => setActiveDetailTab("records")}
             style={archiveDetailTabButtonStyle(activeDetailTab === "records")}
           >
-            详情
+            {archiveCopy.details}
           </button>
           <button
             type="button"
             onClick={() => setActiveDetailTab("profile")}
             style={archiveDetailTabButtonStyle(activeDetailTab === "profile")}
           >
-            档案
+            {archiveCopy.dossier}
           </button>
           <button
             type="button"
             onClick={() => setActiveDetailTab("experience")}
             style={archiveDetailTabButtonStyle(activeDetailTab === "experience")}
           >
-            经验卡（{experienceCardCount}）
+            {archiveCopy.experience_cards}
+            {language === "en" ? ` (${experienceCardCount})` : `（${experienceCardCount}）`}
           </button>
           <button
             type="button"
             onClick={() => setActiveDetailTab("growth")}
             style={archiveDetailTabButtonStyle(activeDetailTab === "growth")}
           >
-            生长线
+            {archiveCopy.growth_line}
           </button>
         </nav>
 
@@ -1919,7 +1940,7 @@ saveRecentArchiveBrowse({
             <ArchiveDetailHeader
               mode={mode}
               archive={activeArchive}
-              username={username}
+              username={displayUsername}
               archiveDisplayName={archiveDisplayName}
               archiveCategoryLabel={archiveCategoryLabel}
               archiveSubcategoryLabel={archiveSubcategoryLabel}
@@ -2030,8 +2051,8 @@ saveRecentArchiveBrowse({
 
         {activeDetailTab === "growth" ? (
           <section style={mobileGrowthLinePlaceholderStyle}>
-            <strong>生长线</strong>
-            <span>生长线将在后续开放，并与详情、档案、经验卡保持同级入口。</span>
+            <strong>{archiveCopy.growth_line}</strong>
+            <span>{archiveCopy.growth_line_coming}</span>
           </section>
         ) : null}
 
@@ -2077,7 +2098,7 @@ saveRecentArchiveBrowse({
                 fontSize: 14,
               }}
             >
-              {mode === "owner" ? "还没有记录，添加第一条记录" : "还没有公开记录"}
+              {mode === "owner" ? archiveCopy.no_records_owner : archiveCopy.no_public_records}
             </div>
           }
           renderRecord={(item, index) => {
@@ -2134,8 +2155,8 @@ saveRecentArchiveBrowse({
           metaText={lightboxMetaText}
           note={lightboxRecord?.note || ""}
           onDeleteCurrentImage={handleDeleteLightboxImage}
-          deleteActionLabel="移入回收站"
-          deleteConfirmMessage="照片将移入回收站，可以从回收站恢复。"
+          deleteActionLabel={archiveCopy.move_to_trash}
+          deleteConfirmMessage={archiveCopy.photo_trash_message}
           onClose={() => {
             setLightboxImages([]);
             setLightboxIndex(0);
@@ -2146,10 +2167,10 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={showUnfollowProjectConfirm}
-        title="取消关注项目"
-        message="确定不再关注这个项目吗？之后该项目的新进展将不会出现在你的关注列表里。"
-        confirmText={projectFollowSubmitting ? "处理中..." : "取消关注"}
-        cancelText="保留关注"
+        title={archiveCopy.unfollow_title}
+        message={archiveCopy.unfollow_message}
+        confirmText={projectFollowSubmitting ? archiveCopy.processing : archiveCopy.unfollow}
+        cancelText={archiveCopy.keep_following}
         onClose={() => {
           if (!projectFollowSubmitting) setShowUnfollowProjectConfirm(false);
         }}
@@ -2159,10 +2180,10 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={deleteArchiveDialogOpen}
-        title="移入回收站"
-        message="项目、记录和照片将移入回收站。与该项目相关的评论、点赞、关注等互动信息将立即删除，无法恢复。"
-        confirmText={isDeletingArchive ? "移入中..." : "移入回收站"}
-        cancelText="取消"
+        title={archiveCopy.trash_title}
+        message={archiveCopy.project_trash_message}
+        confirmText={isDeletingArchive ? archiveCopy.moving_to_trash : archiveCopy.move_to_trash}
+        cancelText={t.cancel}
         confirmDisabled={isDeletingArchive}
         cancelDisabled={isDeletingArchive}
         onClose={() => {
@@ -2174,10 +2195,10 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={archiveStatusConfirmOpen}
-        title="结束项目"
-        message="确认将这个项目标记为已结束吗？之后仍可查看，也可以恢复。"
-        confirmText="确认结束"
-        cancelText="取消"
+        title={archiveCopy.end_project_title}
+        message={archiveCopy.end_project_message}
+        confirmText={archiveCopy.confirm_end_project}
+        cancelText={t.cancel}
         onClose={() => setArchiveStatusConfirmOpen(false)}
         onConfirm={() => {
           setArchiveStatusConfirmOpen(false);
@@ -2187,10 +2208,10 @@ saveRecentArchiveBrowse({
 
       <ConfirmDialog
         open={Boolean(deleteMediaTarget)}
-        title="移入回收站"
-        message="照片将移入回收站，可以从回收站恢复。"
-        confirmText={isDeletingMedia ? "移入中..." : "移入回收站"}
-        cancelText="取消"
+        title={archiveCopy.trash_title}
+        message={archiveCopy.photo_trash_message}
+        confirmText={isDeletingMedia ? archiveCopy.moving_to_trash : archiveCopy.move_to_trash}
+        cancelText={t.cancel}
         onClose={() => {
           if (!isDeletingMedia) setDeleteMediaTarget(null);
         }}
@@ -2312,20 +2333,29 @@ function MobileArchiveProfile({
   onToggleArchiveVisibility: () => void;
   onDeleteArchive: () => void;
 }) {
-  const createdAtText = formatDate(archive.created_at) || "未填写";
-  const nameLabel = category === "plant" ? "系统植物名 *" : "系统名 *";
+  const { t } = useLanguage();
+  const copy = t.archive;
+  const createdAtText = formatDate(archive.created_at) || copy.not_filled;
+  const nameLabel =
+    category === "plant" ? copy.system_plant_name_required : copy.system_name_required;
   const canEdit = isOwner && !savingField;
+  const categoryLabels: Record<ArchiveCategory, string> = {
+    plant: copy.categories.plant_label,
+    system: copy.categories.system_label,
+    insect_fish: copy.categories.insect_fish_label,
+    other: copy.categories.other_label,
+  };
 
   return (
     <section id="archive-profile" style={mobileArchiveProfileStyle}>
       <div style={mobileArchiveProfileHeaderStyle}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: "#1f2d1f" }}>档案</div>
-        {savingField ? <div style={mobileArchiveSavingTextStyle}>保存中...</div> : null}
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#1f2d1f" }}>{copy.dossier}</div>
+        {savingField ? <div style={mobileArchiveSavingTextStyle}>{copy.saving}</div> : null}
       </div>
 
       <MobileArchiveEditableField
-        label="项目名称 *"
-        value={archive.title || "未命名项目"}
+        label={copy.project_name_required}
+        value={archive.title || copy.unnamed_project}
         editing={editingField === "title"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("title")}
@@ -2335,14 +2365,14 @@ function MobileArchiveProfile({
           onChange={(event) => onTitleChange(event.target.value)}
           onBlur={onSaveTitle}
           autoFocus
-          placeholder="未命名项目"
+          placeholder={copy.unnamed_project}
           style={mobileArchiveInputStyle}
         />
       </MobileArchiveEditableField>
 
       <MobileArchiveEditableField
-        label="种类"
-        value={archiveCategoryLabel || "其他"}
+        label={copy.category}
+        value={archiveCategoryLabel || copy.other}
         editing={editingField === "category"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("category")}
@@ -2359,7 +2389,7 @@ function MobileArchiveProfile({
         >
           {archiveCategoryOptions.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {categoryLabels[option.value]}
             </option>
           ))}
         </select>
@@ -2367,7 +2397,7 @@ function MobileArchiveProfile({
 
       <MobileArchiveEditableField
         label={nameLabel}
-        value={archiveDisplayName || "未填写"}
+        value={archiveDisplayName || copy.not_filled}
         editing={editingField === "name"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("name")}
@@ -2382,7 +2412,7 @@ function MobileArchiveProfile({
             }}
             candidates={plantSearchResults.map((item) => ({
               id: item.id,
-              label: item.display_name || item.common_name || item.scientific_name || "未命名植物",
+              label: item.display_name || item.common_name || item.scientific_name || copy.unnamed_plant,
               description: item.scientific_name || "",
             }))}
             selectedValue={selectedSpeciesId}
@@ -2395,7 +2425,7 @@ function MobileArchiveProfile({
             onUseCustom={(value) => onSaveSystemName(value)}
             onBlur={onSaveNameBlur}
             autoFocus
-            placeholder="输入后从系统植物中点选"
+            placeholder={copy.select_system_plant}
             containerStyle={mobileArchiveSuggestionWrapStyle}
             inputStyle={mobileArchiveInputStyle}
             panelStyle={mobileArchiveSuggestionListStyle}
@@ -2404,8 +2434,8 @@ function MobileArchiveProfile({
             }
             customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
             emptyStyle={mobileArchiveSuggestionEmptyStyle}
-            emptyText="没有找到匹配植物"
-            customActionLabel={(inputValue) => `使用“${inputValue}”作为新的系统名`}
+            emptyText={copy.no_matching_plant}
+            customActionLabel={(inputValue) => `${copy.use_as_system_name}: ${inputValue}`}
           />
         ) : (
           <SystemNameSelector
@@ -2425,7 +2455,7 @@ function MobileArchiveProfile({
             onUseCustom={(value) => onSaveSystemName(value)}
             onBlur={() => onSaveSystemName()}
             autoFocus
-            placeholder="输入具体名称"
+            placeholder={copy.input_specific_name}
             containerStyle={mobileArchiveSuggestionWrapStyle}
             inputStyle={mobileArchiveInputStyle}
             panelStyle={mobileArchiveSuggestionListStyle}
@@ -2434,14 +2464,14 @@ function MobileArchiveProfile({
             }
             customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
             emptyStyle={mobileArchiveSuggestionEmptyStyle}
-            customActionLabel={(inputValue) => `新增为具体名称：${inputValue}`}
+            customActionLabel={(inputValue) => `${copy.add_specific_name}${inputValue}`}
           />
         )}
       </MobileArchiveEditableField>
 
       <MobileArchiveEditableField
-        label="来源"
-        value={source || "未填写"}
+        label={copy.source}
+        value={source || copy.not_filled}
         editing={editingField === "source"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("source")}
@@ -2451,14 +2481,14 @@ function MobileArchiveProfile({
           onChange={(event) => onSourceChange(event.target.value)}
           onBlur={onSaveSource}
           autoFocus
-          placeholder="未填写"
+          placeholder={copy.not_filled}
           style={mobileArchiveInputStyle}
         />
       </MobileArchiveEditableField>
 
       <MobileArchiveEditableField
-        label="备注"
-        value={note || "未填写"}
+        label={copy.note}
+        value={note || copy.not_filled}
         editing={editingField === "note"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("note")}
@@ -2469,15 +2499,15 @@ function MobileArchiveProfile({
           onChange={(event) => onNoteChange(event.target.value)}
           onBlur={onSaveNote}
           autoFocus
-          placeholder="未填写"
+          placeholder={copy.not_filled}
           rows={4}
           style={mobileArchiveTextareaStyle}
         />
       </MobileArchiveEditableField>
 
       <MobileArchiveEditableField
-        label="项目摘要"
-        value={archiveSummary || "未填写"}
+        label={copy.summary}
+        value={archiveSummary || copy.not_filled}
         editing={editingField === "archiveSummary"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("archiveSummary")}
@@ -2493,7 +2523,7 @@ function MobileArchiveProfile({
         />
       </MobileArchiveEditableField>
 
-      <MobileArchiveField label="创建时间" value={createdAtText} />
+      <MobileArchiveField label={copy.created_time} value={createdAtText} />
 
       {error ? <div style={mobileArchiveErrorStyle}>{error}</div> : null}
 
@@ -2504,21 +2534,21 @@ function MobileArchiveProfile({
             onClick={onToggleArchiveStatus}
             style={mobileArchiveActionButtonStyle}
           >
-            {archive.status === "ended" ? "恢复" : "结束"}
+            {archive.status === "ended" ? copy.restore : copy.end}
           </button>
           <button
             type="button"
             onClick={onToggleArchiveVisibility}
             style={mobileArchiveActionButtonStyle}
           >
-            {archive.is_public ? "设为私密" : "设为公开发现"}
+            {archive.is_public ? copy.set_private : copy.set_public}
           </button>
           <button
             type="button"
             onClick={onDeleteArchive}
             style={mobileArchiveDangerButtonStyle}
           >
-            移入回收站
+            {copy.move_to_trash}
           </button>
         </div>
       ) : null}

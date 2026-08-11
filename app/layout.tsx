@@ -19,8 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "有时 · 耕作",
-  description: "有时·耕作是种植、养护、农法设施和生态观察的记录工具。",
+  title: "有时·耕作 | LifeSpace for Cultivation",
+  description:
+    "有时·耕作：围绕种植、养护、农法设施与生态观察的长期记录空间。 LifeSpace for long-term cultivation records.",
 };
 
 export const viewport: Viewport = {

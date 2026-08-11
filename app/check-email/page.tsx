@@ -3,10 +3,12 @@
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function CheckEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLanguage();
 
   const email = useMemo(() => searchParams.get("email")?.trim() || "", [searchParams]);
   const type = searchParams.get("type") || "signup";
@@ -17,13 +19,13 @@ function CheckEmailContent() {
 
   async function handleResend() {
     if (!email) {
-      setMessage("缺少邮箱地址，请返回注册页重新提交");
+      setMessage(t.auth.missing_email);
       return;
     }
 
     const now = Date.now();
     if (now - lastSentTime < 30000) {
-      setMessage("30 秒后再试");
+      setMessage(t.auth.retry_after_30_seconds);
       return;
     }
 
@@ -40,14 +42,14 @@ function CheckEmailContent() {
       });
 
       if (error) {
-        setMessage(`发送失败：${error.message}`);
+        setMessage(`${t.auth.send_failed_prefix}${error.message}`);
         return;
       }
 
       setLastSentTime(now);
-      setMessage("确认邮件已发送，请查找来自“有时·耕作”的邮件");
+      setMessage(t.auth.confirmation_sent);
     } catch {
-      setMessage("网络异常");
+      setMessage(t.auth.network_error);
     } finally {
       setLoading(false);
     }
@@ -62,10 +64,10 @@ function CheckEmailContent() {
       }}
     >
       <div style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
-        <h1>请确认邮箱</h1>
+        <h1>{t.auth.confirm_email_title}</h1>
 
         <p style={{ marginTop: 20, fontSize: 14, color: "#666", lineHeight: 1.8 }}>
-          请在邮箱中查找来自“有时·耕作”的确认邮件。也请检查垃圾邮件或促销邮件。
+          {t.auth.confirm_email_intro}
         </p>
 
         {email && (
@@ -80,7 +82,7 @@ function CheckEmailContent() {
               wordBreak: "break-all",
             }}
           >
-            当前邮箱：{email}
+            {t.auth.current_email_prefix}{email}
           </div>
         )}
 
@@ -98,7 +100,7 @@ function CheckEmailContent() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? "处理中..." : "重新发送确认邮件"}
+            {loading ? t.auth.processing : t.auth.resend_confirmation}
           </button>
 
           <button
@@ -112,7 +114,7 @@ function CheckEmailContent() {
               cursor: "pointer",
             }}
           >
-            返回登录
+            {t.auth.return_login}
           </button>
 
           <button
@@ -126,7 +128,7 @@ function CheckEmailContent() {
               cursor: "pointer",
             }}
           >
-            返回注册
+            {t.auth.return_register}
           </button>
         </div>
 
@@ -152,6 +154,8 @@ function CheckEmailContent() {
 
 
 export default function CheckEmailPage() {
+  const { t } = useLanguage();
+
   return (
     <Suspense
       fallback={
@@ -163,9 +167,9 @@ export default function CheckEmailPage() {
           }}
         >
           <div style={{ width: "100%", maxWidth: 360, textAlign: "center" }}>
-            <h1>请确认邮箱</h1>
+            <h1>{t.auth.confirm_email_title}</h1>
             <p style={{ marginTop: 20, fontSize: 14, color: "#666", lineHeight: 1.8 }}>
-              页面加载中...
+              {t.auth.page_loading}
             </p>
           </div>
         </main>

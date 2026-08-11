@@ -44,6 +44,32 @@ export const behaviorTagLabels: Record<string, string> = {
   越冬: "越冬",
 };
 
-export function getBehaviorTagLabel(tag: string): string {
-  return behaviorTagLabels[tag] || tag;
+const behaviorTagLabelsEn: Record<string, string> = {
+  播种: "Sowing",
+  育苗: "Seedling care",
+  发芽: "Germination",
+  移植: "Transplanting",
+  扦插: "Cuttings",
+  分株: "Division",
+  换盆: "Repotting",
+  浇水: "Watering",
+  施肥: "Fertilizing",
+  修剪: "Pruning",
+  除虫: "Pest removal",
+  开花: "Flowering",
+  结果: "Fruiting",
+  采收: "Harvest",
+  病害: "Disease",
+  虫害: "Pests",
+  堆肥: "Composting",
+  补光: "Grow light",
+  越冬: "Overwintering",
+};
+
+export function getBehaviorTagLabel(
+  tag: string,
+  language: Language = "zh"
+): string {
+  return (language === "en" ? behaviorTagLabelsEn : behaviorTagLabels)[tag] || tag;
 }
+import type { Language } from "@/lib/i18n";

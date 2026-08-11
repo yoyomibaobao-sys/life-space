@@ -1,10 +1,5 @@
 import type { DiscoverSearchKind } from "@/lib/discover-search-types";
-
-const options: Array<{ value: DiscoverSearchKind; label: string }> = [
-  { value: "projects", label: "项目" },
-  { value: "records", label: "记录" },
-  { value: "experience", label: "经验卡" },
-];
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function DiscoverSearchTabs({
   value,
@@ -13,9 +8,16 @@ export default function DiscoverSearchTabs({
   value: DiscoverSearchKind;
   onChange: (value: DiscoverSearchKind) => void;
 }) {
+  const { t } = useLanguage();
+  const options: Array<{ value: DiscoverSearchKind; label: string }> = [
+    { value: "projects", label: t.discover.search_ui.projects },
+    { value: "records", label: t.discover.search_ui.records },
+    { value: "experience", label: t.discover.search_ui.experience_cards },
+  ];
+
   return (
     <nav
-      aria-label="搜索类型"
+      aria-label={t.discover.search_ui.search_type}
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(3, minmax(0, 1fr))",

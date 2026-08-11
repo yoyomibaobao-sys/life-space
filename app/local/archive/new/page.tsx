@@ -19,6 +19,7 @@ import {
   getSystemNameCandidates,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function normalizeInitialCategory(value: string): ArchiveCategory | null {
   return archiveCategoryOptions.some((option) => option.value === value)
@@ -39,6 +40,8 @@ function getInitialSearchParam(...names: string[]) {
 }
 
 export default function NewLocalArchivePage() {
+  const { t } = useLanguage();
+  const copy = t.archive;
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory>("plant");
@@ -94,13 +97,13 @@ export default function NewLocalArchivePage() {
 
     const cleanTitle = title.trim();
     if (!cleanTitle) {
-      showToast("请填写项目名");
+      showToast(copy.project_name_required_error);
       return;
     }
 
     const cleanSystemName = (usesCandidateSystemName ? systemName || systemSearch : systemName).trim();
     if (!cleanSystemName) {
-      showToast("请填写系统名");
+      showToast(copy.system_name_required_error);
       return;
     }
 
@@ -119,10 +122,10 @@ export default function NewLocalArchivePage() {
         note,
       });
 
-      showToast("本地项目已创建");
+      showToast(copy.local_created);
       router.push(`/local/archive/${archive.id}`);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "创建本地项目失败");
+      showToast(error instanceof Error ? error.message : copy.local_create_failed);
     } finally {
       setSaving(false);
     }
@@ -140,9 +143,9 @@ export default function NewLocalArchivePage() {
   return (
     <ArchiveNewProjectFormShell
       backHref="/archive?source=local"
-      backLabel="返回我的空间"
-      eyebrow="本地离线"
-      title="新建项目"
+      backLabel={copy.back_to_space}
+      eyebrow={copy.local_offline}
+      title={copy.new_project}
       category={category}
       onCategoryChange={handleCategoryChange}
       projectTitle={title}
@@ -179,8 +182,8 @@ export default function NewLocalArchivePage() {
               }}
               placeholder={
                 category === "plant"
-                  ? "输入后选择候选，或使用当前输入"
-                  : `输入后点选，例如：${systemOptions[0]?.label || "补光灯"}`
+                  ? copy.local_candidate_placeholder
+                  : `${copy.select_system_example}${systemOptions[0]?.label || copy.grow_light_example}`
               }
               inputStyle={archiveNewProjectInputStyle}
               panelStyle={localSuggestionPanelStyle}
@@ -189,16 +192,16 @@ export default function NewLocalArchivePage() {
               }
               customOptionStyle={localSuggestionNewButtonStyle}
               emptyStyle={localSuggestionEmptyStyle}
-              idleText="输入关键词后搜索系统名候选。"
-              emptyText="没有找到匹配候选，可使用当前输入。"
-              customActionLabel={(inputValue) => `使用“${inputValue}”作为新的系统名`}
+              idleText={copy.candidate_idle}
+              emptyText={copy.candidate_empty}
+              customActionLabel={(inputValue) => `${copy.use_as_system_name}: ${inputValue}`}
             />
           </div>
         ) : (
           <input
             value={systemName}
             onChange={(event) => setSystemName(event.target.value)}
-            placeholder="其他种类没有预设系统名，直接输入"
+            placeholder={copy.other_system_placeholder}
             style={archiveNewProjectInputStyle}
           />
         )
@@ -207,7 +210,7 @@ export default function NewLocalArchivePage() {
         <input
           value={source}
           onChange={(event) => setSource(event.target.value)}
-          placeholder="可选，例如：市场购买、朋友分享、育苗记录"
+          placeholder={copy.source_placeholder}
           style={archiveNewProjectInputStyle}
         />
       }
@@ -215,12 +218,12 @@ export default function NewLocalArchivePage() {
       onNoteChange={setNote}
       notice={
         <>
-          只保存在当前设备，不上传云端。子分类和分组可在项目列表或项目档案中继续整理，本地分类 / 分组仍独立于云空间。
-          {plantId || plantSlug ? " 已保存指引关联线索，但不会缓存指引正文、图片、相关项目或大家的经验。" : ""}
+          {copy.local_notice}
+          {plantId || plantSlug ? ` ${copy.local_guide_notice}` : ""}
         </>
       }
-      submitText="创建项目"
-      loadingText="保存中..."
+      submitText={copy.create_project}
+      loadingText={t.saving}
       submitting={saving}
       onSubmit={handleSubmit}
     />

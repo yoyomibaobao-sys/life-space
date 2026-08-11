@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Language } from "@/lib/i18n";
 
 export type SocialProfileSummary = {
   id?: string;
@@ -18,9 +19,13 @@ export type RecentArchiveItem = {
   last_record_time: string | null;
 };
 
-export function getArchiveDisplayName(title?: string | null, systemName?: string | null) {
-  const safeTitle = title || "未命名项目";
-  const safeSystemName = systemName || "未填写";
+export function getArchiveDisplayName(
+  title?: string | null,
+  systemName?: string | null,
+  language: Language = "zh"
+) {
+  const safeTitle = title || (language === "en" ? "Untitled project" : "未命名项目");
+  const safeSystemName = systemName || (language === "en" ? "Not provided" : "未填写");
   return `${safeTitle} · ${safeSystemName}`;
 }
 

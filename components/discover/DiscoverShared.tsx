@@ -1,3 +1,5 @@
+"use client";
+
 import type { MouseEvent } from "react";
 import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import type { FeedItem } from "@/lib/discover-types";
@@ -15,6 +17,7 @@ import {
   getArchiveViewCount,
   shortText,
 } from "@/lib/discover-utils";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 
 export function getFeedItemDisplayImageUrl(record: FeedItem) {
@@ -45,6 +48,7 @@ export function DefaultUserAvatar({ size = 30 }: { size?: number }) {
 }
 
 export function HelpBadge() {
+  const { t } = useLanguage();
   return (
     <span
       style={{
@@ -60,12 +64,13 @@ export function HelpBadge() {
         letterSpacing: 0.5,
       }}
     >
-      求助
+      {t.discover.help_badge}
     </span>
   );
 }
 
 export function ResolvedBadge() {
+  const { t } = useLanguage();
   return (
     <span
       style={{
@@ -81,12 +86,13 @@ export function ResolvedBadge() {
         letterSpacing: 0.2,
       }}
     >
-      求助已解决
+      {t.discover.resolved_badge}
     </span>
   );
 }
 
 export function EndedBadge() {
+  const { t } = useLanguage();
   return (
     <span
       style={{
@@ -102,12 +108,13 @@ export function EndedBadge() {
         lineHeight: 1.35,
       }}
     >
-      已结束
+      {t.discover.ended_badge}
     </span>
   );
 }
 
 export function CategoryBadge({ category }: { category?: string | null }) {
+  const { language } = useLanguage();
   const isPlant = category === "plant";
 
   return (
@@ -124,7 +131,7 @@ export function CategoryBadge({ category }: { category?: string | null }) {
         lineHeight: 1.35,
       }}
     >
-      {categoryLabel(category)}
+      {categoryLabel(category, language)}
     </span>
   );
 }
@@ -138,6 +145,7 @@ export function RecordTagPill({
   tag: string;
   enableLink?: boolean;
 }) {
+  const { language } = useLanguage();
   return (
     <span
       onClick={
@@ -168,7 +176,7 @@ export function RecordTagPill({
         lineHeight: 1.35,
       }}
     >
-      {getBehaviorTagLabel(tag)}
+      {getBehaviorTagLabel(tag, language)}
     </span>
   );
 }
@@ -190,18 +198,19 @@ export function ProjectCardRows({
   showUsername?: boolean;
   mobileFourLine?: boolean;
 }) {
+  const { language, t } = useLanguage();
   const isHelp = record.status_tag === "help";
   const isResolved = record.status_tag === "resolved";
   const lifecycleStatus = getArchiveLifecycleStatus(record);
-  const archiveUserTitle = getArchiveUserTitle(record);
-  const archiveSystemName = getArchiveSystemName(record);
+  const archiveUserTitle = getArchiveUserTitle(record, language);
+  const archiveSystemName = getArchiveSystemName(record, language);
   const archiveRecordCount = getArchiveRecordCount(record);
   const archiveViewCount = getArchiveViewCount(record);
   const archiveDurationDays = getArchiveDurationDays(record);
   const archiveFollowerCount = getArchiveFollowerCount(record);
   const commentCount = typeof record.comment_count === "number" ? record.comment_count : 0;
   const tags = Array.isArray(record.display_tags) ? record.display_tags.slice(0, 2) : [];
-  const displayUsername = record.username || "用户";
+  const displayUsername = record.username || t.discover.default_user;
 
   if (mobileFourLine) {
     const statusBadges = (
@@ -297,7 +306,7 @@ export function ProjectCardRows({
             wordBreak: "break-word",
           }}
         >
-          {record.note ? shortText(record.note, noteMaxLength) : "没有文字"}
+          {record.note ? shortText(record.note, noteMaxLength) : t.discover.no_text}
           {record.record_time ? (
             <span style={{ color: "#9aa59a" }}>
               <span aria-hidden="true"> · </span>
@@ -453,7 +462,7 @@ export function ProjectCardRows({
             flex: 1,
           }}
         >
-          {record.note ? shortText(record.note, noteMaxLength) : "没有文字"}
+          {record.note ? shortText(record.note, noteMaxLength) : t.discover.no_text}
           {record.record_time ? (
             <span style={{ color: "#9aa59a" }}>
               <span aria-hidden="true"> · </span>

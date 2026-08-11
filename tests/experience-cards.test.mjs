@@ -150,13 +150,15 @@ test("card mutations are atomic RPCs with active-cloud and ownership checks", as
 });
 
 test("experience-card detail descriptions are bounded and owner-edited without replacing card content", async () => {
-  const [migration, hardeningMigration, detail, library, types, dynamicTest] = await Promise.all([
+  const [migration, hardeningMigration, detail, library, types, dynamicTest, zhCopy, enCopy] = await Promise.all([
     source(descriptionMigrationPath),
     source(descriptionHardeningMigrationPath),
     source("app/experience-cards/[id]/page.tsx"),
     source("lib/experience-cards.ts"),
     source("lib/experience-card-types.ts"),
     source("supabase/tests/experience_cards_dynamic.sql"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
 
   assert.match(migration, /add column if not exists description text/i);
@@ -204,9 +206,11 @@ test("experience-card detail descriptions are bounded and owner-edited without r
   assert.match(types, /description: string \| null/);
   assert.match(library, /export async function updateExperienceCardDescription/);
   assert.match(library, /"update_experience_card_description"/);
-  assert.match(detail, /label="创建"[\s\S]*?>详情描述</);
-  assert.match(detail, /aria-label="编辑详情描述"/);
-  assert.match(detail, /aria-label="详情描述"/);
+  assert.match(detail, /label=\{t\.experience\.created\}[\s\S]*?\{t\.experience\.description\}/);
+  assert.match(detail, /aria-label=\{t\.experience\.edit_description_aria\}/);
+  assert.match(detail, /aria-label=\{t\.experience\.description\}/);
+  assert.match(zhCopy, /description: "详情描述"/);
+  assert.match(enCopy, /description: "Description"/);
   assert.match(detail, /maxLength=\{500\}/);
   assert.match(detail, /updateExperienceCardDescription\(/);
   assert.doesNotMatch(
@@ -240,11 +244,11 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editor, /availableRecords = records\.filter/);
   assert.match(editor, /records\.map\(\(record, index\) =>/);
   assert.match(editor, /selectedRecordIdSet\.has\(record\.id\)/);
-  assert.match(editor, />全部记录</);
+  assert.match(editor, /\{t\.experience\.all_records\}/);
   assert.match(editor, /renderAvailableRecord/);
-  assert.match(editor, /加入后默认全选/);
-  assert.match(editor, /所选图片用于当前设备生成MP4/);
-  assert.match(editor, /不设累计上限/);
+  assert.match(editor, /t\.experience\.photos_add_default_suffix/);
+  assert.match(editor, /t\.experience\.editor_hint/);
+  assert.match(editor, /t\.experience\.selection_rule/);
   assert.match(editor, /\.is\("trashed_at", null\)/);
   assert.doesNotMatch(editor, /selectedRecords\.length <= 12/);
   assert.doesNotMatch(editor, /最多关联12条/);
@@ -253,26 +257,26 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.match(editor, /deleteCachedExperienceCardVideo\(cardId\)/);
   assert.doesNotMatch(editor, /<ExperienceCardVideoPanel/);
   assert.match(editor, /coverMediaId: effectiveCoverMediaId/);
-  assert.match(editor, /保存修改/);
-  assert.match(editor, /预览/);
-  assert.match(editor, /发布经验卡/);
-  assert.match(editor, /项目中其他记录仍保持原来的可见性/);
+  assert.match(editor, /t\.experience\.save_changes/);
+  assert.match(editor, /t\.experience\.preview/);
+  assert.match(editor, /t\.experience\.publish_card/);
+  assert.match(editor, /t\.experience\.save_public_message_suffix/);
   assert.match(editor, /if \(mode === "publish"\)/);
   assert.doesNotMatch(editor, /cardId && wasPublished/);
   assert.match(editor, /embedded = false/);
   assert.match(editor, /compact \? compactEditorSectionStyle : editorSectionStyle/);
-  assert.match(editor, /标题、记录与图片/);
+  assert.match(editor, /t\.experience\.editor_title_full/);
   assert.match(editor, /recordThumbnailStyle/);
   assert.doesNotMatch(editor, /<ArchiveAddRecordSection/);
   assert.doesNotMatch(editor, /新增项目记录/);
   assert.doesNotMatch(editor, /新增第一条记录/);
   assert.match(editor, /refreshProjectRecords/);
   assert.doesNotMatch(editor, /newlyAddedRecords\.map\(\(record\) => record\.id\)/);
-  assert.match(editor, /当前共有\$\{nextRecords\.length\}条可供选择/);
+  assert.match(editor, /t\.experience\.records_updated_prefix[\s\S]*?nextRecords\.length[\s\S]*?t\.experience\.records_updated_suffix/);
   assert.doesNotMatch(editor, /打开即可查看和编辑/);
   assert.doesNotMatch(detail, /分享经验卡/);
-  assert.match(detail, /设为私密/);
-  assert.match(detail, /来源记录已经变化/);
+  assert.match(detail, /t\.experience\.make_private/);
+  assert.match(detail, /t\.experience\.source_changed_warning/);
   assert.doesNotMatch(detail, /type OwnerMode/);
   assert.doesNotMatch(detail, /ownerMode/);
   assert.doesNotMatch(detail, /ownerMode === "video"/);
@@ -282,35 +286,35 @@ test("experience-card creation and editing share one inline full-record picker",
     detail.match(/onClick=\{\(\) => void copyCardLink\(\)\}/g)?.length,
     1
   );
-  assert.match(detail, /删除经验卡/);
-  assert.match(detail, /生成MP4/);
-  assert.match(detail, /重新生成MP4/);
+  assert.match(detail, /t\.experience\.delete_title/);
+  assert.match(detail, /t\.experience\.generate_mp4/);
+  assert.match(detail, /t\.experience\.regenerate_mp4/);
   assert.match(detail, /externalControls/);
   assert.match(detail, /onStatusChange=\{setVideoStatus\}/);
-  assert.match(detail, /onClick=\{shareVideo\}[\s\S]*?> 分享MP4\s*</);
+  assert.match(detail, /onClick=\{shareVideo\}[\s\S]*?t\.experience\.share_mp4/);
   assert.doesNotMatch(detail, /分享视频/);
   assert.doesNotMatch(detail, /直接分享视频/);
-  assert.match(detail, /保存MP4/);
+  assert.match(detail, /t\.experience\.save_mp4/);
   assert.match(detail, /videoStatus\.progress/);
   assert.match(detail, /videoStatus\.selectedImageCount/);
   assert.match(detail, /formatStorageBytes\(videoStatus\.sizeBytes\)/);
-  assert.match(detail, /aria-label="MP4操作"/);
-  assert.match(detail, /<span style=\{overviewLabelStyle\}>状态<\/span>/);
+  assert.match(detail, /aria-label=\{t\.experience\.mp4_actions_aria\}/);
+  assert.match(detail, /<span style=\{overviewLabelStyle\}>\{t\.experience\.status\}<\/span>/);
   assert.match(detail, /style=\{overviewStatusItemStyle\}/);
-  assert.match(detail, /<section style=\{deleteSectionStyle\} aria-label="删除经验卡">/);
-  assert.match(detail, /<UiIcon name="trash" size=\{14\} \/> 删除经验卡/);
+  assert.match(detail, /<section style=\{deleteSectionStyle\} aria-label=\{t\.experience\.delete_aria\}>/);
+  assert.match(detail, /<UiIcon name="trash" size=\{14\} \/> \{t\.experience\.delete_title\}/);
   assert.doesNotMatch(detail, /aria-label="删除操作"/);
   assert.doesNotMatch(detail, /aria-label="公开与管理"/);
   assert.doesNotMatch(detail, /经验卡管理/);
-  assert.match(detail, /aria-label="经验卡公开方式"/);
-  assert.match(detail, />\s*私密\s*</);
+  assert.match(detail, /aria-label=\{t\.experience\.visibility_aria\}/);
+  assert.match(detail, /\{t\.experience\.private\}/);
   assert.doesNotMatch(detail, />\s*默认\s*</);
-  assert.match(detail, />\s*公开\s*</);
+  assert.match(detail, /\{t\.experience\.public\}/);
   assert.match(detail, /requestVisibility\(false\)/);
   assert.match(detail, /requestVisibility\(true\)/);
-  assert.match(detail, /经验过程/);
+  assert.match(detail, /t\.experience\.process/);
   assert.match(detail, /ExperienceCardTimeline/);
-  assert.match(detail, /\{!isOwner \? \([\s\S]*?经验过程/);
+  assert.match(detail, /\{!isOwner \? \([\s\S]*?t\.experience\.process/);
   assert.ok(
     detail.indexOf("<ExperienceCardVideoPanel") <
       detail.indexOf("<ExperienceCardTimeline")
@@ -329,7 +333,7 @@ test("experience-card creation and editing share one inline full-record picker",
   );
   assert.ok(
     detail.indexOf("<ExperienceCardEditWorkspace") <
-      detail.indexOf('aria-label="删除经验卡"')
+      detail.indexOf("aria-label={t.experience.delete_aria}")
   );
   assert.doesNotMatch(detail, /dangerZoneStyle/);
   assert.match(
@@ -342,33 +346,33 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(detail, /detail\.card\.id\}\/edit/);
   assert.doesNotMatch(detail, /setEditing/);
   assert.doesNotMatch(detail, /经验卡概况/);
-  assert.ok(detail.indexOf('label="项目"') < detail.indexOf('label="记录"'));
-  assert.ok(detail.indexOf('label="系统名"') < detail.indexOf('label="记录"'));
-  assert.ok(detail.indexOf('label="记录"') < detail.indexOf('label="创建"'));
-  assert.match(detail, /label="记录"/);
+  assert.ok(detail.indexOf("label={t.experience.project}") < detail.indexOf("label={t.experience.records}"));
+  assert.ok(detail.indexOf("label={t.experience.system_name}") < detail.indexOf("label={t.experience.records}"));
+  assert.ok(detail.indexOf("label={t.experience.records}") < detail.indexOf("label={t.experience.created}"));
+  assert.match(detail, /label=\{t\.experience\.records\}/);
   assert.doesNotMatch(detail, /recordPeriod/);
-  assert.match(detail, /durationDays \? `\$\{durationDays\}天`/);
-  assert.match(detail, /`\$\{detail\.records\.length\}条`/);
-  assert.match(detail, /value=\{createdDate \|\| "时间暂缺"\}/);
+  assert.match(detail, /durationDays \? `\$\{durationDays\}\$\{t\.experience\.day_suffix\}`/);
+  assert.match(detail, /`\$\{detail\.records\.length\}\$\{t\.experience\.record_suffix\}`/);
+  assert.match(detail, /value=\{createdDate \|\| t\.experience\.time_missing\}/);
   assert.doesNotMatch(detail, /创建于 \{createdDate/);
   assert.doesNotMatch(detail, /label="时长"/);
   assert.doesNotMatch(detail, /label="记录数"/);
   assert.doesNotMatch(detail, /label="图片数"/);
   assert.doesNotMatch(detail, /label="创建时间"/);
-  assert.match(detail, /aria-label=\{`修改经验卡名称/);
-  assert.match(detail, /aria-label="经验卡名称"/);
+  assert.match(detail, /aria-label=\{`\$\{t\.experience\.edit_name_prefix\}/);
+  assert.match(detail, /aria-label=\{t\.experience\.card_name_aria\}/);
   assert.match(detail, /saveExperienceCard\(/);
   assert.match(detail, /publishExperienceCard\(detail\.card\.id\)/);
   assert.match(detail, /deleteCachedExperienceCardVideo\(detail\.card\.id\)/);
   assert.doesNotMatch(detail, /编辑内容/);
-  assert.match(detail, /editorOpen \? "收起编辑" : "编辑经验卡"/);
+  assert.match(detail, /editorOpen \? t\.experience\.collapse_editor : t\.experience\.edit_card/);
   assert.doesNotMatch(detail, /打开编辑/);
   assert.doesNotMatch(detail, /记录与图片/);
   assert.doesNotMatch(detail, /editorSectionHeadingStyle/);
   assert.match(detail, /detail\.archive\.system_name/);
   assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
   assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
-  assert.match(detail, /<span style=\{sourceLabelStyle\}>用户<\/span>/);
+  assert.match(detail, /<span style=\{sourceLabelStyle\}>\{t\.experience\.user\}<\/span>/);
   assert.doesNotMatch(detail, /<span style=\{sourceLabelStyle\}>项目<\/span>/);
   assert.doesNotMatch(detail, /<span style=\{sourceLabelStyle\}>系统名<\/span>/);
   assert.match(detail, /if \(category === "plant" && speciesId\) return `\/plant\/\$\{speciesId\}`/);
@@ -384,12 +388,12 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(editWorkspace, /ExperienceCardVideoPanel/);
   assert.doesNotMatch(editWorkspace, /预览/);
   assert.match(editPage, /redirect\(`\/experience-cards\/\$\{id\}#experience-card-editor`\)/);
-  assert.match(list, /我的经验卡/);
+  assert.match(list, /t\.experience\.my_cards/);
   assert.match(list, /ExperienceCardListCard/);
   assert.match(list, /shareExperienceCard\(item as CardListItem\)/);
   assert.match(list, /copyExperienceCardLink\(item as CardListItem\)/);
   assert.match(list, /getExperienceCardShareUrl\(item\.id\)/);
-  assert.match(list, /公开链接已复制/);
+  assert.match(list, /t\.experience\.public_link_copied/);
   assert.doesNotMatch(list, /取消公开/);
   assert.doesNotMatch(list, /unpublishExperienceCard/);
   assert.doesNotMatch(list, /在同一处查看、编辑和管理/);
@@ -398,20 +402,22 @@ test("experience-card creation and editing share one inline full-record picker",
 });
 
 test("experience cards have a persistent personal-space entry", async () => {
-  const [profile, navbar, archivePage, archiveCards] = await Promise.all([
+  const [profile, navbar, archivePage, archiveCards, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
     source("components/navbar.tsx"),
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveExperienceCards.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
 
   assert.match(profile, /href="\/experience-cards"/);
-  assert.match(profile, /label="我的经验卡"/);
-  assert.match(profile, /value: "space", label: "个人空间"/);
+  assert.match(profile, /label=\{t\.profile\.my_experience_cards\}/);
+  assert.match(profile, /value: "space", label: t\.profile\.modules\.space/);
   assert.match(navbar, /activePaths: \["\/archive", "\/experience-cards"\]/);
   assert.match(navbar, /pathname\.startsWith\("\/experience-cards"\)/);
-  assert.match(navbar, />\s*关注\s*</);
-  assert.match(navbar, />\s*个人空间\s*</);
+  assert.match(navbar, /\{t\.nav\.following\}/);
+  assert.match(navbar, /\{t\.nav\.personal_space\}/);
   assert.doesNotMatch(navbar, />\s*我的关注\s*</);
   assert.doesNotMatch(navbar, />\s*本人空间\s*</);
 
@@ -424,12 +430,18 @@ test("experience cards have a persistent personal-space entry", async () => {
   assert.match(archiveCards, /href=\{`\/experience-cards\/\$\{item\.id\}`\}/);
   assert.doesNotMatch(archiveCards, /\/experience-cards\/\$\{item\.id\}\/edit/);
   assert.match(archiveCards, /deleteExperienceCard\(deleteTarget\.id\)/);
-  assert.match(archiveCards, /aria-label="项目经验卡"/);
-  assert.match(archiveCards, /<div style=\{eyebrowStyle\}>经验卡<\/div>/);
+  assert.match(archiveCards, /aria-label=\{t\.experience\.archive_panel_aria\}/);
+  assert.match(
+    archiveCards,
+    /<div style=\{eyebrowStyle\}>\{t\.experience\.archive_panel_title\}<\/div>/
+  );
+  assert.match(zhCopy, /archive_panel_aria: "项目经验卡"/);
+  assert.match(enCopy, /archive_panel_aria: "Project Experience Cards"/);
   assert.match(archiveCards, /onCountChange\?\.\(rows\.length\)/);
   assert.match(archiveCards, /hydrateExperienceCardListItems\(rows\)/);
   assert.match(archiveCards, /ExperienceCardListCard/);
-  assert.match(archivePage, /经验卡（\{experienceCardCount\}）/);
+  assert.match(archivePage, /\{archiveCopy\.experience_cards\}/);
+  assert.match(archivePage, /experienceCardCount/);
   assert.doesNotMatch(archivePage, /!isMobileViewport && !isOwner/);
 });
 
@@ -444,7 +456,7 @@ test("experience card lists use a shared cover with source and archive fallbacks
   ]);
 
   assert.match(listCard, /item\.coverUrl/);
-  assert.match(listCard, /alt=\{`\$\{item\.title\}封面`\}/);
+  assert.match(listCard, /alt=\{`\$\{item\.title\}\$\{t\.experience\.card_cover_suffix\}`\}/);
   assert.match(listCardStyles, /\.card \{[\s\S]*?padding: 10px;[\s\S]*?border-radius: 15px;/);
   assert.match(listCardStyles, /\.card > a:first-child \{[\s\S]*?position: relative;[\s\S]*?width: 104px;[\s\S]*?height: 104px;[\s\S]*?border-radius: 11px;/);
   assert.match(listCardStyles, /\.cover,[\s\S]*?position: absolute;[\s\S]*?inset: 0;[\s\S]*?height: 100%;/);
@@ -462,11 +474,11 @@ test("experience card lists use a shared cover with source and archive fallbacks
   assert.match(loader, /来源项目已不可用/);
   assert.match(timeline, /thumbWrapStyle/);
   assert.match(timeline, /previewMedia = imageMedia\.slice\(0, 3\)/);
-  assert.match(timeline, /共\{imageMedia\.length\}张/);
+  assert.match(timeline, /t\.experience\.total_photos_prefix\}\{imageMedia\.length\}\{t\.experience\.total_photos_suffix/);
   assert.doesNotMatch(timeline, />\+\{imageMedia\.length - 1\}</);
   assert.match(timeline, /href=\{`\/archive\/\$\{archive\.id\}\?record=\$\{record\.id\}`\}/);
   assert.doesNotMatch(timeline, /这条记录以照片为主|这条记录没有文字/);
-  assert.match(plantDetail, /hydrateExperienceCardListItems\(cardRows\)/);
+  assert.match(plantDetail, /hydrateExperienceCardListItems\(cardRows, language\)/);
   assert.match(plantDetail, /<ExperienceCardListCard/);
 });
 
@@ -488,20 +500,20 @@ test("experience card interactions use private collections and restrained helpfu
   assert.match(migration, /get_experience_card_interaction_summaries/);
   assert.match(migration, /experience_comment/);
   assert.match(migration, /experience_helpful/);
-  assert.match(interactions, /“有帮助”表示这段真实过程值得参考/);
+  assert.match(interactions, /t\.experience\.helpful_hint/);
   assert.match(interactions, /experience_card_bookmarks/);
   assert.match(interactions, /experience_card_helpful_marks/);
   assert.match(interactions, /experience_card_comments/);
   assert.match(interactions, /id="experience-card-interactions"/);
-  assert.match(interactions, />\s*写评论\s*</);
+  assert.match(interactions, /\{t\.experience\.write_comment\}/);
   assert.match(interactions, /href=\{currentUserId \? "\/membership" : "\/login"\}/);
   assert.doesNotMatch(interactions, /if \(!available\) return null/);
   assert.match(detail, /<ExperienceCardInteractions/);
   assert.doesNotMatch(detail, /<ExperienceCardEditor/);
   assert.doesNotMatch(detail, /setEditing\(true\)/);
   assert.match(editorPage, /redirect\(`\/experience-cards\/\$\{id\}#experience-card-editor`\)/);
-  assert.match(list, /我的收藏/);
-  assert.match(list, /被收藏 \{item\.bookmarkCount\}/);
+  assert.match(list, /t\.experience\.saved_cards/);
+  assert.match(list, /t\.experience\.bookmarked_prefix\}\{item\.bookmarkCount/);
 });
 
 
@@ -535,11 +547,10 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(panel, /sizeBytes: videoBlob\?\.size \|\| null/);
   assert.match(panel, /externalControls/);
   assert.match(panel, /hideGenerateAction/);
-  assert.match(panel, /生成竖屏MP4/);
-  assert.match(panel, /选择视频画面与封面/);
-  assert.match(panel, /视频选图保存在当前设备/);
-  assert.match(panel, /自动作为视频片头/);
-  assert.match(panel, /selectedImageCount.*张图片/s);
+  assert.match(panel, /t\.experience\.generate_vertical_mp4/);
+  assert.match(panel, /t\.experience\.video_image_title/);
+  assert.match(panel, /t\.experience\.video_image_hint/);
+  assert.match(panel, /selectedImageCount[\s\S]*?t\.experience\.image_suffix/);
   assert.match(panel, /!previewOnly \? \(/);
   assert.doesNotMatch(panel, /9:16 竖屏 · 静音 H\.264 MP4/);
   assert.doesNotMatch(panel, /直接分享视频/);
@@ -593,12 +604,12 @@ test("experience card MP4 is shown first, selects individual images, and preserv
     detail.indexOf("<ExperienceCardVideoPanel detail={detail} readOnly integrated") <
       detail.indexOf("<article style={infoColumnStyle}")
   );
-  assert.match(detail, /<section style=\{heroStyle\} aria-label="经验卡成品与概况"/);
-  assert.match(panel, /视频选图 \{selectedImageCount\}\/\{totalImageCount\} 张/);
+  assert.match(detail, /<section style=\{heroStyle\} aria-label=\{t\.experience\.finished_aria\}/);
+  assert.match(panel, /t\.experience\.video_selection\} \{selectedImageCount\}\/\{totalImageCount\}\{t\.experience\.image_suffix\}/);
   assert.match(panel, /imageOptions\.map/);
   assert.doesNotMatch(panel, /第 \{index \+ 1\} 条记录/);
   assert.match(panel, /selectedImageByRecordId/);
-  assert.match(panel, /设为封面/);
+  assert.match(panel, /t\.experience\.set_cover/);
   assert.doesNotMatch(panel, /设为片头/);
   assert.match(panel, /getRecordImageOptions\(record\)\.map/);
   assert.match(panel, /selectedUrls\.has\(option\.sourceUrl\)/);
@@ -635,10 +646,10 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
     ]);
 
   assert.match(guide, /href=\{isSignedIn \? "\/archive\/interests" : "\/login"\}/);
-  assert.match(guide, /我的收藏\{isSignedIn && interestCount !== null/);
+  assert.match(guide, /\{t\.plant\.my_saved\}\{isSignedIn && interestCount !== null/);
   assert.match(guide, /from\("user_plant_interests"\)[\s\S]*?count: "exact", head: true/);
-  assert.match(guide, /placeholder="搜索植物名、别名或拉丁名"/);
-  assert.match(guide, /type="submit"[\s\S]*?>\s*搜索\s*<\/button>/);
+  assert.match(guide, /placeholder=\{t\.plant\.search_placeholder\}/);
+  assert.match(guide, /type="submit"[\s\S]*?\{t\.plant\.search\}[\s\S]*?<\/button>/);
   assert.match(guide, /MAX_RECENT_SEARCHES = 8/);
   assert.match(guide, /PLANT_SEARCH_HISTORY_KEY/);
   assert.match(guide, /window\.localStorage\.setItem/);
@@ -656,11 +667,11 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
   );
   assert.match(guide, /pendingScrollYRef/);
   assert.match(guide, /role="dialog"/);
-  assert.match(guide, /aria-label="返回植物指引"/);
+  assert.match(guide, /aria-label=\{t\.plant\.back_to_guide\}/);
   assert.match(plantDetail, /from\("user_plant_interests"\)[\s\S]*?\.delete\(\)/);
   assert.match(plantDetail, /from\("user_plant_plans"\)[\s\S]*?\.delete\(\)/);
-  assert.match(plantDetail, /已添加计划/);
-  assert.match(plantDetail, /已收藏/);
+  assert.match(plantDetail, /copy\.plan_already_added/);
+  assert.match(plantDetail, /copy\.saved/);
   assert.doesNotMatch(plantHero, /disabled=\{planAdded \|\|/);
   assert.doesNotMatch(plantHero, /disabled=\{interestAdded \|\|/);
   assert.ok(
@@ -672,12 +683,14 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
 });
 
 test("guidance counts and public navigation use compact non-duplicated entries", async () => {
-  const [plantDetail, archiveDetail, archiveHeader, discoverHeader] =
+  const [plantDetail, archiveDetail, archiveHeader, discoverHeader, zhCopy, enCopy] =
     await Promise.all([
       source("app/plant/[id]/page.tsx"),
       source("app/archive/[id]/page.tsx"),
       source("components/archive-detail/ArchiveDetailHeader.tsx"),
       source("components/discover/DiscoverHeader.tsx"),
+      source("lib/i18n/zh.ts"),
+      source("lib/i18n/en.ts"),
     ]);
 
   assert.match(
@@ -687,19 +700,24 @@ test("guidance counts and public navigation use compact non-duplicated entries",
   assert.match(plantDetail, /plantingRecordTabCount = Array\.from/);
   assert.match(plantDetail, /experienceCardTabCount > 0/);
   assert.match(plantDetail, /plantingRecordTabCount > 0/);
-  assert.match(plantDetail, /`经验卡（\$\{experienceCardTabCount\}）`/);
-  assert.match(plantDetail, /`种植记录（\$\{plantingRecordTabCount\}）`/);
+  assert.match(plantDetail, /`\$\{copy\.experience_cards\} \(\$\{experienceCardTabCount\}\)`/);
+  assert.match(plantDetail, /`\$\{copy\.growing_records\} \(\$\{plantingRecordTabCount\}\)`/);
 
   assert.match(
     archiveDetail,
     /href=\{`\/user\/\$\{activeArchive\.user_id\}`\}/
   );
-  assert.match(archiveDetail, /aria-label=\{`进入\$\{username\}的空间`\}/);
+  assert.match(
+    archiveDetail,
+    /aria-label=\{`\$\{archiveCopy\.enter_user_space_prefix\}\$\{displayUsername\}\$\{archiveCopy\.enter_user_space_suffix\}`\}/
+  );
   assert.doesNotMatch(archiveHeader, /进入\{username\}的空间/);
 
   assert.match(discoverHeader, /href="\/discover\/search"/);
   assert.match(discoverHeader, /<UiIcon name="search"/);
-  assert.match(discoverHeader, /> 搜索\s*<\/Link>/);
+  assert.match(discoverHeader, /\{t\.discover\.search\}/);
+  assert.match(zhCopy, /search: "搜索"/);
+  assert.match(enCopy, /search: "Search"/);
   assert.doesNotMatch(discoverHeader, /width: "100%"/);
   assert.doesNotMatch(discoverHeader, /搜索记录/);
 });
@@ -715,10 +733,11 @@ test("project details expose details, archive, experience cards, and growth line
     archiveDetail,
     /type ArchiveDetailTab = "profile" \| "records" \| "experience" \| "growth"/
   );
-  assert.match(archiveDetail, />\s*详情\s*</);
-  assert.match(archiveDetail, />\s*档案\s*</);
-  assert.match(archiveDetail, /经验卡（\{experienceCardCount\}）/);
-  assert.match(archiveDetail, />\s*生长线\s*</);
+  assert.match(archiveDetail, /\{archiveCopy\.details\}/);
+  assert.match(archiveDetail, /\{archiveCopy\.dossier\}/);
+  assert.match(archiveDetail, /\{archiveCopy\.experience_cards\}/);
+  assert.match(archiveDetail, /\{archiveCopy\.growth_line\}/);
+  assert.match(archiveDetail, /experienceCardCount/);
   assert.match(archiveDetail, /activeDetailTab === "experience"/);
   assert.match(archiveDetail, /activeDetailTab === "growth"/);
   assert.match(archiveDetail, /repeat\(4, minmax\(0, 1fr\)\)/);
@@ -729,10 +748,19 @@ test("project details expose details, archive, experience cards, and growth line
 });
 
 test("personal space project page has a direct My Experience Cards entry", async () => {
-  const personalSpace = await source("app/archive/page.tsx");
+  const [personalSpace, zhCopy, enCopy] = await Promise.all([
+    source("app/archive/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
 
   assert.match(personalSpace, /href="\/experience-cards"/);
-  assert.match(personalSpace, /我的经验卡（\{experienceCardCount\}）/);
+  assert.match(
+    personalSpace,
+    /\{t\.archive_workspace\.my_experience_cards\} \(\{experienceCardCount\}\)/
+  );
+  assert.match(zhCopy, /my_experience_cards: "我的经验卡"/);
+  assert.match(enCopy, /my_experience_cards: "My experience cards"/);
   assert.match(personalSpace, /select\("id", \{ count: "exact", head: true \}\)/);
   assert.doesNotMatch(personalSpace, /集中查看和管理全部项目的经验卡/);
   assert.match(personalSpace, /display: "inline-flex"/);

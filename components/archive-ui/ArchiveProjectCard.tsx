@@ -7,6 +7,7 @@ import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   project: ArchiveProjectView;
@@ -33,6 +34,8 @@ export default function ArchiveProjectCard({
   titleEditorSlot,
   systemNameEditorSlot,
 }: Props) {
+  const { t } = useLanguage();
+
   function handleInlineEdit(
     event: MouseEvent<HTMLButtonElement>,
     callback?: (project: ArchiveProjectView) => void
@@ -56,7 +59,7 @@ export default function ArchiveProjectCard({
           onClick={(event) => handleInlineEdit(event, onEditTitle)}
           onDoubleClick={(event) => handleInlineEdit(event, onEditTitle)}
           style={inlineEditButtonStyle(titleTextStyle)}
-          title="点击可修改项目名"
+          title={t.archive_workspace.click_edit_project_name}
         >
           {project.title}
         </button>
@@ -76,7 +79,7 @@ export default function ArchiveProjectCard({
             onClick={(event) => handleInlineEdit(event, onEditSystemName)}
             onDoubleClick={(event) => handleInlineEdit(event, onEditSystemName)}
             style={inlineEditButtonStyle(systemNameStyle)}
-            title="点击可修改系统名"
+            title={t.archive_workspace.click_edit_system_name}
           >
             {project.systemName}
           </button>

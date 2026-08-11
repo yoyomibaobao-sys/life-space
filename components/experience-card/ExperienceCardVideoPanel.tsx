@@ -36,6 +36,7 @@ import {
   saveCachedExperienceCardVideo,
   saveExperienceCardVideoSelection,
 } from "@/lib/experience-card-video-cache";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type RecordImageOption = {
   id: string;
@@ -222,6 +223,7 @@ const ExperienceCardVideoPanel = forwardRef<
   },
   ref
 ) {
+  const { language, t } = useLanguage();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const videoUrlRef = useRef("");
@@ -282,17 +284,18 @@ const ExperienceCardVideoPanel = forwardRef<
         detail,
         selectedImageByRecordId,
         effectiveCoverImageUrl,
-        websiteUrl
+        websiteUrl,
+        language
       ),
-    [detail, effectiveCoverImageUrl, selectedImageByRecordId, websiteUrl]
+    [detail, effectiveCoverImageUrl, language, selectedImageByRecordId, websiteUrl]
   );
   const duration = useMemo(
     () => getExperienceCardVideoDuration(scenes),
     [scenes]
   );
   const filename = useMemo(
-    () => getExperienceCardVideoFilename(detail),
-    [detail]
+    () => getExperienceCardVideoFilename(detail, language),
+    [detail, language]
   );
   const sourceSignature = useMemo(
     () => getExperienceCardVideoSourceSignature(detail),
@@ -612,7 +615,7 @@ const ExperienceCardVideoPanel = forwardRef<
   async function handleGenerate() {
     if (generating) return;
     if (imageLoading || cacheLoading) {
-      showToast("正在准备记录图片，请稍后再试");
+      showToast(t.experience.preparing_images);
       return;
     }
     clearGeneratedVideo();
@@ -644,15 +647,15 @@ const ExperienceCardVideoPanel = forwardRef<
           ),
           coverMediaId: getCoverMediaId(detail, effectiveCoverImageUrl),
         });
-        showToast("竖屏MP4已生成并保存在本机");
+        showToast(t.experience.mp4_generated_local);
       } catch {
-        showToast("MP4已生成，但本机缓存失败，请立即保存");
+        showToast(t.experience.mp4_cache_failed);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
-        showToast("视频生成已停止");
+        showToast(t.experience.video_stopped);
       } else {
-        setErrorText(getExperienceCardVideoErrorText(error));
+        setErrorText(getExperienceCardVideoErrorText(error, language));
       }
     } finally {
       abortRef.current = null;
@@ -672,7 +675,7 @@ const ExperienceCardVideoPanel = forwardRef<
     document.body.appendChild(link);
     link.click();
     link.remove();
-    if (showMessage) showToast("MP4已保存到当前设备");
+    if (showMessage) showToast(t.experience.mp4_saved);
   }
 
   async function shareVideo() {
@@ -683,18 +686,18 @@ const ExperienceCardVideoPanel = forwardRef<
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
           title: detail.card.title,
-          text: "有时·耕作经验卡",
+          text: t.experience.share_text,
           files: [file],
         });
         return;
       }
 
       downloadVideo(false);
-      showToast("当前浏览器不能直接分享，MP4已保存，可上传到视频平台");
+      showToast(t.experience.browser_share_unavailable);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       downloadVideo(false);
-      showToast("直接分享失败，MP4已保存到当前设备");
+      showToast(t.experience.direct_share_failed);
     }
   }
 
@@ -717,27 +720,27 @@ const ExperienceCardVideoPanel = forwardRef<
   return (
     <section
       style={integrated ? integratedPanelStyle : panelStyle}
-      aria-label="经验卡图片与视频"
+      aria-label={t.experience.media_aria}
     >
       {!readOnly && !previewOnly ? (
         <>
           <div style={headerStyle}>
             <div>
-              <div style={eyebrowStyle}>图片</div>
-              <h2 style={titleStyle}>选择视频画面与封面</h2>
+              <div style={eyebrowStyle}>{t.experience.images}</div>
+              <h2 style={titleStyle}>{t.experience.video_image_title}</h2>
               <p style={localOnlyHintStyle}>
-                视频选图保存在当前设备；经验卡封面随“保存修改”保存，并自动作为视频片头。
+                {t.experience.video_image_hint}
               </p>
             </div>
             <span style={durationStyle}>
-              {formatExperienceCardVideoDuration(duration)}
+              {formatExperienceCardVideoDuration(duration, language)}
             </span>
           </div>
 
           <div style={imageSelectorStyle}>
             <div style={imageSelectorHeaderStyle}>
               <strong>
-                视频选图 {selectedImageCount}/{totalImageCount} 张
+                {t.experience.video_selection} {selectedImageCount}/{totalImageCount}{t.experience.image_suffix}
               </strong>
               <span style={imageSelectorActionsStyle}>
                 <button
@@ -746,7 +749,7 @@ const ExperienceCardVideoPanel = forwardRef<
                   onClick={selectAllImages}
                   style={imageSelectorActionButtonStyle}
                 >
-                  全选
+                  {t.experience.select_all}
                 </button>
                 <button
                   type="button"
@@ -754,7 +757,7 @@ const ExperienceCardVideoPanel = forwardRef<
                   onClick={clearAllImages}
                   style={imageSelectorActionButtonStyle}
                 >
-                  清空
+                  {t.experience.clear}
                 </button>
               </span>
             </div>
@@ -781,11 +784,11 @@ const ExperienceCardVideoPanel = forwardRef<
                     >
                       <img
                         src={option.previewUrl}
-                        alt={`经验卡可选图片${index + 1}`}
+                        alt={`${t.experience.selectable_image_prefix}${index + 1}`}
                         style={imageChoiceImageStyle}
                       />
                       <span style={imageSelectedBadgeStyle(active)}>
-                        {active ? "已选" : "选择"}
+                        {active ? t.experience.selected : t.experience.select}
                       </span>
                     </button>
                     <button
@@ -794,7 +797,7 @@ const ExperienceCardVideoPanel = forwardRef<
                       onClick={() => selectCoverImage(option.sourceUrl)}
                       style={coverChoiceButtonStyle(isCover, active)}
                     >
-                      {isCover ? "当前封面" : "设为封面"}
+                      {isCover ? t.experience.current_cover : t.experience.set_cover}
                     </button>
                   </div>
                 );
@@ -821,12 +824,12 @@ const ExperienceCardVideoPanel = forwardRef<
               <canvas
                 ref={canvasRef}
                 style={previewStyle}
-                aria-label="循环视频预览"
+                aria-label={t.experience.loop_preview_aria}
               />
             )}
             {!readOnly ? (
               <div style={previewLabelStyle}>
-                {videoUrl ? "MP4循环播放" : "循环预览"}
+                {videoUrl ? t.experience.mp4_loop : t.experience.loop_preview}
               </div>
             ) : null}
           </div>
@@ -836,22 +839,22 @@ const ExperienceCardVideoPanel = forwardRef<
             <div style={controlStyle}>
               {!previewOnly ? (
                 <div style={summaryStyle}>
-                  {selectedImageCount} 张图片
+                  {selectedImageCount}{t.experience.image_suffix}
                 </div>
               ) : null}
 
               {imageLoading ? (
-                <div style={noticeStyle}>正在准备记录照片...</div>
+                <div style={noticeStyle}>{t.experience.preparing_record_photos}</div>
               ) : null}
 
               {cacheLoading ? (
-                <div style={noticeStyle}>正在检查本机已生成的MP4...</div>
+                <div style={noticeStyle}>{t.experience.checking_local_mp4}</div>
               ) : null}
 
               {!externalControls && generating ? (
                 <div style={progressWrapStyle}>
                   <div style={progressTextStyle}>
-                    正在本机生成视频 {Math.round(progress * 100)}%
+                    {t.experience.generating_local_video} {Math.round(progress * 100)}%
                   </div>
                   <div style={progressTrackStyle}>
                     <div
@@ -866,7 +869,7 @@ const ExperienceCardVideoPanel = forwardRef<
                     onClick={handleStop}
                     style={stopButtonStyle}
                   >
-                    停止生成
+                    {t.experience.stop_generating}
                   </button>
                 </div>
               ) : null}
@@ -882,7 +885,7 @@ const ExperienceCardVideoPanel = forwardRef<
                     disabled={imageLoading || cacheLoading}
                     style={primaryButtonStyle}
                   >
-                    {videoBlob ? "重新生成MP4" : "生成竖屏MP4"}
+                    {videoBlob ? t.experience.regenerate_mp4 : t.experience.generate_vertical_mp4}
                   </button>
                 ) : null}
 
@@ -893,14 +896,14 @@ const ExperienceCardVideoPanel = forwardRef<
                       onClick={() => void shareVideo()}
                       style={shareButtonStyle}
                     >
-                      分享视频
+                      {t.experience.share_video}
                     </button>
                     <button
                       type="button"
                       onClick={() => downloadVideo()}
                       style={secondaryButtonStyle}
                     >
-                      保存MP4
+                      {t.experience.save_mp4}
                     </button>
                   </>
                 ) : null}

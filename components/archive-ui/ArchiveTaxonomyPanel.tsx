@@ -3,9 +3,11 @@
 import type { CSSProperties } from "react";
 import {
   archiveCategoryOptions,
+  getArchiveCategoryDescription,
   getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export type ArchiveTaxonomyChip = {
   id: string;
@@ -59,6 +61,7 @@ export default function ArchiveTaxonomyPanel({
   onDeleteGroup,
   onCreateGroup,
 }: Props) {
+  const { language, t } = useLanguage();
   const compact = mobileMode;
 
   return (
@@ -66,7 +69,7 @@ export default function ArchiveTaxonomyPanel({
       {showCategoryRow ? (
         <div style={rowStyle(compact)}>
           <button type="button" onClick={onReset} style={pillStyle(!activeCategory, compact)}>
-            全部
+            {t.archive_workspace.all}
           </button>
           {archiveCategoryOptions.map((option) => (
             <button
@@ -74,9 +77,9 @@ export default function ArchiveTaxonomyPanel({
               type="button"
               onClick={() => onSelectCategory(option.value)}
               style={pillStyle(activeCategory === option.value && !activeSubcategoryId, compact)}
-              title={option.description}
+              title={getArchiveCategoryDescription(option.value, language)}
             >
-              {option.label}
+              {getArchiveCategoryLabel(option.value, language)}
             </button>
           ))}
         </div>
@@ -92,9 +95,9 @@ export default function ArchiveTaxonomyPanel({
             type="button"
             onClick={onResetSubcategory}
             style={pillStyle(!activeSubcategoryId, compact)}
-            title={`显示${getArchiveCategoryLabel(activeCategory)}下全部项目`}
+            title={t.archive_workspace.show_all_category}
           >
-            子分类：
+            {t.archive_workspace.subcategory_prefix}
           </button>
 
           {subcategories.map((chip) => (
@@ -114,7 +117,7 @@ export default function ArchiveTaxonomyPanel({
               type="button"
               onClick={() => onCreateSubcategory(activeCategory)}
               style={addButtonStyle(compact)}
-              title="新增子分类"
+              title={t.archive_workspace.add_subcategory}
             >
               +
             </button>
@@ -130,9 +133,9 @@ export default function ArchiveTaxonomyPanel({
               type="button"
               onClick={onResetGroup}
               style={pillStyle(!activeGroupId, compact)}
-              title="显示当前子分类下全部项目"
+              title={t.archive_workspace.show_all_groups}
             >
-              分组：
+              {t.archive_workspace.group_prefix}
             </button>
 
             {groups.map((chip) => (
@@ -152,7 +155,7 @@ export default function ArchiveTaxonomyPanel({
                 type="button"
                 onClick={onCreateGroup}
                 style={addButtonStyle(compact)}
-                title="新增分组"
+                title={t.archive_workspace.add_group}
               >
                 +
               </button>
@@ -179,6 +182,8 @@ function TaxonomyChipButton({
   onRename?: () => void;
   onDelete?: () => void;
 }) {
+  const { t } = useLanguage();
+
   return (
     <span style={chipWrapperStyle(compact)}>
       <button
@@ -186,7 +191,7 @@ function TaxonomyChipButton({
         onClick={onSelect}
         onDoubleClick={onRename}
         style={chipButtonStyle(active, compact)}
-        title={onRename ? "双击可修改名称" : undefined}
+        title={onRename ? t.archive_workspace.double_click_edit : undefined}
       >
         {chip.label}
       </button>
@@ -196,7 +201,7 @@ function TaxonomyChipButton({
           type="button"
           onClick={onDelete}
           style={deleteButtonStyle(compact)}
-          title="删除"
+          title={t.archive_workspace.delete}
         >
           x
         </button>

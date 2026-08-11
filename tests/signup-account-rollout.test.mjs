@@ -120,12 +120,14 @@ test("trial exhaustion pauses the allowance without blocking account registratio
 });
 
 test("account identity is shown with a pre-migration compatibility path", async () => {
-  const [profileLoader, ownProfile, publicProfile, accountNumber] =
+  const [profileLoader, ownProfile, publicProfile, accountNumber, zhCopy, enCopy] =
     await Promise.all([
       source("lib/user-profile-shared.ts"),
       source("app/profile/page.tsx"),
       source("app/user/[id]/profile/page.tsx"),
       source("lib/account-number.ts"),
+      source("lib/i18n/zh.ts"),
+      source("lib/i18n/en.ts"),
     ]);
 
   assert.match(
@@ -133,31 +135,43 @@ test("account identity is shown with a pre-migration compatibility path", async 
     /select\(\s*"account_number, registration_year, registration_sequence, is_internal_test"\s*\)/
   );
   assert.match(profileLoader, /isMissingDatabaseColumn/);
-  assert.match(ownProfile, /label="账号编号"/);
-  assert.match(ownProfile, /内部测试账号/);
-  assert.match(publicProfile, /账号编号：\{profile\.account_number\}/);
+  assert.match(ownProfile, /label=\{t\.profile\.account_number\}/);
+  assert.match(ownProfile, /t\.profile\.internal_test/);
+  assert.match(publicProfile, /t\.profile\.public_profile\.account_number/);
+  assert.match(zhCopy, /account_number: "账号编号"/);
+  assert.match(enCopy, /account_number: "Account number"/);
   assert.match(accountNumber, /\^LS\(\[a-z\]\)-\(\[0-9\]\{4\}\)-\(\[0-9\]\+\)\$/);
+  assert.match(accountNumber, /Formal user #\$\{parsed\.registrationSequence\}/);
   assert.match(accountNumber, /正式用户总第\$\{parsed\.registrationSequence\}位/);
 });
 
 test("registration, membership, and admin copy use the confirmed rollout rules", async () => {
-  const [registration, membership, admin, docs] = await Promise.all([
+  const [registration, membership, admin, docs, zhCopy, enCopy] = await Promise.all([
     source("app/register/page.tsx"),
     source("app/membership/page.tsx"),
     source("app/admin/memberships/page.tsx"),
     source("docs/membership-access.md"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
 
-  for (const text of [registration, membership, admin, docs]) {
+  for (const text of [zhCopy, docs]) {
     assert.match(text, /20/);
     assert.match(text, /30MB/i);
   }
 
-  assert.match(registration, /永久账号编号/);
-  assert.match(membership, /不设6个月期限/);
+  assert.match(registration, /t\.auth\.registration_intro/);
+  assert.match(membership, /t\.membership_page/);
+  assert.match(zhCopy, /永久账号编号/);
+  assert.match(zhCopy, /不设6个月期限/);
   assert.match(admin, /admin_get_signup_rollout_status/);
-  assert.match(admin, /平台实际存储/);
-  assert.match(admin, /尚未使用的体验额度/);
+  assert.match(admin, /t\.admin_memberships\.rollout_title/);
+  assert.match(admin, /t\.admin_memberships\.platform_storage/);
+  assert.match(admin, /t\.admin_memberships\.unused_allowance/);
+  assert.match(zhCopy, /rollout_title: "20名正式用户 · 每人30MB"/);
+  assert.match(enCopy, /rollout_title: "20 formal users · 30 MB each"/);
+  assert.match(zhCopy, /platform_storage: "平台实际存储"/);
+  assert.match(enCopy, /platform_storage: "Actual platform storage"/);
   assert.match(docs, /LSa-2026-0001/);
   assert.match(docs, /700MB安全线/);
 });

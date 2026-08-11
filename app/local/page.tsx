@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function LocalModePage() {
+  const { t } = useLanguage();
+
   return (
     <main
       style={{
@@ -22,11 +27,11 @@ export default function LocalModePage() {
         }}
       >
         <div style={{ color: "#6c7a63", fontSize: 13, marginBottom: 8 }}>
-          本地离线
+          {t.local_mode.eyebrow}
         </div>
-        <h1 style={{ margin: "0 0 14px", fontSize: 28 }}>先本地使用</h1>
+        <h1 style={{ margin: "0 0 14px", fontSize: 28 }}>{t.local_mode.title}</h1>
         <p style={{ margin: 0, lineHeight: 1.9, color: "#4f5d4a" }}>
-          本地数据保存在当前设备的 App 私有存储中，不会默认写入系统相册。
+          {t.local_mode.intro}
         </p>
 
         <ul
@@ -38,10 +43,10 @@ export default function LocalModePage() {
             fontSize: 14,
           }}
         >
-          <li>免费使用，不需要先开通云会员。</li>
-          <li>只保存在当前设备，不支持多设备同步。</li>
-          <li>不上传云端，不进入发现页，也没有互动或发布入口。</li>
-          <li>换设备、卸载 App、清理浏览器数据后，本地数据可能丢失。</li>
+          <li>{t.local_mode.free}</li>
+          <li>{t.local_mode.one_device}</li>
+          <li>{t.local_mode.private}</li>
+          <li>{t.local_mode.loss_risk}</li>
         </ul>
 
         <div
@@ -56,21 +61,21 @@ export default function LocalModePage() {
             fontSize: 14,
           }}
         >
-          当前版本不提供本地数据迁移操作；需要长期保存的重要资料，请定期自行导出备份。
+          {t.local_mode.backup_notice}
         </div>
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 24 }}>
           <Link href="/local/archive" style={primaryLinkStyle}>
-            进入本地记录
+            {t.local_mode.enter}
           </Link>
           <Link href="/register" style={primaryLinkStyle}>
-            注册账号
+            {t.local_mode.register}
           </Link>
           <Link href="/login" style={secondaryLinkStyle}>
-            登录
+            {t.local_mode.login}
           </Link>
           <Link href="/" style={ghostLinkStyle}>
-            返回首页
+            {t.local_mode.home}
           </Link>
         </div>
       </section>

@@ -64,6 +64,7 @@ import {
   type LocalArchiveSummary,
   type LocalTaxonomyItem,
 } from "@/lib/local-offline-db";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type LatestArchiveRecord = {
   id: string;
@@ -95,6 +96,7 @@ const emptySystemNameCandidateMap: Record<ArchiveCategory, SystemNameCandidate[]
 
 export default function ArchivePage() {
   const router = useRouter();
+  const { language, t } = useLanguage();
   const loadingRef = useRef(false);
 
   const [ready, setReady] = useState(false);
@@ -182,7 +184,7 @@ export default function ArchivePage() {
       setLocalHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
       setLocalError("");
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "无法读取本地项目。");
+      setLocalError(err instanceof Error ? err.message : t.archive_workspace.read_local_failed);
     } finally {
       setLocalLoading(false);
     }
@@ -256,7 +258,10 @@ export default function ArchivePage() {
 
       const speciesRows: PlantSpeciesOption[] = ((speciesData || []) as PlantSpeciesOption[]).map((species) => {
         const aliases = Array.from(new Set(aliasesBySpecies.get(species.id) || []));
-        const displayName = species.common_name || species.scientific_name || "未命名植物";
+        const displayName =
+          species.common_name ||
+          species.scientific_name ||
+          t.archive_workspace.unnamed_plant;
 
         return {
           ...species,
@@ -425,7 +430,7 @@ export default function ArchivePage() {
   function submitPendingSpeciesName(name?: string) {
     const pendingName = (name ?? editingPlantSearch).trim();
     if (!pendingName) {
-      showToast("请输入候选植物名称");
+      showToast(t.archive_workspace.enter_candidate_name);
       return;
     }
 
@@ -490,7 +495,7 @@ export default function ArchivePage() {
     const pendingName = editingPendingSpeciesName.trim();
 
     if (!editingSpeciesId && !pendingName) {
-      showToast("请选择植物，或提交一个候选植物");
+      showToast(t.archive_workspace.select_plant_or_candidate);
       return;
     }
 
@@ -504,7 +509,7 @@ export default function ArchivePage() {
         {
           user_id: user?.id || null,
           submitted_name: pendingName,
-          language_code: "zh",
+          language_code: language,
           status: "pending",
         },
       ]);
@@ -515,7 +520,7 @@ export default function ArchivePage() {
         .eq("id", item.id);
 
       if (error) {
-        showToast("保存失败");
+        showToast(t.archive_workspace.save_failed);
         return;
       }
 
@@ -533,17 +538,20 @@ export default function ArchivePage() {
       );
 
       cancelPlantEditing();
-      showToast("已使用候选植物");
+      showToast(t.archive_workspace.candidate_selected);
       return;
     }
 
     const selectedSpecies = speciesList.find((item) => item.id === editingSpeciesId);
     if (!selectedSpecies) {
-      showToast("请选择植物");
+      showToast(t.archive_workspace.select_plant);
       return;
     }
 
-    const speciesName = selectedSpecies.common_name || selectedSpecies.scientific_name || "未命名植物";
+    const speciesName =
+      selectedSpecies.common_name ||
+      selectedSpecies.scientific_name ||
+      t.archive_workspace.unnamed_plant;
 
     const { error } = await supabase
       .from("archives")
@@ -551,7 +559,7 @@ export default function ArchivePage() {
       .eq("id", item.id);
 
     if (error) {
-      showToast("保存失败");
+      showToast(t.archive_workspace.save_failed);
       return;
     }
 
@@ -569,7 +577,7 @@ export default function ArchivePage() {
     );
 
     cancelPlantEditing();
-    showToast("已更新植物");
+    showToast(t.archive_workspace.plant_updated);
   }
 
   function cancelPlantEditing() {
@@ -613,7 +621,7 @@ export default function ArchivePage() {
   async function saveSystemSelection(item: ArchiveItem) {
     const systemName = editingSystemName.trim();
     if (!systemName) {
-      showToast("请从匹配结果中点选具体名称，或新增为具体名称");
+      showToast(t.archive_workspace.select_specific_name);
       return;
     }
 
@@ -623,7 +631,7 @@ export default function ArchivePage() {
       .eq("id", item.id);
 
     if (error) {
-      showToast("保存失败");
+      showToast(t.archive_workspace.save_failed);
       return;
     }
 
@@ -632,7 +640,7 @@ export default function ArchivePage() {
     );
 
     cancelSystemEditing();
-    showToast("已更新具体名称");
+    showToast(t.archive_workspace.specific_name_updated);
   }
 
   function cancelSystemEditing() {
@@ -643,7 +651,12 @@ export default function ArchivePage() {
   }
 
   async function createSubTag(category: ArchiveCategory) {
-    const name = prompt(`新增${getArchiveCategoryLabel(category)}分类`);
+    const name = prompt(
+      `${t.archive_workspace.add_category_prompt_prefix}${getArchiveCategoryLabel(
+        category,
+        language
+      )}${t.archive_workspace.add_category_prompt_suffix}`
+    );
     if (!name?.trim()) return;
 
     const {
@@ -659,7 +672,7 @@ export default function ArchivePage() {
       .single();
 
     if (error) {
-      showToast("新增分类失败");
+      showToast(t.archive_workspace.add_category_failed);
       return;
     }
 
@@ -669,12 +682,12 @@ export default function ArchivePage() {
   }
 
   async function renameSubTag(tag: SubTagItem) {
-    const name = prompt("修改分类名称", tag.name);
+    const name = prompt(t.archive_workspace.rename_category_prompt, tag.name);
     if (!name?.trim()) return;
 
     const { error } = await supabase.from("sub_tags").update({ name: name.trim() }).eq("id", tag.id);
     if (error) {
-      showToast("修改分类失败");
+      showToast(t.archive_workspace.rename_category_failed);
       return;
     }
 
@@ -682,7 +695,7 @@ export default function ArchivePage() {
   }
 
   async function deleteSubTag(tag: SubTagItem) {
-    if (!confirm("删除后，该分类下的项目会回到对应类型，确认？")) return;
+    if (!confirm(t.archive_workspace.delete_category_confirm)) return;
 
     await supabase.from("archives").update({ sub_tag_id: null, group_tag_id: null }).eq("sub_tag_id", tag.id);
     await supabase.from("group_tags").delete().eq("sub_tag_id", tag.id);
@@ -705,7 +718,7 @@ export default function ArchivePage() {
   async function createGroupTag() {
     if (!activeSubTag) return;
 
-    const name = prompt("新增分组");
+    const name = prompt(t.archive_workspace.add_group_prompt);
     if (!name?.trim()) return;
 
     const {
@@ -721,7 +734,7 @@ export default function ArchivePage() {
       .single();
 
     if (error) {
-      showToast("新增分组失败");
+      showToast(t.archive_workspace.add_group_failed);
       return;
     }
 
@@ -731,12 +744,12 @@ export default function ArchivePage() {
   }
 
   async function renameGroupTag(tag: GroupTagItem) {
-    const name = prompt("修改分组名称", tag.name);
+    const name = prompt(t.archive_workspace.rename_group_prompt, tag.name);
     if (!name?.trim()) return;
 
     const { error } = await supabase.from("group_tags").update({ name: name.trim() }).eq("id", tag.id);
     if (error) {
-      showToast("修改分组失败");
+      showToast(t.archive_workspace.rename_group_failed);
       return;
     }
 
@@ -744,7 +757,7 @@ export default function ArchivePage() {
   }
 
   async function deleteGroupTag(tag: GroupTagItem) {
-    if (!confirm("删除该分组？")) return;
+    if (!confirm(t.archive_workspace.delete_group_confirm)) return;
 
     await supabase.from("archives").update({ group_tag_id: null }).eq("group_tag_id", tag.id);
     await supabase.from("group_tags").delete().eq("id", tag.id);
@@ -762,7 +775,7 @@ export default function ArchivePage() {
   async function updateArchiveStatus(item: ArchiveItem, nextStatus: "active" | "ended") {
     const isEnding = nextStatus === "ended";
 
-    if (isEnding && !confirm("确认将这个项目标记为已结束吗？之后仍可查看，也可以恢复。")) {
+    if (isEnding && !confirm(t.archive.end_project_message)) {
       return;
     }
 
@@ -772,12 +785,12 @@ export default function ArchivePage() {
     );
 
     if (error) {
-      showToast(isEnding ? "标记结束失败" : "恢复失败");
+      showToast(isEnding ? t.archive.end_failed : t.archive.restore_failed);
       return;
     }
 
     await loadData();
-    showToast(isEnding ? "已标记为结束" : "已恢复为进行中");
+    showToast(isEnding ? t.archive.marked_ended : t.archive.restored_ongoing);
   }
 
   async function toggleArchivePublic(item: ArchiveItem) {
@@ -786,7 +799,7 @@ export default function ArchivePage() {
 
     const { error } = await supabase.from("archives").update({ is_public: newValue }).eq("id", item.id);
     if (error) {
-      showToast("更新可见状态失败");
+      showToast(t.archive_workspace.visibility_update_failed);
       return;
     }
 
@@ -797,7 +810,7 @@ export default function ArchivePage() {
         .eq("archive_id", item.id);
 
       if (recordsError) {
-        showToast("记录同步失败");
+        showToast(t.archive_workspace.record_sync_failed);
         return;
       }
     }
@@ -805,7 +818,11 @@ export default function ArchivePage() {
     setArchives((prev) =>
       prev.map((archive) => (archive.id === item.id ? { ...archive, is_public: newValue } : archive))
     );
-    showToast(newValue ? "项目壳已公开，旧记录不会自动公开" : "项目和记录仅自己可见");
+    showToast(
+      newValue
+        ? t.archive.project_shell_public_old_private
+        : t.archive.project_and_records_private
+    );
   }
 
   async function updateArchiveCategory(item: ArchiveItem, value: string) {
@@ -816,7 +833,7 @@ export default function ArchivePage() {
         .eq("id", item.id);
 
       if (error) {
-        showToast("更新分类失败");
+        showToast(t.archive_workspace.category_update_failed);
         return;
       }
 
@@ -839,7 +856,7 @@ export default function ArchivePage() {
       .eq("id", item.id);
 
     if (error) {
-      showToast("更新分类失败");
+      showToast(t.archive_workspace.category_update_failed);
       return;
     }
 
@@ -859,7 +876,7 @@ export default function ArchivePage() {
       .eq("id", item.id);
 
     if (error) {
-      showToast("更新分组失败");
+      showToast(t.archive_workspace.group_update_failed);
       return;
     }
 
@@ -880,14 +897,14 @@ export default function ArchivePage() {
     setDeletingArchiveId(null);
 
     if (!trashed) {
-      showToast("移入回收站失败");
+      showToast(t.archive.trash_failed);
       return;
     }
 
     const deletedArchiveId = deleteArchiveTarget.id;
     setDeleteArchiveTarget(null);
     setArchives((current) => current.filter((archive) => archive.id !== deletedArchiveId));
-    showToast("已移入回收站");
+    showToast(t.archive.moved_to_trash);
   }
 
   async function markLocalArchivesAsMine() {
@@ -900,9 +917,13 @@ export default function ArchivePage() {
         email: currentOwnerContext.email || null,
       });
       await loadLocalArchives(currentOwnerContext);
-      showToast(markedCount > 0 ? "已标记为我的本地项目" : "没有需要标记的本地项目");
+      showToast(
+        markedCount > 0
+          ? t.archive_workspace.marked_as_mine
+          : t.archive_workspace.no_unowned_projects
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "标记本地项目失败");
+      showToast(err instanceof Error ? err.message : t.archive_workspace.ownership_failed);
     } finally {
       setMarkingLocalOwner(false);
     }
@@ -910,7 +931,7 @@ export default function ArchivePage() {
 
   async function markSingleLocalArchiveAsMine(archive: LocalArchiveSummary) {
     if (!currentOwnerContext?.userId) {
-      showToast("请先登录后再标记本地项目归属");
+      showToast(t.archive_workspace.login_to_mark);
       return;
     }
 
@@ -920,14 +941,14 @@ export default function ArchivePage() {
         email: currentOwnerContext.email || null,
       });
       await loadLocalArchives(currentOwnerContext);
-      showToast("已标记为我的本地项目");
+      showToast(t.archive_workspace.marked_as_mine);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "标记本地项目失败");
+      showToast(err instanceof Error ? err.message : t.archive_workspace.ownership_failed);
     }
   }
 
   function renameArchiveTitle(item: ArchiveItem) {
-    const name = prompt("修改名称", item.title || "");
+    const name = prompt(t.archive_workspace.rename_project_prompt, item.title || "");
     if (!name?.trim()) return;
 
     supabase.from("archives").update({ title: name.trim() }).eq("id", item.id).then(() => {
@@ -1252,7 +1273,7 @@ export default function ArchivePage() {
     }
 
     if (contentBlocked) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -1260,7 +1281,12 @@ export default function ArchivePage() {
   }
 
   async function createLocalSubcategory(category: ArchiveCategory) {
-    const name = prompt(`新增${getArchiveCategoryLabel(category)}本地子分类`);
+    const name = prompt(
+      `${t.archive_workspace.add_local_subcategory_prefix}${getArchiveCategoryLabel(
+        category,
+        language
+      )}${t.archive_workspace.add_local_subcategory_suffix}`
+    );
     if (!name?.trim()) return;
 
     try {
@@ -1269,15 +1295,19 @@ export default function ArchivePage() {
         currentOwnerContext
       );
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地子分类已添加");
+      showToast(t.archive_workspace.local_subcategory_added);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "新增本地子分类失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_subcategory_add_failed
+      );
     }
   }
 
   async function deleteLocalSubcategory(chip: ArchiveTaxonomyChip) {
     if (!activeCategory) return;
-    if (!confirm("删除后，该本地子分类下的本地项目会回到当前大类，确认？")) return;
+    if (!confirm(t.archive_workspace.local_subcategory_delete_confirm)) return;
 
     try {
       await deleteLocalTaxonomyItem(
@@ -1291,15 +1321,19 @@ export default function ArchivePage() {
         }
       });
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地子分类已删除");
+      showToast(t.archive_workspace.local_subcategory_deleted);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "删除本地子分类失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_subcategory_delete_failed
+      );
     }
   }
 
   async function renameLocalSubcategory(chip: ArchiveTaxonomyChip) {
     if (!activeCategory) return;
-    const name = prompt("修改本地子分类名称", chip.label);
+    const name = prompt(t.archive_workspace.local_subcategory_rename_prompt, chip.label);
     const cleanName = name?.trim();
     if (!cleanName || cleanName === chip.label) return;
 
@@ -1320,15 +1354,19 @@ export default function ArchivePage() {
         }
       });
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地子分类已修改");
+      showToast(t.archive_workspace.local_subcategory_renamed);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "修改本地子分类失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_subcategory_rename_failed
+      );
     }
   }
 
   async function createLocalGroup() {
     if (!activeCategory || !activeSubTag) return;
-    const name = prompt("新增本地分组");
+    const name = prompt(t.archive_workspace.add_local_group);
     if (!name?.trim()) return;
 
     try {
@@ -1342,15 +1380,17 @@ export default function ArchivePage() {
         currentOwnerContext
       );
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地分组已添加");
+      showToast(t.archive_workspace.local_group_added);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "新增本地分组失败");
+      showToast(
+        error instanceof Error ? error.message : t.archive_workspace.local_group_add_failed
+      );
     }
   }
 
   async function deleteLocalGroup(chip: ArchiveTaxonomyChip) {
     if (!activeCategory || !activeSubTag) return;
-    if (!confirm("删除该本地分组？")) return;
+    if (!confirm(t.archive_workspace.local_group_delete_confirm)) return;
 
     try {
       await deleteLocalTaxonomyItem(
@@ -1366,15 +1406,19 @@ export default function ArchivePage() {
         if (activeGroupTag === chip.id) setActiveGroupTag(null);
       });
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地分组已删除");
+      showToast(t.archive_workspace.local_group_deleted);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "删除本地分组失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_group_delete_failed
+      );
     }
   }
 
   async function renameLocalGroup(chip: ArchiveTaxonomyChip) {
     if (!activeCategory || !activeSubTag) return;
-    const name = prompt("修改本地分组名称", chip.label);
+    const name = prompt(t.archive_workspace.local_group_rename_prompt, chip.label);
     const cleanName = name?.trim();
     if (!cleanName || cleanName === chip.label) return;
 
@@ -1393,14 +1437,18 @@ export default function ArchivePage() {
         if (activeGroupTag === chip.id) setActiveGroupTag(cleanName);
       });
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地分组已修改");
+      showToast(t.archive_workspace.local_group_renamed);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "修改本地分组失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_group_rename_failed
+      );
     }
   }
 
   async function renameLocalArchiveTitle(archive: LocalArchiveSummary) {
-    const name = prompt("修改本地项目名称", archive.title || "");
+    const name = prompt(t.archive_workspace.rename_local_project, archive.title || "");
     const cleanName = name?.trim();
     if (!cleanName || cleanName === archive.title) return;
 
@@ -1411,9 +1459,13 @@ export default function ArchivePage() {
         currentOwnerContext
       );
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地项目名已修改");
+      showToast(t.archive_workspace.local_project_renamed);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "修改本地项目名失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_project_rename_failed
+      );
     }
   }
 
@@ -1435,7 +1487,7 @@ export default function ArchivePage() {
   async function saveLocalArchiveSystemName(archive: LocalArchiveSummary) {
     const cleanName = editingLocalSystemName.trim();
     if (!cleanName) {
-      showToast("系统名不能为空");
+      showToast(t.archive.system_name_empty);
       return;
     }
     if (savingLocalSystemArchiveId) return;
@@ -1449,9 +1501,13 @@ export default function ArchivePage() {
       );
       cancelLocalArchiveSystemNameEditing();
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地系统名已修改");
+      showToast(t.archive_workspace.local_system_name_updated);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "修改本地系统名失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_system_name_update_failed
+      );
     } finally {
       setSavingLocalSystemArchiveId(null);
     }
@@ -1479,9 +1535,13 @@ export default function ArchivePage() {
         currentOwnerContext
       );
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地项目分类已更新");
+      showToast(t.archive_workspace.local_category_updated);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "更新本地项目分类失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_category_update_failed
+      );
     }
   }
 
@@ -1493,16 +1553,23 @@ export default function ArchivePage() {
         currentOwnerContext
       );
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地项目分组已更新");
+      showToast(t.archive_workspace.local_group_updated);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "更新本地项目分组失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_group_update_failed
+      );
     }
   }
 
   async function editLocalArchiveCategoryAndGroup(archive: LocalArchiveSummary) {
-    const nextSubcategory = prompt("编辑本地子分类（留空则清空）", archive.subcategory || "");
+    const nextSubcategory = prompt(
+      t.archive_workspace.edit_local_subcategory,
+      archive.subcategory || ""
+    );
     if (nextSubcategory === null) return;
-    const nextGroup = prompt("编辑本地分组（留空则清空）", archive.group_name || "");
+    const nextGroup = prompt(t.archive_workspace.edit_local_group, archive.group_name || "");
     if (nextGroup === null) return;
 
     try {
@@ -1515,17 +1582,19 @@ export default function ArchivePage() {
         currentOwnerContext
       );
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地项目分类已更新");
+      showToast(t.archive_workspace.local_category_updated);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "更新本地项目分类失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_category_update_failed
+      );
     }
   }
 
   async function deleteLocalArchiveFromList(archive: LocalArchiveSummary) {
     if (
-      !confirm(
-        "确定要删除这个本地项目吗？项目下的本地记录和 App 内图片缓存会一起删除，不会影响系统相册。"
-      )
+      !confirm(t.archive_workspace.delete_local_confirm)
     ) {
       return;
     }
@@ -1533,9 +1602,13 @@ export default function ArchivePage() {
     try {
       await deleteLocalArchive(archive.id);
       await loadLocalArchives(currentOwnerContext);
-      showToast("本地项目已删除");
+      showToast(t.archive_workspace.local_project_deleted);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "删除本地项目失败");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive_workspace.local_project_delete_failed
+      );
     }
   }
 
@@ -1545,7 +1618,7 @@ export default function ArchivePage() {
     contentBlocked;
 
   const createDisabledText = createDisabled
-    ? getCreateContentBlockedText(membership)
+    ? getCreateContentBlockedText(membership, language)
     : undefined;
 
   const workspaceFiltersSlot =
@@ -1700,13 +1773,13 @@ export default function ArchivePage() {
     <>
       {activeSource === "local" ? (
         <div style={localOtherOwnerNoticeStyle}>
-          本地子分类和分组只保存在当前设备，不会自动创建或影响云空间分类。
+          {t.archive_workspace.local_taxonomy_notice}
         </div>
       ) : null}
       {showLocalArchives && currentOwnerContext?.userId && localUnownedCount > 0 && !localOwnershipPromptDismissed ? (
         <div style={localOwnershipNoticeStyle}>
           <span>
-            发现这台设备上有未归属账号的本地项目。这些内容只保存在当前设备，不会自动上传云端。
+            {t.archive_workspace.unowned_local_notice}
           </span>
           <div style={localOwnershipActionRowStyle}>
             <button
@@ -1715,21 +1788,23 @@ export default function ArchivePage() {
               disabled={markingLocalOwner}
               style={localOwnershipPrimaryButtonStyle}
             >
-              {markingLocalOwner ? "标记中..." : "标记为我的本地项目"}
+              {markingLocalOwner
+                ? t.archive_workspace.marking
+                : t.archive_workspace.mark_as_mine}
             </button>
             <button
               type="button"
               onClick={() => setLocalOwnershipPromptDismissed(true)}
               style={localOwnershipSecondaryButtonStyle}
             >
-              暂不处理
+              {t.archive_workspace.dismiss}
             </button>
           </div>
         </div>
       ) : null}
       {showLocalArchives && localHiddenOwnedByOtherCount > 0 ? (
         <div style={localOtherOwnerNoticeStyle}>
-          这台设备上有归属其他账号的本地项目。
+          {t.archive_workspace.other_owner_notice}
         </div>
       ) : null}
     </>
@@ -1770,7 +1845,12 @@ export default function ArchivePage() {
         onSelectPlantSpecies={(species) => {
           setEditingSpeciesId(species.id);
           setEditingPendingSpeciesName("");
-          setEditingPlantSearch(species.display_name || species.common_name || species.scientific_name || "未命名植物");
+          setEditingPlantSearch(
+            species.display_name ||
+              species.common_name ||
+              species.scientific_name ||
+              t.archive_workspace.unnamed_plant
+          );
           setPlantSuggestionsOpen(false);
         }}
         onSubmitPendingSpecies={() => submitPendingSpeciesName()}
@@ -1810,16 +1890,16 @@ export default function ArchivePage() {
     >
       {!isMobileViewport ? (
         <section style={personalSpaceHeaderStyle}>
-          <h1 style={personalSpaceTitleStyle}>我的空间</h1>
+          <h1 style={personalSpaceTitleStyle}>{t.archive_workspace.my_space}</h1>
           <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
-            <span>我的经验卡（{experienceCardCount}）</span>
+            <span>{t.archive_workspace.my_experience_cards} ({experienceCardCount})</span>
             <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
           </Link>
         </section>
       ) : (
         <section style={personalSpaceEntryRowStyle}>
           <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
-            <span>我的经验卡（{experienceCardCount}）</span>
+            <span>{t.archive_workspace.my_experience_cards} ({experienceCardCount})</span>
             <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
           </Link>
         </section>
@@ -1827,9 +1907,13 @@ export default function ArchivePage() {
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
         sourceOptions={[
-          { value: "all", label: "全部", count: archiveCount + localArchives.length },
-          { value: "cloud", label: "云空间", count: archiveCount },
-          { value: "local", label: "本地", count: localArchives.length },
+          {
+            value: "all",
+            label: t.archive_workspace.all,
+            count: archiveCount + localArchives.length,
+          },
+          { value: "cloud", label: t.archive_workspace.cloud_space, count: archiveCount },
+          { value: "local", label: t.archive_workspace.local, count: localArchives.length },
         ]}
         activeSource={activeSource}
         onSelectSource={handleSelectSource}
@@ -1843,11 +1927,13 @@ export default function ArchivePage() {
         {showCloudArchives ? (
           !currentOwnerContext?.userId ? (
             <div style={emptyPanelStyle}>
-              登录后可查看云空间项目；本地项目仍可在当前设备查看。
+              {t.archive_workspace.login_cloud_hint}
             </div>
           ) : activeArchives.length === 0 && endedArchives.length === 0 ? (
             <div style={emptyPanelStyle}>
-              {archiveCount === 0 ? "还没有云空间项目，请先新建项目" : "没有找到云空间项目"}
+              {archiveCount === 0
+                ? t.archive_workspace.no_cloud_projects
+                : t.archive_workspace.no_cloud_matches}
             </div>
           ) : (
             <>
@@ -1855,8 +1941,8 @@ export default function ArchivePage() {
               {endedArchives.length > 0 ? (
                 <section style={{ marginTop: activeArchives.length > 0 ? 26 : 0 }}>
                   <div style={endedSectionHeaderStyle}>
-                    <h2 style={endedSectionTitleStyle}>已结束</h2>
-                    <span style={endedSectionTextStyle}>这些项目已经告一段落，仍然保存在你的空间里。</span>
+                    <h2 style={endedSectionTitleStyle}>{t.archive_workspace.ended}</h2>
+                    <span style={endedSectionTextStyle}>{t.archive_workspace.ended_hint}</span>
                   </div>
                   {endedArchives.map((item) => renderCloudArchiveCard(item, true))}
                 </section>
@@ -1867,16 +1953,20 @@ export default function ArchivePage() {
 
         {showLocalArchives ? (
           localLoading ? (
-            <div style={emptyPanelStyle}>正在读取本地项目...</div>
+            <div style={emptyPanelStyle}>{t.archive_workspace.reading_local}</div>
           ) : localError ? (
             <div style={emptyPanelStyle}>{localError}</div>
           ) : localArchives.length === 0 ? (
-            <div style={emptyPanelStyle}>还没有可查看的本地项目。</div>
+            <div style={emptyPanelStyle}>{t.archive_workspace.no_local_projects}</div>
           ) : filteredLocalArchives.length === 0 ? (
-            <div style={emptyPanelStyle}>当前筛选下没有本地项目。</div>
+            <div style={emptyPanelStyle}>{t.archive_workspace.no_local_matches}</div>
           ) : (
             filteredLocalArchives.map((archive) => {
-              const project = localArchiveToProjectView(archive, currentOwnerContext);
+              const project = localArchiveToProjectView(
+                archive,
+                currentOwnerContext,
+                language
+              );
               const availableLocalGroups = archive.subcategory
                 ? localGroupTagItems.filter((tag) => tag.sub_tag_id === archive.subcategory)
                 : [];
@@ -1961,7 +2051,7 @@ export default function ArchivePage() {
                             event.stopPropagation();
                             setLocalProjectMenuOpenId((id) => (id === archive.id ? null : archive.id));
                           }}
-                          aria-label="更多本地项目操作"
+                          aria-label={t.archive_workspace.more_local_actions}
                           style={localProjectMoreButtonStyle}
                         >
                           <UiIcon name="more" size={20} />
@@ -1978,7 +2068,7 @@ export default function ArchivePage() {
                               }}
                               style={localProjectMenuItemStyle}
                             >
-                              编辑名称
+                              {t.archive_workspace.edit_name}
                             </button>
                             <button
                               type="button"
@@ -1990,7 +2080,7 @@ export default function ArchivePage() {
                               }}
                               style={localProjectMenuItemStyle}
                             >
-                              编辑系统名
+                              {t.archive_workspace.edit_system_name}
                             </button>
                             <button
                               type="button"
@@ -2002,7 +2092,7 @@ export default function ArchivePage() {
                               }}
                               style={localProjectMenuItemStyle}
                             >
-                              编辑分类 / 分组
+                              {t.archive_workspace.edit_category_group}
                             </button>
                             {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
                               <button
@@ -2015,7 +2105,7 @@ export default function ArchivePage() {
                                 }}
                                 style={localProjectMenuItemStyle}
                               >
-                                标记归属
+                                {t.archive_workspace.mark_ownership}
                               </button>
                             ) : null}
                             <button
@@ -2028,7 +2118,7 @@ export default function ArchivePage() {
                               }}
                               style={localProjectDangerMenuItemStyle}
                             >
-                              删除本地项目
+                              {t.archive_workspace.delete_local_project}
                             </button>
                           </div>
                         ) : null}
@@ -2048,7 +2138,7 @@ export default function ArchivePage() {
                           }}
                           style={localProjectRailButtonStyle}
                         >
-                          标记归属
+                          {t.archive_workspace.mark_ownership}
                         </button>
                       ) : null}
                       <button
@@ -2060,7 +2150,7 @@ export default function ArchivePage() {
                         }}
                         style={localProjectRailButtonStyle}
                       >
-                        编辑
+                        {t.archive_workspace.edit}
                       </button>
                       <button
                         type="button"
@@ -2071,7 +2161,7 @@ export default function ArchivePage() {
                         }}
                         style={localProjectRailDangerButtonStyle}
                       >
-                        删除
+                        {t.archive_workspace.delete}
                       </button>
                     </>
                     ) : undefined
@@ -2087,10 +2177,14 @@ export default function ArchivePage() {
       </ArchiveWorkspaceTemplate>
       <ConfirmDialog
         open={Boolean(deleteArchiveTarget)}
-        title="移入回收站"
-        message="项目、记录和照片将移入回收站。与该项目相关的评论、点赞、关注等互动信息将立即删除，无法恢复。"
-        confirmText={deletingArchiveId ? "移入中..." : "移入回收站"}
-        cancelText="取消"
+        title={t.archive_workspace.move_to_trash}
+        message={t.archive_workspace.trash_message}
+        confirmText={
+          deletingArchiveId
+            ? t.archive_workspace.moving_to_trash
+            : t.archive_workspace.move_to_trash
+        }
+        cancelText={t.archive_workspace.cancel}
         danger
         confirmDisabled={Boolean(deletingArchiveId)}
         cancelDisabled={Boolean(deletingArchiveId)}
@@ -2112,11 +2206,13 @@ function MainCategoryFilters({
   onReset: () => void;
   onSelectCategory: (category: ArchiveCategory) => void;
 }) {
+  const { language, t } = useLanguage();
+
   return (
     <section style={workspaceFilterPanelStyle}>
       <div style={workspaceChipRowStyle}>
         <button type="button" onClick={onReset} style={workspacePillStyle(!activeCategory)}>
-          全部
+          {t.archive_workspace.all}
         </button>
         {archiveCategoryOptions.map((option) => (
           <button
@@ -2125,7 +2221,7 @@ function MainCategoryFilters({
             onClick={() => onSelectCategory(option.value)}
             style={workspacePillStyle(activeCategory === option.value)}
           >
-            {option.label}
+            {getArchiveCategoryLabel(option.value, language)}
           </button>
         ))}
       </div>
@@ -2154,6 +2250,8 @@ function LocalArchiveFilters({
   onSelectSubTag: (name: string) => void;
   onSelectGroup: (name: string) => void;
 }) {
+  const { t } = useLanguage();
+
   return (
     <>
       <MainCategoryFilters
@@ -2164,14 +2262,14 @@ function LocalArchiveFilters({
 
       {activeCategory ? (
         <section style={workspaceFilterPanelStyle}>
-          <div style={workspaceFilterLabelStyle}>本地子分类</div>
+          <div style={workspaceFilterLabelStyle}>{t.archive_workspace.local_subcategories}</div>
           <div style={workspaceChipRowStyle}>
             <button
               type="button"
               onClick={() => onSelectCategory(activeCategory)}
               style={workspacePillStyle(!activeSubTag)}
             >
-              全部子分类
+              {t.archive_workspace.all_subcategories}
             </button>
             {subTags.map((tag) => (
               <button
@@ -2189,14 +2287,14 @@ function LocalArchiveFilters({
 
       {activeCategory && activeSubTag ? (
         <section style={workspaceFilterPanelStyle}>
-          <div style={workspaceFilterLabelStyle}>本地分组</div>
+          <div style={workspaceFilterLabelStyle}>{t.archive_workspace.local_groups}</div>
           <div style={workspaceChipRowStyle}>
             <button
               type="button"
               onClick={() => onSelectGroup("")}
               style={workspacePillStyle(!activeGroupTag)}
             >
-              全部分组
+              {t.archive_workspace.all_groups}
             </button>
             {groupTags.map((tag) => (
               <button

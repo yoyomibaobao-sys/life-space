@@ -1,6 +1,7 @@
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { supabase } from "@/lib/supabase";
 import { formatCardDate, getInclusiveDaySpan } from "@/lib/date-time";
+import type { Language } from "@/lib/i18n";
 import type {
   ExperienceCardArchive,
   ExperienceCardAuthor,
@@ -89,7 +90,8 @@ function joinExperienceCardRegion(profile?: ExperienceCardListProfileRow) {
 }
 
 export async function hydrateExperienceCardListItems(
-  rows: ExperienceCardRow[]
+  rows: ExperienceCardRow[],
+  language: Language = "zh"
 ): Promise<ExperienceCardListItem[]> {
   if (rows.length === 0) return [];
 
@@ -218,7 +220,13 @@ export async function hydrateExperienceCardListItems(
       ...row,
       archiveTitle:
         archive?.title?.trim() ||
-        (sourceState === "error" ? "来源读取失败，请稍后重试" : "来源项目已不可用"),
+        (sourceState === "error"
+          ? language === "en"
+            ? "Could not read the source. Try again later."
+            : "来源读取失败，请稍后重试"
+          : language === "en"
+            ? "Source project unavailable"
+            : "来源项目已不可用"),
       sourceAvailable: Boolean(archive),
       sourceState,
       archiveCategory: archive?.category || null,
@@ -231,7 +239,7 @@ export async function hydrateExperienceCardListItems(
         cover?.display_url ||
         archiveCoverById.get(row.archive_id) ||
         null,
-      authorName: profile?.username?.trim() || "用户",
+      authorName: profile?.username?.trim() || (language === "en" ? "User" : "用户"),
       authorAvatarUrl: profile?.avatar_url || null,
       authorRegion: joinExperienceCardRegion(profile),
       authorCountryCode: profile?.country_code || null,
@@ -250,47 +258,68 @@ export async function hydrateExperienceCardListItems(
   });
 }
 
-export function getExperienceCardStageLabel(index: number, count: number) {
-  if (index === 0) return "起点";
-  if (index === count - 1) return "结果";
-  return "过程";
+export function getExperienceCardStageLabel(
+  index: number,
+  count: number,
+  language: Language = "zh"
+) {
+  if (index === 0) return language === "en" ? "Beginning" : "起点";
+  if (index === count - 1) return language === "en" ? "Result" : "结果";
+  return language === "en" ? "Process" : "过程";
 }
 
-export function getExperienceCardErrorText(error: unknown) {
+export function getExperienceCardErrorText(
+  error: unknown,
+  language: Language = "zh"
+) {
   const message =
     typeof error === "object" && error && "message" in error
       ? String(error.message || "")
       : String(error || "");
 
   if (message.includes("experience_card_cloud_access_required")) {
-    return "需要开通云会员才能创建、修改或发布经验卡。";
+    return language === "en"
+      ? "Cloud Membership is required to create, edit, or publish Experience Cards."
+      : "需要开通云会员才能创建、修改或发布经验卡。";
   }
   if (message.includes("experience_card_record_count_invalid")) {
-    return "请至少选择3条记录。";
+    return language === "en" ? "Select at least three records." : "请至少选择3条记录。";
   }
   if (message.includes("experience_card_records_must_share_archive")) {
-    return "所选记录必须来自同一个项目，且不能处于回收站中。";
+    return language === "en"
+      ? "Selected records must come from one project and cannot be in Trash."
+      : "所选记录必须来自同一个项目，且不能处于回收站中。";
   }
   if (message.includes("experience_card_cover_invalid")) {
-    return "封面必须来自当前所选记录的照片。";
+    return language === "en"
+      ? "The cover must be a photo from the selected records."
+      : "封面必须来自当前所选记录的照片。";
   }
   if (message.includes("experience_card_source_changed")) {
-    return "来源记录已经变化，请重新检查并保存草稿。";
+    return language === "en"
+      ? "The source records changed. Review them and save the draft again."
+      : "来源记录已经变化，请重新检查并保存草稿。";
   }
   if (
     message.includes("experience_card_not_found_or_forbidden") ||
     message.includes("experience_card_archive_not_found")
   ) {
-    return "经验卡或来源项目不存在，或者你没有操作权限。";
+    return language === "en"
+      ? "The Experience Card or source project does not exist, or you do not have permission."
+      : "经验卡或来源项目不存在，或者你没有操作权限。";
   }
   if (message.includes("experience_card_title_invalid")) {
-    return "标题需为1～120个字符。";
+    return language === "en" ? "The title must be 1–120 characters." : "标题需为1～120个字符。";
   }
   if (message.includes("experience_card_description_invalid")) {
-    return "详情描述最多500个字符。";
+    return language === "en"
+      ? "The description can contain up to 500 characters."
+      : "详情描述最多500个字符。";
   }
 
-  return "操作失败，请稍后重试。";
+  return language === "en"
+    ? "The action failed. Try again later."
+    : "操作失败，请稍后重试。";
 }
 
 export async function saveExperienceCard(input: ExperienceCardSaveInput) {

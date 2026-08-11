@@ -43,10 +43,13 @@ test("public membership terminology uses 商社会员", () => {
   const membershipPage = read("app/membership/page.tsx");
   const membershipLib = read("lib/membership.ts");
   const membershipDocs = read("docs/membership-access.md");
+  const zh = read("lib/i18n/zh.ts");
 
-  assert.match(membershipPage, /商社会员/);
-  assert.match(membershipPage, /商社空间/);
+  assert.match(membershipPage, /t\.membership_page/);
+  assert.match(zh, /business_title: "商社会员"/);
+  assert.match(zh, /value: "商社空间"/);
   assert.doesNotMatch(membershipPage, /商业会员/);
+  assert.doesNotMatch(zh, /商业会员/);
   assert.match(membershipLib, /return "商社会员"/);
   assert.match(membershipDocs, /商社会员采用“商社空间＋成员账号”/);
   assert.doesNotMatch(membershipDocs, /商业会员/);

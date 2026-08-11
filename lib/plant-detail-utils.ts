@@ -1,4 +1,5 @@
-import { getPlantCategoryLabel, normalizePlantCategoryKey } from "@/lib/plant-shared";
+import { normalizePlantCategoryKey } from "@/lib/plant-shared";
+import { getTranslations, type Language } from "@/lib/i18n";
 
 type PlantPhParameters = {
   ph_sensitivity_score?: unknown;
@@ -11,24 +12,6 @@ type PlantGuideSource = {
   sub_category?: string | null;
 };
 
-const photoperiodLabels: Record<string, string> = {
-  long_day: "长日照",
-  short_day: "短日照",
-  day_neutral: "日中性",
-  intermediate_day: "中日照",
-  cultivar_dependent: "品种相关",
-};
-
-const stageLabels: Record<string, string> = {
-  flowering: "开花",
-  fruiting: "结果",
-  bolting: "抽薹",
-  tuberization: "块茎形成",
-  bulb_formation: "鳞茎膨大",
-  dormancy: "休眠",
-  flower_bud_init: "花芽分化",
-};
-
 export function isEmpty(value: unknown) {
   return value === null || value === undefined || value === "";
 }
@@ -37,7 +20,13 @@ export function hasText(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-export function formatRange(min: unknown, max: unknown, suffix = "") {
+export function formatRange(
+  min: unknown,
+  max: unknown,
+  suffix = "",
+  language: Language = "zh"
+) {
+  const copy = getTranslations(language).plant.detail;
   if (isEmpty(min) && isEmpty(max)) return null;
 
   if (!isEmpty(min) && !isEmpty(max)) {
@@ -45,8 +34,10 @@ export function formatRange(min: unknown, max: unknown, suffix = "") {
     return `${min}–${max}${suffix}`;
   }
 
-  if (!isEmpty(min)) return `${min}${suffix}以上`;
-  return `${max}${suffix}以下`;
+  if (!isEmpty(min)) {
+    return `${copy.range_min_prefix}${min}${suffix}${copy.range_min_suffix}`;
+  }
+  return `${copy.range_max_prefix}${max}${suffix}${copy.range_max_suffix}`;
 }
 
 export function scoreLabel(value: unknown) {
@@ -54,69 +45,94 @@ export function scoreLabel(value: unknown) {
   return `${value}/10`;
 }
 
-export function phRequirementLabel(value: unknown) {
+export function phRequirementLabel(value: unknown, language: Language = "zh") {
+  const copy = getTranslations(language).plant.detail;
   if (isEmpty(value)) return null;
 
   const score = Number(value);
   if (Number.isNaN(score)) return null;
 
-  if (score <= 2) return "适应范围很宽";
-  if (score <= 4) return "适应范围较宽";
-  if (score <= 6) return "中等敏感";
-  if (score <= 8) return "较敏感";
-  return "很敏感";
+  if (score <= 2) return copy.ph_very_broad;
+  if (score <= 4) return copy.ph_broad;
+  if (score <= 6) return copy.ph_moderate;
+  if (score <= 8) return copy.ph_sensitive;
+  return copy.ph_very_sensitive;
 }
 
-export function phRequirementText(parameters?: PlantPhParameters | null) {
-  const sensitivity = phRequirementLabel(parameters?.ph_sensitivity_score);
-  const phRange = formatRange(parameters?.ph_min, parameters?.ph_max);
+export function phRequirementText(
+  parameters?: PlantPhParameters | null,
+  language: Language = "zh"
+) {
+  const copy = getTranslations(language).plant.detail;
+  const sensitivity = phRequirementLabel(parameters?.ph_sensitivity_score, language);
+  const phRange = formatRange(parameters?.ph_min, parameters?.ph_max, "", language);
 
   if (!sensitivity && !phRange) return null;
   if (sensitivity && phRange) return `${sensitivity}（pH ${phRange}）`;
   if (sensitivity) return sensitivity;
-  return `适宜 pH ${phRange}`;
+  return `${copy.suitable_ph} ${phRange}`;
 }
 
-export function difficultyMeta(value: unknown) {
+export function difficultyMeta(value: unknown, language: Language = "zh") {
+  const copy = getTranslations(language).plant.detail;
   if (isEmpty(value)) return null;
 
   const score = Number(value);
   if (Number.isNaN(score)) return null;
 
-  if (score <= 1) return { rating: 0, label: "野生级", detail: `${score}/10` };
-  if (score <= 3) return { rating: 1, label: "非常容易", detail: `${score}/10` };
-  if (score <= 5) return { rating: 2, label: "容易", detail: `${score}/10` };
-  if (score <= 7) return { rating: 3, label: "中等", detail: `${score}/10` };
-  if (score <= 9) return { rating: 4, label: "较难", detail: `${score}/10` };
+  if (score <= 1) return { rating: 0, label: copy.difficulty_wild, detail: `${score}/10` };
+  if (score <= 3) return { rating: 1, label: copy.difficulty_very_easy, detail: `${score}/10` };
+  if (score <= 5) return { rating: 2, label: copy.difficulty_easy, detail: `${score}/10` };
+  if (score <= 7) return { rating: 3, label: copy.difficulty_moderate, detail: `${score}/10` };
+  if (score <= 9) return { rating: 4, label: copy.difficulty_hard, detail: `${score}/10` };
 
-  return { rating: 5, label: "专业种植", detail: `${score}/10` };
+  return { rating: 5, label: copy.difficulty_professional, detail: `${score}/10` };
 }
 
-export const categoryLabel = getPlantCategoryLabel;
+export function categoryLabel(value?: string | null, language: Language = "zh") {
+  const plantCopy = getTranslations(language).plant;
+  if (!value) return plantCopy.uncategorized;
+  return (plantCopy.categories as Record<string, string>)[value] || value;
+}
 
-export function guideTitle(plant?: PlantGuideSource | null) {
+export function guideTitle(
+  plant?: PlantGuideSource | null,
+  language: Language = "zh"
+) {
+  const labels = getTranslations(language).plant.detail.guide_titles;
   const category = normalizePlantCategoryKey(plant?.category);
   const subCategory = plant?.sub_category;
 
   if (category === "flower") {
     return subCategory === "flowering_tree" || subCategory === "flowering_shrub"
-      ? "观花 / 修剪"
-      : "观花";
+      ? labels.flowering_pruning
+      : labels.flowering;
   }
 
-  if (category === "houseplant") return "观叶 / 繁殖";
-  if (category === "succulent") return "繁殖";
-  if (category === "fruit") return "采收 / 修剪";
+  if (category === "houseplant") return labels.foliage_propagation;
+  if (category === "succulent") return labels.propagation;
+  if (category === "fruit") return labels.harvest_pruning;
 
-  return "采收";
+  return labels.harvest;
 }
 
-export function getPhotoperiodTypeLabel(value?: string | null) {
+export function getPhotoperiodTypeLabel(
+  value?: string | null,
+  language: Language = "zh"
+) {
   if (!value || value === "unknown") return null;
-  return photoperiodLabels[value] || value;
+  const labels = getTranslations(language).plant.detail.photoperiod_types;
+  return (labels as Record<string, string>)[value] || value;
 }
 
-export function getPhotoperiodStageLabel(value?: string[] | null) {
+export function getPhotoperiodStageLabel(
+  value?: string[] | null,
+  language: Language = "zh"
+) {
   if (!Array.isArray(value) || value.length === 0) return null;
-  return value.map((stage) => stageLabels[stage] || stage).join("、");
+  const plantCopy = getTranslations(language).plant;
+  const labels = plantCopy.detail.photoperiod_stages;
+  return value
+    .map((stage) => (labels as Record<string, string>)[stage] || stage)
+    .join(plantCopy.alias_separator);
 }

@@ -10,6 +10,7 @@ import type {
   ExperienceCardArchive,
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ExperienceCardTimeline({
   archive,
@@ -18,8 +19,10 @@ export default function ExperienceCardTimeline({
   archive: ExperienceCardArchive;
   records: ExperienceCardSourceRecord[];
 }) {
+  const { language, t } = useLanguage();
+
   return (
-    <section style={timelineStyle} aria-label="经验时间线">
+    <section style={timelineStyle} aria-label={t.experience.timeline_aria}>
       {records.map((record, index) => {
         const imageMedia = record.media.filter((media) =>
           Boolean(media.display_thumb_url || media.display_url)
@@ -49,14 +52,14 @@ export default function ExperienceCardTimeline({
             <Link
               href={`/archive/${archive.id}?record=${record.id}`}
               style={contentStyle}
-              aria-label={`查看${formatExperienceCardDate(record.record_time) || "这一天"}的原记录`}
+              aria-label={`${t.experience.view_original_prefix}${formatExperienceCardDate(record.record_time) || t.experience.this_day}${t.experience.view_original_suffix}`}
             >
               <div style={metaRowStyle}>
                 <span style={stageStyle}>
-                  {getExperienceCardStageLabel(index, records.length)}
+                  {getExperienceCardStageLabel(index, records.length, language)}
                 </span>
                 <time dateTime={record.record_time} style={dateStyle}>
-                  {formatExperienceCardDate(record.record_time) || "日期未记录"}
+                  {formatExperienceCardDate(record.record_time) || t.experience.date_missing}
                 </time>
               </div>
 
@@ -73,12 +76,12 @@ export default function ExperienceCardTimeline({
                         >
                           <img
                             src={src}
-                            alt={`${formatExperienceCardDate(record.record_time)}的记录照片 ${mediaIndex + 1}`}
+                            alt={`${formatExperienceCardDate(record.record_time)} ${t.experience.record_photo_prefix}${mediaIndex + 1}`}
                             style={thumbStyle}
                             loading="lazy"
                           />
                           {mediaIndex === previewMedia.length - 1 && imageMedia.length > 3 ? (
-                            <span style={mediaCountStyle}>共{imageMedia.length}张</span>
+                            <span style={mediaCountStyle}>{t.experience.total_photos_prefix}{imageMedia.length}{t.experience.total_photos_suffix}</span>
                           ) : null}
                         </span>
                       );

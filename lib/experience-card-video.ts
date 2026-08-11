@@ -4,6 +4,7 @@ import type {
   ExperienceCardMedia,
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
+import type { Language } from "@/lib/i18n";
 
 export const EXPERIENCE_CARD_VIDEO_WIDTH = 720;
 export const EXPERIENCE_CARD_VIDEO_HEIGHT = 1280;
@@ -148,9 +149,12 @@ export function buildExperienceCardVideoScenes(
   detail: ExperienceCardDetail,
   imageSelection?: ExperienceCardVideoImageSelection,
   coverImageUrl?: string | null,
-  websiteUrl = ""
+  websiteUrl = "",
+  language: Language = "zh"
 ): ExperienceCardVideoScene[] {
-  const authorName = detail.author?.username?.trim() || "用户";
+  const authorName =
+    detail.author?.username?.trim() || (language === "en" ? "User" : "用户");
+  const brand = language === "en" ? "LifeSpace for Cultivation" : "有时·耕作 LifeSpace";
   const selectedImageUrlsByRecordId = new Map(
     detail.records.map((record) => {
       const hasExplicitImageSelection = Boolean(
@@ -176,8 +180,8 @@ export function buildExperienceCardVideoScenes(
       duration: INTRO_DURATION_SECONDS,
       title: detail.card.title,
       authorName,
-      subtitle: "有时·耕作 LifeSpace",
-      text: `发布者 · ${authorName}`,
+      subtitle: brand,
+      text: language === "en" ? `By · ${authorName}` : `发布者 · ${authorName}`,
       tags: [],
       imageUrl:
         coverImageUrl !== undefined
@@ -213,7 +217,7 @@ export function buildExperienceCardVideoScenes(
         duration: text ? getTextDuration(text) : 3.8,
         title: detail.card.title,
         authorName,
-        subtitle: "有时·耕作 LifeSpace",
+        subtitle: brand,
         text,
         tags,
         imageUrl:
@@ -221,7 +225,9 @@ export function buildExperienceCardVideoScenes(
         imageIndex:
           localImageIndex === null ? null : imageOffset + localImageIndex,
         imageCount,
-        date: formatExperienceCardDate(record.record_time) || "日期未记录",
+        date:
+          formatExperienceCardDate(record.record_time) ||
+          (language === "en" ? "Date not recorded" : "日期未记录"),
         partIndex: partIndex + 1,
         partCount: sceneCount,
       });
@@ -233,10 +239,10 @@ export function buildExperienceCardVideoScenes(
     id: "outro",
     kind: "outro",
     duration: OUTRO_DURATION_SECONDS,
-    title: "让生活有迹可循",
+    title: language === "en" ? "Let life leave its trace" : "让生活有迹可循",
     authorName,
     subtitle: websiteUrl,
-    text: "有时·耕作 LifeSpace",
+    text: brand,
     tags: [],
     imageUrl: null,
     imageIndex: null,
@@ -255,22 +261,33 @@ export function getExperienceCardVideoDuration(
   return scenes.reduce((total, scene) => total + scene.duration, 0);
 }
 
-export function formatExperienceCardVideoDuration(seconds: number) {
+export function formatExperienceCardVideoDuration(
+  seconds: number,
+  language: Language = "zh"
+) {
   const rounded = Math.max(1, Math.round(seconds));
   const minutes = Math.floor(rounded / 60);
   const remaining = rounded % 60;
+  if (language === "en") {
+    if (minutes === 0) return `About ${remaining} sec`;
+    if (remaining === 0) return `About ${minutes} min`;
+    return `About ${minutes} min ${remaining} sec`;
+  }
   if (minutes === 0) return `约 ${remaining} 秒`;
   if (remaining === 0) return `约 ${minutes} 分钟`;
   return `约 ${minutes} 分 ${remaining} 秒`;
 }
 
-export function getExperienceCardVideoFilename(detail: ExperienceCardDetail) {
+export function getExperienceCardVideoFilename(
+  detail: ExperienceCardDetail,
+  language: Language = "zh"
+) {
   const safeTitle = detail.card.title
     .trim()
     .replace(/[\\/:*?"<>|]+/g, "-")
     .replace(/\s+/g, " ")
-    .slice(0, 70) || "经验卡";
-  return `${safeTitle}-有时耕作.mp4`;
+    .slice(0, 70) || (language === "en" ? "Experience-Card" : "经验卡");
+  return `${safeTitle}-${language === "en" ? "LifeSpace" : "有时耕作"}.mp4`;
 }
 
 async function loadCanvasImage(url: string): Promise<ExperienceCardVideoImage> {
@@ -1000,24 +1017,35 @@ export async function generateExperienceCardMp4(
   }
 }
 
-export function getExperienceCardVideoErrorText(error: unknown) {
+export function getExperienceCardVideoErrorText(
+  error: unknown,
+  language: Language = "zh"
+) {
   if (error instanceof DOMException && error.name === "AbortError") {
-    return "视频生成已停止。";
+    return language === "en" ? "Video generation stopped." : "视频生成已停止。";
   }
 
   const message =
     error instanceof Error ? error.message : String(error || "");
   if (message.includes("experience_card_video_avc_unsupported")) {
-    return "当前浏览器不能生成H.264 MP4，请改用最新版 Chrome、Edge 或安卓应用后重试。";
+    return language === "en"
+      ? "This browser cannot generate H.264 MP4. Try the latest Chrome, Edge, or the Android app."
+      : "当前浏览器不能生成H.264 MP4，请改用最新版 Chrome、Edge 或安卓应用后重试。";
   }
   if (
     message.includes("experience_card_video_browser_required") ||
     message.includes("experience_card_video_canvas_unavailable")
   ) {
-    return "当前设备暂时不能生成视频。";
+    return language === "en"
+      ? "This device cannot generate video at the moment."
+      : "当前设备暂时不能生成视频。";
   }
   if (message.includes("experience_card_video_image")) {
-    return "部分照片读取失败，请检查网络后重试。";
+    return language === "en"
+      ? "Some photos could not be read. Check the network and try again."
+      : "部分照片读取失败，请检查网络后重试。";
   }
-  return "视频生成失败，请稍后重试。";
+  return language === "en"
+    ? "Video generation failed. Try again later."
+    : "视频生成失败，请稍后重试。";
 }
