@@ -3,6 +3,7 @@
 import AddRecord from "@/app/archive/[id]/AddRecord";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import type { ArchiveCycle } from "@/lib/archive-detail-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ArchiveAddRecordSection({
   archiveId,
@@ -25,6 +26,8 @@ export default function ArchiveAddRecordSection({
   open?: boolean;
   onClose?: () => void;
 }) {
+  const { t } = useLanguage();
+
   if (mobileMode && !open) return null;
 
   const normalizedDefaultVisibility =
@@ -42,7 +45,7 @@ export default function ArchiveAddRecordSection({
         archiveIsPublic={archiveIsPublic}
         archiveDefaultRecordVisibility={normalizedDefaultVisibility}
         activeCycles={activeCycles}
-        placeholder="记录今天的变化"
+        placeholder={t.record.placeholder}
         mobileMode={mobileMode}
         onRecordCreated={onRecordCreated}
       />

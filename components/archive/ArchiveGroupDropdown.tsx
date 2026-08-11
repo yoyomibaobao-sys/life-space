@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GroupTagItem } from "@/lib/archive-page-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   value: string;
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export default function ArchiveGroupDropdown({ value, groupTags, onChange, compact = false }: Props) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,8 +37,8 @@ export default function ArchiveGroupDropdown({ value, groupTags, onChange, compa
 
   const currentLabel = useMemo(() => {
     const current = groupTags.find((tag) => tag.id === value);
-    return current?.name || "未分组";
-  }, [groupTags, value]);
+    return current?.name || t.archive_workspace.ungrouped;
+  }, [groupTags, t, value]);
 
   return (
     <div ref={wrapRef} style={{ position: "relative", display: "inline-flex" }}>
@@ -122,7 +124,7 @@ export default function ArchiveGroupDropdown({ value, groupTags, onChange, compa
               lineHeight: 1.15,
             }}
           >
-            未分组
+            {t.archive_workspace.ungrouped}
           </button>
 
           <div style={{ marginTop: 2 }}>

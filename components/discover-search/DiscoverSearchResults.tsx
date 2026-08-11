@@ -16,6 +16,7 @@ import {
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { getDurationDays } from "@/lib/follow-utils";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   kind: DiscoverSearchKind;
@@ -24,12 +25,6 @@ type Props = {
   experienceItems: ExperienceCardListItem[];
   loading: boolean;
   hasRun: boolean;
-};
-
-const kindLabels: Record<DiscoverSearchKind, { title: string; unit: string }> = {
-  projects: { title: "项目", unit: "个" },
-  records: { title: "记录", unit: "条" },
-  experience: { title: "经验卡", unit: "张" },
 };
 
 function getProjectSystemName(item: DiscoveryProjectFeedItem) {
@@ -52,6 +47,21 @@ export default function DiscoverSearchResults({
   loading,
   hasRun,
 }: Props) {
+  const { t } = useLanguage();
+  const kindLabels: Record<DiscoverSearchKind, { title: string; unit: string }> = {
+    projects: {
+      title: t.discover.search_ui.projects,
+      unit: t.discover.search_ui.project_unit,
+    },
+    records: {
+      title: t.discover.search_ui.records,
+      unit: t.discover.search_ui.record_unit,
+    },
+    experience: {
+      title: t.discover.search_ui.experience_cards,
+      unit: t.discover.search_ui.card_unit,
+    },
+  };
   const itemCount =
     kind === "projects"
       ? projectItems.length
@@ -86,7 +96,7 @@ export default function DiscoverSearchResults({
             fontSize: 13,
           }}
         >
-          搜索中...
+          {t.discover.search_ui.searching}
         </div>
       ) : hasRun && itemCount === 0 ? (
         <div
@@ -100,21 +110,21 @@ export default function DiscoverSearchResults({
             border: "1px solid #edf2ea",
           }}
         >
-          没有找到符合条件的公开{labels.title}
+          {t.discover.search_ui.no_results_prefix}{labels.title}
         </div>
       ) : kind === "projects" ? (
         <div className={searchCardStyles.grid}>
           {projectItems.map((item) => {
-            const title = item.archive_title?.trim() || "未命名项目";
+            const title = item.archive_title?.trim() || t.discover.unnamed_project;
             const systemName = getProjectSystemName(item);
-            const ownerName = item.profile_display_name?.trim() || "一位种植者";
+            const ownerName = item.profile_display_name?.trim() || t.discover.default_grower;
             const region = item.profile_region?.trim();
 
             return (
               <DiscoverSearchResultCard
                 key={item.archive_id}
                 href={`/archive/${item.archive_id}`}
-                ariaLabel={`查看项目：${title}`}
+                ariaLabel={`${t.discover.search_ui.view_project_prefix}${title}`}
                 title={title}
                 imageUrl={item.display_image_url}
                 imageAlt={title}
@@ -151,16 +161,16 @@ export default function DiscoverSearchResults({
             <DiscoverSearchResultCard
               key={item.id}
               href={`/experience-cards/${item.id}`}
-              ariaLabel={`查看经验卡：${item.title}`}
+              ariaLabel={`${t.discover.search_ui.view_experience_prefix}${item.title}`}
               title={item.title}
               imageUrl={item.coverUrl}
-              imageAlt={`${item.title}封面`}
+              imageAlt={`${item.title}${t.discover.search_ui.experience_cover_suffix}`}
               fallbackIcon={getArchiveCategoryIcon(item.archiveCategory)}
               category={<CategoryBadge category={item.archiveCategory} />}
               dateValue={item.published_at}
               detail={
                 <>
-                  来源：{item.archiveTitle}
+                  {t.discover.search_ui.source}{item.archiveTitle}
                   {item.systemName ? ` · ${item.systemName}` : ""}
                 </>
               }
@@ -183,22 +193,22 @@ export default function DiscoverSearchResults({
             const isResolved = record.status_tag === "resolved";
             const isEnded = getArchiveLifecycleStatus(record) === "ended";
             const displayImageUrl = getFeedItemDisplayImageUrl(record);
-            const title = record.archive_title?.trim() || "未命名项目";
+            const title = record.archive_title?.trim() || t.discover.unnamed_project;
             const systemName = getRecordSystemName(record);
             const tags = Array.isArray(record.display_tags)
               ? record.display_tags.slice(0, 2)
               : [];
-            const authorName = record.username?.trim() || "用户";
+            const authorName = record.username?.trim() || t.discover.default_user;
             const location = record.user_location?.trim();
 
             return (
               <DiscoverSearchResultCard
                 key={record.record_id}
                 href={`/archive/${record.archive_id}?record=${record.record_id}`}
-                ariaLabel={`查看记录：${title}`}
+                ariaLabel={`${t.discover.search_ui.view_record_prefix}${title}`}
                 title={title}
                 imageUrl={displayImageUrl}
-                imageAlt={`${title}记录图片`}
+                imageAlt={`${title}${t.discover.search_ui.record_image_suffix}`}
                 fallbackIcon={getArchiveCategoryIcon(record.archive_category)}
                 category={<CategoryBadge category={record.archive_category} />}
                 status={

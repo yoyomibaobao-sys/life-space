@@ -1,4 +1,6 @@
 import Navbar from "@/components/navbar";
+import SiteUtilityBar from "@/components/SiteUtilityBar";
+import SiteFooter from "@/components/SiteFooter";
 import StatusBarTheme from "@/components/StatusBarTheme";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import Toast from "@/components/Toast";
@@ -17,8 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "有时 · 耕作",
-  description: "有时·耕作是种植、养护、农法设施和生态观察的记录工具。",
+  title: "有时·耕作 | LifeSpace for Cultivation",
+  description:
+    "有时·耕作：围绕种植、养护、农法设施与生态观察的长期记录空间。 LifeSpace for long-term cultivation records.",
 };
 
 export const viewport: Viewport = {
@@ -36,8 +39,10 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <StatusBarTheme />
         <AnalyticsTracker />
+        <SiteUtilityBar />
         <Navbar />
         <main className="app-main">{children}</main>
+        <SiteFooter />
         <Toast />
       </body>
     </html>

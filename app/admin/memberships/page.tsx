@@ -11,6 +11,8 @@ import {
   getMembershipPlanLabel,
   getMembershipStatusLabel,
 } from "@/lib/membership";
+import { getTranslations, type Language } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type AdminMembershipRow = {
   user_id: string;
@@ -71,53 +73,41 @@ type PaymentStatusKey = "confirmed" | "refunded" | "canceled";
 
 type PlanPreset = {
   key: PlanKey;
-  label: string;
   storageLimitBytes: number;
   baseMarketPostLimit: number;
   paidMonths: number | null;
-  note: string;
 };
 
 const PLAN_PRESETS: PlanPreset[] = [
   {
     key: "trial",
-    label: "30MB云空间体验",
     storageLimitBytes: 30_000_000,
     baseMarketPostLimit: 3,
     paidMonths: null,
-    note: "系统只自动授予首批20名正式账号，不设6个月期限；现有内部测试账号保留原数据。",
   },
   {
     key: "basic",
-    label: "云会员",
     storageLimitBytes: 1_000_000_000,
     baseMarketPostLimit: 30,
     paidMonths: 12,
-    note: "正式首发云会员：1GB云空间，集市同时发布中最多 30 条。",
   },
   {
     key: "large",
-    label: "大空间",
     storageLimitBytes: 10_000_000_000,
     baseMarketPostLimit: 20,
     paidMonths: 12,
-    note: "适合大量图片记录：10GB，集市略高。",
   },
   {
     key: "seller",
-    label: "商业会员（兼容）",
     storageLimitBytes: 10_000_000_000,
     baseMarketPostLimit: 100,
     paidMonths: 12,
-    note: "仅兼容旧数据；商业会员的团队空间与成员权限尚未开发，不用于新销售。",
   },
   {
     key: "admin",
-    label: "管理账号",
     storageLimitBytes: 20_000_000_000,
     baseMarketPostLimit: 999,
     paidMonths: 120,
-    note: "仅给内部管理账号使用。",
   },
 ];
 
@@ -125,33 +115,20 @@ const PAYMENT_PLAN_OPTIONS = PLAN_PRESETS.filter(
   (preset): preset is PlanPreset & { key: PaymentPlanKey } => preset.key !== "trial"
 );
 
-const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  wechat: "微信",
-  alipay: "支付宝",
-  paypal: "PayPal",
-  manual: "人工确认",
-  other: "其他",
-};
-
-const PAYMENT_STATUS_LABELS: Record<PaymentStatusKey, string> = {
-  confirmed: "已确认",
-  refunded: "已退款",
-  canceled: "已取消",
-};
-
-const DELETE_MEMBERSHIP_MESSAGE =
-  "确定要删除该会员吗？本次操作会先将该会员移入黑名单 / 已删除会员状态，不会删除账号、用户资料和付款记录。";
-
-function getAdminMembershipStatusLabel(status?: string | null) {
-  if (status === "canceled") return "已删除";
-  return getMembershipStatusLabel(status);
+function getAdminMembershipStatusLabel(
+  status: string | null | undefined,
+  language: Language
+) {
+  if (status === "canceled") return getTranslations(language).admin_memberships.deleted;
+  return getMembershipStatusLabel(status, language);
 }
 
-function getSignupTrialPauseLabel(reason?: string | null) {
-  if (reason === "disabled") return "已由后台暂停";
-  if (reason === "first_twenty_registered") return "首批20个正式账号已注册";
-  if (reason === "storage_safety_threshold") return "已触及存储安全线";
-  return "可继续发放";
+function getSignupTrialPauseLabel(reason: string | null | undefined, language: Language) {
+  const copy = getTranslations(language).admin_memberships;
+  if (reason === "disabled") return copy.pause_disabled;
+  if (reason === "first_twenty_registered") return copy.pause_first_twenty;
+  if (reason === "storage_safety_threshold") return copy.pause_storage;
+  return copy.grants_available;
 }
 
 function canDeleteMembership(row: AdminMembershipRow | null, currentUserId: string) {
@@ -168,16 +145,44 @@ function getDefaultPaymentAmount(plan: PaymentPlanKey, currency: PaymentCurrency
   return 0;
 }
 
-function getPaymentPlanLabel(plan?: string | null) {
-  return PAYMENT_PLAN_OPTIONS.find((item) => item.key === plan)?.label || getMembershipPlanLabel(plan);
+function getPlanPresetLabel(plan: PlanKey, language: Language) {
+  const copy = getTranslations(language).admin_memberships;
+  if (plan === "trial") return copy.plan_trial;
+  if (plan === "basic") return copy.plan_basic;
+  if (plan === "large") return copy.plan_large;
+  if (plan === "seller") return copy.plan_seller;
+  return copy.plan_admin;
 }
 
-function getPaymentMethodLabel(method?: string | null) {
-  return PAYMENT_METHOD_LABELS[method as PaymentMethod] || method || "未记录";
+function getPlanPresetNote(plan: PlanKey, language: Language) {
+  const copy = getTranslations(language).admin_memberships;
+  if (plan === "trial") return copy.plan_trial_note;
+  if (plan === "basic") return copy.plan_basic_note;
+  if (plan === "large") return copy.plan_large_note;
+  if (plan === "seller") return copy.plan_seller_note;
+  return copy.plan_admin_note;
 }
 
-function getPaymentStatusLabel(status?: string | null) {
-  return PAYMENT_STATUS_LABELS[status as PaymentStatusKey] || status || "未记录";
+function getPaymentPlanLabel(plan: string | null | undefined, language: Language) {
+  return getMembershipPlanLabel(plan, language);
+}
+
+function getPaymentMethodLabel(method: string | null | undefined, language: Language) {
+  const copy = getTranslations(language).admin_memberships;
+  if (method === "wechat") return copy.method_wechat;
+  if (method === "alipay") return copy.method_alipay;
+  if (method === "paypal") return copy.method_paypal;
+  if (method === "manual") return copy.method_manual;
+  if (method === "other") return copy.method_other;
+  return method || copy.not_recorded;
+}
+
+function getPaymentStatusLabel(status: string | null | undefined, language: Language) {
+  const copy = getTranslations(language).admin_memberships;
+  if (status === "confirmed") return copy.status_confirmed;
+  if (status === "refunded") return copy.status_refunded;
+  if (status === "canceled") return copy.status_canceled;
+  return status || copy.not_recorded;
 }
 
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
@@ -287,8 +292,9 @@ function firstRpcRow<T>(data: T[] | T | null | undefined): T | null {
   return data;
 }
 
-function describeSupabaseError(error: unknown) {
-  if (!error || typeof error !== "object") return String(error || "未知错误");
+function describeSupabaseError(error: unknown, language: Language = "zh") {
+  const copy = getTranslations(language).admin_memberships;
+  if (!error || typeof error !== "object") return String(error || copy.unknown_error);
 
   const item = error as {
     message?: string;
@@ -308,7 +314,7 @@ function describeSupabaseError(error: unknown) {
     item.statusText ? `statusText: ${item.statusText}` : "",
   ]
     .filter(Boolean)
-    .join("；") || "未知错误";
+    .join(language === "en" ? "; " : "；") || copy.unknown_error;
 }
 
 function logSupabaseError(label: string, error: unknown) {
@@ -322,6 +328,7 @@ function logSupabaseError(label: string, error: unknown) {
 }
 
 export default function AdminMembershipsPage() {
+  const { language, t } = useLanguage();
   const [currentUserId, setCurrentUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -385,7 +392,10 @@ export default function AdminMembershipsPage() {
     if (error) {
       logSupabaseError("admin search memberships error:", error);
       setRows([]);
-      setErrorMsg(describeSupabaseError(error) || "读取会员列表失败");
+      setErrorMsg(
+        describeSupabaseError(error, language) ||
+          t.admin_memberships.read_memberships_failed
+      );
       setLoading(false);
       return;
     }
@@ -412,7 +422,9 @@ export default function AdminMembershipsPage() {
     if (error) {
       logSupabaseError("load signup rollout status error:", error);
       setRolloutStatus(null);
-      setRolloutError(describeSupabaseError(error) || "读取注册体验统计失败");
+      setRolloutError(
+        describeSupabaseError(error, language) || t.admin_memberships.read_rollout_failed
+      );
       setRolloutLoading(false);
       return;
     }
@@ -475,7 +487,10 @@ export default function AdminMembershipsPage() {
       if (adminError) {
         logSupabaseError("check admin error:", adminError);
         setIsAdmin(false);
-        setErrorMsg(describeSupabaseError(adminError) || "无法确认管理员权限");
+        setErrorMsg(
+          describeSupabaseError(adminError, language) ||
+            t.admin_memberships.verify_admin_failed
+        );
         setChecking(false);
         setLoading(false);
         return;
@@ -522,7 +537,6 @@ export default function AdminMembershipsPage() {
     setPaymentServiceMonths("12");
 
     void loadPaymentRows(selected.user_id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
   const selectedUsageText = useMemo(() => {
@@ -587,22 +601,22 @@ export default function AdminMembershipsPage() {
     const paidUntilIso = dateInputToIso(paidUntilDate);
 
     if (!plan) {
-      showToast("请选择会员方案");
+      showToast(t.admin_memberships.select_plan);
       return;
     }
 
     if (plan !== "trial" && !paidUntilIso) {
-      showToast("请填写付费到期日");
+      showToast(t.admin_memberships.enter_paid_until);
       return;
     }
 
     if (!Number.isFinite(safeStorageLimit) || safeStorageLimit <= 0) {
-      showToast("容量上限必须大于 0");
+      showToast(t.admin_memberships.storage_positive);
       return;
     }
 
     if (!Number.isFinite(safeMarketLimit) || safeMarketLimit < 0) {
-      showToast("集市额度不能小于 0");
+      showToast(t.admin_memberships.market_nonnegative);
       return;
     }
 
@@ -619,8 +633,8 @@ export default function AdminMembershipsPage() {
 
     if (error) {
       logSupabaseError("admin update membership rpc error:", error);
-      setErrorMsg(describeSupabaseError(error) || "更新会员失败");
-      showToast("更新会员失败");
+      setErrorMsg(describeSupabaseError(error, language) || t.admin_memberships.update_failed);
+      showToast(t.admin_memberships.update_failed);
       setSaving(false);
       return;
     }
@@ -636,28 +650,31 @@ export default function AdminMembershipsPage() {
           } as SafeUpdateResult);
 
     if (!result.ok) {
-      const message = [result.error_message, result.error_detail].filter(Boolean).join("；") || "更新会员失败";
+      const message =
+        [result.error_message, result.error_detail]
+          .filter(Boolean)
+          .join(language === "en" ? "; " : "；") || t.admin_memberships.update_failed;
       setErrorMsg(message);
-      showToast("更新会员失败");
+      showToast(t.admin_memberships.update_failed);
       setSaving(false);
       return;
     }
 
-    showToast("会员已更新");
+    showToast(t.admin_memberships.updated);
     await loadRows(keyword);
     setSaving(false);
   }
 
   function openDeleteMembershipDialog(row: AdminMembershipRow) {
     if (row.user_id === currentUserId) {
-      showToast("不能删除当前管理员自己");
+      showToast(t.admin_memberships.cannot_delete_self);
       return;
     }
 
     if (row.status === "canceled") return;
 
     if (row.plan === "admin") {
-      showToast("管理员账号不能通过删除会员按钮处理");
+      showToast(t.admin_memberships.cannot_delete_admin);
       return;
     }
 
@@ -685,18 +702,21 @@ export default function AdminMembershipsPage() {
       const result = await response.json().catch(() => null) as { error?: string } | null;
 
       if (!response.ok) {
-        const message = result?.error || "删除会员失败";
+        const message =
+          language === "en"
+            ? t.admin_memberships.delete_failed
+            : result?.error || t.admin_memberships.delete_failed;
         setErrorMsg(message);
         showToast(message);
         return;
       }
 
-      showToast("会员已移入已删除状态");
+      showToast(t.admin_memberships.delete_success);
       setDeleteTarget(null);
       await loadRows(keyword);
     } catch {
-      setErrorMsg("删除会员失败，请稍后再试");
-      showToast("删除会员失败，请稍后再试");
+      setErrorMsg(t.admin_memberships.delete_retry);
+      showToast(t.admin_memberships.delete_retry);
     } finally {
       setDeleteSaving(false);
     }
@@ -717,36 +737,44 @@ export default function AdminMembershipsPage() {
     }
 
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
-      showToast("付款金额必须大于 0");
+      showToast(t.admin_memberships.amount_positive);
       return;
     }
 
     if (!Number.isFinite(serviceMonthsValue) || serviceMonthsValue <= 0) {
-      showToast("服务月数必须大于 0");
+      showToast(t.admin_memberships.months_positive);
       return;
     }
 
     if (!Number.isFinite(safeStorageLimit) || safeStorageLimit <= 0) {
-      showToast("容量上限必须大于 0");
+      showToast(t.admin_memberships.storage_positive);
       return;
     }
 
     if (!Number.isFinite(safeMarketLimit) || safeMarketLimit < 0) {
-      showToast("集市额度不能小于 0");
+      showToast(t.admin_memberships.market_nonnegative);
       return;
     }
 
     const confirmText = [
-      `确认要为「${selected.username || selected.email || selected.user_id}」开通 / 续费吗？`,
-      `方案：${getPaymentPlanLabel(paymentPlan)}`,
-      `金额：${formatPaymentAmount(amountValue, paymentCurrency)}`,
-      `付款方式：${getPaymentMethodLabel(paymentMethod)}`,
-      `付款编号：${finalPaymentReference}`,
-      `服务月数：${serviceMonthsValue} 个月`,
-      `容量：${formatStorageBytes(safeStorageLimit)}`,
-      `集市额度：${safeMarketLimit} 条`,
+      `${t.admin_memberships.payment_confirm_prefix}${
+        selected.username || selected.email || selected.user_id
+      }${t.admin_memberships.payment_confirm_suffix}`,
+      `${t.admin_memberships.plan_prefix}${getPaymentPlanLabel(paymentPlan, language)}`,
+      `${t.admin_memberships.amount_prefix}${formatPaymentAmount(
+        amountValue,
+        paymentCurrency
+      )}`,
+      `${t.admin_memberships.payment_method_prefix}${getPaymentMethodLabel(
+        paymentMethod,
+        language
+      )}`,
+      `${t.admin_memberships.reference_prefix}${finalPaymentReference}`,
+      `${t.admin_memberships.months_prefix}${serviceMonthsValue} ${t.admin_memberships.months_suffix}`,
+      `${t.admin_memberships.storage_prefix}${formatStorageBytes(safeStorageLimit)}`,
+      `${t.admin_memberships.market_limit_prefix}${safeMarketLimit} ${t.admin_memberships.post_unit}`,
       "",
-      "确认后会同时写入付款记录并更新会员到期时间。",
+      t.admin_memberships.confirm_payment_notice,
     ].join("\n");
 
     if (!window.confirm(confirmText)) return;
@@ -772,8 +800,10 @@ export default function AdminMembershipsPage() {
 
       if (error) {
         logSupabaseError("admin create payment rpc error:", error);
-        setErrorMsg(describeSupabaseError(error) || "记录付款失败");
-        showToast("记录付款失败");
+        setErrorMsg(
+          describeSupabaseError(error, language) || t.admin_memberships.payment_record_failed
+        );
+        showToast(t.admin_memberships.payment_record_failed);
         return;
       }
 
@@ -788,13 +818,17 @@ export default function AdminMembershipsPage() {
             } as PaymentCreateResult);
 
       if (!result.ok) {
-        const message = [result.error_message, result.error_detail].filter(Boolean).join("；") || "记录付款失败";
+        const message =
+          [result.error_message, result.error_detail]
+            .filter(Boolean)
+            .join(language === "en" ? "; " : "；") ||
+          t.admin_memberships.payment_record_failed;
         setErrorMsg(message);
-        showToast("记录付款失败");
+        showToast(t.admin_memberships.payment_record_failed);
         return;
       }
 
-      showToast("付款已确认，会员已开通 / 续费");
+      showToast(t.admin_memberships.payment_success);
       setPaymentReference(buildPaymentReference(selected, paymentMethod, paymentPaidAtDate));
       setPaymentNote("");
       await loadPaymentRows(selected.user_id);
@@ -809,18 +843,29 @@ export default function AdminMembershipsPage() {
     if (!selected || paymentStatusSavingId || paymentStatusSubmittingRef.current) return;
 
     const noteMap: Record<PaymentStatusKey, string> = {
-      confirmed: "管理员恢复为已确认",
-      refunded: "管理员标记为已退款",
-      canceled: "管理员标记为已取消",
+      confirmed: t.admin_memberships.note_restore_confirmed,
+      refunded: t.admin_memberships.note_mark_refunded,
+      canceled: t.admin_memberships.note_mark_canceled,
     };
 
     const confirmText = [
-      `确认把这条付款记录改为「${getPaymentStatusLabel(nextStatus)}」吗？`,
-      `金额：${formatPaymentAmount(payment.amount, payment.currency)}`,
-      `付款方式：${getPaymentMethodLabel(payment.payment_method)}`,
-      payment.payment_reference ? `流水号：${payment.payment_reference}` : "",
+      `${t.admin_memberships.status_confirm_prefix}${getPaymentStatusLabel(
+        nextStatus,
+        language
+      )}${t.admin_memberships.status_confirm_suffix}`,
+      `${t.admin_memberships.amount_prefix}${formatPaymentAmount(
+        payment.amount,
+        payment.currency
+      )}`,
+      `${t.admin_memberships.payment_method_prefix}${getPaymentMethodLabel(
+        payment.payment_method,
+        language
+      )}`,
+      payment.payment_reference
+        ? `${t.admin_memberships.transaction_prefix}${payment.payment_reference}`
+        : "",
       "",
-      "这个操作只修改付款记录状态，不会自动回滚会员期限。",
+      t.admin_memberships.status_change_notice,
     ].filter(Boolean).join("\n");
 
     if (!window.confirm(confirmText)) return;
@@ -838,8 +883,11 @@ export default function AdminMembershipsPage() {
 
       if (error) {
         logSupabaseError("admin update payment status rpc error:", error);
-        setErrorMsg(describeSupabaseError(error) || "更新付款状态失败");
-        showToast("更新付款状态失败");
+        setErrorMsg(
+          describeSupabaseError(error, language) ||
+            t.admin_memberships.payment_status_update_failed
+        );
+        showToast(t.admin_memberships.payment_status_update_failed);
         return;
       }
 
@@ -854,13 +902,17 @@ export default function AdminMembershipsPage() {
             } as PaymentStatusUpdateResult);
 
       if (!result.ok) {
-        const message = [result.error_message, result.error_detail].filter(Boolean).join("；") || "更新付款状态失败";
+        const message =
+          [result.error_message, result.error_detail]
+            .filter(Boolean)
+            .join(language === "en" ? "; " : "；") ||
+          t.admin_memberships.payment_status_update_failed;
         setErrorMsg(message);
-        showToast("更新付款状态失败");
+        showToast(t.admin_memberships.payment_status_update_failed);
         return;
       }
 
-      showToast("付款记录状态已更新");
+      showToast(t.admin_memberships.payment_status_updated);
       await loadPaymentRows(selected.user_id);
     } finally {
       paymentStatusSubmittingRef.current = false;
@@ -869,16 +921,16 @@ export default function AdminMembershipsPage() {
   }
 
   if (checking) {
-    return <main style={currentPageStyle}>正在确认管理员权限...</main>;
+    return <main style={currentPageStyle}>{t.admin_memberships.checking_admin}</main>;
   }
 
   if (!userEmail) {
     return (
       <main style={currentPageStyle}>
         <section style={noticeCardStyle}>
-          <h1 style={titleStyle}>管理员会员管理</h1>
-          <p style={mutedTextStyle}>请先登录管理员账号。</p>
-          <Link href="/login" style={primaryButtonStyle}>去登录</Link>
+          <h1 style={titleStyle}>{t.admin_memberships.admin_membership_management}</h1>
+          <p style={mutedTextStyle}>{t.admin_memberships.sign_in_admin}</p>
+          <Link href="/login" style={primaryButtonStyle}>{t.admin_memberships.sign_in}</Link>
         </section>
       </main>
     );
@@ -888,9 +940,9 @@ export default function AdminMembershipsPage() {
     return (
       <main style={currentPageStyle}>
         <section style={noticeCardStyle}>
-          <h1 style={titleStyle}>没有管理员权限</h1>
-          <p style={mutedTextStyle}>当前账号：{userEmail}</p>
-          <Link href="/profile" style={secondaryButtonStyle}>返回个人资料</Link>
+          <h1 style={titleStyle}>{t.admin_memberships.no_admin_access}</h1>
+          <p style={mutedTextStyle}>{t.admin_memberships.current_account_prefix}{userEmail}</p>
+          <Link href="/profile" style={secondaryButtonStyle}>{t.admin_memberships.back_profile}</Link>
         </section>
       </main>
     );
@@ -900,30 +952,30 @@ export default function AdminMembershipsPage() {
     <main style={currentPageStyle}>
       <section style={currentHeaderStyle}>
         <div>
-          <div style={eyebrowStyle}>后台管理</div>
-          <h1 style={titleStyle}>会员管理</h1>
+          <div style={eyebrowStyle}>{t.admin_memberships.admin_eyebrow}</div>
+          <h1 style={titleStyle}>{t.admin_memberships.title}</h1>
           <p style={mutedTextStyle}>
-            当前用于人工开通云会员及处理测试账号。商业会员仍在规划中，旧方案只保留数据库兼容。
+            {t.admin_memberships.intro}
           </p>
         </div>
-        <Link href="/membership" style={secondaryButtonStyle}>查看云会员说明页</Link>
+        <Link href="/membership" style={secondaryButtonStyle}>{t.admin_memberships.view_membership_page}</Link>
       </section>
 
       <section style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}>
         <div style={detailTopStyle}>
           <div>
-            <div style={sectionLabelStyle}>首批注册体验</div>
-            <h2 style={sectionTitleStyle}>20名正式用户 · 每人30MB</h2>
+            <div style={sectionLabelStyle}>{t.admin_memberships.rollout_eyebrow}</div>
+            <h2 style={sectionTitleStyle}>{t.admin_memberships.rollout_title}</h2>
             <p style={smallTextStyle}>
-              内部测试账号另计。安全预算按实际Storage占用加上体验用户尚未使用的剩余额度计算，达到700MB安全线前会自动停止继续赠送。
+              {t.admin_memberships.rollout_intro}
             </p>
           </div>
           <span style={pillStyle}>
             {rolloutLoading
-              ? "读取中"
+              ? t.admin_memberships.reading
               : rolloutStatus?.trial_grants_paused
-                ? getSignupTrialPauseLabel(rolloutStatus.pause_reason)
-                : "可继续发放"}
+                ? getSignupTrialPauseLabel(rolloutStatus.pause_reason, language)
+                : t.admin_memberships.grants_available}
           </span>
         </div>
 
@@ -932,35 +984,41 @@ export default function AdminMembershipsPage() {
         {rolloutStatus ? (
           <div style={currentSummaryGridStyle}>
             <InfoItem
-              label="正式账号"
-              value={`${Number(rolloutStatus.formal_account_count || 0)} 个`}
+              label={t.admin_memberships.formal_accounts}
+              value={`${Number(rolloutStatus.formal_account_count || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.account_unit}`}
             />
             <InfoItem
-              label="内部测试账号"
-              value={`${Number(rolloutStatus.internal_test_account_count || 0)} 个`}
+              label={t.admin_memberships.internal_accounts}
+              value={`${Number(rolloutStatus.internal_test_account_count || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.account_unit}`}
             />
             <InfoItem
-              label="体验名额"
+              label={t.admin_memberships.trial_slots}
               value={`${Number(rolloutStatus.trial_slots_granted || 0)} / ${Number(rolloutStatus.trial_slot_limit || 0)}`}
             />
             <InfoItem
-              label="首批窗口剩余"
-              value={`${Number(rolloutStatus.trial_slots_remaining || 0)} 个`}
+              label={t.admin_memberships.trial_window_remaining}
+              value={`${Number(rolloutStatus.trial_slots_remaining || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.account_unit}`}
             />
             <InfoItem
-              label="单人体验额度"
+              label={t.admin_memberships.allowance_per_user}
               value={formatStorageBytes(Number(rolloutStatus.trial_allowance_bytes || 0))}
             />
             <InfoItem
-              label="平台实际存储"
+              label={t.admin_memberships.platform_storage}
               value={`${formatStorageBytes(Number(rolloutStatus.platform_storage_bytes || 0))} / ${formatStorageBytes(Number(rolloutStatus.platform_storage_pause_bytes || 0))}`}
             />
             <InfoItem
-              label="尚未使用的体验额度"
+              label={t.admin_memberships.unused_allowance}
               value={formatStorageBytes(Number(rolloutStatus.unrealized_trial_allowance_bytes || 0))}
             />
             <InfoItem
-              label="当前安全预算"
+              label={t.admin_memberships.safety_budget}
               value={`${formatStorageBytes(Number(rolloutStatus.projected_storage_bytes || 0))} / ${formatStorageBytes(Number(rolloutStatus.platform_storage_pause_bytes || 0))}`}
             />
           </div>
@@ -972,7 +1030,7 @@ export default function AdminMembershipsPage() {
           onClick={() => void loadSignupRolloutStatus()}
           disabled={rolloutLoading}
         >
-          重新读取体验统计
+          {t.admin_memberships.reload_rollout}
         </button>
       </section>
 
@@ -981,11 +1039,11 @@ export default function AdminMembershipsPage() {
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索邮箱、用户名、账号编号或 user_id"
+            placeholder={t.admin_memberships.search_placeholder}
             style={inputStyle}
           />
           <button type="submit" style={primaryButtonStyle} disabled={loading}>
-            {loading ? "搜索中..." : "搜索"}
+            {loading ? t.admin_memberships.searching : t.admin_memberships.search}
           </button>
           <button
             type="button"
@@ -996,7 +1054,7 @@ export default function AdminMembershipsPage() {
             }}
             disabled={loading}
           >
-            显示最近用户
+            {t.admin_memberships.show_recent}
           </button>
         </form>
 
@@ -1005,9 +1063,9 @@ export default function AdminMembershipsPage() {
         <div style={currentLayoutStyle}>
           <div style={listStyle}>
             {loading ? (
-              <div style={emptyStyle}>正在读取用户...</div>
+              <div style={emptyStyle}>{t.admin_memberships.loading_users}</div>
             ) : rows.length === 0 ? (
-              <div style={emptyStyle}>没有找到用户。</div>
+              <div style={emptyStyle}>{t.admin_memberships.no_users}</div>
             ) : (
               rows.map((row) => {
                 const active = selected?.user_id === row.user_id;
@@ -1026,12 +1084,18 @@ export default function AdminMembershipsPage() {
                     tabIndex={0}
                   >
                     <div style={userTitleRowStyle}>
-                      <strong style={userNameStyle}>{row.username || "未设置用户名"}</strong>
-                      <span style={pillStyle}>{getAdminMembershipStatusLabel(row.status)}</span>
+                      <strong style={userNameStyle}>
+                        {row.username || t.admin_memberships.username_unset}
+                      </strong>
+                      <span style={pillStyle}>
+                        {getAdminMembershipStatusLabel(row.status, language)}
+                      </span>
                     </div>
                     <div style={smallTextStyle}>{row.email || row.user_id}</div>
                     <div style={smallTextStyle}>
-                      {getMembershipPlanLabel(row.plan)} · 容量 {formatStorageBytes(row.storage_used || 0)} / {formatStorageBytes(row.storage_limit_bytes || 0)} · 集市 {Number(row.active_market_post_count || 0)} / {Number(row.market_post_limit || 0)}
+                      {getMembershipPlanLabel(row.plan, language)} · {t.admin_memberships.capacity}{" "}
+                      {formatStorageBytes(row.storage_used || 0)} / {formatStorageBytes(row.storage_limit_bytes || 0)} · {t.admin_memberships.market}{" "}
+                      {Number(row.active_market_post_count || 0)} / {Number(row.market_post_limit || 0)}
                     </div>
                     <div style={memberRowActionStyle}>
                       {canDeleteMembership(row, currentUserId) ? (
@@ -1044,10 +1108,10 @@ export default function AdminMembershipsPage() {
                           }}
                           disabled={deleteSaving}
                         >
-                          删除会员
+                          {t.admin_memberships.delete_membership}
                         </button>
                       ) : row.status === "canceled" ? (
-                        <span style={deletedHintStyle}>已删除</span>
+                        <span style={deletedHintStyle}>{t.admin_memberships.deleted}</span>
                       ) : null}
                     </div>
                   </article>
@@ -1061,23 +1125,41 @@ export default function AdminMembershipsPage() {
               <>
                 <div style={detailTopStyle}>
                   <div>
-                    <div style={sectionLabelStyle}>当前选择</div>
-                    <h2 style={sectionTitleStyle}>{selected.username || selected.email || "未设置用户名"}</h2>
+                    <div style={sectionLabelStyle}>{t.admin_memberships.current_selection}</div>
+                    <h2 style={sectionTitleStyle}>
+                      {selected.username || selected.email || t.admin_memberships.username_unset}
+                    </h2>
                     <p style={smallTextStyle}>{selected.user_id}</p>
                   </div>
-                  <span style={pillStyle}>{getAdminMembershipStatusLabel(selected.status)}</span>
+                  <span style={pillStyle}>
+                    {getAdminMembershipStatusLabel(selected.status, language)}
+                  </span>
                 </div>
 
                 <div style={currentSummaryGridStyle}>
-                  <InfoItem label="当前方案" value={getMembershipPlanLabel(selected.plan)} />
-                  <InfoItem label="试用到期" value={formatMembershipDate(selected.trial_ends_at)} />
-                  <InfoItem label="付费到期" value={formatMembershipDate(selected.paid_until)} />
-                  <InfoItem label="容量" value={selectedUsageText} />
                   <InfoItem
-                    label="集市额度"
-                    value={`${Number(selected.active_market_post_count || 0)} / ${Number(selected.market_post_limit || 0)} 条`}
+                    label={t.admin_memberships.current_plan}
+                    value={getMembershipPlanLabel(selected.plan, language)}
                   />
-                  <InfoItem label="基础额度" value={`${Number(selected.base_market_post_limit || 0)} 条`} />
+                  <InfoItem
+                    label={t.admin_memberships.trial_expires}
+                    value={formatMembershipDate(selected.trial_ends_at, language)}
+                  />
+                  <InfoItem
+                    label={t.admin_memberships.paid_expires}
+                    value={formatMembershipDate(selected.paid_until, language)}
+                  />
+                  <InfoItem label={t.admin_memberships.capacity} value={selectedUsageText} />
+                  <InfoItem
+                    label={t.admin_memberships.market_limit}
+                    value={`${Number(selected.active_market_post_count || 0)} / ${Number(
+                      selected.market_post_limit || 0
+                    )} ${t.admin_memberships.post_unit}`}
+                  />
+                  <InfoItem
+                    label={t.admin_memberships.base_limit}
+                    value={`${Number(selected.base_market_post_limit || 0)} ${t.admin_memberships.post_unit}`}
+                  />
                 </div>
 
                 <div style={currentPresetGridStyle}>
@@ -1088,15 +1170,15 @@ export default function AdminMembershipsPage() {
                       style={presetButtonStyle(plan === preset.key)}
                       onClick={() => handleApplyPreset(preset.key)}
                     >
-                      <strong>{preset.label}</strong>
-                      <span>{preset.note}</span>
+                      <strong>{getPlanPresetLabel(preset.key, language)}</strong>
+                      <span>{getPlanPresetNote(preset.key, language)}</span>
                     </button>
                   ))}
                 </div>
 
                 <div style={currentFormGridStyle}>
                   <label style={labelStyle}>
-                    会员方案
+                    {t.admin_memberships.membership_plan}
                     <select
                       value={plan}
                       onChange={(event) => handleApplyPreset(event.target.value as PlanKey)}
@@ -1109,14 +1191,14 @@ export default function AdminMembershipsPage() {
                         )
                         .map((preset) => (
                           <option key={preset.key} value={preset.key}>
-                            {preset.label}
+                            {getPlanPresetLabel(preset.key, language)}
                           </option>
                         ))}
                     </select>
                   </label>
 
                   <label style={labelStyle}>
-                    付费到期日
+                    {t.admin_memberships.paid_until}
                     <input
                       type="date"
                       value={paidUntilDate}
@@ -1127,7 +1209,7 @@ export default function AdminMembershipsPage() {
                   </label>
 
                   <label style={labelStyle}>
-                    云端容量 bytes
+                    {t.admin_memberships.cloud_capacity_bytes}
                     <input
                       value={storageLimitBytes}
                       onChange={(event) => setStorageLimitBytes(event.target.value)}
@@ -1138,7 +1220,7 @@ export default function AdminMembershipsPage() {
                   </label>
 
                   <label style={labelStyle}>
-                    集市基础额度
+                    {t.admin_memberships.market_base_limit}
                     <input
                       value={baseMarketPostLimit}
                       onChange={(event) => setBaseMarketPostLimit(event.target.value)}
@@ -1150,14 +1232,14 @@ export default function AdminMembershipsPage() {
 
                 <div style={actionRowStyle}>
                   <button type="button" style={primaryButtonStyle} onClick={handleSave} disabled={saving}>
-                    {saving ? "保存中..." : "保存会员设置"}
+                    {saving ? t.admin_memberships.saving : t.admin_memberships.save_settings}
                   </button>
                   <button type="button" style={secondaryButtonStyle} onClick={() => void loadRows(keyword)} disabled={saving}>
-                    重新读取
+                    {t.admin_memberships.reload}
                   </button>
                   {canDeleteMembership(selected, currentUserId) ? (
                     <button type="button" style={dangerButtonStyle} onClick={() => openDeleteMembershipDialog(selected)} disabled={deleteSaving}>
-                      删除会员
+                      {t.admin_memberships.delete_membership}
                     </button>
                   ) : null}
                 </div>
@@ -1167,40 +1249,42 @@ export default function AdminMembershipsPage() {
                 <section style={paymentSectionStyle}>
                   <div style={detailTopStyle}>
                     <div>
-                      <div style={sectionLabelStyle}>人工收款</div>
-                      <h3 style={subsectionTitleStyle}>确认付款并开通</h3>
-                      <p style={smallTextStyle}>用于确认微信、支付宝、PayPal 或其他人工付款。保存后会同时写入付款记录，并按服务月数自动开通或续费会员。</p>
+                      <div style={sectionLabelStyle}>{t.admin_memberships.manual_payment}</div>
+                      <h3 style={subsectionTitleStyle}>{t.admin_memberships.confirm_and_open}</h3>
+                      <p style={smallTextStyle}>{t.admin_memberships.manual_payment_intro}</p>
                     </div>
                   </div>
 
                   <div style={currentFormGridStyle}>
                     <label style={labelStyle}>
-                      付款方案
+                      {t.admin_memberships.payment_plan}
                       <select
                         value={paymentPlan}
                         onChange={(event) => handlePaymentPlanChange(event.target.value as PaymentPlanKey)}
                         style={inputStyle}
                       >
                         {PAYMENT_PLAN_OPTIONS.map((preset) => (
-                          <option key={preset.key} value={preset.key}>{preset.label}</option>
+                          <option key={preset.key} value={preset.key}>
+                            {getPlanPresetLabel(preset.key, language)}
+                          </option>
                         ))}
                       </select>
                     </label>
 
                     <label style={labelStyle}>
-                      币种
+                      {t.admin_memberships.currency}
                       <select
                         value={paymentCurrency}
                         onChange={(event) => handlePaymentCurrencyChange(event.target.value as PaymentCurrency)}
                         style={inputStyle}
                       >
-                        <option value="CNY">人民币 CNY</option>
-                        <option value="USD">美元 USD</option>
+                        <option value="CNY">{t.admin_memberships.currency_cny}</option>
+                        <option value="USD">{t.admin_memberships.currency_usd}</option>
                       </select>
                     </label>
 
                     <label style={labelStyle}>
-                      付款金额
+                      {t.admin_memberships.payment_amount}
                       <input
                         value={paymentAmount}
                         onChange={(event) => setPaymentAmount(event.target.value)}
@@ -1211,7 +1295,7 @@ export default function AdminMembershipsPage() {
                     </label>
 
                     <label style={labelStyle}>
-                      付款方式
+                      {t.admin_memberships.payment_method}
                       <select
                         value={paymentMethod}
                         onChange={(event) => {
@@ -1221,16 +1305,16 @@ export default function AdminMembershipsPage() {
                         }}
                         style={inputStyle}
                       >
-                        <option value="wechat">微信</option>
-                        <option value="alipay">支付宝</option>
-                        <option value="paypal">PayPal</option>
-                        <option value="manual">人工确认</option>
-                        <option value="other">其他</option>
+                        <option value="wechat">{t.admin_memberships.method_wechat}</option>
+                        <option value="alipay">{t.admin_memberships.method_alipay}</option>
+                        <option value="paypal">{t.admin_memberships.method_paypal}</option>
+                        <option value="manual">{t.admin_memberships.method_manual}</option>
+                        <option value="other">{t.admin_memberships.method_other}</option>
                       </select>
                     </label>
 
                     <label style={labelStyle}>
-                      付款日期
+                      {t.admin_memberships.payment_date}
                       <input
                         type="date"
                         value={paymentPaidAtDate}
@@ -1244,76 +1328,98 @@ export default function AdminMembershipsPage() {
                     </label>
 
                     <label style={labelStyle}>
-                      服务月数
+                      {t.admin_memberships.service_months}
                       <input
                         value={paymentServiceMonths}
                         onChange={(event) => setPaymentServiceMonths(event.target.value)}
                         style={inputStyle}
                         inputMode="numeric"
                       />
-                      <span style={hintStyle}>通常云空间填 12；系统会从当前到期日或今天起自动延长。</span>
+                      <span style={hintStyle}>{t.admin_memberships.months_hint}</span>
                     </label>
 
                     <label style={labelStyle}>
-                      付款编号 / PayPal 交易号
+                      {t.admin_memberships.payment_reference}
                       <div style={inlineFieldRowStyle}>
                         <input
                           value={paymentReference}
                           onChange={(event) => setPaymentReference(event.target.value)}
                           style={{ ...inputStyle, flex: 1 }}
-                          placeholder="系统自动生成，可按实际交易号修改"
+                          placeholder={t.admin_memberships.reference_placeholder}
                         />
                         <button
                           type="button"
                           style={miniButtonStyle}
                           onClick={() => regeneratePaymentReference()}
                         >
-                          重新生成
+                          {t.admin_memberships.regenerate}
                         </button>
                       </div>
-                      <span style={hintStyle}>用于防止重复点击或重复录入。同一用户、同一付款方式、同一编号只会确认一次。</span>
+                      <span style={hintStyle}>{t.admin_memberships.reference_hint}</span>
                     </label>
                   </div>
 
                   <label style={labelStyle}>
-                    管理员备注
+                    {t.admin_memberships.admin_note}
                     <textarea
                       value={paymentNote}
                       onChange={(event) => setPaymentNote(event.target.value)}
                       style={textareaStyle}
-                      placeholder="例如：注册邮箱、付款截图说明、特殊开通原因"
+                      placeholder={t.admin_memberships.note_placeholder}
                     />
                   </label>
 
                   <div style={{ ...actionRowStyle, marginTop: 12 }}>
                     <button type="button" style={primaryButtonStyle} onClick={handleCreatePayment} disabled={paymentSaving}>
-                      {paymentSaving ? "确认中..." : "确认付款并开通"}
+                      {paymentSaving
+                        ? t.admin_memberships.confirming
+                        : t.admin_memberships.confirm_and_open}
                     </button>
                     <button type="button" style={secondaryButtonStyle} onClick={() => void loadPaymentRows(selected.user_id)} disabled={paymentLoading}>
-                      {paymentLoading ? "读取中..." : "刷新付款记录"}
+                      {paymentLoading
+                        ? `${t.admin_memberships.reading}...`
+                        : t.admin_memberships.refresh_payments}
                     </button>
                   </div>
 
                   <div style={paymentHistoryStyle}>
                     {paymentLoading ? (
-                      <div style={emptyStyle}>正在读取付款记录...</div>
+                      <div style={emptyStyle}>{t.admin_memberships.loading_payments}</div>
                     ) : paymentRows.length === 0 ? (
-                      <div style={emptyStyle}>暂无付款记录。确认付款并开通后会显示在这里。</div>
+                      <div style={emptyStyle}>{t.admin_memberships.no_payments}</div>
                     ) : (
                       paymentRows.map((payment) => (
                         <div key={payment.id} style={paymentItemStyle}>
                           <div style={userTitleRowStyle}>
                             <strong>{formatPaymentAmount(payment.amount, payment.currency)}</strong>
-                            <span style={pillStyle}>{getPaymentStatusLabel(payment.status)}</span>
+                            <span style={pillStyle}>
+                              {getPaymentStatusLabel(payment.status, language)}
+                            </span>
                           </div>
                           <div style={smallTextStyle}>
-                            {getPaymentPlanLabel(payment.plan)} · {getPaymentMethodLabel(payment.payment_method)} · 付款时间 {formatMembershipDate(payment.paid_at)}
+                            {getPaymentPlanLabel(payment.plan, language)} · {getPaymentMethodLabel(
+                              payment.payment_method,
+                              language
+                            )} · {t.admin_memberships.payment_time}{" "}
+                            {formatMembershipDate(payment.paid_at, language)}
                           </div>
                           <div style={smallTextStyle}>
-                            服务期：{formatMembershipDate(payment.service_started_at)} - {formatMembershipDate(payment.service_ends_at)}
+                            {t.admin_memberships.service_period}
+                            {formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(
+                              payment.service_ends_at,
+                              language
+                            )}
                           </div>
-                          {payment.payment_reference ? <div style={smallTextStyle}>流水号：{payment.payment_reference}</div> : null}
-                          {payment.note ? <div style={smallTextStyle}>备注：{payment.note}</div> : null}
+                          {payment.payment_reference ? (
+                            <div style={smallTextStyle}>
+                              {t.admin_memberships.transaction_prefix}{payment.payment_reference}
+                            </div>
+                          ) : null}
+                          {payment.note ? (
+                            <div style={smallTextStyle}>
+                              {t.admin_memberships.note_prefix}{payment.note}
+                            </div>
+                          ) : null}
                           <div style={paymentActionRowStyle}>
                             {payment.status !== "confirmed" ? (
                               <button
@@ -1322,7 +1428,7 @@ export default function AdminMembershipsPage() {
                                 onClick={() => void handleUpdatePaymentStatus(payment, "confirmed")}
                                 disabled={paymentStatusSavingId === payment.id}
                               >
-                                恢复确认
+                                {t.admin_memberships.restore_confirmation}
                               </button>
                             ) : null}
                             {payment.status !== "refunded" ? (
@@ -1332,7 +1438,7 @@ export default function AdminMembershipsPage() {
                                 onClick={() => void handleUpdatePaymentStatus(payment, "refunded")}
                                 disabled={paymentStatusSavingId === payment.id}
                               >
-                                标记退款
+                                {t.admin_memberships.mark_refund}
                               </button>
                             ) : null}
                             {payment.status !== "canceled" ? (
@@ -1342,7 +1448,7 @@ export default function AdminMembershipsPage() {
                                 onClick={() => void handleUpdatePaymentStatus(payment, "canceled")}
                                 disabled={paymentStatusSavingId === payment.id}
                               >
-                                标记取消
+                                {t.admin_memberships.mark_cancel}
                               </button>
                             ) : null}
                           </div>
@@ -1354,7 +1460,7 @@ export default function AdminMembershipsPage() {
               </>
             ) : (
               <div style={emptyDetailStyle}>
-                从左侧选择一个用户，然后设置会员方案、到期日、容量和集市额度。
+                {t.admin_memberships.choose_user_hint}
               </div>
             )}
           </aside>
@@ -1362,10 +1468,14 @@ export default function AdminMembershipsPage() {
       </section>
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="删除会员"
-        message={DELETE_MEMBERSHIP_MESSAGE}
-        confirmText={deleteSaving ? "删除中..." : "确认删除会员"}
-        cancelText="取消"
+        title={t.admin_memberships.delete_membership}
+        message={t.admin_memberships.delete_message}
+        confirmText={
+          deleteSaving
+            ? t.admin_memberships.deleting
+            : t.admin_memberships.confirm_delete_membership
+        }
+        cancelText={t.cancel}
         danger
         confirmDisabled={deleteSaving}
         cancelDisabled={deleteSaving}

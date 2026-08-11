@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   title?: string;
@@ -11,23 +12,26 @@ type Props = {
 };
 
 export default function ArchiveRecordComposer({
-  title = "添加记录",
+  title,
   mobileMode = false,
   open = true,
   onClose,
   children,
 }: Props) {
+  const { t } = useLanguage();
+  const resolvedTitle = title || t.record.add_record;
+
   if (mobileMode && !open) return null;
 
   if (mobileMode) {
     return (
       <div style={mobileOverlayStyle}>
-        <section id="add-record" style={mobilePanelStyle} aria-label={title}>
+        <section id="add-record" style={mobilePanelStyle} aria-label={resolvedTitle}>
           <div style={headerStyle}>
-            <div style={titleStyle}>{title}</div>
+            <div style={titleStyle}>{resolvedTitle}</div>
             {onClose ? (
               <button type="button" onClick={onClose} style={closeButtonStyle}>
-                取消
+                {t.record.cancel}
               </button>
             ) : null}
           </div>
@@ -39,7 +43,7 @@ export default function ArchiveRecordComposer({
 
   return (
     <section id="add-record" style={desktopPanelStyle}>
-      <div style={desktopTitleStyle}>{title}</div>
+      <div style={desktopTitleStyle}>{resolvedTitle}</div>
       {children}
     </section>
   );

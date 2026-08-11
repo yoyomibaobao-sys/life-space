@@ -3,9 +3,11 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function LocalArchiveRedirectPage() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   useEffect(() => {
     router.replace("/archive?source=local");
@@ -20,10 +22,10 @@ export default function LocalArchiveRedirectPage() {
         color: "#263326",
       }}
     >
-      正在进入我的空间中的本地项目...
+      {t.local_mode.redirecting}
       <div style={{ marginTop: 12 }}>
         <Link href="/archive?source=local" style={{ color: "#2f6a31" }}>
-          前往本地项目
+          {t.local_mode.open_projects}
         </Link>
       </div>
     </main>

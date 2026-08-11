@@ -1,6 +1,8 @@
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function DiscoverSearchHeader() {
+  const { t } = useLanguage();
   return (
     <header
       style={{
@@ -12,7 +14,7 @@ export default function DiscoverSearchHeader() {
       }}
     >
       <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>
-        搜索发现
+        {t.discover.search_ui.title}
       </div>
 
       <a
@@ -26,7 +28,7 @@ export default function DiscoverSearchHeader() {
           whiteSpace: "nowrap",
         }}
       >
-        <UiIcon name="arrow-left" size={14} /> 返回发现
+        <UiIcon name="arrow-left" size={14} /> {t.discover.search_ui.back_to_discover}
       </a>
     </header>
   );

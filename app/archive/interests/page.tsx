@@ -23,9 +23,11 @@ import {
   canCreateMembershipContent,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function PlantInterestsPage() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [userId, setUserId] = useState("");
   const [interests, setInterests] = useState<PlantInterestRow[]>([]);
@@ -82,7 +84,7 @@ export default function PlantInterestsPage() {
     setHasCloudAccess(canCreateMembershipContent(membership));
 
     if (interestError) {
-      showToast("读取感兴趣植物失败：" + interestError.message);
+      showToast(t.plant_lists.read_interests_failed + interestError.message);
       setInterests([]);
     } else {
       setInterests(interestData || []);
@@ -91,7 +93,7 @@ export default function PlantInterestsPage() {
     setPlanSpeciesIds(new Set((planData || []).map((item: SpeciesRefRow) => String(item.species_id))));
 
     setLoading(false);
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -104,7 +106,7 @@ export default function PlantInterestsPage() {
   async function updateInterest(id: string, payload: Partial<Pick<PlantInterestRow, "note">>) {
     if (!userId) return;
     if (!hasCloudAccess) {
-      showToast("需要开通云会员才能修改感兴趣列表；现有条目仍可移除。");
+      showToast(t.plant_lists.interests_edit_membership);
       return;
     }
 
@@ -119,7 +121,7 @@ export default function PlantInterestsPage() {
     setSavingId(null);
 
     if (error) {
-      showToast("保存失败：" + error.message);
+      showToast(t.plant_lists.save_failed_prefix + error.message);
       return;
     }
 
@@ -146,19 +148,19 @@ export default function PlantInterestsPage() {
     setRemovingInterestId(null);
 
     if (error) {
-      showToast("移除失败：" + error.message);
+      showToast(t.plant_lists.remove_failed_prefix + error.message);
       return;
     }
 
     setInterests((prev) => prev.filter((item) => item.id !== removeInterestTarget.id));
     setRemoveInterestTarget(null);
-    showToast("已从感兴趣列表中移除");
+    showToast(t.plant_lists.interest_removed);
   }
 
   async function addToPlan(speciesId: string) {
     if (!userId) return;
     if (!hasCloudAccess) {
-      showToast("加入云端种植计划需要开通云会员。");
+      showToast(t.plant_lists.plan_membership_required);
       return;
     }
 
@@ -176,11 +178,11 @@ export default function PlantInterestsPage() {
     setAddingPlanSpeciesId(null);
 
     if (error) {
-      showToast("加入种植计划失败：" + error.message);
+      showToast(t.plant_lists.plan_add_failed_prefix + error.message);
       return;
     }
 
-    showToast("已加入种植计划");
+    showToast(t.plant_lists.plan_added);
 
     setPlanSpeciesIds((prev) => {
       const next = new Set(prev);
@@ -197,7 +199,7 @@ export default function PlantInterestsPage() {
         <ArchivePlantCardHeader
           speciesId={item.species_id}
           plant={item.plant_species}
-          badgeText="感兴趣"
+          badgeText={t.plant_lists.interested_badge}
           badgeStyle={{ background: "#f7fbf7", color: "#4b6b4b" }}
         />
 
@@ -209,7 +211,7 @@ export default function PlantInterestsPage() {
             color: "#666",
           }}
         >
-          兴趣备注
+          {t.plant_lists.interest_note}
           <textarea
             value={item.note || ""}
             disabled={!hasCloudAccess || savingId === item.id}
@@ -221,7 +223,7 @@ export default function PlantInterestsPage() {
               )
             }
             onBlur={(event) => updateInterest(item.id, { note: event.target.value })}
-            placeholder="比如：喜欢花色、想以后研究、适合阳台吗..."
+            placeholder={t.plant_lists.interest_note_placeholder}
             rows={3}
             style={subtleTextareaStyle}
           />
@@ -250,7 +252,7 @@ export default function PlantInterestsPage() {
                 textDecoration: "none",
               }}
             >
-              已在计划 · 查看
+              {t.plant_lists.in_plan_view}
             </Link>
           ) : (
             <button
@@ -272,7 +274,9 @@ export default function PlantInterestsPage() {
                 opacity: hasCloudAccess ? 1 : 0.55,
               }}
             >
-              {addingPlanSpeciesId === item.species_id ? "加入中..." : "加入种植计划"}
+              {addingPlanSpeciesId === item.species_id
+                ? t.plant_lists.adding_to_plan
+                : t.plant_lists.add_to_plan}
             </button>
           )}
 
@@ -297,41 +301,45 @@ export default function PlantInterestsPage() {
               fontWeight: 650,
             }}
           >
-            {hasCloudAccess ? "创建云端项目" : "创建本地项目"}
+            {hasCloudAccess
+              ? t.plant_lists.create_cloud_project
+              : t.plant_lists.create_local_project}
           </Link>
 
           <Link href={`/plant/${item.species_id}`} style={neutralActionLinkStyle}>
-            查看植物指引
+            {t.plant_lists.view_guide}
           </Link>
 
           <button type="button" onClick={() => removeInterest(item.id)} style={dangerActionButtonStyle}>
-            移除
+            {t.plant_lists.remove}
           </button>
 
-          {savingId === item.id && <span style={{ color: "#888", fontSize: 13 }}>保存中...</span>}
+          {savingId === item.id && (
+            <span style={{ color: "#888", fontSize: 13 }}>{t.plant_lists.saving}</span>
+          )}
         </div>
       </article>
     );
   }
 
   if (loading) {
-    return <main style={{ padding: 20 }}>加载中...</main>;
+    return <main style={{ padding: 20 }}>{t.loading}</main>;
   }
 
   return (
     <main style={{ padding: "16px", maxWidth: 980, margin: "0 auto" }}>
       <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-        <UiIcon name="arrow-left" size={15} /> 返回空间
+        <UiIcon name="arrow-left" size={15} /> {t.plant_lists.back_to_space}
       </Link>
 
       <ArchivePlantPageHero
-        badge="个人种植路径"
-        title="我感兴趣的植物"
-        description="这里适合轻量保存喜欢、想了解、以后可能会种的植物。明确想种后，再加入种植计划。"
+        badge={t.plant_lists.personal_path}
+        title={t.plant_lists.interests_title}
+        description={t.plant_lists.interests_description}
         primaryHref="/plant"
-        primaryLabel="去指引选择植物"
+        primaryLabel={t.plant_lists.guide_choose}
         secondaryHref="/archive/plans"
-        secondaryLabel="查看种植计划"
+        secondaryLabel={t.plant_lists.view_plans}
       />
 
       {!hasCloudAccess ? (
@@ -347,23 +355,23 @@ export default function PlantInterestsPage() {
             lineHeight: 1.7,
           }}
         >
-          感兴趣列表属于云会员权益。现有过渡条目仍可查看和移除，但不能修改或新增；你仍可创建本地项目。
+          {t.plant_lists.interests_membership_notice}
           <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-            了解云会员
+            {t.plant_lists.learn_membership}
           </Link>
         </div>
       ) : null}
 
       {interests.length === 0 ? (
         <ArchivePlantEmptyState
-          title="还没有感兴趣的植物"
-          description="这里可以先轻轻保存喜欢的植物，不必马上决定要不要种。"
+          title={t.plant_lists.no_interests}
+          description={t.plant_lists.no_interests_description}
           href="/plant"
-          label="去指引看看"
+          label={t.plant_lists.guide_browse}
         />
       ) : (
         <section style={{ marginTop: 16 }}>
-          <h2 style={sectionHeaderStyle}>全部 · {interests.length}</h2>
+          <h2 style={sectionHeaderStyle}>{t.plant_lists.all} · {interests.length}</h2>
 
           <div style={{ display: "grid", gap: 12 }}>{interests.map((item) => renderInterestCard(item))}</div>
         </section>
@@ -371,10 +379,14 @@ export default function PlantInterestsPage() {
 
       <ConfirmDialog
         open={Boolean(removeInterestTarget)}
-        title="移除感兴趣植物"
-        message={`确定将“${removeInterestTarget ? plantDisplayName(removeInterestTarget.plant_species) : "这株植物"}”从感兴趣列表中移除吗？`}
-        confirmText={removingInterestId ? "移除中..." : "移除"}
-        cancelText="取消"
+        title={t.plant_lists.remove_interest_title}
+        message={`${t.plant_lists.remove_interest_prefix}${
+          removeInterestTarget
+            ? plantDisplayName(removeInterestTarget.plant_species)
+            : t.plant_lists.fallback_plant
+        }${t.plant_lists.remove_interest_suffix}`}
+        confirmText={removingInterestId ? t.plant_lists.removing : t.plant_lists.remove}
+        cancelText={t.cancel}
         danger
         onClose={() => {
           if (!removingInterestId) setRemoveInterestTarget(null);

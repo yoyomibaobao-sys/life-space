@@ -16,6 +16,7 @@ import type {
   ExperienceCardRow,
 } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CardListItem = ExperienceCardListItem & {
   isPubliclyAvailable: boolean;
@@ -23,6 +24,7 @@ type CardListItem = ExperienceCardListItem & {
 
 export default function MyExperienceCardsPage() {
   const router = useRouter();
+  const { language, t } = useLanguage();
   const [items, setItems] = useState<CardListItem[]>([]);
   const [savedItems, setSavedItems] = useState<ExperienceCardListItem[]>([]);
   const [activeTab, setActiveTab] = useState<"mine" | "saved">("mine");
@@ -57,7 +59,7 @@ export default function MyExperienceCardsPage() {
 
     const rows = (cards || []) as ExperienceCardRow[];
     const [hydratedRows, publicStates] = await Promise.all([
-      hydrateExperienceCardListItems(rows),
+      hydrateExperienceCardListItems(rows, language),
       Promise.all(rows.map(async (row) => {
         const { data } = await supabase.rpc("is_experience_card_public", {
           p_card_id: row.id,
@@ -81,7 +83,8 @@ export default function MyExperienceCardsPage() {
         .eq("status", "published");
       const savedById = new Map(
         (await hydrateExperienceCardListItems(
-          (savedCards || []) as ExperienceCardRow[]
+          (savedCards || []) as ExperienceCardRow[],
+          language
         )).map((item) => [item.id, item])
       );
       setSavedItems(
@@ -98,14 +101,14 @@ export default function MyExperienceCardsPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [language]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
     setBusyId(deleteTarget.id);
     try {
       await deleteExperienceCard(deleteTarget.id);
-      showToast("经验卡已删除，原记录不受影响");
+      showToast(t.experience.deleted_toast);
       setDeleteTarget(null);
       await load();
     } finally {
@@ -120,9 +123,9 @@ export default function MyExperienceCardsPage() {
       .delete()
       .eq("card_id", item.id);
     if (error) {
-      showToast("取消收藏失败");
+      showToast(t.experience.remove_bookmark_failed);
     } else {
-      showToast("已取消收藏");
+      showToast(t.experience.bookmark_removed);
       setSavedItems((current) => current.filter((card) => card.id !== item.id));
     }
     setBusyId(null);
@@ -131,9 +134,9 @@ export default function MyExperienceCardsPage() {
   async function copyExperienceCardLink(item: CardListItem) {
     try {
       await navigator.clipboard.writeText(getExperienceCardShareUrl(item.id));
-      showToast("公开链接已复制");
+      showToast(t.experience.public_link_copied);
     } catch {
-      showToast("暂时无法复制链接");
+      showToast(t.experience.copy_link_failed);
     }
   }
 
@@ -148,7 +151,7 @@ export default function MyExperienceCardsPage() {
       await copyExperienceCardLink(item);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      showToast("暂时无法分享，请使用复制链接");
+      showToast(t.experience.share_failed_use_copy);
     }
   }
 
@@ -159,35 +162,35 @@ export default function MyExperienceCardsPage() {
       <header style={headerStyle}>
         <div>
           <Link href="/archive" style={backLinkStyle}>
-            <UiIcon name="arrow-left" size={15} /> 我的项目
+            <UiIcon name="arrow-left" size={15} /> {t.experience.my_projects}
           </Link>
-          <h1 style={titleStyle}>我的经验卡</h1>
+          <h1 style={titleStyle}>{t.experience.my_cards}</h1>
         </div>
       </header>
 
-      <nav style={tabRowStyle} aria-label="经验卡目录">
+      <nav style={tabRowStyle} aria-label={t.experience.directory_aria}>
         <button type="button" aria-pressed={activeTab === "mine"} style={tabButtonStyle(activeTab === "mine")} onClick={() => setActiveTab("mine")}>
-          我的经验卡（{items.length}）
+          {t.experience.my_cards}（{items.length}）
         </button>
         <button type="button" aria-pressed={activeTab === "saved"} style={tabButtonStyle(activeTab === "saved")} onClick={() => setActiveTab("saved")}>
-          我的收藏（{savedItems.length}）
+          {t.experience.saved_cards}（{savedItems.length}）
         </button>
       </nav>
 
       {loading ? (
-        <section style={emptyStyle}>正在读取...</section>
+        <section style={emptyStyle}>{t.experience.reading}</section>
       ) : visibleItems.length === 0 ? (
         <section style={emptyStyle}>
           <h2 style={emptyTitleStyle}>
-            {activeTab === "mine" ? "还没有经验卡" : "还没有收藏经验卡"}
+            {activeTab === "mine" ? t.experience.no_cards : t.experience.no_saved_cards}
           </h2>
           <p style={mutedStyle}>
             {activeTab === "mine"
-              ? "当一个项目已经有起点、过程和结果记录后，就可以把它们串成一张经验卡。"
-              : "在公开经验卡详情中选择“收藏”，会保存到这里。"}
+              ? t.experience.no_cards_hint
+              : t.experience.no_saved_cards_hint}
           </p>
           {activeTab === "mine" ? (
-            <Link href="/archive" style={primaryLinkStyle}>选择项目</Link>
+            <Link href="/archive" style={primaryLinkStyle}>{t.experience.choose_project}</Link>
           ) : null}
         </section>
       ) : (
@@ -200,31 +203,31 @@ export default function MyExperienceCardsPage() {
               showAuthor
               status={
                 activeTab === "saved" ? (
-                  <span style={statusStyle(true)}>已收藏</span>
+                  <span style={statusStyle(true)}>{t.experience.saved}</span>
                 ) : (
                   <>
                   <span style={statusStyle((item as CardListItem).isPubliclyAvailable)}>
                     {(item as CardListItem).isPubliclyAvailable
-                      ? "已公开"
+                      ? t.experience.published
                       : item.status === "published"
-                        ? "公开已暂停"
-                        : "私密"}
+                        ? t.experience.publication_paused
+                        : t.experience.private}
                   </span>
-                  <span>被收藏 {item.bookmarkCount}</span>
+                  <span>{t.experience.bookmarked_prefix}{item.bookmarkCount}</span>
                   </>
                 )
               }
               actions={
                 activeTab === "saved" ? (
                   <>
-                    <Link href={`/experience-cards/${item.id}`} style={primaryLinkStyle}>打开</Link>
+                    <Link href={`/experience-cards/${item.id}`} style={primaryLinkStyle}>{t.experience.open}</Link>
                     <button
                       type="button"
                       disabled={busyId === item.id}
                       onClick={() => void handleRemoveBookmark(item)}
                       style={secondaryButtonStyle}
                     >
-                      取消收藏
+                      {t.experience.remove_bookmark}
                     </button>
                   </>
                 ) : (
@@ -233,7 +236,7 @@ export default function MyExperienceCardsPage() {
                   href={`/experience-cards/${item.id}`}
                   style={primaryLinkStyle}
                 >
-                  打开并管理
+                  {t.experience.open_manage}
                 </Link>
                 {(item as CardListItem).isPubliclyAvailable ? (
                   <>
@@ -242,14 +245,14 @@ export default function MyExperienceCardsPage() {
                       onClick={() => void shareExperienceCard(item as CardListItem)}
                       style={secondaryButtonStyle}
                     >
-                      分享
+                      {t.experience.share}
                     </button>
                     <button
                       type="button"
                       onClick={() => void copyExperienceCardLink(item as CardListItem)}
                       style={secondaryButtonStyle}
                     >
-                      复制链接
+                      {t.experience.copy_link}
                     </button>
                   </>
                 ) : null}
@@ -259,7 +262,7 @@ export default function MyExperienceCardsPage() {
                   onClick={() => setDeleteTarget(item as CardListItem)}
                   style={dangerButtonStyle}
                 >
-                  删除
+                  {t.experience.delete}
                 </button>
                 </>
                 )
@@ -271,10 +274,10 @@ export default function MyExperienceCardsPage() {
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="删除经验卡"
-        message="只删除经验卡及其引用关系，原项目、原记录和照片不会删除。"
-        confirmText={busyId ? "删除中..." : "确认删除"}
-        cancelText="取消"
+        title={t.experience.delete_title}
+        message={t.experience.delete_message}
+        confirmText={busyId ? t.experience.deleting : t.experience.confirm_delete}
+        cancelText={t.experience.cancel}
         danger
         confirmDisabled={Boolean(busyId)}
         cancelDisabled={Boolean(busyId)}

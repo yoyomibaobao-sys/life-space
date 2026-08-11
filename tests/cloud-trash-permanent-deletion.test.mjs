@@ -118,14 +118,20 @@ test("listing stays owner-only and does not grant direct trash table access", as
 });
 
 test("trash UI renders the three user-visible states", async () => {
-  const page = await source("app/profile/trash/page.tsx");
+  const [page, zhCopy, enCopy] = await Promise.all([
+    source("app/profile/trash/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
 
   assert.match(page, /item\.status === "active"/);
   assert.match(page, /item\.status === "purging"/);
   assert.match(page, /item\.status === "failed"/);
-  assert.match(page, /正在永久删除/);
-  assert.match(page, /永久删除失败/);
-  assert.match(page, /删除未完成，请重试/);
+  assert.match(page, /trashT\.purging/);
+  assert.match(page, /trashT\.purge_failed/);
+  assert.match(page, /trashT\.retry_delete/);
+  assert.match(zhCopy, /purging: "正在永久删除"/);
+  assert.match(enCopy, /purging: "Permanently deleting"/);
   assert.match(page, /item\.previewUrl/);
   assert.match(page, /previewImageStyle/);
 });
@@ -145,18 +151,31 @@ test("trash previews stay owner-bound and expose only signed display URLs", asyn
 });
 
 test("trash UI uses the approved irreversible confirmation copy", async () => {
-  const page = await source("app/profile/trash/page.tsx");
+  const [page, zhCopy, enCopy] = await Promise.all([
+    source("app/profile/trash/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
 
-  assert.match(page, /项目中的记录和照片也会一起永久删除，删除后无法恢复。/);
-  assert.match(page, /这条记录及其中的照片将被永久删除，删除后无法恢复。/);
-  assert.match(page, /回收站中的所有内容将被永久删除，删除后无法恢复。/);
+  assert.match(page, /translations\.project_purge_message/);
+  assert.match(page, /translations\.record_purge_message/);
+  assert.match(page, /trashT\.empty_message/);
+  assert.match(zhCopy, /项目中的记录和照片也会一起永久删除，删除后无法恢复。/);
+  assert.match(zhCopy, /这条记录及其中的照片将被永久删除，删除后无法恢复。/);
+  assert.match(enCopy, /Everything in Trash will be permanently deleted/);
 });
 
 test("trash empty feedback separates more pending from failed entries", async () => {
-  const page = await source("app/profile/trash/page.tsx");
+  const [page, zhCopy, enCopy] = await Promise.all([
+    source("app/profile/trash/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
 
   assert.match(page, /else if \(result\.morePending\)/);
-  assert.match(page, /回收站仍有内容，请再次清空。/);
+  assert.match(page, /trashT\.partially_remaining/);
+  assert.match(zhCopy, /回收站仍有内容，请再次清空。/);
+  assert.match(enCopy, /items remain\. Empty Trash again/);
   assert.match(page, /else if \(result\.failed > 0\)/);
   assert.doesNotMatch(
     page,

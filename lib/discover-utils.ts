@@ -1,9 +1,13 @@
 import { getArchiveCategoryLabel, getArchiveNamePlaceholder } from "@/lib/archive-categories";
 import type { FeedItem, UserSection } from "@/lib/discover-types";
 import { formatCardDate } from "@/lib/date-time";
+import type { Language } from "@/lib/i18n";
 
-export function categoryLabel(value?: string | null) {
-  return getArchiveCategoryLabel(value);
+export function categoryLabel(
+  value?: string | null,
+  language: Language = "zh"
+) {
+  return getArchiveCategoryLabel(value, language);
 }
 
 export function formatDate(value?: string | null) {
@@ -17,18 +21,18 @@ export function shortText(value?: string | null, maxLength = 42) {
   return `${text.slice(0, maxLength)}…`;
 }
 
-export function getArchiveUserTitle(record: FeedItem) {
-  return record.archive_title || "未命名项目";
+export function getArchiveUserTitle(record: FeedItem, language: Language = "zh") {
+  return record.archive_title || (language === "en" ? "Untitled project" : "未命名项目");
 }
 
-export function getArchiveSystemName(record: FeedItem) {
+export function getArchiveSystemName(record: FeedItem, language: Language = "zh") {
   const systemName =
     record.archive_category === "plant"
       ? record.species_name_snapshot || record.system_name
       : record.system_name || record.species_name_snapshot;
 
   if (systemName) return systemName;
-  return getArchiveNamePlaceholder(record.archive_category);
+  return getArchiveNamePlaceholder(record.archive_category, language);
 }
 
 export function getArchiveRecordCount(record: FeedItem) {

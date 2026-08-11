@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function DiscoverMarketTabs({ active }: { active: "discover" | "market" }) {
+  const { t } = useLanguage();
+
   return (
     <nav
       className="mobile-app-flex-only"
       style={wrapStyle}
-      aria-label="发现和集市"
+      aria-label={t.nav.discover_market_tabs}
     >
       <Link href="/discover" style={tabStyle(active === "discover")}>
-        动态
+        {t.nav.activity}
       </Link>
       <Link href="/market" style={tabStyle(active === "market")}>
-        集市
+        {t.nav.market}
       </Link>
     </nav>
   );

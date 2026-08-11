@@ -1,5 +1,6 @@
 import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   userId: string;
@@ -7,6 +8,7 @@ type Props = {
 };
 
 export default function UserSpaceHeader({ userId, username }: Props) {
+  const { t } = useLanguage();
   return (
     <section
       style={{
@@ -27,7 +29,7 @@ export default function UserSpaceHeader({ userId, username }: Props) {
             fontWeight: 650,
           }}
         >
-          {username ? `${username} · 空间` : "用户空间"}
+          {username ? `${username}${t.profile.space.title_suffix}` : t.profile.space.user_space}
         </h1>
 
         <Link
@@ -43,7 +45,7 @@ export default function UserSpaceHeader({ userId, username }: Props) {
             textDecoration: "none",
           }}
         >
-          用户资料
+          {t.profile.space.user_profile}
         </Link>
       </div>
 
@@ -55,7 +57,7 @@ export default function UserSpaceHeader({ userId, username }: Props) {
           textDecoration: "none",
         }}
       >
-        <UiIcon name="arrow-left" size={15} /> 返回发现
+        <UiIcon name="arrow-left" size={15} /> {t.profile.space.back_to_discover}
       </Link>
     </section>
   );

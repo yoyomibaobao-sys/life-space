@@ -2,6 +2,7 @@
 
 import type { GroupTagItem } from "@/lib/archive-page-types";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   activeGroupTag: string | null;
@@ -26,6 +27,8 @@ export default function ArchiveGroupPanel({
   onCreateGroupTag,
   mobileMode = false,
 }: Props) {
+  const { t } = useLanguage();
+
   if (visibleGroupTags.length > 0) {
     return (
       <section
@@ -41,7 +44,9 @@ export default function ArchiveGroupPanel({
           gap: mobileMode ? 5 : 8,
         }}
       >
-        {mobileMode ? <div style={mobileFilterLabelStyle}>分组</div> : null}
+        {mobileMode ? (
+          <div style={mobileFilterLabelStyle}>{t.archive_workspace.group}</div>
+        ) : null}
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
@@ -57,9 +62,9 @@ export default function ArchiveGroupPanel({
             padding: mobileMode ? "5px 9px" : "6px 12px",
             lineHeight: mobileMode ? 1.15 : 1.3,
           }}
-          title="点击显示当前分类下全部项目"
+          title={t.archive_workspace.show_all_groups}
         >
-          {mobileMode ? "全部分组" : "分组："}
+          {mobileMode ? t.archive_workspace.all_groups : t.archive_workspace.group_prefix}
         </button>
 
         {visibleGroupTags.map((tag) => (
@@ -90,7 +95,7 @@ export default function ArchiveGroupPanel({
                 cursor: "pointer",
                 lineHeight: mobileMode ? 1.15 : 1.3,
               }}
-              title="双击可修改名称"
+              title={t.archive_workspace.double_click_edit}
             >
               {tag.name}
             </button>
@@ -107,7 +112,7 @@ export default function ArchiveGroupPanel({
                 padding: mobileMode ? "2px 1px" : 0,
                 lineHeight: 1,
               }}
-              title="删除分组"
+              title={t.archive_workspace.delete_group}
             >
               <UiIcon name="close" size={12} />
             </button>
@@ -148,7 +153,9 @@ export default function ArchiveGroupPanel({
           justifyContent: "flex-start",
         }}
       >
-        {mobileMode ? <div style={mobileFilterLabelStyle}>分组</div> : null}
+        {mobileMode ? (
+          <div style={mobileFilterLabelStyle}>{t.archive_workspace.group}</div>
+        ) : null}
         <button
           type="button"
           onClick={onCreateGroupTag}
@@ -163,7 +170,7 @@ export default function ArchiveGroupPanel({
             lineHeight: mobileMode ? 1.15 : 1.3,
           }}
         >
-          <UiIcon name="plus" size={14} /> 新增分组
+          <UiIcon name="plus" size={14} /> {t.archive_workspace.add_group}
         </button>
       </section>
     );

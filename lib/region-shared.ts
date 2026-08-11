@@ -1,5 +1,6 @@
 import type { AppProfile } from "@/lib/domain-types";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Language } from "@/lib/i18n";
 
 export type CountryOption = {
   code: string;
@@ -31,6 +32,36 @@ export const countryOptions: CountryOption[] = [
   { code: "OTHER", name: "其他地区" },
 ];
 
+const countryNamesEn: Record<string, string> = {
+  CN: "China",
+  JP: "Japan",
+  US: "United States",
+  GB: "United Kingdom",
+  CA: "Canada",
+  AU: "Australia",
+  NZ: "New Zealand",
+  DE: "Germany",
+  FR: "France",
+  IT: "Italy",
+  ES: "Spain",
+  SG: "Singapore",
+  MY: "Malaysia",
+  TH: "Thailand",
+  KR: "South Korea",
+  VN: "Vietnam",
+  OTHER: "Other location",
+};
+
+export function getLocalizedCountryOptions(
+  language: Language = "zh"
+): CountryOption[] {
+  if (language !== "en") return countryOptions;
+  return countryOptions.map((item) => ({
+    ...item,
+    name: countryNamesEn[item.code] || item.name,
+  }));
+}
+
 const regionPresets: Record<string, RegionOption[]> = {
   CN: ["北京", "天津", "上海", "重庆", "河北", "山西", "辽宁", "吉林", "黑龙江", "江苏", "浙江", "安徽", "福建", "江西", "山东", "河南", "湖北", "湖南", "广东", "海南", "四川", "贵州", "云南", "陕西", "甘肃", "青海", "台湾", "内蒙古", "广西", "西藏", "宁夏", "新疆", "香港", "澳门"].map((item) => ({ value: item, label: item })),
   JP: ["北海道", "东北", "关东", "中部", "近畿", "中国", "四国", "九州", "冲绳", "东京", "神奈川", "埼玉", "千叶", "大阪", "京都", "兵库", "爱知", "福冈"].map((item) => ({ value: item, label: item })),
@@ -58,8 +89,13 @@ export function getCountryOption(code?: string | null) {
   return countryOptions.find((item) => item.code === code) || null;
 }
 
-export function getCountryName(code?: string | null, fallbackName?: string | null) {
+export function getCountryName(
+  code?: string | null,
+  fallbackName?: string | null,
+  language: Language = "zh"
+) {
   if (code === "OTHER") return normalizeRegionPart(fallbackName);
+  if (language === "en" && code && countryNamesEn[code]) return countryNamesEn[code];
   return getCountryOption(code)?.name || normalizeRegionPart(fallbackName);
 }
 
@@ -112,24 +148,27 @@ export function buildRegionDisplay(parts: {
   regionName?: string | null;
   cityName?: string | null;
   location?: string | null;
-}) {
-  const country = getCountryName(parts.countryCode, parts.countryName);
+}, language: Language = "zh") {
+  const country = getCountryName(parts.countryCode, parts.countryName, language);
   const region = normalizeRegionPart(parts.regionName);
   const city = normalizeRegionPart(parts.cityName);
   const values = [country, region, city].filter(Boolean);
   if (values.length) return values.join(" · ");
   const fallback = normalizeRegionPart(parts.location);
-  return fallback || "未填写";
+  return fallback || (language === "en" ? "Not provided" : "未填写");
 }
 
-export function formatRegionDisplayFromProfile(profile?: AppProfile | null) {
+export function formatRegionDisplayFromProfile(
+  profile?: AppProfile | null,
+  language: Language = "zh"
+) {
   return buildRegionDisplay({
     countryCode: profile?.country_code,
     countryName: profile?.country_name,
     regionName: profile?.region_name,
     cityName: profile?.city_name,
     location: profile?.location,
-  });
+  }, language);
 }
 
 export function buildLocationTextFromFields(parts: {
@@ -137,8 +176,8 @@ export function buildLocationTextFromFields(parts: {
   countryName?: string | null;
   regionName?: string | null;
   cityName?: string | null;
-}) {
-  const country = getCountryName(parts.countryCode, parts.countryName);
+}, language: Language = "zh") {
+  const country = getCountryName(parts.countryCode, parts.countryName, language);
   const region = normalizeRegionPart(parts.regionName);
   const city = normalizeRegionPart(parts.cityName);
   return [country, region, city].filter(Boolean).join(" ");

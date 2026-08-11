@@ -2,6 +2,7 @@
 
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import type { PlantSpeciesOption } from "@/lib/archive-page-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   value: string;
@@ -30,6 +31,8 @@ export default function ArchivePlantNameEditor({
   onSave,
   onCancel,
 }: Props) {
+  const { language, t } = useLanguage();
+
   return (
     <span
       onClick={(e) => e.stopPropagation()}
@@ -45,11 +48,17 @@ export default function ArchivePlantNameEditor({
         onChange={onChange}
         candidates={results.map((species) => ({
           id: species.id,
-          label: species.display_name || species.common_name || species.scientific_name || "未命名植物",
+          label:
+            species.display_name ||
+            species.common_name ||
+            species.scientific_name ||
+            t.archive_workspace.unnamed_plant,
           description: [
             species.scientific_name,
             Array.isArray(species.aliases) && species.aliases.length > 0
-              ? `别名：${species.aliases.slice(0, 4).join("、")}`
+              ? `${t.archive_workspace.alias_prefix}${species.aliases
+                  .slice(0, 4)
+                  .join(language === "en" ? ", " : "、")}`
               : "",
           ]
             .filter(Boolean)
@@ -63,7 +72,7 @@ export default function ArchivePlantNameEditor({
           if (selected) onSelectSpecies(selected);
         }}
         onUseCustom={onSubmitPending}
-        placeholder="输入关键词后点选"
+        placeholder={t.archive_workspace.input_then_select}
         inputStyle={{
           fontSize: 12,
           padding: "4px 6px",
@@ -82,18 +91,24 @@ export default function ArchivePlantNameEditor({
               : "1px solid transparent",
           background: selectedSpeciesId === candidate.id ? "#f0fff4" : "#fafafa",
         })}
-        emptyText="没有找到匹配植物"
-        customActionLabel={(inputValue) => `+ 新增候选植物：${inputValue}`}
+        emptyText={t.archive_workspace.no_matching_plant}
+        customActionLabel={(inputValue) =>
+          `+ ${t.archive_workspace.add_candidate_plant}${inputValue}`
+        }
       />
 
-      {pendingName && <span style={{ fontSize: 12, color: "#666" }}>候选：{pendingName}</span>}
+      {pendingName && (
+        <span style={{ fontSize: 12, color: "#666" }}>
+          {t.archive_workspace.candidate_prefix}{pendingName}
+        </span>
+      )}
 
       <button type="button" onClick={onSave} style={{ fontSize: 12 }}>
-        保存
+        {t.archive_workspace.save}
       </button>
 
       <button type="button" onClick={onCancel} style={{ fontSize: 12 }}>
-        取消
+        {t.archive_workspace.cancel}
       </button>
     </span>
   );

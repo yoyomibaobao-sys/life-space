@@ -11,8 +11,8 @@ import {
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
-  MARKET_ITEM_CATEGORY_OPTIONS,
-  MARKET_POST_TYPE_OPTIONS,
+  getMarketItemCategoryOptions,
+  getMarketPostTypeOptions,
   type MarketItemCategory,
   type MarketPostRow,
   type MarketPostType,
@@ -30,8 +30,8 @@ import {
 } from "@/lib/market-media-storage";
 import {
   isStorageUploadMaintenance,
-  STORAGE_UPLOAD_MAINTENANCE_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type ArchiveOption = {
   id: string;
@@ -58,6 +58,7 @@ type MarketMediaRow = {
 };
 
 export default function EditMarketPostPage() {
+  const { language, t } = useLanguage();
   const params = useParams();
   const router = useRouter();
   const id = String(params?.id || "");
@@ -222,12 +223,12 @@ export default function EditMarketPostPage() {
     const safeExternalLabel = externalLabel.trim();
 
     if (externalUrl.trim() && !safeExternalUrl) {
-      setErrorMsg("外部链接格式不正确，请填写 http:// 或 https:// 开头的链接");
+      setErrorMsg(t.market.invalid_external_link);
       return;
     }
 
     if (!safeTitle) {
-      setErrorMsg("请输入标题");
+      setErrorMsg(t.market.title_required);
       return;
     }
 
@@ -254,7 +255,7 @@ export default function EditMarketPostPage() {
 
     if (error) {
       console.error("update market post error:", error);
-      setErrorMsg("保存失败，请稍后重试");
+      setErrorMsg(t.market.save_failed);
       return;
     }
 
@@ -272,18 +273,18 @@ export default function EditMarketPostPage() {
     const imageFiles = files.filter((file) => file.type.startsWith("image/"));
 
     if (imageFiles.length !== files.length) {
-      setErrorMsg("只能上传图片文件");
+      setErrorMsg(t.market.image_only);
       return;
     }
 
     const tooLarge = imageFiles.find((file) => file.size > 6 * 1024 * 1024);
     if (tooLarge) {
-      setErrorMsg("单张图片请控制在 6MB 以内");
+      setErrorMsg(t.market.single_image_size_limit);
       return;
     }
 
     if (await isStorageUploadMaintenance()) {
-      setErrorMsg(STORAGE_UPLOAD_MAINTENANCE_MESSAGE);
+      setErrorMsg(t.market.image_upload_maintenance);
       return;
     }
 
@@ -342,10 +343,10 @@ export default function EditMarketPostPage() {
             .maybeSingle();
           if (reconciliation.error) {
             cleanupAllowed = false;
-            throw new Error("图片保存状态待确认，请刷新后查看。");
+            throw new Error(t.market.image_state_pending);
           }
           committedRow = reconciliation.data as MarketMediaRow | null;
-          if (!committedRow) throw new Error("图片保存失败，请稍后重试。");
+          if (!committedRow) throw new Error(t.market.image_save_failed);
         }
 
         committed = true;
@@ -356,7 +357,7 @@ export default function EditMarketPostPage() {
           await rollbackReservedMarketImage(uploaded);
         }
         failureCount += 1;
-        lastError = error instanceof Error ? error.message : "图片上传失败，请稍后重试";
+        lastError = error instanceof Error ? error.message : t.market.image_upload_failed;
       }
     }
 
@@ -372,7 +373,7 @@ export default function EditMarketPostPage() {
       setErrorMsg(
         failureCount === imageFiles.length
           ? lastError
-          : `已有 ${imageFiles.length - failureCount} 张保存成功，${failureCount} 张未能保存。`,
+          : `${t.market.partial_image_success_prefix} ${imageFiles.length - failureCount} ${t.market.partial_image_success_middle}${failureCount} ${t.market.partial_image_success_suffix}`,
       );
     }
     setUploading(false);
@@ -391,7 +392,7 @@ export default function EditMarketPostPage() {
     });
 
     if (!result.ok) {
-      setErrorMsg("设置封面失败");
+      setErrorMsg(t.market.set_cover_failed);
       return;
     }
 
@@ -418,7 +419,7 @@ export default function EditMarketPostPage() {
   async function handleDeleteMedia(media: MarketMediaRow) {
     if (!item || !user || workingMediaId) return;
 
-    const ok = window.confirm("确定删除这张集市图片吗？");
+    const ok = window.confirm(t.market.delete_image_confirm);
     if (!ok) return;
 
     setWorkingMediaId(media.id);
@@ -426,7 +427,7 @@ export default function EditMarketPostPage() {
 
     const result = await requestMarketMediaDeletion(media.id);
     if (!result.ok) {
-      setErrorMsg("删除图片失败");
+      setErrorMsg(t.market.delete_image_failed);
       setWorkingMediaId(null);
       return;
     }
@@ -435,7 +436,7 @@ export default function EditMarketPostPage() {
   }
 
   if (loading) {
-    return <main style={pageStyle}>加载中...</main>;
+    return <main style={pageStyle}>{t.market.loading}</main>;
   }
 
   if (!item) {
@@ -443,9 +444,9 @@ export default function EditMarketPostPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href="/market" style={backLinkStyle}>
-            <UiIcon name="arrow-left" size={15} /> 返回集市
+            <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
           </Link>
-          <section style={emptyStyle}>这条集市信息不存在或已不可见</section>
+          <section style={emptyStyle}>{t.market.not_found}</section>
         </div>
       </main>
     );
@@ -456,9 +457,9 @@ export default function EditMarketPostPage() {
       <main style={pageStyle}>
         <div style={shellStyle}>
           <Link href={`/market/${item.id}`} style={backLinkStyle}>
-            <UiIcon name="arrow-left" size={15} /> 返回集市详情
+            <UiIcon name="arrow-left" size={15} /> {t.market.back_to_detail}
           </Link>
-          <section style={emptyStyle}>只有发布者可以编辑这条集市信息。</section>
+          <section style={emptyStyle}>{t.market.owner_only_edit}</section>
         </div>
       </main>
     );
@@ -468,20 +469,20 @@ export default function EditMarketPostPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <Link href={`/market/${item.id}`} style={backLinkStyle}>
-          <UiIcon name="arrow-left" size={15} /> 返回集市详情
+          <UiIcon name="arrow-left" size={15} /> {t.market.back_to_detail}
         </Link>
 
         <section style={panelStyle}>
-          <h1 style={titleStyle}>编辑集市信息</h1>
+          <h1 style={titleStyle}>{t.market.edit_title}</h1>
 
           {errorMsg ? <div style={errorStyle}>{errorMsg}</div> : null}
 
           <section style={imageManagerSectionStyle}>
             <div style={imageManagerHeaderStyle}>
-              <div style={sectionTitleStyle}>集市图片</div>
+              <div style={sectionTitleStyle}>{t.market.market_images}</div>
 
               <label style={uploadButtonStyle}>
-                {uploading ? "上传中..." : "上传/拍照"}
+                {uploading ? t.market.uploading : t.market.upload_or_camera}
                 <input
                   type="file"
                   accept="image/*"
@@ -516,7 +517,7 @@ export default function EditMarketPostPage() {
                           />
                         ) : (
                           <div
-                            aria-label="图片暂不可用"
+                            aria-label={t.market.image_unavailable}
                             style={{
                               ...mediaManageImageStyle,
                               display: "grid",
@@ -525,16 +526,16 @@ export default function EditMarketPostPage() {
                               fontSize: 12,
                             }}
                           >
-                            图片暂不可用
+                            {t.market.image_unavailable}
                           </div>
                         )}
                         {isCover ? (
-                          <span style={coverBadgeStyle}>封面</span>
+                          <span style={coverBadgeStyle}>{t.market.cover}</span>
                         ) : null}
                         {media.path && !media.source_media_id ? (
-                          <span style={uploadedBadgeStyle}>上传图</span>
+                          <span style={uploadedBadgeStyle}>{t.market.uploaded_image}</span>
                         ) : (
-                          <span style={sourceBadgeStyle}>记录图</span>
+                          <span style={sourceBadgeStyle}>{t.market.source_image}</span>
                         )}
                       </div>
 
@@ -545,7 +546,7 @@ export default function EditMarketPostPage() {
                           disabled={isCover || isWorking}
                           style={smallButtonStyle(isCover)}
                         >
-                          {isCover ? "当前封面" : "设为封面"}
+                          {isCover ? t.market.current_cover : t.market.set_as_cover}
                         </button>
 
                         <button
@@ -554,7 +555,7 @@ export default function EditMarketPostPage() {
                           disabled={isWorking}
                           style={smallDangerButtonStyle}
                         >
-                          {isWorking ? "处理中..." : "删除"}
+                          {isWorking ? t.market.processing : t.market.delete}
                         </button>
                       </div>
                     </article>
@@ -563,14 +564,14 @@ export default function EditMarketPostPage() {
               </div>
             ) : (
               <div style={emptyImageStyle}>
-                还没有集市图片。可以上传或拍照补充图片。
+                {t.market.no_market_images}
               </div>
             )}
           </section>
 
           <div style={formStyle}>
             <div>
-              <label style={labelStyle}>类型</label>
+              <label style={labelStyle}>{t.market.type}</label>
               <select
                 value={postType}
                 onChange={(event) =>
@@ -578,7 +579,7 @@ export default function EditMarketPostPage() {
                 }
                 style={inputStyle}
               >
-                {MARKET_POST_TYPE_OPTIONS.map((option) => (
+                {getMarketPostTypeOptions(language).map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -587,7 +588,7 @@ export default function EditMarketPostPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>类别</label>
+              <label style={labelStyle}>{t.market.category}</label>
               <select
                 value={itemCategory}
                 onChange={(event) =>
@@ -595,7 +596,7 @@ export default function EditMarketPostPage() {
                 }
                 style={inputStyle}
               >
-                {MARKET_ITEM_CATEGORY_OPTIONS.map((option) => (
+                {getMarketItemCategoryOptions(language).map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -604,30 +605,30 @@ export default function EditMarketPostPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>标题</label>
+              <label style={labelStyle}>{t.market.title_label}</label>
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 style={inputStyle}
-                placeholder="例如：薄荷分株出让 / 求换番茄苗"
+                placeholder={t.market.title_placeholder}
               />
             </div>
 
             <div>
-              <label style={labelStyle}>关联项目，可选</label>
+              <label style={labelStyle}>{t.market.optional_archive}</label>
               <select
                 value={archiveId}
                 onChange={(event) => setArchiveId(event.target.value)}
                 style={inputStyle}
               >
-                <option value="">不关联项目</option>
+                <option value="">{t.market.no_archive}</option>
                 {archives.map((archive) => {
                   const systemName =
                     archive.system_name || archive.species_name_snapshot || "";
 
                   return (
                     <option key={archive.id} value={archive.id}>
-                      {archive.title || "未命名项目"}
+                      {archive.title || t.market.unnamed_project}
                       {systemName ? ` · ${systemName}` : ""}
                     </option>
                   );
@@ -637,56 +638,56 @@ export default function EditMarketPostPage() {
 
             {selectedArchive ? (
               <div style={archiveHintStyle}>
-                已关联项目：{selectedArchive.title || "未命名项目"}
+                {t.market.linked_archive}{selectedArchive.title || t.market.unnamed_project}
               </div>
             ) : null}
 
             <div>
-              <label style={labelStyle}>交易地区</label>
+              <label style={labelStyle}>{t.market.transaction_area}</label>
               <input
                 value={locationText}
                 onChange={(event) => setLocationText(event.target.value)}
                 style={inputStyle}
-                placeholder="例如：浙江 · 宁波 · 鄞州区 / 加州 · 湾区 · San Jose"
+                placeholder={t.market.transaction_area_placeholder}
               />
             </div>
 
             <div>
-              <label style={labelStyle}>外部链接，可选</label>
+              <label style={labelStyle}>{t.market.optional_external_link}</label>
               <input
                 value={externalUrl}
                 onChange={(event) => setExternalUrl(event.target.value)}
                 style={inputStyle}
-                placeholder="例如：https://example.com/item"
+                placeholder={t.market.external_link_placeholder}
               />
               <div style={coverHintStyle}>
-                可放置更详细的说明页、预约表单或个人主页链接。
+                {t.market.external_link_hint}
               </div>
             </div>
 
             <div>
-              <label style={labelStyle}>外链名称，可选</label>
+              <label style={labelStyle}>{t.market.optional_external_label}</label>
               <input
                 value={externalLabel}
                 onChange={(event) => setExternalLabel(event.target.value)}
                 style={inputStyle}
-                placeholder="例如：查看详细说明 / 联系方式 / 原发布页"
+                placeholder={t.market.external_label_placeholder}
               />
             </div>
 
             <div>
-              <label style={labelStyle}>说明</label>
+              <label style={labelStyle}>{t.market.description}</label>
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 style={textareaStyle}
-                placeholder="说明数量、状态、交换方式、是否限本地等。"
+                placeholder={t.market.description_placeholder}
               />
             </div>
           </div>
 
           <div style={noticeStyle}>
-            第一版集市只做信息发布，不做平台支付、担保、物流和纠纷处理。
+            {t.market.disclaimer}
           </div>
 
           <div style={buttonRowStyle}>
@@ -696,11 +697,11 @@ export default function EditMarketPostPage() {
               disabled={saving}
               style={primaryButtonStyle}
             >
-              {saving ? "保存中..." : "保存修改"}
+              {saving ? t.market.saving : t.market.save_changes}
             </button>
 
             <Link href={`/market/${item.id}`} style={secondaryButtonStyle}>
-              取消
+              {t.market.cancel}
             </Link>
           </div>
         </section>

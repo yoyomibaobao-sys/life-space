@@ -3,9 +3,11 @@
 import type { CSSProperties } from "react";
 import {
   archiveCategoryOptions,
+  getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import type { ArchiveCategoryFilterValue } from "@/components/archive-ui/types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   activeCategory: ArchiveCategoryFilterValue;
@@ -21,21 +23,25 @@ export default function ArchiveCategoryTabs({
   counts,
   totalCount,
   onSelect,
-  label = "主分类",
+  label,
   mobileMode = false,
 }: Props) {
+  const { language, t } = useLanguage();
   const tabs: Array<{ value: ArchiveCategoryFilterValue; label: string; count: number }> = [
-    { value: null, label: "全部", count: totalCount },
+    { value: null, label: t.archive_workspace.all, count: totalCount },
     ...archiveCategoryOptions.map((option) => ({
       value: option.value,
-      label: option.label,
+      label: getArchiveCategoryLabel(option.value, language),
       count: counts[option.value] || 0,
     })),
   ];
 
   return (
-    <section style={mobileMode ? mobileWrapStyle : wrapStyle} aria-label="项目主分类">
-      <span style={labelStyle}>{label}</span>
+    <section
+      style={mobileMode ? mobileWrapStyle : wrapStyle}
+      aria-label={t.archive_workspace.project_categories_aria}
+    >
+      <span style={labelStyle}>{label || t.archive_workspace.main_category}</span>
       {tabs.map((tab) => {
         const active = activeCategory === tab.value;
 

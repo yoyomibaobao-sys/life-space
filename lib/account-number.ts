@@ -25,9 +25,15 @@ export function parseAccountNumber(value?: string | null): ParsedAccountNumber |
   };
 }
 
-export function getAccountRegistrationSummary(value?: string | null) {
+export function getAccountRegistrationSummary(
+  value?: string | null,
+  language: Language = "zh"
+) {
   const parsed = parseAccountNumber(value);
   if (!parsed) return "";
 
-  return `${parsed.registrationYear}年注册 · 正式用户总第${parsed.registrationSequence}位`;
+  return language === "en"
+    ? `Registered ${parsed.registrationYear} · Formal user #${parsed.registrationSequence}`
+    : `${parsed.registrationYear}年注册 · 正式用户总第${parsed.registrationSequence}位`;
 }
+import type { Language } from "@/lib/i18n";

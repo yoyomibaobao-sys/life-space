@@ -43,17 +43,20 @@ test("local-to-cloud transfer reuses the existing app standard without recompres
 });
 
 test("the web UI states the standard and does not promise automatic system-album writes", async () => {
-  const [cloudComposer, localComposer, rules] = await Promise.all([
+  const [cloudComposer, localComposer, rules, zhCopy, enCopy] = await Promise.all([
     source("app/archive/[id]/AddRecord.tsx"),
     source("app/local/archive/[id]/page.tsx"),
     source("AGENTS.md"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
 
-  for (const composer of [cloudComposer, localComposer]) {
-    assert.match(composer, /1800px/);
-    assert.match(composer, /质量 82%/);
-    assert.match(composer, /小图不放大/);
-  }
+  assert.match(cloudComposer, /copy\.standard_photo_hint/);
+  assert.match(localComposer, /recordCopy\.local_standard_photo_hint/);
+  assert.match(zhCopy, /最长边不超过 1800px、质量 82%/);
+  assert.match(zhCopy, /小图不放大/);
+  assert.match(enCopy, /maximum 1800 px edge at 82% quality/);
+  assert.match(enCopy, /smaller images are not enlarged/);
 
   assert.match(rules, /同时保存原图到系统相册/);
   assert.match(rules, /默认关闭/);

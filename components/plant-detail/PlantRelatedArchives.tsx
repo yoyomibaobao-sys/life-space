@@ -1,10 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import type { PlantRelatedArchiveItem } from "@/lib/plant-detail-types";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
-function getHelpLabel(status?: string | null) {
-  if (status === "open") return "求助中";
-  if (status === "resolved") return "求助已解决";
+function getHelpLabel(
+  status: string | null | undefined,
+  labels: { open: string; resolved: string }
+) {
+  if (status === "open") return labels.open;
+  if (status === "resolved") return labels.resolved;
   return "";
 }
 
@@ -13,6 +19,8 @@ export default function PlantRelatedArchives({
 }: {
   archives: PlantRelatedArchiveItem[];
 }) {
+  const { t } = useLanguage();
+  const copy = t.plant.detail;
   const uniqueArchives = Array.from(
     new Map(archives.map((archive) => [archive.archive_id, archive])).values()
   );
@@ -27,7 +35,7 @@ export default function PlantRelatedArchives({
           marginBottom: 10,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 18 }}>相关种植项目</h2>
+        <h2 style={{ margin: 0, fontSize: 18 }}>{copy.related_projects}</h2>
       </div>
 
       {uniqueArchives.length === 0 ? (
@@ -40,7 +48,7 @@ export default function PlantRelatedArchives({
             background: "#fff",
           }}
         >
-          还没有相关公开项目
+          {copy.no_related_public_projects}
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
@@ -48,12 +56,15 @@ export default function PlantRelatedArchives({
             const imageUrl =
               archive.display_cover_image_url ||
               archive.display_last_public_record_image_url;
-            const helpLabel = getHelpLabel(archive.archive_help_status);
+            const helpLabel = getHelpLabel(archive.archive_help_status, {
+              open: copy.help_open,
+              resolved: copy.help_resolved,
+            });
             const visibilityLabel = archive.is_own_archive
               ? archive.archive_is_public
-                ? "我的公开项目"
-                : "我的项目 · 仅自己可见"
-              : "公开项目";
+                ? copy.my_public_project
+                : copy.my_private_project
+              : copy.public_project;
 
             return (
               <Link
@@ -87,10 +98,10 @@ export default function PlantRelatedArchives({
 
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, color: "#263326" }}>
-                    {archive.archive_title || "种植项目"}
+                    {archive.archive_title || copy.planting_project}
                   </div>
                   <div style={{ marginTop: 4, color: "#70806a", fontSize: 13 }}>
-                    {archive.species_name_snapshot || archive.system_name || "未填写植物名"}
+                    {archive.species_name_snapshot || archive.system_name || copy.plant_name_missing}
                   </div>
                   <div style={{ marginTop: 8, color: "#6a7564", fontSize: 13 }}>
                     {visibilityLabel}
@@ -113,11 +124,11 @@ export default function PlantRelatedArchives({
                       overflow: "hidden",
                     }}
                   >
-                    {archive.last_public_record_note || "还没有公开记录摘要"}
+                    {archive.last_public_record_note || copy.no_public_record_summary}
                   </div>
                   {archive.username ? (
                     <div style={{ marginTop: 8, color: "#8a9584", fontSize: 12 }}>
-                      来自 {archive.username}
+                      {copy.from_prefix}{archive.username}
                     </div>
                   ) : null}
                 </div>

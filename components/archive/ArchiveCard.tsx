@@ -21,6 +21,8 @@ import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
+import { getTranslations, type Language } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   item: ArchiveItem;
@@ -72,13 +74,18 @@ type StatusPill = {
   };
 };
 
-function buildStatusPills(item: ArchiveItem, ended: boolean): StatusPill[] {
+function buildStatusPills(
+  item: ArchiveItem,
+  ended: boolean,
+  language: Language
+): StatusPill[] {
+  const copy = getTranslations(language).archive_workspace;
   const pills: StatusPill[] = [];
 
   if (item.help_status === "open") {
     pills.push({
       key: "help-open",
-      label: "求助中",
+      label: copy.help_open,
       style: {
         border: "1px solid #f3d7a3",
         background: "#fff7e8",
@@ -90,7 +97,7 @@ function buildStatusPills(item: ArchiveItem, ended: boolean): StatusPill[] {
   if (item.help_status === "resolved") {
     pills.push({
       key: "help-resolved",
-      label: "求助已解决",
+      label: copy.help_resolved,
       style: {
         border: "1px solid #cfdcc6",
         background: "#f5f8f1",
@@ -102,7 +109,7 @@ function buildStatusPills(item: ArchiveItem, ended: boolean): StatusPill[] {
   if (ended) {
     pills.push({
       key: "ended",
-      label: "已结束",
+      label: copy.ended,
       style: {
         border: "1px solid #d8ddd4",
         background: "#f3f3f3",
@@ -114,11 +121,14 @@ function buildStatusPills(item: ArchiveItem, ended: boolean): StatusPill[] {
   return pills;
 }
 
-function getLatestRecordPreview(item: ArchiveItem) {
+function getLatestRecordPreview(item: ArchiveItem, language: Language) {
+  const copy = getTranslations(language).archive_workspace;
   const note = item.latest_record_note?.trim();
   if (note) return note;
-  if (item.latest_record_media_count && item.latest_record_media_count > 0) return "新增了图片记录";
-  if (item.latest_record_time || item.last_record_time) return "新增了一条记录";
+  if (item.latest_record_media_count && item.latest_record_media_count > 0) {
+    return copy.new_photo_record;
+  }
+  if (item.latest_record_time || item.last_record_time) return copy.new_record;
   return "";
 }
 
@@ -175,6 +185,7 @@ export default function ArchiveCard({
   onDeleteArchive,
   mobileMode = false,
 }: Props) {
+  const { language, t } = useLanguage();
   const hasLatestRecord = Boolean(
     item.latest_record_time ||
       item.latest_record_note ||
@@ -184,13 +195,16 @@ export default function ArchiveCard({
     item.latest_record_primary_thumb_url ||
     item.latest_record_primary_image_url ||
     (!hasLatestRecord ? item.display_cover_image_url || "" : "");
-  const cardImageAlt = item.latest_record_primary_image_url || item.latest_record_primary_thumb_url ? "最新记录图片" : item.title || "项目封面";
+  const cardImageAlt =
+    item.latest_record_primary_image_url || item.latest_record_primary_thumb_url
+      ? t.archive_workspace.latest_record_image
+      : item.title || t.archive_workspace.project_cover;
   const systemName = getArchiveSystemName(item);
-  const mobileSystemName = getMobileArchiveSystemName(item);
-  const latestRecordPreview = getLatestRecordPreview(item);
+  const mobileSystemName = getMobileArchiveSystemName(item, language);
+  const latestRecordPreview = getLatestRecordPreview(item, language);
   const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
   const ongoingDays = getOngoingDays(item.created_at);
-  const statusPills = buildStatusPills(item, ended);
+  const statusPills = buildStatusPills(item, ended, language);
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
@@ -277,7 +291,9 @@ export default function ArchiveCard({
               fontSize: 24,
             }}
           >
-            <span style={{ fontSize: 12, color: "#8c9b88" }}>无图</span>
+            <span style={{ fontSize: 12, color: "#8c9b88" }}>
+              {t.archive_workspace.no_image}
+            </span>
           </div>
         )}
       </div>
@@ -347,7 +363,7 @@ export default function ArchiveCard({
                 onRenameTitle(item);
               }}
               style={{ cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-              title="点击可修改名称"
+              title={t.archive_workspace.click_edit_name}
             >
               {item.title}
             </span>
@@ -382,7 +398,7 @@ export default function ArchiveCard({
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
-                title="点击可修改系统名"
+                title={t.archive_workspace.click_edit_system_name}
               >
                 {systemName}
               </span>
@@ -412,7 +428,7 @@ export default function ArchiveCard({
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
-                title="点击可修改具体名称"
+                title={t.archive_workspace.click_edit_specific_name}
               >
                 {systemName}
               </span>
@@ -453,7 +469,7 @@ export default function ArchiveCard({
         >
           <button
             type="button"
-            title={item.is_public ? "设为仅自己可见" : "公开"}
+            title={item.is_public ? t.archive.set_private : t.archive_workspace.publish}
             onClick={(e) => {
               e.stopPropagation();
               onTogglePublic(item);
@@ -468,7 +484,7 @@ export default function ArchiveCard({
               cursor: "pointer",
             }}
           >
-            {item.is_public ? "公开发现" : "仅自己可见"}
+            {item.is_public ? t.archive.public_discover : t.archive.private_only}
           </button>
 
           <ArchiveCategoryDropdown
@@ -498,9 +514,9 @@ export default function ArchiveCard({
             WebkitLineClamp: 1,
             WebkitBoxOrient: "vertical",
           }}
-          title={latestRecordPreview || "还没有记录内容"}
+          title={latestRecordPreview || t.archive_workspace.no_record_content}
         >
-          {latestRecordPreview || "还没有记录内容"}
+          {latestRecordPreview || t.archive_workspace.no_record_content}
           {latestRecordTime ? (
             <>
               <span aria-hidden="true"> · </span>
@@ -547,7 +563,7 @@ export default function ArchiveCard({
       whiteSpace: "nowrap",
     }}
   >
-    {ended ? "恢复" : "结束"}
+    {ended ? t.archive_workspace.restore : t.archive_workspace.end}
   </button>
 
   <button
@@ -563,7 +579,7 @@ export default function ArchiveCard({
             whiteSpace: "nowrap",
           }}
         >
-          删除
+          {t.archive_workspace.delete}
         </button>
       </div>
     </div>
@@ -601,26 +617,27 @@ function MobileArchiveCard({
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
   onDeleteArchive: (item: ArchiveItem) => void;
 }) {
+  const { language, t } = useLanguage();
   const [menuOpen, setMenuOpen] = useState(false);
   const ongoingDays = getOngoingDays(item.created_at);
   const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
-  const latestRecordPreview = getLatestRecordPreview(item);
-  const visibilityText = item.is_public ? "公开发现" : "仅自己可见";
-  const mobileEndedText = ended ? "已结束" : "";
+  const latestRecordPreview = getLatestRecordPreview(item, language);
+  const visibilityText = item.is_public ? t.archive.public_discover : t.archive.private_only;
+  const mobileEndedText = ended ? t.archive_workspace.ended : "";
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
   const projectView: ArchiveProjectView = {
     id: item.id,
     mode: "cloud",
-    title: item.title || "未命名项目",
+    title: item.title || t.archive_workspace.unnamed_project,
     category: item.category,
     plantId: item.species_id,
-    categoryLabel: getArchiveCategoryLabel(item.category),
+    categoryLabel: getArchiveCategoryLabel(item.category, language),
     categoryIcon: getArchiveCategoryIcon(item.category),
     systemName,
     cover: imageUrl ? { kind: "url", url: imageUrl, alt: imageAlt } : null,
-    latestText: latestRecordPreview || "还没有记录内容",
+    latestText: latestRecordPreview || t.archive_workspace.no_record_content,
     latestTime: latestRecordTime,
     recordCount: item.record_count || 0,
     durationDays: ongoingDays,
@@ -660,7 +677,7 @@ function MobileArchiveCard({
           event.stopPropagation();
           setMenuOpen((open) => !open);
         }}
-        aria-label="更多项目操作"
+        aria-label={t.archive_workspace.more_project_actions}
         style={mobileCardMoreButtonStyle}
       >
         <UiIcon name="more" size={20} />
@@ -676,7 +693,7 @@ function MobileArchiveCard({
             }}
             style={mobileCardMenuItemStyle}
           >
-            {ended ? "恢复" : "结束"}
+            {ended ? t.archive_workspace.restore : t.archive_workspace.end}
           </button>
           <button
             type="button"
@@ -686,7 +703,9 @@ function MobileArchiveCard({
             }}
             style={mobileCardMenuItemStyle}
           >
-            {item.is_public ? "设为私密" : "设为公开发现"}
+            {item.is_public
+              ? t.archive_workspace.set_private
+              : t.archive_workspace.set_public}
           </button>
           <button
             type="button"
@@ -696,7 +715,7 @@ function MobileArchiveCard({
             }}
             style={mobileCardDangerMenuItemStyle}
           >
-            移入回收站
+            {t.archive_workspace.move_to_trash}
           </button>
         </div>
       ) : null}
@@ -714,12 +733,13 @@ function MobileArchiveCard({
   );
 }
 
-function getMobileArchiveSystemName(item: ArchiveItem) {
+function getMobileArchiveSystemName(item: ArchiveItem, language: Language) {
+  const copy = getTranslations(language).archive_workspace;
   if (item.category === "plant") {
-    return item.species_display_name || item.species_name_snapshot || "未填写";
+    return item.species_display_name || item.species_name_snapshot || copy.not_filled;
   }
 
-  return item.system_name?.trim() || "未填写";
+  return item.system_name?.trim() || copy.not_filled;
 }
 
 const mobileCardImageWrapStyle: CSSProperties = {

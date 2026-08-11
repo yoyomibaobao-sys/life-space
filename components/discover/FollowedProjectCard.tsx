@@ -10,6 +10,7 @@ import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
 import styles from "@/components/discover/FollowedProjects.module.css";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function getSystemName(item: DiscoveryProjectFeedItem) {
   const value =
@@ -30,14 +31,15 @@ export function FollowedProjectCard({
   unfollowing?: boolean;
   onRequestUnfollow?: (archiveId: string) => void;
 }) {
+  const { t } = useLanguage();
   const [imageFailed, setImageFailed] = useState(false);
-  const title = item.archive_title?.trim() || "未命名项目";
+  const title = item.archive_title?.trim() || t.discover.unnamed_project;
   const systemName = getSystemName(item);
   const durationDays = getDurationDays(
     item.archive_created_at,
     item.archive_ended_at
   );
-  const ownerName = item.profile_display_name?.trim() || "一位种植者";
+  const ownerName = item.profile_display_name?.trim() || t.discover.default_grower;
   const region = item.profile_region?.trim() || null;
   const showImage = Boolean(item.display_image_url) && !imageFailed;
 
@@ -45,7 +47,7 @@ export function FollowedProjectCard({
     <article className={styles.card}>
       <Link
         href={`/archive/${item.archive_id}`}
-        aria-label={`查看项目：${title}`}
+        aria-label={`${t.discover.view_project_prefix}${title}`}
         className={styles.cardLink}
       >
         <div className={styles.imageRegion}>
@@ -100,7 +102,7 @@ export function FollowedProjectCard({
 
       {mode === "followed-project" ? (
         <div className={styles.followActionRow}>
-          <span className={styles.followStatus}>已关注</span>
+          <span className={styles.followStatus}>{t.discover.followed_badge}</span>
           <span className={styles.followActionDivider} aria-hidden="true">
             |
           </span>
@@ -110,7 +112,7 @@ export function FollowedProjectCard({
             disabled={unfollowing}
             onClick={() => onRequestUnfollow?.(item.archive_id)}
           >
-            {unfollowing ? "处理中..." : "取消关注"}
+            {unfollowing ? t.discover.processing : t.discover.unfollow}
           </button>
         </div>
       ) : null}

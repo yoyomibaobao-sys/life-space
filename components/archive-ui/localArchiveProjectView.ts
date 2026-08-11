@@ -7,6 +7,7 @@ import type {
   LocalArchiveSummary,
 } from "@/lib/local-offline-db";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import { getTranslations, type Language } from "@/lib/i18n";
 
 function getOngoingDays(createdAt?: string | null) {
   if (!createdAt) return null;
@@ -24,32 +25,36 @@ function getOngoingDays(createdAt?: string | null) {
 
 export function getLocalArchiveOwnerLabel(
   archive: LocalArchiveSummary,
-  ownerContext?: LocalArchiveOwnerContext | null
+  ownerContext?: LocalArchiveOwnerContext | null,
+  language: Language = "zh"
 ) {
-  if (!archive.local_owner_user_id) return "未归属账号";
-  if (archive.local_owner_user_id === ownerContext?.userId) return "已归属当前账号";
-  return "已归属其他账号";
+  const copy = getTranslations(language).archive_workspace;
+  if (!archive.local_owner_user_id) return copy.not_assigned;
+  if (archive.local_owner_user_id === ownerContext?.userId) return copy.assigned_current;
+  return copy.assigned_other;
 }
 
 export function localArchiveToProjectView(
   archive: LocalArchiveSummary,
-  ownerContext?: LocalArchiveOwnerContext | null
+  ownerContext?: LocalArchiveOwnerContext | null,
+  language: Language = "zh"
 ): ArchiveProjectView {
+  const copy = getTranslations(language).archive_workspace;
   const ongoingDays = getOngoingDays(archive.created_at);
   const latestTime = archive.latest_record_time || archive.updated_at;
-  const latestSummary = archive.latest_record_note || archive.note || "暂无记录内容";
+  const latestSummary = archive.latest_record_note || archive.note || copy.no_record_summary;
 
   return {
     id: archive.id,
     mode: "local",
     href: `/local/archive/${archive.id}`,
-    title: archive.title || "未命名项目",
+    title: archive.title || copy.unnamed_project,
     category: archive.category,
     plantId: archive.plant_id,
     plantSlug: archive.plant_slug,
-    categoryLabel: getArchiveCategoryLabel(archive.category),
+    categoryLabel: getArchiveCategoryLabel(archive.category, language),
     categoryIcon: getArchiveCategoryIcon(archive.category),
-    systemName: archive.system_name || archive.species_name || "未填写",
+    systemName: archive.system_name || archive.species_name || copy.not_filled,
     // Local labels come from IndexedDB only and are not Supabase sub_tags/group_tags.
     subcategoryLabel: archive.subcategory,
     groupLabel: archive.group_name,
@@ -57,14 +62,14 @@ export function localArchiveToProjectView(
       ? {
           kind: "blob",
           blob: archive.cover_image.blob,
-          alt: archive.title || "本地项目封面",
+          alt: archive.title || copy.local_project_cover,
         }
       : null,
     latestText: latestSummary,
     latestTime,
     recordCount: archive.record_count || 0,
     durationDays: ongoingDays,
-    visibilityLabel: "本地",
+    visibilityLabel: copy.local,
     visibilityTone: "neutral",
     mobilePrimaryStatsText: null,
     mobileSecondaryStatsText: null,

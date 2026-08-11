@@ -14,6 +14,7 @@ import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Category = "all" | ArchiveCategory;
 
@@ -64,10 +65,6 @@ type UserSpaceArchiveStats = {
   hasHelp: boolean;
 };
 
-function categoryLabel(category?: string | null) {
-  return getArchiveCategoryLabel(category);
-}
-
 function getMediaUrl(media?: MediaItem | null) {
   return media?.display_url || "";
 }
@@ -77,6 +74,7 @@ function getMediaPreviewUrl(media?: MediaItem | null) {
 }
 
 export default function UserSpacePage() {
+  const { language, t } = useLanguage();
   const params = useParams();
   const router = useRouter();
   const userId = params.id as string;
@@ -345,7 +343,7 @@ export default function UserSpacePage() {
               fontWeight: 650,
             }}
           >
-            {username ? `${username} · 空间` : "用户空间"}
+            {username ? `${username}${t.profile.space.title_suffix}` : t.profile.space.user_space}
           </h1>
 
           <Link
@@ -361,7 +359,7 @@ export default function UserSpacePage() {
               textDecoration: "none",
             }}
           >
-            用户资料
+            {t.profile.space.user_profile}
           </Link>
         </div>
 
@@ -373,7 +371,7 @@ export default function UserSpacePage() {
             textDecoration: "none",
           }}
         >
-          <UiIcon name="arrow-left" size={15} /> 返回发现
+          <UiIcon name="arrow-left" size={15} /> {t.profile.space.back_to_discover}
         </Link>
       </section>
 
@@ -400,7 +398,7 @@ export default function UserSpacePage() {
             onClick={() => selectCategory("all")}
             style={mainFilterStyle(activeCategory === "all")}
           >
-            全部
+            {t.profile.space.all}
           </button>
 
           {[
@@ -417,7 +415,7 @@ export default function UserSpacePage() {
                   activeCategory === category && !activeSubTag
                 )}
               >
-                {categoryLabel(category)}：
+                {getArchiveCategoryLabel(category, language)}{language === "en" ? ":" : "："}
               </button>
 
               {visibleSubTags
@@ -460,7 +458,7 @@ export default function UserSpacePage() {
                 padding: 0,
               }}
             >
-              分组：
+              {t.profile.space.group_prefix}
             </button>
 
             {visibleGroupTags.map((tag) => (
@@ -489,7 +487,7 @@ export default function UserSpacePage() {
               background: "#fff",
             }}
           >
-            还没有公开项目
+            {t.profile.space.no_public_projects}
           </div>
         ) : (
           filteredArchives.map((archive) => {
@@ -498,7 +496,7 @@ export default function UserSpacePage() {
             const cover = coverMap[archive.id];
             const subTagName =
               subTags.find((tag) => tag.id === archive.sub_tag_id)?.name ||
-              "未细分";
+              t.profile.space.uncategorized;
             const groupTagName =
               groupTags.find((tag) => tag.id === archive.group_tag_id)?.name ||
               "";
@@ -571,14 +569,14 @@ export default function UserSpacePage() {
                       minWidth: 0,
                     }}
                   >
-                    <span style={typeBadgeStyle}>{categoryLabel(archive.category)}</span>
+                    <span style={typeBadgeStyle}>{getArchiveCategoryLabel(archive.category, language)}</span>
 
-                    {hasHelp && <span style={helpBadgeStyle}>求助</span>}
+                    {hasHelp && <span style={helpBadgeStyle}>{t.profile.space.help}</span>}
 
-                    {isEnded && <span style={endedBadgeStyle}>已结束</span>}
+                    {isEnded && <span style={endedBadgeStyle}>{t.profile.space.ended}</span>}
 
                     {followedArchiveIds.includes(archive.id) && (
-                      <span style={followedBadgeStyle}>已关注</span>
+                      <span style={followedBadgeStyle}>{t.profile.space.followed}</span>
                     )}
 
                     <span
@@ -591,7 +589,7 @@ export default function UserSpacePage() {
                         color: "#263326",
                       }}
                     >
-                      {archive.title} · {archive.system_name || archive.species_name_snapshot || "未填写"}
+                      {archive.title} · {archive.system_name || archive.species_name_snapshot || t.profile.public_profile.not_provided}
                     </span>
                   </div>
 
@@ -605,7 +603,7 @@ export default function UserSpacePage() {
                       fontSize: 14,
                     }}
                   >
-                    {latest?.note || "还没有公开记录"}
+                    {latest?.note || t.profile.space.no_public_records}
                     {latest?.record_time ? (
                       <span style={{ color: "#9a9f94" }}>
                         <span aria-hidden="true"> · </span>

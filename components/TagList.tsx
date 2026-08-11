@@ -4,6 +4,7 @@ import { getBehaviorTagLabel } from "@/lib/tag-labels";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 import type { CSSProperties } from "react";
 
@@ -26,6 +27,8 @@ export default function TagList({
   containerStyle,
   tagStyle,
 }: Props) {
+  const { language, t } = useLanguage();
+
   if (!Array.isArray(tags) || tags.length === 0) return null;
 
   return (
@@ -59,7 +62,7 @@ export default function TagList({
               ...tagStyle,
             }}
           >
-            {getBehaviorTagLabel(tag)}
+            {getBehaviorTagLabel(tag, language)}
 
             {editable && isUserTag && recordId ? (
               <span
@@ -75,13 +78,13 @@ export default function TagList({
                     .eq("source", "user");
 
                   if (error) {
-                    showToast("删除标签失败");
+                    showToast(t.tag_list.delete_failed);
                     return;
                   }
 
                   onChange?.(tag, "remove");
                   requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
-                  showToast("已删除标签");
+                  showToast(t.tag_list.deleted);
                 }}
                 style={{
                   cursor: "pointer",

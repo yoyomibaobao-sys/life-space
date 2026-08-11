@@ -30,6 +30,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 const RECORD_SELECT = [
   "id",
@@ -216,6 +217,7 @@ export default function ExperienceCardEditor({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { language, t } = useLanguage();
   const requestedArchiveId = searchParams.get("archiveId");
 
   const [archive, setArchive] = useState<ExperienceCardArchive | null>(null);
@@ -261,7 +263,7 @@ export default function ExperienceCardEditor({
       if (cardId) {
         const detail = await loadExperienceCard(cardId);
         if (!detail || detail.card.user_id !== user.id) {
-          setErrorText("经验卡不存在，或者你没有编辑权限。");
+          setErrorText(t.experience.editor_not_found);
           setLoading(false);
           return;
         }
@@ -275,7 +277,7 @@ export default function ExperienceCardEditor({
       }
 
       if (!archiveId) {
-        setErrorText("请先从一个云端项目中选择“生成经验卡”。");
+        setErrorText(t.experience.editor_choose_cloud_project);
         setLoading(false);
         return;
       }
@@ -290,7 +292,7 @@ export default function ExperienceCardEditor({
         .maybeSingle();
 
       if (!archiveData) {
-        setErrorText("来源项目不存在，或者已经进入回收站。");
+        setErrorText(t.experience.source_project_unavailable);
         setLoading(false);
         return;
       }
@@ -300,7 +302,7 @@ export default function ExperienceCardEditor({
         nextRecords = await loadEditorRecords({ archiveId, userId: user.id });
       } catch (error) {
         console.error("load experience card editor records error:", error);
-        setErrorText("项目记录读取失败，请稍后重试。");
+        setErrorText(t.experience.records_load_failed);
         setLoading(false);
         return;
       }
@@ -361,7 +363,7 @@ export default function ExperienceCardEditor({
       setSelectedMediaIdsByRecordId(nextMediaSelection);
       setCoverMediaId(nextCoverMediaId);
       if (!cardId) {
-        setTitle(`${archiveData.title}的经验`);
+        setTitle(`${archiveData.title}${t.experience.title_suffix}`);
       } else {
         setInitialSnapshot(
           createEditorSnapshot({
@@ -376,7 +378,7 @@ export default function ExperienceCardEditor({
     }
 
     void init();
-  }, [cardId, requestedArchiveId, router]);
+  }, [cardId, requestedArchiveId, router, t.experience]);
 
   const imageOptions = useMemo(
     () =>
@@ -534,13 +536,13 @@ export default function ExperienceCardEditor({
       if (announce) {
         showToast(
           newlyAddedRecords.length > 0
-            ? `项目已有记录已更新，当前共有${nextRecords.length}条可供选择`
-            : "项目记录已是最新"
+            ? `${t.experience.records_updated_prefix}${nextRecords.length}${t.experience.records_updated_suffix}`
+            : t.experience.records_current
         );
       }
     } catch (error) {
       console.error("refresh experience card editor records error:", error);
-      setErrorText("新记录读取失败，请稍后再试。");
+      setErrorText(t.experience.new_records_failed);
     } finally {
       setRefreshingRecords(false);
     }
@@ -645,14 +647,14 @@ export default function ExperienceCardEditor({
       }
 
       if (mode === "publish") {
-        showToast("经验卡已公开");
+        showToast(t.experience.card_published);
       } else {
         showToast(
           mode === "preview"
-            ? "草稿已保存"
+            ? t.experience.draft_saved
             : cardId
-              ? "经验卡修改已保存"
-              : "经验卡草稿已保存"
+              ? t.experience.changes_saved
+              : t.experience.card_draft_saved
         );
       }
 
@@ -664,7 +666,7 @@ export default function ExperienceCardEditor({
         );
       }
     } catch (error) {
-      setErrorText(getExperienceCardErrorText(error));
+      setErrorText(getExperienceCardErrorText(error, language));
     } finally {
       setSaving(false);
       setPublishConfirmOpen(false);
@@ -673,19 +675,19 @@ export default function ExperienceCardEditor({
 
   if (loading) {
     return embedded ? (
-      <section style={messageCardStyle}>正在读取可编辑内容...</section>
+      <section style={messageCardStyle}>{t.experience.reading_editable}</section>
     ) : (
-      <main style={pageStyle}>正在读取项目记录...</main>
+      <main style={pageStyle}>{t.experience.reading_project_records}</main>
     );
   }
 
   if (errorText && !archive) {
     const message = (
       <section style={messageCardStyle}>
-        <h1 style={titleStyle}>无法编辑经验卡</h1>
+        <h1 style={titleStyle}>{t.experience.cannot_edit}</h1>
         <p style={mutedStyle}>{errorText}</p>
         <Link href="/experience-cards" style={secondaryLinkStyle}>
-          返回我的经验卡
+          {t.experience.back_my_cards}
         </Link>
       </section>
     );
@@ -699,17 +701,17 @@ export default function ExperienceCardEditor({
   if (!canCreateMembershipContent(membership)) {
     const membershipMessage = (
       <section style={messageCardStyle}>
-        <h1 style={titleStyle}>需要开通云会员</h1>
+        <h1 style={titleStyle}>{t.experience.membership_required}</h1>
         <p style={mutedStyle}>
-          经验卡引用云端项目与记录，只有云会员可以创建、修改和发布。
+          {t.experience.membership_required_hint}
         </p>
         <div style={actionRowStyle}>
           <Link href="/membership" style={primaryLinkStyle}>
-            了解云会员
+            {t.experience.learn_membership}
           </Link>
           {!embedded ? (
             <Link href="/experience-cards" style={secondaryLinkStyle}>
-              返回
+              {t.experience.back}
             </Link>
           ) : null}
         </div>
@@ -739,28 +741,28 @@ export default function ExperienceCardEditor({
           aria-pressed="true"
           onClick={() => toggleRecord(record.id)}
           style={recordHeaderButtonStyle}
-          aria-label={`从经验卡移出第${index + 1}条记录`}
+          aria-label={`${t.experience.remove_record_prefix}${index + 1}${t.experience.remove_record_suffix}`}
         >
           <span style={recordCheckStyle(true)} aria-hidden="true">
             <UiIcon name="check" size={14} />
           </span>
           <span style={recordHeaderTextStyle}>
             <span style={recordMetaStyle}>
-              {formatExperienceCardDate(record.record_time) || `记录${index + 1}`}
+              {formatExperienceCardDate(record.record_time) || `${t.experience.record_prefix}${index + 1}`}
             </span>
             <span style={recordNoteStyle}>
-              {record.note?.trim() || "无文字记录"}
+              {record.note?.trim() || t.experience.no_text}
             </span>
           </span>
-          <span style={recordSelectedStyle(false)}>移出</span>
+          <span style={recordSelectedStyle(false)}>{t.experience.remove}</span>
         </button>
 
         <div style={recordMediaAreaStyle(true)}>
           <div style={recordMediaHeadingStyle}>
             <span>
               {recordImages.length > 0
-                ? `MP4图片 ${selectedMediaIds.length}/${recordImages.length}`
-                : "这条记录没有图片，将使用文字画面"}
+                ? `${t.experience.mp4_images} ${selectedMediaIds.length}/${recordImages.length}`
+                : t.experience.no_images_text_scene}
             </span>
             {recordImages.length > 0 ? (
               <button
@@ -768,7 +770,7 @@ export default function ExperienceCardEditor({
                 onClick={() => toggleAllRecordImages(record)}
                 style={recordMediaActionStyle}
               >
-                {allImagesSelected ? "清空图片" : "全选图片"}
+                {allImagesSelected ? t.experience.clear_images : t.experience.select_all_images}
               </button>
             ) : null}
           </div>
@@ -791,7 +793,7 @@ export default function ExperienceCardEditor({
                     >
                       <img
                         src={previewUrl}
-                        alt={`第${index + 1}条记录的图片${mediaIndex + 1}`}
+                        alt={`${t.experience.record_image_prefix}${index + 1}${t.experience.record_image_middle}${mediaIndex + 1}`}
                         loading="lazy"
                         style={recordThumbnailStyle}
                       />
@@ -807,7 +809,7 @@ export default function ExperienceCardEditor({
                         onClick={() => selectCoverMedia(media.id)}
                         style={recordCoverButtonStyle(isCover)}
                       >
-                        {isCover ? "封面" : "设为封面"}
+                        {isCover ? t.experience.cover : t.experience.set_cover}
                       </button>
                     ) : null}
                   </div>
@@ -833,28 +835,28 @@ export default function ExperienceCardEditor({
           aria-pressed="false"
           onClick={() => toggleRecord(record.id)}
           style={recordHeaderButtonStyle}
-          aria-label={`把第${index + 1}条已有记录加入经验卡`}
+          aria-label={`${t.experience.add_record_prefix}${index + 1}${t.experience.add_record_suffix}`}
         >
           <span style={recordCheckStyle(false)} aria-hidden="true">
             <UiIcon name="plus" size={14} />
           </span>
           <span style={recordHeaderTextStyle}>
             <span style={recordMetaStyle}>
-              {formatExperienceCardDate(record.record_time) || `记录${index + 1}`}
+              {formatExperienceCardDate(record.record_time) || `${t.experience.record_prefix}${index + 1}`}
             </span>
             <span style={recordNoteStyle}>
-              {record.note?.trim() || "无文字记录"}
+              {record.note?.trim() || t.experience.no_text}
             </span>
           </span>
-          <span style={recordSelectedStyle(false)}>加入</span>
+          <span style={recordSelectedStyle(false)}>{t.experience.add}</span>
         </button>
 
         <div style={recordMediaAreaStyle(false)}>
           <div style={recordMediaHeadingStyle}>
             <span>
               {recordImages.length > 0
-                ? `${recordImages.length}张图片 · 加入后默认全选`
-                : "这条记录没有图片，将使用文字画面"}
+                ? `${recordImages.length}${t.experience.photos_add_default_suffix}`
+                : t.experience.no_images_text_scene}
             </span>
           </div>
           {recordImages.length > 0 ? (
@@ -863,7 +865,7 @@ export default function ExperienceCardEditor({
                 <img
                   key={media.id}
                   src={media.display_thumb_url || media.display_url || ""}
-                  alt={`可加入的第${index + 1}条记录图片${mediaIndex + 1}`}
+                  alt={`${t.experience.addable_image_prefix}${index + 1}${t.experience.addable_image_middle}${mediaIndex + 1}`}
                   loading="lazy"
                   style={availableRecordThumbnailStyle}
                 />
@@ -882,14 +884,14 @@ export default function ExperienceCardEditor({
           <>
             <div style={editorHeadingStyle}>
               <div>
-                <div style={eyebrowStyle}>内容编辑</div>
+                <div style={eyebrowStyle}>{t.experience.content_editing}</div>
                 <h2 style={sectionTitleStyle}>
-                  {showTitleField ? "标题、记录与图片" : "记录、图片与封面"}
+                  {showTitleField ? t.experience.editor_title_full : t.experience.editor_title_content}
                 </h2>
               </div>
             </div>
             <p style={editorLeadStyle}>
-              经验卡引用项目里的已有记录；所选图片用于当前设备生成MP4，封面随经验卡保存。
+              {t.experience.editor_hint}
             </p>
           </>
         ) : null}
@@ -897,7 +899,7 @@ export default function ExperienceCardEditor({
         {showTitleField ? (
           <div style={titleSectionStyle}>
             <label style={labelStyle} htmlFor="experience-card-title">
-              经验卡标题
+              {t.experience.card_title}
             </label>
             <input
               id="experience-card-title"
@@ -912,7 +914,7 @@ export default function ExperienceCardEditor({
 
         <div style={compact ? compactEditorSectionStyle : editorSectionStyle}>
           <div style={sectionHeadingRowStyle}>
-            <h3 style={compactSectionTitleStyle}>全部记录</h3>
+            <h3 style={compactSectionTitleStyle}>{t.experience.all_records}</h3>
             <div style={recordToolbarStyle}>
               <button
                 type="button"
@@ -921,29 +923,29 @@ export default function ExperienceCardEditor({
                 style={refreshRecordsButtonStyle}
               >
                 <UiIcon name="refresh" size={14} />
-                {refreshingRecords ? "刷新中..." : "刷新记录"}
+                {refreshingRecords ? t.experience.refreshing : t.experience.refresh_records}
               </button>
             </div>
           </div>
           <div style={recordSummaryStyle}>
             <span style={countPillStyle(selectedRecords.length >= 3)}>
-              已选 {selectedRecords.length} / {records.length} 条
+              {t.experience.selected_prefix}{selectedRecords.length}{t.experience.selected_middle}{records.length}{t.experience.selected_suffix}
             </span>
             {unselectedRecordCount > 0 ? (
-              <span>{unselectedRecordCount} 条可加入</span>
+              <span>{unselectedRecordCount}{t.experience.addable_suffix}</span>
             ) : null}
           </div>
           <p style={recordSelectionIntroStyle}>
-            至少选择3条，不设累计上限；记录按原始时间排序。
+            {t.experience.selection_rule}
           </p>
 
           {records.length === 0 ? (
             <div style={emptyRecordsStyle}>
-              <strong>当前项目还没有可用记录</strong>
-              <span>请先回到来源项目添加记录，再返回这里刷新。</span>
+              <strong>{t.experience.no_available_records}</strong>
+              <span>{t.experience.no_available_records_hint}</span>
               {archive ? (
                 <Link href={`/archive/${archive.id}`} style={secondaryLinkStyle}>
-                  返回来源项目
+                  {t.experience.back_source_project}
                 </Link>
               ) : null}
             </div>
@@ -957,7 +959,7 @@ export default function ExperienceCardEditor({
             </div>
           )}
           {selectedRecords.length < 3 ? (
-            <p style={selectionHintStyle}>还需选择至少3条记录。</p>
+            <p style={selectionHintStyle}>{t.experience.need_three_records}</p>
           ) : null}
         </div>
 
@@ -972,7 +974,7 @@ export default function ExperienceCardEditor({
             onClick={() => void persist("draft")}
             style={primaryButtonStyle(canSave)}
           >
-            {saving ? "保存中..." : "保存修改"}
+            {saving ? t.experience.saving : t.experience.save_changes}
           </button>
         ) : (
           <>
@@ -982,7 +984,7 @@ export default function ExperienceCardEditor({
               onClick={() => void persist("draft")}
               style={secondaryButtonStyle(canSave)}
             >
-              {saving ? "保存中..." : cardId ? "保存修改" : "保存草稿"}
+              {saving ? t.experience.saving : cardId ? t.experience.save_changes : t.experience.save_draft}
             </button>
             {!embedded ? (
               <button
@@ -991,7 +993,7 @@ export default function ExperienceCardEditor({
                 onClick={() => void persist("preview")}
                 style={secondaryButtonStyle(canSave)}
               >
-                预览
+                {t.experience.preview}
               </button>
             ) : null}
             <button
@@ -1000,7 +1002,7 @@ export default function ExperienceCardEditor({
               onClick={() => setPublishConfirmOpen(true)}
               style={primaryButtonStyle(canPublish)}
             >
-              {wasPublished ? "保存并重新发布" : "发布经验卡"}
+              {wasPublished ? t.experience.save_republish : t.experience.publish_card}
             </button>
           </>
         )}
@@ -1008,10 +1010,10 @@ export default function ExperienceCardEditor({
 
       <ConfirmDialog
         open={publishConfirmOpen}
-        title={wasPublished ? "保存经验卡修改" : "确认公开经验卡"}
-        message={`保存后，所选${selectedRecords.length}条来源记录及其照片将作为经验卡内容公开。项目中其他记录仍保持原来的可见性。`}
-        confirmText={saving ? "保存中..." : wasPublished ? "保存修改" : "确认发布"}
-        cancelText="取消"
+        title={wasPublished ? t.experience.save_changes_title : t.experience.confirm_public_title}
+        message={`${t.experience.save_public_message_prefix}${selectedRecords.length}${t.experience.save_public_message_suffix}`}
+        confirmText={saving ? t.experience.saving : wasPublished ? t.experience.save_changes : t.experience.confirm_release}
+        cancelText={t.experience.cancel}
         confirmDisabled={saving}
         cancelDisabled={saving}
         onClose={() => {
@@ -1027,7 +1029,7 @@ export default function ExperienceCardEditor({
     return (
       <section
         style={compact ? compactEmbeddedEditorStyle : embeddedEditorStyle}
-        aria-label="编辑经验卡"
+        aria-label={t.experience.editor_aria}
       >
         {editorContent}
       </section>
@@ -1042,12 +1044,12 @@ export default function ExperienceCardEditor({
             href={cardId ? `/experience-cards/${cardId}` : `/archive/${archive?.id}`}
             style={backLinkStyle}
           >
-            <UiIcon name="arrow-left" size={15} /> 返回
+            <UiIcon name="arrow-left" size={15} /> {t.experience.back}
           </Link>
-          <h1 style={titleStyle}>{cardId ? "修改经验卡" : "生成经验卡"}</h1>
+          <h1 style={titleStyle}>{cardId ? t.experience.modify_card : t.experience.generate_card}</h1>
         </div>
         <Link href="/experience-cards" style={secondaryLinkStyle}>
-          我的经验卡
+          {t.experience.my_cards}
         </Link>
       </header>
       {editorContent}

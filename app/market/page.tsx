@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  MARKET_ITEM_CATEGORY_OPTIONS,
-  MARKET_POST_TYPE_OPTIONS,
   formatMarketTime,
+  getMarketItemCategoryOptions,
   getMarketItemCategoryLabel,
+  getMarketPostTypeOptions,
   getMarketPostTypeLabel,
   type MarketItemCategory,
   type MarketPostRow,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/membership";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type ProfileBrief = {
   id: string;
@@ -43,14 +44,6 @@ type MarketPostDisplayRow = MarketPostRow & {
   display_cover_thumb_url?: string | null;
 };
 
-const MOBILE_MARKET_TABS: Array<{ value: "all" | MarketPostType; label: string }> = [
-  { value: "all", label: "全部" },
-  { value: "offer", label: "出让" },
-  { value: "exchange", label: "交换" },
-  { value: "gift", label: "赠送" },
-  { value: "wanted", label: "求购" },
-];
-
 async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
   const pairs = await resolveMediaDisplayPairs(
     supabase,
@@ -71,6 +64,7 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
 }
 
 export default function MarketPage() {
+  const { language, t } = useLanguage();
   const [items, setItems] = useState<MarketPostDisplayRow[]>([]);
   const [profiles, setProfiles] = useState<Map<string, ProfileBrief>>(new Map());
   const [archives, setArchives] = useState<Map<string, ArchiveBrief>>(new Map());
@@ -290,11 +284,11 @@ export default function MarketPage() {
         <header style={headerStyle}>
           <div>
             {isMobileViewport ? (
-              <div style={mobileMarketIntroStyle}>交换与求购 · 仅发布信息，交易、支付、物流请双方自行确认</div>
+              <div style={mobileMarketIntroStyle}>{t.market.intro_mobile}</div>
             ) : (
               <>
-                <div style={marketIntroStyle}>交换与求购</div>
-                <div style={marketSubIntroStyle}>基于真实记录的信息发布，交易、支付、物流请双方自行确认</div>
+                <div style={marketIntroStyle}>{t.market.intro_title}</div>
+                <div style={marketSubIntroStyle}>{t.market.intro_subtitle}</div>
               </>
             )}
           </div>
@@ -302,20 +296,20 @@ export default function MarketPage() {
           {currentUserId ? (
             <div style={isMobileViewport ? hiddenMobileHeaderActionStyle : headerActionStyle}>
               <Link href="/market/mine" style={mineButtonStyle}>
-                我的发布
+                {t.market.my_posts}
               </Link>
 
               {marketBlocked ? (
                 <Link
                   href="/membership"
                   style={disabledPublishButtonStyle}
-                  title={getCreateMarketPostBlockedText(membership)}
+                  title={getCreateMarketPostBlockedText(membership, language)}
                 >
-                  发布受限
+                  {t.market.post_restricted}
                 </Link>
               ) : (
                 <Link href="/market/new" style={publishButtonStyle}>
-                  发布信息
+                  {t.market.post_information}
                 </Link>
               )}
             </div>
@@ -337,16 +331,16 @@ export default function MarketPage() {
         ) : (
         <section style={filterPanelStyle}>
           <div style={filterGroupStyle}>
-            <span style={filterLabelStyle}>类型</span>
+            <span style={filterLabelStyle}>{t.market.type}</span>
             <button
               type="button"
               onClick={() => setTypeFilter("all")}
               style={filterButtonStyle(typeFilter === "all")}
             >
-              全部
+              {t.market.all}
             </button>
 
-            {MARKET_POST_TYPE_OPTIONS.map((item) => (
+            {getMarketPostTypeOptions(language).map((item) => (
               <button
                 key={item.value}
                 type="button"
@@ -359,16 +353,16 @@ export default function MarketPage() {
           </div>
 
           <div style={filterGroupStyle}>
-            <span style={filterLabelStyle}>类别</span>
+            <span style={filterLabelStyle}>{t.market.category}</span>
             <button
               type="button"
               onClick={() => setCategoryFilter("all")}
               style={filterButtonStyle(categoryFilter === "all")}
             >
-              全部
+              {t.market.all}
             </button>
 
-            {MARKET_ITEM_CATEGORY_OPTIONS.map((item) => (
+            {getMarketItemCategoryOptions(language).map((item) => (
               <button
                 key={item.value}
                 type="button"
@@ -381,11 +375,11 @@ export default function MarketPage() {
           </div>
 
           <div style={filterGroupStyle}>
-            <span style={filterLabelStyle}>地区</span>
+            <span style={filterLabelStyle}>{t.market.area}</span>
             <input
               value={locationFilter}
               onChange={(event) => setLocationFilter(event.target.value)}
-              placeholder="输入或选择地区"
+              placeholder={t.market.area_placeholder}
               list="market-location-options"
               style={locationInputStyle}
             />
@@ -400,10 +394,10 @@ export default function MarketPage() {
         )}
 
         {loading ? (
-          <section style={emptyStyle}>加载中...</section>
+          <section style={emptyStyle}>{t.market.loading}</section>
         ) : visibleItems.length === 0 ? (
           <section style={emptyStyle}>
-            {hasFilter ? "当前筛选下还没有集市信息" : "还没有集市信息"}
+            {hasFilter ? t.market.empty_filtered : t.market.empty}
           </section>
         ) : (
           <section style={listStyle}>
@@ -417,7 +411,7 @@ export default function MarketPage() {
               const archiveTitle = archive?.title || "";
               const systemName =
                 archive?.system_name || archive?.species_name_snapshot || "";
-              const publisherName = profile?.username || "未设置用户名";
+              const publisherName = profile?.username || t.market.unset_username;
 
               return (
                 <Link key={item.id} href={`/market/${item.id}`} style={cardStyle}>
@@ -433,17 +427,17 @@ export default function MarketPage() {
                       loading="lazy"
                     />
                   ) : (
-                    <div style={cardImageFallbackStyle}>集市</div>
+                    <div style={cardImageFallbackStyle}>{t.market.name}</div>
                   )}
 
                   <div style={cardContentStyle}>
                     <div style={cardHeaderStyle}>
                       <div style={badgeRowStyle}>
                         <span style={typeBadgeStyle}>
-                          {getMarketPostTypeLabel(item.post_type)}
+                          {getMarketPostTypeLabel(item.post_type, language)}
                         </span>
                         <span style={categoryBadgeStyle}>
-                          {getMarketItemCategoryLabel(item.item_category)}
+                          {getMarketItemCategoryLabel(item.item_category, language)}
                         </span>
                       </div>
 
@@ -460,18 +454,18 @@ export default function MarketPage() {
 
                     <div style={infoGridStyle}>
                       <div style={infoLineStyle}>
-                        <span style={infoLabelStyle}>地点</span>
-                        <span style={infoValueStyle}>{locationText || "未填写"}</span>
+                        <span style={infoLabelStyle}>{t.market.location}</span>
+                        <span style={infoValueStyle}>{locationText || t.market.not_provided}</span>
                       </div>
                       <div style={infoLineStyle}>
-                        <span style={infoLabelStyle}>来源</span>
+                        <span style={infoLabelStyle}>{t.market.source}</span>
                         <span style={{ ...infoValueStyle, ...sourceValueStyle }}>
                           <span style={sourceUserStyle}>{publisherName}</span>
                           <span style={sourceDividerStyle}>·</span>
                           {archiveTitle ? (
                             <span style={sourceArchiveStyle}>{archiveTitle}</span>
                           ) : (
-                            <span style={sourceMissingStyle}>未关联记录</span>
+                            <span style={sourceMissingStyle}>{t.market.no_linked_record}</span>
                           )}
                           {systemName ? (
                             <>
@@ -514,10 +508,16 @@ function MobileMarketFilters({
   onLocationChange: (value: string) => void;
   onContentChange: (value: string) => void;
 }) {
+  const { language, t } = useLanguage();
+  const mobileTabs: Array<{ value: "all" | MarketPostType; label: string }> = [
+    { value: "all", label: t.market.all },
+    ...getMarketPostTypeOptions(language),
+  ];
+
   return (
     <section style={mobileFilterPanelStyle}>
-      <div style={mobileMarketTabsStyle} aria-label="集市类型">
-        {MOBILE_MARKET_TABS.map((tab) => {
+      <div style={mobileMarketTabsStyle} aria-label={t.market.type}>
+        {mobileTabs.map((tab) => {
           const active = typeFilter === tab.value;
 
           return (
@@ -535,14 +535,14 @@ function MobileMarketFilters({
 
       <div style={mobileFilterTopGridStyle}>
         <label style={mobileFilterFieldStyle}>
-          <span style={mobileFilterLabelStyle}>类别</span>
+          <span style={mobileFilterLabelStyle}>{t.market.category}</span>
           <select
             value={categoryFilter}
             onChange={(event) => onCategoryChange(event.target.value as "all" | MarketItemCategory)}
             style={mobileFilterControlStyle}
           >
-            <option value="all">全部</option>
-            {MARKET_ITEM_CATEGORY_OPTIONS.map((item) => (
+            <option value="all">{t.market.all}</option>
+            {getMarketItemCategoryOptions(language).map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
               </option>
@@ -551,22 +551,22 @@ function MobileMarketFilters({
         </label>
 
         <label style={mobileFilterFieldStyle}>
-          <span style={mobileFilterLabelStyle}>地区</span>
+          <span style={mobileFilterLabelStyle}>{t.market.area}</span>
           <input
             value={locationFilter}
             onChange={(event) => onLocationChange(event.target.value)}
-            placeholder="地区"
+            placeholder={t.market.area_short_placeholder}
             list="market-location-options"
             style={mobileFilterControlStyle}
           />
         </label>
 
         <label style={mobileFilterContentFieldStyle}>
-          <span style={mobileFilterLabelStyle}>内容</span>
+          <span style={mobileFilterLabelStyle}>{t.market.content}</span>
           <input
             value={contentFilter}
             onChange={(event) => onContentChange(event.target.value)}
-            placeholder="内容"
+            placeholder={t.market.content_placeholder}
             style={mobileFilterControlStyle}
           />
         </label>

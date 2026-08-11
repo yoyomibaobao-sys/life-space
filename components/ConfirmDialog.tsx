@@ -1,14 +1,15 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ConfirmDialog({
   open,
   title,
   message,
   children,
-  confirmText = "确认",
-  cancelText = "取消",
+  confirmText,
+  cancelText,
   danger = false,
   confirmDisabled = false,
   cancelDisabled = false,
@@ -27,6 +28,10 @@ export default function ConfirmDialog({
   onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
+  const resolvedConfirmText = confirmText || t.confirm;
+  const resolvedCancelText = cancelText || t.cancel;
+
   if (!open) return null;
 
   return (
@@ -87,7 +92,7 @@ export default function ConfirmDialog({
               opacity: cancelDisabled ? 0.55 : 1,
             }}
           >
-            {cancelText}
+            {resolvedCancelText}
           </button>
           <button
             type="button"
@@ -106,7 +111,7 @@ export default function ConfirmDialog({
               opacity: confirmDisabled ? 0.55 : 1,
             }}
           >
-            {confirmText}
+            {resolvedConfirmText}
           </button>
         </div>
       </div>

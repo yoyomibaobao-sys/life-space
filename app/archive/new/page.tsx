@@ -27,11 +27,14 @@ import {
   hasExactSystemNameCandidate,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 const DEFAULT_ARCHIVE_IS_PUBLIC = false;
 const DEFAULT_RECORD_VISIBILITY = "private";
 
 export default function NewArchivePage() {
+  const { t } = useLanguage();
+
   return (
     <Suspense
       fallback={
@@ -42,7 +45,7 @@ export default function NewArchivePage() {
             margin: "0 auto",
           }}
         >
-          加载中...
+          {t.archive.loading}
         </main>
       }
     >
@@ -52,6 +55,8 @@ export default function NewArchivePage() {
 }
 
 function NewArchiveContent() {
+  const { language, t } = useLanguage();
+  const copy = t.archive;
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedSpeciesId = searchParams.get("species");
@@ -107,14 +112,14 @@ function NewArchiveContent() {
           setPendingSpeciesName(null);
           setSpeciesSearch(selected.label);
           setTitle((current) =>
-            current || (selected.label ? `我的${selected.label}` : "")
+            current || (selected.label ? `${copy.my_project_prefix}${selected.label}` : "")
           );
         }
       }
     }
 
     void loadCandidates();
-  }, [category, preselectedSpeciesId]);
+  }, [category, copy.my_project_prefix, preselectedSpeciesId]);
 
   useEffect(() => {
     async function loadMembership() {
@@ -202,7 +207,7 @@ function NewArchiveContent() {
     const name = speciesSearch.trim();
 
     if (!name) {
-      showToast("请输入候选植物名称");
+      showToast(copy.plant_candidate_required);
       return;
     }
 
@@ -222,12 +227,12 @@ function NewArchiveContent() {
     if (loading) return;
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
     if (!title.trim()) {
-      showToast("请输入项目名称");
+      showToast(copy.project_name_required_error);
       return;
     }
 
@@ -235,7 +240,7 @@ function NewArchiveContent() {
       category === "plant" ? speciesSearch.trim() : systemName.trim() || systemSearch.trim();
 
     if (!cleanSystemName) {
-      showToast("请填写系统名");
+      showToast(copy.system_name_required_error);
       return;
     }
 
@@ -248,7 +253,7 @@ function NewArchiveContent() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      showToast("未登录");
+      showToast(copy.not_logged_in);
       setLoading(false);
       return;
     }
@@ -258,7 +263,7 @@ function NewArchiveContent() {
         {
           user_id: user.id,
           submitted_name: cleanSystemName,
-          language_code: "zh",
+          language_code: language,
           status: "pending",
         },
       ]);
@@ -293,7 +298,7 @@ function NewArchiveContent() {
 
     if (error) {
       setLoading(false);
-      showToast("创建失败");
+      showToast(copy.create_failed);
       return;
     }
 
@@ -309,9 +314,7 @@ function NewArchiveContent() {
 
       if (planError) {
         setLoading(false);
-        showToast(
-          "项目已创建，但未能加入种植计划"
-        );
+        showToast(copy.plan_link_failed);
         router.push(`/archive/${createdArchive.id}`);
         return;
       }
@@ -329,9 +332,9 @@ function NewArchiveContent() {
   return (
     <ArchiveNewProjectFormShell
       backHref="/archive"
-      backLabel="返回我的空间"
-      eyebrow="云空间"
-      title="新建项目"
+      backLabel={copy.back_to_space}
+      eyebrow={copy.cloud_space}
+      title={copy.new_project}
       category={category}
       onCategoryChange={(nextCategory) => {
         switchCategory(nextCategory);
@@ -355,14 +358,14 @@ function NewArchiveContent() {
               onSuggestionsOpenChange={setPlantSuggestionsOpen}
               hasExactMatch={hasExactPlantMatch()}
               onSelect={(species) => {
-                const name = species.label || "未命名植物";
+                const name = species.label || copy.unnamed_plant;
                 setSpeciesId(species.plantId || species.id || null);
                 setPendingSpeciesName(null);
                 setSpeciesSearch(name);
                 setPlantSuggestionsOpen(false);
               }}
               onUseCustom={() => submitPendingSpeciesName()}
-              placeholder="输入后点选系统植物，或新增候选名"
+              placeholder={copy.plant_selector_placeholder}
               inputStyle={archiveNewProjectInputStyle}
               panelStyle={archiveNewProjectSuggestionPanelStyle}
               optionStyle={(candidate, selected) =>
@@ -377,18 +380,18 @@ function NewArchiveContent() {
                 color: "#4CAF50",
               }}
               emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
-              emptyText="没有找到匹配植物"
-              customActionLabel={(inputValue) => `新增候选植物：${inputValue}`}
+              emptyText={copy.no_matching_plant}
+              customActionLabel={(inputValue) => `${copy.add_plant_candidate}${inputValue}`}
             />
             {pendingSpeciesName ? (
               <span style={archiveNewProjectHelperTextStyle}>
-                当前使用候选植物：<strong>{pendingSpeciesName}</strong>
+                {copy.current_plant_candidate}<strong>{pendingSpeciesName}</strong>
               </span>
             ) : null}
           </>
         ) : category === "other" ? (
           <input
-            placeholder="其他种类没有预设系统名，直接输入"
+            placeholder={copy.other_system_placeholder}
             value={systemName}
             onChange={(event) => {
               setSystemName(event.target.value);
@@ -415,7 +418,7 @@ function NewArchiveContent() {
                 setSystemSearch(candidate.label);
                 setSystemSuggestionsOpen(false);
               }}
-              placeholder={`输入后点选，例如：${systemOptions[0]?.label || "补光灯"}`}
+              placeholder={`${copy.select_system_example}${systemOptions[0]?.label || copy.grow_light_example}`}
               inputStyle={archiveNewProjectInputStyle}
               panelStyle={archiveNewProjectSuggestionPanelStyle}
               optionStyle={(candidate, selected) =>
@@ -428,8 +431,8 @@ function NewArchiveContent() {
                 color: "#4CAF50",
               }}
               emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
-              emptyText="没有找到匹配名称"
-              customActionLabel={(inputValue) => `新增为系统名：${inputValue}`}
+              emptyText={copy.no_matching_name}
+              customActionLabel={(inputValue) => `${copy.add_system_name}${inputValue}`}
             />
           </>
         )
@@ -438,23 +441,23 @@ function NewArchiveContent() {
         <input
           value={source}
           onChange={(event) => setSource(event.target.value)}
-          placeholder="可选，例如：市场购买、朋友分享、育苗记录"
+          placeholder={copy.source_placeholder}
           style={archiveNewProjectInputStyle}
         />
       }
       note={note}
       onNoteChange={setNote}
-      notice="保存到云空间。当前默认仅自己可见；后续可在项目或记录中切换公开发现。子分类和分组可在项目列表或项目档案中继续整理。"
-      submitText="创建项目"
-      loadingText="创建中..."
+      notice={copy.cloud_notice}
+      submitText={copy.create_project}
+      loadingText={copy.creating}
       submitting={loading}
       disabled={membershipLoading || contentBlocked}
       disabledNotice={
         contentBlocked ? (
           <>
-            <span>{getCreateContentBlockedText(membership)}</span>{" "}
+            <span>{getCreateContentBlockedText(membership, language)}</span>{" "}
             <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-              了解云会员
+              {copy.learn_cloud_membership}
             </Link>
           </>
         ) : null

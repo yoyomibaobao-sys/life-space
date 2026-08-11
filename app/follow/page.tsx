@@ -15,6 +15,7 @@ import {
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type TabKey = "projects" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -122,6 +123,8 @@ type FollowUserCard = {
 
 export default function FollowPage() {
   const router = useRouter();
+  const { language, t } = useLanguage();
+  const followT = t.follow;
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>(() => getInitialTabFromUrl());
@@ -305,28 +308,28 @@ export default function FollowPage() {
           const latestRecord = latestRecordMap.get(archive.id);
           const profile = profileMap.get(archive.user_id);
           const systemName =
-            archive.system_name || archive.species_name_snapshot || "未填写";
+            archive.system_name || archive.species_name_snapshot || followT.not_provided;
           const endBase = archive.ended_at || archive.last_record_time || new Date().toISOString();
 
           return {
             id: archive.id,
-            title: archive.title || "未命名项目",
+            title: archive.title || followT.untitled_project,
             displaySystemName: systemName,
             ownerId: archive.user_id,
-            ownerName: profile?.username || "未设置用户名",
+            ownerName: profile?.username || followT.username_not_set,
             ownerAvatarUrl: profile?.avatar_url || null,
-            categoryLabel: getArchiveCategoryLabel(archive.category),
+            categoryLabel: getArchiveCategoryLabel(archive.category, language),
             categoryIcon: getArchiveCategoryIcon(archive.category),
             subTagName: archive.sub_tag_id ? subTagMap.get(archive.sub_tag_id) || "" : "",
             groupTagName: archive.group_tag_id
               ? groupTagMap.get(archive.group_tag_id) || ""
               : "",
-            latestNote: latestRecord?.note?.trim() || "新增了一条记录",
+            latestNote: latestRecord?.note?.trim() || followT.new_record,
             latestRecordTime: latestRecord?.record_time || archive.last_record_time || null,
             recordCount: Number(archive.record_count || 0),
             durationDays: getDurationDays(archive.created_at, endBase),
             viewCount: Number(archive.view_count || 0),
-            statusLabel: getProjectStatusLabel(archive.help_status, archive.status),
+            statusLabel: getProjectStatusLabel(archive.help_status, archive.status, followT),
             statusKind: getProjectStatusKind(archive.help_status, archive.status),
             coverUrl:
               projectCoverPairs[index]?.display_thumb_url ||
@@ -343,7 +346,7 @@ export default function FollowPage() {
           publicArchiveMap.set(archive.user_id, []);
         }
         publicArchiveMap.get(archive.user_id)?.push({
-          title: archive.title || "未命名项目",
+          title: archive.title || followT.untitled_project,
           last_record_time: archive.last_record_time || null,
         });
       });
@@ -357,7 +360,7 @@ export default function FollowPage() {
 
           return {
             id: followedId,
-            username: profile?.username || "未设置用户名",
+            username: profile?.username || followT.username_not_set,
             avatarUrl: profile?.avatar_url || null,
             latestRecordTime: archivesOfUser[0]?.last_record_time || null,
             publicArchiveCount: archivesOfUser.length,
@@ -372,7 +375,7 @@ export default function FollowPage() {
     }
 
     load();
-  }, [router]);
+  }, [followT, language, router]);
 
   const filteredProjectCards = useMemo(() => {
     const search = keyword.trim().toLowerCase();
@@ -426,14 +429,14 @@ export default function FollowPage() {
 
     if (error) {
       setProjectSubmitting(false);
-      showToast("取消关注失败");
+      showToast(followT.unfollow_failed);
       return;
     }
 
     setProjectCards((prev) => prev.filter((item) => item.id !== archiveId));
     setProjectSubmitting(false);
     setProjectConfirmId(null);
-    showToast("已取消关注项目");
+    showToast(followT.project_unfollowed);
   }
 
   async function handleUnfollowUser(userId: string) {
@@ -449,25 +452,25 @@ export default function FollowPage() {
 
     if (error) {
       setUserSubmitting(false);
-      showToast("取消关注失败");
+      showToast(followT.unfollow_failed);
       return;
     }
 
     setUserCards((prev) => prev.filter((item) => item.id !== userId));
     setUserSubmitting(false);
     setUserConfirmId(null);
-    showToast("已取消关注用户");
+    showToast(followT.user_unfollowed);
   }
 
   return (
     <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
       {!isMobileViewport ? (
         <section style={heroStyle}>
-          <h1 style={titleStyle}>关注</h1>
+          <h1 style={titleStyle}>{followT.title}</h1>
 
           <div style={summaryWrapStyle}>
-            <SummaryCard label="关注项目" value={projectCards.length} />
-            <SummaryCard label="关注用户" value={userCards.length} />
+            <SummaryCard label={followT.projects} value={projectCards.length} />
+            <SummaryCard label={followT.users} value={userCards.length} />
           </div>
         </section>
       ) : null}
@@ -479,14 +482,14 @@ export default function FollowPage() {
             onClick={() => setTab("projects")}
             style={tabButtonStyle(tab === "projects")}
           >
-            {isMobileViewport ? `关注项目（${projectCards.length}）` : "关注项目"}
+            {isMobileViewport ? `${followT.projects} (${projectCards.length})` : followT.projects}
           </button>
           <button
             type="button"
             onClick={() => setTab("users")}
             style={tabButtonStyle(tab === "users")}
           >
-            {isMobileViewport ? `关注用户（${userCards.length}）` : "关注用户"}
+            {isMobileViewport ? `${followT.users} (${userCards.length})` : followT.users}
           </button>
         </div>
 
@@ -494,7 +497,7 @@ export default function FollowPage() {
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder={tab === "projects" ? "搜索项目 / 具体名称 / 用户名" : "搜索用户名 / 项目名"}
+            placeholder={tab === "projects" ? followT.search_projects : followT.search_users}
             style={searchInputStyle}
           />
 
@@ -504,16 +507,16 @@ export default function FollowPage() {
               onChange={(e) => setProjectStatus(e.target.value as ProjectStatusFilter)}
               style={selectStyle}
             >
-              <option value="all">全部状态</option>
-              <option value="open">求助中</option>
-              <option value="resolved">已解决</option>
-              <option value="ended">已结束</option>
+              <option value="all">{followT.status_all}</option>
+              <option value="open">{followT.status_open}</option>
+              <option value="resolved">{followT.status_resolved}</option>
+              <option value="ended">{followT.status_ended}</option>
             </select>
           ) : null}
         </div>
 
         {loading ? (
-          <div style={emptyWrapStyle}>正在加载关注内容…</div>
+          <div style={emptyWrapStyle}>{followT.loading}</div>
         ) : tab === "projects" ? (
           filteredProjectCards.length ? (
             <div style={listStyle}>
@@ -542,7 +545,7 @@ export default function FollowPage() {
                         ) : null}
                       </div>
 
-                      <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || "关注项目"}</div>
+                      <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || followT.projects}</div>
 
                       <div style={noteLineStyle}>
                         {item.latestNote}
@@ -560,17 +563,17 @@ export default function FollowPage() {
                           onClick={() => router.push(`/archive/${item.id}`)}
                           style={primaryButtonStyle}
                         >
-                          查看记录
+                          {followT.view_records}
                         </button>
                         <button
                           type="button"
                           onClick={() => setProjectConfirmId(item.id)}
                           style={ghostButtonStyle}
                         >
-                          取消关注
+                          {followT.unfollow}
                         </button>
                         <Link href={`/user/${item.ownerId}`} style={textLinkStyle}>
-                          进入空间
+                          {followT.enter_space}
                         </Link>
                       </div>
                     </div>
@@ -580,9 +583,9 @@ export default function FollowPage() {
             </div>
           ) : (
             <EmptyState
-              title="还没有关注的项目"
-              description="去别人的项目页点“关注项目”后，这里就会出现。"
-              actionLabel="去发现页看看"
+              title={followT.empty_projects}
+              description={followT.empty_projects_intro}
+              actionLabel={followT.browse_discover}
               href="/discover"
             />
           )
@@ -604,10 +607,10 @@ export default function FollowPage() {
                   </div>
 
                   <div style={noteLineStyle}>
-                    最近更新：
+                    {followT.latest_update}
                     {item.recentArchiveTitles.length
-                      ? item.recentArchiveTitles.join("、")
-                      : "最近还没有公开项目更新"}
+                      ? item.recentArchiveTitles.join(language === "zh" ? "、" : ", ")
+                      : followT.no_recent_update}
                   </div>
 
                   <div style={statsLineStyle}>
@@ -623,21 +626,21 @@ export default function FollowPage() {
                       onClick={() => router.push(`/user/${item.id}`)}
                       style={primaryButtonStyle}
                     >
-                      进入空间
+                      {followT.enter_space}
                     </button>
                     <button
                       type="button"
                       onClick={() => router.push(`/user/${item.id}/profile`)}
                       style={ghostButtonStyle}
                     >
-                      查看资料
+                      {followT.view_profile}
                     </button>
                     <button
                       type="button"
                       onClick={() => setUserConfirmId(item.id)}
                       style={ghostButtonStyle}
                     >
-                      取消关注
+                      {followT.unfollow}
                     </button>
                   </div>
                 </div>
@@ -646,9 +649,9 @@ export default function FollowPage() {
           </div>
         ) : (
           <EmptyState
-            title="还没有关注的用户"
-            description="去别人的空间页点“关注用户”后，这里就会出现。"
-            actionLabel="去发现页看看"
+            title={followT.empty_users}
+            description={followT.empty_users_intro}
+            actionLabel={followT.browse_discover}
             href="/discover"
           />
         )}
@@ -656,10 +659,10 @@ export default function FollowPage() {
 
       <ConfirmDialog
         open={!!projectConfirmId}
-        title="取消关注项目"
-        message="确定取消关注这个项目吗？取消后，它将从关注列表中移除。"
-        confirmText={projectSubmitting ? "处理中..." : "取消关注"}
-        cancelText="返回"
+        title={followT.unfollow_project_title}
+        message={followT.unfollow_project_message}
+        confirmText={projectSubmitting ? followT.processing : followT.unfollow}
+        cancelText={followT.back}
         danger
         onClose={() => {
           if (projectSubmitting) return;
@@ -673,10 +676,10 @@ export default function FollowPage() {
 
       <ConfirmDialog
         open={!!userConfirmId}
-        title="取消关注用户"
-        message="确定取消关注这个用户吗？取消后，对方将从关注列表中移除。"
-        confirmText={userSubmitting ? "处理中..." : "取消关注"}
-        cancelText="返回"
+        title={followT.unfollow_user_title}
+        message={followT.unfollow_user_message}
+        confirmText={userSubmitting ? followT.processing : followT.unfollow}
+        cancelText={followT.back}
         danger
         onClose={() => {
           if (userSubmitting) return;
@@ -777,11 +780,15 @@ function getDurationDays(start?: string | null, end?: string | null) {
   return Math.max(1, Math.floor((safeEnd - startTime) / (1000 * 60 * 60 * 24)) + 1);
 }
 
-function getProjectStatusLabel(helpStatus?: string | null, status?: string | null) {
-  if (helpStatus === "open") return "求助中";
-  if (helpStatus === "resolved") return "已解决";
-  if (status === "ended") return "已结束";
-  return "进行中";
+function getProjectStatusLabel(
+  helpStatus: string | null | undefined,
+  status: string | null | undefined,
+  labels: { status_open: string; status_resolved: string; status_ended: string; status_ongoing: string }
+) {
+  if (helpStatus === "open") return labels.status_open;
+  if (helpStatus === "resolved") return labels.status_resolved;
+  if (status === "ended") return labels.status_ended;
+  return labels.status_ongoing;
 }
 
 function getProjectStatusKind(

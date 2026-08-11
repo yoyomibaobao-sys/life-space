@@ -1,4 +1,5 @@
 import { formatCardDate } from "@/lib/date-time";
+import type { Language } from "@/lib/i18n";
 
 export type MarketPostType = "offer" | "exchange" | "gift" | "wanted";
 
@@ -66,16 +67,49 @@ export const MARKET_ITEM_CATEGORY_OPTIONS: {
   { value: "other", label: "其他" },
 ];
 
-export function getMarketPostTypeLabel(value?: string | null) {
+export function getMarketPostTypeOptions(language: Language = "zh") {
+  if (language !== "en") return MARKET_POST_TYPE_OPTIONS;
+  return [
+    { value: "offer" as const, label: "Offer" },
+    { value: "exchange" as const, label: "Exchange" },
+    { value: "gift" as const, label: "Give away" },
+    { value: "wanted" as const, label: "Wanted" },
+  ];
+}
+
+export function getMarketItemCategoryOptions(language: Language = "zh") {
+  if (language !== "en") return MARKET_ITEM_CATEGORY_OPTIONS;
+  return [
+    { value: "seed" as const, label: "Seeds" },
+    { value: "seedling" as const, label: "Seedlings" },
+    { value: "cutting" as const, label: "Cuttings" },
+    { value: "potted" as const, label: "Potted plants" },
+    { value: "fruit" as const, label: "Fruit & produce" },
+    { value: "aquatic_plant" as const, label: "Aquatic plants" },
+    { value: "fish_shrimp" as const, label: "Fish & shrimp" },
+    { value: "insect" as const, label: "Insects" },
+    { value: "tool_facility" as const, label: "Tools / facilities" },
+    { value: "other" as const, label: "Other" },
+  ];
+}
+
+export function getMarketPostTypeLabel(
+  value?: string | null,
+  language: Language = "zh"
+) {
   return (
-    MARKET_POST_TYPE_OPTIONS.find((item) => item.value === value)?.label || "集市"
+    getMarketPostTypeOptions(language).find((item) => item.value === value)?.label ||
+    (language === "en" ? "Market" : "集市")
   );
 }
 
-export function getMarketItemCategoryLabel(value?: string | null) {
+export function getMarketItemCategoryLabel(
+  value?: string | null,
+  language: Language = "zh"
+) {
   return (
-    MARKET_ITEM_CATEGORY_OPTIONS.find((item) => item.value === value)?.label ||
-    "其他"
+    getMarketItemCategoryOptions(language).find((item) => item.value === value)?.label ||
+    (language === "en" ? "Other" : "其他")
   );
 }
 

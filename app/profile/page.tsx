@@ -21,8 +21,8 @@ import {
 import {
   buildLocationTextFromFields,
   buildRegionDisplay,
-  countryOptions,
   getCountryName,
+  getLocalizedCountryOptions,
   getRegionOptions,
   hasPresetRegions,
   parseLegacyLocation,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/region-shared";
 import { getAccountRegistrationSummary } from "@/lib/account-number";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 
 type MembershipPaymentRow = {
@@ -53,19 +54,6 @@ type MobileProfileNavItem = {
   href?: string;
 };
 
-const baseMobileProfileModules: MobileProfileNavItem[] = [
-  { value: "info", label: "用户信息" },
-  { value: "membership", label: "会员与容量" },
-  { value: "space", label: "个人空间" },
-  { href: "/profile/trash", label: "回收站" },
-  { value: "account", label: "数据与安全" },
-];
-
-const adminMembershipProfileModule: { value: MobileProfileModule; label: string } = {
-  value: "adminMembership",
-  label: "会员管理",
-};
-
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
   const value = Number(amount || 0);
   if (!Number.isFinite(value)) return `${currency || ""} ${amount || ""}`.trim();
@@ -74,17 +62,29 @@ function formatPaymentAmount(amount?: number | string | null, currency?: string 
   return `${value.toFixed(2)} ${currency || ""}`.trim();
 }
 
-function getPaymentMethodLabel(method?: string | null) {
-  if (method === "wechat") return "微信";
-  if (method === "alipay") return "支付宝";
+function getPaymentMethodLabel(method: string | null | undefined, language: "zh" | "en") {
+  if (method === "wechat") return language === "en" ? "WeChat Pay" : "微信";
+  if (method === "alipay") return language === "en" ? "Alipay" : "支付宝";
   if (method === "paypal") return "PayPal";
-  if (method === "manual") return "人工确认";
-  if (method === "other") return "其他";
-  return method || "未记录";
+  if (method === "manual") return language === "en" ? "Manual confirmation" : "人工确认";
+  if (method === "other") return language === "en" ? "Other" : "其他";
+  return method || (language === "en" ? "Not recorded" : "未记录");
 }
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { language, t } = useLanguage();
+  const baseMobileProfileModules: MobileProfileNavItem[] = [
+    { value: "info", label: t.profile.modules.info },
+    { value: "membership", label: t.profile.modules.membership },
+    { value: "space", label: t.profile.modules.space },
+    { href: "/profile/trash", label: t.profile.modules.trash },
+    { value: "account", label: t.profile.modules.account },
+  ];
+  const adminMembershipProfileModule: MobileProfileNavItem = {
+    value: "adminMembership",
+    label: t.profile.modules.admin_membership,
+  };
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [stats, setStats] = useState<UserProfileStats | null>(null);
@@ -183,7 +183,7 @@ export default function ProfilePage() {
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
         setMembership(null);
-        setMembershipError("暂时无法读取会员与容量信息");
+        setMembershipError("load_failed");
       } else {
         setMembership(normalizeMembershipRpcResult(membershipResult.data));
         setMembershipError("");
@@ -227,8 +227,8 @@ export default function ProfilePage() {
       regionName,
       cityName,
       location: profile?.location,
-    });
-  }, [countryCode, customCountryName, regionName, cityName, profile]);
+    }, language);
+  }, [countryCode, customCountryName, regionName, cityName, profile, language]);
 
   const storageText = useMemo(() => {
     const used = formatStorage(Number(profile?.storage_used || 0));
@@ -236,7 +236,8 @@ export default function ProfilePage() {
     return `${used} / ${limit}`;
   }, [profile, membership]);
   const accountRegistrationSummary = getAccountRegistrationSummary(
-    profile?.account_number
+    profile?.account_number,
+    language
   );
 
   const membershipEndDate = getMembershipEndDate(membership);
@@ -247,23 +248,28 @@ export default function ProfilePage() {
         (typeof membershipDaysRemaining === "number" && membershipDaysRemaining <= 14))
   );
   const membershipNoticeText = membership?.can_create_content === false
-    ? "使用权已到期"
+    ? t.profile.expired
     : typeof membershipDaysRemaining === "number" && membershipDaysRemaining <= 14
-      ? `当前使用权还有 ${membershipDaysRemaining} 天到期。你可以提前查看付款方式，管理员确认后会延长使用期限。`
+      ? `${t.profile.expires_prefix} ${membershipDaysRemaining} ${t.profile.expires_suffix}`
       : "";
-  const membershipStatusText = membershipError || getMembershipSummary(membership);
+  const membershipStatusText = membershipError
+    ? t.profile.membership_load_failed
+    : getMembershipSummary(membership, language);
   const marketQuotaText = membership
-    ? `${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} 条`
-    : "0 / 0 条";
+    ? `${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} ${t.profile.item_suffix}`
+    : `0 / 0 ${t.profile.item_suffix}`;
 
   const privateArchiveCount = Math.max(0, Number(stats?.archiveCount || 0) - Number(stats?.publicArchiveCount || 0));
   const endedArchiveCount = Number(stats?.endedArchiveCount || 0);
-  const planHint = getPlanHint(stats?.planNames || [], Number(stats?.planCount || 0));
-  const isMobileViewport = viewportWidth < 760;
-  const visibleMobileProfileModules = useMemo(
-    () => (isAdmin ? [...baseMobileProfileModules, adminMembershipProfileModule] : baseMobileProfileModules),
-    [isAdmin]
+  const planHint = getPlanHint(
+    stats?.planNames || [],
+    Number(stats?.planCount || 0),
+    language
   );
+  const isMobileViewport = viewportWidth < 760;
+  const visibleMobileProfileModules = isAdmin
+    ? [...baseMobileProfileModules, adminMembershipProfileModule]
+    : baseMobileProfileModules;
   const topGridColumns = isMobileViewport ? "minmax(0, 1fr)" : viewportWidth < 820 ? "1fr" : "minmax(280px, 0.95fr) minmax(420px, 1.05fr)";
   const formGridColumns = viewportWidth < 560 ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))";
   const statsGridColumns = isMobileViewport
@@ -309,7 +315,7 @@ export default function ProfilePage() {
 
     if (error) {
       console.error("refresh membership payments error:", error);
-      showToast("付款记录读取失败");
+      showToast(t.profile.payment_load_failed);
     } else {
       setPaymentRows(Array.isArray(data) ? (data as MembershipPaymentRow[]) : []);
     }
@@ -324,19 +330,19 @@ export default function ProfilePage() {
     const safeCountryCode = countryCode || null;
     const safeCountryName = countryCode === "OTHER"
       ? customCountryName.trim()
-      : getCountryName(countryCode, customCountryName);
+      : getCountryName(countryCode, customCountryName, language);
     const safeRegionName = regionName.trim();
     const safeCityName = cityName.trim();
 
     if (safeUsername.length < 2) {
-      setErrorMsg("用户名至少2个字符");
-      showToast("用户名至少2个字符");
+      setErrorMsg(t.profile.username_too_short);
+      showToast(t.profile.username_too_short);
       return;
     }
 
     if (countryCode === "OTHER" && !safeCountryName) {
-      setErrorMsg("请填写自定义国家 / 地区");
-      showToast("请填写自定义国家 / 地区");
+      setErrorMsg(t.profile.custom_country_required);
+      showToast(t.profile.custom_country_required);
       return;
     }
 
@@ -348,7 +354,7 @@ export default function ProfilePage() {
       countryName: safeCountryName,
       regionName: safeRegionName,
       cityName: safeCityName,
-    });
+    }, language);
 
     const { error } = await supabase
       .from("profiles")
@@ -365,12 +371,12 @@ export default function ProfilePage() {
     setSaving(false);
 
     if (error) {
-      setErrorMsg(error.message || "保存失败");
-      showToast("保存失败");
+      setErrorMsg(error.message || t.profile.save_failed);
+      showToast(t.profile.save_failed);
       return;
     }
 
-    showToast("资料已保存");
+    showToast(t.profile.saved);
     void refreshStats(user.id);
   }
 
@@ -388,8 +394,8 @@ export default function ProfilePage() {
       } = await supabase.auth.getSession();
 
       if (error || !session?.access_token) {
-        setErrorMsg("请先重新登录后再导出");
-        showToast("请先重新登录后再导出");
+        setErrorMsg(t.profile.relogin_export);
+        showToast(t.profile.relogin_export);
         router.push("/login");
         return;
       }
@@ -402,7 +408,7 @@ export default function ProfilePage() {
 
       if (!response.ok) {
         const text = await response.text();
-        const message = text || "导出失败，请稍后再试";
+        const message = text || t.profile.export_failed;
         setErrorMsg(message);
         showToast(message);
         return;
@@ -413,7 +419,7 @@ export default function ProfilePage() {
       const fileNameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
       const fileName = fileNameMatch?.[1]
         ? decodeURIComponent(fileNameMatch[1])
-        : fileNameMatch?.[2] || `有时耕作-我的记录-${new Date().toISOString().slice(0, 10)}.zip`;
+        : fileNameMatch?.[2] || `${t.profile.export_filename}-${new Date().toISOString().slice(0, 10)}.zip`;
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -423,10 +429,10 @@ export default function ProfilePage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      showToast("导出完成，文件已交给浏览器下载；请查看浏览器下载栏或“下载”文件夹。");
+      showToast(t.profile.export_done);
     } catch {
-      setErrorMsg("导出失败，请稍后再试");
-      showToast("导出失败，请稍后再试");
+      setErrorMsg(t.profile.export_failed);
+      showToast(t.profile.export_failed);
     } finally {
       setExporting(false);
     }
@@ -449,7 +455,7 @@ export default function ProfilePage() {
     if (!user || deleteLoading) return;
 
     if (!deleteConfirmed) {
-      setDeleteAccountError("请先勾选确认");
+      setDeleteAccountError(t.profile.confirm_checkbox);
       return;
     }
 
@@ -463,8 +469,8 @@ export default function ProfilePage() {
       } = await supabase.auth.getSession();
 
       if (error || !session?.access_token) {
-        setDeleteAccountError("请先重新登录后再注销账号");
-        showToast("请先重新登录后再注销账号");
+        setDeleteAccountError(t.profile.relogin_delete);
+        showToast(t.profile.relogin_delete);
         router.push("/login");
         return;
       }
@@ -480,17 +486,17 @@ export default function ProfilePage() {
       const payload = (await response.json().catch(() => null)) as { error?: string } | null;
 
       if (!response.ok) {
-        const message = payload?.error || "注销账号失败，请稍后再试";
+        const message = payload?.error || t.profile.delete_failed;
         setDeleteAccountError(message);
         showToast(message);
         return;
       }
 
       await supabase.auth.signOut();
-      showToast("账号已注销");
+      showToast(t.profile.deleted);
       router.replace("/");
     } catch {
-      const message = "注销账号失败，请稍后再试";
+      const message = t.profile.delete_failed;
       setDeleteAccountError(message);
       showToast(message);
     } finally {
@@ -503,14 +509,14 @@ export default function ProfilePage() {
     if (!file || !user) return;
 
     if (!file.type.startsWith("image/")) {
-      setErrorMsg("请上传图片文件");
-      showToast("请上传图片文件");
+      setErrorMsg(t.profile.image_required);
+      showToast(t.profile.image_required);
       return;
     }
 
     if (file.size > 3 * 1024 * 1024) {
-      setErrorMsg("头像请控制在 3MB 以内");
-      showToast("头像请控制在 3MB 以内");
+      setErrorMsg(t.profile.avatar_size_limit);
+      showToast(t.profile.avatar_size_limit);
       return;
     }
 
@@ -527,8 +533,8 @@ export default function ProfilePage() {
 
     if (error) {
       setUploading(false);
-      setErrorMsg("上传失败");
-      showToast("头像上传失败");
+      setErrorMsg(t.profile.upload_failed);
+      showToast(t.profile.avatar_upload_failed);
       return;
     }
 
@@ -543,24 +549,24 @@ export default function ProfilePage() {
     setUploading(false);
 
     if (updateError) {
-      setErrorMsg("头像保存失败");
-      showToast("头像保存失败");
+      setErrorMsg(t.profile.avatar_save_failed);
+      showToast(t.profile.avatar_save_failed);
       return;
     }
 
-    showToast("头像已更新");
+    showToast(t.profile.avatar_updated);
     void refreshStats(user.id);
   }
 
   if (initLoading || !user || !profile || !stats) {
-    return <div style={{ padding: 40 }}>加载中...</div>;
+    return <div style={{ padding: 40 }}>{t.profile.loading}</div>;
   }
 
   return (
     <main style={pageStyle}>
       <section style={shellStyle}>
         {!isMobileViewport ? (
-          <h1 style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>我的资料</h1>
+          <h1 style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>{t.profile.title}</h1>
         ) : null}
 
         {errorMsg ? (
@@ -586,88 +592,88 @@ export default function ProfilePage() {
               )}
 
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: isMobileViewport ? 17 : 19, fontWeight: 700, color: "#1f2a1f" }}>{profile.username || "未设置用户名"}</div>
+                <div style={{ fontSize: isMobileViewport ? 17 : 19, fontWeight: 700, color: "#1f2a1f" }}>{profile.username || t.profile.unset_username}</div>
                 <div style={{ marginTop: 3, fontSize: 13, color: "#6f7b69", wordBreak: "break-all" }}>{user.email}</div>
                 <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
-                  所在地区：{locationPreview}
+                  {t.profile.region_prefix}{locationPreview}
                 </div>
               </div>
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <label style={fieldLabelStyle}>更换头像</label>
+              <label style={fieldLabelStyle}>{t.profile.change_avatar}</label>
               <input type="file" accept="image/*" onChange={handleUpload} style={isMobileViewport ? mobileFileInputStyle : undefined} />
               <div style={{ marginTop: 4, fontSize: 12, color: "#7b8676" }}>
-                建议上传正方形图片，3MB 以内。{uploading ? "上传中..." : ""}
+                {t.profile.avatar_hint}{uploading ? t.profile.uploading : ""}
               </div>
             </div>
 
             <div style={metaListStyle}>
               <MetaItem
-                label="账号编号"
+                label={t.profile.account_number}
                 value={
                   profile.account_number ||
-                  (profile.is_internal_test ? "内部测试账号" : "暂未分配")
+                  (profile.is_internal_test ? t.profile.internal_test : t.profile.not_assigned)
                 }
               />
               {accountRegistrationSummary ? (
-                <MetaItem label="注册顺序" value={accountRegistrationSummary} />
+                <MetaItem label={t.profile.registration_order} value={accountRegistrationSummary} />
               ) : null}
-              <MetaItem label="账号等级" value={`Lv.${Number(profile.level || 1)}`} />
-              <MetaItem label="收到有帮助" value={<span><UiIcon name="helpful" size={13} /> {Number(profile.flower_count || 0)}</span>} />
-              <MetaItem label="加入时间" value={formatProfileDateTime(profile.created_at)} />
+              <MetaItem label={t.profile.account_level} value={`Lv.${Number(profile.level || 1)}`} />
+              <MetaItem label={t.profile.received_helpful} value={<span><UiIcon name="helpful" size={13} /> {Number(profile.flower_count || 0)}</span>} />
+              <MetaItem label={t.profile.joined} value={formatProfileDateTime(profile.created_at, language)} />
             </div>
           </section>
 
           <section style={compactPanelStyle}>
-            <div style={sectionTitleStyle}>基础信息</div>
+            <div style={sectionTitleStyle}>{t.profile.basic_info}</div>
             <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns }}>
               <div>
-                <label style={fieldLabelStyle}>用户名</label>
-                <input value={username} onChange={(e) => setUsername(e.target.value)} style={fieldInputStyle} placeholder="输入你的用户名" />
+                <label style={fieldLabelStyle}>{t.profile.username}</label>
+                <input value={username} onChange={(e) => setUsername(e.target.value)} style={fieldInputStyle} placeholder={t.profile.username_placeholder} />
               </div>
               <div>
-                <label style={fieldLabelStyle}>国家 / 地区</label>
+                <label style={fieldLabelStyle}>{t.profile.country_region}</label>
                 <select value={countryCode} onChange={(e) => { setCountryCode(e.target.value); setRegionName(""); }} style={fieldInputStyle}>
-                  <option value="">请选择</option>
-                  {countryOptions.map((item) => (
+                  <option value="">{t.profile.select}</option>
+                  {getLocalizedCountryOptions(language).map((item) => (
                     <option key={item.code} value={item.code}>{item.name}</option>
                   ))}
                 </select>
               </div>
               {showCustomCountryInput ? (
                 <div>
-                  <label style={fieldLabelStyle}>自定义国家 / 地区</label>
-                  <input value={customCountryName} onChange={(e) => setCustomCountryName(e.target.value)} style={fieldInputStyle} placeholder="例如：巴西" />
+                  <label style={fieldLabelStyle}>{t.profile.custom_country_region}</label>
+                  <input value={customCountryName} onChange={(e) => setCustomCountryName(e.target.value)} style={fieldInputStyle} placeholder={t.profile.country_example} />
                 </div>
               ) : null}
               <div>
-                <label style={fieldLabelStyle}>省 / 州 / 地域</label>
+                <label style={fieldLabelStyle}>{t.profile.region}</label>
                 {useRegionSelect ? (
                   <select value={regionName} onChange={(e) => setRegionName(e.target.value)} style={fieldInputStyle}>
-                    <option value="">请选择</option>
+                    <option value="">{t.profile.select}</option>
                     {regionOptions.map((item) => (
                       <option key={item.value} value={item.value}>{item.label}</option>
                     ))}
                   </select>
                 ) : (
-                  <input value={regionName} onChange={(e) => setRegionName(e.target.value)} style={fieldInputStyle} placeholder="例如：浙江 / California" />
+                  <input value={regionName} onChange={(e) => setRegionName(e.target.value)} style={fieldInputStyle} placeholder={t.profile.region_example} />
                 )}
               </div>
               <div>
-                <label style={fieldLabelStyle}>城市</label>
-                <input value={cityName} onChange={(e) => setCityName(e.target.value)} style={fieldInputStyle} placeholder="例如：宁波 / Tokyo" />
+                <label style={fieldLabelStyle}>{t.profile.city}</label>
+                <input value={cityName} onChange={(e) => setCityName(e.target.value)} style={fieldInputStyle} placeholder={t.profile.city_example} />
               </div>
             </div>
 
             <div style={{ marginTop: 8, fontSize: 13, color: "#5e6959" }}>
-              显示为：<span style={{ fontWeight: 700, color: "#243123" }}>{locationPreview}</span>
+              {t.profile.display_as}<span style={{ fontWeight: 700, color: "#243123" }}>{locationPreview}</span>
             </div>
 
             <div style={isMobileViewport ? mobileProfileActionRowStyle : { marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? "保存中..." : "保存资料"}</button>
-              <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>查看公开资料页</Link>
-              <Link href="/archive" style={secondaryActionStyle}>我的项目</Link>
+              <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? t.profile.saving : t.profile.save_profile}</button>
+              <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>{t.profile.view_public_profile}</Link>
+              <Link href="/archive" style={secondaryActionStyle}>{t.profile.my_projects}</Link>
             </div>
           </section>
         </div>
@@ -678,8 +684,8 @@ export default function ProfilePage() {
         <section style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>账号方案</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>会员与容量</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.account_plan}</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.membership_capacity}</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 {membershipStatusText}
               </p>
@@ -687,7 +693,7 @@ export default function ProfilePage() {
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link href="/membership" style={secondaryLinkStyle}>
-                {membership ? "开通与续期说明" : "了解云会员"}
+                {membership ? t.profile.open_renew_info : t.profile.learn_cloud_membership}
               </Link>
             </div>
           </div>
@@ -696,42 +702,42 @@ export default function ProfilePage() {
             <div style={membershipNoticeStyle}>
               <div>{membershipNoticeText}</div>
               <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                查看开通与续期
+                {t.profile.view_open_renew}
               </Link>
             </div>
           ) : null}
 
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
             <InfoCard
-              label="账号身份"
-              value={membership ? getMembershipPlanLabel(membership.plan) : "本地免费"}
-              hint={membership ? getMembershipStatusLabel(membership.status) : "免费使用本地功能"}
+              label={t.profile.account_identity}
+              value={membership ? getMembershipPlanLabel(membership.plan, language) : t.profile.local_free}
+              hint={membership ? getMembershipStatusLabel(membership.status, language) : t.profile.local_free_hint}
             />
             <InfoCard
-              label="有效期至"
-              value={membership ? formatMembershipDate(membershipEndDate) : "不适用"}
+              label={t.profile.valid_until}
+              value={membership ? formatMembershipDate(membershipEndDate, language) : t.profile.not_applicable}
               hint={
                 membership
                   ? membership.can_create_content === false
-                    ? "已限制新增，仍可查看和导出"
-                    : "到期前可继续新增云端内容"
-                  : "本地记录没有到期日"
+                    ? t.profile.restricted_existing
+                    : t.profile.active_until_expiry
+                  : t.profile.local_no_expiry
               }
             />
             <InfoCard
-              label="存储用量"
+              label={t.profile.storage_usage}
               value={storageText}
-              hint="用于云端照片与媒体文件"
+              hint={t.profile.storage_hint}
             />
             <InfoCard
-              label="集市发布"
+              label={t.profile.market_posts}
               value={marketQuotaText}
               hint={
                 !membership
-                  ? "本地用户不能发布"
+                  ? t.profile.local_cannot_post
                   : membership.can_create_market_post === false
-                    ? "当前不可继续发布"
-                    : "同时在线发布数量"
+                    ? t.profile.cannot_post
+                    : t.profile.active_post_limit
               }
             />
           </div>
@@ -740,10 +746,10 @@ export default function ProfilePage() {
         <section style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>付款记录</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>会员开通记录</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.payment_records}</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.membership_records}</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
-                这里只显示管理员已确认的最近付款记录；已取消或退款的记录不会显示。若已付款但未显示，请联系管理员邮箱：yoyomibaobao@gmail.com。
+                {t.profile.payment_records_hint}
               </p>
             </div>
             <button
@@ -756,13 +762,13 @@ export default function ProfilePage() {
                 opacity: paymentLoading ? 0.65 : 1,
               }}
             >
-              {paymentLoading ? "刷新中..." : "刷新付款记录"}
+              {paymentLoading ? t.profile.refreshing : t.profile.refresh_payments}
             </button>
           </div>
 
           <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
             {paymentRows.length === 0 ? (
-              <div style={emptyPaymentStyle}>暂无已确认的付款记录。</div>
+              <div style={emptyPaymentStyle}>{t.profile.no_confirmed_payments}</div>
             ) : (
               paymentRows.map((payment) => (
                 <div key={payment.id} style={paymentCardStyle}>
@@ -772,25 +778,25 @@ export default function ProfilePage() {
                         {formatPaymentAmount(payment.amount, payment.currency)}
                       </div>
                       <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
-                        {getMembershipPlanLabel(payment.plan)} · {getPaymentMethodLabel(payment.payment_method)}
+                        {getMembershipPlanLabel(payment.plan, language)} · {getPaymentMethodLabel(payment.payment_method, language)}
                       </div>
                     </div>
                     <div style={{ fontSize: 13, color: "#6f7b69", textAlign: "right" }}>
-                      付款时间：{formatMembershipDate(payment.paid_at)}
+                      {t.profile.payment_time}{formatMembershipDate(payment.paid_at, language)}
                     </div>
                   </div>
 
                   <div style={{ marginTop: 8, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
-                    服务期：{formatMembershipDate(payment.service_started_at)} - {formatMembershipDate(payment.service_ends_at)}
+                    {t.profile.service_period}{formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(payment.service_ends_at, language)}
                   </div>
                   {payment.payment_reference ? (
                     <div style={{ marginTop: 4, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
-                      流水号 / 交易号：{payment.payment_reference}
+                      {t.profile.transaction_reference}{payment.payment_reference}
                     </div>
                   ) : null}
                   {payment.note ? (
                     <div style={{ marginTop: 4, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
-                      备注：{payment.note}
+                      {t.profile.note}{payment.note}
                     </div>
                   ) : null}
                 </div>
@@ -804,8 +810,8 @@ export default function ProfilePage() {
         {showAdminMembershipModule ? (
         <section style={{ ...statsSectionStyle, ...sectionCompactStyle }}>
           <Link href="/admin/memberships" style={mobileAdminMembershipEntryStyle}>
-            <span>会员管理</span>
-            <small style={mobileAdminMembershipHintStyle}>查看会员状态、付款记录和管理员操作</small>
+            <span>{t.profile.modules.admin_membership}</span>
+            <small style={mobileAdminMembershipHintStyle}>{t.profile.admin_membership_hint}</small>
           </Link>
         </section>
         ) : null}
@@ -815,8 +821,8 @@ export default function ProfilePage() {
           {!isMobileViewport ? (
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>个人空间</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>项目、经验卡与互动</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.personal_space}</div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.projects_cards_interactions}</h2>
             </div>
           </div>
           ) : null}
@@ -832,35 +838,35 @@ export default function ProfilePage() {
                 />
                 <StatLinkCard
                   href="/experience-cards"
-                  label="我的经验卡"
+                  label={t.profile.my_experience_cards}
                   value={String(experienceCardCount)}
                   hint=""
                   compact
                 />
                 <StatLinkCard
                   href="/profile/recent"
-                  label="最近看过的项目"
-                  value="进入"
+                  label={t.profile.recent_projects}
+                  value={t.profile.enter}
                   hint=""
                   compact
                 />
                 <StatLinkCard
                   href="/profile/followers"
-                  label="谁在关注我"
+                  label={t.profile.followers_entry}
                   value={String(stats.followerCount)}
                   hint=""
                   compact
                 />
                 <StatLinkCard
                   href="/profile/helpful"
-                  label="收到有帮助"
+                  label={t.profile.received_helpful_entry}
                   value={String(stats.receivedFlowerCount)}
                   hint=""
                   compact
                 />
                 <StatLinkCard
                   href="/profile/helpful?tab=sent"
-                  label="我标记的帮助"
+                  label={t.profile.sent_helpful_entry}
                   value={String(stats.sentFlowerCount || 0)}
                   hint=""
                   compact
@@ -870,57 +876,57 @@ export default function ProfilePage() {
               <>
                 <StatLinkCard
                   href="/archive"
-                  label="我的项目"
+                  label={t.profile.my_projects}
                   value={String(stats.archiveCount)}
-                  hint={`公开 ${stats.publicArchiveCount} · 仅自己可见 ${privateArchiveCount}`}
+                  hint={`${t.profile.public_prefix} ${stats.publicArchiveCount} · ${t.profile.private_prefix} ${privateArchiveCount}`}
                 />
                 <StatLinkCard
                   href="/experience-cards"
-                  label="我的经验卡"
+                  label={t.profile.my_experience_cards}
                   value={String(experienceCardCount)}
-                  hint="管理草稿和已公开的经验时间线"
+                  hint={t.profile.experience_hint}
                 />
                 <StatLinkCard
                   href="/profile/recent"
-                  label="最近浏览"
-                  value="进入"
+                  label={t.profile.recent_browse}
+                  value={t.profile.enter}
                   hint=""
                 />
                 <StatLinkCard
                   href="/follow?tab=projects"
-                  label="我关注的项目"
+                  label={t.profile.followed_projects}
                   value={String(stats.projectFollowCount)}
                   hint=""
                 />
                 <StatLinkCard
                   href="/follow?tab=users"
-                  label="我关注的用户"
+                  label={t.profile.followed_users}
                   value={String(stats.followingCount)}
                   hint=""
                 />
                 <StatLinkCard
                   href="/profile/followers"
-                  label="粉丝"
+                  label={t.profile.followers}
                   value={String(stats.followerCount)}
                   hint=""
                 />
                 <StatLinkCard
                   href="/profile/helpful"
-                  label="收到的帮助标记"
+                  label={t.profile.received_helpful_marks}
                   value={String(stats.receivedFlowerCount)}
-                  hint="查看哪些求助回答被确认有帮助"
+                  hint={t.profile.received_helpful_hint}
                 />
                 <StatLinkCard
                   href="/profile/helpful?tab=sent"
-                  label="我标记的帮助"
+                  label={t.profile.sent_helpful_marks}
                   value={String(stats.sentFlowerCount || 0)}
-                  hint="查看我确认过的有帮助回答"
+                  hint={t.profile.sent_helpful_hint}
                 />
                 <StatLinkCard
                   href="/notifications"
-                  label="通知"
-                  value="进入"
-                  hint="关注、评论和有帮助反馈提醒"
+                  label={t.profile.notifications}
+                  value={t.profile.enter}
+                  hint={t.profile.notifications_hint}
                 />
               </>
             )}
@@ -932,25 +938,25 @@ export default function ProfilePage() {
         <section style={plantInfoSectionStyle}>
           <div style={plantInfoHeaderStyle}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>植物资料</div>
-              <h2 style={plantInfoTitleStyle}>我的植物计划与收藏</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.plant_info}</div>
+              <h2 style={plantInfoTitleStyle}>{t.profile.plant_plan_title}</h2>
               <p style={plantInfoDescStyle}>
-                管理还没有正式建档的种植准备和感兴趣植物。开始记录后，可以再转入项目档案。
+                {t.profile.plant_plan_intro}
               </p>
             </div>
           </div>
 
           <div style={plantInfoGridStyle}>
             <Link href="/archive/plans" style={plantInfoCardStyle}>
-              <div style={plantInfoCardLabelStyle}>种植计划</div>
+              <div style={plantInfoCardLabelStyle}>{t.profile.planting_plan}</div>
               <div style={plantInfoCardValueStyle}>{stats.planCount}</div>
               <div style={plantInfoCardHintStyle}>{planHint}</div>
             </Link>
 
             <Link href="/archive/interests" style={plantInfoCardStyle}>
-              <div style={plantInfoCardLabelStyle}>植物收藏</div>
+              <div style={plantInfoCardLabelStyle}>{t.profile.plant_collection}</div>
               <div style={plantInfoCardValueStyle}>{stats.interestCount}</div>
-              <div style={plantInfoCardHintStyle}>{getInterestHint(Number(stats.interestCount || 0))}</div>
+              <div style={plantInfoCardHintStyle}>{getInterestHint(Number(stats.interestCount || 0), language)}</div>
             </Link>
           </div>
         </section>
@@ -960,28 +966,28 @@ export default function ProfilePage() {
         <section style={marketInfoSectionStyle}>
           <div style={marketInfoHeaderStyle}>
             <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>集市信息</div>
-              <h2 style={marketInfoTitleStyle}>我的集市</h2>
+              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.market_info}</div>
+              <h2 style={marketInfoTitleStyle}>{t.profile.my_market}</h2>
               <p style={marketInfoDescStyle}>
-                管理你的交换、赠送、转让和求购信息。
+                {t.profile.my_market_intro}
               </p>
             </div>
           </div>
 
           <div style={marketInfoGridStyle}>
             <Link href="/market/mine" style={marketInfoCardStyle}>
-              <div style={marketInfoCardLabelStyle}>我的集市发布</div>
+              <div style={marketInfoCardLabelStyle}>{t.profile.my_market_posts}</div>
               <div style={marketInfoCardValueStyle}>{marketPostCount}</div>
               <div style={marketInfoCardHintStyle}>
-                查看和管理我发布的集市信息
+                {t.profile.my_market_posts_hint}
               </div>
             </Link>
 
             <Link href="/market/new" style={marketInfoCardStyle}>
-              <div style={marketInfoCardLabelStyle}>发布新信息</div>
+              <div style={marketInfoCardLabelStyle}>{t.profile.new_market_post}</div>
               <div style={marketInfoCardValueStyle}><UiIcon name="plus" size={22} /></div>
               <div style={marketInfoCardHintStyle}>
-                发布交换、赠送、转让或求购
+                {t.profile.new_market_post_hint}
               </div>
             </Link>
           </div>
@@ -991,14 +997,14 @@ export default function ProfilePage() {
         {showSpaceModule && !isMobileViewport ? (
         <section style={trashEntrySectionStyle}>
           <div>
-            <div style={{ fontSize: 13, color: "#6b7b66" }}>云端内容</div>
-            <h2 style={trashEntryTitleStyle}>回收站</h2>
+            <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.cloud_content}</div>
+            <h2 style={trashEntryTitleStyle}>{t.profile.trash}</h2>
             <p style={trashEntryDescStyle}>
-              查看并恢复已移入回收站的项目、记录和照片。
+              {t.profile.trash_intro}
             </p>
           </div>
           <Link href="/profile/trash" style={trashEntryLinkStyle}>
-            查看回收站
+            {t.profile.view_trash}
           </Link>
         </section>
         ) : null}
@@ -1007,10 +1013,10 @@ export default function ProfilePage() {
         <>
         <section style={isMobileViewport ? { ...dataSectionStyle, ...sectionCompactStyle } : dataSectionStyle}>
           <div>
-            <div style={{ fontSize: 13, color: "#6b7b66" }}>我的数据</div>
-            <h2 style={dataTitleStyle}>导出与备份</h2>
+            <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.my_data}</div>
+            <h2 style={dataTitleStyle}>{t.profile.export_backup}</h2>
             <p style={dataDescStyle}>
-              导出自己的项目、记录和图片。导出属于数据管理，不取决于是否开通云会员。
+              {t.profile.export_intro}
             </p>
           </div>
           <button
@@ -1023,21 +1029,21 @@ export default function ProfilePage() {
               opacity: exporting ? 0.65 : 1,
             }}
           >
-            {exporting ? "正在打包记录和图片..." : "导出我的记录"}
+            {exporting ? t.profile.packaging : t.profile.export_records}
           </button>
           {exporting ? (
             <p style={exportProgressStyle}>
-              正在打包你的记录和图片，图片较多时可能需要 1～3 分钟，请不要关闭页面。完成后请在浏览器下载栏或“下载”文件夹中查看。
+              {t.profile.packaging_hint}
             </p>
           ) : null}
         </section>
 
         <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
-            <div style={{ fontSize: 13, color: "#9a5b55" }}>危险操作</div>
-            <h2 style={dangerTitleStyle}>注销账号</h2>
+            <div style={{ fontSize: 13, color: "#9a5b55" }}>{t.profile.danger}</div>
+            <h2 style={dangerTitleStyle}>{t.profile.delete_account}</h2>
             <p style={dangerDescStyle}>
-              注销后，你的项目、记录、图片、个人资料和公开内容将被删除。此操作无法恢复。建议先导出数据。
+              {t.profile.delete_intro}
             </p>
           </div>
           <button
@@ -1045,7 +1051,7 @@ export default function ProfilePage() {
             onClick={openDeleteDialog}
             style={dangerButtonStyle}
           >
-            注销账号
+            {t.profile.delete_account}
           </button>
         </section>
         </>
@@ -1053,10 +1059,10 @@ export default function ProfilePage() {
       </section>
       <ConfirmDialog
         open={deleteDialogOpen}
-        title="确认注销账号？"
-        message={"注销后，你的项目、记录、图片、个人资料和公开内容将被删除。\n此操作无法恢复。"}
-        confirmText={deleteLoading ? "注销中..." : "确认注销"}
-        cancelText="取消"
+        title={t.profile.delete_confirm_title}
+        message={t.profile.delete_confirm_message}
+        confirmText={deleteLoading ? t.profile.deleting : t.profile.confirm_delete}
+        cancelText={t.profile.cancel}
         danger
         confirmDisabled={deleteLoading || !deleteConfirmed}
         cancelDisabled={deleteLoading}
@@ -1074,7 +1080,7 @@ export default function ProfilePage() {
             disabled={deleteLoading}
             style={deleteConfirmCheckboxStyle}
           />
-          <span>我已了解，仍要注销账号</span>
+          <span>{t.profile.acknowledge_delete}</span>
         </label>
         {deleteAccountError ? (
           <div style={deleteErrorStyle}>{deleteAccountError}</div>
@@ -1084,16 +1090,22 @@ export default function ProfilePage() {
   );
 }
 
-function getPlanHint(planNames: string[], planCount: number) {
-  if (!planCount) return "还没有种植计划";
-  if (!planNames.length) return "查看我的种植计划";
-  const suffix = planCount > planNames.length ? "等" : "";
-  return `${planNames.join("、")}${suffix}`;
+function getPlanHint(
+  planNames: string[],
+  planCount: number,
+  language: "zh" | "en"
+) {
+  if (!planCount) return language === "en" ? "No planting plans yet" : "还没有种植计划";
+  if (!planNames.length) return language === "en" ? "View my planting plan" : "查看我的种植计划";
+  const suffix = planCount > planNames.length
+    ? language === "en" ? " and more" : "等"
+    : "";
+  return `${planNames.join(language === "en" ? ", " : "、")}${suffix}`;
 }
 
-function getInterestHint(interestCount: number) {
-  if (!interestCount) return "还没有植物收藏";
-  return "查看我感兴趣的植物";
+function getInterestHint(interestCount: number, language: "zh" | "en") {
+  if (!interestCount) return language === "en" ? "No plants in the collection yet" : "还没有植物收藏";
+  return language === "en" ? "View plants I am interested in" : "查看我感兴趣的植物";
 }
 
 function MetaItem({ label, value }: { label: string; value: ReactNode }) {
@@ -1114,13 +1126,14 @@ function MobileProfileModuleTabs({
   modules: MobileProfileNavItem[];
   onChange: (value: MobileProfileModule) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <nav
       style={{
         ...mobileProfileTabsStyle,
         gridTemplateColumns: `repeat(${modules.length}, minmax(0, 1fr))`,
       }}
-      aria-label="我的页面模块"
+      aria-label={t.profile.module_aria}
     >
       {modules.map((item) =>
         item.href ? (
@@ -1153,14 +1166,15 @@ function ProjectStatsCard({
   privateArchiveCount: number;
   endedArchiveCount: number;
 }) {
+  const { t } = useLanguage();
   return (
     <Link href="/archive" style={mobileProjectStatsCardStyle}>
       <span style={mobileProjectStatsTitleRowStyle}>
-        <strong>项目档案</strong>
-        <strong>{archiveCount} 个 <UiIcon name="arrow-right" size={14} /></strong>
+        <strong>{t.profile.project_archives}</strong>
+        <strong>{archiveCount} {t.profile.project_unit} <UiIcon name="arrow-right" size={14} /></strong>
       </span>
       <span style={mobileProjectStatsDetailStyle}>
-        公开 {publicArchiveCount} · 仅自己可见 {privateArchiveCount} · 已结束 {endedArchiveCount}
+        {t.profile.public_prefix} {publicArchiveCount} · {t.profile.private_prefix} {privateArchiveCount} · {t.profile.ended_prefix} {endedArchiveCount}
       </span>
     </Link>
   );

@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import type { ActionMessage, PlantI18nItem, PlantSpeciesDetail } from "@/lib/plant-detail-types";
 import { categoryLabel } from "@/lib/plant-detail-utils";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function PlantDetailHero({
   plant,
@@ -31,6 +34,10 @@ export default function PlantDetailHero({
   onAddPlan: () => void;
   onAddInterest: () => void;
 }) {
+  const { language, t } = useLanguage();
+  const copy = t.plant.detail;
+  const localizedFamily = (language === "en" ? en?.family : zh?.family) || plant.family;
+
   return (
     <section
       style={{
@@ -61,18 +68,18 @@ export default function PlantDetailHero({
             fontWeight: 700,
           }}
         >
-          植物档案
+          {copy.plant_archive}
         </span>
       </div>
 
       <h1 style={{ margin: 0, fontSize: 30 }}>{displayName}</h1>
 
       <div style={{ marginTop: 10, color: "#666", lineHeight: 1.85 }}>
-        {plant.scientific_name && <div>学名：{plant.scientific_name}</div>}
-        {aliasNames.length > 0 && <div>别名：{aliasNames.join("、")}</div>}
-        {(zh?.family || plant.family) && <div>科属：{zh?.family || plant.family}</div>}
-        <div>分类：{categoryLabel(plant.category)}</div>
-        {en?.common_name && <div>英文名：{en.common_name}</div>}
+        {plant.scientific_name && <div>{t.plant.scientific_name}{plant.scientific_name}</div>}
+        {aliasNames.length > 0 && <div>{t.plant.aliases}{aliasNames.join(t.plant.alias_separator)}</div>}
+        {localizedFamily && <div>{copy.family}{localizedFamily}</div>}
+        <div>{copy.classification}{categoryLabel(plant.category, language)}</div>
+        {en?.common_name && <div>{copy.english_name}{en.common_name}</div>}
       </div>
 
       {summary && (
@@ -85,7 +92,7 @@ export default function PlantDetailHero({
               marginBottom: 8,
             }}
           >
-            简介
+            {copy.summary}
           </div>
           <div
             style={{
@@ -154,7 +161,7 @@ export default function PlantDetailHero({
             boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
           }}
         >
-          新建种植项目
+          {copy.new_project}
         </Link>
 
         <button
@@ -174,7 +181,11 @@ export default function PlantDetailHero({
             boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
           }}
         >
-          {planAdded ? "已添加计划" : actionLoading === "plan" ? "加入中..." : "加入种植计划"}
+          {planAdded
+            ? copy.plan_already_added
+            : actionLoading === "plan"
+              ? copy.adding
+              : copy.add_to_plan}
         </button>
 
         <button
@@ -194,7 +205,11 @@ export default function PlantDetailHero({
             boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
           }}
         >
-          {interestAdded ? "已收藏" : actionLoading === "interest" ? "加入中..." : "加入收藏"}
+          {interestAdded
+            ? copy.saved
+            : actionLoading === "interest"
+              ? copy.adding
+              : copy.add_to_saved}
         </button>
       </div>
 
@@ -222,7 +237,7 @@ export default function PlantDetailHero({
                 textDecoration: "none",
               }}
             >
-              {actionMessage.hrefText || "查看"}
+              {actionMessage.hrefText || copy.view}
             </Link>
           )}
         </div>

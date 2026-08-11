@@ -1,5 +1,8 @@
+"use client";
+
 import type { ProjectStatusFilter, TabKey } from "@/lib/follow-types";
 import { searchInputStyle, selectStyle, tabButtonStyle, tabRowStyle, toolbarStyle } from "@/components/follow/FollowShared";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function FollowToolbar({
   tab,
@@ -16,18 +19,21 @@ export default function FollowToolbar({
   onKeywordChange: (value: string) => void;
   onProjectStatusChange: (value: ProjectStatusFilter) => void;
 }) {
+  const { t } = useLanguage();
+  const followT = t.follow;
+
   return (
     <>
       <div style={tabRowStyle}>
-        <button type="button" onClick={() => onTabChange("projects")} style={tabButtonStyle(tab === "projects")}>关注项目</button>
-        <button type="button" onClick={() => onTabChange("users")} style={tabButtonStyle(tab === "users")}>关注用户</button>
+        <button type="button" onClick={() => onTabChange("projects")} style={tabButtonStyle(tab === "projects")}>{followT.projects}</button>
+        <button type="button" onClick={() => onTabChange("users")} style={tabButtonStyle(tab === "users")}>{followT.users}</button>
       </div>
 
       <div style={toolbarStyle}>
         <input
           value={keyword}
           onChange={(e) => onKeywordChange(e.target.value)}
-          placeholder={tab === "projects" ? "搜索项目 / 具体名称 / 用户名" : "搜索用户名 / 项目名"}
+          placeholder={tab === "projects" ? followT.search_projects : followT.search_users}
           style={searchInputStyle}
         />
 
@@ -37,10 +43,10 @@ export default function FollowToolbar({
             onChange={(e) => onProjectStatusChange(e.target.value as ProjectStatusFilter)}
             style={selectStyle}
           >
-            <option value="all">全部状态</option>
-            <option value="open">求助中</option>
-            <option value="resolved">已解决</option>
-            <option value="ended">已结束</option>
+            <option value="all">{followT.status_all}</option>
+            <option value="open">{followT.status_open}</option>
+            <option value="resolved">{followT.status_resolved}</option>
+            <option value="ended">{followT.status_ended}</option>
           </select>
         ) : null}
       </div>

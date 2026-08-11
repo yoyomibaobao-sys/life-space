@@ -9,6 +9,7 @@ import {
   mainFilterStyle,
   subFilterStyle,
 } from "@/components/user-space/UserSpaceShared";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   activeCategory: Category;
@@ -22,10 +23,6 @@ type Props = {
   onClearGroupTag: () => void;
 };
 
-function categoryLabel(category?: string | null) {
-  return getArchiveCategoryLabel(category);
-}
-
 export default function UserSpaceFilters({
   activeCategory,
   activeSubTag,
@@ -37,6 +34,7 @@ export default function UserSpaceFilters({
   onSelectGroupTag,
   onClearGroupTag,
 }: Props) {
+  const { language, t } = useLanguage();
   return (
     <section
       style={{
@@ -61,7 +59,7 @@ export default function UserSpaceFilters({
           onClick={() => onSelectCategory("all")}
           style={mainFilterStyle(activeCategory === "all")}
         >
-          全部
+          {t.profile.space.all}
         </button>
 
         {["plant", "system", "insect_fish", "other"].map((category) => (
@@ -71,7 +69,7 @@ export default function UserSpaceFilters({
               onClick={() => onSelectCategory(category as ArchiveCategory)}
               style={mainFilterStyle(activeCategory === category && !activeSubTag)}
             >
-              {categoryLabel(category)}：
+              {getArchiveCategoryLabel(category, language)}：
             </button>
 
             {visibleSubTags
@@ -114,7 +112,7 @@ export default function UserSpaceFilters({
               padding: 0,
             }}
           >
-            分组：
+            {t.profile.space.group_prefix}
           </button>
 
           {visibleGroupTags.map((tag) => (

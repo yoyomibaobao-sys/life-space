@@ -1,4 +1,5 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import type { Language } from "@/lib/i18n";
 
 export type FeedItem = {
   record_id: string;
@@ -60,3 +61,16 @@ export const filterOptions: FilterOption[] = [
   { value: "other", label: "其他" },
   { value: "help", label: "只看求助" },
 ];
+
+export function getDiscoverFilterOptions(language: Language): FilterOption[] {
+  if (language !== "en") return filterOptions;
+
+  return [
+    { value: "all", label: "All" },
+    { value: "plant", label: "Cultivation" },
+    { value: "system", label: "Methods & facilities" },
+    { value: "insect_fish", label: "Insects & aquatic life" },
+    { value: "other", label: "Other" },
+    { value: "help", label: "Help requests" },
+  ];
+}

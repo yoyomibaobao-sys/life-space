@@ -1,5 +1,6 @@
 import type { ArchiveStat, UserSpaceArchive, UserSpaceRecord, UserSpaceTag } from "@/lib/user-space-types";
 import { formatCardDate } from "@/lib/date-time";
+import type { Language } from "@/lib/i18n";
 
 export function formatDate(value?: string | null) {
   return formatCardDate(value);
@@ -132,8 +133,13 @@ export function getFilteredArchives(
   });
 }
 
-export function getSubTagName(subTags: UserSpaceTag[], subTagId?: string | null) {
-  return subTags.find((tag) => tag.id === subTagId)?.name || "未细分";
+export function getSubTagName(
+  subTags: UserSpaceTag[],
+  subTagId?: string | null,
+  language: Language = "zh"
+) {
+  return subTags.find((tag) => tag.id === subTagId)?.name ||
+    (language === "en" ? "Uncategorized" : "未细分");
 }
 
 export function getGroupTagName(groupTags: UserSpaceTag[], groupTagId?: string | null) {

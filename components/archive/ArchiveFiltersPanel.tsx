@@ -7,6 +7,7 @@ import {
 import type { SubTagItem } from "@/lib/archive-page-types";
 import ArchiveSubTagChip from "@/components/archive/ArchiveSubTagChip";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   activeCategory: ArchiveCategory | null;
@@ -67,6 +68,7 @@ export default function ArchiveFiltersPanel({
   onDeleteSubTag,
   onCreateSubTag,
 }: Props) {
+  const { language, t } = useLanguage();
   const groups = [
     { category: "plant" as const, tags: plantSubTags },
     { category: "system" as const, tags: methodFacilitySubTags },
@@ -93,7 +95,7 @@ export default function ArchiveFiltersPanel({
       {!mobileMode ? (
         <div style={rowStyle}>
           <button type="button" onClick={onReset} style={pillStyle(!activeCategory && !activeSubTag)}>
-            全部
+            {t.archive_workspace.all}
           </button>
 
           {groups.map(({ category }) => (
@@ -103,7 +105,7 @@ export default function ArchiveFiltersPanel({
               onClick={() => onSelectCategory(category)}
               style={pillStyle(activeCategory === category && !activeSubTag)}
             >
-              {getArchiveCategoryLabel(category)}
+              {getArchiveCategoryLabel(category, language)}
             </button>
           ))}
         </div>
@@ -121,15 +123,19 @@ export default function ArchiveFiltersPanel({
 
       {currentGroup ? (
       <>
-        {mobileMode ? <div style={mobileFilterLabelStyle}>子分类</div> : null}
+        {mobileMode ? (
+          <div style={mobileFilterLabelStyle}>{t.archive_workspace.subcategory}</div>
+        ) : null}
         <div style={mobileMode ? mobileRowStyle : rowStyle}>
           <button
             type="button"
             onClick={() => onSelectCategory(currentGroup.category)}
             style={pillStyle(!activeSubTag, mobileMode)}
-            title="点击显示当前大类下全部项目"
+            title={t.archive_workspace.show_all_category}
           >
-            {mobileMode ? "全部子分类" : "子分类："}
+            {mobileMode
+              ? t.archive_workspace.all_subcategories
+              : t.archive_workspace.subcategory_prefix}
           </button>
 
           {currentGroup.tags.map((tag) => (
@@ -157,7 +163,7 @@ export default function ArchiveFiltersPanel({
               fontSize: mobileMode ? 13 : 14,
               lineHeight: mobileMode ? 1.15 : 1.3,
             }}
-            title="新增子分类"
+            title={t.archive_workspace.add_subcategory}
           >
             <UiIcon name="plus" size={14} />
           </button>

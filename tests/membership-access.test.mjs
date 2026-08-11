@@ -12,10 +12,11 @@ const signupRolloutMigrationPath =
   "supabase/migrations/20260730063743_add_signup_account_rollout.sql";
 
 test("new registrations use the bounded 30 MB signup rollout instead of the legacy automatic trial", async () => {
-  const [migration, signupRolloutMigration, registration] = await Promise.all([
+  const [migration, signupRolloutMigration, registration, zhCopy] = await Promise.all([
     source(migrationPath),
     source(signupRolloutMigrationPath),
     source("app/register/page.tsx"),
+    source("lib/i18n/zh.ts"),
   ]);
 
   assert.match(
@@ -42,15 +43,17 @@ test("new registrations use the bounded 30 MB signup rollout instead of the lega
     signupRolloutMigration,
     /from private\.initialize_new_account/i
   );
-  assert.match(registration, /首批20名正式注册用户/);
-  assert.match(registration, /30MB云空间体验/);
+  assert.match(registration, /t\.auth\.registration_intro/);
+  assert.match(zhCopy, /首批20名正式注册用户/);
+  assert.match(zhCopy, /30MB云空间体验/);
 });
 
 test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async () => {
-  const [migration, admin, membershipPage] = await Promise.all([
+  const [migration, admin, membershipPage, zhCopy] = await Promise.all([
     source(migrationPath),
     source("app/admin/memberships/page.tsx"),
     source("app/membership/page.tsx"),
+    source("lib/i18n/zh.ts"),
   ]);
 
   assert.match(
@@ -74,8 +77,9 @@ test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async 
   assert.match(admin, /if \(plan === "basic"\) return currency === "CNY" \? 64 : 8;/);
   assert.match(admin, /baseMarketPostLimit: 30/);
   assert.match(admin, /preset\.key !== "trial" \|\| selected\?\.plan === "trial"/);
-  assert.match(membershipPage, /¥64 \/ 年｜US\$8 \/ year/);
-  assert.match(membershipPage, /暂不提供集市加量包/);
+  assert.match(membershipPage, /t\.membership_page/);
+  assert.match(zhCopy, /¥64 \/ 年｜US\$8 \/ year/);
+  assert.match(zhCopy, /暂不提供集市加量包/);
 });
 
 test("plant guidance is split into visitor, registered, and cloud-member tiers", async () => {
@@ -158,10 +162,11 @@ test("plant guidance is split into visitor, registered, and cloud-member tiers",
 });
 
 test("the plant pages request only data allowed for the current tier", async () => {
-  const [indexPage, detailPage, guideCompat] = await Promise.all([
+  const [indexPage, detailPage, guideCompat, zhCopy] = await Promise.all([
     source("app/plant/page.tsx"),
     source("app/plant/[id]/page.tsx"),
     source("lib/plant-guide-compat.ts"),
+    source("lib/i18n/zh.ts"),
   ]);
 
   assert.match(indexPage, /loadPlantBasicOverviewsCompat\(null\)/);
@@ -171,7 +176,7 @@ test("the plant pages request only data allowed for the current tier", async () 
     indexPage,
     /\.from\("plant_species"\)[\s\S]{0,180}\.select\([^)]*description/i
   );
-  assert.match(indexPage, /游客可以查看植物目录、名称和分类/);
+  assert.match(indexPage, /t\.plant\.visitor_notice/);
 
   assert.match(detailPage, /loadPlantBasicOverviewsCompat\(id\)/);
   assert.match(detailPage, /loadPlantCoreParametersCompat\(id\)/);
@@ -184,7 +189,9 @@ test("the plant pages request only data allowed for the current tier", async () 
     /canReadFullGuide\s+\?\s+supabase\.from\("plant_growth_cycle"\)/
   );
   assert.doesNotMatch(detailPage, /from\("plant_related_archives_view"\)/);
-  assert.match(detailPage, /游客可以查看目录、名称和分类/);
+  assert.match(detailPage, /copy\.visitor_detail_notice/);
+  assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录、名称和分类。"/);
+  assert.match(zhCopy, /visitor_detail_notice: "游客可以查看目录、名称和分类。"/);
 
   assert.match(guideCompat, /rpc\("get_plant_basic_overviews"/);
   assert.match(guideCompat, /rpc\("get_plant_core_parameters"/);
@@ -238,9 +245,11 @@ test("all community interactions require active cloud access for new writes", as
 });
 
 test("registered local-free users can consult on active marketplace posts", async () => {
-  const [migration, marketComments] = await Promise.all([
+  const [migration, marketComments, zhCopy, enCopy] = await Promise.all([
     source(migrationPath),
     source("components/market/MarketCommentsSection.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
   const consultationPolicy =
     migration.match(
@@ -255,17 +264,21 @@ test("registered local-free users can consult on active marketplace posts", asyn
   assert.doesNotMatch(consultationPolicy, /has_active_cloud_access/i);
   assert.doesNotMatch(marketComments, /canCreateMembershipContent/);
   assert.doesNotMatch(marketComments, /get_my_membership/);
-  assert.match(marketComments, /咨询与联系/);
-  assert.match(marketComments, /本地用户也可咨询/);
+  assert.match(marketComments, /t\.market\.comments_title/);
+  assert.match(marketComments, /t\.market\.comment_permission_hint/);
+  assert.match(zhCopy, /comments_title: "咨询与联系"/);
+  assert.match(zhCopy, /本地用户也可咨询/);
+  assert.match(enCopy, /comments_title: "Questions & contact"/);
 });
 
 test("record photos are unlimited cumulatively but capped at ten per add operation", async () => {
-  const [batchRules, cloudAddRecord, cloudArchive, localArchive, migration] =
+  const [batchRules, cloudAddRecord, cloudArchive, localArchive, zhCopy, migration] =
     await Promise.all([
       source("lib/record-photo-batches.ts"),
       source("app/archive/[id]/AddRecord.tsx"),
       source("app/archive/[id]/page.tsx"),
       source("app/local/archive/[id]/page.tsx"),
+      source("lib/i18n/zh.ts"),
       source(migrationPath),
     ]);
 
@@ -277,8 +290,9 @@ test("record photos are unlimited cumulatively but capped at ten per add operati
   assert.match(batchRules, /recordTimeISO: latestRecordTime\(groupPhotos\)/);
   assert.match(
     cloudAddRecord,
-    /每次最多添加 \{MAX_RECORD_PHOTOS_PER_ADD\} 张，可分多次继续添加；单条记录累计照片不设上限/
+    /\{copy\.photo_limit_prefix\} \{MAX_RECORD_PHOTOS_PER_ADD\} \{copy\.photo_limit_suffix\}/
   );
+  assert.match(zhCopy, /单条记录累计照片不设上限/);
   assert.match(cloudArchive, /limitRecordPhotoBatch/);
   assert.match(localArchive, /image_captured_at/);
   assert.match(
@@ -381,10 +395,10 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /集市咨询和联系发布者 \| — \| ✓ \| ✓/);
   assert.match(docs, /未来：作者主动公开的单张经验卡.*\| ✓ \| ✓ \| ✓/);
   assert.match(docs, /只有报名时仍有效的云会员可以申请试用／试种/);
-  assert.match(docs, /商业会员面向个人经营者、苗圃、农场、工作室、小型商家和协作团队/);
-  assert.match(docs, /团队空间＋成员账号/);
+  assert.match(docs, /商社会员面向个人经营者、苗圃、农场、工作室、小型商家和协作团队/);
+  assert.match(docs, /商社空间＋成员账号/);
   assert.match(docs, /不允许多人共用同一登录账号和密码/);
-  assert.match(docs, /受邀成员获得的是团队管理权限，不自动获得个人云会员权益/);
+  assert.match(docs, /受邀成员获得的是商社管理权限，不自动获得个人云会员权益/);
   assert.match(docs, /主动公开、或在本次报名中明确授权展示的种植经验/);
   assert.match(docs, /不得读取或披露报名者的私密项目、私密记录/);
   assert.match(docs, /¥64\/年或 US\$8\/year/);

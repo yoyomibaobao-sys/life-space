@@ -1,3 +1,5 @@
+import { useLanguage } from "@/lib/i18n/useLanguage";
+
 export function DiscoverEmptyState({
   filterMode,
   activeFilterLabel,
@@ -5,6 +7,8 @@ export function DiscoverEmptyState({
   filterMode: string;
   activeFilterLabel: string;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div
       style={{
@@ -18,8 +22,8 @@ export function DiscoverEmptyState({
       }}
     >
       {filterMode === "help"
-        ? "还没有公开求助记录"
-        : `还没有${activeFilterLabel === "全部" ? "" : activeFilterLabel}公开记录`}
+        ? t.discover.grid.empty_public_help
+        : `${t.discover.grid.empty_public_prefix}${activeFilterLabel === t.discover.filters.all ? "" : activeFilterLabel}${t.discover.grid.empty_public_suffix}`}
     </div>
   );
 }

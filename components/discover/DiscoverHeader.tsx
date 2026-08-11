@@ -1,7 +1,10 @@
 import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export function DiscoverHeader() {
+  const { t } = useLanguage();
+
   return (
     <header style={{ marginBottom: 12 }}>
       <div
@@ -14,7 +17,7 @@ export function DiscoverHeader() {
         }}
       >
         <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>
-          发现公开项目
+          {t.discover.title}
         </div>
         <Link
           href="/discover/search"
@@ -34,7 +37,7 @@ export function DiscoverHeader() {
             boxSizing: "border-box",
           }}
         >
-          <UiIcon name="search" size={15} /> 搜索
+          <UiIcon name="search" size={15} /> {t.discover.search}
         </Link>
       </div>
     </header>

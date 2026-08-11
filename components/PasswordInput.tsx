@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   value: string;
@@ -12,8 +13,9 @@ type Props = {
 export default function PasswordInput({
   value,
   onChange,
-  placeholder = "请输入密码",
+  placeholder,
 }: Props) {
+  const { t } = useLanguage();
   const [show, setShow] = useState(false);
 
   return (
@@ -22,7 +24,7 @@ export default function PasswordInput({
         type={show ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
+        placeholder={placeholder || t.auth.password_placeholder}
         style={{
           width: "100%",
           padding: "12px 44px 12px 12px",
@@ -35,7 +37,7 @@ export default function PasswordInput({
       <button
         type="button"
         onClick={() => setShow(!show)}
-        aria-label={show ? "隐藏密码" : "显示密码"}
+        aria-label={show ? t.auth.hide_password : t.auth.show_password}
         style={{
           position: "absolute",
           right: 0,

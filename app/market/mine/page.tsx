@@ -22,6 +22,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type StatusFilter = "all" | MarketPostStatus;
 
@@ -51,6 +52,7 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
 
 export default function MyMarketPostsPage() {
   const router = useRouter();
+  const { language, t } = useLanguage();
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [items, setItems] = useState<MarketPostDisplayRow[]>([]);
@@ -123,40 +125,40 @@ export default function MyMarketPostsPage() {
         <header style={headerStyle}>
           <div>
             <Link href="/market" style={backLinkStyle}>
-              <UiIcon name="arrow-left" size={15} /> 返回集市
+              <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
             </Link>
-            <h1 style={titleStyle}>我的集市发布</h1>
+            <h1 style={titleStyle}>{t.market.mine_title}</h1>
           </div>
 
           {marketBlocked ? (
             <Link
               href="/membership"
               style={disabledPublishButtonStyle}
-              title={getCreateMarketPostBlockedText(membership)}
+              title={getCreateMarketPostBlockedText(membership, language)}
             >
-              发布受限
+              {t.market.post_restricted}
             </Link>
           ) : (
             <Link href="/market/new" style={publishButtonStyle}>
-              发布信息
+              {t.market.post_information}
             </Link>
           )}
         </header>
 
         <section style={quotaPanelStyle(marketBlocked)}>
           <div>
-            <div style={quotaTitleStyle}>集市发布额度</div>
+            <div style={quotaTitleStyle}>{t.market.quota_title}</div>
             <div style={quotaTextStyle}>
-              {getMarketPostQuotaLabel(membership)}
+              {getMarketPostQuotaLabel(membership, language)}
             </div>
             <div style={quotaHintStyle}>
-              {getMarketPostQuotaHint(membership)}
+              {getMarketPostQuotaHint(membership, language)}
             </div>
           </div>
 
           {marketBlocked ? (
             <Link href="/membership" style={quotaLinkStyle}>
-              了解云会员
+              {t.market.learn_membership}
             </Link>
           ) : null}
         </section>
@@ -167,31 +169,31 @@ export default function MyMarketPostsPage() {
             onClick={() => setStatusFilter("all")}
             style={filterButtonStyle(statusFilter === "all")}
           >
-            全部
+            {t.market.all}
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("active")}
             style={filterButtonStyle(statusFilter === "active")}
           >
-            进行中
+            {t.market.active}
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("ended")}
             style={filterButtonStyle(statusFilter === "ended")}
           >
-            已结束
+            {t.market.ended}
           </button>
         </section>
 
         {loading ? (
-          <section style={emptyStyle}>加载中...</section>
+          <section style={emptyStyle}>{t.market.loading}</section>
         ) : items.length === 0 ? (
           <section style={emptyStyle}>
             {statusFilter === "all"
-              ? "你还没有发布过集市信息。"
-              : "当前筛选下没有集市信息。"}
+              ? t.market.empty_mine
+              : t.market.empty_mine_filtered}
           </section>
         ) : (
           <section style={listStyle}>
@@ -209,22 +211,22 @@ export default function MyMarketPostsPage() {
                     loading="lazy"
                   />
                 ) : (
-                  <div style={cardImageFallbackStyle}>集市</div>
+                  <div style={cardImageFallbackStyle}>{t.market.name}</div>
                 )}
 
                 <div style={cardContentStyle}>
                   <div style={cardTopStyle}>
                     <div style={badgeRowStyle}>
                       <span style={typeBadgeStyle}>
-                        {getMarketPostTypeLabel(item.post_type)}
+                        {getMarketPostTypeLabel(item.post_type, language)}
                       </span>
                       <span style={categoryBadgeStyle}>
-                        {getMarketItemCategoryLabel(item.item_category)}
+                        {getMarketItemCategoryLabel(item.item_category, language)}
                       </span>
                       {item.status === "ended" ? (
-                        <span style={endedBadgeStyle}>已结束</span>
+                        <span style={endedBadgeStyle}>{t.market.ended}</span>
                       ) : (
-                        <span style={activeBadgeStyle}>进行中</span>
+                        <span style={activeBadgeStyle}>{t.market.active}</span>
                       )}
                     </div>
 
@@ -238,18 +240,18 @@ export default function MyMarketPostsPage() {
                   ) : null}
 
                   <div style={metaStyle}>
-                    {item.location_text ? item.location_text : "未填写地区"}
+                    {item.location_text ? item.location_text : t.market.area_not_provided}
                     {Number(item.view_count || 0) > 0
-                      ? ` · 浏览 ${Number(item.view_count || 0)}`
+                      ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
                       : ""}
                   </div>
 
                   <div style={actionRowStyle}>
                     <Link href={`/market/${item.id}`} style={secondaryLinkStyle}>
-                      查看
+                      {t.market.view}
                     </Link>
                     <Link href={`/market/${item.id}/edit`} style={secondaryLinkStyle}>
-                      编辑
+                      {t.market.edit}
                     </Link>
                   </div>
                 </div>

@@ -27,6 +27,8 @@ import {
 import { getAccountRegistrationSummary } from "@/lib/account-number";
 import UiIcon from "@/components/ui/UiIcon";
 import UserAvatar from "@/components/social/UserAvatar";
+import { useLanguage } from "@/lib/i18n/useLanguage";
+import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 
 type MarketPostDisplayRow = MarketPostRow & {
   display_cover_image_url?: string | null;
@@ -53,6 +55,7 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
 }
 
 export default function PublicUserProfilePage() {
+  const { language, t } = useLanguage();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const userId = params.id;
@@ -127,27 +130,28 @@ export default function PublicUserProfilePage() {
   }, [userId]);
 
   if (loading || !data) {
-    return <div style={{ padding: 40 }}>加载中...</div>;
+    return <div style={{ padding: 40 }}>{t.profile.public_profile.loading}</div>;
   }
 
   const profile = data.profile;
   const stats = data.stats;
   const isSelf = viewerId === userId;
   const accountRegistrationSummary = getAccountRegistrationSummary(
-    profile?.account_number
+    profile?.account_number,
+    language
   );
 
   if (!profile) {
     return (
       <main style={{ maxWidth: 860, margin: "0 auto", padding: "28px 16px 48px" }}>
         <section style={panelStyle}>
-          <h1 style={{ marginTop: 0 }}>找不到这个用户资料页</h1>
+          <h1 style={{ marginTop: 0 }}>{t.profile.public_profile.not_found}</h1>
           <div style={{ color: "#66725f", lineHeight: 1.8 }}>
-            这个资料页可能还未建立，或该用户不存在。
+            {t.profile.public_profile.not_found_hint}
           </div>
           <div style={{ marginTop: 16 }}>
             <Link href="/discover" style={secondaryLinkStyle}>
-              返回发现页
+              {t.profile.public_profile.back_to_discover}
             </Link>
           </div>
         </section>
@@ -181,7 +185,7 @@ export default function PublicUserProfilePage() {
       : normalizeMembershipRpcResult(membershipData);
 
     if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership));
+      showToast(getCreateContentBlockedText(membership, language));
       return;
     }
 
@@ -197,7 +201,7 @@ export default function PublicUserProfilePage() {
     setSubmitting(false);
 
     if (error) {
-      showToast("关注失败");
+      showToast(t.profile.public_profile.follow_failed);
       return;
     }
 
@@ -213,7 +217,7 @@ export default function PublicUserProfilePage() {
           }
         : current
     );
-    showToast("已关注该用户");
+    showToast(t.profile.public_profile.followed);
   }
 
   return (
@@ -221,7 +225,9 @@ export default function PublicUserProfilePage() {
       <div style={{ marginBottom: 12 }}>
         <Link href={isSelf ? "/profile" : "/discover"} style={backLinkStyle}>
           <UiIcon name="arrow-left" size={15} />
-          {isSelf ? " 返回我的空间" : " 返回发现"}
+          {isSelf
+            ? ` ${t.profile.public_profile.back_my_space}`
+            : ` ${t.profile.public_profile.back_discover}`}
         </Link>
       </div>
       <section style={{ ...panelStyle, padding: 18 }}>
@@ -235,16 +241,16 @@ export default function PublicUserProfilePage() {
             />
 
             <div style={{ minWidth: 0 }}>
-              <h1 style={profileNameStyle}>{profile.username || "未设置用户名"}</h1>
-              <div style={profileRegionStyle}>{formatRegionDisplayFromProfile(profile)}</div>
+              <h1 style={profileNameStyle}>{profile.username || t.profile.unset_username}</h1>
+              <div style={profileRegionStyle}>{formatRegionDisplayFromProfile(profile, language)}</div>
               {profile.account_number ? (
                 <div style={profileAccountStyle}>
-                  账号编号：{profile.account_number}
+                  {t.profile.public_profile.account_number}{profile.account_number}
                   {accountRegistrationSummary ? ` · ${accountRegistrationSummary}` : ""}
                 </div>
               ) : null}
               <div style={profileLevelStyle}>
-                Lv.{Number(profile.level || 1)} · <UiIcon name="helpful" size={13} /> 有帮助{" "}
+                Lv.{Number(profile.level || 1)} · <UiIcon name="helpful" size={13} /> {t.profile.public_profile.helpful}{" "}
                 {Number(profile.flower_count || 0)}
               </div>
             </div>
@@ -252,12 +258,14 @@ export default function PublicUserProfilePage() {
 
           <div style={profileActionRowStyle}>
             <Link href={`/user/${userId}`} style={secondaryLinkStyle}>
-              进入{profile.username ? `${profile.username}的` : ""}空间
+              {profile.username
+                ? `${t.profile.public_profile.enter_prefix}${profile.username}${t.profile.public_profile.enter_suffix}`
+                : t.profile.space.user_space}
             </Link>
 
             {isSelf ? (
               <Link href="/profile" style={secondaryLinkStyle}>
-                编辑我的资料
+                {t.profile.public_profile.edit_profile}
               </Link>
             ) : (
               <button
@@ -265,21 +273,25 @@ export default function PublicUserProfilePage() {
                 onClick={handleFollowToggle}
                 style={primaryButtonStyle}
               >
-                {submitting ? "处理中..." : isFollowing ? "已关注" : "关注用户"}
+                {submitting
+                  ? t.profile.public_profile.processing
+                  : isFollowing
+                    ? t.profile.public_profile.following
+                    : t.profile.public_profile.follow}
               </button>
             )}
           </div>
         </div>
 
         <div style={profileStatsGridStyle}>
-          <MetaItem label="关注" value={String(stats.followingCount)} />
-          <MetaItem label="粉丝" value={String(stats.followerCount)} />
-          <MetaItem label="公开项目" value={String(stats.publicArchiveCount)} />
-          <MetaItem label="最近活跃" value={formatProfileDate(stats.latestRecordTime)} />
+          <MetaItem label={t.profile.public_profile.follows} value={String(stats.followingCount)} />
+          <MetaItem label={t.profile.public_profile.followers} value={String(stats.followerCount)} />
+          <MetaItem label={t.profile.public_profile.public_projects} value={String(stats.publicArchiveCount)} />
+          <MetaItem label={t.profile.public_profile.recent_activity} value={formatProfileDate(stats.latestRecordTime, language)} />
         </div>
 
         <section style={{ ...panelInnerStyle, marginTop: 16 }}>
-          <div style={sectionTitleStyle}>最近公开项目</div>
+          <div style={sectionTitleStyle}>{t.profile.public_profile.recent_projects}</div>
 
           {data.recentArchives.length ? (
             <div style={{ display: "grid", gap: 10 }}>
@@ -305,20 +317,22 @@ export default function PublicUserProfilePage() {
                     }}
                   >
                     <div style={{ fontWeight: 650 }}>
-                      {item.title || "未命名项目"}
+                      {item.title || t.profile.public_profile.unnamed_project}
                     </div>
                     <div style={{ fontSize: 12, color: "#75806f" }}>
-                      {formatProfileDate(item.last_record_time)}
+                      {formatProfileDate(item.last_record_time, language)}
                     </div>
                   </div>
 
                   <div style={{ marginTop: 6, fontSize: 13, color: "#63705d" }}>
-                    具体名称：{item.system_name || "未填写"} · 分类：
-                    {item.category || "未分类"}
+                    {t.profile.public_profile.specific_name}{item.system_name || t.profile.public_profile.not_provided} · {t.profile.public_profile.category}
+                    {item.category
+                      ? getArchiveCategoryLabel(item.category, language)
+                      : t.profile.public_profile.uncategorized}
                   </div>
 
                   <div style={{ marginTop: 6, fontSize: 12, color: "#7a8575" }}>
-                    记录 {Number(item.record_count || 0)} 条 · 浏览{" "}
+                    {t.profile.public_profile.records} {Number(item.record_count || 0)} {t.profile.public_profile.record_unit} · {t.profile.public_profile.views}{" "}
                     {Number(item.view_count || 0)}
                   </div>
                 </Link>
@@ -326,17 +340,17 @@ export default function PublicUserProfilePage() {
             </div>
           ) : (
             <div style={{ color: "#6d7968", lineHeight: 1.8 }}>
-              还没有公开项目
+              {t.profile.public_profile.no_public_projects}
             </div>
           )}
         </section>
 
         <section style={marketInfoSectionStyle}>
           <div style={marketInfoHeaderStyle}>
-            <h2 style={marketInfoTitleStyle}>集市信息</h2>
+            <h2 style={marketInfoTitleStyle}>{t.profile.public_profile.market_info}</h2>
 
             <Link href="/market" style={smallMarketLinkStyle}>
-              去集市看看
+              {t.profile.public_profile.browse_market}
             </Link>
           </div>
 
@@ -355,17 +369,17 @@ export default function PublicUserProfilePage() {
                       style={marketImageStyle}
                     />
                   ) : (
-                    <div style={marketImageFallbackStyle}>集市</div>
+                    <div style={marketImageFallbackStyle}>{t.profile.public_profile.market}</div>
                   )}
 
                   <div style={marketContentStyle}>
                     <div style={marketTopRowStyle}>
                       <div style={marketBadgeRowStyle}>
                         <span style={marketTypeBadgeStyle}>
-                          {getMarketPostTypeLabel(item.post_type)}
+                          {getMarketPostTypeLabel(item.post_type, language)}
                         </span>
                         <span style={marketCategoryBadgeStyle}>
-                          {getMarketItemCategoryLabel(item.item_category)}
+                          {getMarketItemCategoryLabel(item.item_category, language)}
                         </span>
                       </div>
 
@@ -381,7 +395,7 @@ export default function PublicUserProfilePage() {
                     ) : null}
 
                     <div style={marketMetaStyle}>
-                      {item.location_text ? item.location_text : "未填写地区"}
+                      {item.location_text ? item.location_text : t.profile.public_profile.area_not_provided}
                     </div>
                   </div>
                 </Link>
@@ -389,7 +403,7 @@ export default function PublicUserProfilePage() {
             </div>
           ) : (
             <div style={emptyMarketStyle}>
-              还没有正在进行的集市信息。
+              {t.profile.public_profile.no_active_market}
             </div>
           )}
         </section>
@@ -397,10 +411,10 @@ export default function PublicUserProfilePage() {
 
       <ConfirmDialog
         open={showUnfollowConfirm}
-        title="取消关注用户"
-        message={`确定不再关注“${profile.username || "这个用户"}”吗？`}
-        confirmText={submitting ? "处理中..." : "取消关注"}
-        cancelText="保留关注"
+        title={t.profile.public_profile.unfollow_title}
+        message={`${t.profile.public_profile.unfollow_message_prefix}${profile.username || t.profile.public_profile.this_user}${t.profile.public_profile.unfollow_message_suffix}`}
+        confirmText={submitting ? t.profile.public_profile.processing : t.profile.public_profile.unfollow}
+        cancelText={t.profile.public_profile.keep_following}
         danger
         onClose={() => {
           if (!submitting) setShowUnfollowConfirm(false);
@@ -419,7 +433,7 @@ export default function PublicUserProfilePage() {
           setSubmitting(false);
 
           if (error) {
-            showToast("取消关注失败");
+            showToast(t.profile.public_profile.unfollow_failed);
             return;
           }
 
@@ -436,7 +450,7 @@ export default function PublicUserProfilePage() {
                 }
               : current
           );
-          showToast("已取消关注该用户");
+          showToast(t.profile.public_profile.unfollowed);
         }}
       />
     </main>

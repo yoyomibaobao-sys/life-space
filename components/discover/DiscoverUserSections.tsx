@@ -3,6 +3,7 @@ import type { FeedItem, UserSection } from "@/lib/discover-types";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { DefaultUserAvatar, ProjectCardRows, getFeedItemDisplayImageUrl } from "@/components/discover/DiscoverShared";
 import UiIcon from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function DiscoverUserRecordCard({
   record,
@@ -105,6 +106,7 @@ function DiscoverUserSectionCard({
   onGoUser: (userId: string) => void;
   compactMobile?: boolean;
 }) {
+  const { t } = useLanguage();
   const visibleRecords = isExpanded ? section.records : section.records.slice(0, 2);
   const hiddenCount = Math.max(section.records.length - 2, 0);
   const hasMoreProjectsInSpace = section.total_project_count > 4;
@@ -179,7 +181,7 @@ function DiscoverUserSectionCard({
               maxWidth: 150,
             }}
           >
-            {section.username || "用户"}
+            {section.username || t.discover.default_user}
           </span>
           {section.user_location ? (
             <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -225,7 +227,7 @@ function DiscoverUserSectionCard({
                 whiteSpace: "nowrap",
               }}
             >
-              进入空间
+              {t.discover.enter_space}
             </button>
           </div>
         )}
@@ -247,7 +249,9 @@ function DiscoverUserSectionCard({
               textAlign: "center",
             }}
           >
-            {isExpanded ? "收起 ▲" : `展开更多 ${hiddenCount} 个项目 ▼`}
+            {isExpanded
+              ? t.discover.collapse
+              : `${t.discover.expand_more_prefix} ${hiddenCount} ${t.discover.expand_more_suffix}`}
           </button>
         )}
       </div>

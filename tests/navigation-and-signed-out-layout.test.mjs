@@ -7,31 +7,41 @@ async function source(path) {
 }
 
 test("mobile personal space project summary opens the project archive", async () => {
-  const profile = await source("app/profile/page.tsx");
+  const [profile, zhCopy, enCopy] = await Promise.all([
+    source("app/profile/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
 
   assert.match(profile, /<Link href="\/archive" style=\{mobileProjectStatsCardStyle\}>/);
-  assert.match(profile, /<strong>项目档案<\/strong>/);
-  assert.match(profile, /公开 \{publicArchiveCount\}/);
+  assert.match(profile, /<strong>\{t\.profile\.project_archives\}<\/strong>/);
+  assert.match(profile, /\{t\.profile\.public_prefix\} \{publicArchiveCount\}/);
+  assert.match(zhCopy, /project_archives: "项目档案"/);
+  assert.match(enCopy, /project_archives: "Project archives"/);
 });
 
 test("account navigation keeps membership contextual and export under data management", async () => {
-  const [profile, navbar, membership, login, home] = await Promise.all([
+  const [profile, navbar, membership, login, home, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
     source("components/navbar.tsx"),
     source("app/membership/page.tsx"),
     source("app/login/page.tsx"),
     source("app/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(profile, /value: "membership", label: "会员与容量"/);
-  assert.match(profile, /value: "account", label: "数据与安全"/);
+  assert.match(profile, /value: "membership", label: t\.profile\.modules\.membership/);
+  assert.match(profile, /value: "account", label: t\.profile\.modules\.account/);
   assert.match(profile, /<MobileProfileModuleTabs/);
   assert.match(profile, /const showInfoModule = mobileProfileModule === "info"/);
-  assert.match(profile, /<h2 style=\{dataTitleStyle\}>导出与备份<\/h2>/);
-  assert.match(profile, /导出属于数据管理，不取决于是否开通云会员/);
+  assert.match(profile, /<h2 style=\{dataTitleStyle\}>\{t\.profile\.export_backup\}<\/h2>/);
+  assert.match(profile, /\{t\.profile\.export_intro\}/);
   assert.ok(
-    profile.indexOf("导出我的记录") > profile.indexOf("{showAccountModule ?")
+    profile.indexOf("t.profile.export_records") > profile.indexOf("{showAccountModule ?")
   );
+  assert.match(zhCopy, /export_backup: "导出与备份"/);
+  assert.match(enCopy, /export_backup: "Export & backup"/);
   assert.doesNotMatch(profile, /云会员与云空间/);
   assert.doesNotMatch(navbar, /membershipEntryStyle/);
   assert.doesNotMatch(navbar, />\s*云会员\s*<\/Link>/);
@@ -39,40 +49,54 @@ test("account navigation keeps membership contextual and export under data manag
   assert.doesNotMatch(navbar, /mobileRegisterActionStyle/);
   assert.match(navbar, /<Link href="\/login" style=\{loginLinkStyle\}>/);
   assert.match(navbar, /pathname !== "\/"/);
-  assert.match(membership, /个人使用方案/);
-  assert.match(membership, /1GB 个人云端存储/);
+  assert.match(membership, /t\.membership_page/);
+  assert.match(zhCopy, /eyebrow: "个人使用方案"/);
+  assert.match(zhCopy, /1GB 个人云端存储/);
   assert.doesNotMatch(membership, /查看会员权益/);
   assert.doesNotMatch(login, /href="\/membership"/);
   assert.doesNotMatch(login, /登录后进入我的项目/);
   assert.match(home, /href="\/membership"/);
-  assert.match(home, /会员类别与权限/);
-  assert.match(home, /本地免费使用，云会员可云端保存与公开互动/);
+  assert.match(home, /t\.home\.membership_title/);
+  assert.match(home, /t\.home\.membership_description/);
+  assert.match(zhCopy, /membership_title: "会员类别与权限"/);
+  assert.match(zhCopy, /membership_description: "本地免费使用，云会员可云端保存与公开互动"/);
   assert.match(
     home,
-    /href="\/register"[\s\S]*?注册[\s\S]*?href="\/discover"[\s\S]*?浏览发现/
+    /href="\/register"[\s\S]*?t\.register[\s\S]*?href="\/discover"[\s\S]*?t\.home\.browse_discover/
   );
   assert.match(home, /membershipLinkArrowStyle/);
-  assert.match(navbar, /href="\/login"[\s\S]*?登录/);
+  assert.match(navbar, /href="\/login"[\s\S]*?t\.nav\.login/);
 });
 
 test("signed-out market does not repeat login and registration actions inside the page", async () => {
-  const market = await source("app/market/page.tsx");
+  const [market, zhCopy, enCopy] = await Promise.all([
+    source("app/market/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
 
   assert.doesNotMatch(market, /登录后发布/);
   assert.doesNotMatch(market, /注册账号/);
   assert.match(market, /\{currentUserId \? \(/);
-  assert.match(market, /我的发布/);
+  assert.match(market, /\{t\.market\.my_posts\}/);
+  assert.match(zhCopy, /my_posts: "我的发布"/);
+  assert.match(enCopy, /my_posts: "My posts"/);
 });
 
 test("signed-out home uses a compact viewport-oriented layout", async () => {
-  const home = await source("app/page.tsx");
+  const [home, zhCopy] = await Promise.all([
+    source("app/page.tsx"),
+    source("lib/i18n/zh.ts"),
+  ]);
 
   assert.match(home, /minHeight: "calc\(100vh - 70px\)"/);
   assert.match(home, /gridTemplateColumns: "repeat\(4, minmax\(0, 1fr\)\)"/);
   assert.match(home, /@media \(max-height: 720px\)/);
   assert.match(home, /\.home-actions > a:last-child \{ grid-column: 1 \/ -1; \}/);
-  assert.match(home, /记录四时变化，留下发现、收获与成长/);
-  assert.match(home, /其他自然生活相关项目/);
+  assert.match(home, /\{t\.home\.poem\}/);
+  assert.match(home, /\{t\.home\.cards\.map/);
+  assert.match(zhCopy, /记录四时变化，留下发现、收获与成长/);
+  assert.match(zhCopy, /其他自然生活相关项目/);
   assert.match(home, /href="\/register"/);
   assert.doesNotMatch(home, /href="\/login"/);
   assert.doesNotMatch(home, /background: "rgba\(255,255,255,0\.82\)"/);
@@ -93,6 +117,8 @@ test("project archive label, following cards, and discover cards use the refined
     archiveCard,
     localProjectView,
     discoverData,
+    zhCopy,
+    enCopy,
   ] =
     await Promise.all([
       source("components/archive-ui/ArchiveDetailHeaderView.tsx"),
@@ -107,9 +133,11 @@ test("project archive label, following cards, and discover cards use the refined
       source("components/archive/ArchiveCard.tsx"),
       source("components/archive-ui/localArchiveProjectView.ts"),
       source("lib/discover-project-feed.ts"),
+      source("lib/i18n/zh.ts"),
+      source("lib/i18n/en.ts"),
     ]);
 
-  assert.match(archiveHeader, /title="打开项目档案"/);
+  assert.match(archiveHeader, /title=\{copy\.open_project_archive\}/);
   assert.match(archiveHeader, /style=\{eyebrowButtonStyle\}/);
   assert.match(archiveHeader, /<span style=\{titleTextDisplayStyle\}>/);
 
@@ -147,7 +175,9 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(uiIcon, /"duration"/);
   assert.match(uiIcon, /"view"/);
   assert.match(uiIcon, /"follow"/);
-  assert.match(archiveCard, />无图</);
+  assert.match(archiveCard, /\{t\.archive_workspace\.no_image\}/);
+  assert.match(zhCopy, /no_image: "无图"/);
+  assert.match(enCopy, /no_image: "No image"/);
   assert.match(archiveCard, /<CompactActivityTime value=\{latestRecordTime\}/);
   assert.match(archiveCard, /<ProjectMetaLine/);
   assert.doesNotMatch(archiveCard, /最新无图|最新：|· 更新/);
@@ -161,25 +191,31 @@ test("project archive label, following cards, and discover cards use the refined
 });
 
 test("plant detail exposes guide, experience cards, and records as peer tabs", async () => {
-  const detail = await source("app/plant/[id]/page.tsx");
+  const [detail, zhCopy, enCopy] = await Promise.all([
+    source("app/plant/[id]/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
 
   assert.match(detail, /type PlantDetailTab = "guide" \| "experience" \| "records"/);
-  assert.match(detail, /\["guide", "概要与种植办法"\]/);
+  assert.match(detail, /\["guide", copy\.guide_tab\]/);
   assert.match(detail, /"experience",[\s\S]*?experienceCardTabCount > 0/);
   assert.match(detail, /"records",[\s\S]*?plantingRecordTabCount > 0/);
-  assert.match(detail, /`经验卡（\$\{experienceCardTabCount\}）`/);
-  assert.match(detail, /`种植记录（\$\{plantingRecordTabCount\}）`/);
+  assert.match(detail, /`\$\{copy\.experience_cards\} \(\$\{experienceCardTabCount\}\)`/);
+  assert.match(detail, /`\$\{copy\.growing_records\} \(\$\{plantingRecordTabCount\}\)`/);
   assert.match(detail, /activeTab === "experience"/);
   assert.match(detail, /<PlantExperienceCardsSection[\s\S]*?cards=\{relatedExperienceCards\}[\s\S]*?currentUserId=\{currentUserId\}/);
-  assert.match(detail, /title="我的经验卡"/);
-  assert.match(detail, /title="其他人的经验卡"/);
+  assert.match(detail, /title=\{copy\.my_experience_cards\}/);
+  assert.match(detail, /title=\{copy\.others_experience_cards\}/);
   assert.match(detail, /activeTab === "records"/);
   assert.match(detail, /\.from\("experience_cards"\)/);
   assert.match(detail, /is_experience_card_public/);
+  assert.match(zhCopy, /guide_tab: "概要与种植办法"/);
+  assert.match(enCopy, /guide_tab: "Overview & growing guide"/);
 });
 
 test("discover search separates three result types with one shared card format", async () => {
-  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils] = await Promise.all([
+  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils, zhCopy, enCopy] = await Promise.all([
     source("app/discover/search/page.tsx"),
     source("components/discover-search/DiscoverSearchTabs.tsx"),
     source("components/discover-search/DiscoverSearchForm.tsx"),
@@ -188,11 +224,15 @@ test("discover search separates three result types with one shared card format",
     source("components/discover-search/DiscoverSearchResultCard.module.css"),
     source("lib/discover-search-data.ts"),
     source("lib/discover-search-utils.ts"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(tabs, /label: "项目"/);
-  assert.match(tabs, /label: "记录"/);
-  assert.match(tabs, /label: "经验卡"/);
+  assert.match(tabs, /label: t\.discover\.search_ui\.projects/);
+  assert.match(tabs, /label: t\.discover\.search_ui\.records/);
+  assert.match(tabs, /label: t\.discover\.search_ui\.experience_cards/);
+  assert.match(zhCopy, /projects: "项目"/);
+  assert.match(enCopy, /experience_cards: "Experience cards"/);
   assert.match(page, /fetchDiscoverProjectSearchResults/);
   assert.match(page, /fetchDiscoverSearchResults/);
   assert.match(page, /fetchDiscoverExperienceCardSearchResults/);
@@ -229,22 +269,29 @@ test("discover search separates three result types with one shared card format",
 });
 
 test("user navigation opens a compact profile directly and keeps the space entry obvious", async () => {
-  const [userSpace, publicProfile, archiveDetail] = await Promise.all([
+  const [userSpace, publicProfile, archiveDetail, zhCopy, enCopy] = await Promise.all([
     source("app/user/[id]/page.tsx"),
     source("app/user/[id]/profile/page.tsx"),
     source("app/archive/[id]/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
   ]);
 
   assert.match(userSpace, /href=\{`\/user\/\$\{userId\}\/profile`\}/);
-  assert.match(userSpace, />\s*用户资料\s*<\/Link>/);
+  assert.match(userSpace, /\{t\.profile\.space\.user_profile\}/);
+  assert.match(zhCopy, /user_profile: "用户资料"/);
+  assert.match(enCopy, /user_profile: "User profile"/);
   assert.doesNotMatch(userSpace, /名片|showCard|UserProfileCard/);
 
   assert.match(publicProfile, /<UserAvatar/);
   assert.match(publicProfile, /profileStatsGridStyle/);
-  assert.match(publicProfile, /进入\{profile\.username \? `\$\{profile\.username\}的` : ""\}空间/);
+  assert.match(publicProfile, /t\.profile\.public_profile\.enter_prefix/);
+  assert.match(publicProfile, /t\.profile\.public_profile\.enter_suffix/);
   assert.doesNotMatch(publicProfile, /用户信息页|当前正在进行的交换、赠送、转让或求购信息/);
 
-  assert.match(archiveDetail, /进入\{username\}的空间/);
+  assert.match(archiveDetail, /archiveCopy\.enter_user_space_prefix/);
+  assert.match(archiveDetail, /archiveCopy\.enter_user_space_suffix/);
+  assert.match(archiveDetail, /displayUsername/);
   assert.match(archiveDetail, /<UiIcon name="arrow-right" size=\{14\} \/>/);
   assert.match(archiveDetail, /background: "#edf6e9"/);
   assert.match(archiveDetail, /border: "1px solid #bfd5b8"/);

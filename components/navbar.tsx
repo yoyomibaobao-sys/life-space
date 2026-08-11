@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
+import { useLanguage } from "@/lib/i18n/useLanguage";
+import type { TranslationDictionary } from "@/lib/i18n";
 
 type MobileArchiveTitleInfo = {
   title: string;
@@ -14,6 +16,7 @@ type MobileArchiveTitleInfo = {
 } | null;
 
 export default function Navbar() {
+  const { t } = useLanguage();
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [username, setUsername] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
@@ -23,7 +26,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isCompact, setIsCompact] = useState(false);
-  const [mobileTitle, setMobileTitle] = useState("有时·耕作");
+  const [mobileTitle, setMobileTitle] = useState("");
   const [mobileArchiveTitleInfo, setMobileArchiveTitleInfo] =
     useState<MobileArchiveTitleInfo>(null);
   const [mobileMeMenuOpen, setMobileMeMenuOpen] = useState(false);
@@ -180,7 +183,7 @@ export default function Navbar() {
         .maybeSingle();
 
       if (!cancelled) {
-        const title = String(data?.title || "项目");
+        const title = String(data?.title || t.nav.project);
         const systemName =
           data?.category === "plant"
             ? String(data?.species_name_snapshot || "")
@@ -206,11 +209,11 @@ export default function Navbar() {
       setMobileArchiveTitleInfo(null);
 
       if (!archiveDetailPath) {
-        setMobileTitle(getMobilePageTitle(pathname));
+        setMobileTitle(getMobilePageTitle(pathname, t.nav));
         return;
       }
 
-      setMobileTitle("项目");
+      setMobileTitle(t.nav.project);
       void loadMobileTitle();
     }, 0);
 
@@ -218,7 +221,7 @@ export default function Navbar() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [pathname]);
+  }, [pathname, t.nav]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -238,7 +241,7 @@ export default function Navbar() {
             title={
               mobileArchiveTitleInfo?.systemName
                 ? `${mobileArchiveTitleInfo.title} · ${mobileArchiveTitleInfo.systemName}`
-                : mobileTitle
+                : mobileTitle || t.nav.brand
             }
           >
             {mobileArchiveTitleInfo ? (
@@ -265,7 +268,7 @@ export default function Navbar() {
                 ) : null}
               </>
             ) : (
-              mobileTitle
+              mobileTitle || t.nav.brand
             )}
           </div>
 
@@ -274,8 +277,8 @@ export default function Navbar() {
               <Link
                 href="/notifications"
                 style={mobileNotificationButtonStyle}
-                aria-label="通知"
-                title="通知"
+                aria-label={t.nav.notification}
+                title={t.nav.notification}
               >
                 <UiIcon name="bell" size={18} />
               </Link>
@@ -295,7 +298,7 @@ export default function Navbar() {
                 }}
                 style={mobileSearchButtonStyle}
               >
-                搜索
+                {t.nav.search}
               </button>
             ) : isMobileMarketPath(pathname) ? (
               <>
@@ -303,13 +306,13 @@ export default function Navbar() {
                   href={user ? "/market/mine" : "/login"}
                   style={mobileMarketMineButtonStyle}
                 >
-                  我的发布
+                  {t.nav.my_posts}
                 </Link>
                 <Link
                   href={user ? "/market/new" : "/login"}
                   style={mobileMarketPublishButtonStyle}
                 >
-                  发布信息
+                  {t.nav.post_information}
                 </Link>
               </>
             ) : isMobilePlantPath(pathname) ? (
@@ -319,7 +322,7 @@ export default function Navbar() {
                   onClick={() => setMobilePlantMenuOpen((open) => !open)}
                   style={mobilePlantButtonStyle}
                 >
-                  我的植物
+                  {t.nav.my_plants}
                 </button>
                 {mobilePlantMenuOpen ? (
                   <div style={mobilePlantMenuStyle}>
@@ -327,13 +330,13 @@ export default function Navbar() {
                       href={user ? "/archive/interests" : "/login"}
                       style={mobilePlantMenuItemStyle}
                     >
-                      我收藏的植物
+                      {t.nav.interested_plants}
                     </Link>
                     <Link
                       href={user ? "/archive/plans" : "/login"}
                       style={mobilePlantMenuItemStyle}
                     >
-                      种植计划
+                      {t.nav.planting_plan}
                     </Link>
                   </div>
                 ) : null}
@@ -343,7 +346,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => setMobileMeMenuOpen((open) => !open)}
-                  aria-label="更多账号操作"
+                  aria-label={t.nav.more_account_actions}
                   style={mobileMeMoreButtonStyle}
                 >
                   <UiIcon name="more" size={20} />
@@ -355,7 +358,7 @@ export default function Navbar() {
                       onClick={handleLogout}
                       style={mobileMeLogoutItemStyle}
                     >
-                      退出登录
+                      {t.nav.logout_full}
                     </button>
                   </div>
                 ) : null}
@@ -364,8 +367,8 @@ export default function Navbar() {
               <Link
                 href={getMobileCreateHref(pathname, true)}
                 style={mobileCreateButtonStyle}
-                aria-label={getMobileCreateLabel(pathname)}
-                title={getMobileCreateLabel(pathname)}
+                aria-label={getMobileCreateLabel(pathname, t.nav)}
+                title={getMobileCreateLabel(pathname, t.nav)}
                 onClick={(event) => {
                   if (getArchiveDetailPath(pathname)) {
                     event.preventDefault();
@@ -373,11 +376,11 @@ export default function Navbar() {
                   }
                 }}
               >
-                <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname)}
+                <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname, t.nav)}
               </Link>
             ) : !user && shouldShowMobileLoginAction(pathname) ? (
               <Link href="/login" style={mobileLoginActionStyle}>
-                登录
+                {t.nav.login}
               </Link>
             ) : null}
           </div>
@@ -387,6 +390,7 @@ export default function Navbar() {
           pathname={pathname}
           user={user}
           unreadCount={unreadCount}
+          labels={t.nav}
         />
       </>
     );
@@ -396,7 +400,7 @@ export default function Navbar() {
     <nav style={getNavStyle(isCompact)}>
       <div style={getLeftGroupStyle(isCompact)}>
         <Link href="/" style={brandStyle}>
-          有时·耕作
+          {t.nav.brand}
         </Link>
 
         <div style={getNavItemsWrapStyle(isCompact)}>
@@ -410,7 +414,7 @@ export default function Navbar() {
               );
             }}
           >
-            发现
+            {t.nav.discover}
           </NavItem>
 
           <NavItem
@@ -427,7 +431,7 @@ export default function Navbar() {
               );
             }}
           >
-            关注
+            {t.nav.following}
           </NavItem>
 
           <NavItem
@@ -436,22 +440,22 @@ export default function Navbar() {
               isActive("/archive") || pathname.startsWith("/experience-cards")
             }
           >
-            个人空间
+            {t.nav.personal_space}
           </NavItem>
 
           <NavItem href="/plant" active={isActive("/plant")}>
-            指引
+            {t.nav.guide}
           </NavItem>
 
           <NavItem href="/market" active={isActive("/market")}>
-            集市
+            {t.nav.market}
           </NavItem>
         </div>
       </div>
 
       {user ? (
         <div style={getUserAreaStyle(isCompact)}>
-          <Link href="/notifications" style={notificationStyle} title="通知">
+          <Link href="/notifications" style={notificationStyle} title={t.nav.notification}>
             <UiIcon name="bell" size={18} />
             {unreadCount > 0 ? (
               <span style={notificationBadgeStyle}>
@@ -464,14 +468,14 @@ export default function Navbar() {
             <Link
               href="/admin/memberships"
               style={adminLinkStyle(isActive("/admin"))}
-              title="管理会员"
+              title={t.nav.manage_members}
             >
-              管理
+              {t.nav.admin}
             </Link>
           ) : null}
 
           <Link href="/profile" style={getProfileLinkStyle(isCompact)}>
-            {username || "未设置用户名"}
+            {username || t.nav.username_unset}
           </Link>
 
           {!isCompact ? (
@@ -485,17 +489,17 @@ export default function Navbar() {
             onClick={handleLogout}
             style={logoutButtonStyle}
           >
-            退出
+            {t.nav.logout}
           </button>
         </div>
       ) : (
         <div style={getGuestAreaStyle(isCompact)}>
           <Link href="/login" style={loginLinkStyle}>
-            登录
+            {t.nav.login}
           </Link>
           {pathname !== "/" ? (
             <Link href="/register" style={registerLinkStyle}>
-              注册
+              {t.nav.register}
             </Link>
           ) : null}
         </div>
@@ -508,38 +512,40 @@ function MobileBottomNav({
   pathname,
   user,
   unreadCount,
+  labels,
 }: {
   pathname: string;
   user: SupabaseUser | null;
   unreadCount: number;
+  labels: TranslationDictionary["nav"];
 }) {
   const items = [
     {
-      label: "发现",
+      label: labels.discover,
       icon: "home" as UiIconName,
       href: "/discover",
       activePaths: ["/discover"],
     },
     {
-      label: "集市",
+      label: labels.market,
       icon: "store" as UiIconName,
       href: "/market",
       activePaths: ["/market"],
     },
     {
-      label: "空间",
+      label: labels.space,
       icon: "project" as UiIconName,
       href: user ? "/archive" : "/login",
       activePaths: ["/archive", "/experience-cards"],
     },
     {
-      label: "指引",
+      label: labels.guide,
       icon: "sprout" as UiIconName,
       href: "/plant",
       activePaths: ["/plant"],
     },
     {
-      label: "我",
+      label: labels.me,
       icon: "user" as UiIconName,
       href: user ? "/profile" : "/login",
       activePaths: ["/profile", "/notifications", "/membership", "/admin", "/login", "/register"],
@@ -548,7 +554,7 @@ function MobileBottomNav({
   ];
 
   return (
-    <nav style={mobileBottomNavStyle} aria-label="手机端主导航">
+    <nav style={mobileBottomNavStyle} aria-label={labels.mobile_navigation}>
       {items.map((item) => (
         <MobileBottomNavItem
           key={item.label}
@@ -655,25 +661,25 @@ function getMobileCreateHref(pathname: string, hasUser: boolean) {
   return "/archive/new";
 }
 
-function getMobileCreateLabel(pathname: string) {
-  return getArchiveDetailPath(pathname) ? "添加记录" : "新建项目";
+function getMobileCreateLabel(pathname: string, labels: TranslationDictionary["nav"]) {
+  return getArchiveDetailPath(pathname) ? labels.add_record : labels.new_project;
 }
 
-function getMobilePageTitle(pathname: string) {
-  if (pathname === "/archive") return "我的空间";
-  if (pathname === "/") return "个人空间";
-  if (pathname.startsWith("/experience-cards")) return "我的经验卡";
-  if (pathname.startsWith("/discover")) return "发现";
-  if (pathname.startsWith("/follow")) return "关注";
-  if (pathname.startsWith("/plant")) return "指引";
-  if (pathname.startsWith("/profile")) return "我";
-  if (pathname.startsWith("/notifications")) return "通知";
-  if (pathname.startsWith("/membership")) return "云会员";
-  if (pathname.startsWith("/archive/new")) return "新建项目";
-  if (pathname.startsWith("/market")) return "集市";
-  if (pathname.startsWith("/login")) return "登录";
-  if (pathname.startsWith("/register")) return "注册";
-  return "有时·耕作";
+function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav"]) {
+  if (pathname === "/archive") return labels.my_space;
+  if (pathname === "/") return labels.personal_space;
+  if (pathname.startsWith("/experience-cards")) return labels.my_experience_cards;
+  if (pathname.startsWith("/discover")) return labels.discover;
+  if (pathname.startsWith("/follow")) return labels.following;
+  if (pathname.startsWith("/plant")) return labels.guide;
+  if (pathname.startsWith("/profile")) return labels.me;
+  if (pathname.startsWith("/notifications")) return labels.notification;
+  if (pathname.startsWith("/membership")) return labels.cloud_membership;
+  if (pathname.startsWith("/archive/new")) return labels.new_project;
+  if (pathname.startsWith("/market")) return labels.market;
+  if (pathname.startsWith("/login")) return labels.login;
+  if (pathname.startsWith("/register")) return labels.register;
+  return labels.brand;
 }
 
 function getNavStyle(compact: boolean): CSSProperties {

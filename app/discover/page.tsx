@@ -24,7 +24,7 @@ import type {
   DiscoveryProjectCursor,
   DiscoveryProjectFeedItem,
 } from "@/lib/discover-project-types";
-import { type FilterMode, filterOptions } from "@/lib/discover-types";
+import { type FilterMode, getDiscoverFilterOptions } from "@/lib/discover-types";
 import {
   fetchFollowedPublicProjects,
 } from "@/lib/followed-public-project-feed";
@@ -33,6 +33,7 @@ import {
   fetchFollowedUsers,
   type FollowedUserSummary,
 } from "@/lib/followed-users";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type MobileDiscoverTab = "feed" | "following";
 type FollowingContentTab = "projects" | "users";
@@ -50,6 +51,7 @@ function dedupeDiscoveryProjects(items: DiscoveryProjectFeedItem[]) {
 }
 
 export default function DiscoverPage() {
+  const { language, t } = useLanguage();
   const [items, setItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [diversityState, setDiversityState] =
@@ -596,7 +598,7 @@ export default function DiscoverPage() {
         message: error.message,
       });
       setProjectUnfollowSubmitting(false);
-      showToast("取消关注失败");
+      showToast(t.discover.unfollow_failed);
       return;
     }
 
@@ -605,7 +607,7 @@ export default function DiscoverPage() {
     );
     setProjectUnfollowSubmitting(false);
     setProjectConfirmId(null);
-    showToast("已取消关注项目");
+    showToast(t.discover.unfollowed_project);
   }
 
   const showFollowing = mobileTab === "following";
@@ -624,7 +626,7 @@ export default function DiscoverPage() {
 
       <div className="mobile-app-desktop-only">
         {showFollowing ? (
-          <header style={followedDesktopHeaderStyle}>关注</header>
+          <header style={followedDesktopHeaderStyle}>{t.discover.following}</header>
         ) : (
           <DiscoverHeader />
         )}
@@ -646,8 +648,8 @@ export default function DiscoverPage() {
               initialError={followedArchiveProjectsError}
               loadMoreError={false}
               hasMore={false}
-              emptyMessage="还没有关注的项目"
-              emptyActionLabel="去发现页看看"
+              emptyMessage={t.discover.empty_followed_projects}
+              emptyActionLabel={t.discover.browse_discover}
               unfollowingArchiveId={
                 projectUnfollowSubmitting ? projectConfirmId : null
               }
@@ -664,13 +666,13 @@ export default function DiscoverPage() {
             <>
               {followedUsersLoading && !followedUsersLoaded ? (
                 <div style={followedUsersStatusStyle}>
-                  正在加载关注的用户...
+                  {t.discover.loading_followed_users}
                 </div>
               ) : null}
 
               {followedUsersError ? (
                 <div style={followedUsersErrorStyle}>
-                  <span>关注的用户加载失败，请稍后重试。</span>
+                  <span>{t.discover.followed_users_load_failed}</span>
                   <button
                     type="button"
                     style={followedUsersRetryStyle}
@@ -680,7 +682,7 @@ export default function DiscoverPage() {
                       }
                     }}
                   >
-                    重新加载
+                    {t.discover.reload}
                   </button>
                 </div>
               ) : null}
@@ -703,14 +705,14 @@ export default function DiscoverPage() {
                 hasMore={followedHasMore}
                 emptyMessage={
                   followedUsersLoaded && followedUsers.length === 0
-                    ? "还没有关注的用户"
+                    ? t.discover.empty_followed_users
                     : selectedFollowedUserId
-                      ? "这位用户暂时没有公开项目"
-                      : "关注的用户暂时没有公开项目"
+                      ? t.discover.empty_selected_user_projects
+                      : t.discover.empty_followed_user_projects
                 }
                 emptyActionLabel={
                   followedUsersLoaded && followedUsers.length === 0
-                    ? "去发现页看看"
+                    ? t.discover.browse_discover
                     : undefined
                 }
                 listAnchorRef={followedProjectListRef}
@@ -738,7 +740,7 @@ export default function DiscoverPage() {
       ) : (
         <>
           <DiscoverFilterBar
-            options={filterOptions}
+            options={getDiscoverFilterOptions(language)}
             activeMode={filterMode}
             onChange={changeFilter}
             compactMobile={isMobileViewport}
@@ -773,10 +775,10 @@ export default function DiscoverPage() {
 
       <ConfirmDialog
         open={Boolean(projectConfirmId)}
-        title="取消关注项目"
-        message="确定取消关注这个项目吗？取消后，它将从“关注的项目”中移除。"
-        confirmText={projectUnfollowSubmitting ? "处理中..." : "取消关注"}
-        cancelText="返回"
+        title={t.discover.unfollow_project_title}
+        message={t.discover.unfollow_project_message}
+        confirmText={projectUnfollowSubmitting ? t.discover.processing : t.discover.unfollow}
+        cancelText={t.discover.back}
         danger
         onClose={() => {
           if (!projectUnfollowSubmitting) setProjectConfirmId(null);
@@ -798,8 +800,9 @@ function FollowingContentTabs({
   active: FollowingContentTab;
   onChange: (tab: FollowingContentTab) => void;
 }) {
+  const { t } = useLanguage();
   return (
-    <div style={followingContentTabsStyle} role="tablist" aria-label="关注内容">
+    <div style={followingContentTabsStyle} role="tablist" aria-label={t.discover.following_content}>
       <button
         type="button"
         role="tab"
@@ -807,7 +810,7 @@ function FollowingContentTabs({
         onClick={() => onChange("projects")}
         style={followingContentTabStyle(active === "projects")}
       >
-        关注的项目
+        {t.discover.followed_projects}
       </button>
       <button
         type="button"
@@ -816,7 +819,7 @@ function FollowingContentTabs({
         onClick={() => onChange("users")}
         style={followingContentTabStyle(active === "users")}
       >
-        关注的用户
+        {t.discover.followed_users}
       </button>
     </div>
   );
@@ -829,21 +832,22 @@ function MobileDiscoverTabs({
   active: MobileDiscoverTab;
   onChange: (tab: MobileDiscoverTab) => void;
 }) {
+  const { t } = useLanguage();
   return (
-    <nav style={mobileDiscoverTabsStyle} aria-label="发现内容">
+    <nav style={mobileDiscoverTabsStyle} aria-label={t.discover.discover_content}>
       <button
         type="button"
         onClick={() => onChange("feed")}
         style={mobileDiscoverTabButtonStyle(active === "feed")}
       >
-        动态
+        {t.discover.feed}
       </button>
       <button
         type="button"
         onClick={() => onChange("following")}
         style={mobileDiscoverTabButtonStyle(active === "following")}
       >
-        关注
+        {t.discover.following}
       </button>
     </nav>
   );

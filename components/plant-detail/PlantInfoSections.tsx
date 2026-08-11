@@ -1,10 +1,14 @@
+"use client";
+
 import { Section, Card, TempCard, TextBlock } from "./PlantDetailShared";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export function EnvironmentSection({ environmentCards }: { environmentCards: { label: string; value: string }[] }) {
+  const { t } = useLanguage();
   if (environmentCards.length === 0) return null;
 
   return (
-    <Section title="环境与场景">
+    <Section title={t.plant.detail.environment_setting}>
       <div
         style={{
           display: "grid",
@@ -70,11 +74,12 @@ export function TemperatureSection({
   items: { label: string; value: string | null }[];
   note?: string | null;
 }) {
+  const { t } = useLanguage();
   const visibleItems = items.filter((item) => item.value);
   if (visibleItems.length === 0 && !note?.trim()) return null;
 
   return (
-    <Section title="温度节点">
+    <Section title={t.plant.detail.temperature_nodes}>
       {visibleItems.length > 0 && (
         <div
           style={{
@@ -103,11 +108,12 @@ export function PhotoperiodSection({
   items: { label: string; value: string | null }[];
   note?: string | null;
 }) {
+  const { t } = useLanguage();
   const visibleItems = items.filter((item) => item.value);
   if (visibleItems.length === 0 && !note?.trim()) return null;
 
   return (
-    <Section title="光周期">
+    <Section title={t.plant.detail.photoperiod}>
       {visibleItems.length > 0 && (
         <div
           style={{

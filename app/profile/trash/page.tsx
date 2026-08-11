@@ -23,6 +23,8 @@ import {
 } from "@/lib/cloud-trash";
 import { supabase } from "@/lib/supabase";
 import { formatPreciseDateTime } from "@/lib/date-time";
+import { useLanguage } from "@/lib/i18n/useLanguage";
+import type { TranslationDictionary } from "@/lib/i18n";
 
 type LoadOptions = {
   silent?: boolean;
@@ -30,6 +32,8 @@ type LoadOptions = {
 
 export default function CloudTrashPage() {
   const router = useRouter();
+  const { t } = useLanguage();
+  const trashT = t.profile.trash_page;
   const loadSequence = useRef(0);
   const [items, setItems] = useState<CloudTrashItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,10 +65,10 @@ export default function CloudTrashPage() {
 
       if (!result.ok) {
         if (options.silent) {
-          setRefreshError("状态更新失败，请手动刷新。");
+          setRefreshError(trashT.state_update_failed);
         } else {
           setItems([]);
-          setError("暂时无法读取回收站，请稍后重试。");
+          setError(trashT.load_failed);
         }
       } else {
         setItems(result.items);
@@ -74,7 +78,7 @@ export default function CloudTrashPage() {
 
       if (!options.silent) setLoading(false);
     },
-    [],
+    [trashT],
   );
 
   useEffect(() => {
@@ -131,7 +135,7 @@ export default function CloudTrashPage() {
 
     if (!restored) {
       setActionKey(null);
-      showToast("恢复失败，请稍后重试");
+      showToast(trashT.restore_failed);
       return;
     }
 
@@ -144,8 +148,8 @@ export default function CloudTrashPage() {
     setActionKey(null);
     showToast(
       restoredType === "media"
-        ? "照片已恢复。"
-        : "已恢复。评论、点赞等互动信息不会恢复。",
+        ? trashT.photo_restored
+        : trashT.restored,
     );
   }
 
@@ -158,7 +162,7 @@ export default function CloudTrashPage() {
 
     if (!result.ok) {
       setActionKey(null);
-      showToast("永久删除未能开始，请稍后重试");
+      showToast(trashT.purge_start_failed);
       if (result.status === 409 || result.status === 404) {
         await loadTrash(undefined, { silent: true });
       }
@@ -174,7 +178,7 @@ export default function CloudTrashPage() {
     );
     setPurgeTarget(null);
     setActionKey(null);
-    showToast("已开始永久删除，正在后台处理。");
+    showToast(trashT.purge_started);
     await loadTrash(undefined, { silent: true });
   }
 
@@ -186,7 +190,7 @@ export default function CloudTrashPage() {
 
     if (!result.ok) {
       setActionKey(null);
-      showToast("删除未完成，请稍后重试。");
+      showToast(trashT.purge_incomplete);
       await loadTrash(undefined, { silent: true });
       return;
     }
@@ -199,7 +203,7 @@ export default function CloudTrashPage() {
       ),
     );
     setActionKey(null);
-    showToast("已重新开始处理。");
+    showToast(trashT.restarted);
     await loadTrash(undefined, { silent: true });
   }
 
@@ -211,20 +215,20 @@ export default function CloudTrashPage() {
 
     if (!result.ok) {
       setActionKey(null);
-      showToast("清空回收站未能开始，请稍后重试");
+      showToast(trashT.empty_start_failed);
       return;
     }
 
     setEmptyConfirmOpen(false);
     setActionKey(null);
     if (result.action === "empty") {
-      showToast("回收站已清空。");
+      showToast(trashT.emptied);
     } else if (result.morePending) {
-      showToast("已完成本次受理，回收站仍有内容，请再次清空。");
+      showToast(trashT.partially_remaining);
     } else if (result.failed > 0) {
-      showToast("已完成部分受理，部分内容未能处理，请稍后重试清空。");
+      showToast(trashT.partially_failed);
     } else {
-      showToast("已开始清空，正在后台处理。");
+      showToast(trashT.empty_started);
     }
     await loadTrash(undefined, { silent: true });
   }
@@ -233,8 +237,8 @@ export default function CloudTrashPage() {
     <main style={pageStyle}>
       <div style={topRowStyle}>
         <div>
-          <div style={eyebrowStyle}>云端内容</div>
-          <h1 style={titleStyle}>回收站</h1>
+          <div style={eyebrowStyle}>{trashT.cloud_content}</div>
+          <h1 style={titleStyle}>{trashT.title}</h1>
         </div>
         <div style={topActionsStyle}>
           {activeCount > 0 ? (
@@ -244,18 +248,18 @@ export default function CloudTrashPage() {
               disabled={actionBusy}
               style={emptyButtonStyle}
             >
-              清空回收站
+              {trashT.empty_trash}
             </button>
           ) : null}
           <Link href="/profile" style={backLinkStyle}>
-            返回我的空间
+            {trashT.back}
           </Link>
         </div>
       </div>
 
       <section style={noticeStyle}>
-        <strong>回收站内容会继续占用云空间。</strong>
-        <span>恢复后可继续使用；永久删除受理后无法恢复，并会在后台安全处理。</span>
+        <strong>{trashT.capacity_notice}</strong>
+        <span>{trashT.recover_notice}</span>
       </section>
 
       {refreshError && items.length > 0 ? (
@@ -266,13 +270,13 @@ export default function CloudTrashPage() {
             onClick={() => void loadTrash(undefined, { silent: true })}
             style={inlineRefreshButtonStyle}
           >
-            刷新
+            {trashT.refresh}
           </button>
         </div>
       ) : null}
 
       {loading ? (
-        <section style={stateStyle}>正在读取回收站...</section>
+        <section style={stateStyle}>{trashT.loading}</section>
       ) : error ? (
         <section style={stateStyle}>
           <p style={stateTextStyle}>{error}</p>
@@ -281,13 +285,13 @@ export default function CloudTrashPage() {
             onClick={() => void loadTrash()}
             style={retryButtonStyle}
           >
-            重新读取
+            {trashT.reload}
           </button>
         </section>
       ) : items.length === 0 ? (
-        <section style={stateStyle}>回收站还是空的。</section>
+        <section style={stateStyle}>{trashT.empty}</section>
       ) : (
-        <section style={listStyle} aria-label="云端回收站内容">
+        <section style={listStyle} aria-label={trashT.list_aria}>
           {items.map((item) => {
             const itemBusy = actionKey?.endsWith(item.trashEntryId) === true;
             return (
@@ -296,44 +300,44 @@ export default function CloudTrashPage() {
                   {item.previewUrl ? (
                     <img
                       src={item.previewUrl}
-                      alt={`${item.title}预览`}
+                      alt={`${item.title}${trashT.preview_suffix}`}
                       loading="lazy"
                       style={previewImageStyle}
                     />
                   ) : (
                     <span style={previewPlaceholderStyle} aria-hidden="true">
-                      {item.type === "archive" ? "项目" : item.type === "record" ? "记录" : "照片"}
+                      {getTrashTypeLabel(item.type, trashT)}
                     </span>
                   )}
                 </div>
                 <div style={itemContentStyle}>
                   <div style={itemMetaRowStyle}>
-                    <span style={typeChipStyle}>{getTypeLabel(item.type)}</span>
+                    <span style={typeChipStyle}>{getTrashTypeLabel(item.type, trashT)}</span>
                     <time dateTime={item.deletedAt} style={deletedTimeStyle}>
-                      {formatDeletedAt(item.deletedAt)}
+                      {formatDeletedAt(item.deletedAt, trashT)}
                     </time>
                     {item.status === "purging" ? (
-                      <span style={processingChipStyle}>正在永久删除</span>
+                      <span style={processingChipStyle}>{trashT.purging}</span>
                     ) : item.status === "failed" ? (
-                      <span style={failedChipStyle}>永久删除失败</span>
+                      <span style={failedChipStyle}>{trashT.purge_failed}</span>
                     ) : null}
                   </div>
                   <h2 style={itemTitleStyle}>{item.title}</h2>
                   {item.parentTitle ? (
-                    <div style={parentTitleStyle}>原项目：{item.parentTitle}</div>
+                    <div style={parentTitleStyle}>{trashT.original_project}{item.parentTitle}</div>
                   ) : null}
                   {item.recordCount > 0 || item.mediaCount > 0 ? (
                     <div style={countStyle}>
-                      {item.recordCount > 0 ? `记录 ${item.recordCount} 条` : null}
+                      {item.recordCount > 0 ? `${trashT.record_prefix} ${item.recordCount}${trashT.item_suffix}` : null}
                       {item.recordCount > 0 && item.mediaCount > 0 ? " · " : null}
-                      {item.mediaCount > 0 ? `照片 ${item.mediaCount} 张` : null}
+                      {item.mediaCount > 0 ? `${trashT.photo_prefix} ${item.mediaCount}${trashT.photo_suffix}` : null}
                     </div>
                   ) : null}
                   {item.status === "failed" ? (
                     <div style={failedMessageStyle}>
                       {item.canRetry
-                        ? "删除未完成，请重试。"
-                        : "删除未完成，需要稍后处理。"}
+                        ? trashT.retry_delete
+                        : trashT.delayed_delete}
                     </div>
                   ) : null}
                 </div>
@@ -346,7 +350,7 @@ export default function CloudTrashPage() {
                         disabled={actionBusy}
                         style={restoreButtonStyle}
                       >
-                        恢复
+                        {trashT.restore}
                       </button>
                       <button
                         type="button"
@@ -354,11 +358,11 @@ export default function CloudTrashPage() {
                         disabled={actionBusy}
                         style={purgeButtonStyle}
                       >
-                        永久删除
+                        {trashT.purge}
                       </button>
                     </>
                   ) : item.status === "purging" ? (
-                    <span style={processingTextStyle}>处理中...</span>
+                    <span style={processingTextStyle}>{trashT.processing}</span>
                   ) : item.canRetry ? (
                     <button
                       type="button"
@@ -366,7 +370,7 @@ export default function CloudTrashPage() {
                       disabled={actionBusy}
                       style={retryPurgeButtonStyle}
                     >
-                      {itemBusy ? "重试中..." : "重试"}
+                      {itemBusy ? trashT.retrying : trashT.retry}
                     </button>
                   ) : null}
                 </div>
@@ -378,14 +382,14 @@ export default function CloudTrashPage() {
 
       <ConfirmDialog
         open={Boolean(restoreTarget)}
-        title={`恢复${restoreTarget ? getTypeLabel(restoreTarget.type) : "内容"}`}
+        title={`${trashT.restore_title_prefix}${restoreTarget ? getTrashTypeLabel(restoreTarget.type, trashT) : trashT.content}`}
         message={
           restoreTarget?.type === "media"
-            ? "确定将这张照片恢复到原记录吗？"
-            : "确定恢复这项内容吗？之前清理的评论、点赞等互动信息不会恢复。"
+            ? trashT.restore_photo_message
+            : trashT.restore_message
         }
-        confirmText={actionKey?.startsWith("restore:") ? "恢复中..." : "恢复"}
-        cancelText="取消"
+        confirmText={actionKey?.startsWith("restore:") ? trashT.restoring : trashT.restore}
+        cancelText={trashT.cancel}
         confirmDisabled={actionBusy}
         cancelDisabled={actionBusy}
         onClose={() => {
@@ -396,10 +400,10 @@ export default function CloudTrashPage() {
 
       <ConfirmDialog
         open={Boolean(purgeTarget)}
-        title="确定永久删除？"
-        message={purgeTarget ? getPurgeConfirmMessage(purgeTarget.type) : "删除后无法恢复。"}
-        confirmText={actionKey?.startsWith("purge:") ? "处理中..." : "永久删除"}
-        cancelText="取消"
+        title={trashT.purge_title}
+        message={purgeTarget ? getPurgeConfirmMessage(purgeTarget.type, trashT) : trashT.purge_fallback}
+        confirmText={actionKey?.startsWith("purge:") ? trashT.processing : trashT.purge}
+        cancelText={trashT.cancel}
         danger
         confirmDisabled={actionBusy}
         cancelDisabled={actionBusy}
@@ -411,10 +415,10 @@ export default function CloudTrashPage() {
 
       <ConfirmDialog
         open={emptyConfirmOpen}
-        title="确定清空回收站？"
-        message="回收站中的所有内容将被永久删除，删除后无法恢复。"
-        confirmText={actionKey === "empty" ? "处理中..." : "清空回收站"}
-        cancelText="取消"
+        title={trashT.empty_title}
+        message={trashT.empty_message}
+        confirmText={actionKey === "empty" ? trashT.processing : trashT.empty_trash}
+        cancelText={trashT.cancel}
         danger
         confirmDisabled={actionBusy}
         cancelDisabled={actionBusy}
@@ -427,25 +431,33 @@ export default function CloudTrashPage() {
   );
 }
 
-function getTypeLabel(type: CloudTrashItem["type"]) {
-  if (type === "archive") return "项目";
-  if (type === "record") return "记录";
-  return "照片";
+type TrashTranslations = TranslationDictionary["profile"]["trash_page"];
+
+function getTrashTypeLabel(
+  type: CloudTrashItem["type"],
+  translations: TrashTranslations
+) {
+  if (type === "archive") return translations.project;
+  if (type === "record") return translations.record;
+  return translations.photo;
 }
 
-function getPurgeConfirmMessage(type: CloudTrashItem["type"]) {
+function getPurgeConfirmMessage(
+  type: CloudTrashItem["type"],
+  translations: TrashTranslations
+) {
   if (type === "archive") {
-    return "项目中的记录和照片也会一起永久删除，删除后无法恢复。";
+    return translations.project_purge_message;
   }
   if (type === "record") {
-    return "这条记录及其中的照片将被永久删除，删除后无法恢复。";
+    return translations.record_purge_message;
   }
-  return "删除后无法恢复。";
+  return translations.purge_fallback;
 }
 
-function formatDeletedAt(value: string) {
+function formatDeletedAt(value: string, translations: TrashTranslations) {
   const text = formatPreciseDateTime(value);
-  return text ? `${text} 移入` : "删除时间未知";
+  return text ? `${text} ${translations.moved_suffix}` : translations.unknown_delete_time;
 }
 
 const pageStyle: CSSProperties = {

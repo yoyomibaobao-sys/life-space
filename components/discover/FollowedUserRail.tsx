@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import UserAvatar from "@/components/social/UserAvatar";
 import type { FollowedUserSummary } from "@/lib/followed-users";
 import styles from "@/components/discover/FollowedProjects.module.css";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
   users: FollowedUserSummary[];
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function FollowedUserRail({ users, selectedUserId, onChange }: Props) {
+  const { language, t } = useLanguage();
   const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
   const selectedKey = selectedUserId || "all";
 
@@ -30,7 +32,7 @@ export function FollowedUserRail({ users, selectedUserId, onChange }: Props) {
 
   return (
     <section className={styles.railSection}>
-      <div className={styles.rail} aria-label="关注的用户">
+      <div className={styles.rail} aria-label={t.discover.followed_users}>
         <button
           ref={(node) => setButtonRef("all", node)}
           type="button"
@@ -41,9 +43,9 @@ export function FollowedUserRail({ users, selectedUserId, onChange }: Props) {
           onClick={() => onChange(null)}
         >
           <span className={styles.avatarFrame} aria-hidden="true">
-            <span className={styles.allAvatar}>全</span>
+            <span className={styles.allAvatar}>{language === "en" ? "A" : "全"}</span>
           </span>
-          <span className={styles.userName}>全部</span>
+          <span className={styles.userName}>{t.discover.filters.all}</span>
         </button>
 
         {users.map((user) => (

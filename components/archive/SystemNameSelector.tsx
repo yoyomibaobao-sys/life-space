@@ -5,6 +5,7 @@ import type {
   KeyboardEvent,
   ReactNode,
 } from "react";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export type SystemNameSelectorCandidate = {
   id?: string | null;
@@ -126,7 +127,7 @@ export default function SystemNameSelector({
   value,
   onChange,
   candidates,
-  placeholder = "输入关键词后点选",
+  placeholder,
   selectedValue = "",
   suggestionsOpen = false,
   onSuggestionsOpenChange,
@@ -137,9 +138,9 @@ export default function SystemNameSelector({
   showSource = false,
   autoFocus,
   maxCandidates,
-  idleText = "输入关键词后，从结果中点选",
-  emptyText = "没有找到匹配候选，可使用当前输入。",
-  customActionLabel = (inputValue) => `使用“${inputValue}”作为新的系统名`,
+  idleText,
+  emptyText,
+  customActionLabel,
   containerStyle,
   inputStyle,
   panelStyle,
@@ -151,6 +152,13 @@ export default function SystemNameSelector({
   onBlur,
   onKeyDown,
 }: Props) {
+  const { t } = useLanguage();
+  const resolvedPlaceholder = placeholder || t.archive_workspace.input_then_select;
+  const resolvedIdleText = idleText ?? t.archive.candidate_idle;
+  const resolvedEmptyText = emptyText ?? t.archive.candidate_empty;
+  const resolvedCustomActionLabel =
+    customActionLabel ||
+    ((inputValue: string) => `${t.archive.use_as_system_name}: ${inputValue}`);
   const trimmedValue = normalize(value);
   const visibleCandidates =
     typeof maxCandidates === "number"
@@ -190,7 +198,7 @@ export default function SystemNameSelector({
         onBlur={onBlur}
         onKeyDown={onKeyDown}
         autoFocus={autoFocus}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         style={{ ...defaultInputStyle, ...inputStyle }}
       />
 
@@ -228,7 +236,7 @@ export default function SystemNameSelector({
           })}
 
           {!visibleCandidates.length && trimmedValue ? (
-            <div style={{ ...defaultEmptyStyle, ...emptyStyle }}>{emptyText}</div>
+              <div style={{ ...defaultEmptyStyle, ...emptyStyle }}>{resolvedEmptyText}</div>
           ) : null}
 
           {allowCustom && trimmedValue && !exactMatch ? (
@@ -237,12 +245,12 @@ export default function SystemNameSelector({
               onClick={handleUseCustom}
               style={{ ...defaultCustomOptionStyle, ...customOptionStyle }}
             >
-              {customActionLabel(trimmedValue)}
+                {resolvedCustomActionLabel(trimmedValue)}
             </button>
           ) : null}
 
           {!trimmedValue ? (
-            <div style={{ ...defaultEmptyStyle, ...emptyStyle }}>{idleText}</div>
+            <div style={{ ...defaultEmptyStyle, ...emptyStyle }}>{resolvedIdleText}</div>
           ) : null}
         </div>
       ) : null}

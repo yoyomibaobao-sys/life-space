@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import styles from "@/components/experience-card/ExperienceCardListCard.module.css";
@@ -5,6 +7,7 @@ import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import ResponsiveActionMenu from "@/components/ui/ResponsiveActionMenu";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ExperienceCardListCard({
   item,
@@ -21,18 +24,20 @@ export default function ExperienceCardListCard({
   actions?: ReactNode;
   showAuthor?: boolean;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div className={styles.card}>
       <Link href={`/experience-cards/${item.id}`} aria-label={item.title}>
         {item.coverUrl ? (
           <img
             src={item.coverUrl}
-            alt={`${item.title}封面`}
+            alt={`${item.title}${t.experience.card_cover_suffix}`}
             className={styles.cover}
             loading="lazy"
           />
         ) : (
-          <div className={styles.placeholder}>无图</div>
+          <div className={styles.placeholder}>{t.experience.no_image}</div>
         )}
       </Link>
 
@@ -62,7 +67,7 @@ export default function ExperienceCardListCard({
             bookmarkCount={item.bookmarkCount}
             helpfulCount={item.helpfulCount}
           />
-          {actions ? <ResponsiveActionMenu label="经验卡操作">{actions}</ResponsiveActionMenu> : null}
+          {actions ? <ResponsiveActionMenu label={t.experience.actions}>{actions}</ResponsiveActionMenu> : null}
         </div>
       </div>
     </div>
