@@ -20,6 +20,87 @@ test("mobile personal space project summary opens the project archive", async ()
   assert.match(enCopy, /project_archives: "Project archives"/);
 });
 
+test("mobile shell keeps an ordered fixed navigation and returns within the app", async () => {
+  const [navbar, backNavigation, layout, manifest, globals, zhCopy, enCopy] = await Promise.all([
+    source("components/navbar.tsx"),
+    source("components/MobileBackNavigation.tsx"),
+    source("app/layout.tsx"),
+    source("app/manifest.ts"),
+    source("app/globals.css"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
+
+  const mobileNav = navbar.slice(
+    navbar.indexOf("function MobileBottomNav"),
+    navbar.indexOf("function MobileBottomNavItem")
+  );
+  assert.ok(mobileNav.indexOf("labels.discover") < mobileNav.indexOf("labels.space"));
+  assert.ok(mobileNav.indexOf("labels.space") < mobileNav.indexOf("labels.guide"));
+  assert.ok(mobileNav.indexOf("labels.guide") < mobileNav.indexOf("labels.market"));
+  assert.ok(mobileNav.indexOf("labels.market") < mobileNav.indexOf("labels.me"));
+  assert.match(navbar, /flexDirection: "column"/);
+  assert.match(navbar, /transform: "translateZ\(0\)"/);
+  assert.match(navbar, /<LanguageSwitcher compact \/>/);
+  assert.doesNotMatch(mobileNav, /href="\/feedback"/);
+  assert.match(zhCopy, /discover: "发现"/);
+  assert.match(enCopy, /discover: "Discover"/);
+  assert.match(enCopy, /space: "Space"/);
+  assert.match(enCopy, /guide: "Guide"/);
+  assert.match(enCopy, /market: "Market"/);
+  assert.match(enCopy, /me: "Me"/);
+
+  assert.match(backNavigation, /MIN_HORIZONTAL_DISTANCE = 72/);
+  assert.match(backNavigation, /window\.history\.pushState/);
+  assert.match(backNavigation, /window\.addEventListener\("popstate"/);
+  assert.match(backNavigation, /router\.replace\(destination\)/);
+  assert.match(backNavigation, /isAppHome\(pathname\)/);
+  assert.match(layout, /<MobileBackNavigation \/>/);
+  assert.match(layout, /viewportFit: "cover"/);
+  assert.match(manifest, /display: "standalone"/);
+  assert.match(manifest, /theme_color: "#f6f8f3"/);
+  assert.match(globals, /overscroll-behavior-x: none/);
+});
+
+test("mobile archive creation and project controls stay compact without clipping", async () => {
+  const [archivePage, workspace, projectCard, newProjectShell, newProjectStyles, menu, menuStyles, listStyles] = await Promise.all([
+    source("app/archive/page.tsx"),
+    source("components/archive-ui/ArchiveWorkspaceTemplate.tsx"),
+    source("components/archive-ui/ArchiveProjectCard.tsx"),
+    source("components/archive-ui/ArchiveNewProjectFormShell.tsx"),
+    source("components/archive-ui/ArchiveNewProjectFormShell.module.css"),
+    source("components/ui/ResponsiveActionMenu.tsx"),
+    source("components/ui/ResponsiveActionMenu.module.css"),
+    source("components/experience-card/ExperienceCardListCard.module.css"),
+  ]);
+
+  assert.match(workspace, /showCreateToolbar = true/);
+  assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport\}/);
+  assert.match(projectCard, /mobileStatusCategoryRowStyle[\s\S]*?flexWrap: "wrap"/);
+  assert.match(projectCard, /mobileSelectRowStyle[\s\S]*?flexWrap: "wrap"/);
+  assert.match(newProjectShell, /styles\.categoryDescription/);
+  assert.match(newProjectStyles, /@media \(max-width: 759px\)[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(newProjectStyles, /-webkit-line-clamp: 2/);
+  assert.match(menu, /aria-expanded=\{open\}/);
+  assert.match(menu, /setOpen\(\(current\) => !current\)/);
+  assert.match(menuStyles, /\.rootOpen/);
+  assert.match(listStyles, /overflow: visible/);
+});
+
+test("mobile plant guides use compact two-column parameters and sticky content tabs", async () => {
+  const [detail, styles] = await Promise.all([
+    source("app/plant/[id]/page.tsx"),
+    source("app/plant/[id]/page.module.css"),
+  ]);
+
+  assert.match(detail, /className=\{styles\.parameterGrid\}/);
+  assert.match(detail, /className=\{styles\.contentTabs\}/);
+  assert.match(detail, /className=\{styles\.section\}/);
+  assert.match(styles, /@media \(max-width: 759px\)[\s\S]*?\.parameterGrid \{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.contentTabs \{[\s\S]*?position: sticky;[\s\S]*?top: 50px;/);
+  assert.match(styles, /padding: 10px 10px calc\(34px \+ env\(safe-area-inset-bottom\)\)/);
+});
+
 test("account navigation keeps membership contextual and export under data management", async () => {
   const [profile, navbar, membership, login, home, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),

@@ -7,6 +7,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import styles from "@/components/archive-ui/ArchiveNewProjectFormShell.module.css";
 
 type Props = {
   backHref: string;
@@ -90,8 +91,8 @@ export default function ArchiveNewProjectFormShell({
         : copy.system_name_helper;
 
   return (
-    <main style={pageStyle}>
-      <section style={panelStyle}>
+    <main className={styles.page}>
+      <section className={styles.panel}>
         <Link href={backHref} style={backLinkStyle}>
           {backLabel}
         </Link>
@@ -103,23 +104,22 @@ export default function ArchiveNewProjectFormShell({
 
         <form onSubmit={onSubmit} style={formStyle}>
           <ArchiveNewProjectField label={copy.category_required}>
-            <div style={categoryGridStyle}>
+            <div className={styles.categoryGrid}>
               {translatedCategoryOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => onCategoryChange(option.value)}
-                  style={{
-                    ...categoryButtonStyle,
-                    ...(category === option.value ? categoryButtonActiveStyle : {}),
-                  }}
+                  className={`${styles.categoryButton} ${
+                    category === option.value ? styles.categoryButtonActive : ""
+                  }`}
                 >
-                  <strong>{option.label}</strong>
-                  <span>{option.description}</span>
+                  <strong className={styles.categoryLabel}>{option.label}</strong>
+                  <span className={styles.categoryDescription}>{option.description}</span>
                 </button>
               ))}
             </div>
-            <span style={helperTextStyle}>{selectedCategoryDescription}</span>
+            <span className={styles.selectedDescription}>{selectedCategoryDescription}</span>
           </ArchiveNewProjectField>
 
           <ArchiveNewProjectField label={copy.project_name_required}>
@@ -252,23 +252,6 @@ export function archiveNewProjectSuggestionButtonStyle(active = false): CSSPrope
   };
 }
 
-const pageStyle: CSSProperties = {
-  minHeight: "calc(100vh - 70px)",
-  padding: "24px 16px 48px",
-  background: "#fbfcf7",
-  color: "#263326",
-};
-
-const panelStyle: CSSProperties = {
-  maxWidth: 720,
-  margin: "0 auto",
-  padding: 20,
-  borderRadius: 18,
-  border: "1px solid #e2eadc",
-  background: "#fff",
-  boxShadow: "0 10px 28px rgba(42, 66, 34, 0.06)",
-};
-
 const backLinkStyle: CSSProperties = {
   display: "inline-flex",
   color: "#617258",
@@ -328,31 +311,6 @@ const helperTextStyle: CSSProperties = {
   color: "#7d8a76",
   fontSize: 12,
   lineHeight: 1.5,
-};
-
-const categoryGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-  gap: 10,
-};
-
-const categoryButtonStyle: CSSProperties = {
-  minHeight: 84,
-  padding: 12,
-  borderRadius: 14,
-  border: "1px solid #dfe8d7",
-  background: "#fbfdf8",
-  color: "#394639",
-  textAlign: "left",
-  display: "grid",
-  gap: 4,
-  cursor: "pointer",
-};
-
-const categoryButtonActiveStyle: CSSProperties = {
-  borderColor: "#91b587",
-  background: "#f0f7ec",
-  color: "#285425",
 };
 
 const noticeStyle: CSSProperties = {

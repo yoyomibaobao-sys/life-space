@@ -1,7 +1,10 @@
 .root {
   position: relative;
-  z-index: 2;
   flex: 0 0 auto;
+}
+
+.rootOpen {
+  z-index: 40;
 }
 
 .desktop {
@@ -35,11 +38,7 @@
     background: #fff;
     color: #5b6958;
     cursor: pointer;
-    list-style: none;
-  }
-
-  .summary::-webkit-details-marker {
-    display: none;
+    padding: 0;
   }
 
   .summary:focus-visible {
@@ -62,7 +61,7 @@
     box-shadow: 0 12px 30px rgba(37, 55, 34, 0.16);
   }
 
-  .mobile[open] .summary {
+  .rootOpen .summary {
     border-color: #9fba99;
     background: #f2f8ef;
   }

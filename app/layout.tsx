@@ -1,9 +1,9 @@
 import Navbar from "@/components/navbar";
-import SiteUtilityBar from "@/components/SiteUtilityBar";
 import SiteFooter from "@/components/SiteFooter";
 import StatusBarTheme from "@/components/StatusBarTheme";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import Toast from "@/components/Toast";
+import MobileBackNavigation from "@/components/MobileBackNavigation";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -22,11 +22,18 @@ export const metadata: Metadata = {
   title: "有时·耕作 | LifeSpace for Cultivation",
   description:
     "有时·耕作：围绕种植、养护、农法设施与生态观察的长期记录空间。 LifeSpace for long-term cultivation records.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "有时·耕作",
+  },
+  manifest: "/manifest.webmanifest",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fbfcf7",
+  themeColor: "#f6f8f3",
   colorScheme: "light",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -38,8 +45,8 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <StatusBarTheme />
+        <MobileBackNavigation />
         <AnalyticsTracker />
-        <SiteUtilityBar />
         <Navbar />
         <main className="app-main">{children}</main>
         <SiteFooter />

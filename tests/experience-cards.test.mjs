@@ -577,7 +577,10 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(renderer, /context\.fillText\(scene\.date, contentX, cursorY\)/);
   assert.match(renderer, /fitInlineCaptionText/);
   assert.match(renderer, /scene\.authorName, scene\.title/);
-  assert.match(renderer, /rgba\(15,30,17,0\.34\)/);
+  assert.match(renderer, /rgba\(15,30,17,0\.46\)/);
+  assert.match(renderer, /setFont\(context, 23 \* scale, 800\)/);
+  assert.match(renderer, /setFont\(context, 27 \* scale, 800\)/);
+  assert.match(renderer, /const dateFontSize = 27 \* scale/);
   assert.doesNotMatch(renderer, /rgba\(255,255,255,0\.88\)/);
   assert.doesNotMatch(renderer, /fillText\(scene\.date, width - 48/);
   assert.match(cache, /indexedDB\.open\(DB_NAME, DB_VERSION\)/);
@@ -625,7 +628,7 @@ test("experience card MP4 is shown first, selects individual images, and preserv
   assert.doesNotMatch(renderer, /width - 94 \* scale/);
   assert.match(renderer, /const hasCaption = Boolean\(scene\.text\.trim\(\)\)/);
   assert.match(renderer, /const panelHeight =/);
-  assert.match(renderer, /"rgba\(18,31,20,0\.54\)"/);
+  assert.match(renderer, /"rgba\(18,31,20,0\.64\)"/);
   assert.doesNotMatch(renderer, /这条记录没有文字。/);
   assert.doesNotMatch(renderer, /scene\.date} · \$\{scene\.subtitle/);
   assert.doesNotMatch(detail, /按记录时间排列/);

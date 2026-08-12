@@ -77,7 +77,7 @@ test("other project copy consistently refers to natural life", async () => {
   assert.match(homepage, /t\.home\.cards\.map/);
 });
 
-test("desktop navigation places guidance before marketplace without changing mobile order", async () => {
+test("desktop and mobile navigation place guidance before marketplace", async () => {
   const navbar = await source("components/navbar.tsx");
   const desktopStart = navbar.indexOf("<div style={getNavItemsWrapStyle(isCompact)}>");
   const mobileStart = navbar.indexOf("function MobileBottomNav");
@@ -86,7 +86,7 @@ test("desktop navigation places guidance before marketplace without changing mob
 
   assert.ok(desktopStart >= 0 && mobileStart > desktopStart);
   assert.ok(desktopNav.indexOf('href="/plant"') < desktopNav.indexOf('href="/market"'));
-  assert.ok(mobileNav.indexOf("label: labels.market") < mobileNav.indexOf("label: labels.guide"));
+  assert.ok(mobileNav.indexOf("label: labels.guide") < mobileNav.indexOf("label: labels.market"));
 });
 
 test("local recording is offered only after a network registration or login failure", async () => {

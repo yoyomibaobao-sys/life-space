@@ -814,7 +814,6 @@ const zh = {
   feedback: "反馈",
   feedback_and_contact: "反馈与联系",
   open_feedback: "进入反馈页",
-  browser_translation_hint: "植物百科正文和用户内容保留原文；需要时可使用浏览器翻译。",
 
   feedback_eyebrow: "反馈 / Feedback",
   feedback_title: "告诉我们哪里可以做得更好",
@@ -833,14 +832,14 @@ const zh = {
   feedback_contact: "联系方式（选填）",
   feedback_contact_placeholder: "邮箱或其他方便回复你的方式",
   feedback_page_url: "页面地址（选填）",
-  feedback_page_url_placeholder: "例如：https://life-space-gules.vercel.app/...",
+  feedback_page_url_placeholder: "例如：https://life-space-mobile-ui-polish.vercel.app/...",
   feedback_submit: "通过邮件发送",
   feedback_required: "请选择问题类型并填写反馈内容。",
   feedback_privacy: "请不要填写密码、验证码或私密记录内容。",
   feedback_priority: "账号、付款、数据风险或无法继续使用的问题会优先处理；普通建议会记录，但不承诺立即实现。",
   feedback_intent_title: "为什么保留这个入口",
-  feedback_intent_p1: "这里希望见证生命的瞬间。存在即永恒。",
-  feedback_intent_p2: "LifeSpace 会慢慢打磨，不急功近利，做一个经过时间沉淀的产品。网站的建设推进不会太快，也希望在这个过程中遇见同道，共同见证、参与和成长。",
+  feedback_intent_p1: "这里想见证生命发生的每一个瞬间。只要被看见、被记录，那些真实存在过的，便不会轻易消逝。",
+  feedback_intent_p2: "LifeSpace 不急着长大，也不追逐一时的热闹。它会在真实使用与时间沉淀中被一点点打磨，成为一个能够长久陪伴的产品。建设也许不会很快，但愿在这段缓慢生长的路上，遇见理念相近的人，一同见证、参与，也与它一起成长。",
   feedback_bottom: "我们会认真阅读每一条反馈，并在后续版本中持续改进。",
 
   meta: {

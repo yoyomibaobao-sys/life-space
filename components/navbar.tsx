@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
 
@@ -273,6 +274,8 @@ export default function Navbar() {
           </div>
 
           <div style={mobileTopActionGroupStyle}>
+            <LanguageSwitcher compact />
+
             {user ? (
               <Link
                 href="/notifications"
@@ -455,6 +458,8 @@ export default function Navbar() {
 
       {user ? (
         <div style={getUserAreaStyle(isCompact)}>
+          <DesktopUtilityActions feedbackLabel={t.feedback} />
+
           <Link href="/notifications" style={notificationStyle} title={t.nav.notification}>
             <UiIcon name="bell" size={18} />
             {unreadCount > 0 ? (
@@ -478,12 +483,6 @@ export default function Navbar() {
             {username || t.nav.username_unset}
           </Link>
 
-          {!isCompact ? (
-            <div style={emailStyle} title={user.email || ""}>
-              {user.email}
-            </div>
-          ) : null}
-
           <button
             type="button"
             onClick={handleLogout}
@@ -494,6 +493,8 @@ export default function Navbar() {
         </div>
       ) : (
         <div style={getGuestAreaStyle(isCompact)}>
+          <DesktopUtilityActions feedbackLabel={t.feedback} />
+
           <Link href="/login" style={loginLinkStyle}>
             {t.nav.login}
           </Link>
@@ -505,6 +506,20 @@ export default function Navbar() {
         </div>
       )}
     </nav>
+  );
+}
+
+function DesktopUtilityActions({ feedbackLabel }: { feedbackLabel: string }) {
+  return (
+    <>
+      <div style={desktopUtilityGroupStyle}>
+        <Link href="/feedback" style={desktopFeedbackLinkStyle}>
+          {feedbackLabel}
+        </Link>
+        <LanguageSwitcher compact />
+      </div>
+      <span aria-hidden="true" style={desktopUtilityDividerStyle} />
+    </>
   );
 }
 
@@ -527,12 +542,6 @@ function MobileBottomNav({
       activePaths: ["/discover"],
     },
     {
-      label: labels.market,
-      icon: "store" as UiIconName,
-      href: "/market",
-      activePaths: ["/market"],
-    },
-    {
       label: labels.space,
       icon: "project" as UiIconName,
       href: user ? "/archive" : "/login",
@@ -543,6 +552,12 @@ function MobileBottomNav({
       icon: "sprout" as UiIconName,
       href: "/plant",
       activePaths: ["/plant"],
+    },
+    {
+      label: labels.market,
+      icon: "store" as UiIconName,
+      href: "/market",
+      activePaths: ["/market"],
     },
     {
       label: labels.me,
@@ -557,7 +572,7 @@ function MobileBottomNav({
     <nav style={mobileBottomNavStyle} aria-label={labels.mobile_navigation}>
       {items.map((item) => (
         <MobileBottomNavItem
-          key={item.label}
+          key={item.href}
           href={item.href}
           active={item.activePaths.some((path) => isPathActive(pathname, path))}
           badge={item.badge}
@@ -754,7 +769,7 @@ const mobileArchiveTitleLinkStyle: CSSProperties = {
 const mobileTopActionGroupStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: 8,
+  gap: 6,
   flexShrink: 0,
 };
 
@@ -942,6 +957,11 @@ const mobileBottomNavStyle: CSSProperties = {
   background: "rgba(255,255,255,0.98)",
   boxShadow: "0 -8px 22px rgba(40, 62, 34, 0.08)",
   boxSizing: "border-box",
+  transform: "translateZ(0)",
+  backfaceVisibility: "hidden",
+  WebkitBackfaceVisibility: "hidden",
+  willChange: "transform",
+  touchAction: "manipulation",
 };
 
 function mobileBottomNavItemStyle(active: boolean): CSSProperties {
@@ -955,7 +975,7 @@ function mobileBottomNavItemStyle(active: boolean): CSSProperties {
     color: active ? "#2f6a31" : "#657160",
     background: active ? "#edf6e8" : "transparent",
     borderRadius: 12,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: active ? 800 : 650,
     lineHeight: 1,
   };
@@ -963,16 +983,20 @@ function mobileBottomNavItemStyle(active: boolean): CSSProperties {
 
 const mobileBottomNavLabelStyle: CSSProperties = {
   position: "relative",
-  display: "inline-flex",
+  display: "flex",
+  flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
   minWidth: 0,
+  maxWidth: "100%",
+  gap: 3,
+  whiteSpace: "nowrap",
 };
 
 const mobileBottomBadgeStyle: CSSProperties = {
   position: "absolute",
-  top: -13,
-  right: -18,
+  top: -5,
+  right: -13,
   minWidth: 16,
   height: 16,
   borderRadius: 999,
@@ -1056,6 +1080,34 @@ const notificationStyle: CSSProperties = {
   borderRadius: 999,
 };
 
+const desktopUtilityGroupStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  flexShrink: 0,
+};
+
+const desktopFeedbackLinkStyle: CSSProperties = {
+  minHeight: 28,
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0 6px",
+  color: "#4f6448",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
+
+const desktopUtilityDividerStyle: CSSProperties = {
+  width: 1,
+  height: 22,
+  flexShrink: 0,
+  margin: "0 2px",
+  background: "#d9e1d5",
+};
+
 const notificationBadgeStyle: CSSProperties = {
   position: "absolute",
   top: -5,
@@ -1098,14 +1150,6 @@ function adminLinkStyle(active: boolean): CSSProperties {
     whiteSpace: "nowrap",
   };
 }
-
-const emailStyle: CSSProperties = {
-  color: "#7b8676",
-  maxWidth: 180,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
 
 const logoutButtonStyle: CSSProperties = {
   border: "none",

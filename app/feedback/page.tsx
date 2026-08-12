@@ -4,7 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import styles from "./page.module.css";
 
-const FEEDBACK_EMAIL = "feedback@coastline.ai";
+const FEEDBACK_EMAIL = "yoyomibaobao@gmail.com";
 
 type FeedbackType = "" | "feature" | "problem" | "experience" | "other";
 

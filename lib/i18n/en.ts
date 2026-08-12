@@ -814,7 +814,6 @@ const en = {
   feedback: "Feedback",
   feedback_and_contact: "Feedback & contact",
   open_feedback: "Open feedback",
-  browser_translation_hint: "Plant guide text and user content stay in their original language; use browser translation when needed.",
 
   feedback_eyebrow: "Feedback",
   feedback_title: "Tell us what could be better",
@@ -833,14 +832,14 @@ const en = {
   feedback_contact: "Contact details (optional)",
   feedback_contact_placeholder: "Email or another way we can reply",
   feedback_page_url: "Page address (optional)",
-  feedback_page_url_placeholder: "e.g. https://life-space-gules.vercel.app/...",
+  feedback_page_url_placeholder: "e.g. https://life-space-mobile-ui-polish.vercel.app/...",
   feedback_submit: "Send by email",
   feedback_required: "Select a feedback type and enter your feedback.",
   feedback_privacy: "Do not include passwords, verification codes, or private record content.",
   feedback_priority: "Account, payment, data-risk, and blocking issues are handled first. General suggestions are recorded, but may not be implemented immediately.",
   feedback_intent_title: "Why this channel exists",
-  feedback_intent_p1: "This is a place to witness moments of life. Existence itself can become lasting memory.",
-  feedback_intent_p2: "LifeSpace will be refined slowly rather than chasing quick results. We want it to become a product shaped by time. Development will not move especially fast, and we hope people who share this outlook can take part, witness the process, and grow with it.",
+  feedback_intent_p1: "This is a place to witness life as it unfolds, moment by moment. When something real is seen and recorded, it need not disappear without a trace.",
+  feedback_intent_p2: "LifeSpace is in no hurry to grow, nor is it chasing brief attention. It will be shaped little by little through real use and the passage of time, into a product that can stay with people for years. Development may be unhurried, but along this slow-growing path, we hope to meet people who share the same outlook—to witness it, take part in it, and grow with it.",
   feedback_bottom: "We read every piece of feedback and will keep improving LifeSpace over time.",
 
   meta: {

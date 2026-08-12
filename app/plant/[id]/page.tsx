@@ -33,6 +33,7 @@ import type {
   PlantSpeciesI18nRow,
   PlantSpeciesRow,
 } from "@/lib/plant-detail-types";
+import styles from "./page.module.css";
 
 type PlantGrowthCycleRow = {
   species_id: string;
@@ -387,14 +388,7 @@ function TextBlock({ text }: { text?: string | null }) {
   if (!hasText(text)) return null;
 
   return (
-    <div
-      style={{
-        color: "#555",
-        fontSize: 15,
-        lineHeight: 1.95,
-        whiteSpace: "pre-line",
-      }}
-    >
+    <div className={styles.textBlock}>
       {text}
     </div>
   );
@@ -484,26 +478,11 @@ function Card({
   }
 
   return (
-    <div
-      style={{
-        padding: 12,
-        border: "1px solid #eee",
-        borderRadius: 14,
-        background: "#fafafa",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#555",
-          marginBottom: 8,
-          lineHeight: 1.5,
-        }}
-      >
+    <div className={styles.parameterCard}>
+      <div className={styles.parameterLabel}>
         {label}
       </div>
-      <div style={{ fontSize: 17, fontWeight: 700, color: "#2f2f2f" }}>{value}</div>
+      <div className={styles.parameterValue}>{value}</div>
       {hint && <div style={{ marginTop: 4, color: "#999", fontSize: 12 }}>{hint}</div>}
     </div>
   );
@@ -537,15 +516,8 @@ function Subsection({
   if (!children) return null;
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <h3
-        style={{
-          margin: "0 0 10px",
-          fontSize: 16,
-          fontWeight: 750,
-          color: "#315a2f",
-        }}
-      >
+    <div className={styles.subsection}>
+      <h3 className={styles.subsectionTitle}>
         {title}
       </h3>
       {children}
@@ -557,15 +529,7 @@ function GuideList({ items }: { items: string[] }) {
   if (items.length === 0) return null;
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gap: 8,
-        color: "#555",
-        fontSize: 15,
-        lineHeight: 1.68,
-      }}
-    >
+    <div className={styles.guideList}>
       {items.slice(0, 5).map((item) => (
         <div
           key={item}
@@ -605,23 +569,8 @@ function Section({
   if (!children) return null;
 
   return (
-    <section
-      style={{
-        marginTop: 16,
-        padding: 20,
-        border: "1px solid #eee",
-        borderRadius: 18,
-        background: "#fff",
-      }}
-    >
-      <h2
-        style={{
-          margin: "0 0 14px",
-          fontSize: 21,
-          fontWeight: 700,
-          color: "#222",
-        }}
-      >
+    <section className={styles.section}>
+      <h2 className={styles.sectionTitle}>
         {title}
       </h2>
       {children}
@@ -1805,8 +1754,8 @@ export default function PlantDetailPage() {
   }
 
   return (
-    <main style={{ padding: "16px", maxWidth: 860, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
+    <main className={styles.page}>
+      <div className={styles.backRow}>
         {isMobileViewport && returnRecordHref ? (
           <Link href={returnRecordHref} style={{ color: "#4d7044", fontSize: 14, fontWeight: 700 }}>
             {copy.back_to_record}
@@ -1822,15 +1771,7 @@ export default function PlantDetailPage() {
         ) : null}
       </div>
 
-      <section
-        style={{
-          padding: 22,
-          border: "1px solid #eee",
-          borderRadius: 20,
-          background: "#fff",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
-        }}
-      >
+      <section className={styles.hero}>
         <div
           style={{
             display: "flex",
@@ -1855,9 +1796,9 @@ export default function PlantDetailPage() {
           </span>
         </div>
 
-        <h1 style={{ margin: 0, fontSize: 30 }}>{displayName}</h1>
+        <h1 className={styles.heroTitle}>{displayName}</h1>
 
-        <div style={{ marginTop: 10, color: "#666", lineHeight: 1.85 }}>
+        <div className={styles.heroMeta}>
           {plant.scientific_name && <div>{t.plant.scientific_name}{plant.scientific_name}</div>}
           {aliasNames.length > 0 && <div>{t.plant.aliases}{aliasNames.join(t.plant.alias_separator)}</div>}
           {displayFamily && <div>{copy.family}{displayFamily}</div>}
@@ -2060,15 +2001,7 @@ export default function PlantDetailPage() {
         )}
       </section>
 
-      <nav
-        aria-label={copy.content_aria}
-        style={{
-          marginTop: 16,
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 8,
-        }}
-      >
+      <nav aria-label={copy.content_aria} className={styles.contentTabs}>
         {([
           ["guide", copy.guide_tab],
           [
@@ -2119,13 +2052,7 @@ export default function PlantDetailPage() {
 
       {isSignedIn && !hasCloudAccess && localCoreParameterCards.length > 0 ? (
         <Section title={copy.basic_parameters}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-              gap: 12,
-            }}
-          >
+          <div className={styles.parameterGrid}>
             {localCoreParameterCards.map((item) => (
               <Card key={item.label} label={item.label} value={item.value} />
             ))}
@@ -2142,14 +2069,7 @@ export default function PlantDetailPage() {
         <Section title={copy.climate_environment}>
           {environmentCards.length > 0 && (
             <Subsection title={copy.environment_setting}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-                  gap: 12,
-                  marginTop: 0,
-                }}
-              >
+              <div className={styles.parameterGrid}>
                 {environmentCards.map((item) => (
                   <Card key={item.label} label={item.label} value={item.value} />
                 ))}
@@ -2166,13 +2086,7 @@ export default function PlantDetailPage() {
           {hasTemperatureSection && (
             <Subsection title={copy.temperature_nodes}>
               {temperatureCards.length > 0 && (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: 12,
-                  }}
-                >
+                <div className={styles.parameterGrid}>
                   {temperatureCards.map((item) => (
                     <TempCard key={item.label} label={item.label} value={item.value} />
                   ))}
@@ -2197,13 +2111,7 @@ export default function PlantDetailPage() {
 
           {parameterCards.length > 0 && (
             <Subsection title={copy.parameter_details}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-                  gap: 12,
-                }}
-              >
+              <div className={styles.parameterGrid}>
                 {parameterCards.map((item) => (
                   <Card key={item.label} label={item.label} value={item.value} />
                 ))}
@@ -2214,13 +2122,7 @@ export default function PlantDetailPage() {
           {hasPhotoperiodSection && (
             <Subsection title={copy.photoperiod}>
               {photoperiodCards.length > 0 && (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: 12,
-                  }}
-                >
+                <div className={styles.parameterGrid}>
                   {photoperiodCards.map((item) => (
                     <Card key={item.label} label={item.label} value={item.value} />
                   ))}
