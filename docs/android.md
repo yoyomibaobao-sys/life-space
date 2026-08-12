@@ -36,6 +36,20 @@ npm run android:debug
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+当前主分支测试包按 512 KiB 分片复制到网站静态目录：
+
+```text
+/downloads/android-test-parts/part-00 ... part-07
+```
+
+`/api/download/android` 会读取全部分片、校验总字节数，并以
+`youshi-cultivation-android-test.apk` 文件名返回完整 APK。
+
+若配置了 `ANDROID_APK_DOWNLOAD_URL` 或
+`NEXT_PUBLIC_ANDROID_APK_URL`，网页下载入口会优先跳转到配置的正式地址。
+当前静态包属于调试签名测试版；调试签名变化时可能需要卸载后重装，
+不应把它当作可长期覆盖升级的正式发行包。
+
 ## 正式签名
 
 正式更新必须始终使用同一把 keystore。以下变量只放在本机安全环境或 GitHub Actions Secrets，不写入仓库：

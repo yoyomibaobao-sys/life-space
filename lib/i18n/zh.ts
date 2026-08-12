@@ -22,7 +22,7 @@ const zh = {
     spirit: "留其间，守其度，顺其时，共生长。",
     entering: "正在进入...",
     browse_discover: "浏览发现",
-    download_android: "下载 Android",
+    download_android: "下载 Android 测试版",
     membership_title: "会员类别与权限",
     membership_description: "本地免费使用，云会员可云端保存与公开互动",
     category_aria: "自然生活记录范围",
