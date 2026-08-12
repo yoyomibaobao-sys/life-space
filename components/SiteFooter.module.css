@@ -33,10 +33,7 @@
 }
 
 @media (max-width: 759px) {
-  .inner {
-    width: calc(100% - 24px);
-    padding-bottom: calc(80px + env(safe-area-inset-bottom));
-    align-items: flex-start;
-    flex-direction: column;
+  .footer {
+    display: none;
   }
 }

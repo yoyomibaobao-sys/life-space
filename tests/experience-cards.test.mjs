@@ -414,7 +414,10 @@ test("experience cards have a persistent personal-space entry", async () => {
   assert.match(profile, /href="\/experience-cards"/);
   assert.match(profile, /label=\{t\.profile\.my_experience_cards\}/);
   assert.match(profile, /value: "space", label: t\.profile\.modules\.space/);
-  assert.match(navbar, /activePaths: \["\/archive", "\/experience-cards"\]/);
+  assert.match(
+    navbar,
+    /isPathActive\(pathname, "\/archive"\)[\s\S]*?isPathActive\(pathname, "\/experience-cards"\)/
+  );
   assert.match(navbar, /pathname\.startsWith\("\/experience-cards"\)/);
   assert.match(navbar, /\{t\.nav\.following\}/);
   assert.match(navbar, /\{t\.nav\.personal_space\}/);

@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  Capacitor,
+  SystemBars,
+  SystemBarsStyle,
+} from "@capacitor/core";
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
@@ -25,16 +30,26 @@ function setThemeColor(color: string) {
 export function setAppStatusBarTheme(color: string) {
   if (typeof document === "undefined") return;
   setThemeColor(color);
+
+  if (Capacitor.isNativePlatform()) {
+    const style =
+      color === APP_STATUS_BAR_DARK
+        ? SystemBarsStyle.Dark
+        : SystemBarsStyle.Light;
+    void SystemBars.setStyle({ style }).catch(() => {
+      // The browser/PWA path has no native system bars to update.
+    });
+  }
 }
 
 export default function StatusBarTheme() {
   const pathname = usePathname();
 
   useEffect(() => {
-    setThemeColor(APP_STATUS_BAR_LIGHT);
+    setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
 
     return () => {
-      setThemeColor(APP_STATUS_BAR_LIGHT);
+      setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
     };
   }, [pathname]);
 

@@ -23,6 +23,22 @@
   --shadow-nav: 0 1px 0 rgba(31, 42, 31, 0.06);
   --page-max: 1040px;
   --page-pad-x: 16px;
+  --app-safe-area-top: var(
+    --safe-area-inset-top,
+    env(safe-area-inset-top, 0px)
+  );
+  --app-safe-area-right: var(
+    --safe-area-inset-right,
+    env(safe-area-inset-right, 0px)
+  );
+  --app-safe-area-bottom: var(
+    --safe-area-inset-bottom,
+    env(safe-area-inset-bottom, 0px)
+  );
+  --app-safe-area-left: var(
+    --safe-area-inset-left,
+    env(safe-area-inset-left, 0px)
+  );
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -286,7 +302,7 @@ p {
 
   .app-main {
     min-height: calc(100vh - 104px);
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-bottom: calc(76px + var(--app-safe-area-bottom));
   }
 
   .mobile-app-flex-only {

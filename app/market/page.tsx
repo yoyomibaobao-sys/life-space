@@ -13,12 +13,6 @@ import {
   type MarketPostRow,
   type MarketPostType,
 } from "@/lib/market-types";
-import {
-  canCreateMembershipMarketPost,
-  getCreateMarketPostBlockedText,
-  normalizeMembershipRpcResult,
-  type MyMembership,
-} from "@/lib/membership";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -70,7 +64,6 @@ export default function MarketPage() {
   const [archives, setArchives] = useState<Map<string, ArchiveBrief>>(new Map());
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [membership, setMembership] = useState<MyMembership | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<"all" | MarketPostType>("all");
   const [categoryFilter, setCategoryFilter] =
@@ -100,19 +93,6 @@ export default function MarketPage() {
         } = await supabase.auth.getUser();
 
         setCurrentUserId(user?.id || null);
-
-        if (user) {
-          const { data: membershipData, error: membershipError } = await supabase.rpc("get_my_membership");
-
-          if (membershipError) {
-            console.error("load membership error:", membershipError);
-            setMembership(null);
-          } else {
-            setMembership(normalizeMembershipRpcResult(membershipData));
-          }
-        } else {
-          setMembership(null);
-        }
 
         let query = supabase
           .from("market_posts")
@@ -206,10 +186,6 @@ export default function MarketPage() {
     locationFilter.trim() !== "" ||
     contentFilter.trim() !== "";
 
-  const marketBlocked = Boolean(
-    currentUserId && !canCreateMembershipMarketPost(membership)
-  );
-
   const locationOptions = useMemo(() => {
     const optionSet = new Set<string>();
 
@@ -281,37 +257,19 @@ export default function MarketPage() {
   return (
     <main style={pageStyle}>
       <div style={shellStyle}>
-        <header style={headerStyle}>
+        <header style={isMobileViewport ? mobileHeaderStyle : headerStyle}>
           <div>
-            {isMobileViewport ? (
-              <div style={mobileMarketIntroStyle}>{t.market.intro_mobile}</div>
-            ) : (
-              <>
-                <div style={marketIntroStyle}>{t.market.intro_title}</div>
-                <div style={marketSubIntroStyle}>{t.market.intro_subtitle}</div>
-              </>
-            )}
+            <div style={marketIntroStyle}>{t.market.intro_title}</div>
+            <div style={marketSubIntroStyle}>
+              {isMobileViewport ? t.market.intro_mobile : t.market.intro_subtitle}
+            </div>
           </div>
 
           {currentUserId ? (
-            <div style={isMobileViewport ? hiddenMobileHeaderActionStyle : headerActionStyle}>
+            <div style={headerActionStyle}>
               <Link href="/market/mine" style={mineButtonStyle}>
                 {t.market.my_posts}
               </Link>
-
-              {marketBlocked ? (
-                <Link
-                  href="/membership"
-                  style={disabledPublishButtonStyle}
-                  title={getCreateMarketPostBlockedText(membership, language)}
-                >
-                  {t.market.post_restricted}
-                </Link>
-              ) : (
-                <Link href="/market/new" style={publishButtonStyle}>
-                  {t.market.post_information}
-                </Link>
-              )}
             </div>
           ) : null}
         </header>
@@ -616,24 +574,23 @@ const headerStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
+const mobileHeaderStyle: CSSProperties = {
+  display: "grid",
+  gap: 7,
+  marginBottom: 10,
+};
+
 const marketIntroStyle: CSSProperties = {
   color: "#1f2a1f",
   fontSize: 18,
   fontWeight: 700,
 };
 
-const mobileMarketIntroStyle: CSSProperties = {
-  color: "#1f2a1f",
-  fontSize: 13,
-  fontWeight: 800,
-  lineHeight: 1.35,
-  maxWidth: "100%",
-};
-
 const marketSubIntroStyle: CSSProperties = {
   marginTop: 3,
   color: "#7b8676",
   fontSize: 12,
+  lineHeight: 1.45,
 };
 
 const headerActionStyle: CSSProperties = {
@@ -655,17 +612,6 @@ const mineButtonStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const publishButtonStyle: CSSProperties = {
-  textDecoration: "none",
-  background: "#4f7b45",
-  color: "#fff",
-  borderRadius: 999,
-  padding: "9px 15px",
-  fontSize: 14,
-  fontWeight: 700,
-  whiteSpace: "nowrap",
-};
-
 const filterPanelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e4ece0",
@@ -674,10 +620,6 @@ const filterPanelStyle: CSSProperties = {
   display: "grid",
   gap: 10,
   marginBottom: 12,
-};
-
-const hiddenMobileHeaderActionStyle: CSSProperties = {
-  display: "none",
 };
 
 const mobileFilterPanelStyle: CSSProperties = {
@@ -987,10 +929,4 @@ const emptyStyle: CSSProperties = {
   padding: 28,
   color: "#6f7b69",
   textAlign: "center",
-};
-
-const disabledPublishButtonStyle: CSSProperties = {
-  ...publishButtonStyle,
-  background: "#9aa398",
-  cursor: "not-allowed",
 };

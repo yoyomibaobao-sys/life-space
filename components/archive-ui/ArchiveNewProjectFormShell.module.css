@@ -15,6 +15,12 @@
   box-shadow: 0 10px 28px rgba(42, 66, 34, 0.06);
 }
 
+.form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
 .categoryGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -52,22 +58,37 @@
   line-height: 1.45;
 }
 
-.selectedDescription {
-  color: #7d8a76;
-  font-size: 12px;
-  line-height: 1.5;
+.notice {
+  padding: 10px 12px;
+  border: 1px solid #e5ead5;
+  border-radius: 12px;
+  background: #f7faf2;
+  color: #5f6d58;
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 @media (max-width: 759px) {
   .page {
     min-height: calc(100dvh - 50px);
-    padding: 12px 10px calc(32px + env(safe-area-inset-bottom));
+    padding: 12px 10px calc(32px + var(--app-safe-area-bottom));
   }
 
   .panel {
-    padding: 14px;
-    border-radius: 15px;
+    padding: 4px 6px 10px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     box-shadow: none;
+  }
+
+  .intro {
+    display: none;
+  }
+
+  .form {
+    gap: 14px;
+    margin-top: 0;
   }
 
   .categoryGrid {
@@ -76,7 +97,7 @@
   }
 
   .categoryButton {
-    min-height: 70px;
+    min-height: 64px;
     padding: 9px 10px;
     border-radius: 12px;
   }
@@ -94,12 +115,8 @@
     -webkit-line-clamp: 2;
   }
 
-  .selectedDescription {
-    display: block;
-    margin-top: 1px;
-    padding: 7px 9px;
-    border-radius: 9px;
-    background: #f6f9f3;
+  .notice {
+    padding: 8px 10px;
     font-size: 11.5px;
     line-height: 1.45;
   }

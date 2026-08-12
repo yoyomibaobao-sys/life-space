@@ -21,9 +21,11 @@ test("mobile personal space project summary opens the project archive", async ()
 });
 
 test("mobile shell keeps an ordered fixed navigation and returns within the app", async () => {
-  const [navbar, backNavigation, layout, manifest, globals, zhCopy, enCopy] = await Promise.all([
+  const [navbar, backNavigation, lightbox, footerStyles, layout, manifest, globals, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
     source("components/MobileBackNavigation.tsx"),
+    source("components/archive-detail/ArchiveLightbox.tsx"),
+    source("components/SiteFooter.module.css"),
     source("app/layout.tsx"),
     source("app/manifest.ts"),
     source("app/globals.css"),
@@ -35,22 +37,29 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
     navbar.indexOf("function MobileBottomNav"),
     navbar.indexOf("function MobileBottomNavItem")
   );
-  assert.ok(mobileNav.indexOf("labels.discover") < mobileNav.indexOf("labels.space"));
-  assert.ok(mobileNav.indexOf("labels.space") < mobileNav.indexOf("labels.guide"));
+  assert.ok(mobileNav.indexOf("labels.discover") < mobileNav.indexOf("labels.following"));
+  assert.ok(mobileNav.indexOf("labels.following") < mobileNav.indexOf("labels.personal_space"));
+  assert.ok(mobileNav.indexOf("labels.personal_space") < mobileNav.indexOf("labels.guide"));
   assert.ok(mobileNav.indexOf("labels.guide") < mobileNav.indexOf("labels.market"));
-  assert.ok(mobileNav.indexOf("labels.market") < mobileNav.indexOf("labels.me"));
+  assert.doesNotMatch(mobileNav, /labels\.me/);
+  assert.match(navbar, /shouldShowMobileProfileEntry\(pathname\)/);
+  assert.match(navbar, /\{user \? t\.nav\.me : t\.nav\.login\}/);
   assert.match(navbar, /flexDirection: "column"/);
   assert.match(navbar, /transform: "translateZ\(0\)"/);
   assert.match(navbar, /<LanguageSwitcher compact \/>/);
   assert.doesNotMatch(mobileNav, /href="\/feedback"/);
   assert.match(zhCopy, /discover: "发现"/);
   assert.match(enCopy, /discover: "Discover"/);
-  assert.match(enCopy, /space: "Space"/);
+  assert.match(enCopy, /following: "Following"/);
+  assert.match(enCopy, /personal_space: "My Space"/);
   assert.match(enCopy, /guide: "Guide"/);
   assert.match(enCopy, /market: "Market"/);
   assert.match(enCopy, /me: "Me"/);
 
   assert.match(backNavigation, /MIN_HORIZONTAL_DISTANCE = 72/);
+  assert.doesNotMatch(backNavigation, /EDGE_GESTURE_WIDTH/);
+  assert.match(backNavigation, /touchmove", handleTouchMove, \{ passive: false \}/);
+  assert.match(backNavigation, /hasActiveMobileOverlay\(\)/);
   assert.match(backNavigation, /window\.history\.pushState/);
   assert.match(backNavigation, /window\.addEventListener\("popstate"/);
   assert.match(backNavigation, /router\.replace\(destination\)/);
@@ -60,6 +69,11 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(manifest, /display: "standalone"/);
   assert.match(manifest, /theme_color: "#f6f8f3"/);
   assert.match(globals, /overscroll-behavior-x: none/);
+  assert.match(lightbox, /data-mobile-swipe-ignore="true"/);
+  assert.match(lightbox, /mobileOverlayOpen = "true"/);
+  assert.doesNotMatch(lightbox, /maxDistance >= 120/);
+  assert.match(lightbox, /window\.history\.back\(\)/);
+  assert.match(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.footer \{[\s\S]*?display: none/);
 });
 
 test("mobile archive creation and project controls stay compact without clipping", async () => {
@@ -79,26 +93,37 @@ test("mobile archive creation and project controls stay compact without clipping
   assert.match(projectCard, /mobileStatusCategoryRowStyle[\s\S]*?flexWrap: "wrap"/);
   assert.match(projectCard, /mobileSelectRowStyle[\s\S]*?flexWrap: "wrap"/);
   assert.match(newProjectShell, /styles\.categoryDescription/);
+  assert.doesNotMatch(newProjectShell, /selectedCategoryDescription/);
   assert.match(newProjectStyles, /@media \(max-width: 759px\)[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(newProjectStyles, /-webkit-line-clamp: 2/);
+  assert.match(newProjectStyles, /\.intro \{[\s\S]*?display: none/);
+  assert.match(newProjectStyles, /\.form \{[\s\S]*?margin-top: 0/);
   assert.match(menu, /aria-expanded=\{open\}/);
   assert.match(menu, /setOpen\(\(current\) => !current\)/);
   assert.match(menuStyles, /\.rootOpen/);
   assert.match(listStyles, /overflow: visible/);
 });
 
-test("mobile plant guides use compact two-column parameters and sticky content tabs", async () => {
-  const [detail, styles] = await Promise.all([
+test("mobile plant guides use compact parameters, actions, cards, and sticky tabs", async () => {
+  const [detail, styles, experienceCard, experienceStyles] = await Promise.all([
     source("app/plant/[id]/page.tsx"),
     source("app/plant/[id]/page.module.css"),
+    source("components/experience-card/ExperienceCardListCard.tsx"),
+    source("components/experience-card/ExperienceCardListCard.module.css"),
   ]);
 
   assert.match(detail, /className=\{styles\.parameterGrid\}/);
   assert.match(detail, /className=\{styles\.contentTabs\}/);
   assert.match(detail, /className=\{styles\.section\}/);
   assert.match(styles, /@media \(max-width: 759px\)[\s\S]*?\.parameterGrid \{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.contentTabs \{[\s\S]*?position: sticky;[\s\S]*?top: 50px;/);
-  assert.match(styles, /padding: 10px 10px calc\(34px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(styles, /\.contentTabs \{[\s\S]*?position: sticky;[\s\S]*?top: calc\(50px \+ var\(--app-safe-area-top\)\);/);
+  assert.match(detail, /className=\{styles\.heroActions\}/);
+  assert.match(styles, /\.heroActions \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.heroAction \{[\s\S]*?white-space: normal;[\s\S]*?overflow-wrap: anywhere;/);
+  assert.match(experienceCard, /<div className=\{styles\.headerRow\}>[\s\S]*?styles\.title[\s\S]*?styles\.statusRow/);
+  assert.match(experienceStyles, /\.headerRow \{[\s\S]*?align-items: flex-start/);
+  assert.match(experienceStyles, /\.title \{[\s\S]*?margin: 0 0 4px/);
+  assert.match(styles, /padding: 10px 10px calc\(34px \+ var\(--app-safe-area-bottom\)\)/);
 });
 
 test("account navigation keeps membership contextual and export under data management", async () => {
@@ -162,6 +187,32 @@ test("signed-out market does not repeat login and registration actions inside th
   assert.match(market, /\{t\.market\.my_posts\}/);
   assert.match(zhCopy, /my_posts: "我的发布"/);
   assert.match(enCopy, /my_posts: "My posts"/);
+});
+
+test("mobile market keeps actions out of the global bar and uses compact management cards", async () => {
+  const [navbar, market, mine, zhCopy, enCopy] = await Promise.all([
+    source("components/navbar.tsx"),
+    source("app/market/page.tsx"),
+    source("app/market/mine/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
+
+  assert.doesNotMatch(navbar, /mobileMarketMineButtonStyle|mobileMarketPublishButtonStyle/);
+  assert.match(navbar, /if \(pathname\.startsWith\("\/market"\)\) return false/);
+  assert.match(market, /t\.market\.intro_title/);
+  assert.match(market, /t\.market\.intro_mobile/);
+  assert.match(market, /href="\/market\/mine"[\s\S]*?t\.market\.my_posts/);
+  assert.doesNotMatch(market, /href="\/market\/new"/);
+  assert.match(zhCopy, /intro_mobile: "平台仅发布供需信息，不提供站内交易。"/);
+  assert.match(enCopy, /intro_mobile: "Listings only; transactions do not take place in the app\."/);
+
+  assert.match(mine, /href="\/market\/new"[\s\S]*?t\.market\.post_information/);
+  assert.doesNotMatch(mine, /getMarketPostQuotaHint/);
+  assert.match(mine, /gridTemplateColumns: "112px minmax\(0, 1fr\)"/);
+  assert.match(mine, /WebkitLineClamp: 2/);
+  assert.match(mine, /formatMarketTime\(item\.created_at\)[\s\S]*?views_prefix/);
+  assert.match(mine, /marginTop: "auto"/);
 });
 
 test("signed-out home uses a compact viewport-oriented layout", async () => {
@@ -335,13 +386,16 @@ test("discover search separates three result types with one shared card format",
   );
   assert.match(resultCard, /<CompactActivityTime/);
   assert.match(resultCard, /className=\{styles\.card\}/);
+  assert.match(resultCard, /sizes="\(max-width: 759px\) 106px, 108px"/);
   assert.match(resultCard, /\{summary \? <div className=\{styles\.summary\}>\{summary\}<\/div> : null\}/);
   assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(resultCardStyles, /\.card\s*\{[\s\S]*grid-template-columns: 108px minmax\(0, 1fr\);[\s\S]*padding: 8px;[\s\S]*border-radius: 14px;/);
   assert.match(resultCardStyles, /\.media\s*\{[\s\S]*width: 108px;[\s\S]*height: 108px;[\s\S]*border-radius: 10px;/);
   assert.match(resultCardStyles, /\.summary\s*\{[\s\S]*-webkit-line-clamp: 2;/);
   assert.match(resultCardStyles, /@media \(min-width: 760px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 92px minmax\(0, 1fr\);/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 106px minmax\(0, 1fr\);/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.media \{[\s\S]*height: auto;[\s\S]*align-self: stretch;/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.footer \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(data, /\.from\("discovery_project_feed_view"\)/);
   assert.match(data, /hydrateExperienceCardListItems/);
   assert.match(data, /is_experience_card_public/);

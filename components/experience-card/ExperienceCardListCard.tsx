@@ -42,19 +42,21 @@ export default function ExperienceCardListCard({
       </Link>
 
       <div className={styles.content}>
-        {status || dateValue || dateText ? (
-          <div className={styles.statusRow}>
-            {status}
-            {dateValue ? (
-              <CompactActivityTime value={dateValue} fallback={dateText} />
-            ) : dateText ? (
-              <span>{dateText}</span>
-            ) : null}
-          </div>
-        ) : null}
-        <Link href={`/experience-cards/${item.id}`} className={styles.title}>
-          {item.title}
-        </Link>
+        <div className={styles.headerRow}>
+          <Link href={`/experience-cards/${item.id}`} className={styles.title}>
+            {item.title}
+          </Link>
+          {status || dateValue || dateText ? (
+            <div className={styles.statusRow}>
+              {status}
+              {dateValue ? (
+                <CompactActivityTime value={dateValue} fallback={dateText} />
+              ) : dateText ? (
+                <span>{dateText}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         <p className={styles.source}>
           {item.archiveTitle}
           {showAuthor ? ` · ${item.authorName}` : ""}

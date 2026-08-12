@@ -1883,32 +1883,10 @@ export default function PlantDetailPage() {
         )}
 
 
-        <div
-          style={{
-            marginTop: 22,
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
+        <div className={styles.heroActions}>
           <Link
             href={newProjectHref}
-            style={{
-              padding: "12px 20px",
-              borderRadius: 14,
-              border: "1.5px solid #cfe1d0",
-              background: "#fff",
-              color: "#2f6f35",
-              fontSize: 15,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              textDecoration: "none",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
-            }}
+            className={styles.heroAction}
           >
             {hasCloudAccess ? copy.new_cloud_project : copy.new_local_project}
           </Link>
@@ -1918,17 +1896,11 @@ export default function PlantDetailPage() {
                 type="button"
                 onClick={handleAddPlan}
                 disabled={actionLoading !== null}
+                className={styles.heroAction}
                 style={{
-                  padding: "12px 20px",
-                  borderRadius: 14,
-                  border: "1.5px solid #cfe1d0",
                   background: planAdded ? "#f5faf5" : "#fff",
                   color: planAdded ? "#5f7f5f" : "#2f6f35",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  lineHeight: 1.2,
                   cursor: actionLoading !== null ? "default" : "pointer",
-                  boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
                 }}
               >
                 {planAdded
@@ -1944,17 +1916,11 @@ export default function PlantDetailPage() {
                 type="button"
                 onClick={handleAddInterest}
                 disabled={actionLoading !== null}
+                className={styles.heroAction}
                 style={{
-                  padding: "12px 20px",
-                  borderRadius: 14,
-                  border: "1.5px solid #cfe1d0",
                   background: interestAdded ? "#f5faf5" : "#fff",
                   color: interestAdded ? "#5f7f5f" : "#2f6f35",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  lineHeight: 1.2,
                   cursor: actionLoading !== null ? "default" : "pointer",
-                  boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
                 }}
               >
                 {interestAdded

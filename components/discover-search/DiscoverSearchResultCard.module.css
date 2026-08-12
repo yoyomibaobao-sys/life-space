@@ -69,10 +69,13 @@
 .topRow,
 .footer {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
+}
+
+.topRow {
+  align-items: flex-start;
 }
 
 .badges {
@@ -166,19 +169,21 @@
 
 @media (max-width: 759px) {
   .card {
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: 9px;
-    min-height: 106px;
-    padding: 7px;
+    grid-template-columns: 106px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 124px;
+    padding: 8px;
   }
 
   .media {
-    width: 92px;
-    height: 92px;
+    width: 106px;
+    height: auto;
+    min-height: 106px;
+    align-self: stretch;
   }
 
   .content {
-    min-height: 92px;
+    min-height: 108px;
   }
 
   .title {
@@ -192,8 +197,14 @@
   }
 
   .footer {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
     padding-top: 4px;
+  }
+
+  .meta {
+    justify-self: end;
   }
 }
 

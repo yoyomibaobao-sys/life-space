@@ -16,7 +16,6 @@ import UiIcon from "@/components/ui/UiIcon";
 import {
   canCreateMembershipMarketPost,
   getCreateMarketPostBlockedText,
-  getMarketPostQuotaHint,
   getMarketPostQuotaLabel,
   normalizeMembershipRpcResult,
   type MyMembership,
@@ -151,9 +150,6 @@ export default function MyMarketPostsPage() {
             <div style={quotaTextStyle}>
               {getMarketPostQuotaLabel(membership, language)}
             </div>
-            <div style={quotaHintStyle}>
-              {getMarketPostQuotaHint(membership, language)}
-            </div>
           </div>
 
           {marketBlocked ? (
@@ -199,38 +195,40 @@ export default function MyMarketPostsPage() {
           <section style={listStyle}>
             {items.map((item) => (
               <article key={item.id} style={cardStyle}>
-                {item.display_cover_thumb_url || item.display_cover_image_url ? (
-                  <img
-                    src={
-                      item.display_cover_thumb_url ||
-                      item.display_cover_image_url ||
-                      ""
-                    }
-                    alt=""
-                    style={cardImageStyle}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div style={cardImageFallbackStyle}>{t.market.name}</div>
-                )}
+                <Link
+                  href={`/market/${item.id}`}
+                  style={cardMediaLinkStyle}
+                  aria-label={`${t.market.view}：${item.title}`}
+                >
+                  {item.display_cover_thumb_url || item.display_cover_image_url ? (
+                    <img
+                      src={
+                        item.display_cover_thumb_url ||
+                        item.display_cover_image_url ||
+                        ""
+                      }
+                      alt=""
+                      style={cardImageStyle}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div style={cardImageFallbackStyle}>{t.market.name}</div>
+                  )}
+                </Link>
 
                 <div style={cardContentStyle}>
-                  <div style={cardTopStyle}>
-                    <div style={badgeRowStyle}>
-                      <span style={typeBadgeStyle}>
-                        {getMarketPostTypeLabel(item.post_type, language)}
-                      </span>
-                      <span style={categoryBadgeStyle}>
-                        {getMarketItemCategoryLabel(item.item_category, language)}
-                      </span>
-                      {item.status === "ended" ? (
-                        <span style={endedBadgeStyle}>{t.market.ended}</span>
-                      ) : (
-                        <span style={activeBadgeStyle}>{t.market.active}</span>
-                      )}
-                    </div>
-
-                    <span style={timeStyle}>{formatMarketTime(item.created_at)}</span>
+                  <div style={badgeRowStyle}>
+                    <span style={typeBadgeStyle}>
+                      {getMarketPostTypeLabel(item.post_type, language)}
+                    </span>
+                    <span style={categoryBadgeStyle}>
+                      {getMarketItemCategoryLabel(item.item_category, language)}
+                    </span>
+                    {item.status === "ended" ? (
+                      <span style={endedBadgeStyle}>{t.market.ended}</span>
+                    ) : (
+                      <span style={activeBadgeStyle}>{t.market.active}</span>
+                    )}
                   </div>
 
                   <h2 style={cardTitleStyle}>{item.title}</h2>
@@ -240,10 +238,15 @@ export default function MyMarketPostsPage() {
                   ) : null}
 
                   <div style={metaStyle}>
-                    {item.location_text ? item.location_text : t.market.area_not_provided}
-                    {Number(item.view_count || 0) > 0
-                      ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
-                      : ""}
+                    <span style={locationMetaStyle}>
+                      {item.location_text ? item.location_text : t.market.area_not_provided}
+                    </span>
+                    <span style={timeStyle}>
+                      {formatMarketTime(item.created_at)}
+                      {Number(item.view_count || 0) > 0
+                        ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
+                        : ""}
+                    </span>
                   </div>
 
                   <div style={actionRowStyle}>
@@ -279,9 +282,10 @@ const shellStyle: CSSProperties = {
 const headerStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "flex-end",
   gap: 12,
   marginBottom: 14,
+  flexWrap: "wrap",
 };
 
 const backLinkStyle: CSSProperties = {
@@ -294,8 +298,10 @@ const backLinkStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
   margin: 0,
-  fontSize: 28,
+  fontSize: "clamp(23px, 6vw, 28px)",
+  lineHeight: 1.15,
   color: "#1f2a1f",
+  whiteSpace: "nowrap",
 };
 
 const publishButtonStyle: CSSProperties = {
@@ -336,13 +342,6 @@ const quotaTextStyle: CSSProperties = {
   color: "#40583a",
   fontSize: 13,
   fontWeight: 700,
-};
-
-const quotaHintStyle: CSSProperties = {
-  color: "#6f7b69",
-  fontSize: 13,
-  lineHeight: 1.6,
-  marginTop: 4,
 };
 
 const quotaLinkStyle: CSSProperties = {
@@ -386,28 +385,38 @@ const listStyle: CSSProperties = {
 };
 
 const cardStyle: CSSProperties = {
-  display: "flex",
-  gap: 12,
+  display: "grid",
+  gridTemplateColumns: "112px minmax(0, 1fr)",
+  gap: 10,
   background: "#fff",
   border: "1px solid #e4ece0",
   borderRadius: 16,
-  padding: 12,
+  padding: 10,
+  alignItems: "start",
+  boxShadow: "0 7px 18px rgba(32, 56, 24, 0.035)",
+};
+
+const cardMediaLinkStyle: CSSProperties = {
+  width: 112,
+  height: 112,
+  display: "block",
+  borderRadius: 13,
+  overflow: "hidden",
+  textDecoration: "none",
 };
 
 const cardImageStyle: CSSProperties = {
-  width: 96,
-  height: 96,
+  width: "100%",
+  height: "100%",
   objectFit: "cover",
-  borderRadius: 13,
   background: "#f0f4ed",
   border: "1px solid #e4ece0",
-  flexShrink: 0,
+  boxSizing: "border-box",
 };
 
 const cardImageFallbackStyle: CSSProperties = {
-  width: 96,
-  height: 96,
-  borderRadius: 13,
+  width: "100%",
+  height: "100%",
   background: "#edf4e8",
   border: "1px solid #e4ece0",
   color: "#6f7b69",
@@ -416,26 +425,22 @@ const cardImageFallbackStyle: CSSProperties = {
   justifyContent: "center",
   fontSize: 13,
   fontWeight: 700,
-  flexShrink: 0,
+  boxSizing: "border-box",
 };
 
 const cardContentStyle: CSSProperties = {
   minWidth: 0,
   flex: 1,
-};
-
-const cardTopStyle: CSSProperties = {
   display: "flex",
-  justifyContent: "space-between",
-  gap: 10,
-  alignItems: "center",
-  marginBottom: 8,
+  flexDirection: "column",
+  minHeight: 112,
 };
 
 const badgeRowStyle: CSSProperties = {
   display: "flex",
-  gap: 6,
+  gap: 5,
   flexWrap: "wrap",
+  marginBottom: 5,
 };
 
 const typeBadgeStyle: CSSProperties = {
@@ -484,13 +489,18 @@ const cardTitleStyle: CSSProperties = {
   margin: 0,
   color: "#1f2a1f",
   fontSize: 17,
+  lineHeight: 1.35,
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
 };
 
 const descriptionStyle: CSSProperties = {
-  margin: "8px 0 0",
+  margin: "4px 0 0",
   color: "#5f6a5b",
-  fontSize: 14,
-  lineHeight: 1.6,
+  fontSize: 13,
+  lineHeight: 1.4,
   display: "-webkit-box",
   WebkitLineClamp: 2,
   WebkitBoxOrient: "vertical",
@@ -498,17 +508,31 @@ const descriptionStyle: CSSProperties = {
 };
 
 const metaStyle: CSSProperties = {
-  marginTop: 9,
+  marginTop: 6,
   color: "#7b8676",
-  fontSize: 13,
-  lineHeight: 1.5,
+  fontSize: 12,
+  lineHeight: 1.35,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "baseline",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const locationMetaStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const actionRowStyle: CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  marginTop: 10,
+  justifyContent: "flex-end",
+  marginTop: "auto",
+  paddingTop: 8,
 };
 
 const secondaryLinkStyle: CSSProperties = {
