@@ -576,7 +576,11 @@ function MobileBottomNav({
   ];
 
   return (
-    <nav style={mobileBottomNavStyle} aria-label={labels.mobile_navigation}>
+    <nav
+      data-mobile-bottom-nav="true"
+      style={mobileBottomNavStyle}
+      aria-label={labels.mobile_navigation}
+    >
       {items.map((item) => (
         <MobileBottomNavItem
           key={`${item.href}-${item.label}`}

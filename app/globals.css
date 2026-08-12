@@ -23,6 +23,8 @@
   --shadow-nav: 0 1px 0 rgba(31, 42, 31, 0.06);
   --page-max: 1040px;
   --page-pad-x: 16px;
+  --app-status-bar-background: #f6f8f3;
+  --auth-keyboard-height: 0px;
   --app-safe-area-top: var(
     --safe-area-inset-top,
     env(safe-area-inset-top, 0px)
@@ -94,6 +96,15 @@ p {
 .app-main {
   width: 100%;
   min-height: calc(100vh - 58px);
+}
+
+.app-status-bar-surface {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 4000;
+  height: var(--app-safe-area-top);
+  background: var(--app-status-bar-background);
+  pointer-events: none;
 }
 
 .mobile-app-flex-only,
@@ -303,6 +314,14 @@ p {
   .app-main {
     min-height: calc(100vh - 104px);
     padding-bottom: calc(76px + var(--app-safe-area-bottom));
+  }
+
+  html[data-auth-keyboard-open="true"] .app-main {
+    padding-bottom: 0;
+  }
+
+  html[data-auth-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
+    display: none;
   }
 
   .mobile-app-flex-only {

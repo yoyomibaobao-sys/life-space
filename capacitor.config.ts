@@ -1,3 +1,6 @@
+/// <reference types="@capacitor/keyboard" />
+/// <reference types="@capacitor/status-bar" />
+
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const DEFAULT_SERVER_URL =
@@ -37,6 +40,14 @@ const config: CapacitorConfig = {
   plugins: {
     App: {
       disableBackButtonHandler: false,
+    },
+    Keyboard: {
+      resizeOnFullScreen: true,
+    },
+    StatusBar: {
+      overlaysWebView: false,
+      style: "LIGHT",
+      backgroundColor: "#f6f8f3",
     },
     SystemBars: {
       insetsHandling: "css",

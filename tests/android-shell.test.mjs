@@ -25,18 +25,38 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   const config = read("capacitor.config.ts");
   const statusBar = read("components/StatusBarTheme.tsx");
   const globals = read("app/globals.css");
+  const manifest = read("android/app/src/main/AndroidManifest.xml");
   const baseStyles = read("android/app/src/main/res/values/styles.xml");
   const api27Styles = read("android/app/src/main/res/values-v27/styles.xml");
 
   assert.match(config, /SystemBars:[\s\S]*insetsHandling: "css"/);
   assert.match(config, /SystemBars:[\s\S]*style: "LIGHT"/);
   assert.match(statusBar, /SystemBars\.setStyle/);
+  assert.match(statusBar, /StatusBar\.setBackgroundColor/);
+  assert.match(statusBar, /--app-status-bar-background/);
   assert.match(statusBar, /APP_STATUS_BAR_DARK[\s\S]*SystemBarsStyle\.Dark/);
   assert.match(statusBar, /SystemBarsStyle\.Light/);
+  assert.match(globals, /\.app-status-bar-surface/);
   assert.match(globals, /--app-safe-area-top/);
   assert.match(globals, /--safe-area-inset-top/);
+  assert.match(manifest, /android:windowSoftInputMode="adjustResize"/);
+  assert.match(baseStyles, /android:statusBarColor">@color\/app_background/);
   assert.doesNotMatch(baseStyles, /windowLightNavigationBar/);
   assert.match(api27Styles, /windowLightNavigationBar/);
+});
+
+test("Android login keeps focused fields above the software keyboard", () => {
+  const config = read("capacitor.config.ts");
+  const login = read("app/login/page.tsx");
+  const navbar = read("components/navbar.tsx");
+  const globals = read("app/globals.css");
+
+  assert.match(config, /Keyboard:[\s\S]*resizeOnFullScreen: true/);
+  assert.match(login, /Keyboard\.addListener\("keyboardWillShow"/);
+  assert.match(login, /scrollIntoView/);
+  assert.match(login, /authKeyboardOpen/);
+  assert.match(navbar, /data-mobile-bottom-nav="true"/);
+  assert.match(globals, /data-auth-keyboard-open="true"[\s\S]*data-mobile-bottom-nav/);
 });
 
 test("native Android back closes overlays before route navigation and exits only at home", () => {

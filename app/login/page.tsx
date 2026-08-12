@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Keyboard } from "@capacitor/keyboard";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
@@ -49,6 +51,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [lastSentTime, setLastSentTime] = useState(0);
   const [showLocalFallback, setShowLocalFallback] = useState(false);
+  const focusTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("remember_email");
@@ -56,6 +59,84 @@ export default function LoginPage() {
       setEmail(savedEmail);
     }
   }, []);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let disposed = false;
+    let listenerHandles: Array<{ remove: () => Promise<void> }> = [];
+
+    function scrollFocusedFieldIntoView() {
+      const activeElement = document.activeElement;
+      if (!(activeElement instanceof HTMLInputElement)) return;
+
+      const timer = window.setTimeout(() => {
+        activeElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "nearest",
+        });
+      }, 120);
+      focusTimersRef.current.push(timer);
+    }
+
+    function markKeyboardOpen(keyboardHeight: number) {
+      document.documentElement.dataset.authKeyboardOpen = "true";
+      document.documentElement.style.setProperty(
+        "--auth-keyboard-height",
+        `${Math.max(0, keyboardHeight)}px`,
+      );
+      scrollFocusedFieldIntoView();
+    }
+
+    function markKeyboardClosed() {
+      delete document.documentElement.dataset.authKeyboardOpen;
+      document.documentElement.style.setProperty(
+        "--auth-keyboard-height",
+        "0px",
+      );
+    }
+
+    void Promise.all([
+      Keyboard.addListener("keyboardWillShow", (info) => {
+        markKeyboardOpen(info.keyboardHeight);
+      }),
+      Keyboard.addListener("keyboardDidShow", (info) => {
+        markKeyboardOpen(info.keyboardHeight);
+      }),
+      Keyboard.addListener("keyboardWillHide", markKeyboardClosed),
+      Keyboard.addListener("keyboardDidHide", markKeyboardClosed),
+    ]).then((handles) => {
+      if (disposed) {
+        for (const handle of handles) void handle.remove();
+        return;
+      }
+
+      listenerHandles = handles;
+    });
+
+    return () => {
+      disposed = true;
+      for (const handle of listenerHandles) void handle.remove();
+      for (const timer of focusTimersRef.current) window.clearTimeout(timer);
+      focusTimersRef.current = [];
+      markKeyboardClosed();
+    };
+  }, []);
+
+  function keepFieldVisible(element: HTMLInputElement) {
+    if (!Capacitor.isNativePlatform()) return;
+
+    document.documentElement.dataset.authKeyboardOpen = "true";
+    const timer = window.setTimeout(() => {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
+      });
+    }, 180);
+    focusTimersRef.current.push(timer);
+  }
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -144,9 +225,13 @@ export default function LoginPage() {
   return (
     <main
       style={{
-        padding: "32px 20px",
+        minHeight: "calc(100dvh - 50px - var(--app-safe-area-top))",
+        padding: "32px 20px max(32px, calc(var(--auth-keyboard-height) + 24px))",
         display: "flex",
         justifyContent: "center",
+        alignItems: "flex-start",
+        overflowY: "auto",
+        scrollPaddingBlock: 24,
       }}
     >
       <div style={{ width: "100%", maxWidth: 320 }}>
@@ -157,6 +242,7 @@ export default function LoginPage() {
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onFocus={(e) => keepFieldVisible(e.currentTarget)}
             placeholder={t.auth.email_placeholder}
             autoComplete="email"
             style={{
@@ -169,7 +255,11 @@ export default function LoginPage() {
           />
 
           <p style={{ marginTop: 16 }}>{t.auth.password}</p>
-          <PasswordInput value={password} onChange={setPassword} />
+          <PasswordInput
+            value={password}
+            onChange={setPassword}
+            onFocus={keepFieldVisible}
+          />
 
           <div style={{ marginTop: 10, fontSize: 12 }}>
             <label style={{ cursor: "pointer" }}>

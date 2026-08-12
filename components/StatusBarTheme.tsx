@@ -5,6 +5,10 @@ import {
   SystemBars,
   SystemBarsStyle,
 } from "@capacitor/core";
+import {
+  StatusBar,
+  Style as LegacyStatusBarStyle,
+} from "@capacitor/status-bar";
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
@@ -30,15 +34,25 @@ function setThemeColor(color: string) {
 export function setAppStatusBarTheme(color: string) {
   if (typeof document === "undefined") return;
   setThemeColor(color);
+  document.documentElement.style.setProperty(
+    "--app-status-bar-background",
+    color,
+  );
 
   if (Capacitor.isNativePlatform()) {
-    const style =
-      color === APP_STATUS_BAR_DARK
-        ? SystemBarsStyle.Dark
-        : SystemBarsStyle.Light;
-    void SystemBars.setStyle({ style }).catch(() => {
-      // The browser/PWA path has no native system bars to update.
-    });
+    const useDarkBackground = color === APP_STATUS_BAR_DARK;
+    const systemBarsStyle = useDarkBackground
+      ? SystemBarsStyle.Dark
+      : SystemBarsStyle.Light;
+    const legacyStatusBarStyle = useDarkBackground
+      ? LegacyStatusBarStyle.Dark
+      : LegacyStatusBarStyle.Light;
+
+    void Promise.allSettled([
+      SystemBars.setStyle({ style: systemBarsStyle }),
+      StatusBar.setStyle({ style: legacyStatusBarStyle }),
+      StatusBar.setBackgroundColor({ color }),
+    ]);
   }
 }
 
@@ -53,5 +67,5 @@ export default function StatusBarTheme() {
     };
   }, [pathname]);
 
-  return null;
+  return <div className="app-status-bar-surface" aria-hidden="true" />;
 }
