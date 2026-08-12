@@ -2,7 +2,9 @@
 
 import {
   Capacitor,
+  registerPlugin,
   SystemBars,
+  SystemBarType,
   SystemBarsStyle,
 } from "@capacitor/core";
 import {
@@ -14,6 +16,16 @@ import { usePathname } from "next/navigation";
 
 export const APP_STATUS_BAR_LIGHT = "#f6f8f3";
 export const APP_STATUS_BAR_DARK = "#000000";
+
+type NativeSystemUiPlugin = {
+  setStatusBarAppearance(options: {
+    color: string;
+    darkIcons: boolean;
+  }): Promise<void>;
+};
+
+const NativeSystemUi = registerPlugin<NativeSystemUiPlugin>("NativeSystemUi");
+let nativeThemeRevision = 0;
 
 function ensureThemeMeta() {
   let meta = document.querySelector<HTMLMetaElement>("meta[name='theme-color']");
@@ -39,21 +51,44 @@ export function setAppStatusBarTheme(color: string) {
     color,
   );
 
-  if (Capacitor.isNativePlatform()) {
-    const useDarkBackground = color === APP_STATUS_BAR_DARK;
-    const systemBarsStyle = useDarkBackground
-      ? SystemBarsStyle.Dark
-      : SystemBarsStyle.Light;
-    const legacyStatusBarStyle = useDarkBackground
-      ? LegacyStatusBarStyle.Dark
-      : LegacyStatusBarStyle.Light;
+  if (!Capacitor.isNativePlatform()) return;
 
-    void Promise.allSettled([
-      SystemBars.setStyle({ style: systemBarsStyle }),
+  const useDarkBackground = color === APP_STATUS_BAR_DARK;
+  const systemBarsStyle = useDarkBackground
+    ? SystemBarsStyle.Dark
+    : SystemBarsStyle.Light;
+  const legacyStatusBarStyle = useDarkBackground
+    ? LegacyStatusBarStyle.Dark
+    : LegacyStatusBarStyle.Light;
+  const revision = ++nativeThemeRevision;
+
+  void (async () => {
+    await Promise.allSettled([
+      SystemBars.setStyle({
+        style: systemBarsStyle,
+        bar: SystemBarType.StatusBar,
+      }),
       StatusBar.setStyle({ style: legacyStatusBarStyle }),
-      StatusBar.setBackgroundColor({ color }),
     ]);
-  }
+
+    if (revision !== nativeThemeRevision) return;
+
+    if (
+      Capacitor.getPlatform() === "android" &&
+      Capacitor.isPluginAvailable("NativeSystemUi")
+    ) {
+      await NativeSystemUi.setStatusBarAppearance({
+        color,
+        darkIcons: !useDarkBackground,
+      });
+      return;
+    }
+
+    await StatusBar.setBackgroundColor({ color });
+  })().catch(() => {
+    // Older installed shells do not include the native bridge yet. Their
+    // existing status-bar configuration remains a safe fallback.
+  });
 }
 
 export default function StatusBarTheme() {

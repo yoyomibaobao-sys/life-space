@@ -25,6 +25,7 @@
   --page-pad-x: 16px;
   --app-status-bar-background: #f6f8f3;
   --auth-keyboard-height: 0px;
+  --auth-visible-viewport-height: 100dvh;
   --app-safe-area-top: var(
     --safe-area-inset-top,
     env(safe-area-inset-top, 0px)
@@ -316,12 +317,35 @@ p {
     padding-bottom: calc(76px + var(--app-safe-area-bottom));
   }
 
+  html[data-auth-keyboard-open="true"],
+  html[data-auth-keyboard-open="true"] body {
+    overflow: hidden;
+  }
+
   html[data-auth-keyboard-open="true"] .app-main {
+    height: max(
+      240px,
+      calc(
+        var(--auth-visible-viewport-height) - 50px -
+          var(--app-safe-area-top)
+      )
+    );
+    min-height: 0;
     padding-bottom: 0;
+    overflow: hidden;
   }
 
   html[data-auth-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
-    display: none;
+    display: none !important;
+  }
+
+  html[data-auth-keyboard-open="true"] .auth-login-page {
+    height: 100%;
+    min-height: 0 !important;
+    padding: 14px 20px 24px !important;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: 16px 24px;
   }
 
   .mobile-app-flex-only {

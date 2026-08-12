@@ -28,11 +28,18 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const baseStyles = read("android/app/src/main/res/values/styles.xml");
   const api27Styles = read("android/app/src/main/res/values-v27/styles.xml");
+  const activity = read(
+    "android/app/src/main/java/com/youshi/cultivation/MainActivity.java",
+  );
+  const nativeSystemUi = read(
+    "android/app/src/main/java/com/youshi/cultivation/NativeSystemUiPlugin.java",
+  );
 
   assert.match(config, /SystemBars:[\s\S]*insetsHandling: "css"/);
   assert.match(config, /SystemBars:[\s\S]*style: "LIGHT"/);
   assert.match(statusBar, /SystemBars\.setStyle/);
-  assert.match(statusBar, /StatusBar\.setBackgroundColor/);
+  assert.match(statusBar, /SystemBarType\.StatusBar/);
+  assert.match(statusBar, /NativeSystemUi\.setStatusBarAppearance/);
   assert.match(statusBar, /--app-status-bar-background/);
   assert.match(statusBar, /APP_STATUS_BAR_DARK[\s\S]*SystemBarsStyle\.Dark/);
   assert.match(statusBar, /SystemBarsStyle\.Light/);
@@ -43,6 +50,11 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   assert.match(baseStyles, /android:statusBarColor">@color\/app_background/);
   assert.doesNotMatch(baseStyles, /windowLightNavigationBar/);
   assert.match(api27Styles, /windowLightNavigationBar/);
+  assert.match(activity, /registerPlugin\(NativeSystemUiPlugin\.class\)/);
+  assert.match(nativeSystemUi, /@CapacitorPlugin\(name = "NativeSystemUi"\)/);
+  assert.match(nativeSystemUi, /decorView\.setBackgroundColor\(color\)/);
+  assert.match(nativeSystemUi, /webViewParent\.setBackgroundColor\(color\)/);
+  assert.match(nativeSystemUi, /setAppearanceLightStatusBars\(darkIcons\)/);
 });
 
 test("Android login keeps focused fields above the software keyboard", () => {
@@ -53,10 +65,16 @@ test("Android login keeps focused fields above the software keyboard", () => {
 
   assert.match(config, /Keyboard:[\s\S]*resizeOnFullScreen: true/);
   assert.match(login, /Keyboard\.addListener\("keyboardWillShow"/);
-  assert.match(login, /scrollIntoView/);
+  assert.match(login, /visualViewport/);
+  assert.match(login, /scrollFieldIntoVisibleArea/);
+  assert.match(login, /--auth-visible-viewport-height/);
   assert.match(login, /authKeyboardOpen/);
   assert.match(navbar, /data-mobile-bottom-nav="true"/);
-  assert.match(globals, /data-auth-keyboard-open="true"[\s\S]*data-mobile-bottom-nav/);
+  assert.match(
+    globals,
+    /data-auth-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/,
+  );
+  assert.match(globals, /data-auth-keyboard-open="true"[\s\S]*\.auth-login-page/);
 });
 
 test("native Android back closes overlays before route navigation and exits only at home", () => {
