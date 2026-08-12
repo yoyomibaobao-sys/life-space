@@ -78,9 +78,6 @@ export default function ArchiveNewProjectFormShell({
 
     return { ...option, ...categoryCopy };
   });
-  const selectedCategoryDescription =
-    translatedCategoryOptions.find((option) => option.value === category)?.description ||
-    copy.categories.fallback_description;
   const systemNameLabel =
     category === "plant" ? copy.system_plant_name_required : copy.system_name_required;
   const systemNameHelper =
@@ -93,16 +90,18 @@ export default function ArchiveNewProjectFormShell({
   return (
     <main className={styles.page}>
       <section className={styles.panel}>
-        <Link href={backHref} style={backLinkStyle}>
-          {backLabel}
-        </Link>
-        <div style={eyebrowStyle}>{eyebrow}</div>
-        <h1 style={titleStyle}>{title}</h1>
-        {subtitle ? <p style={subtitleStyle}>{subtitle}</p> : null}
+        <header className={styles.intro}>
+          <Link href={backHref} style={backLinkStyle}>
+            {backLabel}
+          </Link>
+          <div style={eyebrowStyle}>{eyebrow}</div>
+          <h1 style={titleStyle}>{title}</h1>
+          {subtitle ? <p style={subtitleStyle}>{subtitle}</p> : null}
+        </header>
 
         {disabledNotice ? <div style={disabledNoticeStyle}>{disabledNotice}</div> : null}
 
-        <form onSubmit={onSubmit} style={formStyle}>
+        <form onSubmit={onSubmit} className={styles.form}>
           <ArchiveNewProjectField label={copy.category_required}>
             <div className={styles.categoryGrid}>
               {translatedCategoryOptions.map((option) => (
@@ -119,7 +118,6 @@ export default function ArchiveNewProjectFormShell({
                 </button>
               ))}
             </div>
-            <span className={styles.selectedDescription}>{selectedCategoryDescription}</span>
           </ArchiveNewProjectField>
 
           <ArchiveNewProjectField label={copy.project_name_required}>
@@ -152,7 +150,7 @@ export default function ArchiveNewProjectFormShell({
             />
           </ArchiveNewProjectField>
 
-          <section style={noticeStyle}>{notice}</section>
+          <section className={styles.notice}>{notice}</section>
 
           <div style={actionRowStyle}>
             <Link href={backHref} style={cancelButtonStyle}>
@@ -290,12 +288,6 @@ const disabledNoticeStyle: CSSProperties = {
   lineHeight: 1.7,
 };
 
-const formStyle: CSSProperties = {
-  display: "grid",
-  gap: 16,
-  marginTop: 20,
-};
-
 const fieldStyle: CSSProperties = {
   display: "grid",
   gap: 8,
@@ -311,16 +303,6 @@ const helperTextStyle: CSSProperties = {
   color: "#7d8a76",
   fontSize: 12,
   lineHeight: 1.5,
-};
-
-const noticeStyle: CSSProperties = {
-  padding: 12,
-  borderRadius: 14,
-  border: "1px solid #e5ead5",
-  background: "#f7faf2",
-  color: "#5f6d58",
-  fontSize: 13,
-  lineHeight: 1.7,
 };
 
 const actionRowStyle: CSSProperties = {

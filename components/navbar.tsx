@@ -269,7 +269,17 @@ export default function Navbar() {
                 ) : null}
               </>
             ) : (
-              mobileTitle || t.nav.brand
+              shouldShowMobileProfileEntry(pathname) ? (
+                <Link
+                  href={user ? "/profile" : "/login"}
+                  style={mobileProfileEntryStyle}
+                >
+                  <UiIcon name="user" size={18} strokeWidth={1.8} />
+                  {user ? t.nav.me : t.nav.login}
+                </Link>
+              ) : (
+                mobileTitle || t.nav.brand
+              )
             )}
           </div>
 
@@ -303,21 +313,6 @@ export default function Navbar() {
               >
                 {t.nav.search}
               </button>
-            ) : isMobileMarketPath(pathname) ? (
-              <>
-                <Link
-                  href={user ? "/market/mine" : "/login"}
-                  style={mobileMarketMineButtonStyle}
-                >
-                  {t.nav.my_posts}
-                </Link>
-                <Link
-                  href={user ? "/market/new" : "/login"}
-                  style={mobileMarketPublishButtonStyle}
-                >
-                  {t.nav.post_information}
-                </Link>
-              </>
             ) : isMobilePlantPath(pathname) ? (
               <div style={mobilePlantMenuWrapStyle}>
                 <button
@@ -392,7 +387,7 @@ export default function Navbar() {
         <MobileBottomNav
           pathname={pathname}
           user={user}
-          unreadCount={unreadCount}
+          discoverTab={desktopDiscoverTab}
           labels={t.nav}
         />
       </>
@@ -526,12 +521,12 @@ function DesktopUtilityActions({ feedbackLabel }: { feedbackLabel: string }) {
 function MobileBottomNav({
   pathname,
   user,
-  unreadCount,
+  discoverTab,
   labels,
 }: {
   pathname: string;
   user: SupabaseUser | null;
-  unreadCount: number;
+  discoverTab: "feed" | "following";
   labels: TranslationDictionary["nav"];
 }) {
   const items = [
@@ -539,44 +534,60 @@ function MobileBottomNav({
       label: labels.discover,
       icon: "home" as UiIconName,
       href: "/discover",
-      activePaths: ["/discover"],
+      active: pathname === "/discover" && discoverTab === "feed",
+      onClick: () => {
+        window.dispatchEvent(
+          new CustomEvent("discover-tab-change", { detail: "feed" }),
+        );
+      },
     },
     {
-      label: labels.space,
+      label: labels.following,
+      icon: "follow" as UiIconName,
+      href: user ? "/discover?tab=following" : "/login",
+      active: pathname === "/discover" && discoverTab === "following",
+      onClick: () => {
+        if (!user) return;
+        window.dispatchEvent(
+          new CustomEvent("discover-tab-change", { detail: "following" }),
+        );
+      },
+    },
+    {
+      label: labels.personal_space,
       icon: "project" as UiIconName,
       href: user ? "/archive" : "/login",
-      activePaths: ["/archive", "/experience-cards"],
+      active:
+        isPathActive(pathname, "/archive") ||
+        isPathActive(pathname, "/experience-cards"),
     },
     {
       label: labels.guide,
       icon: "sprout" as UiIconName,
       href: "/plant",
-      activePaths: ["/plant"],
+      active: isPathActive(pathname, "/plant"),
     },
     {
       label: labels.market,
       icon: "store" as UiIconName,
       href: "/market",
-      activePaths: ["/market"],
-    },
-    {
-      label: labels.me,
-      icon: "user" as UiIconName,
-      href: user ? "/profile" : "/login",
-      activePaths: ["/profile", "/notifications", "/membership", "/admin", "/login", "/register"],
-      badge: user && unreadCount > 0 ? (unreadCount > 99 ? "99+" : String(unreadCount)) : null,
+      active: isPathActive(pathname, "/market"),
     },
   ];
 
   return (
-    <nav style={mobileBottomNavStyle} aria-label={labels.mobile_navigation}>
+    <nav
+      data-mobile-bottom-nav="true"
+      style={mobileBottomNavStyle}
+      aria-label={labels.mobile_navigation}
+    >
       {items.map((item) => (
         <MobileBottomNavItem
-          key={item.href}
+          key={`${item.href}-${item.label}`}
           href={item.href}
-          active={item.activePaths.some((path) => isPathActive(pathname, path))}
-          badge={item.badge}
+          active={item.active}
           icon={item.icon}
+          onClick={item.onClick}
         >
           {item.label}
         </MobileBottomNavItem>
@@ -590,16 +601,18 @@ function MobileBottomNavItem({
   active,
   badge,
   icon,
+  onClick,
   children,
 }: {
   href: string;
   active: boolean;
   badge?: string | null;
   icon: UiIconName;
+  onClick?: () => void;
   children: ReactNode;
 }) {
   return (
-    <Link href={href} style={mobileBottomNavItemStyle(active)}>
+    <Link href={href} style={mobileBottomNavItemStyle(active)} onClick={onClick}>
       <span style={mobileBottomNavLabelStyle}>
         <UiIcon name={icon} size={17} strokeWidth={1.7} />
         {children}
@@ -646,20 +659,23 @@ function isMobileDiscoverIndexPath(pathname: string) {
   return pathname === "/discover";
 }
 
-function isMobileMarketPath(pathname: string) {
-  return pathname === "/market";
-}
-
 function isMobilePlantPath(pathname: string) {
   return pathname === "/plant" || pathname.startsWith("/plant/");
 }
 
+function shouldShowMobileProfileEntry(pathname: string) {
+  return ["/discover", "/archive", "/plant", "/market", "/profile"].includes(
+    pathname,
+  );
+}
+
 function shouldShowMobileCreateAction(pathname: string) {
+  if (pathname === "/archive/new" || pathname === "/local/archive/new") return false;
+  if (pathname.startsWith("/market")) return false;
   if (pathname === "/plant" || pathname.startsWith("/plant/")) return false;
   if (pathname.startsWith("/experience-cards")) return false;
   if (isMobileMePath(pathname)) return false;
   if (isMobileDiscoverIndexPath(pathname)) return false;
-  if (isMobileMarketPath(pathname)) return false;
   return true;
 }
 
@@ -719,16 +735,25 @@ const mobileTopNavStyle: CSSProperties = {
   position: "sticky",
   top: 0,
   zIndex: 100,
-  height: 50,
+  minHeight: "calc(50px + var(--app-safe-area-top))",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   gap: 12,
-  padding: "8px 14px",
+  padding: "calc(8px + var(--app-safe-area-top)) 14px 8px",
   borderBottom: "1px solid #e4ece0",
   background: "rgba(255,255,255,0.96)",
   backdropFilter: "blur(10px)",
   boxSizing: "border-box",
+};
+
+const mobileProfileEntryStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  color: "#1f2a1f",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
 
 const mobilePageTitleStyle: CSSProperties = {
@@ -812,16 +837,6 @@ const mobileSearchButtonStyle: CSSProperties = {
   border: "1px solid #dfe8da",
   background: "#fff",
   color: "#40583a",
-};
-
-const mobileMarketMineButtonStyle: CSSProperties = {
-  ...mobileSearchButtonStyle,
-  padding: "0 9px",
-};
-
-const mobileMarketPublishButtonStyle: CSSProperties = {
-  ...mobileCreateButtonStyle,
-  padding: "0 9px",
 };
 
 const mobilePlantMenuWrapStyle: CSSProperties = {
@@ -948,8 +963,8 @@ const mobileBottomNavStyle: CSSProperties = {
   right: 0,
   bottom: 0,
   zIndex: 1100,
-  height: "calc(58px + env(safe-area-inset-bottom))",
-  padding: "5px 8px calc(5px + env(safe-area-inset-bottom))",
+  height: "calc(58px + var(--app-safe-area-bottom))",
+  padding: "5px 8px calc(5px + var(--app-safe-area-bottom))",
   display: "grid",
   gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
   gap: 4,

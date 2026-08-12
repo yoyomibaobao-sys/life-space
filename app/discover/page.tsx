@@ -620,10 +620,6 @@ export default function DiscoverPage() {
         margin: "0 auto",
       }}
     >
-      {isMobileViewport ? (
-        <MobileDiscoverTabs active={mobileTab} onChange={changeMobileTab} />
-      ) : null}
-
       <div className="mobile-app-desktop-only">
         {showFollowing ? (
           <header style={followedDesktopHeaderStyle}>{t.discover.following}</header>
@@ -825,34 +821,6 @@ function FollowingContentTabs({
   );
 }
 
-function MobileDiscoverTabs({
-  active,
-  onChange,
-}: {
-  active: MobileDiscoverTab;
-  onChange: (tab: MobileDiscoverTab) => void;
-}) {
-  const { t } = useLanguage();
-  return (
-    <nav style={mobileDiscoverTabsStyle} aria-label={t.discover.discover_content}>
-      <button
-        type="button"
-        onClick={() => onChange("feed")}
-        style={mobileDiscoverTabButtonStyle(active === "feed")}
-      >
-        {t.discover.feed}
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("following")}
-        style={mobileDiscoverTabButtonStyle(active === "following")}
-      >
-        {t.discover.following}
-      </button>
-    </nav>
-  );
-}
-
 const followingContentTabsStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -874,30 +842,6 @@ function followingContentTabStyle(active: boolean): CSSProperties {
   };
 }
 
-const mobileDiscoverTabsStyle: CSSProperties = {
-  margin: "0 0 12px",
-  padding: 4,
-  border: "1px solid #e2ecd9",
-  borderRadius: 16,
-  background: "#fff",
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-};
-
-function mobileDiscoverTabButtonStyle(active: boolean): CSSProperties {
-  return {
-    flex: 1,
-    minHeight: 36,
-    border: "none",
-    borderRadius: 12,
-    background: active ? "#e3f1dd" : "transparent",
-    color: active ? "#2f6a31" : "#61705d",
-    fontSize: 14,
-    fontWeight: 800,
-    cursor: "pointer",
-  };
-}
 
 const followedUsersStatusStyle: CSSProperties = {
   marginBottom: 12,

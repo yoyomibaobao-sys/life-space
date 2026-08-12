@@ -7,12 +7,14 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 type Props = {
   value: string;
   onChange: (v: string) => void;
+  onFocus?: (element: HTMLInputElement) => void;
   placeholder?: string;
 };
 
 export default function PasswordInput({
   value,
   onChange,
+  onFocus,
   placeholder,
 }: Props) {
   const { t } = useLanguage();
@@ -24,6 +26,7 @@ export default function PasswordInput({
         type={show ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => onFocus?.(e.currentTarget)}
         placeholder={placeholder || t.auth.password_placeholder}
         style={{
           width: "100%",

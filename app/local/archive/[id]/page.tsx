@@ -1992,7 +1992,7 @@ const recordFooterStyle = {
 const mobileFloatingAddButtonStyle = {
   position: "fixed",
   right: 16,
-  bottom: "calc(78px + env(safe-area-inset-bottom))",
+  bottom: "calc(78px + var(--app-safe-area-bottom))",
   zIndex: 60,
   height: 42,
   padding: "0 16px",

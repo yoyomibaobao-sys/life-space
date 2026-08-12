@@ -23,6 +23,25 @@
   --shadow-nav: 0 1px 0 rgba(31, 42, 31, 0.06);
   --page-max: 1040px;
   --page-pad-x: 16px;
+  --app-status-bar-background: #f6f8f3;
+  --auth-keyboard-height: 0px;
+  --auth-visible-viewport-height: 100dvh;
+  --app-safe-area-top: var(
+    --safe-area-inset-top,
+    env(safe-area-inset-top, 0px)
+  );
+  --app-safe-area-right: var(
+    --safe-area-inset-right,
+    env(safe-area-inset-right, 0px)
+  );
+  --app-safe-area-bottom: var(
+    --safe-area-inset-bottom,
+    env(safe-area-inset-bottom, 0px)
+  );
+  --app-safe-area-left: var(
+    --safe-area-inset-left,
+    env(safe-area-inset-left, 0px)
+  );
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -78,6 +97,15 @@ p {
 .app-main {
   width: 100%;
   min-height: calc(100vh - 58px);
+}
+
+.app-status-bar-surface {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 4000;
+  height: var(--app-safe-area-top);
+  background: var(--app-status-bar-background);
+  pointer-events: none;
 }
 
 .mobile-app-flex-only,
@@ -286,7 +314,38 @@ p {
 
   .app-main {
     min-height: calc(100vh - 104px);
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-bottom: calc(76px + var(--app-safe-area-bottom));
+  }
+
+  html[data-auth-keyboard-open="true"],
+  html[data-auth-keyboard-open="true"] body {
+    overflow: hidden;
+  }
+
+  html[data-auth-keyboard-open="true"] .app-main {
+    height: max(
+      240px,
+      calc(
+        var(--auth-visible-viewport-height) - 50px -
+          var(--app-safe-area-top)
+      )
+    );
+    min-height: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+
+  html[data-auth-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
+    display: none !important;
+  }
+
+  html[data-auth-keyboard-open="true"] .auth-login-page {
+    height: 100%;
+    min-height: 0 !important;
+    padding: 14px 20px 24px !important;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: 16px 24px;
   }
 
   .mobile-app-flex-only {

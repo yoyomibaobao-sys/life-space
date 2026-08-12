@@ -72,7 +72,7 @@ const mobileOverlayStyle: CSSProperties = {
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "center",
-  padding: "64px 10px calc(68px + env(safe-area-inset-bottom))",
+  padding: "64px 10px calc(68px + var(--app-safe-area-bottom))",
   boxSizing: "border-box",
 };
 

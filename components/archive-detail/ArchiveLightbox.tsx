@@ -90,11 +90,17 @@ export default function ArchiveLightbox({
     if (!isMobileViewport || typeof window === "undefined") return;
 
     setAppStatusBarTheme(APP_STATUS_BAR_DARK);
+    document.documentElement.dataset.mobileOverlayOpen = "true";
 
-    window.history.pushState({ __archiveLightbox: true }, "");
+    window.history.pushState(
+      { ...(window.history.state || {}), __archiveLightbox: true },
+      "",
+      window.location.href,
+    );
     pushedMobileHistoryRef.current = true;
 
     function handlePopState() {
+      pushedMobileHistoryRef.current = false;
       onClose();
     }
 
@@ -102,6 +108,7 @@ export default function ArchiveLightbox({
 
     return () => {
       window.removeEventListener("popstate", handlePopState);
+      delete document.documentElement.dataset.mobileOverlayOpen;
       setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
     };
     // Run once for this mobile lightbox mount so the Android back key exits it.
@@ -111,7 +118,7 @@ export default function ArchiveLightbox({
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose();
+        requestClose();
         return;
       }
 
@@ -136,16 +143,17 @@ export default function ArchiveLightbox({
   const current = images[((index % images.length) + images.length) % images.length];
 
   function requestClose() {
-    onClose();
-
     if (
       isMobileViewport &&
       pushedMobileHistoryRef.current &&
       typeof window !== "undefined" &&
       window.history.state?.__archiveLightbox
     ) {
-      window.setTimeout(() => window.history.back(), 0);
+      window.history.back();
+      return;
     }
+
+    onClose();
   }
 
   function clampScale(next: number) {
@@ -186,7 +194,7 @@ export default function ArchiveLightbox({
       suppressClickRef.current = false;
       return;
     }
-    onClose();
+    requestClose();
   }
 
   function startMousePan(event: React.MouseEvent<HTMLImageElement>) {
@@ -249,6 +257,7 @@ export default function ArchiveLightbox({
   if (isMobileViewport) {
     return (
       <div
+        data-mobile-swipe-ignore="true"
         onTouchStart={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest("button")) return;
@@ -366,11 +375,6 @@ export default function ArchiveLightbox({
           if (maxDistance < 8) {
             setMobileToolbarVisible((visible) => !visible);
             setMobileMenuOpen(false);
-            return;
-          }
-
-          if (maxDistance >= 120) {
-            requestClose();
             return;
           }
 
@@ -654,7 +658,7 @@ export default function ArchiveLightbox({
           aria-label={copy.close_preview}
           style={{
             position: "fixed",
-            top: "calc(12px + env(safe-area-inset-top))",
+            top: "calc(12px + var(--app-safe-area-top))",
             right: 12,
             zIndex: 3002,
             width: 44,
@@ -682,7 +686,7 @@ export default function ArchiveLightbox({
         style={{
           position: "fixed",
           left: "50%",
-          bottom: "calc(18px + env(safe-area-inset-bottom))",
+          bottom: "calc(18px + var(--app-safe-area-bottom))",
           zIndex: 3002,
           transform: "translateX(-50%)",
           minWidth: 96,
@@ -709,8 +713,8 @@ const mobileTopToolbarStyle = {
   left: 0,
   right: 0,
   zIndex: 3002,
-  minHeight: "calc(54px + env(safe-area-inset-top))",
-  padding: "calc(10px + env(safe-area-inset-top)) 48px 10px",
+  minHeight: "calc(54px + var(--app-safe-area-top))",
+  padding: "calc(10px + var(--app-safe-area-top)) 48px 10px",
   boxSizing: "border-box",
   background: "linear-gradient(to bottom, rgba(0,0,0,0.76), rgba(0,0,0,0))",
   color: "#fff",
@@ -731,7 +735,7 @@ const mobileMetaTextStyle = {
 
 const mobileLightboxMoreButtonStyle = {
   position: "absolute",
-  top: "calc(8px + env(safe-area-inset-top))",
+  top: "calc(8px + var(--app-safe-area-top))",
   right: 12,
   width: 36,
   height: 36,
@@ -746,7 +750,7 @@ const mobileLightboxMoreButtonStyle = {
 
 const mobileLightboxBackButtonStyle = {
   position: "absolute",
-  top: "calc(9px + env(safe-area-inset-top))",
+  top: "calc(9px + var(--app-safe-area-top))",
   left: 12,
   height: 34,
   minWidth: 52,
@@ -761,7 +765,7 @@ const mobileLightboxBackButtonStyle = {
 
 const mobileLightboxMenuStyle = {
   position: "absolute",
-  top: "calc(48px + env(safe-area-inset-top))",
+  top: "calc(48px + var(--app-safe-area-top))",
   right: 12,
   width: 148,
   borderRadius: 12,
@@ -793,7 +797,7 @@ const mobileBottomNoteStyle = {
   zIndex: 3002,
   maxHeight: "34dvh",
   overflowY: "auto",
-  padding: "18px 16px calc(18px + env(safe-area-inset-bottom))",
+  padding: "18px 16px calc(18px + var(--app-safe-area-bottom))",
   boxSizing: "border-box",
   background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))",
   color: "rgba(255,255,255,0.92)",
