@@ -104,6 +104,12 @@
   -webkit-line-clamp: 2;
 }
 
+.secondaryTitle {
+  color: #71806d;
+  font-size: 0.86em;
+  font-weight: 650;
+}
+
 .detail {
   margin-top: 2px;
   overflow: hidden;
@@ -136,6 +142,7 @@
 }
 
 .author {
+  flex: 1 1 110px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -147,6 +154,7 @@
   flex-shrink: 0;
   justify-content: flex-end;
   min-width: 0;
+  margin-left: auto;
 }
 
 @media (min-width: 760px) {
@@ -184,6 +192,7 @@
   }
 
   .footer {
+    flex-wrap: wrap;
     padding-top: 4px;
   }
 }

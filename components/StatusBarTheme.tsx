@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
-export const APP_STATUS_BAR_LIGHT = "#fbfcf7";
+export const APP_STATUS_BAR_LIGHT = "#f6f8f3";
 export const APP_STATUS_BAR_DARK = "#000000";
 
 function ensureThemeMeta() {

@@ -19,6 +19,7 @@ type Props<T extends string> = {
   createDisabled?: boolean;
   createDisabledTitle?: string;
   createDisabledHref?: string;
+  showCreateToolbar?: boolean;
   filtersSlot?: ReactNode;
   noticeSlot?: ReactNode;
   children: ReactNode;
@@ -33,6 +34,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   createDisabled,
   createDisabledTitle,
   createDisabledHref,
+  showCreateToolbar = true,
   filtersSlot,
   noticeSlot,
   children,
@@ -54,12 +56,14 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
         ))}
       </section>
 
-      <ArchiveToolbar
-        onCreateArchive={onCreateArchive}
-        createDisabled={createDisabled}
-        createDisabledTitle={createDisabledTitle}
-        createDisabledHref={createDisabledHref}
-      />
+      {showCreateToolbar ? (
+        <ArchiveToolbar
+          onCreateArchive={onCreateArchive}
+          createDisabled={createDisabled}
+          createDisabledTitle={createDisabledTitle}
+          createDisabledHref={createDisabledHref}
+        />
+      ) : null}
 
       {filtersSlot}
       {noticeSlot}

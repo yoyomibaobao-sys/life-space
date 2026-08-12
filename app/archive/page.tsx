@@ -1921,6 +1921,7 @@ export default function ArchivePage() {
         createDisabled={createDisabled}
         createDisabledTitle={createDisabledText}
         createDisabledHref={createDisabled ? "/membership" : undefined}
+        showCreateToolbar={!isMobileViewport}
         filtersSlot={workspaceFiltersSlot}
         noticeSlot={workspaceNoticeSlot}
       >

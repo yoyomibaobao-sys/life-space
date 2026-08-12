@@ -367,6 +367,7 @@ const mobileStatusCategoryRowStyle: CSSProperties = {
   gap: 6,
   minWidth: 0,
   overflow: "visible",
+  flexWrap: "wrap",
 };
 
 const mobileSelectRowStyle: CSSProperties = {
@@ -375,6 +376,7 @@ const mobileSelectRowStyle: CSSProperties = {
   gap: 6,
   minWidth: 0,
   overflow: "visible",
+  flexWrap: "wrap",
 };
 
 const mobileCategoryTextStyle: CSSProperties = {

@@ -11,6 +11,7 @@ type DiscoverSearchResultCardProps = {
   href: string;
   ariaLabel: string;
   title: string;
+  secondaryTitle?: string | null;
   imageUrl?: string | null;
   imageAlt: string;
   fallbackIcon: UiIconName;
@@ -27,6 +28,7 @@ export default function DiscoverSearchResultCard({
   href,
   ariaLabel,
   title,
+  secondaryTitle,
   imageUrl,
   imageAlt,
   fallbackIcon,
@@ -73,7 +75,12 @@ export default function DiscoverSearchResultCard({
           ) : null}
         </div>
 
-        <h2 className={styles.title}>{title}</h2>
+        <h2 className={styles.title}>
+          <span>{title}</span>
+          {secondaryTitle ? (
+            <span className={styles.secondaryTitle}> · {secondaryTitle}</span>
+          ) : null}
+        </h2>
         {detail ? <div className={styles.detail}>{detail}</div> : null}
         {summary ? <div className={styles.summary}>{summary}</div> : null}
 

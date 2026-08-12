@@ -574,14 +574,14 @@ function drawBrandPill(
   const x = 42 * scale;
   const y = 53 * scale;
   const right = 42 * scale;
-  const gap = 14 * scale;
-  const counterWidth = 68 * scale;
-  const counterHeight = 38 * scale;
+  const gap = 16 * scale;
+  const counterWidth = 80 * scale;
+  const counterHeight = 44 * scale;
   const brandWidth = counterText
     ? width - x - right - counterWidth - gap
     : width - x - right;
-  setFont(context, 18 * scale, 800);
-  context.fillStyle = "rgba(255,255,255,0.66)";
+  setFont(context, 23 * scale, 800);
+  context.fillStyle = "rgba(255,255,255,0.82)";
   context.textBaseline = "middle";
   const brandText = contextText || "有时·耕作 LifeSpace";
   context.shadowColor = "rgba(7,18,9,0.55)";
@@ -603,11 +603,11 @@ function drawBrandPill(
       counterY,
       counterWidth,
       counterHeight,
-      19 * scale,
-      "rgba(15,30,17,0.34)"
+      22 * scale,
+      "rgba(15,30,17,0.46)"
     );
-    setFont(context, 20 * scale, 700);
-    context.fillStyle = "rgba(255,255,255,0.82)";
+    setFont(context, 24 * scale, 750);
+    context.fillStyle = "rgba(255,255,255,0.94)";
     context.textAlign = "center";
     context.fillText(
       counterText,
@@ -630,7 +630,7 @@ function drawExperienceName(
   const x = 42 * scale;
   const y = 108 * scale;
   const maxWidth = width - x - 42 * scale;
-  setFont(context, 22 * scale, 700);
+  setFont(context, 27 * scale, 700);
   const displayAuthor = ellipsizeCanvasText(
     context,
     authorName,
@@ -638,7 +638,7 @@ function drawExperienceName(
   );
   const authorText = `${displayAuthor} · `;
   const authorWidth = context.measureText(authorText).width;
-  setFont(context, 22 * scale, 800);
+  setFont(context, 27 * scale, 800);
   const displayTitle = ellipsizeCanvasText(
     context,
     title,
@@ -647,10 +647,10 @@ function drawExperienceName(
   context.textBaseline = "middle";
   context.shadowColor = "rgba(7,18,9,0.60)";
   context.shadowBlur = 8 * scale;
-  setFont(context, 22 * scale, 700);
+  setFont(context, 27 * scale, 700);
   context.fillStyle = "rgba(255,255,255,0.76)";
   context.fillText(authorText, x, y);
-  setFont(context, 22 * scale, 800);
+  setFont(context, 27 * scale, 800);
   context.fillStyle = "rgba(255,255,255,0.96)";
   context.fillText(displayTitle, x + authorWidth, y);
   context.shadowColor = "transparent";
@@ -790,8 +790,8 @@ function drawRecordScene(
     const contentX = panelX + 28 * scale;
     const contentWidth = panelWidth - 56 * scale;
     const maxTextLines = image ? 4 : 6;
-    const dateFontSize = 22 * scale;
-    const dateGap = 14 * scale;
+    const dateFontSize = 27 * scale;
+    const dateGap = 16 * scale;
     setFont(context, dateFontSize, 700);
     const dateWidth = context.measureText(scene.date).width;
     const fitted = fitInlineCaptionText(
@@ -800,8 +800,8 @@ function drawRecordScene(
       Math.max(80 * scale, contentWidth - dateWidth - dateGap),
       contentWidth,
       maxTextLines,
-      (image ? 28 : 34) * scale,
-      (image ? 21 : 24) * scale
+      (image ? 36 : 40) * scale,
+      (image ? 26 : 30) * scale
     );
     const lines = fitted.lines.slice(0, maxTextLines);
     const lineHeight = fitted.size * (image ? 1.35 : 1.45);
@@ -820,7 +820,7 @@ function drawRecordScene(
       panelWidth,
       panelHeight,
       24 * scale,
-      "rgba(18,31,20,0.54)"
+      "rgba(18,31,20,0.64)"
     );
 
     const cursorY = panelY + topPadding + fitted.size;

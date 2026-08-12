@@ -17,6 +17,7 @@ import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { getDurationDays } from "@/lib/follow-utils";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import type { Language } from "@/lib/i18n";
 
 type Props = {
   kind: DiscoverSearchKind;
@@ -39,6 +40,19 @@ function getRecordSystemName(record: FeedItem) {
     : record.system_name || record.species_name_snapshot;
 }
 
+function getDistinctSystemName(title: string, systemName?: string | null) {
+  const normalizedTitle = title.trim().toLocaleLowerCase();
+  const normalizedSystem = String(systemName || "").trim().toLocaleLowerCase();
+  if (!normalizedSystem || normalizedTitle.includes(normalizedSystem)) return null;
+  return String(systemName).trim();
+}
+
+function getCompactRegion(region: string | null | undefined, language: Language) {
+  const value = String(region || "").trim();
+  if (language !== "zh") return value;
+  return value.replace(/^中国\s*(?:[·•｜|/]\s*|\s+)/, "").trim();
+}
+
 export default function DiscoverSearchResults({
   kind,
   projectItems,
@@ -47,7 +61,7 @@ export default function DiscoverSearchResults({
   loading,
   hasRun,
 }: Props) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const kindLabels: Record<DiscoverSearchKind, { title: string; unit: string }> = {
     projects: {
       title: t.discover.search_ui.projects,
@@ -118,7 +132,7 @@ export default function DiscoverSearchResults({
             const title = item.archive_title?.trim() || t.discover.unnamed_project;
             const systemName = getProjectSystemName(item);
             const ownerName = item.profile_display_name?.trim() || t.discover.default_grower;
-            const region = item.profile_region?.trim();
+            const region = getCompactRegion(item.profile_region, language);
 
             return (
               <DiscoverSearchResultCard
@@ -126,6 +140,7 @@ export default function DiscoverSearchResults({
                 href={`/archive/${item.archive_id}`}
                 ariaLabel={`${t.discover.search_ui.view_project_prefix}${title}`}
                 title={title}
+                secondaryTitle={getDistinctSystemName(title, systemName)}
                 imageUrl={item.display_image_url}
                 imageAlt={title}
                 fallbackIcon={getArchiveCategoryIcon(item.category)}
@@ -137,7 +152,6 @@ export default function DiscoverSearchResults({
                   </>
                 }
                 dateValue={item.public_activity_at}
-                detail={systemName}
                 summary={item.card_summary?.trim() || undefined}
                 author={`${ownerName}${region ? ` · ${region}` : ""}`}
                 meta={
@@ -175,7 +189,7 @@ export default function DiscoverSearchResults({
                 </>
               }
               summary={item.description?.trim() || undefined}
-              author={`${item.authorName}${item.authorRegion ? ` · ${item.authorRegion}` : ""}`}
+              author={`${item.authorName}${getCompactRegion(item.authorRegion, language) ? ` · ${getCompactRegion(item.authorRegion, language)}` : ""}`}
               meta={
                 <ProjectMetaLine
                   recordCount={item.source_record_count}
@@ -199,7 +213,7 @@ export default function DiscoverSearchResults({
               ? record.display_tags.slice(0, 2)
               : [];
             const authorName = record.username?.trim() || t.discover.default_user;
-            const location = record.user_location?.trim();
+            const location = getCompactRegion(record.user_location, language);
 
             return (
               <DiscoverSearchResultCard
@@ -207,6 +221,7 @@ export default function DiscoverSearchResults({
                 href={`/archive/${record.archive_id}?record=${record.record_id}`}
                 ariaLabel={`${t.discover.search_ui.view_record_prefix}${title}`}
                 title={title}
+                secondaryTitle={getDistinctSystemName(title, systemName)}
                 imageUrl={displayImageUrl}
                 imageAlt={`${title}${t.discover.search_ui.record_image_suffix}`}
                 fallbackIcon={getArchiveCategoryIcon(record.archive_category)}
@@ -220,7 +235,7 @@ export default function DiscoverSearchResults({
                 }
                 dateValue={record.record_time}
                 detail={
-                  systemName || tags.length > 0 ? (
+                  tags.length > 0 ? (
                     <span
                       style={{
                         display: "inline-flex",
@@ -228,7 +243,6 @@ export default function DiscoverSearchResults({
                         gap: 5,
                       }}
                     >
-                      {systemName ? <span>{systemName}</span> : null}
                       {tags.map((tag) => (
                         <RecordTagPill key={tag} record={record} tag={tag} />
                       ))}

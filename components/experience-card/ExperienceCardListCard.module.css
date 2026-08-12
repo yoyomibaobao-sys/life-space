@@ -6,12 +6,16 @@
   min-height: 124px;
   padding: 10px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
   color: #2b382a;
   text-decoration: none;
   background: #fff;
   border: 1px solid #e1e8de;
   border-radius: 15px;
+}
+
+.card:has([aria-expanded="true"]) {
+  z-index: 30;
 }
 
 .card > a:first-child {

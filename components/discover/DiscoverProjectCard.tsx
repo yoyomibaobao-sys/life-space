@@ -89,18 +89,16 @@ export function DiscoverProjectCard({
         {item.card_summary ? (
           <p className={styles.summary}>
             {item.card_summary}
-            {activityTime ? (
-              <span className={styles.summaryTime}>
-                <span aria-hidden="true"> · </span>
-                <time
-                  dateTime={item.public_activity_at || undefined}
-                  suppressHydrationWarning
-                >
-                  {activityTime}
-                </time>
-              </span>
-            ) : null}
           </p>
+        ) : null}
+        {activityTime ? (
+          <time
+            className={styles.summaryTime}
+            dateTime={item.public_activity_at || undefined}
+            suppressHydrationWarning
+          >
+            {activityTime}
+          </time>
         ) : null}
       </div>
 

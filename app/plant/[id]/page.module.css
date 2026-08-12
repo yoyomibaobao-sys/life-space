@@ -1,0 +1,203 @@
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.backRow {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero {
+  padding: 22px;
+  border: 1px solid #eee;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.25;
+}
+
+.heroMeta {
+  margin-top: 10px;
+  color: #666;
+  line-height: 1.85;
+}
+
+.contentTabs {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.parameterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.section {
+  margin-top: 16px;
+  padding: 20px;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.sectionTitle {
+  margin: 0 0 14px;
+  color: #222;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.subsection {
+  margin-top: 16px;
+}
+
+.subsectionTitle {
+  margin: 0 0 10px;
+  color: #315a2f;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.textBlock {
+  color: #555;
+  font-size: 15px;
+  line-height: 1.95;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.parameterCard {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  background: #fafafa;
+}
+
+.parameterLabel {
+  margin-bottom: 8px;
+  color: #555;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.parameterValue {
+  color: #2f2f2f;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.guideList {
+  display: grid;
+  gap: 8px;
+  color: #555;
+  font-size: 15px;
+  line-height: 1.68;
+}
+
+@media (max-width: 759px) {
+  .page {
+    padding: 10px 10px calc(34px + env(safe-area-inset-bottom));
+  }
+
+  .backRow {
+    margin-bottom: 10px;
+    gap: 9px;
+  }
+
+  .hero {
+    padding: 14px;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+
+  .heroTitle {
+    font-size: 25px;
+  }
+
+  .heroMeta {
+    margin-top: 7px;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .contentTabs {
+    position: sticky;
+    top: 50px;
+    z-index: 75;
+    margin: 10px 0 0;
+    padding: 6px 0;
+    gap: 6px;
+    background: rgba(246, 248, 243, 0.97);
+    backdrop-filter: blur(8px);
+  }
+
+  .parameterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .section {
+    margin-top: 10px;
+    padding: 13px;
+    border-radius: 14px;
+  }
+
+  .sectionTitle {
+    margin-bottom: 10px;
+    font-size: 18px;
+  }
+
+  .subsection {
+    margin-top: 12px;
+  }
+
+  .subsectionTitle {
+    margin-bottom: 7px;
+    font-size: 15px;
+  }
+
+  .textBlock {
+    font-size: 14px;
+    line-height: 1.78;
+  }
+
+  .parameterCard {
+    padding: 9px 10px;
+    border-radius: 11px;
+  }
+
+  .parameterLabel {
+    margin-bottom: 4px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .parameterValue {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .guideList {
+    gap: 7px;
+    font-size: 14px;
+    line-height: 1.62;
+  }
+}
