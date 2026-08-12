@@ -25,6 +25,8 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   const config = read("capacitor.config.ts");
   const statusBar = read("components/StatusBarTheme.tsx");
   const globals = read("app/globals.css");
+  const baseStyles = read("android/app/src/main/res/values/styles.xml");
+  const api27Styles = read("android/app/src/main/res/values-v27/styles.xml");
 
   assert.match(config, /SystemBars:[\s\S]*insetsHandling: "css"/);
   assert.match(config, /SystemBars:[\s\S]*style: "LIGHT"/);
@@ -33,6 +35,8 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   assert.match(statusBar, /SystemBarsStyle\.Light/);
   assert.match(globals, /--app-safe-area-top/);
   assert.match(globals, /--safe-area-inset-top/);
+  assert.doesNotMatch(baseStyles, /windowLightNavigationBar/);
+  assert.match(api27Styles, /windowLightNavigationBar/);
 });
 
 test("native Android back closes overlays before route navigation and exits only at home", () => {
