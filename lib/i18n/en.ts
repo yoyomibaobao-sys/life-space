@@ -22,7 +22,7 @@ const en = {
     spirit: "Stay with it. Keep its rhythm. Follow its season. Grow together.",
     entering: "Opening your space...",
     browse_discover: "Browse Discover",
-    download_android: "Download Android",
+    download_android: "Download Android test build",
     membership_title: "Memberships & access",
     membership_description: "Local use is free; Cloud Membership adds cloud storage and public interaction.",
     category_aria: "Natural-life record categories",
