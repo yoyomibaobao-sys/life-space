@@ -62,11 +62,19 @@ export default function Home() {
     <main className="signed-out-home" style={pageStyle}>
       <style>{`
         @media (max-width: 760px) {
-          .signed-out-home { min-height: auto !important; padding: 18px 14px 92px !important; align-items: flex-start !important; }
+          .signed-out-home { min-height: auto !important; padding: 14px 12px 92px !important; align-items: flex-start !important; }
           .home-content { gap: 14px !important; }
-          .home-hero { padding: 12px 4px 8px !important; }
+          .home-hero { padding: 20px 18px 18px !important; text-align: left !important; border-radius: 22px !important; }
+          .home-brand { justify-content: flex-start !important; gap: 6px 8px !important; font-size: 31px !important; letter-spacing: 0.6px !important; }
+          .home-english-brand { flex-basis: 100%; font-size: 12px !important; letter-spacing: 0.9px !important; text-transform: uppercase; }
+          .home-space-title { margin-top: 12px !important; font-size: 15px !important; letter-spacing: 0.8px !important; }
+          .home-subtitle { margin: 7px 0 15px !important; font-size: 14px !important; line-height: 1.65 !important; }
+          .home-poem { margin: 0 !important; padding-left: 13px !important; border-left: 3px solid #a8c49d; font-size: 16px !important; line-height: 1.65 !important; }
+          .home-spirit { width: 100% !important; margin-top: 15px !important; padding: 11px 13px !important; border-radius: 14px !important; justify-content: flex-start !important; font-size: 14px !important; line-height: 1.55 !important; letter-spacing: 0.3px !important; }
           .home-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .home-actions > a:last-child { grid-column: 1 / -1; }
+          .home-actions > a:first-child { grid-column: 1 / -1; }
+          .home-actions[data-has-download="false"] > a:last-child { grid-column: 1 / -1; }
+          .home-membership-link { margin-top: 11px !important; }
           .home-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         }
         @media (max-height: 720px) and (min-width: 761px) {
@@ -77,17 +85,25 @@ export default function Home() {
 
       <div className="home-content" style={contentStyle}>
         <section className="home-hero" style={heroStyle}>
-          <h1 style={brandStyle}>
+          <h1 className="home-brand" style={brandStyle}>
             <span>{t.home.brand}</span>
-            <span style={englishBrandStyle}>{t.home.english_brand}</span>
+            <span className="home-english-brand" style={englishBrandStyle}>
+              {t.home.english_brand}
+            </span>
           </h1>
 
-          <div style={spaceTitleStyle}>{t.home.space_title}</div>
-          <p style={subtitleStyle}>{t.home.subtitle}</p>
-          <p style={poemStyle}>{t.home.poem}</p>
-          <div style={spiritStyle}>{t.home.spirit}</div>
+          <div className="home-space-title" style={spaceTitleStyle}>
+            {t.home.space_title}
+          </div>
+          <p className="home-subtitle" style={subtitleStyle}>{t.home.subtitle}</p>
+          <p className="home-poem" style={poemStyle}>{t.home.poem}</p>
+          <div className="home-spirit" style={spiritStyle}>{t.home.spirit}</div>
 
-          <div className="home-actions" style={actionsStyle}>
+          <div
+            className="home-actions"
+            data-has-download={isNativeApp === false ? "true" : "false"}
+            style={actionsStyle}
+          >
             <Link href={currentUserId ? "/archive" : "/register"} style={primaryActionStyle}>
               {currentUserId ? t.home.enter_my_space : t.register}
             </Link>
@@ -98,7 +114,7 @@ export default function Home() {
             ) : null}
             <Link href="/discover" style={softActionStyle}>{t.home.browse_discover}</Link>
           </div>
-          <Link href="/membership" style={membershipLinkStyle}>
+          <Link className="home-membership-link" href="/membership" style={membershipLinkStyle}>
             <span style={membershipLinkCopyStyle}>
               <strong style={membershipLinkTitleStyle}>{t.home.membership_title}</strong>
               <span style={membershipLinkDescriptionStyle}>
@@ -154,13 +170,18 @@ const heroStyle: CSSProperties = {
   maxWidth: 860,
   width: "100%",
   margin: "0 auto",
-  padding: "16px 10px 10px",
+  padding: "28px 32px 24px",
   boxSizing: "border-box",
   textAlign: "center",
+  border: "1px solid #e0e9da",
+  borderRadius: 26,
+  background:
+    "radial-gradient(circle at 92% 8%, rgba(218, 234, 207, 0.72), transparent 34%), rgba(255, 255, 255, 0.9)",
+  boxShadow: "0 12px 30px rgba(45, 72, 38, 0.07)",
 };
 
 const brandStyle: CSSProperties = {
-  margin: "0 0 5px",
+  margin: 0,
   display: "flex",
   justifyContent: "center",
   alignItems: "baseline",
@@ -181,6 +202,7 @@ const englishBrandStyle: CSSProperties = {
 };
 
 const spaceTitleStyle: CSSProperties = {
+  marginTop: 7,
   color: "#496347",
   fontSize: "clamp(15px, 2vw, 18px)",
   fontWeight: 800,
@@ -188,7 +210,7 @@ const spaceTitleStyle: CSSProperties = {
 };
 
 const subtitleStyle: CSSProperties = {
-  margin: "8px auto 12px",
+  margin: "8px auto 15px",
   color: "#71806d",
   fontSize: 14,
   lineHeight: 1.6,
@@ -196,6 +218,7 @@ const subtitleStyle: CSSProperties = {
 
 const poemStyle: CSSProperties = {
   margin: "0 auto",
+  maxWidth: 650,
   color: "#2f3b2f",
   fontSize: "clamp(16px, 2.2vw, 19px)",
   fontWeight: 550,
@@ -205,6 +228,8 @@ const poemStyle: CSSProperties = {
 
 const spiritStyle: CSSProperties = {
   display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   marginTop: 14,
   padding: "8px 18px",
   borderRadius: 999,
@@ -218,20 +243,20 @@ const spiritStyle: CSSProperties = {
 
 const actionsStyle: CSSProperties = {
   maxWidth: 520,
-  margin: "15px auto 0",
+  margin: "17px auto 0",
   display: "grid",
   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: 9,
 };
 
 const actionBaseStyle: CSSProperties = {
-  minHeight: 42,
-  padding: "10px 13px",
+  minHeight: 44,
+  padding: "11px 14px",
   boxSizing: "border-box",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: 999,
+  borderRadius: 13,
   textDecoration: "none",
   fontSize: 14,
   fontWeight: 750,

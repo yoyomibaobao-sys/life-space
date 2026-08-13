@@ -27,7 +27,7 @@ test("Android download keeps environment overrides and assembles its bundled tes
   assert.ok(bundledFallback > environmentOverride);
   assert.match(route, /\{ length: 8 \}/);
   assert.match(route, /\/downloads\/android-test-parts\/part-/);
-  assert.match(route, /BUNDLED_ANDROID_APK_VERSION = "1\.0\.1"/);
+  assert.match(route, /BUNDLED_ANDROID_APK_VERSION = "1\.0\.2"/);
   assert.match(route, /searchParams\.set\("v", BUNDLED_ANDROID_APK_VERSION\)/);
   assert.match(route, /totalSize !== BUNDLED_ANDROID_APK_SIZE/);
   assert.match(route, /application\/vnd\.android\.package-archive/);
@@ -52,6 +52,6 @@ test("Android download keeps environment overrides and assembles its bundled tes
   const expectedHash = checksum.trim().split(/\s+/)[0];
   const actualHash = crypto.createHash("sha256").update(apk).digest("hex");
 
-  assert.equal(apk.byteLength, 4_108_758);
+  assert.equal(apk.byteLength, 4_109_118);
   assert.equal(actualHash, expectedHash);
 });

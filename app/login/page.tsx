@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
@@ -52,7 +52,6 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [lastSentTime, setLastSentTime] = useState(0);
   const [showLocalFallback, setShowLocalFallback] = useState(false);
-  const pageRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("remember_email");
@@ -60,32 +59,6 @@ export default function LoginPage() {
       setEmail(savedEmail);
     }
   }, []);
-
-  useEffect(() => {
-    return () => {
-      delete document.documentElement.dataset.authKeyboardOpen;
-    };
-  }, []);
-
-  function markKeyboardOpen() {
-    document.documentElement.dataset.authKeyboardOpen = "true";
-  }
-
-  function handleLoginPageBlur() {
-    window.setTimeout(() => {
-      const activeElement = document.activeElement;
-      const keyboardFieldStillFocused =
-        activeElement instanceof HTMLElement &&
-        pageRef.current?.contains(activeElement) &&
-        activeElement.matches(
-          'input:not([type="checkbox"]):not([type="radio"]), textarea',
-        );
-
-      if (!keyboardFieldStillFocused) {
-        delete document.documentElement.dataset.authKeyboardOpen;
-      }
-    }, 80);
-  }
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -173,9 +146,7 @@ export default function LoginPage() {
 
   return (
     <main
-      ref={pageRef}
       className="auth-login-page"
-      onBlurCapture={handleLoginPageBlur}
       style={{
         padding: "20px 20px 28px",
         width: "100%",
@@ -191,7 +162,6 @@ export default function LoginPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onFocus={markKeyboardOpen}
             placeholder={t.auth.email_placeholder}
             autoComplete="email"
             autoCapitalize="none"
@@ -211,7 +181,6 @@ export default function LoginPage() {
           <PasswordInput
             value={password}
             onChange={setPassword}
-            onFocus={markKeyboardOpen}
           />
 
           <div style={{ marginTop: 10, fontSize: 12 }}>
