@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
+import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 function isNetworkError(message: string) {
@@ -42,6 +43,7 @@ function getLoginErrorMessage(
 export default function LoginPage() {
   const router = useRouter();
   const { t } = useLanguage();
+  const isNativeApp = useIsNativeApp();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -315,9 +317,11 @@ export default function LoginPage() {
           <Link href="/" style={loginTextLinkStyle}>
             {t.local_mode.home}
           </Link>
-          <Link href="/api/download/android" style={loginDownloadLinkStyle}>
-            {t.home.download_android}
-          </Link>
+          {isNativeApp === false ? (
+            <Link href="/api/download/android" style={loginDownloadLinkStyle}>
+              {t.home.download_android}
+            </Link>
+          ) : null}
         </div>
       </div>
     </main>
