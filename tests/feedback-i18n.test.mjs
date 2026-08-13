@@ -19,6 +19,7 @@ test("feedback entry is available globally and inside profile", () => {
   const profileLayout = read("app/profile/layout.tsx");
   const navbar = read("components/navbar.tsx");
   const footer = read("components/SiteFooter.tsx");
+  const profileFeedback = read("components/ProfileFeedbackEntry.tsx");
 
   assert.doesNotMatch(layout, /<SiteUtilityBar \/>/);
   assert.match(layout, /<SiteFooter \/>/);
@@ -29,6 +30,9 @@ test("feedback entry is available globally and inside profile", () => {
   assert.match(navbar, /desktopUtilityDividerStyle/);
   assert.doesNotMatch(navbar, /\{user\.email\}/);
   assert.match(footer, /href="\/feedback"/);
+  assert.match(profileFeedback, /fontSize: 15/);
+  assert.match(profileFeedback, /t\.feedback_and_contact/);
+  assert.doesNotMatch(profileFeedback, /t\.feedback_priority/);
 });
 
 test("Chinese and English feedback copy stay in the shared dictionaries", () => {

@@ -108,6 +108,14 @@ p {
   pointer-events: none;
 }
 
+html[data-native-window-insets="true"] {
+  --app-safe-area-top: 0px;
+}
+
+html[data-native-window-insets="true"] .app-status-bar-surface {
+  display: none;
+}
+
 .mobile-app-flex-only,
 .mobile-app-grid-only,
 .mobile-app-block-only {
@@ -317,22 +325,8 @@ p {
     padding-bottom: calc(76px + var(--app-safe-area-bottom));
   }
 
-  html[data-auth-keyboard-open="true"],
-  html[data-auth-keyboard-open="true"] body {
-    overflow: hidden;
-  }
-
   html[data-auth-keyboard-open="true"] .app-main {
-    height: max(
-      240px,
-      calc(
-        var(--auth-visible-viewport-height) - 50px -
-          var(--app-safe-area-top)
-      )
-    );
-    min-height: 0;
     padding-bottom: 0;
-    overflow: hidden;
   }
 
   html[data-auth-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
@@ -340,9 +334,22 @@ p {
   }
 
   html[data-auth-keyboard-open="true"] .auth-login-page {
-    height: 100%;
+    height: max(
+      260px,
+      calc(
+        var(--auth-visible-viewport-height) - 50px -
+          var(--app-safe-area-top)
+      )
+    );
+    max-height: max(
+      260px,
+      calc(
+        var(--auth-visible-viewport-height) - 50px -
+          var(--app-safe-area-top)
+      )
+    );
     min-height: 0 !important;
-    padding: 14px 20px 24px !important;
+    padding: 10px 20px 18px !important;
     overflow-y: auto;
     overscroll-behavior: contain;
     scroll-padding-block: 16px 24px;

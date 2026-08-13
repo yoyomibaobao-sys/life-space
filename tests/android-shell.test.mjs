@@ -41,11 +41,14 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   assert.match(statusBar, /SystemBarType\.StatusBar/);
   assert.match(statusBar, /NativeSystemUi\.setStatusBarAppearance/);
   assert.match(statusBar, /--app-status-bar-background/);
+  assert.match(statusBar, /nativeWindowAlreadyInsetsWebView/);
+  assert.match(statusBar, /nativeWindowInsets = "true"/);
   assert.match(statusBar, /APP_STATUS_BAR_DARK[\s\S]*SystemBarsStyle\.Dark/);
   assert.match(statusBar, /SystemBarsStyle\.Light/);
   assert.match(globals, /\.app-status-bar-surface/);
   assert.match(globals, /--app-safe-area-top/);
   assert.match(globals, /--safe-area-inset-top/);
+  assert.match(globals, /data-native-window-insets="true"/);
   assert.match(manifest, /android:windowSoftInputMode="adjustResize"/);
   assert.match(baseStyles, /android:statusBarColor">@color\/app_background/);
   assert.doesNotMatch(baseStyles, /windowLightNavigationBar/);
@@ -75,6 +78,17 @@ test("Android login keeps focused fields above the software keyboard", () => {
     /data-auth-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/,
   );
   assert.match(globals, /data-auth-keyboard-open="true"[\s\S]*\.auth-login-page/);
+  assert.doesNotMatch(
+    globals,
+    /data-auth-keyboard-open="true"[^}]*body[^}]*overflow: hidden/,
+  );
+});
+
+test("mobile Market lightbox requests the dark native status bar", () => {
+  const marketDetail = read("app/market/[id]/page.tsx");
+
+  assert.match(marketDetail, /setIsMobileViewport\(window\.innerWidth < 760\)/);
+  assert.match(marketDetail, /isMobileViewport=\{isMobileViewport\}/);
 });
 
 test("native Android back closes overlays before route navigation and exits only at home", () => {

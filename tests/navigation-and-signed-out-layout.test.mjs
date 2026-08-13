@@ -168,10 +168,36 @@ test("account navigation keeps membership contextual and export under data manag
   assert.match(zhCopy, /membership_description: "本地免费使用，云会员可云端保存与公开互动"/);
   assert.match(
     home,
-    /href="\/register"[\s\S]*?t\.register[\s\S]*?href="\/discover"[\s\S]*?t\.home\.browse_discover/
+    /href=\{currentUserId \? "\/archive" : "\/register"\}[\s\S]*?t\.home\.enter_my_space[\s\S]*?href="\/api\/download\/android"[\s\S]*?href="\/discover"/
   );
+  assert.match(home, /session\?\.user && Capacitor\.isNativePlatform\(\)/);
+  assert.match(login, /href="\/api\/download\/android"/);
   assert.match(home, /membershipLinkArrowStyle/);
   assert.match(navbar, /href="\/login"[\s\S]*?t\.nav\.login/);
+});
+
+test("mobile account actions, membership copy, and plant names stay compact", async () => {
+  const [navbar, membership, zhCopy, enCopy] = await Promise.all([
+    source("components/navbar.tsx"),
+    source("app/membership/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
+
+  assert.match(navbar, /href="\/" style=\{mobileMeMenuItemStyle\}/);
+  assert.match(navbar, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
+  assert.match(navbar, /style=\{mobileMeLogoutItemStyle\}[\s\S]*?t\.nav\.logout/);
+  assert.doesNotMatch(navbar, /style=\{mobileMeLogoutItemStyle\}[\s\S]*?t\.nav\.logout_full/);
+
+  assert.doesNotMatch(membership, /t\.membership_page\.business_/);
+  assert.match(membership, /mobilePaymentGridStyle/);
+  assert.match(membership, /t\.membership_page\.payment_mobile_intro/);
+  assert.match(membership, /t\.membership_page\.mobile_rules/);
+  assert.match(zhCopy, /mobile_items: \["1GB 云端存储与同步"/);
+  assert.match(zhCopy, /interested_plants: "我的植物收藏"/);
+  assert.match(zhCopy, /planting_plan: "我的种植计划"/);
+  assert.match(enCopy, /interested_plants: "My saved plants"/);
+  assert.match(enCopy, /planting_plan: "My planting plans"/);
 });
 
 test("signed-out market does not repeat login and registration actions inside the page", async () => {
@@ -203,6 +229,8 @@ test("mobile market keeps actions out of the global bar and uses compact managem
   assert.match(market, /t\.market\.intro_title/);
   assert.match(market, /t\.market\.intro_mobile/);
   assert.match(market, /href="\/market\/mine"[\s\S]*?t\.market\.my_posts/);
+  assert.match(market, /mobileHeaderStyle[\s\S]*?display: "flex"/);
+  assert.match(market, /mobileFilterTopGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(market, /href="\/market\/new"/);
   assert.match(zhCopy, /intro_mobile: "平台仅发布供需信息，不提供站内交易。"/);
   assert.match(enCopy, /intro_mobile: "Listings only; transactions do not take place in the app\."/);
@@ -229,7 +257,8 @@ test("signed-out home uses a compact viewport-oriented layout", async () => {
   assert.match(home, /\{t\.home\.cards\.map/);
   assert.match(zhCopy, /记录四时变化，留下发现、收获与成长/);
   assert.match(zhCopy, /其他自然生活相关项目/);
-  assert.match(home, /href="\/register"/);
+  assert.match(home, /href=\{currentUserId \? "\/archive" : "\/register"\}/);
+  assert.match(home, /href="\/api\/download\/android"/);
   assert.doesNotMatch(home, /href="\/login"/);
   assert.doesNotMatch(home, /background: "rgba\(255,255,255,0\.82\)"/);
   assert.doesNotMatch(home, /boxShadow: "0 14px 36px/);
@@ -369,6 +398,7 @@ test("discover search separates three result types with one shared card format",
   assert.match(page, /fetchDiscoverSearchResults/);
   assert.match(page, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(form, /searchKind === "records"/);
+  assert.match(form, /mobileGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(form, /按地区匹配公开/);
   assert.match(results, /kind === "projects"[\s\S]*?projectItems\.map[\s\S]*?<DiscoverSearchResultCard/);
   assert.match(results, /kind === "experience"[\s\S]*?experienceItems\.map[\s\S]*?<DiscoverSearchResultCard/);

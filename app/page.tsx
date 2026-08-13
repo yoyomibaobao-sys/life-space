@@ -1,5 +1,6 @@
 "use client";
 
+import { Capacitor } from "@capacitor/core";
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
@@ -11,6 +12,7 @@ export default function Home() {
   const router = useRouter();
   const { t } = useLanguage();
   const [checkingSession, setCheckingSession] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -21,10 +23,11 @@ export default function Home() {
       } = await supabase.auth.getSession();
 
       if (!mounted) return;
-      if (session?.user) {
+      if (session?.user && Capacitor.isNativePlatform()) {
         router.replace("/archive");
         return;
       }
+      setCurrentUserId(session?.user?.id || "");
       setCheckingSession(false);
     }
 
@@ -33,7 +36,13 @@ export default function Home() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) router.replace("/archive");
+      if (session?.user && Capacitor.isNativePlatform()) {
+        router.replace("/archive");
+        return;
+      }
+
+      setCurrentUserId(session?.user?.id || "");
+      setCheckingSession(false);
     });
 
     return () => {
@@ -76,9 +85,11 @@ export default function Home() {
           <div style={spiritStyle}>{t.home.spirit}</div>
 
           <div className="home-actions" style={actionsStyle}>
-            <Link href="/register" style={primaryActionStyle}>{t.register}</Link>
+            <Link href={currentUserId ? "/archive" : "/register"} style={primaryActionStyle}>
+              {currentUserId ? t.home.enter_my_space : t.register}
+            </Link>
+            <Link href="/api/download/android" style={downloadActionStyle}>{t.home.download_android}</Link>
             <Link href="/discover" style={softActionStyle}>{t.home.browse_discover}</Link>
-            <Link href="/api/download/android" style={softActionStyle}>{t.home.download_android}</Link>
           </div>
           <Link href="/membership" style={membershipLinkStyle}>
             <span style={membershipLinkCopyStyle}>
@@ -232,6 +243,13 @@ const softActionStyle: CSSProperties = {
   background: "#eef5e8",
   color: "#496b3f",
   border: "1px solid #d9e6d0",
+};
+
+const downloadActionStyle: CSSProperties = {
+  ...actionBaseStyle,
+  background: "#f7faf3",
+  color: "#355f31",
+  border: "1px solid #bcd3b3",
 };
 
 const membershipLinkStyle: CSSProperties = {
