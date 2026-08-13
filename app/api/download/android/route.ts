@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 const BUNDLED_ANDROID_APK_NAME = "youshi-cultivation-android-test.apk";
-const BUNDLED_ANDROID_APK_VERSION = "1.0.1";
-const BUNDLED_ANDROID_APK_SIZE = 4_108_758;
+const BUNDLED_ANDROID_APK_VERSION = "1.0.2";
+const BUNDLED_ANDROID_APK_SIZE = 4_109_118;
 const BUNDLED_ANDROID_APK_PARTS = Array.from(
   { length: 8 },
   (_, index) =>
