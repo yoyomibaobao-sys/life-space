@@ -35,7 +35,7 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
     "android/app/src/main/java/com/youshi/cultivation/NativeSystemUiPlugin.java",
   );
 
-  assert.match(config, /SystemBars:[\s\S]*insetsHandling: "css"/);
+  assert.match(config, /SystemBars:[\s\S]*insetsHandling: "disable"/);
   assert.match(config, /SystemBars:[\s\S]*style: "LIGHT"/);
   assert.match(statusBar, /SystemBars\.setStyle/);
   assert.match(statusBar, /SystemBarType\.StatusBar/);
@@ -76,6 +76,8 @@ test("Android login uses one resize path and blocks IME extracted-text overlays"
   );
 
   assert.match(config, /Keyboard:[\s\S]*resizeOnFullScreen: false/);
+  assert.match(config, /SystemBars:[\s\S]*insetsHandling: "disable"/);
+  assert.match(config, /Let adjustResize handle the IME by itself/);
   assert.match(webView, /extends CapacitorWebView/);
   assert.match(webView, /IME_FLAG_NO_FULLSCREEN/);
   assert.match(webView, /IME_FLAG_NO_EXTRACT_UI/);
@@ -146,10 +148,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '3'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.2'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '3' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.2' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '4'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.3'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '4' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.3' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
