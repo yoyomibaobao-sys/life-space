@@ -293,7 +293,7 @@ function projectCardStyle(ended: boolean, mobileMode: boolean): CSSProperties {
     borderRadius: 14,
     padding: mobileMode ? 8 : 10,
     marginBottom: 10,
-    minHeight: mobileMode ? 110 : 124,
+    minHeight: mobileMode ? 136 : 124,
     boxSizing: "border-box",
     background: ended ? "#fafafa" : "#fff",
     opacity: ended ? 0.82 : 1,
@@ -305,8 +305,8 @@ function projectCardStyle(ended: boolean, mobileMode: boolean): CSSProperties {
 
 function coverStyle(mobileMode: boolean): CSSProperties {
   return {
-    width: mobileMode ? 94 : 104,
-    height: mobileMode ? 94 : 104,
+    width: mobileMode ? 120 : 104,
+    height: mobileMode ? 120 : 104,
     flexShrink: 0,
     alignSelf: "flex-start",
     borderRadius: 11,
@@ -353,7 +353,7 @@ const mobileTitleTextStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
   color: "#1f2d1f",
-  fontSize: 15,
+  fontSize: 17,
   fontWeight: 800,
   lineHeight: 1.3,
   overflow: "hidden",
@@ -382,7 +382,7 @@ const mobileSelectRowStyle: CSSProperties = {
 const mobileCategoryTextStyle: CSSProperties = {
   minWidth: 0,
   color: "#667066",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 700,
   lineHeight: 1.35,
   overflow: "hidden",
@@ -393,7 +393,7 @@ const mobileCategoryTextStyle: CSSProperties = {
 const mobileStatsLineStyle: CSSProperties = {
   minWidth: 0,
   color: "#7f887a",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 600,
   lineHeight: 1.35,
   overflow: "hidden",
@@ -509,7 +509,7 @@ function visibilityBadgeStyle(tone?: "public" | "private" | "neutral"): CSSPrope
     border: tone === "public" ? "1px solid #b7dfbb" : "1px solid #ddd",
     background: tone === "public" ? "#f1fff1" : "#fff",
     color: tone === "public" ? "#2f8f2f" : tone === "private" ? "#888" : "#697663",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 700,
     lineHeight: 1,
     padding: "4px 7px",
@@ -522,7 +522,7 @@ const badgeStyle: CSSProperties = {
   background: "#f4f8ef",
   color: "#5f7a55",
   border: "1px solid #dfe9d7",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 800,
   lineHeight: 1,
   padding: "4px 7px",
@@ -582,6 +582,6 @@ const footerStyle: CSSProperties = {
   gap: 8,
   flexWrap: "wrap",
   color: "#929b8d",
-  fontSize: 11,
+  fontSize: 12,
   lineHeight: 1.3,
 };

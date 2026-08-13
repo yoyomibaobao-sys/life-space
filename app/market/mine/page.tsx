@@ -195,68 +195,70 @@ export default function MyMarketPostsPage() {
           <section style={listStyle}>
             {items.map((item) => (
               <article key={item.id} style={cardStyle}>
-                <Link
-                  href={`/market/${item.id}`}
-                  style={cardMediaLinkStyle}
-                  aria-label={`${t.market.view}：${item.title}`}
-                >
-                  {item.display_cover_thumb_url || item.display_cover_image_url ? (
-                    <img
-                      src={
-                        item.display_cover_thumb_url ||
-                        item.display_cover_image_url ||
-                        ""
-                      }
-                      alt=""
-                      style={cardImageStyle}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div style={cardImageFallbackStyle}>{t.market.name}</div>
-                  )}
-                </Link>
-
-                <div style={cardContentStyle}>
-                  <div style={badgeRowStyle}>
-                    <span style={typeBadgeStyle}>
-                      {getMarketPostTypeLabel(item.post_type, language)}
-                    </span>
-                    <span style={categoryBadgeStyle}>
-                      {getMarketItemCategoryLabel(item.item_category, language)}
-                    </span>
-                    {item.status === "ended" ? (
-                      <span style={endedBadgeStyle}>{t.market.ended}</span>
+                <div style={cardMainStyle}>
+                  <Link
+                    href={`/market/${item.id}`}
+                    style={cardMediaLinkStyle}
+                    aria-label={`${t.market.view}：${item.title}`}
+                  >
+                    {item.display_cover_thumb_url || item.display_cover_image_url ? (
+                      <img
+                        src={
+                          item.display_cover_thumb_url ||
+                          item.display_cover_image_url ||
+                          ""
+                        }
+                        alt=""
+                        style={cardImageStyle}
+                        loading="lazy"
+                      />
                     ) : (
-                      <span style={activeBadgeStyle}>{t.market.active}</span>
+                      <div style={cardImageFallbackStyle}>{t.market.name}</div>
                     )}
+                  </Link>
+
+                  <div style={cardContentStyle}>
+                    <div style={badgeRowStyle}>
+                      <span style={typeBadgeStyle}>
+                        {getMarketPostTypeLabel(item.post_type, language)}
+                      </span>
+                      <span style={categoryBadgeStyle}>
+                        {getMarketItemCategoryLabel(item.item_category, language)}
+                      </span>
+                      {item.status === "ended" ? (
+                        <span style={endedBadgeStyle}>{t.market.ended}</span>
+                      ) : (
+                        <span style={activeBadgeStyle}>{t.market.active}</span>
+                      )}
+                    </div>
+
+                    <h2 style={cardTitleStyle}>{item.title}</h2>
+
+                    {item.description ? (
+                      <p style={descriptionStyle}>{item.description}</p>
+                    ) : null}
+
+                    <div style={metaStyle}>
+                      <span style={locationMetaStyle}>
+                        {item.location_text ? item.location_text : t.market.area_not_provided}
+                      </span>
+                      <span style={timeStyle}>
+                        {formatMarketTime(item.created_at)}
+                        {Number(item.view_count || 0) > 0
+                          ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
+                          : ""}
+                      </span>
+                    </div>
                   </div>
+                </div>
 
-                  <h2 style={cardTitleStyle}>{item.title}</h2>
-
-                  {item.description ? (
-                    <p style={descriptionStyle}>{item.description}</p>
-                  ) : null}
-
-                  <div style={metaStyle}>
-                    <span style={locationMetaStyle}>
-                      {item.location_text ? item.location_text : t.market.area_not_provided}
-                    </span>
-                    <span style={timeStyle}>
-                      {formatMarketTime(item.created_at)}
-                      {Number(item.view_count || 0) > 0
-                        ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
-                        : ""}
-                    </span>
-                  </div>
-
-                  <div style={actionRowStyle}>
-                    <Link href={`/market/${item.id}`} style={secondaryLinkStyle}>
-                      {t.market.view}
-                    </Link>
-                    <Link href={`/market/${item.id}/edit`} style={secondaryLinkStyle}>
-                      {t.market.edit}
-                    </Link>
-                  </div>
+                <div style={actionRowStyle}>
+                  <Link href={`/market/${item.id}`} style={secondaryLinkStyle}>
+                    {t.market.view}
+                  </Link>
+                  <Link href={`/market/${item.id}/edit`} style={secondaryLinkStyle}>
+                    {t.market.edit}
+                  </Link>
                 </div>
               </article>
             ))}
@@ -385,20 +387,23 @@ const listStyle: CSSProperties = {
 };
 
 const cardStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "112px minmax(0, 1fr)",
-  gap: 10,
   background: "#fff",
   border: "1px solid #e4ece0",
   borderRadius: 16,
   padding: 10,
-  alignItems: "start",
   boxShadow: "0 7px 18px rgba(32, 56, 24, 0.035)",
 };
 
+const cardMainStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "120px minmax(0, 1fr)",
+  gap: 10,
+  alignItems: "start",
+};
+
 const cardMediaLinkStyle: CSSProperties = {
-  width: 112,
-  height: 112,
+  width: 120,
+  height: 120,
   display: "block",
   borderRadius: 13,
   overflow: "hidden",
@@ -423,7 +428,7 @@ const cardImageFallbackStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 13,
+  fontSize: 14,
   fontWeight: 700,
   boxSizing: "border-box",
 };
@@ -433,7 +438,7 @@ const cardContentStyle: CSSProperties = {
   flex: 1,
   display: "flex",
   flexDirection: "column",
-  minHeight: 112,
+  minHeight: 120,
 };
 
 const badgeRowStyle: CSSProperties = {
@@ -448,7 +453,7 @@ const typeBadgeStyle: CSSProperties = {
   background: "#edf4e8",
   color: "#4f7b45",
   padding: "3px 8px",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 700,
 };
 
@@ -457,7 +462,7 @@ const categoryBadgeStyle: CSSProperties = {
   background: "#f5f3e8",
   color: "#7a6b35",
   padding: "3px 8px",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 700,
 };
 
@@ -466,7 +471,7 @@ const activeBadgeStyle: CSSProperties = {
   background: "#edf4e8",
   color: "#4f7b45",
   padding: "3px 8px",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 700,
 };
 
@@ -475,20 +480,20 @@ const endedBadgeStyle: CSSProperties = {
   background: "#f2f2f2",
   color: "#777",
   padding: "3px 8px",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 700,
 };
 
 const timeStyle: CSSProperties = {
   color: "#8a9585",
-  fontSize: 12,
+  fontSize: 13,
   whiteSpace: "nowrap",
 };
 
 const cardTitleStyle: CSSProperties = {
   margin: 0,
   color: "#1f2a1f",
-  fontSize: 17,
+  fontSize: 18,
   lineHeight: 1.35,
   display: "-webkit-box",
   WebkitLineClamp: 2,
@@ -499,7 +504,7 @@ const cardTitleStyle: CSSProperties = {
 const descriptionStyle: CSSProperties = {
   margin: "4px 0 0",
   color: "#5f6a5b",
-  fontSize: 13,
+  fontSize: 14,
   lineHeight: 1.4,
   display: "-webkit-box",
   WebkitLineClamp: 2,
@@ -510,29 +515,27 @@ const descriptionStyle: CSSProperties = {
 const metaStyle: CSSProperties = {
   marginTop: 6,
   color: "#7b8676",
-  fontSize: 12,
+  fontSize: 13,
   lineHeight: 1.35,
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "baseline",
-  gap: 8,
-  flexWrap: "wrap",
+  display: "grid",
+  gap: 3,
 };
 
 const locationMetaStyle: CSSProperties = {
   minWidth: 0,
   overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical",
 };
 
 const actionRowStyle: CSSProperties = {
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 8,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-  marginTop: "auto",
-  paddingTop: 8,
+  marginTop: 10,
+  paddingTop: 10,
+  borderTop: "1px solid #edf1eb",
 };
 
 const secondaryLinkStyle: CSSProperties = {
@@ -541,8 +544,12 @@ const secondaryLinkStyle: CSSProperties = {
   background: "#fff",
   color: "#40583a",
   borderRadius: 999,
-  padding: "6px 11px",
-  fontSize: 13,
+  minHeight: 38,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "7px 11px",
+  fontSize: 14,
   fontWeight: 700,
 };
 

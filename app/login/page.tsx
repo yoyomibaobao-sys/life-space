@@ -1,7 +1,5 @@
 "use client";
 
-import { Capacitor } from "@capacitor/core";
-import { Keyboard } from "@capacitor/keyboard";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
@@ -18,13 +16,6 @@ function isNetworkError(message: string) {
     "network error",
     "load failed",
   ].some((part) => text.includes(part));
-}
-
-function getCurrentViewportHeight() {
-  return Math.max(
-    0,
-    window.visualViewport?.height || window.innerHeight,
-  );
 }
 
 function getLoginErrorMessage(
@@ -62,41 +53,6 @@ export default function LoginPage() {
   const focusTimersRef = useRef<number[]>([]);
   const pageRef = useRef<HTMLElement>(null);
   const focusedFieldRef = useRef<HTMLInputElement | null>(null);
-  const keyboardOpenRef = useRef(false);
-  const keyboardHeightRef = useRef(0);
-  const baselineViewportHeightRef = useRef(0);
-
-  const syncVisibleViewportHeight = useCallback(() => {
-    const currentHeight = getCurrentViewportHeight();
-
-    if (!keyboardOpenRef.current) {
-      baselineViewportHeightRef.current = Math.max(
-        baselineViewportHeightRef.current,
-        currentHeight,
-        window.innerHeight,
-      );
-    }
-
-    const baselineHeight = Math.max(
-      baselineViewportHeightRef.current,
-      currentHeight,
-    );
-    const viewportAlreadyResized = currentHeight + 96 < baselineHeight;
-    const nativeVisibleHeight =
-      keyboardHeightRef.current > 0
-        ? baselineHeight - keyboardHeightRef.current
-        : currentHeight;
-    const visibleHeight = keyboardOpenRef.current
-      ? viewportAlreadyResized
-        ? currentHeight
-        : Math.max(240, nativeVisibleHeight)
-      : currentHeight;
-
-    document.documentElement.style.setProperty(
-      "--auth-visible-viewport-height",
-      `${Math.round(Math.max(240, visibleHeight))}px`,
-    );
-  }, []);
 
   const scrollFieldIntoVisibleArea = useCallback(
     (element?: HTMLInputElement | null) => {
@@ -105,34 +61,16 @@ export default function LoginPage() {
 
       focusedFieldRef.current = target;
 
-      for (const delay of [0, 120, 280]) {
+      for (const timer of focusTimersRef.current) window.clearTimeout(timer);
+      focusTimersRef.current = [];
+
+      for (const delay of [0, 180, 320]) {
         const timer = window.setTimeout(() => {
-          const container = pageRef.current;
-          if (!container) {
-            target.scrollIntoView({ block: "center", inline: "nearest" });
-            return;
-          }
-
-          const containerRect = container.getBoundingClientRect();
-          const targetRect = target.getBoundingClientRect();
-          const visibleTop = containerRect.top + 12;
-          const visibleBottom = containerRect.bottom - 16;
-          let delta = 0;
-
-          if (targetRect.bottom > visibleBottom) {
-            delta = targetRect.bottom - visibleBottom;
-          } else if (targetRect.top < visibleTop) {
-            delta = targetRect.top - visibleTop;
-          } else if (keyboardOpenRef.current && targetRect.top > visibleTop + 28) {
-            delta = targetRect.top - visibleTop;
-          }
-
-          if (delta !== 0) {
-            container.scrollBy({
-              top: delta,
-              behavior: delay === 0 ? "auto" : "smooth",
-            });
-          }
+          target.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+            behavior: delay === 0 ? "auto" : "smooth",
+          });
         }, delay);
         focusTimersRef.current.push(timer);
       }
@@ -148,91 +86,34 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-
-    let disposed = false;
-    let listenerHandles: Array<{ remove: () => Promise<void> }> = [];
-
-    function markKeyboardOpen(keyboardHeight: number) {
-      keyboardOpenRef.current = true;
-      keyboardHeightRef.current = Math.max(0, keyboardHeight);
-      document.documentElement.dataset.authKeyboardOpen = "true";
-      document.documentElement.style.setProperty(
-        "--auth-keyboard-height",
-        `${keyboardHeightRef.current}px`,
-      );
-      syncVisibleViewportHeight();
-      scrollFieldIntoVisibleArea();
-    }
-
-    function markKeyboardClosed() {
-      keyboardOpenRef.current = false;
-      keyboardHeightRef.current = 0;
-      delete document.documentElement.dataset.authKeyboardOpen;
-      document.documentElement.style.setProperty(
-        "--auth-keyboard-height",
-        "0px",
-      );
-      syncVisibleViewportHeight();
-    }
-
-    function handleViewportChange() {
-      syncVisibleViewportHeight();
-      if (keyboardOpenRef.current) {
-        scrollFieldIntoVisibleArea();
-      }
-    }
-
-    baselineViewportHeightRef.current = Math.max(
-      window.innerHeight,
-      getCurrentViewportHeight(),
-    );
-    syncVisibleViewportHeight();
-    window.addEventListener("resize", handleViewportChange);
-    window.visualViewport?.addEventListener("resize", handleViewportChange);
-    window.visualViewport?.addEventListener("scroll", handleViewportChange);
-
-    void Promise.all([
-      Keyboard.addListener("keyboardWillShow", (info) => {
-        markKeyboardOpen(info.keyboardHeight);
-      }),
-      Keyboard.addListener("keyboardDidShow", (info) => {
-        markKeyboardOpen(info.keyboardHeight);
-      }),
-      Keyboard.addListener("keyboardWillHide", markKeyboardClosed),
-      Keyboard.addListener("keyboardDidHide", markKeyboardClosed),
-    ]).then((handles) => {
-      if (disposed) {
-        for (const handle of handles) void handle.remove();
-        return;
-      }
-
-      listenerHandles = handles;
-    });
-
     return () => {
-      disposed = true;
-      for (const handle of listenerHandles) void handle.remove();
-      window.removeEventListener("resize", handleViewportChange);
-      window.visualViewport?.removeEventListener("resize", handleViewportChange);
-      window.visualViewport?.removeEventListener("scroll", handleViewportChange);
       for (const timer of focusTimersRef.current) window.clearTimeout(timer);
       focusTimersRef.current = [];
-      markKeyboardClosed();
-      document.documentElement.style.removeProperty(
-        "--auth-visible-viewport-height",
-      );
+      delete document.documentElement.dataset.authKeyboardOpen;
     };
-  }, [scrollFieldIntoVisibleArea, syncVisibleViewportHeight]);
+  }, []);
 
   function keepFieldVisible(element: HTMLInputElement) {
-    if (!Capacitor.isNativePlatform()) return;
-
     focusedFieldRef.current = element;
-    keyboardOpenRef.current = true;
     document.documentElement.dataset.authKeyboardOpen = "true";
-    syncVisibleViewportHeight();
     scrollFieldIntoVisibleArea(element);
+  }
+
+  function handleLoginPageBlur() {
+    const timer = window.setTimeout(() => {
+      const activeElement = document.activeElement;
+      const keyboardFieldStillFocused =
+        activeElement instanceof HTMLElement &&
+        pageRef.current?.contains(activeElement) &&
+        activeElement.matches(
+          'input:not([type="checkbox"]):not([type="radio"]), textarea',
+        );
+
+      if (!keyboardFieldStillFocused) {
+        delete document.documentElement.dataset.authKeyboardOpen;
+      }
+    }, 80);
+    focusTimersRef.current.push(timer);
   }
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
@@ -323,6 +204,7 @@ export default function LoginPage() {
     <main
       ref={pageRef}
       className="auth-login-page"
+      onBlurCapture={handleLoginPageBlur}
       style={{
         minHeight: "calc(100dvh - 50px - var(--app-safe-area-top))",
         padding: "20px 20px 28px",

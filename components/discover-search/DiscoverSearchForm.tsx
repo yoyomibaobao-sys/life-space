@@ -44,6 +44,12 @@ export default function DiscoverSearchForm({
       : searchKind === "experience"
         ? t.discover.search_ui.experience_placeholder
         : t.discover.search_ui.record_placeholder;
+  const mobileKeywordPlaceholder =
+    searchKind === "projects"
+      ? t.discover.search_ui.project_short_placeholder
+      : searchKind === "experience"
+        ? t.discover.search_ui.experience_short_placeholder
+        : t.discover.search_ui.record_short_placeholder;
   const hasCustomTag =
     filters.tag.trim() && !commonSearchTags.includes(filters.tag.trim() as (typeof commonSearchTags)[number]);
 
@@ -76,8 +82,27 @@ export default function DiscoverSearchForm({
         style={mobileFormStyle}
       >
         <div style={mobileGridStyle}>
-          <label style={mobileFieldLabelStyle}>
-            {t.discover.search_ui.region_search}
+          <label
+            style={mobileFieldLabelStyle}
+            aria-label={t.discover.search_ui.category}
+          >
+            <select
+              value={filters.category}
+              onChange={(event) => patch({ category: event.target.value as SearchCategory })}
+              style={mobileInputStyle}
+            >
+              <option value="all">{t.discover.search_ui.all_categories}</option>
+              <option value="plant">{t.discover.filters.plant}</option>
+              <option value="system">{t.discover.filters.system}</option>
+              <option value="insect_fish">{t.discover.filters.insect_fish}</option>
+              <option value="other">{t.discover.filters.other}</option>
+            </select>
+          </label>
+
+          <label
+            style={mobileFieldLabelStyle}
+            aria-label={t.discover.search_ui.region_search}
+          >
             <input
               value={filters.locationQuery || ""}
               onChange={(event) =>
@@ -89,13 +114,12 @@ export default function DiscoverSearchForm({
                   city: "",
                 })
               }
-              placeholder={t.discover.search_ui.region_search_placeholder}
+              placeholder={t.discover.search_ui.region_short_placeholder}
               style={mobileInputStyle}
             />
           </label>
 
-          <label style={mobileFieldLabelStyle}>
-            {keywordLabel}
+          <label style={mobileFieldLabelStyle} aria-label={keywordLabel}>
             <input
               value={filters.textQuery || ""}
               onChange={(event) =>
@@ -106,29 +130,15 @@ export default function DiscoverSearchForm({
                   speciesId: null,
                 })
               }
-              placeholder={keywordPlaceholder}
+              placeholder={mobileKeywordPlaceholder}
               style={mobileInputStyle}
             />
           </label>
+        </div>
 
-          <label style={mobileFieldLabelStyle}>
-            {t.discover.search_ui.category}
-            <select
-              value={filters.category}
-              onChange={(event) => patch({ category: event.target.value as SearchCategory })}
-              style={mobileInputStyle}
-            >
-              <option value="all">{t.discover.filters.all}</option>
-              <option value="plant">{t.discover.filters.plant}</option>
-              <option value="system">{t.discover.filters.system}</option>
-              <option value="insect_fish">{t.discover.filters.insect_fish}</option>
-              <option value="other">{t.discover.filters.other}</option>
-            </select>
-          </label>
-
-          {isRecordSearch ? (
-            <label style={mobileFieldLabelStyle}>
-              {t.discover.search_ui.tag}
+        {isRecordSearch ? (
+          <div style={mobileRecordOptionsStyle}>
+            <label style={mobileTagFieldStyle} aria-label={t.discover.search_ui.tag}>
               <select
                 value={filters.tag}
                 onChange={(event) => patch({ tag: event.target.value })}
@@ -143,11 +153,6 @@ export default function DiscoverSearchForm({
                 ))}
               </select>
             </label>
-          ) : null}
-        </div>
-
-        <div style={mobileActionsStyle}>
-          {isRecordSearch ? (
             <label style={mobileHelpOnlyStyle}>
               <input
                 type="checkbox"
@@ -156,8 +161,10 @@ export default function DiscoverSearchForm({
               />
               {t.discover.search_ui.help_only}
             </label>
-          ) : <span />}
+          </div>
+        ) : null}
 
+        <div style={mobileActionsStyle}>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={onReset} style={secondaryButtonStyle}>
               {t.discover.search_ui.reset}
@@ -369,24 +376,37 @@ const mobileGridStyle: CSSProperties = {
 };
 
 const mobileFieldLabelStyle: CSSProperties = {
-  ...fieldLabelStyle,
-  fontSize: 10,
+  display: "block",
+  minWidth: 0,
 };
 
 const mobileInputStyle: CSSProperties = {
   ...inputStyle,
   minWidth: 0,
-  height: 34,
-  marginTop: 3,
-  padding: "0 5px",
+  height: 36,
+  marginTop: 0,
+  padding: "0 7px",
   borderRadius: 9,
-  fontSize: 11,
+  fontSize: 13,
+};
+
+const mobileRecordOptionsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginTop: 8,
+};
+
+const mobileTagFieldStyle: CSSProperties = {
+  flex: "0 1 150px",
+  minWidth: 0,
 };
 
 const mobileActionsStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
+  justifyContent: "flex-end",
   gap: 10,
   marginTop: 10,
 };
@@ -405,9 +425,9 @@ const secondaryButtonStyle: CSSProperties = {
   background: "#fff",
   color: "#4d5d4d",
   borderRadius: 999,
-  padding: "8px 13px",
+  padding: "9px 14px",
   cursor: "pointer",
-  fontSize: 13,
+  fontSize: 14,
 };
 
 const primaryButtonStyle: CSSProperties = {
@@ -415,7 +435,7 @@ const primaryButtonStyle: CSSProperties = {
   background: "#4CAF50",
   color: "#fff",
   borderRadius: 999,
-  padding: "8px 15px",
+  padding: "9px 16px",
   cursor: "pointer",
-  fontSize: 13,
+  fontSize: 14,
 };

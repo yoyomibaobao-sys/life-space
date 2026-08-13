@@ -495,14 +495,13 @@ function MobileMarketFilters({
       </div>
 
       <div style={mobileFilterTopGridStyle}>
-        <label style={mobileFilterFieldStyle}>
-          <span style={mobileFilterLabelStyle}>{t.market.category}</span>
+        <label style={mobileFilterFieldStyle} aria-label={t.market.category}>
           <select
             value={categoryFilter}
             onChange={(event) => onCategoryChange(event.target.value as "all" | MarketItemCategory)}
             style={mobileFilterControlStyle}
           >
-            <option value="all">{t.market.all}</option>
+            <option value="all">{t.market.all_categories}</option>
             {getMarketItemCategoryOptions(language).map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
@@ -511,8 +510,7 @@ function MobileMarketFilters({
           </select>
         </label>
 
-        <label style={mobileFilterFieldStyle}>
-          <span style={mobileFilterLabelStyle}>{t.market.area}</span>
+        <label style={mobileFilterFieldStyle} aria-label={t.market.area}>
           <input
             value={locationFilter}
             onChange={(event) => onLocationChange(event.target.value)}
@@ -522,8 +520,7 @@ function MobileMarketFilters({
           />
         </label>
 
-        <label style={mobileFilterContentFieldStyle}>
-          <span style={mobileFilterLabelStyle}>{t.market.content}</span>
+        <label style={mobileFilterContentFieldStyle} aria-label={t.market.content}>
           <input
             value={contentFilter}
             onChange={(event) => onContentChange(event.target.value)}
@@ -599,7 +596,7 @@ const marketIntroStyle: CSSProperties = {
 const marketSubIntroStyle: CSSProperties = {
   marginTop: 3,
   color: "#7b8676",
-  fontSize: 12,
+  fontSize: 13,
   lineHeight: 1.45,
 };
 
@@ -629,7 +626,7 @@ const mobileMineButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   padding: "6px 11px",
-  fontSize: 12,
+  fontSize: 14,
 };
 
 const filterPanelStyle: CSSProperties = {
@@ -680,8 +677,7 @@ const mobileFilterTopGridStyle: CSSProperties = {
 };
 
 const mobileFilterFieldStyle: CSSProperties = {
-  display: "grid",
-  gap: 3,
+  display: "block",
   minWidth: 0,
 };
 
@@ -689,22 +685,16 @@ const mobileFilterContentFieldStyle: CSSProperties = {
   ...mobileFilterFieldStyle,
 };
 
-const mobileFilterLabelStyle: CSSProperties = {
-  color: "#7b8676",
-  fontSize: 10,
-  fontWeight: 700,
-};
-
 const mobileFilterControlStyle: CSSProperties = {
   width: "100%",
   minWidth: 0,
-  height: 30,
+  height: 36,
   border: "1px solid #dfe8da",
   borderRadius: 9,
   background: "#fff",
   color: "#40583a",
-  padding: "0 5px",
-  fontSize: 11,
+  padding: "0 7px",
+  fontSize: 13,
   boxSizing: "border-box",
 };
 
@@ -753,21 +743,21 @@ const listStyle: CSSProperties = {
 
 const cardStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "88px minmax(0, 1fr)",
-  gap: 9,
+  gridTemplateColumns: "104px minmax(0, 1fr)",
+  gap: 10,
   textDecoration: "none",
   color: "inherit",
   background: "#fff",
   border: "1px solid #e4ece0",
   borderRadius: 14,
   padding: 8,
-  alignItems: "center",
+  alignItems: "start",
   boxShadow: "0 8px 20px rgba(32,56,24,0.04)",
 };
 
 const cardImageStyle: CSSProperties = {
-  width: "88px",
-  height: "88px",
+  width: "104px",
+  height: "104px",
   objectFit: "cover",
   borderRadius: 12,
   background: "#f0f4ed",
@@ -775,8 +765,8 @@ const cardImageStyle: CSSProperties = {
 };
 
 const cardImageFallbackStyle: CSSProperties = {
-  width: "88px",
-  height: "88px",
+  width: "104px",
+  height: "104px",
   borderRadius: 12,
   background: "#edf4e8",
   border: "1px solid #e4ece0",
@@ -784,13 +774,13 @@ const cardImageFallbackStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 700,
 };
 
 const cardContentStyle: CSSProperties = {
   minWidth: 0,
-  minHeight: 88,
+  minHeight: 104,
   display: "flex",
   flexDirection: "column",
 };
@@ -800,6 +790,7 @@ const cardHeaderStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 6,
   alignItems: "flex-start",
+  flexWrap: "wrap",
   marginBottom: 4,
 };
 
@@ -814,7 +805,7 @@ const typeBadgeStyle: CSSProperties = {
   background: "#edf4e8",
   color: "#4f7b45",
   padding: "2px 7px",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 700,
 };
 
@@ -823,13 +814,13 @@ const categoryBadgeStyle: CSSProperties = {
   background: "#f5f3e8",
   color: "#7a6b35",
   padding: "2px 7px",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 700,
 };
 
 const timeStyle: CSSProperties = {
   color: "#8a9585",
-  fontSize: 11,
+  fontSize: 12,
   lineHeight: 1.25,
   whiteSpace: "nowrap",
 };
@@ -837,11 +828,11 @@ const timeStyle: CSSProperties = {
 const cardTitleStyle: CSSProperties = {
   margin: 0,
   color: "#1f2a1f",
-  fontSize: 15,
-  lineHeight: 1.25,
+  fontSize: 16,
+  lineHeight: 1.3,
   fontWeight: 700,
   display: "-webkit-box",
-  WebkitLineClamp: 1,
+  WebkitLineClamp: 2,
   WebkitBoxOrient: "vertical",
   overflow: "hidden",
 };
@@ -849,8 +840,8 @@ const cardTitleStyle: CSSProperties = {
 const descriptionStyle: CSSProperties = {
   margin: "3px 0 0",
   color: "#5f6a5b",
-  fontSize: 12,
-  lineHeight: 1.2,
+  fontSize: 13,
+  lineHeight: 1.35,
   display: "-webkit-box",
   WebkitLineClamp: 1,
   WebkitBoxOrient: "vertical",
@@ -866,12 +857,12 @@ const infoGridStyle: CSSProperties = {
 
 const infoLineStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "38px minmax(0, 1fr)",
+  gridTemplateColumns: "36px minmax(0, 1fr)",
   gap: 5,
   alignItems: "baseline",
   color: "#6b7665",
-  fontSize: 12,
-  lineHeight: 1.2,
+  fontSize: 13,
+  lineHeight: 1.3,
 };
 
 const infoLabelStyle: CSSProperties = {
@@ -883,18 +874,23 @@ const infoValueStyle: CSSProperties = {
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical",
 };
 
 const sourceValueStyle: CSSProperties = {
-  display: "inline-flex",
+  display: "flex",
   alignItems: "baseline",
   gap: 4,
+  flexWrap: "wrap",
+  overflow: "visible",
 };
 
 const sourceUserStyle: CSSProperties = {
   color: "#7b8676",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 600,
 };
 
@@ -906,7 +902,7 @@ const sourceArchiveStyle: CSSProperties = {
 
 const sourceSystemStyle: CSSProperties = {
   color: "#4f7b45",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 700,
   background: "#edf4e8",
   borderRadius: 999,
@@ -915,12 +911,12 @@ const sourceSystemStyle: CSSProperties = {
 
 const sourceMissingStyle: CSSProperties = {
   color: "#9aa398",
-  fontSize: 11,
+  fontSize: 12,
 };
 
 const sourceDividerStyle: CSSProperties = {
   color: "#c1cbbb",
-  fontSize: 11,
+  fontSize: 12,
 };
 
 const emptyStyle: CSSProperties = {

@@ -89,7 +89,7 @@
 .date {
   flex-shrink: 0;
   color: #8a9588;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -99,7 +99,7 @@
   overflow: hidden;
   margin: 4px 0 0;
   color: #253524;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 750;
   line-height: 1.35;
   word-break: break-word;
@@ -117,7 +117,7 @@
   margin-top: 2px;
   overflow: hidden;
   color: #647461;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -128,7 +128,7 @@
   overflow: hidden;
   margin-top: 4px;
   color: #455443;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
   word-break: break-word;
   -webkit-box-orient: vertical;
@@ -140,7 +140,7 @@
   margin-top: auto;
   padding-top: 5px;
   color: #7b8878;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -169,26 +169,26 @@
 
 @media (max-width: 759px) {
   .card {
-    grid-template-columns: 106px minmax(0, 1fr);
+    grid-template-columns: 104px minmax(0, 1fr);
     gap: 10px;
-    min-height: 124px;
+    min-height: 120px;
     padding: 8px;
   }
 
   .media {
-    width: 106px;
-    height: auto;
-    min-height: 106px;
-    align-self: stretch;
+    width: 104px;
+    height: 104px;
+    min-height: 104px;
+    align-self: start;
   }
 
   .content {
-    min-height: 108px;
+    min-height: 104px;
   }
 
   .title {
     margin-top: 4px;
-    font-size: 14px;
+    font-size: 16px;
     -webkit-line-clamp: 2;
   }
 
