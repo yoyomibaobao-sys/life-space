@@ -54,7 +54,13 @@ const config: CapacitorConfig = {
       backgroundColor: "#f6f8f3",
     },
     SystemBars: {
-      insetsHandling: "css",
+      // StatusBar.overlaysWebView=false already places this WebView below the
+      // native status bar on Android < 15, while Android 15+ exposes CSS
+      // safe-area env() values. Let adjustResize handle the IME by itself.
+      // Capacitor's CSS inset handler also pads the WebView parent by the IME
+      // height on newer WebViews, which double-applies the keyboard inset and
+      // leaves a keyboard-sized blank panel on some Huawei devices.
+      insetsHandling: "disable",
       style: "LIGHT",
       hidden: false,
       animation: "NONE",
