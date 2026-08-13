@@ -324,6 +324,7 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
   }
 
   html[data-auth-keyboard-open="true"] .app-main {
+    min-height: 0;
     padding-bottom: 0;
   }
 
@@ -332,13 +333,9 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
   }
 
   html[data-auth-keyboard-open="true"] .auth-login-page {
-    height: calc(100dvh - 50px - var(--app-safe-area-top));
-    max-height: none;
     min-height: 0 !important;
     padding: 10px 20px 18px !important;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scroll-padding-block: 16px 24px;
+    overflow: visible !important;
   }
 
   .mobile-app-flex-only {

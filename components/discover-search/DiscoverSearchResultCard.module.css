@@ -59,6 +59,16 @@
   background: linear-gradient(145deg, #edf4e8, #f8faf5);
 }
 
+.mediaCategory {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 1;
+  max-width: calc(100% - 14px);
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .content {
   display: flex;
   flex-direction: column;
@@ -76,6 +86,7 @@
 
 .topRow {
   align-items: flex-start;
+  min-height: 20px;
 }
 
 .badges {
@@ -84,6 +95,10 @@
   gap: 5px;
   min-width: 0;
   overflow: hidden;
+}
+
+.badges:empty {
+  display: none;
 }
 
 .date {
@@ -97,7 +112,7 @@
 .title {
   display: -webkit-box;
   overflow: hidden;
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: #253524;
   font-size: 16px;
   font-weight: 750;
@@ -129,7 +144,7 @@
   margin-top: 4px;
   color: #455443;
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.35;
   word-break: break-word;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -187,7 +202,7 @@
   }
 
   .title {
-    margin-top: 4px;
+    margin-top: 2px;
     font-size: 16px;
     -webkit-line-clamp: 2;
   }

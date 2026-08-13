@@ -47,7 +47,7 @@ type MembershipPaymentRow = {
   service_ends_at: string | null;
 };
 
-type MobileProfileModule = "info" | "membership" | "adminMembership" | "space" | "account";
+type MobileProfileModule = "info" | "membership" | "space" | "account";
 type MobileProfileNavItem = {
   label: string;
   value?: MobileProfileModule;
@@ -82,7 +82,7 @@ export default function ProfilePage() {
     { value: "account", label: t.profile.modules.account },
   ];
   const adminMembershipProfileModule: MobileProfileNavItem = {
-    value: "adminMembership",
+    href: "/admin/memberships",
     label: t.profile.modules.admin_membership,
   };
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -286,16 +286,8 @@ export default function ProfilePage() {
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
   const showInfoModule = mobileProfileModule === "info";
   const showMembershipModule = mobileProfileModule === "membership";
-  const showAdminMembershipModule =
-    isAdmin && mobileProfileModule === "adminMembership";
   const showSpaceModule = mobileProfileModule === "space";
   const showAccountModule = mobileProfileModule === "account";
-
-  useEffect(() => {
-    if (!isAdmin && mobileProfileModule === "adminMembership") {
-      setMobileProfileModule("info");
-    }
-  }, [isAdmin, mobileProfileModule]);
 
   async function refreshStats(targetUserId: string) {
     const data = await loadUserProfileData(supabase, targetUserId);
@@ -579,6 +571,7 @@ export default function ProfilePage() {
           active={mobileProfileModule}
           modules={visibleMobileProfileModules}
           onChange={setMobileProfileModule}
+          compact={isMobileViewport}
         />
 
         {showInfoModule ? (
@@ -805,15 +798,6 @@ export default function ProfilePage() {
           </div>
         </section>
         </>
-        ) : null}
-
-        {showAdminMembershipModule ? (
-        <section style={{ ...statsSectionStyle, ...sectionCompactStyle }}>
-          <Link href="/admin/memberships" style={mobileAdminMembershipEntryStyle}>
-            <span>{t.profile.modules.admin_membership}</span>
-            <small style={mobileAdminMembershipHintStyle}>{t.profile.admin_membership_hint}</small>
-          </Link>
-        </section>
         ) : null}
 
         {showSpaceModule ? (
@@ -1121,23 +1105,38 @@ function MobileProfileModuleTabs({
   active,
   modules,
   onChange,
+  compact,
 }: {
   active: MobileProfileModule;
   modules: MobileProfileNavItem[];
   onChange: (value: MobileProfileModule) => void;
+  compact: boolean;
 }) {
   const { t } = useLanguage();
   return (
     <nav
       style={{
         ...mobileProfileTabsStyle,
-        gridTemplateColumns: `repeat(${modules.length}, minmax(0, 1fr))`,
+        gridTemplateColumns: compact
+          ? "repeat(3, minmax(0, 1fr))"
+          : `repeat(${modules.length}, minmax(0, 1fr))`,
       }}
       aria-label={t.profile.module_aria}
     >
       {modules.map((item) =>
         item.href ? (
-          <Link key={item.href} href={item.href} style={mobileProfileLinkTabStyle}>
+          <Link
+            key={item.href}
+            href={item.href}
+            style={
+              item.href === "/admin/memberships"
+                ? {
+                    ...mobileAdminMembershipEntryStyle,
+                    gridColumn: compact ? "1 / -1" : undefined,
+                  }
+                : mobileProfileLinkTabStyle
+            }
+          >
             {item.label}
           </Link>
         ) : item.value ? (
@@ -1279,7 +1278,6 @@ const mobileProfileShellStyle: CSSProperties = {
 
 const mobileProfileTabsStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
   gap: 6,
   overflowX: "visible",
   margin: "0 0 10px",
@@ -1745,23 +1743,19 @@ const mobileSecondaryLinkStyle: CSSProperties = {
 
 const mobileAdminMembershipEntryStyle: CSSProperties = {
   display: "flex",
-  flexDirection: "column",
-  gap: 4,
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 40,
   border: "1px solid #c9d8be",
-  borderRadius: 13,
+  borderRadius: 11,
   background: "#f3faef",
   color: "#2f5a27",
-  padding: "12px 13px",
+  padding: "0 12px",
   textDecoration: "none",
-  fontSize: 15,
+  fontSize: 13,
   fontWeight: 800,
-};
-
-const mobileAdminMembershipHintStyle: CSSProperties = {
-  color: "#62765b",
-  fontSize: 12,
-  fontWeight: 500,
-  lineHeight: 1.45,
+  lineHeight: 1.2,
+  boxSizing: "border-box",
 };
 
 const mobileProfileActionRowStyle: CSSProperties = {

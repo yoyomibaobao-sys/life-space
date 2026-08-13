@@ -67,6 +67,14 @@ export default function PublicUserProfilePage() {
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [data, setData] = useState<PublicUserProfileData | null>(null);
   const [marketPosts, setMarketPosts] = useState<MarketPostDisplayRow[]>([]);
+  const [viewportWidth, setViewportWidth] = useState(1200);
+
+  useEffect(() => {
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    updateViewportWidth();
+    window.addEventListener("resize", updateViewportWidth);
+    return () => window.removeEventListener("resize", updateViewportWidth);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -136,6 +144,7 @@ export default function PublicUserProfilePage() {
   const profile = data.profile;
   const stats = data.stats;
   const isSelf = viewerId === userId;
+  const isMobileViewport = viewportWidth < 760;
   const accountRegistrationSummary = getAccountRegistrationSummary(
     profile?.account_number,
     language
@@ -221,8 +230,8 @@ export default function PublicUserProfilePage() {
   }
 
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "20px 16px 48px" }}>
-      <div style={{ marginBottom: 12 }}>
+    <main style={isMobileViewport ? mobilePublicProfileMainStyle : publicProfileMainStyle}>
+      <div style={{ marginBottom: isMobileViewport ? 8 : 12 }}>
         <Link href={isSelf ? "/profile" : "/discover"} style={backLinkStyle}>
           <UiIcon name="arrow-left" size={15} />
           {isSelf
@@ -230,19 +239,49 @@ export default function PublicUserProfilePage() {
             : ` ${t.profile.public_profile.back_discover}`}
         </Link>
       </div>
-      <section style={{ ...panelStyle, padding: 18 }}>
-        <div style={profileHeaderStyle}>
-          <div style={profileIdentityStyle}>
+      <section
+        style={{
+          ...panelStyle,
+          ...(isMobileViewport ? mobileProfilePanelStyle : {}),
+          padding: isMobileViewport ? 12 : 18,
+        }}
+      >
+        <div
+          style={{
+            ...profileHeaderStyle,
+            ...(isMobileViewport ? mobileProfileHeaderStyle : {}),
+          }}
+        >
+          <div
+            style={{
+              ...profileIdentityStyle,
+              ...(isMobileViewport ? mobileProfileIdentityStyle : {}),
+            }}
+          >
             <UserAvatar
               avatarUrl={profile.avatar_url ? String(profile.avatar_url) : null}
-              size={64}
-              iconSize={27}
+              size={isMobileViewport ? 52 : 64}
+              iconSize={isMobileViewport ? 22 : 27}
               style={{ border: "1px solid #dfe9db", flexShrink: 0 }}
             />
 
             <div style={{ minWidth: 0 }}>
-              <h1 style={profileNameStyle}>{profile.username || t.profile.unset_username}</h1>
-              <div style={profileRegionStyle}>{formatRegionDisplayFromProfile(profile, language)}</div>
+              <h1
+                style={{
+                  ...profileNameStyle,
+                  ...(isMobileViewport ? mobileProfileNameStyle : {}),
+                }}
+              >
+                {profile.username || t.profile.unset_username}
+              </h1>
+              <div
+                style={{
+                  ...profileRegionStyle,
+                  ...(isMobileViewport ? mobileProfileTextStyle : {}),
+                }}
+              >
+                {formatRegionDisplayFromProfile(profile, language)}
+              </div>
               {profile.account_number ? (
                 <div style={profileAccountStyle}>
                   {t.profile.public_profile.account_number}{profile.account_number}
@@ -256,22 +295,42 @@ export default function PublicUserProfilePage() {
             </div>
           </div>
 
-          <div style={profileActionRowStyle}>
-            <Link href={`/user/${userId}`} style={secondaryLinkStyle}>
+          <div
+            style={{
+              ...profileActionRowStyle,
+              ...(isMobileViewport ? mobileProfileActionRowStyle : {}),
+            }}
+          >
+            <Link
+              href={`/user/${userId}`}
+              style={{
+                ...secondaryLinkStyle,
+                ...(isMobileViewport ? mobileProfileActionTargetStyle : {}),
+              }}
+            >
               {profile.username
                 ? `${t.profile.public_profile.enter_prefix}${profile.username}${t.profile.public_profile.enter_suffix}`
                 : t.profile.space.user_space}
             </Link>
 
             {isSelf ? (
-              <Link href="/profile" style={secondaryLinkStyle}>
+              <Link
+                href="/profile"
+                style={{
+                  ...secondaryLinkStyle,
+                  ...(isMobileViewport ? mobileProfileActionTargetStyle : {}),
+                }}
+              >
                 {t.profile.public_profile.edit_profile}
               </Link>
             ) : (
               <button
                 type="button"
                 onClick={handleFollowToggle}
-                style={primaryButtonStyle}
+                style={{
+                  ...primaryButtonStyle,
+                  ...(isMobileViewport ? mobileProfileActionTargetStyle : {}),
+                }}
               >
                 {submitting
                   ? t.profile.public_profile.processing
@@ -283,14 +342,25 @@ export default function PublicUserProfilePage() {
           </div>
         </div>
 
-        <div style={profileStatsGridStyle}>
-          <MetaItem label={t.profile.public_profile.follows} value={String(stats.followingCount)} />
-          <MetaItem label={t.profile.public_profile.followers} value={String(stats.followerCount)} />
-          <MetaItem label={t.profile.public_profile.public_projects} value={String(stats.publicArchiveCount)} />
-          <MetaItem label={t.profile.public_profile.recent_activity} value={formatProfileDate(stats.latestRecordTime, language)} />
+        <div
+          style={{
+            ...profileStatsGridStyle,
+            ...(isMobileViewport ? mobileProfileStatsGridStyle : {}),
+          }}
+        >
+          <MetaItem compact={isMobileViewport} label={t.profile.public_profile.follows} value={String(stats.followingCount)} />
+          <MetaItem compact={isMobileViewport} label={t.profile.public_profile.followers} value={String(stats.followerCount)} />
+          <MetaItem compact={isMobileViewport} label={t.profile.public_profile.public_projects} value={String(stats.publicArchiveCount)} />
+          <MetaItem compact={isMobileViewport} label={t.profile.public_profile.recent_activity} value={formatProfileDate(stats.latestRecordTime, language)} />
         </div>
 
-        <section style={{ ...panelInnerStyle, marginTop: 16 }}>
+        <section
+          style={{
+            ...panelInnerStyle,
+            ...(isMobileViewport ? mobilePanelInnerStyle : {}),
+            marginTop: isMobileViewport ? 12 : 16,
+          }}
+        >
           <div style={sectionTitleStyle}>{t.profile.public_profile.recent_projects}</div>
 
           {data.recentArchives.length ? (
@@ -302,8 +372,8 @@ export default function PublicUserProfilePage() {
                   style={{
                     textDecoration: "none",
                     border: "1px solid #e5ece1",
-                    borderRadius: 14,
-                    padding: 12,
+                    borderRadius: isMobileViewport ? 11 : 14,
+                    padding: isMobileViewport ? 9 : 12,
                     color: "#22301f",
                     background: "#fff",
                   }}
@@ -345,7 +415,12 @@ export default function PublicUserProfilePage() {
           )}
         </section>
 
-        <section style={marketInfoSectionStyle}>
+        <section
+          style={{
+            ...marketInfoSectionStyle,
+            ...(isMobileViewport ? mobileMarketInfoSectionStyle : {}),
+          }}
+        >
           <div style={marketInfoHeaderStyle}>
             <h2 style={marketInfoTitleStyle}>{t.profile.public_profile.market_info}</h2>
 
@@ -457,20 +532,30 @@ export default function PublicUserProfilePage() {
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function MetaItem({
+  label,
+  value,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+}) {
   return (
     <div
       style={{
         display: "grid",
-        gap: 4,
-        padding: "10px 12px",
+        gap: compact ? 2 : 4,
+        minWidth: 0,
+        minHeight: compact ? 54 : undefined,
+        padding: compact ? "7px 9px" : "10px 12px",
         border: "1px solid #e5ece1",
         borderRadius: 12,
         background: "#f9fcf7",
       }}
     >
-      <span style={{ color: "#74806f", fontSize: 12 }}>{label}</span>
-      <span style={{ color: "#1f2a1f", fontSize: 14, fontWeight: 650 }}>
+      <span style={{ color: "#74806f", fontSize: compact ? 11 : 12 }}>{label}</span>
+      <span style={{ color: "#1f2a1f", fontSize: compact ? 13 : 14, fontWeight: 650, lineHeight: 1.25 }}>
         {value}
       </span>
     </div>
@@ -482,6 +567,28 @@ const panelStyle: CSSProperties = {
   border: "1px solid #e7efe3",
   borderRadius: 20,
   boxShadow: "0 12px 28px rgba(32,56,24,0.06)",
+};
+
+const publicProfileMainStyle: CSSProperties = {
+  maxWidth: 960,
+  margin: "0 auto",
+  padding: "20px 16px 48px",
+};
+
+const mobilePublicProfileMainStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  margin: "0 auto",
+  padding: "9px 8px 88px",
+  boxSizing: "border-box",
+  overflowX: "hidden",
+};
+
+const mobileProfilePanelStyle: CSSProperties = {
+  width: "100%",
+  borderRadius: 16,
+  boxShadow: "0 6px 16px rgba(32,56,24,0.04)",
+  boxSizing: "border-box",
 };
 
 const panelInnerStyle: CSSProperties = {
@@ -508,6 +615,12 @@ const profileHeaderStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
+const mobileProfileHeaderStyle: CSSProperties = {
+  display: "grid",
+  alignItems: "stretch",
+  gap: 12,
+};
+
 const profileIdentityStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -515,11 +628,26 @@ const profileIdentityStyle: CSSProperties = {
   minWidth: 0,
 };
 
+const mobileProfileIdentityStyle: CSSProperties = {
+  alignItems: "flex-start",
+  gap: 10,
+};
+
 const profileNameStyle: CSSProperties = {
   margin: 0,
   color: "#1f2a1f",
   fontSize: 24,
   lineHeight: 1.2,
+};
+
+const mobileProfileNameStyle: CSSProperties = {
+  fontSize: 21,
+};
+
+const mobileProfileTextStyle: CSSProperties = {
+  marginTop: 4,
+  fontSize: 13,
+  lineHeight: 1.35,
 };
 
 const profileRegionStyle: CSSProperties = {
@@ -550,11 +678,40 @@ const profileActionRowStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
+const mobileProfileActionRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  width: "100%",
+  gap: 7,
+};
+
+const mobileProfileActionTargetStyle: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: 38,
+  justifyContent: "center",
+  padding: "7px 8px",
+  boxSizing: "border-box",
+  textAlign: "center",
+  lineHeight: 1.25,
+};
+
 const profileStatsGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
   gap: 8,
   marginTop: 16,
+};
+
+const mobileProfileStatsGridStyle: CSSProperties = {
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 7,
+  marginTop: 12,
+};
+
+const mobilePanelInnerStyle: CSSProperties = {
+  borderRadius: 13,
+  padding: 11,
 };
 
 const sectionTitleStyle: CSSProperties = {
@@ -594,6 +751,12 @@ const marketInfoSectionStyle: CSSProperties = {
   border: "1px solid #efe1c9",
   borderRadius: 18,
   padding: 16,
+};
+
+const mobileMarketInfoSectionStyle: CSSProperties = {
+  marginTop: 12,
+  borderRadius: 14,
+  padding: 11,
 };
 
 const marketInfoHeaderStyle: CSSProperties = {

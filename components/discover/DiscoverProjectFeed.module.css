@@ -2,12 +2,11 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .card {
   min-width: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -31,7 +30,7 @@
 .imageRegion {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 6 / 7;
   overflow: hidden;
   background: #edf2e8;
 }
@@ -117,10 +116,9 @@
 
 .body {
   min-width: 0;
-  flex: 1;
   display: grid;
   align-content: start;
-  padding: 10px 11px 0;
+  padding: 8px 10px 0;
 }
 
 .summary {
@@ -129,7 +127,7 @@
   margin: 0;
   color: #536051;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.35;
   white-space: pre-line;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -140,7 +138,7 @@
   margin-top: 2px;
   color: #919a90;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.25;
   white-space: nowrap;
 }
 
@@ -149,10 +147,10 @@
   gap: 4px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 7px 11px 0;
+  padding: 5px 10px 0;
   color: #778375;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.25;
 }
 
 .metaSegment {
@@ -166,9 +164,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 27px;
-  margin: 7px 11px 11px;
-  padding-top: 7px;
+  min-height: 24px;
+  margin: 5px 10px 9px;
+  padding-top: 5px;
   border-top: 1px solid #edf1eb;
 }
 
@@ -177,7 +175,7 @@
   overflow: hidden;
   color: #8a9488;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -191,7 +189,7 @@
 }
 
 .skeletonImage {
-  aspect-ratio: 1;
+  aspect-ratio: 6 / 7;
   background: #edf1ea;
 }
 
@@ -286,6 +284,11 @@
   .grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
+    align-items: stretch;
+  }
+
+  .card {
+    height: 100%;
   }
 
   .imageRegion {
@@ -293,7 +296,12 @@
   }
 
   .body {
+    flex: 1;
     padding: 12px 12px 0;
+  }
+
+  .skeletonImage {
+    aspect-ratio: 1;
   }
 
   .title {
