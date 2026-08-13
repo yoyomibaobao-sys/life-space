@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 const BUNDLED_ANDROID_APK_NAME = "youshi-cultivation-android-test.apk";
+const BUNDLED_ANDROID_APK_VERSION = "1.0.1";
 const BUNDLED_ANDROID_APK_SIZE = 4_108_758;
 const BUNDLED_ANDROID_APK_PARTS = Array.from(
   { length: 8 },
@@ -12,9 +13,11 @@ const BUNDLED_ANDROID_APK_PARTS = Array.from(
 async function serveBundledAndroidApk(request: Request) {
   try {
     const responses = await Promise.all(
-      BUNDLED_ANDROID_APK_PARTS.map((part) =>
-        fetch(new URL(part, request.url), { cache: "force-cache" }),
-      ),
+      BUNDLED_ANDROID_APK_PARTS.map((part) => {
+        const partUrl = new URL(part, request.url);
+        partUrl.searchParams.set("v", BUNDLED_ANDROID_APK_VERSION);
+        return fetch(partUrl, { cache: "force-cache" });
+      }),
     );
 
     if (responses.some((response) => !response.ok)) {

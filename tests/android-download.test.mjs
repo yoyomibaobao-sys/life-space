@@ -27,6 +27,8 @@ test("Android download keeps environment overrides and assembles its bundled tes
   assert.ok(bundledFallback > environmentOverride);
   assert.match(route, /\{ length: 8 \}/);
   assert.match(route, /\/downloads\/android-test-parts\/part-/);
+  assert.match(route, /BUNDLED_ANDROID_APK_VERSION = "1\.0\.1"/);
+  assert.match(route, /searchParams\.set\("v", BUNDLED_ANDROID_APK_VERSION\)/);
   assert.match(route, /totalSize !== BUNDLED_ANDROID_APK_SIZE/);
   assert.match(route, /application\/vnd\.android\.package-archive/);
   assert.match(route, /Content-Disposition/);
