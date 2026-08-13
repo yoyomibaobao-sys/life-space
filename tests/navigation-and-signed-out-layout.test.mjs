@@ -140,6 +140,11 @@ test("account navigation keeps membership contextual and export under data manag
   assert.match(profile, /value: "membership", label: t\.profile\.modules\.membership/);
   assert.match(profile, /value: "account", label: t\.profile\.modules\.account/);
   assert.match(profile, /<MobileProfileModuleTabs/);
+  assert.match(profile, /href: "\/admin\/memberships"/);
+  assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
+  assert.match(profile, /compact[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(profile, /gridColumn: compact \? "1 \/ -1" : undefined/);
+  assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
   assert.match(profile, /const showInfoModule = mobileProfileModule === "info"/);
   assert.match(profile, /<h2 style=\{dataTitleStyle\}>\{t\.profile\.export_backup\}<\/h2>/);
   assert.match(profile, /\{t\.profile\.export_intro\}/);
@@ -184,10 +189,9 @@ test("mobile account actions, membership copy, and plant names stay compact", as
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(navbar, /href="\/" style=\{mobileMeMenuItemStyle\}/);
   assert.match(navbar, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
-  assert.match(navbar, /style=\{mobileMeLogoutItemStyle\}[\s\S]*?t\.nav\.logout/);
-  assert.doesNotMatch(navbar, /style=\{mobileMeLogoutItemStyle\}[\s\S]*?t\.nav\.logout_full/);
+  assert.match(navbar, /onClick=\{handleLogout\}[\s\S]*?style=\{mobileLogoutButtonStyle\}[\s\S]*?t\.nav\.logout/);
+  assert.doesNotMatch(navbar, /mobileMeMenuOpen|mobileMeMoreButtonStyle|mobileMeMenuStyle/);
 
   assert.doesNotMatch(membership, /t\.membership_page\.business_/);
   assert.match(membership, /mobilePaymentGridStyle/);
@@ -234,18 +238,19 @@ test("mobile market keeps actions out of the global bar and uses readable manage
   assert.match(market, /<option value="all">\{t\.market\.all_categories\}<\/option>/);
   assert.doesNotMatch(market, /mobileFilterLabelStyle/);
   assert.match(market, /mobileFilterControlStyle[\s\S]*?height: 36[\s\S]*?fontSize: 13/);
-  assert.match(market, /cardStyle[\s\S]*?gridTemplateColumns: "104px minmax\(0, 1fr\)"/);
+  assert.match(market, /cardStyle[\s\S]*?gridTemplateColumns: "96px minmax\(0, 1fr\)"/);
+  assert.match(market, /infoValueStyle[\s\S]*?whiteSpace: "nowrap"/);
   assert.doesNotMatch(market, /href="\/market\/new"/);
   assert.match(zhCopy, /intro_mobile: "平台仅发布供需信息，不提供站内交易。"/);
   assert.match(enCopy, /intro_mobile: "Listings only; transactions do not take place in the app\."/);
 
   assert.match(mine, /href="\/market\/new"[\s\S]*?t\.market\.post_information/);
   assert.doesNotMatch(mine, /getMarketPostQuotaHint/);
-  assert.match(mine, /cardMainStyle[\s\S]*?gridTemplateColumns: "120px minmax\(0, 1fr\)"/);
-  assert.match(mine, /WebkitLineClamp: 2/);
+  assert.match(mine, /cardMainStyle[\s\S]*?gridTemplateColumns: "104px minmax\(0, 1fr\)"/);
+  assert.match(mine, /descriptionStyle[\s\S]*?WebkitLineClamp: 1/);
   assert.match(mine, /formatMarketTime\(item\.created_at\)[\s\S]*?views_prefix/);
   assert.match(mine, /actionRowStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(mine, /secondaryLinkStyle[\s\S]*?minHeight: 38/);
+  assert.match(mine, /secondaryLinkStyle[\s\S]*?minHeight: 34/);
 });
 
 test("mobile archive detail only offers Add record to the project owner", async () => {
@@ -334,10 +339,11 @@ test("project archive label, following cards, and discover cards use the refined
   assert.doesNotMatch(discoverCard, /item\.public_comment_count/);
   assert.doesNotMatch(discoverCard, /view_count|浏览/);
   assert.doesNotMatch(discoverCard, /getProjectSystemName|species_name_snapshot/);
-  assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: stretch/);
-  assert.match(discoverCss, /\.body \{[^}]*flex: 1/);
+  assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: start/);
+  assert.doesNotMatch(discoverCss, /^\.body \{[^}]*flex: 1/m);
   assert.match(discoverCss, /\.imageTitleArea \{[\s\S]*?linear-gradient/);
-  assert.match(discoverCss, /\.imageRegion \{[\s\S]*?aspect-ratio: 4 \/ 5/);
+  assert.match(discoverCss, /\.imageRegion \{[\s\S]*?aspect-ratio: 6 \/ 7/);
+  assert.match(discoverCss, /\.summary \{[\s\S]*?line-height: 1\.35/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
   assert.match(discoverFormat, /formatCompactActivityTime as formatDiscoveryActivityTime/);
   assert.match(activityFormat, /formatRecentActivityTime/);
@@ -438,11 +444,13 @@ test("discover search separates three result types with one shared card format",
   );
   assert.match(resultCard, /<CompactActivityTime/);
   assert.match(resultCard, /className=\{styles\.card\}/);
+  assert.match(resultCard, /className=\{styles\.mediaCategory\}>\{category\}/);
   assert.match(resultCard, /sizes="\(max-width: 759px\) 104px, 108px"/);
   assert.match(resultCard, /\{summary \? <div className=\{styles\.summary\}>\{summary\}<\/div> : null\}/);
   assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(resultCardStyles, /\.card\s*\{[\s\S]*grid-template-columns: 108px minmax\(0, 1fr\);[\s\S]*padding: 8px;[\s\S]*border-radius: 14px;/);
   assert.match(resultCardStyles, /\.media\s*\{[\s\S]*width: 108px;[\s\S]*height: 108px;[\s\S]*border-radius: 10px;/);
+  assert.match(resultCardStyles, /\.mediaCategory\s*\{[\s\S]*position: absolute;[\s\S]*top: 7px;[\s\S]*left: 7px;/);
   assert.match(resultCardStyles, /\.summary\s*\{[\s\S]*-webkit-line-clamp: 2;/);
   assert.match(resultCardStyles, /@media \(min-width: 760px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 104px minmax\(0, 1fr\);/);
@@ -472,6 +480,8 @@ test("user navigation opens a compact profile directly and keeps the space entry
 
   assert.match(publicProfile, /<UserAvatar/);
   assert.match(publicProfile, /profileStatsGridStyle/);
+  assert.match(publicProfile, /mobileProfileStatsGridStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(publicProfile, /mobileProfileActionRowStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(publicProfile, /t\.profile\.public_profile\.enter_prefix/);
   assert.match(publicProfile, /t\.profile\.public_profile\.enter_suffix/);
   assert.doesNotMatch(publicProfile, /用户信息页|当前正在进行的交换、赠送、转让或求购信息/);

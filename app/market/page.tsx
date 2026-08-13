@@ -743,8 +743,8 @@ const listStyle: CSSProperties = {
 
 const cardStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "104px minmax(0, 1fr)",
-  gap: 10,
+  gridTemplateColumns: "96px minmax(0, 1fr)",
+  gap: 9,
   textDecoration: "none",
   color: "inherit",
   background: "#fff",
@@ -756,8 +756,8 @@ const cardStyle: CSSProperties = {
 };
 
 const cardImageStyle: CSSProperties = {
-  width: "104px",
-  height: "104px",
+  width: "96px",
+  height: "96px",
   objectFit: "cover",
   borderRadius: 12,
   background: "#f0f4ed",
@@ -765,8 +765,8 @@ const cardImageStyle: CSSProperties = {
 };
 
 const cardImageFallbackStyle: CSSProperties = {
-  width: "104px",
-  height: "104px",
+  width: "96px",
+  height: "96px",
   borderRadius: 12,
   background: "#edf4e8",
   border: "1px solid #e4ece0",
@@ -780,7 +780,7 @@ const cardImageFallbackStyle: CSSProperties = {
 
 const cardContentStyle: CSSProperties = {
   minWidth: 0,
-  minHeight: 104,
+  minHeight: 96,
   display: "flex",
   flexDirection: "column",
 };
@@ -790,22 +790,24 @@ const cardHeaderStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 6,
   alignItems: "flex-start",
-  flexWrap: "wrap",
-  marginBottom: 4,
+  flexWrap: "nowrap",
+  marginBottom: 3,
 };
 
 const badgeRowStyle: CSSProperties = {
   display: "flex",
-  gap: 6,
-  flexWrap: "wrap",
+  gap: 4,
+  minWidth: 0,
+  overflow: "hidden",
+  flexWrap: "nowrap",
 };
 
 const typeBadgeStyle: CSSProperties = {
   borderRadius: 999,
   background: "#edf4e8",
   color: "#4f7b45",
-  padding: "2px 7px",
-  fontSize: 12,
+  padding: "2px 6px",
+  fontSize: 11,
   fontWeight: 700,
 };
 
@@ -813,14 +815,14 @@ const categoryBadgeStyle: CSSProperties = {
   borderRadius: 999,
   background: "#f5f3e8",
   color: "#7a6b35",
-  padding: "2px 7px",
-  fontSize: 12,
+  padding: "2px 6px",
+  fontSize: 11,
   fontWeight: 700,
 };
 
 const timeStyle: CSSProperties = {
   color: "#8a9585",
-  fontSize: 12,
+  fontSize: 11,
   lineHeight: 1.25,
   whiteSpace: "nowrap",
 };
@@ -829,7 +831,7 @@ const cardTitleStyle: CSSProperties = {
   margin: 0,
   color: "#1f2a1f",
   fontSize: 16,
-  lineHeight: 1.3,
+  lineHeight: 1.25,
   fontWeight: 700,
   display: "-webkit-box",
   WebkitLineClamp: 2,
@@ -852,17 +854,17 @@ const infoGridStyle: CSSProperties = {
   display: "grid",
   gap: 1,
   marginTop: "auto",
-  paddingTop: 4,
+  paddingTop: 3,
 };
 
 const infoLineStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "36px minmax(0, 1fr)",
-  gap: 5,
+  gridTemplateColumns: "auto minmax(0, 1fr)",
+  gap: 4,
   alignItems: "baseline",
   color: "#6b7665",
-  fontSize: 13,
-  lineHeight: 1.3,
+  fontSize: 12,
+  lineHeight: 1.25,
 };
 
 const infoLabelStyle: CSSProperties = {
@@ -874,18 +876,16 @@ const infoValueStyle: CSSProperties = {
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
-  whiteSpace: "normal",
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
+  whiteSpace: "nowrap",
 };
 
 const sourceValueStyle: CSSProperties = {
   display: "flex",
   alignItems: "baseline",
-  gap: 4,
-  flexWrap: "wrap",
-  overflow: "visible",
+  gap: 3,
+  flexWrap: "nowrap",
+  overflow: "hidden",
+  whiteSpace: "nowrap",
 };
 
 const sourceUserStyle: CSSProperties = {
@@ -895,6 +895,10 @@ const sourceUserStyle: CSSProperties = {
 };
 
 const sourceArchiveStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
   color: "#2f3a2f",
   fontSize: 12,
   fontWeight: 700,

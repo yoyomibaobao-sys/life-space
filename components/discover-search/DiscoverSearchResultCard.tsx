@@ -62,12 +62,12 @@ export default function DiscoverSearchResultCard({
             <UiIcon name={fallbackIcon} size={27} strokeWidth={1.6} />
           </div>
         )}
+        <div className={styles.mediaCategory}>{category}</div>
       </div>
 
       <div className={styles.content}>
         <div className={styles.topRow}>
           <div className={styles.badges}>
-            {category}
             {status}
           </div>
           {dateValue ? (

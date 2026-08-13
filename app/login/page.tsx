@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
@@ -50,33 +50,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [lastSentTime, setLastSentTime] = useState(0);
   const [showLocalFallback, setShowLocalFallback] = useState(false);
-  const focusTimersRef = useRef<number[]>([]);
   const pageRef = useRef<HTMLElement>(null);
-  const focusedFieldRef = useRef<HTMLInputElement | null>(null);
-
-  const scrollFieldIntoVisibleArea = useCallback(
-    (element?: HTMLInputElement | null) => {
-      const target = element || focusedFieldRef.current;
-      if (!target) return;
-
-      focusedFieldRef.current = target;
-
-      for (const timer of focusTimersRef.current) window.clearTimeout(timer);
-      focusTimersRef.current = [];
-
-      for (const delay of [0, 180, 320]) {
-        const timer = window.setTimeout(() => {
-          target.scrollIntoView({
-            block: "nearest",
-            inline: "nearest",
-            behavior: delay === 0 ? "auto" : "smooth",
-          });
-        }, delay);
-        focusTimersRef.current.push(timer);
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("remember_email");
@@ -87,20 +61,16 @@ export default function LoginPage() {
 
   useEffect(() => {
     return () => {
-      for (const timer of focusTimersRef.current) window.clearTimeout(timer);
-      focusTimersRef.current = [];
       delete document.documentElement.dataset.authKeyboardOpen;
     };
   }, []);
 
-  function keepFieldVisible(element: HTMLInputElement) {
-    focusedFieldRef.current = element;
+  function markKeyboardOpen() {
     document.documentElement.dataset.authKeyboardOpen = "true";
-    scrollFieldIntoVisibleArea(element);
   }
 
   function handleLoginPageBlur() {
-    const timer = window.setTimeout(() => {
+    window.setTimeout(() => {
       const activeElement = document.activeElement;
       const keyboardFieldStillFocused =
         activeElement instanceof HTMLElement &&
@@ -113,7 +83,6 @@ export default function LoginPage() {
         delete document.documentElement.dataset.authKeyboardOpen;
       }
     }, 80);
-    focusTimersRef.current.push(timer);
   }
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
@@ -206,26 +175,27 @@ export default function LoginPage() {
       className="auth-login-page"
       onBlurCapture={handleLoginPageBlur}
       style={{
-        minHeight: "calc(100dvh - 50px - var(--app-safe-area-top))",
         padding: "20px 20px 28px",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
-        overflowY: "auto",
-        scrollPaddingBlock: 24,
+        width: "100%",
+        boxSizing: "border-box",
       }}
     >
-      <div style={{ width: "100%", maxWidth: 360 }}>
+      <div style={{ width: "100%", maxWidth: 360, margin: "0 auto" }}>
         <h1 style={{ margin: "0 0 14px", lineHeight: 1.2 }}>{t.auth.login_title}</h1>
 
         <form onSubmit={handleLogin}>
           <p style={{ margin: "0 0 6px" }}>{t.auth.email}</p>
           <input
+            type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onFocus={(e) => keepFieldVisible(e.currentTarget)}
+            onFocus={markKeyboardOpen}
             placeholder={t.auth.email_placeholder}
             autoComplete="email"
+            autoCapitalize="none"
+            inputMode="email"
+            enterKeyHint="next"
+            spellCheck={false}
             style={{
               padding: "11px 12px",
               width: "100%",
@@ -239,7 +209,7 @@ export default function LoginPage() {
           <PasswordInput
             value={password}
             onChange={setPassword}
-            onFocus={keepFieldVisible}
+            onFocus={markKeyboardOpen}
           />
 
           <div style={{ marginTop: 10, fontSize: 12 }}>

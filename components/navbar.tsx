@@ -32,7 +32,6 @@ export default function Navbar() {
   const [mobileTitle, setMobileTitle] = useState("");
   const [mobileArchiveTitleInfo, setMobileArchiveTitleInfo] =
     useState<MobileArchiveTitleInfo>(null);
-  const [mobileMeMenuOpen, setMobileMeMenuOpen] = useState(false);
   const [mobilePlantMenuOpen, setMobilePlantMenuOpen] = useState(false);
   const [desktopDiscoverTab, setDesktopDiscoverTab] = useState<
     "feed" | "following"
@@ -209,7 +208,6 @@ export default function Navbar() {
     const timeoutId = window.setTimeout(() => {
       if (cancelled) return;
 
-      setMobileMeMenuOpen(false);
       setMobilePlantMenuOpen(false);
       setMobileArchiveTitleInfo(null);
 
@@ -353,30 +351,14 @@ export default function Navbar() {
                 ) : null}
               </div>
             ) : user && isMobileMePath(pathname) ? (
-              <div style={mobileMeMenuWrapStyle}>
-                <button
-                  type="button"
-                  onClick={() => setMobileMeMenuOpen((open) => !open)}
-                  aria-label={t.nav.more_account_actions}
-                  style={mobileMeMoreButtonStyle}
-                >
-                  <UiIcon name="more" size={20} />
-                </button>
-                {mobileMeMenuOpen ? (
-                  <div style={mobileMeMenuStyle}>
-                    <Link href="/" style={mobileMeMenuItemStyle}>
-                      {t.nav.home}
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      style={mobileMeLogoutItemStyle}
-                    >
-                      {t.nav.logout}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                aria-label={t.nav.logout}
+                style={mobileLogoutButtonStyle}
+              >
+                {t.nav.logout}
+              </button>
             ) : canShowMobileCreateAction ? (
               <Link
                 href={getMobileCreateHref(pathname, true)}
@@ -892,65 +874,22 @@ const mobilePlantMenuItemStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const mobileMeMenuWrapStyle: CSSProperties = {
-  position: "relative",
-  display: "inline-flex",
-  flexShrink: 0,
-};
-
-const mobileMeMoreButtonStyle: CSSProperties = {
-  width: 34,
+const mobileLogoutButtonStyle: CSSProperties = {
   height: 34,
   borderRadius: 999,
-  border: "1px solid #dfe8da",
-  background: "#fff",
-  color: "#52634e",
-  fontSize: 20,
+  border: "1px solid #ead8d3",
+  background: "#fff8f6",
+  color: "#a94435",
+  padding: "0 12px",
+  fontSize: 13,
+  fontWeight: 800,
   lineHeight: 1,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   cursor: "pointer",
-};
-
-const mobileMeMenuStyle: CSSProperties = {
-  position: "absolute",
-  top: "calc(100% + 8px)",
-  right: 0,
-  zIndex: 140,
-  width: 112,
-  border: "1px solid #e6ebdf",
-  borderRadius: 12,
-  background: "#fff",
-  boxShadow: "0 14px 30px rgba(39, 58, 34, 0.16)",
-  padding: 5,
-};
-
-const mobileMeMenuItemStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  width: "100%",
-  minHeight: 34,
-  borderRadius: 9,
-  color: "#40583a",
-  fontSize: 13,
-  fontWeight: 800,
-  textDecoration: "none",
-  padding: "0 9px",
-};
-
-const mobileMeLogoutItemStyle: CSSProperties = {
-  width: "100%",
-  minHeight: 34,
-  border: "none",
-  borderRadius: 9,
-  background: "transparent",
-  color: "#b23a2d",
-  fontSize: 13,
-  fontWeight: 800,
-  textAlign: "left",
-  padding: "0 9px",
-  cursor: "pointer",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 const mobileLoginActionStyle: CSSProperties = {

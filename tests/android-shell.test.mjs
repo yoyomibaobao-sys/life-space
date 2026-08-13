@@ -71,8 +71,7 @@ test("Android login relies on native resize without adding a second keyboard vie
   assert.doesNotMatch(login, /Keyboard\.addListener/);
   assert.doesNotMatch(login, /visualViewport/);
   assert.doesNotMatch(login, /--auth-visible-viewport-height/);
-  assert.match(login, /scrollFieldIntoVisibleArea/);
-  assert.match(login, /scrollIntoView\(\{[\s\S]*?block: "nearest"/);
+  assert.doesNotMatch(login, /scrollFieldIntoVisibleArea|scrollIntoView\(/);
   assert.match(login, /authKeyboardOpen/);
   assert.match(login, /onBlurCapture=\{handleLoginPageBlur\}/);
   assert.match(navbar, /data-mobile-bottom-nav="true"/);
@@ -81,10 +80,9 @@ test("Android login relies on native resize without adding a second keyboard vie
     /data-auth-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/,
   );
   assert.match(globals, /data-auth-keyboard-open="true"[\s\S]*\.auth-login-page/);
-  assert.match(
-    globals,
-    /\.auth-login-page \{[\s\S]*?height: calc\(100dvh - 50px - var\(--app-safe-area-top\)\)/,
-  );
+  assert.match(globals, /\.auth-login-page \{[\s\S]*?min-height: 0 !important;[\s\S]*?overflow: visible !important/);
+  assert.doesNotMatch(globals, /\.auth-login-page \{[\s\S]*?height: calc\(100dvh/);
+  assert.doesNotMatch(login, /minHeight: "calc\(100dvh|overflowY: "auto"/);
   assert.doesNotMatch(globals, /--auth-visible-viewport-height|max\(\s*260px/);
   assert.doesNotMatch(
     globals,
