@@ -60,24 +60,32 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   assert.match(nativeSystemUi, /setAppearanceLightStatusBars\(darkIcons\)/);
 });
 
-test("Android login keeps focused fields above the software keyboard", () => {
+test("Android login relies on native resize without adding a second keyboard viewport", () => {
   const config = read("capacitor.config.ts");
   const login = read("app/login/page.tsx");
   const navbar = read("components/navbar.tsx");
   const globals = read("app/globals.css");
 
   assert.match(config, /Keyboard:[\s\S]*resizeOnFullScreen: true/);
-  assert.match(login, /Keyboard\.addListener\("keyboardWillShow"/);
-  assert.match(login, /visualViewport/);
+  assert.doesNotMatch(login, /@capacitor\/keyboard/);
+  assert.doesNotMatch(login, /Keyboard\.addListener/);
+  assert.doesNotMatch(login, /visualViewport/);
+  assert.doesNotMatch(login, /--auth-visible-viewport-height/);
   assert.match(login, /scrollFieldIntoVisibleArea/);
-  assert.match(login, /--auth-visible-viewport-height/);
+  assert.match(login, /scrollIntoView\(\{[\s\S]*?block: "nearest"/);
   assert.match(login, /authKeyboardOpen/);
+  assert.match(login, /onBlurCapture=\{handleLoginPageBlur\}/);
   assert.match(navbar, /data-mobile-bottom-nav="true"/);
   assert.match(
     globals,
     /data-auth-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/,
   );
   assert.match(globals, /data-auth-keyboard-open="true"[\s\S]*\.auth-login-page/);
+  assert.match(
+    globals,
+    /\.auth-login-page \{[\s\S]*?height: calc\(100dvh - 50px - var\(--app-safe-area-top\)\)/,
+  );
+  assert.doesNotMatch(globals, /--auth-visible-viewport-height|max\(\s*260px/);
   assert.doesNotMatch(
     globals,
     /data-auth-keyboard-open="true"[^}]*body[^}]*overflow: hidden/,

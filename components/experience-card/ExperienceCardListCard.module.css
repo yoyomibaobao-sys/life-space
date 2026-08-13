@@ -112,24 +112,24 @@
 
 @media (max-width: 520px) {
   .card {
-    grid-template-columns: 94px minmax(0, 1fr);
+    grid-template-columns: 104px minmax(0, 1fr);
     gap: 10px;
-    min-height: 110px;
+    min-height: 124px;
     padding: 8px;
   }
 
   .card > a:first-child {
-    width: 94px;
-    height: 94px;
+    width: 104px;
+    height: 104px;
   }
 
   .content {
-    min-height: 94px;
+    min-height: 104px;
     padding: 0;
   }
 
   .title {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .headerRow {
@@ -137,7 +137,7 @@
   }
 
   .statusRow {
-    font-size: 11.5px;
+    font-size: 12px;
   }
 
   .footer {

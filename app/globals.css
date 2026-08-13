@@ -24,8 +24,6 @@
   --page-max: 1040px;
   --page-pad-x: 16px;
   --app-status-bar-background: #f6f8f3;
-  --auth-keyboard-height: 0px;
-  --auth-visible-viewport-height: 100dvh;
   --app-safe-area-top: var(
     --safe-area-inset-top,
     env(safe-area-inset-top, 0px)
@@ -316,7 +314,7 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
   }
 
   body {
-    font-size: 15px;
+    font-size: 16px;
     overscroll-behavior-x: none;
   }
 
@@ -334,20 +332,8 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
   }
 
   html[data-auth-keyboard-open="true"] .auth-login-page {
-    height: max(
-      260px,
-      calc(
-        var(--auth-visible-viewport-height) - 50px -
-          var(--app-safe-area-top)
-      )
-    );
-    max-height: max(
-      260px,
-      calc(
-        var(--auth-visible-viewport-height) - 50px -
-          var(--app-safe-area-top)
-      )
-    );
+    height: calc(100dvh - 50px - var(--app-safe-area-top));
+    max-height: none;
     min-height: 0 !important;
     padding: 10px 20px 18px !important;
     overflow-y: auto;

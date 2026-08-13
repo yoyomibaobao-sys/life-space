@@ -11,6 +11,8 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
 
 type MobileArchiveTitleInfo = {
+  archiveId: string;
+  ownerId: string;
   title: string;
   systemName: string;
   href: string | null;
@@ -179,7 +181,7 @@ export default function Navbar() {
 
       const { data } = await supabase
         .from("archives")
-        .select("title, category, species_id, species_name_snapshot, system_name")
+        .select("title, category, species_id, species_name_snapshot, system_name, user_id")
         .eq("id", archiveId)
         .maybeSingle();
 
@@ -192,6 +194,8 @@ export default function Navbar() {
 
         setMobileTitle(title);
         setMobileArchiveTitleInfo({
+          archiveId,
+          ownerId: String(data?.user_id || ""),
           title,
           systemName,
           href:
@@ -222,12 +226,21 @@ export default function Navbar() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [pathname, t.nav]);
+  }, [pathname, t.nav, user?.id]);
 
   async function handleLogout() {
     await supabase.auth.signOut({ scope: "local" });
     router.push("/login");
   }
+
+  const archiveDetailPath = getArchiveDetailPath(pathname);
+  const canShowMobileCreateAction = Boolean(
+    user &&
+      shouldShowMobileCreateAction(pathname) &&
+      (!archiveDetailPath ||
+        (mobileArchiveTitleInfo?.archiveId === archiveDetailPath.split("/").pop() &&
+          mobileArchiveTitleInfo?.ownerId === user.id)),
+  );
 
   function isActive(path: string) {
     return pathname === path || pathname.startsWith(`${path}/`);
@@ -364,7 +377,7 @@ export default function Navbar() {
                   </div>
                 ) : null}
               </div>
-            ) : user && shouldShowMobileCreateAction(pathname) ? (
+            ) : canShowMobileCreateAction ? (
               <Link
                 href={getMobileCreateHref(pathname, true)}
                 style={mobileCreateButtonStyle}

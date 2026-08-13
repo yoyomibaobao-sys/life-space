@@ -53,7 +53,7 @@ export default function DiscoverSearchResultCard({
             fill
             unoptimized
             loading="lazy"
-            sizes="(max-width: 759px) 106px, 108px"
+            sizes="(max-width: 759px) 104px, 108px"
             className={styles.image}
             onError={() => setImageFailed(true)}
           />

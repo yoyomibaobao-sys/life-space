@@ -215,7 +215,7 @@ test("signed-out market does not repeat login and registration actions inside th
   assert.match(enCopy, /my_posts: "My posts"/);
 });
 
-test("mobile market keeps actions out of the global bar and uses compact management cards", async () => {
+test("mobile market keeps actions out of the global bar and uses readable management cards", async () => {
   const [navbar, market, mine, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
     source("app/market/page.tsx"),
@@ -231,16 +231,31 @@ test("mobile market keeps actions out of the global bar and uses compact managem
   assert.match(market, /href="\/market\/mine"[\s\S]*?t\.market\.my_posts/);
   assert.match(market, /mobileHeaderStyle[\s\S]*?display: "flex"/);
   assert.match(market, /mobileFilterTopGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(market, /<option value="all">\{t\.market\.all_categories\}<\/option>/);
+  assert.doesNotMatch(market, /mobileFilterLabelStyle/);
+  assert.match(market, /mobileFilterControlStyle[\s\S]*?height: 36[\s\S]*?fontSize: 13/);
+  assert.match(market, /cardStyle[\s\S]*?gridTemplateColumns: "104px minmax\(0, 1fr\)"/);
   assert.doesNotMatch(market, /href="\/market\/new"/);
   assert.match(zhCopy, /intro_mobile: "平台仅发布供需信息，不提供站内交易。"/);
   assert.match(enCopy, /intro_mobile: "Listings only; transactions do not take place in the app\."/);
 
   assert.match(mine, /href="\/market\/new"[\s\S]*?t\.market\.post_information/);
   assert.doesNotMatch(mine, /getMarketPostQuotaHint/);
-  assert.match(mine, /gridTemplateColumns: "112px minmax\(0, 1fr\)"/);
+  assert.match(mine, /cardMainStyle[\s\S]*?gridTemplateColumns: "120px minmax\(0, 1fr\)"/);
   assert.match(mine, /WebkitLineClamp: 2/);
   assert.match(mine, /formatMarketTime\(item\.created_at\)[\s\S]*?views_prefix/);
-  assert.match(mine, /marginTop: "auto"/);
+  assert.match(mine, /actionRowStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(mine, /secondaryLinkStyle[\s\S]*?minHeight: 38/);
+});
+
+test("mobile archive detail only offers Add record to the project owner", async () => {
+  const navbar = await source("components/navbar.tsx");
+
+  assert.match(navbar, /select\("title, category, species_id, species_name_snapshot, system_name, user_id"\)/);
+  assert.match(navbar, /ownerId: String\(data\?\.user_id \|\| ""\)/);
+  assert.match(navbar, /const canShowMobileCreateAction = Boolean/);
+  assert.match(navbar, /mobileArchiveTitleInfo\?\.ownerId === user\.id/);
+  assert.match(navbar, /\) : canShowMobileCreateAction \? \(/);
 });
 
 test("signed-out home uses a compact viewport-oriented layout", async () => {
@@ -307,7 +322,7 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(followedCard, /<ProjectMetaLine/);
   assert.match(followedCard, /<CompactActivityTime/);
   assert.doesNotMatch(followedCard, /更新 ·|最新：/);
-  assert.match(followedCss, /\.body \{[\s\S]*?height: 88px/);
+  assert.match(followedCss, /\.body \{[\s\S]*?height: 104px/);
 
   assert.match(discoverCard, /className=\{styles\.imageTitleArea\}/);
   assert.ok(
@@ -322,6 +337,7 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: stretch/);
   assert.match(discoverCss, /\.body \{[^}]*flex: 1/);
   assert.match(discoverCss, /\.imageTitleArea \{[\s\S]*?linear-gradient/);
+  assert.match(discoverCss, /\.imageRegion \{[\s\S]*?aspect-ratio: 4 \/ 5/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
   assert.match(discoverFormat, /formatCompactActivityTime as formatDiscoveryActivityTime/);
   assert.match(activityFormat, /formatRecentActivityTime/);
@@ -399,6 +415,12 @@ test("discover search separates three result types with one shared card format",
   assert.match(page, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(form, /searchKind === "records"/);
   assert.match(form, /mobileGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(form, /t\.discover\.search_ui\.all_categories/);
+  assert.match(form, /t\.discover\.search_ui\.region_short_placeholder/);
+  assert.match(form, /mobileKeywordPlaceholder/);
+  assert.match(form, /mobileRecordOptionsStyle/);
+  assert.match(zhCopy, /all_categories: "全部类别"/);
+  assert.match(zhCopy, /region_short_placeholder: "地区"/);
   assert.doesNotMatch(form, /按地区匹配公开/);
   assert.match(results, /kind === "projects"[\s\S]*?projectItems\.map[\s\S]*?<DiscoverSearchResultCard/);
   assert.match(results, /kind === "experience"[\s\S]*?experienceItems\.map[\s\S]*?<DiscoverSearchResultCard/);
@@ -416,15 +438,15 @@ test("discover search separates three result types with one shared card format",
   );
   assert.match(resultCard, /<CompactActivityTime/);
   assert.match(resultCard, /className=\{styles\.card\}/);
-  assert.match(resultCard, /sizes="\(max-width: 759px\) 106px, 108px"/);
+  assert.match(resultCard, /sizes="\(max-width: 759px\) 104px, 108px"/);
   assert.match(resultCard, /\{summary \? <div className=\{styles\.summary\}>\{summary\}<\/div> : null\}/);
   assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(resultCardStyles, /\.card\s*\{[\s\S]*grid-template-columns: 108px minmax\(0, 1fr\);[\s\S]*padding: 8px;[\s\S]*border-radius: 14px;/);
   assert.match(resultCardStyles, /\.media\s*\{[\s\S]*width: 108px;[\s\S]*height: 108px;[\s\S]*border-radius: 10px;/);
   assert.match(resultCardStyles, /\.summary\s*\{[\s\S]*-webkit-line-clamp: 2;/);
   assert.match(resultCardStyles, /@media \(min-width: 760px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 106px minmax\(0, 1fr\);/);
-  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.media \{[\s\S]*height: auto;[\s\S]*align-self: stretch;/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 104px minmax\(0, 1fr\);/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.media \{[\s\S]*width: 104px;[\s\S]*height: 104px;[\s\S]*align-self: start;/);
   assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.footer \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(data, /\.from\("discovery_project_feed_view"\)/);
   assert.match(data, /hydrateExperienceCardListItems/);
