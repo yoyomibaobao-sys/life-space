@@ -416,7 +416,7 @@ test("experience cards have a persistent personal-space entry", async () => {
   assert.match(profile, /value: "space", label: t\.profile\.modules\.space/);
   assert.match(
     navbar,
-    /isPathActive\(pathname, "\/archive"\)[\s\S]*?isPathActive\(pathname, "\/experience-cards"\)/
+    /isPersonalExperiencePath[\s\S]*?pathname === "\/experience-cards"/
   );
   assert.match(navbar, /pathname\.startsWith\("\/experience-cards"\)/);
   assert.match(navbar, /\{t\.nav\.following\}/);
@@ -509,7 +509,7 @@ test("experience card interactions use private collections and restrained helpfu
   assert.match(interactions, /experience_card_comments/);
   assert.match(interactions, /id="experience-card-interactions"/);
   assert.match(interactions, /\{t\.experience\.write_comment\}/);
-  assert.match(interactions, /href=\{currentUserId \? "\/membership" : "\/login"\}/);
+  assert.match(interactions, /href=\{\s*currentUserId[\s\S]*?buildLoginHref\(getCurrentInternalPath\(\)\)/);
   assert.doesNotMatch(interactions, /if \(!available\) return null/);
   assert.match(detail, /<ExperienceCardInteractions/);
   assert.doesNotMatch(detail, /<ExperienceCardEditor/);
@@ -651,7 +651,7 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
       source("components/discover/DiscoverProjectFeed.module.css"),
     ]);
 
-  assert.match(guide, /href=\{isSignedIn \? "\/archive\/interests" : "\/login"\}/);
+  assert.match(guide, /buildLoginHref\("\/archive\/interests"\)/);
   assert.match(guide, /\{t\.plant\.my_saved\}\{isSignedIn && interestCount !== null/);
   assert.match(guide, /from\("user_plant_interests"\)[\s\S]*?count: "exact", head: true/);
   assert.match(guide, /placeholder=\{t\.plant\.search_placeholder\}/);

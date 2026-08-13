@@ -30,6 +30,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 const RECORD_SELECT = [
@@ -247,7 +248,7 @@ export default function ExperienceCardEditor({
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.replace("/login");
+        router.replace(buildLoginHref(getCurrentInternalPath()));
         return;
       }
 

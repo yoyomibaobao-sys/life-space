@@ -22,6 +22,7 @@ import {
 } from "@/lib/membership";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref } from "@/lib/auth-return";
 
 type StatusFilter = "all" | MarketPostStatus;
 
@@ -69,7 +70,7 @@ export default function MyMarketPostsPage() {
       } = await supabase.auth.getUser();
 
       if (error || !user) {
-        router.push("/login");
+        router.push(buildLoginHref("/market/mine"));
         return;
       }
 

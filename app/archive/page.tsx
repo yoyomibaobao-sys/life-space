@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { buildLoginHref } from "@/lib/auth-return";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
@@ -1268,7 +1269,7 @@ export default function ArchivePage() {
     }
 
     if (!currentOwnerContext?.userId) {
-      router.push("/login");
+      router.push(buildLoginHref("/archive"));
       return;
     }
 

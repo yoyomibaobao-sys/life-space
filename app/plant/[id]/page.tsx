@@ -24,6 +24,7 @@ import {
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
 import type { TranslationDictionary } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import type {
   ActionMessage,
   PlantAliasRow,
@@ -1573,7 +1574,7 @@ export default function PlantDetailPage() {
       setActionMessage({
         type: "error",
         text: copy.login_before_interest,
-        href: "/login",
+        href: buildLoginHref(getCurrentInternalPath()),
         hrefText: copy.go_login,
       });
       return;
@@ -1587,7 +1588,7 @@ export default function PlantDetailPage() {
       setActionMessage({
         type: "error",
         text: copy.login_before_interest,
-        href: "/login",
+        href: buildLoginHref(getCurrentInternalPath()),
         hrefText: copy.go_login,
       });
       return;
@@ -1647,7 +1648,7 @@ export default function PlantDetailPage() {
       setActionMessage({
         type: "error",
         text: copy.login_before_plan,
-        href: "/login",
+        href: buildLoginHref(getCurrentInternalPath()),
         hrefText: copy.go_login,
       });
       return;
@@ -1661,7 +1662,7 @@ export default function PlantDetailPage() {
       setActionMessage({
         type: "error",
         text: copy.login_before_plan,
-        href: "/login",
+        href: buildLoginHref(getCurrentInternalPath()),
         hrefText: copy.go_login,
       });
       return;

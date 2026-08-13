@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useRef, useState, type CSSProperties, type
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import {
   createImageThumbnailFile,
   standardizeRecordPhotoFile,
@@ -1192,7 +1193,7 @@ saveRecentArchiveBrowse({
     } = await supabase.auth.getUser();
 
     if (!user) {
-      window.location.href = "/login";
+      window.location.href = buildLoginHref(getCurrentInternalPath());
       return;
     }
 
@@ -1238,7 +1239,7 @@ saveRecentArchiveBrowse({
     } = await supabase.auth.getUser();
 
     if (!user) {
-      window.location.href = "/login";
+      window.location.href = buildLoginHref(getCurrentInternalPath());
       return;
     }
 

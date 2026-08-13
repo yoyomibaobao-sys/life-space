@@ -8,6 +8,7 @@ import type { SupabaseUser } from "@/lib/domain-types";
 import UiIcon from "@/components/ui/UiIcon";
 import { formatPreciseDateTime } from "@/lib/date-time";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref } from "@/lib/auth-return";
 
 type NotificationItem = {
   id: string;
@@ -37,7 +38,7 @@ export default function NotificationsPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/login");
+        router.push(buildLoginHref("/notifications"));
         return;
       }
 

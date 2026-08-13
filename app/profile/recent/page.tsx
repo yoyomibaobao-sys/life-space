@@ -15,6 +15,7 @@ import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import UiIcon from "@/components/ui/UiIcon";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref } from "@/lib/auth-return";
 
 type RecentArchiveRow = {
   id: string;
@@ -51,7 +52,7 @@ export default function RecentBrowsePage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/login");
+        router.push(buildLoginHref("/profile/recent"));
         return;
       }
 

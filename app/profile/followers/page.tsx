@@ -5,6 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
+import { buildLoginHref } from "@/lib/auth-return";
 import {
   buttonRowStyle,
   cardBodyStyle,
@@ -69,7 +70,7 @@ export default function FollowersPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        router.push("/login");
+        router.push(buildLoginHref("/profile/followers"));
         return;
       }
 

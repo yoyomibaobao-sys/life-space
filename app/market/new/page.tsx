@@ -12,6 +12,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { formatPreciseDateTime } from "@/lib/date-time";
+import { buildLoginHref } from "@/lib/auth-return";
 import {
   getMarketItemCategoryOptions,
   getMarketPostTypeOptions,
@@ -139,7 +140,7 @@ function NewMarketPostPageContent() {
       } = await supabase.auth.getUser();
 
       if (error || !user) {
-        router.push("/login");
+        router.push(buildLoginHref("/market/new"));
         return;
       }
 
