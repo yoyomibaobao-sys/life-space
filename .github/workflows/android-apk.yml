@@ -10,12 +10,24 @@ on:
       version_code:
         description: Monotonically increasing Android version code
         required: false
-        default: "1"
+        default: "2"
       version_name:
         description: User-facing Android version
         required: false
-        default: 1.0.0
+        default: 1.0.1
   push:
+    branches:
+      - main
+    paths:
+      - "android/**"
+      - "mobile-shell/**"
+      - "capacitor.config.ts"
+      - "components/MobileBackNavigation.tsx"
+      - "components/StatusBarTheme.tsx"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
     paths:
       - "android/**"
       - "mobile-shell/**"
@@ -35,8 +47,8 @@ jobs:
     timeout-minutes: 30
     env:
       CAPACITOR_SERVER_URL: ${{ inputs.server_url || 'https://life-space-mobile-ui-polish.vercel.app' }}
-      ANDROID_VERSION_CODE: ${{ inputs.version_code || '1' }}
-      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.0' }}
+      ANDROID_VERSION_CODE: ${{ inputs.version_code || '2' }}
+      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.1' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}

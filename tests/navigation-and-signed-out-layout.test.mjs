@@ -173,10 +173,10 @@ test("account navigation keeps membership contextual and export under data manag
   assert.match(zhCopy, /membership_description: "本地免费使用，云会员可云端保存与公开互动"/);
   assert.match(
     home,
-    /href=\{currentUserId \? "\/archive" : "\/register"\}[\s\S]*?t\.home\.enter_my_space[\s\S]*?href="\/api\/download\/android"[\s\S]*?href="\/discover"/
+    /href=\{currentUserId \? "\/archive" : "\/register"\}[\s\S]*?t\.home\.enter_my_space[\s\S]*?isNativeApp === false[\s\S]*?href="\/api\/download\/android"[\s\S]*?href="\/discover"/
   );
   assert.match(home, /session\?\.user && Capacitor\.isNativePlatform\(\)/);
-  assert.match(login, /href="\/api\/download\/android"/);
+  assert.match(login, /isNativeApp === false[\s\S]*?href="\/api\/download\/android"/);
   assert.match(home, /membershipLinkArrowStyle/);
   assert.match(navbar, /href="\/login"[\s\S]*?t\.nav\.login/);
 });

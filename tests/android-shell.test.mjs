@@ -65,8 +65,9 @@ test("Android login relies on native resize without adding a second keyboard vie
   const login = read("app/login/page.tsx");
   const navbar = read("components/navbar.tsx");
   const globals = read("app/globals.css");
+  const nativePlatformHook = read("lib/capacitor/useIsNativeApp.ts");
 
-  assert.match(config, /Keyboard:[\s\S]*resizeOnFullScreen: true/);
+  assert.match(config, /Keyboard:[\s\S]*resizeOnFullScreen: false/);
   assert.doesNotMatch(login, /@capacitor\/keyboard/);
   assert.doesNotMatch(login, /Keyboard\.addListener/);
   assert.doesNotMatch(login, /visualViewport/);
@@ -88,6 +89,10 @@ test("Android login relies on native resize without adding a second keyboard vie
     globals,
     /data-auth-keyboard-open="true"[^}]*body[^}]*overflow: hidden/,
   );
+  assert.match(login, /useIsNativeApp\(\)/);
+  assert.match(nativePlatformHook, /Capacitor\.isNativePlatform\(\)/);
+  assert.match(nativePlatformHook, /useSyncExternalStore/);
+  assert.match(login, /isNativeApp === false[\s\S]*?href="\/api\/download\/android"/);
 });
 
 test("mobile Market lightbox requests the dark native status bar", () => {
@@ -113,6 +118,7 @@ test("native Android back closes overlays before route navigation and exits only
 
 test("release signing is environment-only and local records are excluded from Android backup", () => {
   const gradle = read("android/app/build.gradle");
+  const workflow = read(".github/workflows/android-apk.yml");
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const ignore = read("android/.gitignore");
 
@@ -121,6 +127,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '2'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.1'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '2' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.1' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);

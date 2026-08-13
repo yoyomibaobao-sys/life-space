@@ -42,7 +42,11 @@ const config: CapacitorConfig = {
       disableBackButtonHandler: false,
     },
     Keyboard: {
-      resizeOnFullScreen: true,
+      // The status bar does not overlay this WebView, so Android's
+      // adjustResize is the single source of truth for the keyboard height.
+      // Enabling the full-screen workaround here causes a second resize on
+      // some Huawei keyboards and leaves a large blank panel above the IME.
+      resizeOnFullScreen: false,
     },
     StatusBar: {
       overlaysWebView: false,

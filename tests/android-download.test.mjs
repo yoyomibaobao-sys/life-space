@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -34,4 +35,21 @@ test("Android download keeps environment overrides and assembles its bundled tes
   assert.match(route, /serveBundledAndroidApk\(request\)/);
   assert.match(zh, /download_android: "下载 Android 测试版"/);
   assert.match(checksum, /^[a-f0-9]{64}\s+youshi-cultivation-android-test\.apk\s*$/);
+
+  const apk = Buffer.concat(
+    Array.from({ length: 8 }, (_, index) =>
+      fs.readFileSync(
+        path.join(
+          root,
+          "public/downloads/android-test-parts",
+          `part-${String(index).padStart(2, "0")}`,
+        ),
+      ),
+    ),
+  );
+  const expectedHash = checksum.trim().split(/\s+/)[0];
+  const actualHash = crypto.createHash("sha256").update(apk).digest("hex");
+
+  assert.equal(apk.byteLength, 4_108_758);
+  assert.equal(actualHash, expectedHash);
 });

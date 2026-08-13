@@ -6,16 +6,19 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import UiIcon from "@/components/ui/UiIcon";
+import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function Home() {
   const router = useRouter();
   const { t } = useLanguage();
+  const isNativeApp = useIsNativeApp();
   const [checkingSession, setCheckingSession] = useState(true);
   const [currentUserId, setCurrentUserId] = useState("");
 
   useEffect(() => {
     let mounted = true;
+    const nativeApp = Capacitor.isNativePlatform();
 
     async function checkSession() {
       const {
@@ -23,7 +26,7 @@ export default function Home() {
       } = await supabase.auth.getSession();
 
       if (!mounted) return;
-      if (session?.user && Capacitor.isNativePlatform()) {
+      if (session?.user && nativeApp) {
         router.replace("/archive");
         return;
       }
@@ -88,7 +91,11 @@ export default function Home() {
             <Link href={currentUserId ? "/archive" : "/register"} style={primaryActionStyle}>
               {currentUserId ? t.home.enter_my_space : t.register}
             </Link>
-            <Link href="/api/download/android" style={downloadActionStyle}>{t.home.download_android}</Link>
+            {isNativeApp === false ? (
+              <Link href="/api/download/android" style={downloadActionStyle}>
+                {t.home.download_android}
+              </Link>
+            ) : null}
             <Link href="/discover" style={softActionStyle}>{t.home.browse_discover}</Link>
           </div>
           <Link href="/membership" style={membershipLinkStyle}>
