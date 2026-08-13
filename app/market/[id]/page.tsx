@@ -78,6 +78,17 @@ export default function MarketDetailPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
 
   useEffect(() => {
     async function init() {
@@ -513,6 +524,7 @@ export default function MarketDetailPage() {
         <ArchiveLightbox
           images={lightboxImages}
           index={lightboxIndex}
+          isMobileViewport={isMobileViewport}
           onChange={setLightboxIndex}
           onClose={() => {
             setLightboxImages([]);

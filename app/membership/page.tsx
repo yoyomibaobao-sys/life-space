@@ -22,6 +22,17 @@ export default function MembershipPage() {
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [membershipLoadFailed, setMembershipLoadFailed] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    function updateViewportMode() {
+      setIsMobileViewport(window.innerWidth < 760);
+    }
+
+    updateViewportMode();
+    window.addEventListener("resize", updateViewportMode);
+    return () => window.removeEventListener("resize", updateViewportMode);
+  }, []);
 
   useEffect(() => {
     async function loadMembership() {
@@ -88,19 +99,19 @@ export default function MembershipPage() {
   const isLocalFreeUser = Boolean(userEmail && !membership && !membershipLoadFailed);
 
   return (
-    <main style={pageStyle}>
-      <section style={heroStyle}>
+    <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
+      <section style={isMobileViewport ? mobileHeroStyle : heroStyle}>
         <div style={eyebrowStyle}>{t.membership_page.eyebrow}</div>
-        <h1 style={titleStyle}>{t.membership_page.title}</h1>
-        <p style={subtitleStyle}>
+        <h1 style={isMobileViewport ? mobileTitleStyle : titleStyle}>{t.membership_page.title}</h1>
+        <p style={isMobileViewport ? mobileSubtitleStyle : subtitleStyle}>
           {t.membership_page.subtitle}
         </p>
       </section>
 
       {loading ? (
-        <section style={cardStyle}>{t.membership_page.reading_status}</section>
+        <section style={isMobileViewport ? mobileCardStyle : cardStyle}>{t.membership_page.reading_status}</section>
       ) : userEmail ? (
-        <section style={statusCardStyle}>
+        <section style={isMobileViewport ? mobileStatusCardStyle : statusCardStyle}>
           <div>
             <div style={sectionLabelStyle}>{t.membership_page.current_account}</div>
             <h2 style={sectionTitleStyle}>{userEmail}</h2>
@@ -111,11 +122,12 @@ export default function MembershipPage() {
             </p>
           </div>
 
-          <div style={statusGridStyle}>
+          <div style={isMobileViewport ? mobileStatusGridStyle : statusGridStyle}>
             <InfoItem
               label={t.membership_page.current_identity}
               value={membership ? getMembershipPlanLabel(membership.plan, language) : t.membership_page.local_user}
               hint={membership ? getMembershipStatusLabel(membership.status, language) : t.membership_page.free_local_features}
+              compact={isMobileViewport}
             />
             <InfoItem
               label={t.membership_page.valid_until}
@@ -133,6 +145,7 @@ export default function MembershipPage() {
                     : t.membership_page.use_until_expiry
                   : t.membership_page.local_no_expiry
               }
+              compact={isMobileViewport}
             />
             <InfoItem
               label={t.membership_page.storage_capacity}
@@ -142,11 +155,13 @@ export default function MembershipPage() {
                   ? t.membership_page.trial_storage_hint
                   : t.membership_page.cloud_storage_hint
               }
+              compact={isMobileViewport}
             />
             <InfoItem
               label={t.membership_page.market_posting}
               value={marketQuotaText}
               hint={membership ? t.membership_page.simultaneous_post_hint : t.membership_page.local_cannot_post}
+              compact={isMobileViewport}
             />
           </div>
 
@@ -178,7 +193,7 @@ export default function MembershipPage() {
           </div>
         </section>
       ) : (
-        <section style={statusCardStyle}>
+        <section style={isMobileViewport ? mobileStatusCardStyle : statusCardStyle}>
           <div>
             <div style={sectionLabelStyle}>{t.membership_page.signed_out}</div>
             <h2 style={sectionTitleStyle}>{t.membership_page.signed_out_title}</h2>
@@ -198,7 +213,7 @@ export default function MembershipPage() {
         </section>
       )}
 
-      <section style={trialNoticeStyle}>
+      <section style={isMobileViewport ? mobileTrialNoticeStyle : trialNoticeStyle}>
         <div style={sectionLabelStyle}>{t.membership_page.trial_label}</div>
         <h2 style={noteTitleStyle}>{t.membership_page.trial_title}</h2>
         <p style={mutedTextStyle}>
@@ -206,39 +221,62 @@ export default function MembershipPage() {
         </p>
       </section>
 
-      <section style={plansGridStyle}>
+      <section style={isMobileViewport ? mobilePlansGridStyle : plansGridStyle}>
         {t.membership_page.plans.map((plan, index) => (
-          <PlanCard key={plan.title} {...plan} featured={index === 2} />
+          <PlanCard
+            key={plan.title}
+            {...plan}
+            featured={index === 2}
+            compact={isMobileViewport}
+          />
         ))}
       </section>
 
-      <section style={businessCardStyle}>
-        <div>
-          <div style={sectionLabelStyle}>{t.membership_page.business_label}</div>
-          <h2 style={sectionTitleStyle}>{t.membership_page.business_title}</h2>
-          <p style={mutedTextStyle}>
-            {t.membership_page.business_description}
-          </p>
-        </div>
-        <div style={businessFeatureGridStyle}>
-          {t.membership_page.business_features.map((feature) => (
-            <InfoItem key={feature.label} {...feature} />
-          ))}
-        </div>
-        <p style={businessFootnoteStyle}>
-          {t.membership_page.business_footnote}
-        </p>
-      </section>
-
-      <section id="payment" style={paymentCardStyle}>
+      <section id="payment" style={isMobileViewport ? mobilePaymentCardStyle : paymentCardStyle}>
         <div>
           <div style={sectionLabelStyle}>{t.membership_page.payment_label}</div>
           <h2 style={noteTitleStyle}>{t.membership_page.payment_title}</h2>
           <p style={mutedTextStyle}>
-            {t.membership_page.payment_intro}
+            {isMobileViewport
+              ? t.membership_page.payment_mobile_intro
+              : t.membership_page.payment_intro}
           </p>
         </div>
 
+        {isMobileViewport ? (
+          <>
+            <div style={mobilePaymentGridStyle}>
+              <div style={mobilePaymentItemStyle}>
+                <div style={paymentTitleStyle}>{t.membership_page.domestic_users}</div>
+                <div style={mobilePaymentPriceStyle}>{t.membership_page.domestic_price}</div>
+                <a href="mailto:yoyomibaobao@gmail.com" style={mobilePaymentActionStyle}>
+                  {t.membership_page.domestic_payment_action}
+                </a>
+              </div>
+
+              <div style={mobilePaymentItemStyle}>
+                <div style={paymentTitleStyle}>{t.membership_page.overseas_users}</div>
+                <div style={mobilePaymentPriceStyle}>{t.membership_page.overseas_price}</div>
+                <a
+                  href="https://paypal.me/ying0chen/8"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={mobilePaymentActionStyle}
+                >
+                  {t.membership_page.overseas_payment_action}
+                </a>
+              </div>
+            </div>
+
+            <div style={mobilePaymentContactStyle}>
+              {t.membership_page.payment_mobile_contact}
+              <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
+                yoyomibaobao@gmail.com
+              </a>
+            </div>
+          </>
+        ) : (
+        <>
         <div style={paymentGridStyle}>
           <div style={paymentItemStyle}>
             <div style={paymentTitleStyle}>{t.membership_page.domestic_users}</div>
@@ -284,24 +322,39 @@ export default function MembershipPage() {
         <div style={customStorageStyle}>
           <strong>{t.membership_page.more_storage_label}</strong>{t.membership_page.more_storage_text}
         </div>
+        </>
+        )}
       </section>
 
-      <section style={noteCardStyle}>
+      <section style={isMobileViewport ? mobileNoteCardStyle : noteCardStyle}>
         <h2 style={noteTitleStyle}>{t.membership_page.rules_title}</h2>
         <ul style={ruleListStyle}>
-          {t.membership_page.rules.map((rule) => <li key={rule}>{rule}</li>)}
+          {(isMobileViewport
+            ? t.membership_page.mobile_rules
+            : t.membership_page.rules
+          ).map((rule) => <li key={rule}>{rule}</li>)}
         </ul>
       </section>
     </main>
   );
 }
 
-function InfoItem({ label, value, hint }: { label: string; value: string; hint: string }) {
+function InfoItem({
+  label,
+  value,
+  hint,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  compact?: boolean;
+}) {
   return (
-    <div style={infoItemStyle}>
+    <div style={compact ? mobileInfoItemStyle : infoItemStyle}>
       <div style={infoLabelStyle}>{label}</div>
-      <div style={infoValueStyle}>{value}</div>
-      <div style={infoHintStyle}>{hint}</div>
+      <div style={compact ? mobileInfoValueStyle : infoValueStyle}>{value}</div>
+      <div style={compact ? mobileInfoHintStyle : infoHintStyle}>{hint}</div>
     </div>
   );
 }
@@ -311,23 +364,29 @@ function PlanCard({
   price,
   description,
   items,
+  mobile_items,
   featured = false,
+  compact = false,
 }: {
   title: string;
   price: string;
   description: string;
   items: string[];
+  mobile_items?: string[];
   featured?: boolean;
+  compact?: boolean;
 }) {
+  const visibleItems = compact ? mobile_items || items.slice(0, 3) : items;
+
   return (
-    <article style={planCardStyle(featured)}>
+    <article style={compact ? mobilePlanCardStyle(featured) : planCardStyle(featured)}>
       <div style={planTopStyle}>
-        <h2 style={planTitleStyle}>{title}</h2>
-        <div style={planPriceStyle}>{price}</div>
+        <h2 style={compact ? mobilePlanTitleStyle : planTitleStyle}>{title}</h2>
+        <div style={compact ? mobilePlanPriceStyle : planPriceStyle}>{price}</div>
       </div>
-      <p style={planDescStyle}>{description}</p>
-      <ul style={planListStyle}>
-        {items.map((item) => (
+      <p style={compact ? mobilePlanDescStyle : planDescStyle}>{description}</p>
+      <ul style={compact ? mobilePlanListStyle : planListStyle}>
+        {visibleItems.map((item) => (
           <li key={item}>{item}</li>
         ))}
       </ul>
@@ -341,8 +400,18 @@ const pageStyle: CSSProperties = {
   padding: "40px 18px 72px",
 };
 
+const mobilePageStyle: CSSProperties = {
+  maxWidth: 760,
+  margin: "0 auto",
+  padding: "14px 12px 28px",
+};
+
 const heroStyle: CSSProperties = {
   marginBottom: 22,
+};
+
+const mobileHeroStyle: CSSProperties = {
+  marginBottom: 12,
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -360,12 +429,24 @@ const titleStyle: CSSProperties = {
   lineHeight: 1.2,
 };
 
+const mobileTitleStyle: CSSProperties = {
+  ...titleStyle,
+  fontSize: 25,
+};
+
 const subtitleStyle: CSSProperties = {
   maxWidth: 760,
   margin: "12px 0 0",
   color: "#5d6b57",
   fontSize: 15,
   lineHeight: 1.8,
+};
+
+const mobileSubtitleStyle: CSSProperties = {
+  ...subtitleStyle,
+  marginTop: 7,
+  fontSize: 13,
+  lineHeight: 1.55,
 };
 
 const cardStyle: CSSProperties = {
@@ -376,6 +457,12 @@ const cardStyle: CSSProperties = {
   color: "#5d6b57",
 };
 
+const mobileCardStyle: CSSProperties = {
+  ...cardStyle,
+  borderRadius: 15,
+  padding: 13,
+};
+
 const statusCardStyle: CSSProperties = {
   ...cardStyle,
   display: "grid",
@@ -383,9 +470,22 @@ const statusCardStyle: CSSProperties = {
   marginBottom: 20,
 };
 
+const mobileStatusCardStyle: CSSProperties = {
+  ...mobileCardStyle,
+  display: "grid",
+  gap: 12,
+  marginBottom: 12,
+};
+
 const trialNoticeStyle: CSSProperties = {
   ...cardStyle,
   marginBottom: 20,
+  background: "#f7faf3",
+};
+
+const mobileTrialNoticeStyle: CSSProperties = {
+  ...mobileCardStyle,
+  marginBottom: 12,
   background: "#f7faf3",
 };
 
@@ -414,11 +514,24 @@ const statusGridStyle: CSSProperties = {
   gap: 12,
 };
 
+const mobileStatusGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 7,
+};
+
 const infoItemStyle: CSSProperties = {
   border: "1px solid #edf2e9",
   borderRadius: 16,
   background: "#fbfdf9",
   padding: 14,
+};
+
+const mobileInfoItemStyle: CSSProperties = {
+  ...infoItemStyle,
+  minWidth: 0,
+  borderRadius: 12,
+  padding: 9,
 };
 
 const infoLabelStyle: CSSProperties = {
@@ -433,11 +546,24 @@ const infoValueStyle: CSSProperties = {
   color: "#243123",
 };
 
+const mobileInfoValueStyle: CSSProperties = {
+  ...infoValueStyle,
+  fontSize: 15,
+  lineHeight: 1.3,
+};
+
 const infoHintStyle: CSSProperties = {
   marginTop: 5,
   fontSize: 12,
   color: "#7d8b76",
   lineHeight: 1.5,
+};
+
+const mobileInfoHintStyle: CSSProperties = {
+  ...infoHintStyle,
+  marginTop: 3,
+  fontSize: 10,
+  lineHeight: 1.35,
 };
 
 
@@ -491,12 +617,26 @@ const plansGridStyle: CSSProperties = {
   marginBottom: 20,
 };
 
+const mobilePlansGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: 8,
+  marginBottom: 12,
+};
+
 const planCardStyle = (featured: boolean): CSSProperties => ({
   border: featured ? "1px solid #aacb9b" : "1px solid #e1eadb",
   borderRadius: 20,
   background: featured ? "#f6fbf3" : "#fff",
   padding: 18,
   boxShadow: featured ? "0 10px 24px rgba(63,125,61,0.10)" : "none",
+});
+
+const mobilePlanCardStyle = (featured: boolean): CSSProperties => ({
+  ...planCardStyle(featured),
+  borderRadius: 15,
+  padding: 12,
+  boxShadow: featured ? "0 5px 14px rgba(63,125,61,0.08)" : "none",
 });
 
 const planTopStyle: CSSProperties = {
@@ -513,6 +653,11 @@ const planTitleStyle: CSSProperties = {
   color: "#1f2a1f",
 };
 
+const mobilePlanTitleStyle: CSSProperties = {
+  ...planTitleStyle,
+  fontSize: 16,
+};
+
 const planPriceStyle: CSSProperties = {
   color: "#3f7d3d",
   fontSize: 14,
@@ -520,11 +665,23 @@ const planPriceStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const mobilePlanPriceStyle: CSSProperties = {
+  ...planPriceStyle,
+  fontSize: 12,
+};
+
 const planDescStyle: CSSProperties = {
   margin: "0 0 12px",
   color: "#667260",
   fontSize: 14,
   lineHeight: 1.7,
+};
+
+const mobilePlanDescStyle: CSSProperties = {
+  ...planDescStyle,
+  marginBottom: 6,
+  fontSize: 12,
+  lineHeight: 1.45,
 };
 
 const planListStyle: CSSProperties = {
@@ -535,6 +692,13 @@ const planListStyle: CSSProperties = {
   lineHeight: 1.8,
 };
 
+const mobilePlanListStyle: CSSProperties = {
+  ...planListStyle,
+  paddingLeft: 16,
+  fontSize: 12,
+  lineHeight: 1.6,
+};
+
 const paymentCardStyle: CSSProperties = {
   ...cardStyle,
   display: "grid",
@@ -543,32 +707,63 @@ const paymentCardStyle: CSSProperties = {
   background: "#fffdf7",
 };
 
-const businessCardStyle: CSSProperties = {
-  ...cardStyle,
+const mobilePaymentCardStyle: CSSProperties = {
+  ...mobileCardStyle,
   display: "grid",
-  gap: 16,
-  marginBottom: 20,
-  background: "#f6f8f3",
-  borderColor: "#d4dfcf",
-};
-
-const businessFeatureGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-  gap: 12,
-};
-
-const businessFootnoteStyle: CSSProperties = {
-  margin: 0,
-  color: "#5f6d59",
-  fontSize: 13,
-  lineHeight: 1.7,
+  gap: 11,
+  marginBottom: 12,
+  background: "#fffdf7",
 };
 
 const paymentGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 12,
+};
+
+const mobilePaymentGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 7,
+};
+
+const mobilePaymentItemStyle: CSSProperties = {
+  minWidth: 0,
+  border: "1px solid #efe6c8",
+  borderRadius: 12,
+  background: "#fffaf0",
+  padding: 10,
+};
+
+const mobilePaymentPriceStyle: CSSProperties = {
+  color: "#2d3828",
+  fontSize: 16,
+  fontWeight: 900,
+  lineHeight: 1.3,
+  marginBottom: 8,
+};
+
+const mobilePaymentActionStyle: CSSProperties = {
+  minHeight: 32,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  background: "#f0f6eb",
+  color: "#356b34",
+  fontSize: 11,
+  fontWeight: 800,
+  lineHeight: 1.2,
+  textAlign: "center",
+  textDecoration: "none",
+  padding: "5px 8px",
+};
+
+const mobilePaymentContactStyle: CSSProperties = {
+  color: "#6f6655",
+  fontSize: 12,
+  lineHeight: 1.55,
+  overflowWrap: "anywhere",
 };
 
 const paymentItemStyle: CSSProperties = {
@@ -615,6 +810,11 @@ const inlineLinkStyle: CSSProperties = {
 
 const noteCardStyle: CSSProperties = {
   ...cardStyle,
+  background: "#fbfbf7",
+};
+
+const mobileNoteCardStyle: CSSProperties = {
+  ...mobileCardStyle,
   background: "#fbfbf7",
 };
 

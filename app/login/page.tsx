@@ -2,7 +2,8 @@
 
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
-import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
@@ -80,12 +81,15 @@ export default function LoginPage() {
       baselineViewportHeightRef.current,
       currentHeight,
     );
+    const viewportAlreadyResized = currentHeight + 96 < baselineHeight;
     const nativeVisibleHeight =
       keyboardHeightRef.current > 0
         ? baselineHeight - keyboardHeightRef.current
         : currentHeight;
     const visibleHeight = keyboardOpenRef.current
-      ? Math.min(currentHeight, Math.max(240, nativeVisibleHeight))
+      ? viewportAlreadyResized
+        ? currentHeight
+        : Math.max(240, nativeVisibleHeight)
       : currentHeight;
 
     document.documentElement.style.setProperty(
@@ -111,13 +115,15 @@ export default function LoginPage() {
 
           const containerRect = container.getBoundingClientRect();
           const targetRect = target.getBoundingClientRect();
-          const visibleTop = containerRect.top + 16;
-          const visibleBottom = containerRect.bottom - 24;
+          const visibleTop = containerRect.top + 12;
+          const visibleBottom = containerRect.bottom - 16;
           let delta = 0;
 
           if (targetRect.bottom > visibleBottom) {
             delta = targetRect.bottom - visibleBottom;
           } else if (targetRect.top < visibleTop) {
+            delta = targetRect.top - visibleTop;
+          } else if (keyboardOpenRef.current && targetRect.top > visibleTop + 28) {
             delta = targetRect.top - visibleTop;
           }
 
@@ -319,7 +325,7 @@ export default function LoginPage() {
       className="auth-login-page"
       style={{
         minHeight: "calc(100dvh - 50px - var(--app-safe-area-top))",
-        padding: "32px 20px",
+        padding: "20px 20px 28px",
         display: "flex",
         justifyContent: "center",
         alignItems: "flex-start",
@@ -327,11 +333,11 @@ export default function LoginPage() {
         scrollPaddingBlock: 24,
       }}
     >
-      <div style={{ width: "100%", maxWidth: 320 }}>
-        <h1 style={{ marginBottom: 10 }}>{t.auth.login_title}</h1>
+      <div style={{ width: "100%", maxWidth: 360 }}>
+        <h1 style={{ margin: "0 0 14px", lineHeight: 1.2 }}>{t.auth.login_title}</h1>
 
         <form onSubmit={handleLogin}>
-          <p>{t.auth.email}</p>
+          <p style={{ margin: "0 0 6px" }}>{t.auth.email}</p>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -339,15 +345,15 @@ export default function LoginPage() {
             placeholder={t.auth.email_placeholder}
             autoComplete="email"
             style={{
-              padding: "12px",
+              padding: "11px 12px",
               width: "100%",
-              borderRadius: "6px",
+              borderRadius: "10px",
               border: "1px solid #ccc",
               boxSizing: "border-box",
             }}
           />
 
-          <p style={{ marginTop: 16 }}>{t.auth.password}</p>
+          <p style={{ margin: "12px 0 6px" }}>{t.auth.password}</p>
           <PasswordInput
             value={password}
             onChange={setPassword}
@@ -452,7 +458,39 @@ export default function LoginPage() {
             {t.auth.local_first}
           </button>
         ) : null}
+
+        <div style={loginLinkRowStyle}>
+          <Link href="/" style={loginTextLinkStyle}>
+            {t.local_mode.home}
+          </Link>
+          <Link href="/api/download/android" style={loginDownloadLinkStyle}>
+            {t.home.download_android}
+          </Link>
+        </div>
       </div>
     </main>
   );
 }
+
+const loginLinkRowStyle: CSSProperties = {
+  marginTop: 16,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const loginTextLinkStyle: CSSProperties = {
+  color: "#647060",
+  fontSize: 13,
+  fontWeight: 700,
+  textDecoration: "none",
+};
+
+const loginDownloadLinkStyle: CSSProperties = {
+  ...loginTextLinkStyle,
+  color: "#356b34",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+};

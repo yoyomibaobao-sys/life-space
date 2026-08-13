@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import UiIcon from "@/components/ui/UiIcon";
 
 export default function ProfileFeedbackEntry() {
   const { t } = useLanguage();
@@ -10,32 +11,33 @@ export default function ProfileFeedbackEntry() {
     <div
       style={{
         width: "min(1180px, calc(100% - 28px))",
-        margin: "14px auto 0",
-        padding: "10px 14px",
-        border: "1px solid #e4eadf",
-        borderRadius: 14,
-        background: "#fafbf7",
+        margin: "10px auto 0",
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        flexWrap: "wrap",
+        justifyContent: "flex-end",
       }}
     >
-      <div style={{ color: "#687364", fontSize: 12, lineHeight: 1.55 }}>
-        {t.feedback_priority}
-      </div>
       <Link
         href="/feedback"
         style={{
-          color: "#4f6448",
-          fontSize: 12,
-          fontWeight: 700,
+          minHeight: 40,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          padding: "0 14px",
+          border: "1px solid #d6e3d1",
+          borderRadius: 999,
+          background: "#fff",
+          color: "#354f31",
+          fontSize: 15,
+          fontWeight: 800,
           textDecoration: "none",
-          flexShrink: 0,
+          boxShadow: "0 3px 10px rgba(53, 83, 46, 0.06)",
         }}
       >
-        {t.feedback_and_contact}
+        <UiIcon name="mail" size={17} />
+        <span>{t.feedback_and_contact}</span>
+        <UiIcon name="arrow-right" size={15} />
       </Link>
     </div>
   );

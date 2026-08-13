@@ -225,7 +225,7 @@ export default function Navbar() {
   }, [pathname, t.nav]);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     router.push("/login");
   }
 
@@ -351,12 +351,15 @@ export default function Navbar() {
                 </button>
                 {mobileMeMenuOpen ? (
                   <div style={mobileMeMenuStyle}>
+                    <Link href="/" style={mobileMeMenuItemStyle}>
+                      {t.nav.home}
+                    </Link>
                     <button
                       type="button"
                       onClick={handleLogout}
                       style={mobileMeLogoutItemStyle}
                     >
-                      {t.nav.logout_full}
+                      {t.nav.logout}
                     </button>
                   </div>
                 ) : null}
@@ -698,7 +701,7 @@ function getMobileCreateLabel(pathname: string, labels: TranslationDictionary["n
 
 function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav"]) {
   if (pathname === "/archive") return labels.my_space;
-  if (pathname === "/") return labels.personal_space;
+  if (pathname === "/") return labels.brand;
   if (pathname.startsWith("/experience-cards")) return labels.my_experience_cards;
   if (pathname.startsWith("/discover")) return labels.discover;
   if (pathname.startsWith("/follow")) return labels.following;
@@ -876,21 +879,6 @@ const mobilePlantMenuItemStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const mobileLogoutButtonStyle: CSSProperties = {
-  height: 34,
-  borderRadius: 999,
-  border: "1px solid #ead7d2",
-  background: "#fff8f6",
-  color: "#b23a2d",
-  fontSize: 13,
-  lineHeight: 1,
-  fontWeight: 800,
-  padding: "0 12px",
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
-
 const mobileMeMenuWrapStyle: CSSProperties = {
   position: "relative",
   display: "inline-flex",
@@ -923,6 +911,19 @@ const mobileMeMenuStyle: CSSProperties = {
   background: "#fff",
   boxShadow: "0 14px 30px rgba(39, 58, 34, 0.16)",
   padding: 5,
+};
+
+const mobileMeMenuItemStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  width: "100%",
+  minHeight: 34,
+  borderRadius: 9,
+  color: "#40583a",
+  fontSize: 13,
+  fontWeight: 800,
+  textDecoration: "none",
+  padding: "0 9px",
 };
 
 const mobileMeLogoutItemStyle: CSSProperties = {

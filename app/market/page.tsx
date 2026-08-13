@@ -258,7 +258,7 @@ export default function MarketPage() {
     <main style={pageStyle}>
       <div style={shellStyle}>
         <header style={isMobileViewport ? mobileHeaderStyle : headerStyle}>
-          <div>
+          <div style={isMobileViewport ? mobileHeaderCopyStyle : undefined}>
             <div style={marketIntroStyle}>{t.market.intro_title}</div>
             <div style={marketSubIntroStyle}>
               {isMobileViewport ? t.market.intro_mobile : t.market.intro_subtitle}
@@ -267,7 +267,10 @@ export default function MarketPage() {
 
           {currentUserId ? (
             <div style={headerActionStyle}>
-              <Link href="/market/mine" style={mineButtonStyle}>
+              <Link
+                href="/market/mine"
+                style={isMobileViewport ? mobileMineButtonStyle : mineButtonStyle}
+              >
                 {t.market.my_posts}
               </Link>
             </div>
@@ -575,9 +578,16 @@ const headerStyle: CSSProperties = {
 };
 
 const mobileHeaderStyle: CSSProperties = {
-  display: "grid",
-  gap: 7,
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 8,
   marginBottom: 10,
+};
+
+const mobileHeaderCopyStyle: CSSProperties = {
+  minWidth: 0,
+  flex: 1,
 };
 
 const marketIntroStyle: CSSProperties = {
@@ -598,6 +608,7 @@ const headerActionStyle: CSSProperties = {
   gap: 8,
   flexWrap: "wrap",
   justifyContent: "flex-end",
+  flexShrink: 0,
 };
 
 const mineButtonStyle: CSSProperties = {
@@ -610,6 +621,15 @@ const mineButtonStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
   whiteSpace: "nowrap",
+};
+
+const mobileMineButtonStyle: CSSProperties = {
+  ...mineButtonStyle,
+  minHeight: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "6px 11px",
+  fontSize: 12,
 };
 
 const filterPanelStyle: CSSProperties = {
@@ -654,8 +674,8 @@ function mobileMarketTabButtonStyle(active: boolean): CSSProperties {
 
 const mobileFilterTopGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))",
-  gap: 8,
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 5,
   alignItems: "end",
 };
 
@@ -671,7 +691,7 @@ const mobileFilterContentFieldStyle: CSSProperties = {
 
 const mobileFilterLabelStyle: CSSProperties = {
   color: "#7b8676",
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 700,
 };
 
@@ -683,22 +703,9 @@ const mobileFilterControlStyle: CSSProperties = {
   borderRadius: 9,
   background: "#fff",
   color: "#40583a",
-  padding: "0 8px",
-  fontSize: 13,
+  padding: "0 5px",
+  fontSize: 11,
   boxSizing: "border-box",
-};
-
-const mobileContentSearchStyle: CSSProperties = {
-  width: "100%",
-  height: 34,
-  border: "1px solid #dfe8da",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#40583a",
-  padding: "0 11px",
-  fontSize: 13,
-  boxSizing: "border-box",
-  outline: "none",
 };
 
 const filterGroupStyle: CSSProperties = {
@@ -914,12 +921,6 @@ const sourceMissingStyle: CSSProperties = {
 const sourceDividerStyle: CSSProperties = {
   color: "#c1cbbb",
   fontSize: 11,
-};
-
-const publisherStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#8a9585",
-  fontSize: 12,
 };
 
 const emptyStyle: CSSProperties = {

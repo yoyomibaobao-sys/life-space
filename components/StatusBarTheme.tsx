@@ -27,6 +27,16 @@ type NativeSystemUiPlugin = {
 const NativeSystemUi = registerPlugin<NativeSystemUiPlugin>("NativeSystemUi");
 let nativeThemeRevision = 0;
 
+function nativeWindowAlreadyInsetsWebView() {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") {
+    return false;
+  }
+
+  const versionMatch = navigator.userAgent.match(/Android\s+(\d+)/i);
+  const androidMajor = Number(versionMatch?.[1] || 0);
+  return androidMajor > 0 && androidMajor < 15;
+}
+
 function ensureThemeMeta() {
   let meta = document.querySelector<HTMLMetaElement>("meta[name='theme-color']");
 
@@ -93,6 +103,15 @@ export function setAppStatusBarTheme(color: string) {
 
 export default function StatusBarTheme() {
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (!nativeWindowAlreadyInsetsWebView()) return;
+
+    document.documentElement.dataset.nativeWindowInsets = "true";
+    return () => {
+      delete document.documentElement.dataset.nativeWindowInsets;
+    };
+  }, []);
 
   useEffect(() => {
     setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);

@@ -76,7 +76,7 @@ export default function DiscoverSearchForm({
         style={mobileFormStyle}
       >
         <div style={mobileGridStyle}>
-          <label style={fieldLabelStyle}>
+          <label style={mobileFieldLabelStyle}>
             {t.discover.search_ui.region_search}
             <input
               value={filters.locationQuery || ""}
@@ -90,11 +90,11 @@ export default function DiscoverSearchForm({
                 })
               }
               placeholder={t.discover.search_ui.region_search_placeholder}
-              style={inputStyle}
+              style={mobileInputStyle}
             />
           </label>
 
-          <label style={fieldLabelStyle}>
+          <label style={mobileFieldLabelStyle}>
             {keywordLabel}
             <input
               value={filters.textQuery || ""}
@@ -107,16 +107,16 @@ export default function DiscoverSearchForm({
                 })
               }
               placeholder={keywordPlaceholder}
-              style={inputStyle}
+              style={mobileInputStyle}
             />
           </label>
 
-          <label style={fieldLabelStyle}>
+          <label style={mobileFieldLabelStyle}>
             {t.discover.search_ui.category}
             <select
               value={filters.category}
               onChange={(event) => patch({ category: event.target.value as SearchCategory })}
-              style={inputStyle}
+              style={mobileInputStyle}
             >
               <option value="all">{t.discover.filters.all}</option>
               <option value="plant">{t.discover.filters.plant}</option>
@@ -127,12 +127,12 @@ export default function DiscoverSearchForm({
           </label>
 
           {isRecordSearch ? (
-            <label style={fieldLabelStyle}>
+            <label style={mobileFieldLabelStyle}>
               {t.discover.search_ui.tag}
               <select
                 value={filters.tag}
                 onChange={(event) => patch({ tag: event.target.value })}
-                style={inputStyle}
+                style={mobileInputStyle}
               >
                 <option value="">{t.discover.search_ui.all_tags}</option>
                 {hasCustomTag ? <option value={filters.tag}>{filters.tag}</option> : null}
@@ -364,8 +364,23 @@ const mobileFormStyle: CSSProperties = {
 
 const mobileGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 8,
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 5,
+};
+
+const mobileFieldLabelStyle: CSSProperties = {
+  ...fieldLabelStyle,
+  fontSize: 10,
+};
+
+const mobileInputStyle: CSSProperties = {
+  ...inputStyle,
+  minWidth: 0,
+  height: 34,
+  marginTop: 3,
+  padding: "0 5px",
+  borderRadius: 9,
+  fontSize: 11,
 };
 
 const mobileActionsStyle: CSSProperties = {
