@@ -323,16 +323,16 @@ html[data-native-window-insets="true"] .app-status-bar-surface {
     padding-bottom: calc(76px + var(--app-safe-area-bottom));
   }
 
-  html[data-auth-keyboard-open="true"] .app-main {
+  html[data-app-keyboard-open="true"] .app-main {
     min-height: 0;
     padding-bottom: 0;
   }
 
-  html[data-auth-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
+  html[data-app-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
     display: none !important;
   }
 
-  html[data-auth-keyboard-open="true"] .auth-login-page {
+  html[data-app-keyboard-open="true"] .auth-login-page {
     min-height: 0 !important;
     padding: 10px 20px 18px !important;
     overflow: visible !important;

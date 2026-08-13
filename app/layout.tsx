@@ -4,6 +4,7 @@ import StatusBarTheme from "@/components/StatusBarTheme";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import Toast from "@/components/Toast";
 import MobileBackNavigation from "@/components/MobileBackNavigation";
+import KeyboardLayoutGuard from "@/components/KeyboardLayoutGuard";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -45,6 +46,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <StatusBarTheme />
+        <KeyboardLayoutGuard />
         <MobileBackNavigation />
         <AnalyticsTracker />
         <Navbar />

@@ -272,7 +272,9 @@ test("signed-out home uses a compact viewport-oriented layout", async () => {
   assert.match(home, /minHeight: "calc\(100vh - 70px\)"/);
   assert.match(home, /gridTemplateColumns: "repeat\(4, minmax\(0, 1fr\)\)"/);
   assert.match(home, /@media \(max-height: 720px\)/);
-  assert.match(home, /\.home-actions > a:last-child \{ grid-column: 1 \/ -1; \}/);
+  assert.match(home, /\.home-actions > a:first-child \{ grid-column: 1 \/ -1; \}/);
+  assert.match(home, /data-has-download=\{isNativeApp === false \? "true" : "false"\}/);
+  assert.match(home, /\.home-poem[\s\S]*border-left: 3px solid/);
   assert.match(home, /\{t\.home\.poem\}/);
   assert.match(home, /\{t\.home\.cards\.map/);
   assert.match(zhCopy, /记录四时变化，留下发现、收获与成长/);

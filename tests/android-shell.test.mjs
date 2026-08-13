@@ -60,34 +60,53 @@ test("Android system bars use modern edge-to-edge insets and page-aware contrast
   assert.match(nativeSystemUi, /setAppearanceLightStatusBars\(darkIcons\)/);
 });
 
-test("Android login relies on native resize without adding a second keyboard viewport", () => {
+test("Android login uses one resize path and blocks IME extracted-text overlays", () => {
   const config = read("capacitor.config.ts");
   const login = read("app/login/page.tsx");
   const navbar = read("components/navbar.tsx");
   const globals = read("app/globals.css");
   const nativePlatformHook = read("lib/capacitor/useIsNativeApp.ts");
+  const keyboardGuard = read("components/KeyboardLayoutGuard.tsx");
+  const rootLayout = read("app/layout.tsx");
+  const webView = read(
+    "android/app/src/main/java/com/youshi/cultivation/NoExtractUiCapacitorWebView.java",
+  );
+  const bridgeLayout = read(
+    "android/app/src/main/res/layout/capacitor_bridge_layout_main.xml",
+  );
 
   assert.match(config, /Keyboard:[\s\S]*resizeOnFullScreen: false/);
+  assert.match(webView, /extends CapacitorWebView/);
+  assert.match(webView, /IME_FLAG_NO_FULLSCREEN/);
+  assert.match(webView, /IME_FLAG_NO_EXTRACT_UI/);
+  assert.match(
+    bridgeLayout,
+    /com\.youshi\.cultivation\.NoExtractUiCapacitorWebView/,
+  );
   assert.doesNotMatch(login, /@capacitor\/keyboard/);
   assert.doesNotMatch(login, /Keyboard\.addListener/);
   assert.doesNotMatch(login, /visualViewport/);
   assert.doesNotMatch(login, /--auth-visible-viewport-height/);
   assert.doesNotMatch(login, /scrollFieldIntoVisibleArea|scrollIntoView\(/);
-  assert.match(login, /authKeyboardOpen/);
-  assert.match(login, /onBlurCapture=\{handleLoginPageBlur\}/);
+  assert.match(rootLayout, /<KeyboardLayoutGuard \/>/);
+  assert.match(keyboardGuard, /Keyboard\.addListener\("keyboardDidShow"/);
+  assert.match(keyboardGuard, /Keyboard\.addListener\("keyboardDidHide"/);
+  assert.match(keyboardGuard, /appKeyboardOpen/);
+  assert.match(keyboardGuard, /HTMLInputElement/);
+  assert.match(keyboardGuard, /HTMLTextAreaElement/);
   assert.match(navbar, /data-mobile-bottom-nav="true"/);
   assert.match(
     globals,
-    /data-auth-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/,
+    /data-app-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/,
   );
-  assert.match(globals, /data-auth-keyboard-open="true"[\s\S]*\.auth-login-page/);
+  assert.match(globals, /data-app-keyboard-open="true"[\s\S]*\.auth-login-page/);
   assert.match(globals, /\.auth-login-page \{[\s\S]*?min-height: 0 !important;[\s\S]*?overflow: visible !important/);
   assert.doesNotMatch(globals, /\.auth-login-page \{[\s\S]*?height: calc\(100dvh/);
   assert.doesNotMatch(login, /minHeight: "calc\(100dvh|overflowY: "auto"/);
   assert.doesNotMatch(globals, /--auth-visible-viewport-height|max\(\s*260px/);
   assert.doesNotMatch(
     globals,
-    /data-auth-keyboard-open="true"[^}]*body[^}]*overflow: hidden/,
+    /data-app-keyboard-open="true"[^}]*body[^}]*overflow: hidden/,
   );
   assert.match(login, /useIsNativeApp\(\)/);
   assert.match(nativePlatformHook, /Capacitor\.isNativePlatform\(\)/);
@@ -127,10 +146,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '2'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.1'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '2' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.1' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '3'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.2'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '3' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.2' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
