@@ -21,9 +21,10 @@ test("mobile personal space project summary opens the project archive", async ()
 });
 
 test("mobile shell keeps an ordered fixed navigation and returns within the app", async () => {
-  const [navbar, backNavigation, lightbox, footerStyles, layout, manifest, globals, zhCopy, enCopy] = await Promise.all([
+  const [navbar, backNavigation, authReturn, lightbox, footerStyles, layout, manifest, globals, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
     source("components/MobileBackNavigation.tsx"),
+    source("lib/auth-return.ts"),
     source("components/archive-detail/ArchiveLightbox.tsx"),
     source("components/SiteFooter.module.css"),
     source("app/layout.tsx"),
@@ -56,14 +57,17 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(enCopy, /market: "Market"/);
   assert.match(enCopy, /me: "Me"/);
 
-  assert.match(backNavigation, /MIN_HORIZONTAL_DISTANCE = 72/);
-  assert.doesNotMatch(backNavigation, /EDGE_GESTURE_WIDTH/);
-  assert.match(backNavigation, /touchmove", handleTouchMove, \{ passive: false \}/);
+  assert.doesNotMatch(backNavigation, /MIN_HORIZONTAL_DISTANCE|handleTouchMove|touchstart|touchend/);
+  assert.match(backNavigation, /useSearchParams\(\)/);
+  assert.match(backNavigation, /currentRoute/);
   assert.match(backNavigation, /hasActiveMobileOverlay\(\)/);
-  assert.match(backNavigation, /window\.history\.pushState/);
-  assert.match(backNavigation, /window\.addEventListener\("popstate"/);
+  assert.doesNotMatch(backNavigation, /window\.history\.pushState/);
+  assert.match(backNavigation, /window\.history\.back\(\)/);
   assert.match(backNavigation, /router\.replace\(destination\)/);
-  assert.match(backNavigation, /isAppHome\(pathname\)/);
+  assert.match(backNavigation, /isAppExitRoot\(pathname\)/);
+  assert.match(authReturn, /!value\.startsWith\("\/\/"\)/);
+  assert.match(authReturn, /pathOnly === "\/login" \|\| pathOnly === "\/register"/);
+  assert.match(authReturn, /encodeURIComponent\(getSafeReturnTo\(returnTo\)\)/);
   assert.match(layout, /<MobileBackNavigation \/>/);
   assert.match(layout, /viewportFit: "cover"/);
   assert.match(manifest, /display: "standalone"/);
@@ -158,7 +162,7 @@ test("account navigation keeps membership contextual and export under data manag
   assert.doesNotMatch(navbar, />\s*云会员\s*<\/Link>/);
   assert.doesNotMatch(navbar, /<NavItem href="\/register"/);
   assert.doesNotMatch(navbar, /mobileRegisterActionStyle/);
-  assert.match(navbar, /<Link href="\/login" style=\{loginLinkStyle\}>/);
+  assert.match(navbar, /<Link href=\{buildLoginHref\(pathname\)\} style=\{loginLinkStyle\}>/);
   assert.match(navbar, /pathname !== "\/"/);
   assert.match(membership, /t\.membership_page/);
   assert.match(zhCopy, /eyebrow: "个人使用方案"/);
@@ -178,13 +182,15 @@ test("account navigation keeps membership contextual and export under data manag
   assert.match(home, /session\?\.user && Capacitor\.isNativePlatform\(\)/);
   assert.match(login, /isNativeApp === false[\s\S]*?href="\/api\/download\/android"/);
   assert.match(home, /membershipLinkArrowStyle/);
-  assert.match(navbar, /href="\/login"[\s\S]*?t\.nav\.login/);
+  assert.match(navbar, /buildLoginHref\(pathname\)[\s\S]*?t\.nav\.login/);
 });
 
 test("mobile account actions, membership copy, and plant names stay compact", async () => {
-  const [navbar, membership, zhCopy, enCopy] = await Promise.all([
+  const [navbar, membership, payment, benefits, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
     source("app/membership/page.tsx"),
+    source("app/membership/payment/page.tsx"),
+    source("app/membership/benefits/page.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
@@ -194,14 +200,56 @@ test("mobile account actions, membership copy, and plant names stay compact", as
   assert.doesNotMatch(navbar, /mobileMeMenuOpen|mobileMeMoreButtonStyle|mobileMeMenuStyle/);
 
   assert.doesNotMatch(membership, /t\.membership_page\.business_/);
-  assert.match(membership, /mobilePaymentGridStyle/);
-  assert.match(membership, /t\.membership_page\.payment_mobile_intro/);
-  assert.match(membership, /t\.membership_page\.mobile_rules/);
+  assert.match(membership, /mobileBenefitsCardStyle/);
+  assert.match(membership, /href="\/membership\/payment"/);
+  assert.match(membership, /href="\/membership\/benefits"/);
+  assert.ok(
+    membership.indexOf('href="/membership/payment"') <
+      membership.indexOf('href="/membership/benefits"'),
+  );
+  assert.doesNotMatch(membership, /mobileBenefitsActionsStyle/);
+  assert.match(payment, /payment_page_title/);
+  assert.match(payment, /domestic_payment_action/);
+  assert.match(payment, /overseas_payment_action/);
+  assert.match(benefits, /cloudPlan\.items\.map/);
+  assert.match(benefits, /t\.membership_page\.rules\.map/);
   assert.match(zhCopy, /mobile_items: \["1GB 云端存储与同步"/);
   assert.match(zhCopy, /interested_plants: "我的植物收藏"/);
   assert.match(zhCopy, /planting_plan: "我的种植计划"/);
   assert.match(enCopy, /interested_plants: "My saved plants"/);
   assert.match(enCopy, /planting_plan: "My planting plans"/);
+});
+
+test("plant guide renders a small batch and restores the list position", async () => {
+  const [guide, zhCopy, enCopy] = await Promise.all([
+    source("app/plant/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
+
+  assert.match(guide, /INITIAL_VISIBLE_PLANT_COUNT = 24/);
+  assert.match(guide, /PLANT_BATCH_SIZE = 24/);
+  assert.match(guide, /filteredPlants\.slice\(0, visiblePlantCount\)/);
+  assert.match(guide, /typeof window\.IntersectionObserver === "undefined"/);
+  assert.match(guide, /new IntersectionObserver/);
+  assert.match(guide, /visiblePlantCount: nextVisiblePlantCount/);
+  assert.match(guide, /scrollY: window\.scrollY/);
+  assert.match(guide, /window\.scrollTo\(\{ top: scrollY \}\)/);
+  assert.match(zhCopy, /load_more: "继续加载"/);
+  assert.match(enCopy, /load_more: "Load more"/);
+});
+
+test("following stays in the bottom navigation and returns there after login", async () => {
+  const [navbar, discover, follow] = await Promise.all([
+    source("components/navbar.tsx"),
+    source("app/discover/page.tsx"),
+    source("app/follow/page.tsx"),
+  ]);
+
+  assert.match(navbar, /label: labels\.following/);
+  assert.match(navbar, /href: user[\s\S]*?"\/discover\?tab=following"/);
+  assert.match(discover, /buildLoginHref\("\/discover\?tab=following"\)/);
+  assert.match(follow, /buildLoginHref\(getCurrentInternalPath\(\)\)/);
 });
 
 test("signed-out market does not repeat login and registration actions inside the page", async () => {

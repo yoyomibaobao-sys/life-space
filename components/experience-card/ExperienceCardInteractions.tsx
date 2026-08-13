@@ -18,6 +18,7 @@ import {
 } from "@/lib/membership";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 
 type CommentItem = ExperienceCardCommentRow & {
   username: string;
@@ -368,7 +369,11 @@ export default function ExperienceCardInteractions({
                       : t.experience.login_to_comment}
                   </span>
                   <Link
-                    href={currentUserId ? "/membership" : "/login"}
+                    href={
+                      currentUserId
+                        ? "/membership"
+                        : buildLoginHref(getCurrentInternalPath())
+                    }
                     className={styles.gateLink}
                   >
                     {currentUserId ? t.experience.learn_membership : t.experience.go_login}

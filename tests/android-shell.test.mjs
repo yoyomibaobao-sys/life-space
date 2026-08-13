@@ -126,15 +126,11 @@ test("mobile Market lightbox requests the dark native status bar", () => {
 test("native Android back closes overlays before route navigation and exits only at home", () => {
   const navigation = read("components/MobileBackNavigation.tsx");
 
-  const overlayCheck = navigation.indexOf("hasActiveMobileOverlay()");
-  const routeCheck = navigation.indexOf("!isAppHome(pathname)", overlayCheck);
-  const exitCall = navigation.indexOf("App.exitApp()", routeCheck);
-
-  assert.ok(overlayCheck >= 0);
-  assert.ok(routeCheck > overlayCheck);
-  assert.ok(exitCall > routeCheck);
+  assert.match(navigation, /hasActiveMobileOverlay\(\)[\s\S]*?window\.history\.back\(\)/);
+  assert.match(navigation, /isAppExitRoot\(pathname\)[\s\S]*?App\.exitApp\(\)/);
   assert.match(navigation, /App\.addListener\("backButton"/);
   assert.match(navigation, /window\.history\.back\(\)/);
+  assert.doesNotMatch(navigation, /touchstart|touchmove|touchend/);
 });
 
 test("release signing is environment-only and local records are excluded from Android backup", () => {

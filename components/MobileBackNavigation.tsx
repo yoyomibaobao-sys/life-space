@@ -2,21 +2,11 @@
 
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
-import { useCallback, useEffect, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 const MOBILE_BREAKPOINT = 760;
-const MIN_HORIZONTAL_DISTANCE = 72;
-const MAX_VERTICAL_DISTANCE = 56;
-const MAX_GESTURE_DURATION_MS = 700;
-const SESSION_HISTORY_KEY = "lifespace:mobile-route-history:v1";
-
-type TouchOrigin = {
-  x: number;
-  y: number;
-  at: number;
-  target: EventTarget | null;
-};
+const SESSION_HISTORY_KEY = "lifespace:mobile-route-history:v2";
 
 function readSessionHistory() {
   try {
@@ -31,24 +21,26 @@ function readSessionHistory() {
 
 function writeSessionHistory(paths: string[]) {
   try {
-    sessionStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(paths.slice(-30)));
+    sessionStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(paths.slice(-40)));
   } catch {
-    // Session history is only a fallback; navigation still works without storage.
+    // Native browser history still works when session storage is unavailable.
   }
 }
 
 function getLogicalParent(pathname: string) {
-  if (/^\/archive\/[^/]+/.test(pathname)) return "/archive";
-  if (/^\/local\/archive\/[^/]+/.test(pathname)) return "/archive";
-  if (/^\/experience-cards\/[^/]+/.test(pathname)) return "/experience-cards";
+  if (/^\/local\/archive\/[^/]+/.test(pathname)) return "/local/archive";
+  if (/^\/archive\/[^/]+/.test(pathname)) return "/discover";
+  if (/^\/experience-cards\/[^/]+/.test(pathname)) return "/discover";
   if (pathname === "/experience-cards") return "/archive";
   if (pathname.startsWith("/discover/search")) return "/discover";
   if (/^\/plant\/[^/]+/.test(pathname)) return "/plant";
   if (/^\/market\/(new|mine|[^/]+)/.test(pathname)) return "/market";
   if (pathname.startsWith("/notifications")) return "/profile";
+  if (/^\/membership\/(payment|benefits)/.test(pathname)) return "/membership";
   if (pathname.startsWith("/membership")) return "/profile";
   if (pathname.startsWith("/admin")) return "/profile";
   if (/^\/profile\/.+/.test(pathname)) return "/profile";
+  if (pathname.startsWith("/follow")) return "/discover";
 
   const publicProfileMatch = pathname.match(/^\/user\/([^/]+)\/profile/);
   if (publicProfileMatch) return `/user/${publicProfileMatch[1]}`;
@@ -57,31 +49,8 @@ function getLogicalParent(pathname: string) {
   return "/discover";
 }
 
-function isAppHome(pathname: string) {
-  return pathname === "/" || pathname === "/discover";
-}
-
-function shouldIgnoreGestureTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  if (
-    target.closest(
-      "input, textarea, select, button, video, [data-mobile-swipe-ignore='true']"
-    )
-  ) {
-    return true;
-  }
-
-  let current: HTMLElement | null = target;
-  while (current && current !== document.body) {
-    const style = window.getComputedStyle(current);
-    const canScrollHorizontally =
-      /(auto|scroll)/.test(style.overflowX) &&
-      current.scrollWidth > current.clientWidth + 2;
-    if (canScrollHorizontally) return true;
-    current = current.parentElement;
-  }
-
-  return false;
+function isAppExitRoot(pathname: string) {
+  return ["/", "/archive", "/discover", "/local/archive"].includes(pathname);
 }
 
 function hasActiveMobileOverlay() {
@@ -90,61 +59,70 @@ function hasActiveMobileOverlay() {
 
 export default function MobileBackNavigation() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const originRef = useRef<TouchOrigin | null>(null);
   const navigatingRef = useRef(false);
   const historyInitializedRef = useRef(false);
-
-  const navigateToPreviousPath = useCallback(() => {
-    if (navigatingRef.current || isAppHome(pathname)) return false;
-
-    navigatingRef.current = true;
-    const history = readSessionHistory();
-    const currentIndex = history.lastIndexOf(pathname);
-    const previousPath = currentIndex > 0 ? history[currentIndex - 1] : null;
-    const destination = previousPath || getLogicalParent(pathname);
-    writeSessionHistory(
-      previousPath ? history.slice(0, currentIndex) : [destination]
-    );
-    router.replace(destination);
-
-    window.setTimeout(() => {
-      navigatingRef.current = false;
-    }, 450);
-
-    return true;
-  }, [pathname, router]);
+  const search = searchParams.toString();
+  const currentRoute = useMemo(
+    () => `${pathname}${search ? `?${search}` : ""}`,
+    [pathname, search],
+  );
 
   useEffect(() => {
     if (window.innerWidth >= MOBILE_BREAKPOINT) return;
+
     if (!historyInitializedRef.current) {
       historyInitializedRef.current = true;
-      writeSessionHistory([pathname]);
+      writeSessionHistory([currentRoute]);
       return;
     }
+
     const history = readSessionHistory();
-    if (history[history.length - 1] !== pathname) {
-      writeSessionHistory([...history, pathname]);
-    }
-  }, [pathname]);
+    const lastRoute = history[history.length - 1];
+    const previousRoute = history[history.length - 2];
 
-  useEffect(() => {
-    if (window.innerWidth >= MOBILE_BREAKPOINT || isAppHome(pathname)) return;
+    if (lastRoute === currentRoute) return;
 
-    const guardState = {
-      ...(window.history.state || {}),
-      __lifespaceMobileBackGuard: pathname,
-    };
-    window.history.pushState(guardState, "", window.location.href);
-
-    function handlePopState() {
-      if (navigatingRef.current || hasActiveMobileOverlay()) return;
-      navigateToPreviousPath();
+    if (previousRoute === currentRoute) {
+      writeSessionHistory(history.slice(0, -1));
+      return;
     }
 
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [navigateToPreviousPath, pathname]);
+    const isNativeHomeRedirect =
+      Capacitor.isNativePlatform() && lastRoute === "/" && pathname === "/archive";
+    if (isNativeHomeRedirect) {
+      writeSessionHistory([currentRoute]);
+      return;
+    }
+
+    writeSessionHistory([...history, currentRoute]);
+  }, [currentRoute, pathname]);
+
+  const navigateBack = useCallback(() => {
+    if (navigatingRef.current) return;
+
+    const history = readSessionHistory();
+    if (history.length > 1) {
+      navigatingRef.current = true;
+      window.history.back();
+      window.setTimeout(() => {
+        navigatingRef.current = false;
+      }, 450);
+      return;
+    }
+
+    if (isAppExitRoot(pathname)) {
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+        void App.exitApp();
+      }
+      return;
+    }
+
+    const destination = getLogicalParent(pathname);
+    writeSessionHistory([destination]);
+    router.replace(destination);
+  }, [pathname, router]);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") {
@@ -160,103 +138,17 @@ export default function MobileBackNavigation() {
         return;
       }
 
-      if (!isAppHome(pathname)) {
-        if (
-          window.history.state?.__lifespaceMobileBackGuard === pathname
-        ) {
-          window.history.back();
-        } else {
-          navigateToPreviousPath();
-        }
-        return;
-      }
-
-      void App.exitApp();
+      navigateBack();
     }).then((handle) => {
-      if (disposed) {
-        void handle.remove();
-      } else {
-        listener = handle;
-      }
+      if (disposed) void handle.remove();
+      else listener = handle;
     });
 
     return () => {
       disposed = true;
       if (listener) void listener.remove();
     };
-  }, [navigateToPreviousPath, pathname]);
-
-  useEffect(() => {
-    function handleTouchStart(event: TouchEvent) {
-      if (
-        window.innerWidth >= MOBILE_BREAKPOINT ||
-        event.touches.length !== 1 ||
-        hasActiveMobileOverlay()
-      ) {
-        originRef.current = null;
-        return;
-      }
-
-      const touch = event.touches[0];
-      if (shouldIgnoreGestureTarget(event.target)) {
-        originRef.current = null;
-        return;
-      }
-
-      originRef.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        at: Date.now(),
-        target: event.target,
-      };
-    }
-
-    function handleTouchMove(event: TouchEvent) {
-      const origin = originRef.current;
-      const touch = event.touches[0];
-      if (!origin || !touch || event.touches.length !== 1) return;
-
-      const horizontalDistance = Math.abs(touch.clientX - origin.x);
-      const verticalDistance = Math.abs(touch.clientY - origin.y);
-      if (
-        horizontalDistance > 14 &&
-        horizontalDistance > verticalDistance * 1.25
-      ) {
-        event.preventDefault();
-      }
-    }
-
-    function handleTouchEnd(event: TouchEvent) {
-      const origin = originRef.current;
-      originRef.current = null;
-      if (!origin || navigatingRef.current || event.changedTouches.length !== 1) return;
-
-      const touch = event.changedTouches[0];
-      const horizontalDistance = Math.abs(touch.clientX - origin.x);
-      const verticalDistance = Math.abs(touch.clientY - origin.y);
-      const duration = Date.now() - origin.at;
-      if (
-        horizontalDistance < MIN_HORIZONTAL_DISTANCE ||
-        verticalDistance > MAX_VERTICAL_DISTANCE ||
-        horizontalDistance < verticalDistance * 1.35 ||
-        duration > MAX_GESTURE_DURATION_MS ||
-        isAppHome(pathname)
-      ) {
-        return;
-      }
-
-      navigateToPreviousPath();
-    }
-
-    document.addEventListener("touchstart", handleTouchStart, { passive: true });
-    document.addEventListener("touchmove", handleTouchMove, { passive: false });
-    document.addEventListener("touchend", handleTouchEnd, { passive: true });
-    return () => {
-      document.removeEventListener("touchstart", handleTouchStart);
-      document.removeEventListener("touchmove", handleTouchMove);
-      document.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, [navigateToPreviousPath, pathname]);
+  }, [navigateBack]);
 
   return null;
 }

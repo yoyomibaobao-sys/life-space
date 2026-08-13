@@ -5,6 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   formatProfileDate,
@@ -173,7 +174,7 @@ export default function PublicUserProfilePage() {
     const currentUser = auth.user;
 
     if (!currentUser) {
-      router.push("/login");
+      router.push(buildLoginHref(getCurrentInternalPath()));
       return;
     }
 

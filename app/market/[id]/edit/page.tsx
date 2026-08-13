@@ -19,6 +19,7 @@ import {
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   requestMarketMediaDeletion,
@@ -96,7 +97,7 @@ export default function EditMarketPostPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        router.push("/login");
+        router.push(buildLoginHref(getCurrentInternalPath()));
         return;
       }
 

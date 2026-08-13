@@ -34,6 +34,7 @@ import {
   type FollowedUserSummary,
 } from "@/lib/followed-users";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref } from "@/lib/auth-return";
 
 type MobileDiscoverTab = "feed" | "following";
 type FollowingContentTab = "projects" | "users";
@@ -418,7 +419,7 @@ export default function DiscoverPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        window.location.href = "/login";
+        window.location.href = buildLoginHref("/discover?tab=following");
         return;
       }
 

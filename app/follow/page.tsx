@@ -16,6 +16,7 @@ import {
 } from "@/lib/archive-categories";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 
 type TabKey = "projects" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -158,7 +159,7 @@ export default function FollowPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/login");
+        router.push(buildLoginHref(getCurrentInternalPath()));
         return;
       }
 

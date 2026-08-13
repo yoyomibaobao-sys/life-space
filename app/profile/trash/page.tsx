@@ -22,6 +22,7 @@ import {
   type CloudTrashItem,
 } from "@/lib/cloud-trash";
 import { supabase } from "@/lib/supabase";
+import { buildLoginHref } from "@/lib/auth-return";
 import { formatPreciseDateTime } from "@/lib/date-time";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
@@ -89,7 +90,7 @@ export default function CloudTrashPage() {
       if (controller.signal.aborted) return;
 
       if (userResult.error || !userResult.data.user) {
-        router.replace("/login");
+        router.replace(buildLoginHref("/profile/trash"));
         return;
       }
 

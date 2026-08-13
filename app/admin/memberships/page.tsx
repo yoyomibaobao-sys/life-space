@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { buildLoginHref } from "@/lib/auth-return";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -930,7 +931,7 @@ export default function AdminMembershipsPage() {
         <section style={noticeCardStyle}>
           <h1 style={titleStyle}>{t.admin_memberships.admin_membership_management}</h1>
           <p style={mutedTextStyle}>{t.admin_memberships.sign_in_admin}</p>
-          <Link href="/login" style={primaryButtonStyle}>{t.admin_memberships.sign_in}</Link>
+          <Link href={buildLoginHref("/admin/memberships")} style={primaryButtonStyle}>{t.admin_memberships.sign_in}</Link>
         </section>
       </main>
     );

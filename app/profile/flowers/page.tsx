@@ -10,6 +10,7 @@ import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { formatProfileDateTime } from "@/lib/user-profile-shared";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 
 type FlowerSourceItem = {
   id: string;
@@ -54,7 +55,7 @@ function ProfileFlowersContent() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/login");
+        router.push(buildLoginHref(getCurrentInternalPath()));
         return;
       }
 

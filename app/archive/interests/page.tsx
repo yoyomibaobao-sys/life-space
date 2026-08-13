@@ -8,6 +8,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import type { PlantInterestRow, SpeciesRefRow } from "@/lib/domain-types";
+import { buildLoginHref } from "@/lib/auth-return";
 import ArchivePlantPageHero from "@/components/archive-plant/ArchivePlantPageHero";
 import ArchivePlantEmptyState from "@/components/archive-plant/ArchivePlantEmptyState";
 import ArchivePlantCardHeader from "@/components/archive-plant/ArchivePlantCardHeader";
@@ -45,7 +46,7 @@ export default function PlantInterestsPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      router.push("/login");
+      router.push(buildLoginHref("/archive/interests"));
       return;
     }
 

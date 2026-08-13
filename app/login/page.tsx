@@ -5,6 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
+import { getSafeReturnTo } from "@/lib/auth-return";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -97,7 +98,10 @@ export default function LoginPage() {
         localStorage.removeItem("remember_email");
       }
 
-      router.replace("/archive");
+      const returnTo = getSafeReturnTo(
+        new URLSearchParams(window.location.search).get("returnTo"),
+      );
+      router.replace(returnTo);
     } catch {
       setMessage(t.auth.network_local_fallback);
       setShowLocalFallback(true);

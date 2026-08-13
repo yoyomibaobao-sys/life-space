@@ -20,10 +20,13 @@ import {
 } from "@/lib/plant-guide-compat";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref } from "@/lib/auth-return";
 
 const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
 const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
 const MAX_RECENT_SEARCHES = 8;
+const INITIAL_VISIBLE_PLANT_COUNT = 24;
+const PLANT_BATCH_SIZE = 24;
 
 let hasCheckedInitialPlantNavigation = false;
 
@@ -193,11 +196,15 @@ export default function PlantIndexPage() {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [searchStateRestored, setSearchStateRestored] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [visiblePlantCount, setVisiblePlantCount] = useState(
+    INITIAL_VISIBLE_PLANT_COUNT,
+  );
   const [loading, setLoading] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const desktopSearchWrapRef = useRef<HTMLDivElement>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const resultsSectionRef = useRef<HTMLElement>(null);
+  const loadMorePlantsRef = useRef<HTMLDivElement>(null);
   const pendingScrollYRef = useRef<number | null>(null);
   const [filters, setFilters] = useState<EnvironmentFilters>({
     light: "all",
@@ -246,6 +253,7 @@ export default function PlantIndexPage() {
           activeCategory?: unknown;
           filters?: Partial<EnvironmentFilters>;
           scrollY?: unknown;
+          visiblePlantCount?: unknown;
         } | null;
 
         if (!storedState) {
@@ -268,6 +276,12 @@ export default function PlantIndexPage() {
           scene: String(restoredFilters.scene || "all"),
           indoor: String(restoredFilters.indoor || "all"),
         });
+        setVisiblePlantCount(
+          Math.max(
+            INITIAL_VISIBLE_PLANT_COUNT,
+            Number(storedState.visiblePlantCount) || INITIAL_VISIBLE_PLANT_COUNT,
+          ),
+        );
 
         if (Number.isFinite(Number(storedState.scrollY))) {
           pendingScrollYRef.current = Math.max(0, Number(storedState.scrollY));
@@ -362,7 +376,7 @@ export default function PlantIndexPage() {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
     });
-  }, [loading, searchStateRestored]);
+  }, [loading, searchStateRestored, visiblePlantCount]);
 
   useEffect(() => {
     if (!searchPanelOpen || isMobileViewport) return;
@@ -515,6 +529,36 @@ export default function PlantIndexPage() {
     hasCloudAccess,
   ]);
 
+  const visiblePlants = useMemo(
+    () => filteredPlants.slice(0, visiblePlantCount),
+    [filteredPlants, visiblePlantCount],
+  );
+  const hasMoreVisiblePlants = visiblePlants.length < filteredPlants.length;
+
+  useEffect(() => {
+    const node = loadMorePlantsRef.current;
+    if (
+      !node ||
+      !hasMoreVisiblePlants ||
+      typeof window.IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setVisiblePlantCount((current) =>
+          Math.min(current + PLANT_BATCH_SIZE, filteredPlants.length),
+        );
+      },
+      { rootMargin: "320px 0px" },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filteredPlants.length, hasMoreVisiblePlants]);
+
   const searchSuggestions = useMemo(() => {
     const keyword = normalize(searchInput);
     if (!keyword) return [];
@@ -543,6 +587,12 @@ export default function PlantIndexPage() {
 
   function updateFilter<K extends keyof EnvironmentFilters>(key: K, value: EnvironmentFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
+    setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
+  }
+
+  function changeCategory(value: string) {
+    setActiveCategory(value);
+    setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
   }
 
   function resetFilters() {
@@ -553,9 +603,14 @@ export default function PlantIndexPage() {
       scene: "all",
       indoor: "all",
     });
+    setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
   }
 
-  function persistSearchState(nextQuery = query, nextInput = searchInput) {
+  function persistSearchState(
+    nextQuery = query,
+    nextInput = searchInput,
+    nextVisiblePlantCount = visiblePlantCount,
+  ) {
     try {
       window.sessionStorage.setItem(
         PLANT_SEARCH_STATE_KEY,
@@ -565,6 +620,7 @@ export default function PlantIndexPage() {
           activeCategory,
           filters,
           scrollY: window.scrollY,
+          visiblePlantCount: nextVisiblePlantCount,
         })
       );
     } catch {
@@ -594,10 +650,11 @@ export default function PlantIndexPage() {
 
     setSearchInput(keyword);
     setQuery(keyword);
+    setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
     setSearchPanelOpen(false);
     setIsMobileSearchOpen(false);
     rememberSearch(keyword);
-    persistSearchState(keyword, keyword);
+    persistSearchState(keyword, keyword, INITIAL_VISIBLE_PLANT_COUNT);
 
     window.requestAnimationFrame(() => {
       resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -903,7 +960,11 @@ export default function PlantIndexPage() {
             {t.plant.title}
           </h1>
           <Link
-            href={isSignedIn ? "/archive/interests" : "/login"}
+            href={
+              isSignedIn
+                ? "/archive/interests"
+                : buildLoginHref("/archive/interests")
+            }
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1011,7 +1072,7 @@ export default function PlantIndexPage() {
               <button
                 key={category}
                 type="button"
-                onClick={() => setActiveCategory(category)}
+                onClick={() => changeCategory(category)}
                 style={{
                   border:
                     activeCategory === category
@@ -1119,7 +1180,7 @@ export default function PlantIndexPage() {
             <FilterSelect
               label={t.plant.category}
               value={activeCategory}
-              onChange={setActiveCategory}
+              onChange={changeCategory}
               options={categoryFilterOptions}
               compact={isMobileViewport}
             />
@@ -1241,7 +1302,7 @@ export default function PlantIndexPage() {
               gap: 12,
             }}
           >
-            {filteredPlants.map((plant) => {
+            {visiblePlants.map((plant) => {
               const plantAliases = uniqueTextList(aliasMap[plant.id] || []);
               const summary = isSignedIn ? guideMap[plant.id]?.summary : null;
               const envTags = isSignedIn
@@ -1371,6 +1432,39 @@ export default function PlantIndexPage() {
             })}
           </div>
         )}
+
+        {!loading && hasMoreVisiblePlants ? (
+          <div
+            ref={loadMorePlantsRef}
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              padding: "16px 0 4px",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setVisiblePlantCount((current) =>
+                  Math.min(current + PLANT_BATCH_SIZE, filteredPlants.length),
+                )
+              }
+              style={{
+                minHeight: 40,
+                padding: "8px 18px",
+                border: "1px solid #d7e5d1",
+                borderRadius: 999,
+                background: "#fff",
+                color: "#456b40",
+                fontSize: 13,
+                fontWeight: 750,
+                cursor: "pointer",
+              }}
+            >
+              {t.plant.load_more}
+            </button>
+          </div>
+        ) : null}
       </section>
     </main>
   );

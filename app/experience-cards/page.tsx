@@ -16,6 +16,7 @@ import type {
   ExperienceCardRow,
 } from "@/lib/experience-card-types";
 import { supabase } from "@/lib/supabase";
+import { buildLoginHref } from "@/lib/auth-return";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CardListItem = ExperienceCardListItem & {
@@ -39,7 +40,7 @@ export default function MyExperienceCardsPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      router.replace("/login");
+      router.replace(buildLoginHref("/experience-cards"));
       return;
     }
 

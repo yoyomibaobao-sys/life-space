@@ -15,6 +15,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref } from "@/lib/auth-return";
 
 export default function MembershipPage() {
   const { language, t } = useLanguage();
@@ -104,7 +105,9 @@ export default function MembershipPage() {
         <div style={eyebrowStyle}>{t.membership_page.eyebrow}</div>
         <h1 style={isMobileViewport ? mobileTitleStyle : titleStyle}>{t.membership_page.title}</h1>
         <p style={isMobileViewport ? mobileSubtitleStyle : subtitleStyle}>
-          {t.membership_page.subtitle}
+          {isMobileViewport
+            ? t.membership_page.mobile_subtitle
+            : t.membership_page.subtitle}
         </p>
       </section>
 
@@ -114,7 +117,9 @@ export default function MembershipPage() {
         <section style={isMobileViewport ? mobileStatusCardStyle : statusCardStyle}>
           <div>
             <div style={sectionLabelStyle}>{t.membership_page.current_account}</div>
-            <h2 style={sectionTitleStyle}>{userEmail}</h2>
+            <h2 style={isMobileViewport ? mobileSectionTitleStyle : sectionTitleStyle}>
+              {userEmail}
+            </h2>
             <p style={mutedTextStyle}>
               {membershipLoadFailed
                 ? t.membership_page.load_failed
@@ -165,7 +170,7 @@ export default function MembershipPage() {
             />
           </div>
 
-          {isLocalFreeUser ? (
+          {isLocalFreeUser && !isMobileViewport ? (
             <div style={localFreeNoticeStyle}>
               {t.membership_page.local_user_notice}
             </div>
@@ -183,10 +188,18 @@ export default function MembershipPage() {
             </div>
           ) : null}
 
-          <div style={actionRowStyle}>
-            <a href="#payment" style={primaryButtonStyle}>
-              {membership ? t.membership_page.view_renewal : t.membership_page.view_opening}
-            </a>
+          <div style={isMobileViewport ? mobileActionRowStyle : actionRowStyle}>
+            {isMobileViewport ? (
+              <Link href="/membership/payment" style={primaryButtonStyle}>
+                {membership
+                  ? t.membership_page.renew_now
+                  : t.membership_page.open_now}
+              </Link>
+            ) : (
+              <a href="#payment" style={primaryButtonStyle}>
+                {membership ? t.membership_page.view_renewal : t.membership_page.view_opening}
+              </a>
+            )}
             <Link href="/profile" style={secondaryButtonStyle}>
               {t.membership_page.back_to_profile}
             </Link>
@@ -196,145 +209,143 @@ export default function MembershipPage() {
         <section style={isMobileViewport ? mobileStatusCardStyle : statusCardStyle}>
           <div>
             <div style={sectionLabelStyle}>{t.membership_page.signed_out}</div>
-            <h2 style={sectionTitleStyle}>{t.membership_page.signed_out_title}</h2>
+            <h2 style={isMobileViewport ? mobileSectionTitleStyle : sectionTitleStyle}>
+              {t.membership_page.signed_out_title}
+            </h2>
             <p style={mutedTextStyle}>
               {t.membership_page.signed_out_intro}
             </p>
           </div>
 
-          <div style={actionRowStyle}>
-            <Link href="/register" style={primaryButtonStyle}>
-              {t.membership_page.register_account}
-            </Link>
-            <Link href="/login" style={secondaryButtonStyle}>
-              {t.membership_page.existing_account_login}
-            </Link>
+          <div style={isMobileViewport ? mobileActionRowStyle : actionRowStyle}>
+            {isMobileViewport ? (
+              <Link
+                href={buildLoginHref("/membership/payment")}
+                style={primaryButtonStyle}
+              >
+                {t.membership_page.login_and_continue_payment}
+              </Link>
+            ) : (
+              <>
+                <Link href="/register" style={primaryButtonStyle}>
+                  {t.membership_page.register_account}
+                </Link>
+                <Link
+                  href={buildLoginHref("/membership")}
+                  style={secondaryButtonStyle}
+                >
+                  {t.membership_page.existing_account_login}
+                </Link>
+              </>
+            )}
           </div>
         </section>
       )}
 
-      <section style={isMobileViewport ? mobileTrialNoticeStyle : trialNoticeStyle}>
-        <div style={sectionLabelStyle}>{t.membership_page.trial_label}</div>
-        <h2 style={noteTitleStyle}>{t.membership_page.trial_title}</h2>
-        <p style={mutedTextStyle}>
-          {t.membership_page.trial_description}
-        </p>
-      </section>
-
-      <section style={isMobileViewport ? mobilePlansGridStyle : plansGridStyle}>
-        {t.membership_page.plans.map((plan, index) => (
-          <PlanCard
-            key={plan.title}
-            {...plan}
-            featured={index === 2}
-            compact={isMobileViewport}
-          />
-        ))}
-      </section>
-
-      <section id="payment" style={isMobileViewport ? mobilePaymentCardStyle : paymentCardStyle}>
-        <div>
-          <div style={sectionLabelStyle}>{t.membership_page.payment_label}</div>
-          <h2 style={noteTitleStyle}>{t.membership_page.payment_title}</h2>
-          <p style={mutedTextStyle}>
-            {isMobileViewport
-              ? t.membership_page.payment_mobile_intro
-              : t.membership_page.payment_intro}
-          </p>
-        </div>
-
-        {isMobileViewport ? (
-          <>
-            <div style={mobilePaymentGridStyle}>
-              <div style={mobilePaymentItemStyle}>
-                <div style={paymentTitleStyle}>{t.membership_page.domestic_users}</div>
-                <div style={mobilePaymentPriceStyle}>{t.membership_page.domestic_price}</div>
-                <a href="mailto:yoyomibaobao@gmail.com" style={mobilePaymentActionStyle}>
-                  {t.membership_page.domestic_payment_action}
-                </a>
-              </div>
-
-              <div style={mobilePaymentItemStyle}>
-                <div style={paymentTitleStyle}>{t.membership_page.overseas_users}</div>
-                <div style={mobilePaymentPriceStyle}>{t.membership_page.overseas_price}</div>
-                <a
-                  href="https://paypal.me/ying0chen/8"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={mobilePaymentActionStyle}
-                >
-                  {t.membership_page.overseas_payment_action}
-                </a>
-              </div>
-            </div>
-
-            <div style={mobilePaymentContactStyle}>
-              {t.membership_page.payment_mobile_contact}
-              <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
-                yoyomibaobao@gmail.com
-              </a>
-            </div>
-          </>
-        ) : (
+      {isMobileViewport ? (
+        <section style={mobileBenefitsCardStyle}>
+          <div style={sectionLabelStyle}>{t.membership_page.core_benefits_title}</div>
+          <div style={mobileMembershipPricesStyle}>
+            <strong style={mobileMembershipPriceStyle}>
+              {t.membership_page.domestic_price}
+            </strong>
+            <span style={mobileMembershipOverseasPriceStyle}>
+              {t.membership_page.overseas_price}
+            </span>
+          </div>
+          <ul style={mobileCoreBenefitsStyle}>
+            {t.membership_page.plans[2].mobile_items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <Link href="/membership/benefits" style={mobileBenefitsLinkStyle}>
+            {t.membership_page.view_benefits_rules}
+          </Link>
+        </section>
+      ) : (
         <>
-        <div style={paymentGridStyle}>
-          <div style={paymentItemStyle}>
-            <div style={paymentTitleStyle}>{t.membership_page.domestic_users}</div>
-            <div style={paymentPriceStyle}>{t.membership_page.domestic_price}</div>
-            <p style={paymentDescStyle}>
-              {t.membership_page.domestic_before_email}{" "}
+          <section style={trialNoticeStyle}>
+            <div style={sectionLabelStyle}>{t.membership_page.trial_label}</div>
+            <h2 style={noteTitleStyle}>{t.membership_page.trial_title}</h2>
+            <p style={mutedTextStyle}>
+              {t.membership_page.trial_description}
+            </p>
+          </section>
+
+          <section style={plansGridStyle}>
+            {t.membership_page.plans.map((plan, index) => (
+              <PlanCard
+                key={plan.title}
+                {...plan}
+                featured={index === 2}
+                compact={false}
+              />
+            ))}
+          </section>
+
+          <section id="payment" style={paymentCardStyle}>
+            <div>
+              <div style={sectionLabelStyle}>{t.membership_page.payment_label}</div>
+              <h2 style={noteTitleStyle}>{t.membership_page.payment_title}</h2>
+              <p style={mutedTextStyle}>{t.membership_page.payment_intro}</p>
+            </div>
+
+            <div style={paymentGridStyle}>
+              <div style={paymentItemStyle}>
+                <div style={paymentTitleStyle}>{t.membership_page.domestic_users}</div>
+                <div style={paymentPriceStyle}>{t.membership_page.domestic_price}</div>
+                <p style={paymentDescStyle}>
+                  {t.membership_page.domestic_before_email}{" "}
+                  <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
+                    yoyomibaobao@gmail.com
+                  </a>{" "}
+                  {t.membership_page.domestic_after_email}
+                </p>
+              </div>
+
+              <div style={paymentItemStyle}>
+                <div style={paymentTitleStyle}>{t.membership_page.overseas_users}</div>
+                <div style={paymentPriceStyle}>{t.membership_page.overseas_price}</div>
+                <p style={paymentDescStyle}>
+                  {t.membership_page.overseas_before_paypal}{" "}
+                  <a
+                    href="https://paypal.me/ying0chen/8"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={inlineLinkStyle}
+                  >
+                    paypal.me/ying0chen/8
+                  </a>
+                  {t.membership_page.overseas_after_paypal}{" "}
+                  <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
+                    yoyomibaobao@gmail.com
+                  </a>{" "}
+                  {t.membership_page.overseas_after_email}
+                </p>
+              </div>
+            </div>
+
+            <div style={adminContactStyle}>
+              {t.membership_page.admin_email}
               <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
                 yoyomibaobao@gmail.com
-              </a>{" "}
-              {t.membership_page.domestic_after_email}
-            </p>
-          </div>
-
-          <div style={paymentItemStyle}>
-            <div style={paymentTitleStyle}>{t.membership_page.overseas_users}</div>
-            <div style={paymentPriceStyle}>{t.membership_page.overseas_price}</div>
-            <p style={paymentDescStyle}>
-              {t.membership_page.overseas_before_paypal}{" "}
-              <a
-                href="https://paypal.me/ying0chen/8"
-                target="_blank"
-                rel="noreferrer"
-                style={inlineLinkStyle}
-              >
-                paypal.me/ying0chen/8
               </a>
-              {t.membership_page.overseas_after_paypal}{" "}
-              <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
-                yoyomibaobao@gmail.com
-              </a>{" "}
-              {t.membership_page.overseas_after_email}
-            </p>
-          </div>
-        </div>
+            </div>
 
-        <div style={adminContactStyle}>
-          {t.membership_page.admin_email}
-          <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
-            yoyomibaobao@gmail.com
-          </a>
-        </div>
+            <div style={customStorageStyle}>
+              <strong>{t.membership_page.more_storage_label}</strong>
+              {t.membership_page.more_storage_text}
+            </div>
+          </section>
 
-        <div style={customStorageStyle}>
-          <strong>{t.membership_page.more_storage_label}</strong>{t.membership_page.more_storage_text}
-        </div>
+          <section style={noteCardStyle}>
+            <h2 style={noteTitleStyle}>{t.membership_page.rules_title}</h2>
+            <ul style={ruleListStyle}>
+              {t.membership_page.rules.map((rule) => <li key={rule}>{rule}</li>)}
+            </ul>
+          </section>
         </>
-        )}
-      </section>
-
-      <section style={isMobileViewport ? mobileNoteCardStyle : noteCardStyle}>
-        <h2 style={noteTitleStyle}>{t.membership_page.rules_title}</h2>
-        <ul style={ruleListStyle}>
-          {(isMobileViewport
-            ? t.membership_page.mobile_rules
-            : t.membership_page.rules
-          ).map((rule) => <li key={rule}>{rule}</li>)}
-        </ul>
-      </section>
+      )}
     </main>
   );
 }
@@ -483,12 +494,6 @@ const trialNoticeStyle: CSSProperties = {
   background: "#f7faf3",
 };
 
-const mobileTrialNoticeStyle: CSSProperties = {
-  ...mobileCardStyle,
-  marginBottom: 12,
-  background: "#f7faf3",
-};
-
 const sectionLabelStyle: CSSProperties = {
   fontSize: 13,
   color: "#6b7b66",
@@ -499,6 +504,13 @@ const sectionTitleStyle: CSSProperties = {
   margin: 0,
   fontSize: 22,
   color: "#1f2a1f",
+};
+
+const mobileSectionTitleStyle: CSSProperties = {
+  ...sectionTitleStyle,
+  fontSize: 18,
+  lineHeight: 1.35,
+  overflowWrap: "anywhere",
 };
 
 const mutedTextStyle: CSSProperties = {
@@ -562,8 +574,8 @@ const infoHintStyle: CSSProperties = {
 const mobileInfoHintStyle: CSSProperties = {
   ...infoHintStyle,
   marginTop: 3,
-  fontSize: 10,
-  lineHeight: 1.35,
+  fontSize: 12,
+  lineHeight: 1.4,
 };
 
 
@@ -581,6 +593,12 @@ const actionRowStyle: CSSProperties = {
   display: "flex",
   gap: 10,
   flexWrap: "wrap",
+};
+
+const mobileActionRowStyle: CSSProperties = {
+  ...actionRowStyle,
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr)",
 };
 
 const primaryButtonStyle: CSSProperties = {
@@ -615,13 +633,6 @@ const plansGridStyle: CSSProperties = {
   gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
   gap: 14,
   marginBottom: 20,
-};
-
-const mobilePlansGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr)",
-  gap: 8,
-  marginBottom: 12,
 };
 
 const planCardStyle = (featured: boolean): CSSProperties => ({
@@ -707,63 +718,10 @@ const paymentCardStyle: CSSProperties = {
   background: "#fffdf7",
 };
 
-const mobilePaymentCardStyle: CSSProperties = {
-  ...mobileCardStyle,
-  display: "grid",
-  gap: 11,
-  marginBottom: 12,
-  background: "#fffdf7",
-};
-
 const paymentGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 12,
-};
-
-const mobilePaymentGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 7,
-};
-
-const mobilePaymentItemStyle: CSSProperties = {
-  minWidth: 0,
-  border: "1px solid #efe6c8",
-  borderRadius: 12,
-  background: "#fffaf0",
-  padding: 10,
-};
-
-const mobilePaymentPriceStyle: CSSProperties = {
-  color: "#2d3828",
-  fontSize: 16,
-  fontWeight: 900,
-  lineHeight: 1.3,
-  marginBottom: 8,
-};
-
-const mobilePaymentActionStyle: CSSProperties = {
-  minHeight: 32,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderRadius: 999,
-  background: "#f0f6eb",
-  color: "#356b34",
-  fontSize: 11,
-  fontWeight: 800,
-  lineHeight: 1.2,
-  textAlign: "center",
-  textDecoration: "none",
-  padding: "5px 8px",
-};
-
-const mobilePaymentContactStyle: CSSProperties = {
-  color: "#6f6655",
-  fontSize: 12,
-  lineHeight: 1.55,
-  overflowWrap: "anywhere",
 };
 
 const paymentItemStyle: CSSProperties = {
@@ -813,11 +771,6 @@ const noteCardStyle: CSSProperties = {
   background: "#fbfbf7",
 };
 
-const mobileNoteCardStyle: CSSProperties = {
-  ...mobileCardStyle,
-  background: "#fbfbf7",
-};
-
 const noteTitleStyle: CSSProperties = {
   margin: "0 0 10px",
   fontSize: 18,
@@ -851,4 +804,44 @@ const customStorageStyle: CSSProperties = {
   color: "#5e503d",
   fontSize: 14,
   lineHeight: 1.7,
+};
+
+const mobileBenefitsCardStyle: CSSProperties = {
+  ...mobileCardStyle,
+  display: "grid",
+  gap: 12,
+  background: "#f8fbf5",
+};
+
+const mobileMembershipPricesStyle: CSSProperties = {
+  display: "grid",
+  gap: 1,
+};
+
+const mobileMembershipPriceStyle: CSSProperties = {
+  color: "#243123",
+  fontSize: 20,
+  fontWeight: 900,
+  lineHeight: 1.35,
+};
+
+const mobileMembershipOverseasPriceStyle: CSSProperties = {
+  color: "#6d7b68",
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.4,
+};
+
+const mobileCoreBenefitsStyle: CSSProperties = {
+  margin: 0,
+  paddingLeft: 20,
+  color: "#465541",
+  fontSize: 14,
+  lineHeight: 1.75,
+};
+
+const mobileBenefitsLinkStyle: CSSProperties = {
+  ...secondaryButtonStyle,
+  width: "100%",
+  boxSizing: "border-box",
 };

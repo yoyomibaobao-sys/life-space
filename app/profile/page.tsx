@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { buildLoginHref } from "@/lib/auth-return";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
@@ -129,7 +130,7 @@ export default function ProfilePage() {
       } = await supabase.auth.getUser();
 
       if (error || !user) {
-        router.push("/login");
+        router.push(buildLoginHref("/profile"));
         return;
       }
 
@@ -388,7 +389,7 @@ export default function ProfilePage() {
       if (error || !session?.access_token) {
         setErrorMsg(t.profile.relogin_export);
         showToast(t.profile.relogin_export);
-        router.push("/login");
+        router.push(buildLoginHref("/profile"));
         return;
       }
 
@@ -463,7 +464,7 @@ export default function ProfilePage() {
       if (error || !session?.access_token) {
         setDeleteAccountError(t.profile.relogin_delete);
         showToast(t.profile.relogin_delete);
-        router.push("/login");
+        router.push(buildLoginHref("/profile"));
         return;
       }
 

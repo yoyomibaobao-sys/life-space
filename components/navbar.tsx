@@ -9,6 +9,7 @@ import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
+import { buildLoginHref } from "@/lib/auth-return";
 
 type MobileArchiveTitleInfo = {
   archiveId: string;
@@ -282,7 +283,7 @@ export default function Navbar() {
             ) : (
               shouldShowMobileProfileEntry(pathname) ? (
                 <Link
-                  href={user ? "/profile" : "/login"}
+                  href={user ? "/profile" : buildLoginHref("/profile")}
                   style={mobileProfileEntryStyle}
                 >
                   <UiIcon name="user" size={18} strokeWidth={1.8} />
@@ -336,13 +337,21 @@ export default function Navbar() {
                 {mobilePlantMenuOpen ? (
                   <div style={mobilePlantMenuStyle}>
                     <Link
-                      href={user ? "/archive/interests" : "/login"}
+                      href={
+                        user
+                          ? "/archive/interests"
+                          : buildLoginHref("/archive/interests")
+                      }
                       style={mobilePlantMenuItemStyle}
                     >
                       {t.nav.interested_plants}
                     </Link>
                     <Link
-                      href={user ? "/archive/plans" : "/login"}
+                      href={
+                        user
+                          ? "/archive/plans"
+                          : buildLoginHref("/archive/plans")
+                      }
                       style={mobilePlantMenuItemStyle}
                     >
                       {t.nav.planting_plan}
@@ -375,7 +384,7 @@ export default function Navbar() {
                 <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname, t.nav)}
               </Link>
             ) : !user && shouldShowMobileLoginAction(pathname) ? (
-              <Link href="/login" style={mobileLoginActionStyle}>
+              <Link href={buildLoginHref(pathname)} style={mobileLoginActionStyle}>
                 {t.nav.login}
               </Link>
             ) : null}
@@ -386,6 +395,7 @@ export default function Navbar() {
           pathname={pathname}
           user={user}
           discoverTab={desktopDiscoverTab}
+          archiveOwnerId={mobileArchiveTitleInfo?.ownerId || null}
           labels={t.nav}
         />
       </>
@@ -431,7 +441,7 @@ export default function Navbar() {
           </NavItem>
 
           <NavItem
-            href={user ? "/archive" : "/login"}
+            href={user ? "/archive" : buildLoginHref("/archive")}
             active={
               isActive("/archive") || pathname.startsWith("/experience-cards")
             }
@@ -488,7 +498,7 @@ export default function Navbar() {
         <div style={getGuestAreaStyle(isCompact)}>
           <DesktopUtilityActions feedbackLabel={t.feedback} />
 
-          <Link href="/login" style={loginLinkStyle}>
+          <Link href={buildLoginHref(pathname)} style={loginLinkStyle}>
             {t.nav.login}
           </Link>
           {pathname !== "/" ? (
@@ -520,19 +530,42 @@ function MobileBottomNav({
   pathname,
   user,
   discoverTab,
+  archiveOwnerId,
   labels,
 }: {
   pathname: string;
   user: SupabaseUser | null;
   discoverTab: "feed" | "following";
+  archiveOwnerId: string | null;
   labels: TranslationDictionary["nav"];
 }) {
+  const archiveDetailPath = getArchiveDetailPath(pathname);
+  const isOtherUsersArchive = Boolean(
+    archiveDetailPath && archiveOwnerId && archiveOwnerId !== user?.id,
+  );
+  const isPublicExperienceDetail = /^\/experience-cards\/[^/]+$/.test(pathname);
+  const isPersonalExperiencePath =
+    pathname === "/experience-cards" ||
+    pathname === "/experience-cards/new" ||
+    pathname.endsWith("/edit");
+  const isDiscoverSection =
+    pathname.startsWith("/discover/") ||
+    pathname.startsWith("/user/") ||
+    isOtherUsersArchive ||
+    isPublicExperienceDetail;
+  const isPersonalSection =
+    pathname.startsWith("/profile") ||
+    (isPathActive(pathname, "/archive") && !isOtherUsersArchive) ||
+    isPersonalExperiencePath;
+
   const items = [
     {
       label: labels.discover,
       icon: "home" as UiIconName,
       href: "/discover",
-      active: pathname === "/discover" && discoverTab === "feed",
+      active:
+        (pathname === "/discover" && discoverTab === "feed") ||
+        isDiscoverSection,
       onClick: () => {
         window.dispatchEvent(
           new CustomEvent("discover-tab-change", { detail: "feed" }),
@@ -542,8 +575,12 @@ function MobileBottomNav({
     {
       label: labels.following,
       icon: "follow" as UiIconName,
-      href: user ? "/discover?tab=following" : "/login",
-      active: pathname === "/discover" && discoverTab === "following",
+      href: user
+        ? "/discover?tab=following"
+        : buildLoginHref("/discover?tab=following"),
+      active:
+        (pathname === "/discover" && discoverTab === "following") ||
+        pathname.startsWith("/follow"),
       onClick: () => {
         if (!user) return;
         window.dispatchEvent(
@@ -554,10 +591,8 @@ function MobileBottomNav({
     {
       label: labels.personal_space,
       icon: "project" as UiIconName,
-      href: user ? "/archive" : "/login",
-      active:
-        isPathActive(pathname, "/archive") ||
-        isPathActive(pathname, "/experience-cards"),
+      href: user ? "/archive" : buildLoginHref("/archive"),
+      active: isPersonalSection,
     },
     {
       label: labels.guide,
@@ -678,7 +713,11 @@ function shouldShowMobileCreateAction(pathname: string) {
 }
 
 function shouldShowMobileLoginAction(pathname: string) {
-  return !pathname.startsWith("/login") && !pathname.startsWith("/register");
+  return (
+    !shouldShowMobileProfileEntry(pathname) &&
+    !pathname.startsWith("/login") &&
+    !pathname.startsWith("/register")
+  );
 }
 
 function getMobileCreateHref(pathname: string, hasUser: boolean) {
@@ -943,7 +982,7 @@ function mobileBottomNavItemStyle(active: boolean): CSSProperties {
     color: active ? "#2f6a31" : "#657160",
     background: active ? "#edf6e8" : "transparent",
     borderRadius: 12,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: active ? 800 : 650,
     lineHeight: 1,
   };
