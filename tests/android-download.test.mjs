@@ -27,7 +27,8 @@ test("Android download keeps environment overrides and assembles its bundled tes
   assert.ok(bundledFallback > environmentOverride);
   assert.match(route, /\{ length: 8 \}/);
   assert.match(route, /\/downloads\/android-test-parts\/part-/);
-  assert.match(route, /BUNDLED_ANDROID_APK_VERSION = "1\.0\.2"/);
+  assert.match(route, /BUNDLED_ANDROID_APK_NAME = "youshi-cultivation-android-1\.0\.3\.apk"/);
+  assert.match(route, /BUNDLED_ANDROID_APK_VERSION = "1\.0\.3"/);
   assert.match(route, /searchParams\.set\("v", BUNDLED_ANDROID_APK_VERSION\)/);
   assert.match(route, /totalSize !== BUNDLED_ANDROID_APK_SIZE/);
   assert.match(route, /application\/vnd\.android\.package-archive/);
@@ -36,7 +37,7 @@ test("Android download keeps environment overrides and assembles its bundled tes
   assert.match(route, /NextResponse\.redirect/);
   assert.match(route, /serveBundledAndroidApk\(request\)/);
   assert.match(zh, /download_android: "下载 Android 测试版"/);
-  assert.match(checksum, /^[a-f0-9]{64}\s+youshi-cultivation-android-test\.apk\s*$/);
+  assert.match(checksum, /^[a-f0-9]{64}\s+youshi-cultivation-android-1\.0\.3\.apk\s*$/);
 
   const apk = Buffer.concat(
     Array.from({ length: 8 }, (_, index) =>
