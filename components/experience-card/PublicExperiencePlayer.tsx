@@ -30,9 +30,11 @@ function getPublicPlaybackSelection(detail: ExperienceCardDetail) {
 export default function PublicExperiencePlayer({
   detail,
   active,
+  fullscreen = false,
 }: {
   detail: ExperienceCardDetail;
   active: boolean;
+  fullscreen?: boolean;
 }) {
   const { language, t } = useLanguage();
   const [sceneIndex, setSceneIndex] = useState(0);
@@ -74,12 +76,12 @@ export default function PublicExperiencePlayer({
   if (!currentScene) return null;
 
   return (
-    <article style={playerShellStyle} aria-label={detail.card.title}>
+    <article style={fullscreen ? fullscreenPlayerShellStyle : playerShellStyle} aria-label={detail.card.title}>
       <button
         type="button"
         onClick={() => setPaused((value) => !value)}
         aria-label={paused ? t.experience.play : t.experience.pause}
-        style={stageButtonStyle}
+        style={fullscreen ? fullscreenStageButtonStyle : stageButtonStyle}
       >
         {currentScene.imageUrl ? (
           <img
@@ -102,7 +104,7 @@ export default function PublicExperiencePlayer({
             <span style={introAuthorStyle}>{currentScene.text}</span>
           </span>
         ) : (
-          <span style={recordCaptionStyle}>
+          <span style={fullscreen ? fullscreenRecordCaptionStyle : recordCaptionStyle}>
             <span style={recordDateStyle}>{currentScene.date}</span>
             {currentScene.text ? (
               <span style={recordTextStyle}>{currentScene.text}</span>
@@ -124,21 +126,23 @@ export default function PublicExperiencePlayer({
         ) : null}
       </button>
 
-      <span style={progressTrackStyle}>
+      <span style={fullscreen ? fullscreenProgressTrackStyle : progressTrackStyle}>
         <span style={{ ...progressFillStyle, width: `${progress * 100}%` }} />
       </span>
 
-      <div style={metaStyle}>
+      <div style={fullscreen ? fullscreenMetaStyle : metaStyle}>
         <div style={{ minWidth: 0 }}>
-          <strong style={titleStyle}>{detail.card.title}</strong>
-          <span style={authorStyle}>
+          <strong style={fullscreen ? fullscreenTitleStyle : titleStyle}>{detail.card.title}</strong>
+          <span style={fullscreen ? fullscreenAuthorStyle : authorStyle}>
             {detail.author?.username || t.experience.default_user}
             {detail.archive.title ? ` · ${detail.archive.title}` : ""}
           </span>
         </div>
-        <Link href={`/experience-cards/${detail.card.id}`} style={detailLinkStyle}>
-          {t.experience.view_details}
-        </Link>
+        {!fullscreen ? (
+          <Link href={`/experience-cards/${detail.card.id}`} style={detailLinkStyle}>
+            {t.experience.view_details}
+          </Link>
+        ) : null}
       </div>
     </article>
   );
@@ -148,6 +152,14 @@ const playerShellStyle: CSSProperties = {
   width: "min(100%, 330px)",
   margin: "0 auto 16px",
   scrollSnapAlign: "start",
+};
+const fullscreenPlayerShellStyle: CSSProperties = {
+  position: "relative",
+  width: "100%",
+  height: "100%",
+  margin: 0,
+  overflow: "hidden",
+  background: "#101710",
 };
 const stageButtonStyle: CSSProperties = {
   position: "relative",
@@ -164,6 +176,14 @@ const stageButtonStyle: CSSProperties = {
   textAlign: "left",
   cursor: "pointer",
   boxShadow: "0 12px 34px rgba(31, 48, 31, 0.18)",
+};
+const fullscreenStageButtonStyle: CSSProperties = {
+  ...stageButtonStyle,
+  height: "100%",
+  maxHeight: "none",
+  aspectRatio: "auto",
+  borderRadius: 0,
+  boxShadow: "none",
 };
 const sceneImageStyle: CSSProperties = {
   position: "absolute",
@@ -200,6 +220,10 @@ const recordCaptionStyle: CSSProperties = {
   background: "rgba(15, 25, 15, 0.58)",
   backdropFilter: "blur(7px)",
 };
+const fullscreenRecordCaptionStyle: CSSProperties = {
+  ...recordCaptionStyle,
+  bottom: "calc(92px + var(--app-safe-area-bottom))",
+};
 const recordDateStyle: CSSProperties = { fontSize: 12, opacity: 0.82 };
 const recordTextStyle: CSSProperties = { fontSize: 15, lineHeight: 1.55 };
 const tagRowStyle: CSSProperties = { display: "flex", gap: 6, flexWrap: "wrap" };
@@ -230,6 +254,16 @@ const progressTrackStyle: CSSProperties = {
   borderRadius: 999,
   background: "#dfe7dc",
 };
+const fullscreenProgressTrackStyle: CSSProperties = {
+  ...progressTrackStyle,
+  position: "absolute",
+  left: 12,
+  right: 12,
+  bottom: "calc(78px + var(--app-safe-area-bottom))",
+  zIndex: 4,
+  margin: 0,
+  background: "rgba(255,255,255,.28)",
+};
 const progressFillStyle: CSSProperties = {
   display: "block",
   height: "100%",
@@ -243,6 +277,16 @@ const metaStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 12,
   padding: "9px 4px 0",
+};
+const fullscreenMetaStyle: CSSProperties = {
+  ...metaStyle,
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 4,
+  padding: "14px 16px calc(16px + var(--app-safe-area-bottom))",
+  background: "linear-gradient(180deg, transparent, rgba(8,14,8,.78))",
 };
 const titleStyle: CSSProperties = {
   display: "block",
@@ -260,6 +304,14 @@ const authorStyle: CSSProperties = {
   fontSize: 12,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+};
+const fullscreenTitleStyle: CSSProperties = {
+  ...titleStyle,
+  color: "#fff",
+};
+const fullscreenAuthorStyle: CSSProperties = {
+  ...authorStyle,
+  color: "rgba(255,255,255,.78)",
 };
 const detailLinkStyle: CSSProperties = {
   flexShrink: 0,

@@ -66,6 +66,7 @@ import {
   type LocalTaxonomyItem,
 } from "@/lib/local-offline-db";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import MobileNotificationLink from "@/components/mobile/MobileNotificationLink";
 
 type LatestArchiveRecord = {
   id: string;
@@ -1898,34 +1899,63 @@ export default function ArchivePage() {
   return (
     <main
       style={{
-        padding: isMobileViewport ? "14px 12px 24px" : "22px 18px 42px",
+        padding: isMobileViewport ? "8px 8px 24px" : "22px 18px 42px",
         maxWidth: 1080,
         margin: "0 auto",
       }}
     >
       <section style={personalSpaceIdentityStyle(isMobileViewport)}>
-        <div style={personalSpaceIdentityMainStyle}>
-          {spaceProfile?.avatar_url ? (
-            <img
-              src={spaceProfile.avatar_url}
-              alt={spaceProfile.username || t.archive_workspace.my_space}
-              style={personalSpaceAvatarStyle}
-            />
-          ) : (
-            <span style={personalSpaceAvatarFallbackStyle}>
-              <UiIcon name="user" size={20} />
-            </span>
-          )}
-          <div style={{ minWidth: 0 }}>
-            <h1 style={personalSpaceTitleStyle}>{t.archive_workspace.my_space}</h1>
-            <div style={personalSpaceUsernameStyle}>
-              {spaceProfile?.username || t.nav.username_unset}
+        {isMobileViewport ? (
+          <>
+            <Link href="/profile" style={personalSpaceIdentityLinkStyle}>
+              {spaceProfile?.avatar_url ? (
+                <img
+                  src={spaceProfile.avatar_url}
+                  alt={spaceProfile.username || t.archive_workspace.personal_info}
+                  style={{ ...personalSpaceAvatarStyle, width: 34, height: 34 }}
+                />
+              ) : (
+                <span style={{ ...personalSpaceAvatarFallbackStyle, width: 34, height: 34 }}>
+                  <UiIcon name="user" size={17} />
+                </span>
+              )}
+              <span style={{ minWidth: 0 }}>
+                <strong style={personalSpaceMobileUsernameStyle}>
+                  {spaceProfile?.username || t.nav.username_unset}
+                </strong>
+                <span style={personalSpaceMobileInfoLabelStyle}>
+                  {t.archive_workspace.personal_info}
+                </span>
+              </span>
+            </Link>
+            <MobileNotificationLink />
+          </>
+        ) : (
+          <>
+            <div style={personalSpaceIdentityMainStyle}>
+              {spaceProfile?.avatar_url ? (
+                <img
+                  src={spaceProfile.avatar_url}
+                  alt={spaceProfile.username || t.archive_workspace.my_space}
+                  style={personalSpaceAvatarStyle}
+                />
+              ) : (
+                <span style={personalSpaceAvatarFallbackStyle}>
+                  <UiIcon name="user" size={20} />
+                </span>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <h1 style={personalSpaceTitleStyle}>{t.archive_workspace.my_space}</h1>
+                <div style={personalSpaceUsernameStyle}>
+                  {spaceProfile?.username || t.nav.username_unset}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <Link href="/profile" style={personalInfoLinkStyle}>
-          {t.archive_workspace.personal_info}
-        </Link>
+            <Link href="/profile" style={personalInfoLinkStyle}>
+              {t.archive_workspace.personal_info}
+            </Link>
+          </>
+        )}
       </section>
 
       <section style={personalSpaceEntryRowStyle}>
@@ -2051,22 +2081,24 @@ export default function ArchivePage() {
                     ) : undefined
                   }
                   selectControls={
-                    <>
-                      <ArchiveCategoryDropdown
-                        value={archive.subcategory || archive.category}
-                        subTags={localSubTagItems}
-                        compact
-                        onChange={(nextValue) => updateLocalArchiveCategoryValue(archive, nextValue)}
-                      />
-                      {archive.subcategory && availableLocalGroups.length > 0 ? (
-                        <ArchiveGroupDropdown
-                          value={archive.group_name || ""}
-                          groupTags={availableLocalGroups}
+                    !isMobileViewport ? (
+                      <>
+                        <ArchiveCategoryDropdown
+                          value={archive.subcategory || archive.category}
+                          subTags={localSubTagItems}
                           compact
-                          onChange={(nextValue) => updateLocalArchiveGroupValue(archive, nextValue)}
+                          onChange={(nextValue) => updateLocalArchiveCategoryValue(archive, nextValue)}
                         />
-                      ) : null}
-                    </>
+                        {archive.subcategory && availableLocalGroups.length > 0 ? (
+                          <ArchiveGroupDropdown
+                            value={archive.group_name || ""}
+                            groupTags={availableLocalGroups}
+                            compact
+                            onChange={(nextValue) => updateLocalArchiveGroupValue(archive, nextValue)}
+                          />
+                        ) : null}
+                      </>
+                    ) : undefined
                   }
                   actionSlot={
                     isMobileViewport ? (
@@ -2346,15 +2378,54 @@ function LocalArchiveFilters({
 
 function personalSpaceIdentityStyle(mobile: boolean): CSSProperties {
   return {
+    position: mobile ? "sticky" : "static",
+    top: mobile ? 0 : undefined,
+    zIndex: mobile ? 100 : undefined,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 14,
+    gap: mobile ? 8 : 14,
     marginBottom: mobile ? 8 : 12,
-    padding: mobile ? "2px 2px 10px" : "0 0 10px",
+    marginTop: mobile ? -8 : 0,
+    marginLeft: mobile ? -8 : 0,
+    marginRight: mobile ? -8 : 0,
+    padding: mobile
+      ? "calc(7px + var(--app-safe-area-top)) 10px 7px"
+      : "0 0 10px",
     borderBottom: "1px solid #edf1ea",
+    background: mobile ? "rgba(250,252,248,0.97)" : "transparent",
+    backdropFilter: mobile ? "blur(10px)" : undefined,
   };
 }
+
+const personalSpaceIdentityLinkStyle: CSSProperties = {
+  minWidth: 0,
+  flex: 1,
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  color: "#253725",
+  textDecoration: "none",
+};
+
+const personalSpaceMobileUsernameStyle: CSSProperties = {
+  display: "block",
+  overflow: "hidden",
+  color: "#253725",
+  fontSize: 16,
+  fontWeight: 850,
+  lineHeight: 1.15,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const personalSpaceMobileInfoLabelStyle: CSSProperties = {
+  display: "block",
+  marginTop: 2,
+  color: "#7a8675",
+  fontSize: 11,
+  lineHeight: 1.1,
+};
 
 const personalSpaceIdentityMainStyle: CSSProperties = {
   display: "flex",

@@ -13,8 +13,10 @@ test("profile combines user and membership information without a personal-space 
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(profile, /type MobileProfileModule = "membership" \| "payment" \| "account"/);
-  assert.match(profile, /const showInfoModule = showMembershipModule/);
+  assert.match(profile, /type MobileProfileModule = "settings" \| "membership" \| "payment" \| "account"/);
+  assert.match(profile, /const showInfoModule = mobileProfileModule === "settings"/);
+  assert.match(profile, /t\.profile\.language_setting/);
+  assert.match(profile, /t\.profile\.address_setting/);
   assert.match(profile, /t\.profile\.registered_user_rights/);
   assert.match(profile, /t\.profile\.cloud_member_rights/);
   assert.match(profile, /href="\/membership\/benefits"/);
@@ -58,7 +60,8 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(navbar, /getMobilePageTitle\(pathname, t\.nav\)/);
   assert.match(navbar, /flexDirection: "column"/);
   assert.match(navbar, /transform: "translateZ\(0\)"/);
-  assert.match(navbar, /<LanguageSwitcher compact \/>/);
+  assert.doesNotMatch(navbar, /LanguageSwitcher/);
+  assert.match(navbar, /hasPageManagedMobileTopNav\(pathname\)/);
   assert.doesNotMatch(mobileNav, /href="\/feedback"/);
   assert.match(zhCopy, /discover: "发现"/);
   assert.match(enCopy, /discover: "Discover"/);
@@ -123,6 +126,34 @@ test("the center plus captures a photo and carries it into a new record", async 
   assert.match(localRecord, /deleteQuickCapture/);
 });
 
+test("mobile primary pages use contextual top bars and keep notifications in My Space", async () => {
+  const [navbar, topBar, homeTabs, archivePage, followPage, marketPage, discoverFilters, projectCard] = await Promise.all([
+    source("components/navbar.tsx"),
+    source("components/mobile/MobileContentTopBar.tsx"),
+    source("components/home/HomeSectionTabs.tsx"),
+    source("app/archive/page.tsx"),
+    source("app/follow/page.tsx"),
+    source("app/market/page.tsx"),
+    source("components/discover/DiscoverFilterBar.tsx"),
+    source("components/archive-ui/ArchiveProjectCard.tsx"),
+  ]);
+
+  assert.match(topBar, /showNotification = false/);
+  assert.match(homeTabs, /label: t\.nav\.activity, href: "\/discover"/);
+  assert.match(homeTabs, /label: t\.nav\.experience, href: "\/experience"/);
+  assert.match(homeTabs, /label: t\.nav\.guide, href: "\/plant"/);
+  assert.match(homeTabs, /active === "activity"[\s\S]*?"\/discover\/search"[\s\S]*?active === "experience"[\s\S]*?"\/experience\/search"/);
+  assert.match(archivePage, /<Link href="\/profile" style=\{personalSpaceIdentityLinkStyle\}>[\s\S]*?<MobileNotificationLink \/>/);
+  assert.doesNotMatch(followPage, /showNotification/);
+  assert.doesNotMatch(marketPage, /showNotification/);
+  assert.match(marketPage, /const \[mobileFiltersOpen, setMobileFiltersOpen\] = useState\(false\)/);
+  assert.match(marketPage, /isMobileViewport \? \([\s\S]*?mobileFiltersOpen \? \([\s\S]*?<MobileMarketFilters/);
+  assert.match(discoverFilters, /overflowX: "auto"/);
+  assert.match(projectCard, /width: mobileMode \? 96 : 104/);
+  assert.match(navbar, /pathname\.startsWith\("\/quick-record"\)\) return false/);
+  assert.match(navbar, /pathname\.startsWith\("\/quick-record"\)\) return labels\.add_record/);
+});
+
 test("mobile archive creation and project controls stay compact without clipping", async () => {
   const [archivePage, workspace, projectCard, newProjectShell, newProjectStyles, menu, menuStyles, listStyles] = await Promise.all([
     source("app/archive/page.tsx"),
@@ -185,15 +216,17 @@ test("account navigation keeps membership contextual and export under data manag
   ]);
 
   assert.match(profile, /value: "membership", label: t\.profile\.modules\.membership/);
+  assert.match(profile, /value: "settings", label: t\.profile\.modules\.settings/);
   assert.match(profile, /value: "payment", label: t\.profile\.modules\.payment/);
   assert.match(profile, /value: "account", label: t\.profile\.modules\.account/);
   assert.match(profile, /<MobileProfileModuleTabs/);
   assert.match(profile, /href: "\/admin\/memberships"/);
   assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
-  assert.match(profile, /compact[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(profile, /gridColumn: compact \? "1 \/ -1" : undefined/);
+  assert.match(profile, /display: compact \? "flex" : "grid"/);
+  assert.match(profile, /overflowX: compact \? "auto" : "visible"/);
+  assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minWidth: 104/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
-  assert.match(profile, /const showInfoModule = showMembershipModule/);
+  assert.match(profile, /const showInfoModule = mobileProfileModule === "settings"/);
   assert.match(profile, /admin_get_membership_payment_queue_count/);
   assert.match(profile, /href="\/admin\/memberships#payment-review"/);
   assert.match(profile, /<h2 style=\{dataTitleStyle\}>\{t\.profile\.export_backup\}<\/h2>/);
@@ -232,8 +265,9 @@ test("account navigation keeps membership contextual and export under data manag
 });
 
 test("mobile account actions, membership copy, and plant names stay compact", async () => {
-  const [navbar, membership, payment, benefits, zhCopy, enCopy] = await Promise.all([
+  const [navbar, profile, membership, payment, benefits, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
+    source("app/profile/page.tsx"),
     source("app/membership/page.tsx"),
     source("app/membership/payment/page.tsx"),
     source("app/membership/benefits/page.tsx"),
@@ -242,7 +276,8 @@ test("mobile account actions, membership copy, and plant names stay compact", as
   ]);
 
   assert.match(navbar, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
-  assert.match(navbar, /onClick=\{handleLogout\}[\s\S]*?style=\{mobileLogoutButtonStyle\}[\s\S]*?t\.nav\.logout/);
+  assert.doesNotMatch(navbar, /mobileLogoutButtonStyle/);
+  assert.match(profile, /onClick=\{\(\) => void handleProfileLogout\(\)\}[\s\S]*?style=\{accountLogoutButtonStyle\}[\s\S]*?t\.nav\.logout_full/);
   assert.doesNotMatch(navbar, /mobileMeMenuOpen|mobileMeMoreButtonStyle|mobileMeMenuStyle/);
 
   assert.doesNotMatch(membership, /t\.membership_page\.business_/);
@@ -326,9 +361,9 @@ test("mobile market keeps actions out of the global bar and uses readable manage
   ]);
 
   assert.doesNotMatch(navbar, /mobileMarketMineButtonStyle|mobileMarketPublishButtonStyle/);
-  assert.match(navbar, /if \(pathname\.startsWith\("\/market"\)\) return false/);
-  assert.match(market, /t\.market\.intro_title/);
-  assert.match(market, /t\.market\.intro_mobile/);
+  assert.match(navbar, /hasPageManagedMobileTopNav/);
+  assert.match(market, /<MobileContentTopBar/);
+  assert.match(market, /getMarketPostTypeOptions\(language\)\.map/);
   assert.match(market, /href="\/market\/mine"[\s\S]*?t\.market\.my_posts/);
   assert.match(market, /mobileHeaderStyle[\s\S]*?display: "flex"/);
   assert.match(market, /mobileFilterTopGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
@@ -338,8 +373,8 @@ test("mobile market keeps actions out of the global bar and uses readable manage
   assert.match(market, /cardStyle[\s\S]*?gridTemplateColumns: "96px minmax\(0, 1fr\)"/);
   assert.match(market, /infoValueStyle[\s\S]*?whiteSpace: "nowrap"/);
   assert.doesNotMatch(market, /href="\/market\/new"/);
-  assert.match(zhCopy, /intro_mobile: "平台仅发布供需信息，不提供站内交易。"/);
-  assert.match(enCopy, /intro_mobile: "Listings only; transactions do not take place in the app\."/);
+  assert.match(zhCopy, /my_posts: "我的发布"/);
+  assert.match(enCopy, /my_posts: "My posts"/);
 
   assert.match(mine, /href="\/market\/new"[\s\S]*?t\.market\.post_information/);
   assert.doesNotMatch(mine, /getMarketPostQuotaHint/);

@@ -52,7 +52,7 @@ type MembershipPaymentRow = {
   created_at: string | null;
 };
 
-type MobileProfileModule = "membership" | "payment" | "account";
+type MobileProfileModule = "settings" | "membership" | "payment" | "account";
 type MobileProfileNavItem = {
   label: string;
   value?: MobileProfileModule;
@@ -88,8 +88,9 @@ function getProfilePaymentStatusLabel(status: string | null | undefined, languag
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { language, t } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
+    { value: "settings", label: t.profile.modules.settings },
     { value: "membership", label: t.profile.modules.membership },
     { value: "payment", label: t.profile.modules.payment },
     { href: "/profile/trash", label: t.profile.modules.trash },
@@ -123,7 +124,7 @@ export default function ProfilePage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [mobileProfileModule, setMobileProfileModule] =
-    useState<MobileProfileModule>("membership");
+    useState<MobileProfileModule>("settings");
 
   useEffect(() => {
     const updateViewportWidth = () => setViewportWidth(window.innerWidth);
@@ -269,7 +270,7 @@ export default function ProfilePage() {
   const secondaryActionStyle = isMobileViewport ? mobileSecondaryLinkStyle : secondaryLinkStyle;
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
   const showMembershipModule = mobileProfileModule === "membership";
-  const showInfoModule = showMembershipModule;
+  const showInfoModule = mobileProfileModule === "settings";
   const showPaymentModule = mobileProfileModule === "payment";
   const showAccountModule = mobileProfileModule === "account";
 
@@ -410,6 +411,11 @@ export default function ProfilePage() {
     } finally {
       setExporting(false);
     }
+  }
+
+  async function handleProfileLogout() {
+    await supabase.auth.signOut({ scope: "local" });
+    router.replace("/login");
   }
 
   function openDeleteDialog() {
@@ -612,7 +618,29 @@ export default function ProfilePage() {
           </section>
 
           <section style={compactPanelStyle}>
-            <div style={sectionTitleStyle}>{t.profile.basic_info}</div>
+            <div style={sectionTitleStyle}>{t.profile.settings}</div>
+            <div style={languageSettingRowStyle}>
+              <span style={fieldLabelStyle}>{t.profile.language_setting}</span>
+              <div style={languageChoiceStyle}>
+                <button
+                  type="button"
+                  onClick={() => setLanguage("zh")}
+                  style={languageChoiceButtonStyle(language === "zh")}
+                >
+                  {t.profile.language_chinese}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLanguage("en")}
+                  style={languageChoiceButtonStyle(language === "en")}
+                >
+                  {t.profile.language_english}
+                </button>
+              </div>
+            </div>
+            <div style={{ ...sectionTitleStyle, marginTop: 14 }}>
+              {t.profile.address_setting}
+            </div>
             <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns }}>
               <div>
                 <label style={fieldLabelStyle}>{t.profile.username}</label>
@@ -847,6 +875,14 @@ export default function ProfilePage() {
           ) : null}
         </section>
 
+        <button
+          type="button"
+          onClick={() => void handleProfileLogout()}
+          style={accountLogoutButtonStyle}
+        >
+          {t.nav.logout_full}
+        </button>
+
         <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#9a5b55" }}>{t.profile.danger}</div>
@@ -924,8 +960,10 @@ function MobileProfileModuleTabs({
     <nav
       style={{
         ...mobileProfileTabsStyle,
+        display: compact ? "flex" : "grid",
+        overflowX: compact ? "auto" : "visible",
         gridTemplateColumns: compact
-          ? "repeat(2, minmax(0, 1fr))"
+          ? undefined
           : `repeat(${modules.length}, minmax(0, 1fr))`,
       }}
       aria-label={t.profile.module_aria}
@@ -939,9 +977,12 @@ function MobileProfileModuleTabs({
               item.href === "/admin/memberships"
                 ? {
                     ...mobileAdminMembershipEntryStyle,
-                    gridColumn: compact ? "1 / -1" : undefined,
+                    ...(compact ? mobileProfileCompactTabStyle : {}),
                   }
-                : mobileProfileLinkTabStyle
+                : {
+                    ...mobileProfileLinkTabStyle,
+                    ...(compact ? mobileProfileCompactTabStyle : {}),
+                  }
             }
           >
             {item.label}
@@ -951,7 +992,10 @@ function MobileProfileModuleTabs({
             key={item.value}
             type="button"
             onClick={() => onChange(item.value as MobileProfileModule)}
-            style={mobileProfileTabButtonStyle(active === item.value)}
+            style={{
+              ...mobileProfileTabButtonStyle(active === item.value),
+              ...(compact ? mobileProfileCompactTabStyle : {}),
+            }}
           >
             {item.label}
           </button>
@@ -1010,6 +1054,12 @@ const mobileProfileTabsStyle: CSSProperties = {
   overflowX: "visible",
   margin: "0 0 10px",
   padding: "2px 0 3px",
+};
+
+const mobileProfileCompactTabStyle: CSSProperties = {
+  minWidth: 104,
+  flex: "0 0 auto",
+  padding: "0 12px",
 };
 
 function mobileProfileTabButtonStyle(active: boolean): CSSProperties {
@@ -1158,6 +1208,33 @@ const mobileProfileSectionStyle: CSSProperties = {
   boxSizing: "border-box",
 };
 
+const languageSettingRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  marginTop: 10,
+};
+
+const languageChoiceStyle: CSSProperties = {
+  display: "inline-flex",
+  gap: 5,
+};
+
+function languageChoiceButtonStyle(active: boolean): CSSProperties {
+  return {
+    minHeight: 34,
+    padding: "0 12px",
+    border: active ? "1px solid #8fbd84" : "1px solid #dfe8da",
+    borderRadius: 999,
+    background: active ? "#edf7e9" : "#fff",
+    color: active ? "#2f6a31" : "#60705d",
+    fontSize: 13,
+    fontWeight: active ? 850 : 700,
+    cursor: "pointer",
+  };
+}
+
 const paymentHistorySectionStyle: CSSProperties = {
   marginTop: 14,
   background: "#fffdf7",
@@ -1294,6 +1371,19 @@ const dangerButtonStyle: CSSProperties = {
   cursor: "pointer",
   fontSize: 14,
   fontWeight: 600,
+};
+
+const accountLogoutButtonStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 40,
+  marginBottom: 10,
+  border: "1px solid #dfe7dc",
+  borderRadius: 12,
+  background: "#fff",
+  color: "#52634e",
+  fontSize: 14,
+  fontWeight: 750,
+  cursor: "pointer",
 };
 
 const deleteConfirmCheckStyle: CSSProperties = {

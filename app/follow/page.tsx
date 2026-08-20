@@ -17,6 +17,7 @@ import {
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
+import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
 
 type TabKey = "projects" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -138,6 +139,9 @@ export default function FollowPage() {
   const [projectSubmitting, setProjectSubmitting] = useState(false);
   const [userSubmitting, setUserSubmitting] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
+  const [userMenuOpenId, setUserMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -464,7 +468,29 @@ export default function FollowPage() {
   }
 
   return (
-    <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
+    <>
+      {isMobileViewport ? (
+        <MobileContentTopBar
+          ariaLabel={followT.title}
+          searchLabel={tab === "projects" ? followT.search_projects : followT.search_users}
+          onSearch={() => setMobileSearchOpen((open) => !open)}
+          items={[
+            {
+              key: "projects",
+              label: `${followT.projects} (${projectCards.length})`,
+              active: tab === "projects",
+              onClick: () => setTab("projects"),
+            },
+            {
+              key: "users",
+              label: `${followT.users} (${userCards.length})`,
+              active: tab === "users",
+              onClick: () => setTab("users"),
+            },
+          ]}
+        />
+      ) : null}
+      <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
       {!isMobileViewport ? (
         <section style={heroStyle}>
           <h1 style={titleStyle}>{followT.title}</h1>
@@ -476,8 +502,8 @@ export default function FollowPage() {
         </section>
       ) : null}
 
-      <section style={panelStyle}>
-        <div style={tabRowStyle}>
+      <section style={isMobileViewport ? mobilePanelStyle : panelStyle}>
+        {!isMobileViewport ? <div style={tabRowStyle}>
           <button
             type="button"
             onClick={() => setTab("projects")}
@@ -492,21 +518,21 @@ export default function FollowPage() {
           >
             {isMobileViewport ? `${followT.users} (${userCards.length})` : followT.users}
           </button>
-        </div>
+        </div> : null}
 
-        <div style={toolbarStyle}>
+        {!isMobileViewport || mobileSearchOpen ? <div style={isMobileViewport ? mobileToolbarStyle : toolbarStyle}>
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={tab === "projects" ? followT.search_projects : followT.search_users}
-            style={searchInputStyle}
+            style={isMobileViewport ? mobileSearchInputStyle : searchInputStyle}
           />
 
           {tab === "projects" ? (
             <select
               value={projectStatus}
               onChange={(e) => setProjectStatus(e.target.value as ProjectStatusFilter)}
-              style={selectStyle}
+              style={isMobileViewport ? mobileSelectStyle : selectStyle}
             >
               <option value="all">{followT.status_all}</option>
               <option value="open">{followT.status_open}</option>
@@ -514,7 +540,7 @@ export default function FollowPage() {
               <option value="ended">{followT.status_ended}</option>
             </select>
           ) : null}
-        </div>
+        </div> : null}
 
         {loading ? (
           <div style={emptyWrapStyle}>{followT.loading}</div>
@@ -527,7 +553,20 @@ export default function FollowPage() {
                 if (item.groupTagName) meta.push(item.groupTagName);
 
                 return (
-                  <article key={item.id} style={cardStyle}>
+                  <article
+                    key={item.id}
+                    role={isMobileViewport ? "link" : undefined}
+                    tabIndex={isMobileViewport ? 0 : undefined}
+                    onClick={() => {
+                      if (isMobileViewport) router.push(`/archive/${item.id}`);
+                    }}
+                    onKeyDown={(event) => {
+                      if (isMobileViewport && (event.key === "Enter" || event.key === " ")) {
+                        router.push(`/archive/${item.id}`);
+                      }
+                    }}
+                    style={{ ...cardStyle, cursor: isMobileViewport ? "pointer" : undefined }}
+                  >
                     <div style={coverStyle}>
                       {item.coverUrl ? (
                         <img src={item.coverUrl} alt="" style={coverImageStyle} />
@@ -544,6 +583,28 @@ export default function FollowPage() {
                         {item.statusKind !== "normal" ? (
                           <StatusBadge kind={item.statusKind}>{item.statusLabel}</StatusBadge>
                         ) : null}
+                        {isMobileViewport ? (
+                          <div style={followCardMenuWrapStyle} onClick={(event) => event.stopPropagation()}>
+                            <button
+                              type="button"
+                              aria-label={t.nav.more_actions}
+                              onClick={() => setProjectMenuOpenId((id) => id === item.id ? null : item.id)}
+                              style={followCardMoreButtonStyle}
+                            >
+                              <UiIcon name="more" size={18} />
+                            </button>
+                            {projectMenuOpenId === item.id ? (
+                              <div style={followCardMenuStyle}>
+                                <button type="button" onClick={() => router.push(`/user/${item.ownerId}`)} style={followCardMenuItemStyle}>
+                                  {followT.enter_space}
+                                </button>
+                                <button type="button" onClick={() => { setProjectMenuOpenId(null); setProjectConfirmId(item.id); }} style={followCardDangerMenuItemStyle}>
+                                  {followT.unfollow}
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || followT.projects}</div>
@@ -558,7 +619,7 @@ export default function FollowPage() {
                         ) : null}
                       </div>
 
-                      <div style={buttonRowStyle}>
+                      {!isMobileViewport ? <div style={buttonRowStyle}>
                         <button
                           type="button"
                           onClick={() => router.push(`/archive/${item.id}`)}
@@ -576,7 +637,7 @@ export default function FollowPage() {
                         <Link href={`/user/${item.ownerId}`} style={textLinkStyle}>
                           {followT.enter_space}
                         </Link>
-                      </div>
+                      </div> : null}
                     </div>
                   </article>
                 );
@@ -593,7 +654,20 @@ export default function FollowPage() {
         ) : filteredUserCards.length ? (
           <div style={listStyle}>
             {filteredUserCards.map((item) => (
-              <article key={item.id} style={userCardStyle}>
+              <article
+                key={item.id}
+                role={isMobileViewport ? "link" : undefined}
+                tabIndex={isMobileViewport ? 0 : undefined}
+                onClick={() => {
+                  if (isMobileViewport) router.push(`/user/${item.id}`);
+                }}
+                onKeyDown={(event) => {
+                  if (isMobileViewport && (event.key === "Enter" || event.key === " ")) {
+                    router.push(`/user/${item.id}`);
+                  }
+                }}
+                style={{ ...userCardStyle, cursor: isMobileViewport ? "pointer" : undefined }}
+              >
                 <div style={userAvatarWrapStyle}>
                   {item.avatarUrl ? (
                     <img src={item.avatarUrl} alt="" style={userAvatarStyle} />
@@ -605,6 +679,28 @@ export default function FollowPage() {
                 <div style={cardBodyStyle}>
                   <div style={cardTopRowStyle}>
                     <div style={projectTitleStyle}>{item.username}</div>
+                    {isMobileViewport ? (
+                      <div style={followCardMenuWrapStyle} onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          aria-label={t.nav.more_actions}
+                          onClick={() => setUserMenuOpenId((id) => id === item.id ? null : item.id)}
+                          style={followCardMoreButtonStyle}
+                        >
+                          <UiIcon name="more" size={18} />
+                        </button>
+                        {userMenuOpenId === item.id ? (
+                          <div style={followCardMenuStyle}>
+                            <button type="button" onClick={() => router.push(`/user/${item.id}/profile`)} style={followCardMenuItemStyle}>
+                              {followT.view_profile}
+                            </button>
+                            <button type="button" onClick={() => { setUserMenuOpenId(null); setUserConfirmId(item.id); }} style={followCardDangerMenuItemStyle}>
+                              {followT.unfollow}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div style={noteLineStyle}>
@@ -621,7 +717,7 @@ export default function FollowPage() {
                     />
                   </div>
 
-                  <div style={buttonRowStyle}>
+                  {!isMobileViewport ? <div style={buttonRowStyle}>
                     <button
                       type="button"
                       onClick={() => router.push(`/user/${item.id}`)}
@@ -643,7 +739,7 @@ export default function FollowPage() {
                     >
                       {followT.unfollow}
                     </button>
-                  </div>
+                  </div> : null}
                 </div>
               </article>
             ))}
@@ -691,7 +787,8 @@ export default function FollowPage() {
           return handleUnfollowUser(userConfirmId);
         }}
       />
-    </main>
+      </main>
+    </>
   );
 }
 
@@ -815,7 +912,7 @@ const pageStyle: React.CSSProperties = {
 const mobilePageStyle: React.CSSProperties = {
   maxWidth: 1120,
   margin: "0 auto",
-  padding: "12px 12px 28px",
+  padding: "8px 10px 28px",
 };
 
 const heroStyle: React.CSSProperties = {
@@ -857,6 +954,14 @@ const panelStyle: React.CSSProperties = {
   padding: 16,
 };
 
+const mobilePanelStyle: React.CSSProperties = {
+  background: "transparent",
+  border: 0,
+  borderRadius: 0,
+  boxShadow: "none",
+  padding: 0,
+};
+
 const tabRowStyle: React.CSSProperties = {
   display: "flex",
   gap: 10,
@@ -884,6 +989,12 @@ const toolbarStyle: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
+const mobileToolbarStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 6,
+  marginBottom: 8,
+};
+
 const searchInputStyle: React.CSSProperties = {
   flex: 1,
   minWidth: 240,
@@ -895,6 +1006,15 @@ const searchInputStyle: React.CSSProperties = {
   outline: "none",
 };
 
+const mobileSearchInputStyle: React.CSSProperties = {
+  ...searchInputStyle,
+  minWidth: 0,
+  height: 38,
+  padding: "0 10px",
+  borderRadius: 10,
+  fontSize: 13,
+};
+
 const selectStyle: React.CSSProperties = {
   borderRadius: 14,
   border: "1px solid #dfe7d8",
@@ -902,6 +1022,15 @@ const selectStyle: React.CSSProperties = {
   padding: "12px 14px",
   fontSize: 14,
   color: "#465245",
+};
+
+const mobileSelectStyle: React.CSSProperties = {
+  ...selectStyle,
+  minWidth: 92,
+  height: 38,
+  padding: "0 8px",
+  borderRadius: 10,
+  fontSize: 12,
 };
 
 const listStyle: React.CSSProperties = {
@@ -1001,20 +1130,6 @@ const cardTopRowStyle: React.CSSProperties = {
   minWidth: 0,
 };
 
-const cardTopMetaWrapStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  flexShrink: 0,
-};
-
-const lineClampOneStyle: React.CSSProperties = {
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const projectTitleStyle: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
@@ -1034,15 +1149,6 @@ const projectInlineMetaStyle: React.CSSProperties = {
   fontSize: 11,
   color: "#7b8578",
   fontWeight: 600,
-};
-
-const projectStatsPillStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  color: "#7b8578",
-  fontSize: 11,
-  whiteSpace: "nowrap",
-  flexShrink: 0,
 };
 
 const metaLineStyle: React.CSSProperties = {
@@ -1113,6 +1219,57 @@ const textLinkStyle: React.CSSProperties = {
   fontWeight: 600,
   whiteSpace: "nowrap",
   flexShrink: 0,
+};
+
+const followCardMenuWrapStyle: React.CSSProperties = {
+  position: "relative",
+  marginLeft: "auto",
+  flexShrink: 0,
+};
+
+const followCardMoreButtonStyle: React.CSSProperties = {
+  width: 28,
+  height: 28,
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid #e8ede4",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#697567",
+  padding: 0,
+  cursor: "pointer",
+};
+
+const followCardMenuStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 34,
+  right: 0,
+  zIndex: 30,
+  width: 124,
+  display: "grid",
+  gap: 2,
+  padding: 5,
+  border: "1px solid #e2e9df",
+  borderRadius: 11,
+  background: "#fff",
+  boxShadow: "0 12px 28px rgba(39,58,34,0.16)",
+};
+
+const followCardMenuItemStyle: React.CSSProperties = {
+  minHeight: 34,
+  border: 0,
+  borderRadius: 8,
+  background: "transparent",
+  color: "#40583a",
+  padding: "0 9px",
+  textAlign: "left",
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const followCardDangerMenuItemStyle: React.CSSProperties = {
+  ...followCardMenuItemStyle,
+  color: "#b5574f",
 };
 
 const emptyWrapStyle: React.CSSProperties = {

@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
 import { buildLoginHref } from "@/lib/auth-return";
@@ -34,7 +33,6 @@ export default function Navbar() {
   const [mobileTitle, setMobileTitle] = useState("");
   const [mobileArchiveTitleInfo, setMobileArchiveTitleInfo] =
     useState<MobileArchiveTitleInfo>(null);
-  const [mobilePlantMenuOpen, setMobilePlantMenuOpen] = useState(false);
   const [desktopDiscoverTab, setDesktopDiscoverTab] = useState<
     "feed" | "following"
   >("feed");
@@ -210,7 +208,6 @@ export default function Navbar() {
     const timeoutId = window.setTimeout(() => {
       if (cancelled) return;
 
-      setMobilePlantMenuOpen(false);
       setMobileArchiveTitleInfo(null);
 
       if (!archiveDetailPath) {
@@ -247,9 +244,10 @@ export default function Navbar() {
   }
 
   if (isCompact) {
+    const pageOwnsMobileTopNav = hasPageManagedMobileTopNav(pathname);
     return (
       <>
-        <nav style={mobileTopNavStyle}>
+        {!pageOwnsMobileTopNav ? <nav style={mobileTopNavStyle}>
           <div
             style={mobilePageTitleStyle}
             title={
@@ -287,19 +285,6 @@ export default function Navbar() {
           </div>
 
           <div style={mobileTopActionGroupStyle}>
-            <LanguageSwitcher compact />
-
-            {user ? (
-              <Link
-                href="/notifications"
-                style={mobileNotificationButtonStyle}
-                aria-label={t.nav.notification}
-                title={t.nav.notification}
-              >
-                <UiIcon name="bell" size={18} />
-              </Link>
-            ) : null}
-
             {isMobileDiscoverIndexPath(pathname) ? (
               <button
                 type="button"
@@ -315,49 +300,6 @@ export default function Navbar() {
                 style={mobileSearchButtonStyle}
               >
                 {t.nav.search}
-              </button>
-            ) : isMobilePlantPath(pathname) ? (
-              <div style={mobilePlantMenuWrapStyle}>
-                <button
-                  type="button"
-                  onClick={() => setMobilePlantMenuOpen((open) => !open)}
-                  style={mobilePlantButtonStyle}
-                >
-                  {t.nav.my_plants}
-                </button>
-                {mobilePlantMenuOpen ? (
-                  <div style={mobilePlantMenuStyle}>
-                    <Link
-                      href={
-                        user
-                          ? "/archive/interests"
-                          : buildLoginHref("/archive/interests")
-                      }
-                      style={mobilePlantMenuItemStyle}
-                    >
-                      {t.nav.interested_plants}
-                    </Link>
-                    <Link
-                      href={
-                        user
-                          ? "/archive/plans"
-                          : buildLoginHref("/archive/plans")
-                      }
-                      style={mobilePlantMenuItemStyle}
-                    >
-                      {t.nav.planting_plan}
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-            ) : user && isMobileMePath(pathname) ? (
-              <button
-                type="button"
-                onClick={handleLogout}
-                aria-label={t.nav.logout}
-                style={mobileLogoutButtonStyle}
-              >
-                {t.nav.logout}
               </button>
             ) : canShowMobileCreateAction ? (
               <Link
@@ -380,7 +322,7 @@ export default function Navbar() {
               </Link>
             ) : null}
           </div>
-        </nav>
+        </nav> : null}
 
         <MobileBottomNav
           pathname={pathname}
@@ -510,7 +452,6 @@ function DesktopUtilityActions({ feedbackLabel }: { feedbackLabel: string }) {
         <Link href="/feedback" style={desktopFeedbackLinkStyle}>
           {feedbackLabel}
         </Link>
-        <LanguageSwitcher compact />
       </div>
       <span aria-hidden="true" style={desktopUtilityDividerStyle} />
     </>
@@ -673,8 +614,16 @@ function isMobileDiscoverIndexPath(pathname: string) {
   return pathname === "/discover";
 }
 
-function isMobilePlantPath(pathname: string) {
-  return pathname === "/plant" || pathname.startsWith("/plant/");
+function hasPageManagedMobileTopNav(pathname: string) {
+  return [
+    "/discover",
+    "/experience",
+    "/experience/search",
+    "/plant",
+    "/follow",
+    "/market",
+    "/archive",
+  ].includes(pathname);
 }
 
 function shouldShowMobileProfileEntry(pathname: string) {
@@ -685,6 +634,7 @@ function shouldShowMobileProfileEntry(pathname: string) {
 
 function shouldShowMobileCreateAction(pathname: string) {
   if (pathname === "/archive/new" || pathname === "/local/archive/new") return false;
+  if (pathname.startsWith("/quick-record")) return false;
   if (pathname.startsWith("/market")) return false;
   if (pathname === "/plant" || pathname.startsWith("/plant/")) return false;
   if (pathname.startsWith("/experience-cards")) return false;
@@ -717,6 +667,7 @@ function getMobileCreateLabel(pathname: string, labels: TranslationDictionary["n
 function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav"]) {
   if (pathname === "/archive") return labels.my_space;
   if (pathname === "/") return labels.brand;
+  if (pathname.startsWith("/quick-record")) return labels.add_record;
   if (pathname.startsWith("/experience-cards")) return labels.my_experience_cards;
   if (pathname.startsWith("/experience")) return labels.experience;
   if (pathname.startsWith("/discover")) return labels.discover;
@@ -808,21 +759,6 @@ const mobileTopActionGroupStyle: CSSProperties = {
   flexShrink: 0,
 };
 
-const mobileNotificationButtonStyle: CSSProperties = {
-  width: 34,
-  height: 34,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderRadius: 999,
-  border: "1px solid #dfe8da",
-  background: "#fff",
-  color: "#52634e",
-  textDecoration: "none",
-  fontSize: 16,
-  lineHeight: 1,
-};
-
 const mobileCreateButtonStyle: CSSProperties = {
   minWidth: 0,
   height: 34,
@@ -847,61 +783,6 @@ const mobileSearchButtonStyle: CSSProperties = {
   border: "1px solid #dfe8da",
   background: "#fff",
   color: "#40583a",
-};
-
-const mobilePlantMenuWrapStyle: CSSProperties = {
-  position: "relative",
-  display: "inline-flex",
-  flexShrink: 0,
-};
-
-const mobilePlantButtonStyle: CSSProperties = {
-  ...mobileSearchButtonStyle,
-  padding: "0 10px",
-};
-
-const mobilePlantMenuStyle: CSSProperties = {
-  position: "absolute",
-  top: "calc(100% + 8px)",
-  right: 0,
-  zIndex: 140,
-  width: 132,
-  border: "1px solid #e6ebdf",
-  borderRadius: 12,
-  background: "#fff",
-  boxShadow: "0 14px 30px rgba(39, 58, 34, 0.16)",
-  padding: 5,
-};
-
-const mobilePlantMenuItemStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  minHeight: 34,
-  borderRadius: 9,
-  color: "#40583a",
-  textDecoration: "none",
-  fontSize: 13,
-  fontWeight: 800,
-  padding: "0 9px",
-  whiteSpace: "nowrap",
-};
-
-const mobileLogoutButtonStyle: CSSProperties = {
-  height: 34,
-  borderRadius: 999,
-  border: "1px solid #ead8d3",
-  background: "#fff8f6",
-  color: "#a94435",
-  padding: "0 12px",
-  fontSize: 13,
-  fontWeight: 800,
-  lineHeight: 1,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
 };
 
 const mobileLoginActionStyle: CSSProperties = {

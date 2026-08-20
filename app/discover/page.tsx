@@ -615,14 +615,15 @@ export default function DiscoverPage() {
   const showFollowing = mobileTab === "following";
 
   return (
-    <main
-      style={{
-        padding: 14,
-        maxWidth: 860,
-        margin: "0 auto",
-      }}
-    >
+    <>
       <HomeSectionTabs active="activity" />
+      <main
+        style={{
+          padding: isMobileViewport ? 8 : 14,
+          maxWidth: 860,
+          margin: "0 auto",
+        }}
+      >
       <div className="mobile-app-desktop-only">
         {showFollowing ? (
           <header style={followedDesktopHeaderStyle}>{t.discover.following}</header>
@@ -788,7 +789,8 @@ export default function DiscoverPage() {
         }}
       />
 
-    </main>
+      </main>
+    </>
   );
 }
 

@@ -16,6 +16,7 @@ import {
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
 
 type ProfileBrief = {
   id: string;
@@ -71,6 +72,7 @@ export default function MarketPage() {
   const [locationFilter, setLocationFilter] = useState("");
   const [contentFilter, setContentFilter] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -185,6 +187,10 @@ export default function MarketPage() {
     categoryFilter !== "all" ||
     locationFilter.trim() !== "" ||
     contentFilter.trim() !== "";
+  const mobileFilterCount =
+    Number(categoryFilter !== "all") +
+    Number(locationFilter.trim() !== "") +
+    Number(contentFilter.trim() !== "");
 
   const locationOptions = useMemo(() => {
     const optionSet = new Set<string>();
@@ -255,15 +261,42 @@ export default function MarketPage() {
   }, [items, profiles, archives, locationFilter, contentFilter]);
 
   return (
-    <main style={pageStyle}>
+    <>
+      {isMobileViewport ? (
+        <MobileContentTopBar
+          ariaLabel={t.market.type}
+          items={[
+            { key: "all", label: t.market.all, active: typeFilter === "all", onClick: () => setTypeFilter("all") },
+            ...getMarketPostTypeOptions(language).map((item) => ({
+              key: item.value,
+              label: item.label,
+              active: typeFilter === item.value,
+              onClick: () => setTypeFilter(item.value),
+            })),
+          ]}
+        />
+      ) : null}
+      <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
       <div style={shellStyle}>
         <header style={isMobileViewport ? mobileHeaderStyle : headerStyle}>
-          <div style={isMobileViewport ? mobileHeaderCopyStyle : undefined}>
-            <div style={marketIntroStyle}>{t.market.intro_title}</div>
-            <div style={marketSubIntroStyle}>
-              {isMobileViewport ? t.market.intro_mobile : t.market.intro_subtitle}
+          {isMobileViewport ? (
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen((open) => !open)}
+              aria-expanded={mobileFiltersOpen}
+              style={mobileFilterToggleStyle}
+            >
+              {mobileFiltersOpen ? t.market.hide_filters : t.market.show_filters}
+              {mobileFilterCount > 0 ? ` (${mobileFilterCount})` : ""}
+            </button>
+          ) : (
+            <div>
+              <div style={marketIntroStyle}>{t.market.intro_title}</div>
+              <div style={marketSubIntroStyle}>
+                {t.market.intro_subtitle}
+              </div>
             </div>
-          </div>
+          )}
 
           {currentUserId ? (
             <div style={headerActionStyle}>
@@ -278,80 +311,80 @@ export default function MarketPage() {
         </header>
 
         {isMobileViewport ? (
-          <MobileMarketFilters
-            typeFilter={typeFilter}
-            categoryFilter={categoryFilter}
-            locationFilter={locationFilter}
-            contentFilter={contentFilter}
-            locationOptions={locationOptions}
-            onTypeChange={setTypeFilter}
-            onCategoryChange={setCategoryFilter}
-            onLocationChange={setLocationFilter}
-            onContentChange={setContentFilter}
-          />
-        ) : (
-        <section style={filterPanelStyle}>
-          <div style={filterGroupStyle}>
-            <span style={filterLabelStyle}>{t.market.type}</span>
-            <button
-              type="button"
-              onClick={() => setTypeFilter("all")}
-              style={filterButtonStyle(typeFilter === "all")}
-            >
-              {t.market.all}
-            </button>
-
-            {getMarketPostTypeOptions(language).map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setTypeFilter(item.value)}
-                style={filterButtonStyle(typeFilter === item.value)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={filterGroupStyle}>
-            <span style={filterLabelStyle}>{t.market.category}</span>
-            <button
-              type="button"
-              onClick={() => setCategoryFilter("all")}
-              style={filterButtonStyle(categoryFilter === "all")}
-            >
-              {t.market.all}
-            </button>
-
-            {getMarketItemCategoryOptions(language).map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setCategoryFilter(item.value)}
-                style={filterButtonStyle(categoryFilter === item.value)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={filterGroupStyle}>
-            <span style={filterLabelStyle}>{t.market.area}</span>
-            <input
-              value={locationFilter}
-              onChange={(event) => setLocationFilter(event.target.value)}
-              placeholder={t.market.area_placeholder}
-              list="market-location-options"
-              style={locationInputStyle}
+          mobileFiltersOpen ? (
+            <MobileMarketFilters
+              categoryFilter={categoryFilter}
+              locationFilter={locationFilter}
+              contentFilter={contentFilter}
+              locationOptions={locationOptions}
+              onCategoryChange={setCategoryFilter}
+              onLocationChange={setLocationFilter}
+              onContentChange={setContentFilter}
             />
+          ) : null
+        ) : (
+          <section style={filterPanelStyle}>
+            <div style={filterGroupStyle}>
+              <span style={filterLabelStyle}>{t.market.type}</span>
+              <button
+                type="button"
+                onClick={() => setTypeFilter("all")}
+                style={filterButtonStyle(typeFilter === "all")}
+              >
+                {t.market.all}
+              </button>
 
-            <datalist id="market-location-options">
-              {locationOptions.map((location) => (
-                <option key={location} value={location} />
+              {getMarketPostTypeOptions(language).map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setTypeFilter(item.value)}
+                  style={filterButtonStyle(typeFilter === item.value)}
+                >
+                  {item.label}
+                </button>
               ))}
-            </datalist>
-          </div>
-        </section>
+            </div>
+
+            <div style={filterGroupStyle}>
+              <span style={filterLabelStyle}>{t.market.category}</span>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter("all")}
+                style={filterButtonStyle(categoryFilter === "all")}
+              >
+                {t.market.all}
+              </button>
+
+              {getMarketItemCategoryOptions(language).map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setCategoryFilter(item.value)}
+                  style={filterButtonStyle(categoryFilter === item.value)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={filterGroupStyle}>
+              <span style={filterLabelStyle}>{t.market.area}</span>
+              <input
+                value={locationFilter}
+                onChange={(event) => setLocationFilter(event.target.value)}
+                placeholder={t.market.area_placeholder}
+                list="market-location-options"
+                style={locationInputStyle}
+              />
+
+              <datalist id="market-location-options">
+                {locationOptions.map((location) => (
+                  <option key={location} value={location} />
+                ))}
+              </datalist>
+            </div>
+          </section>
         )}
 
         {loading ? (
@@ -409,11 +442,19 @@ export default function MarketPage() {
 
                     <h2 style={cardTitleStyle}>{item.title}</h2>
 
-                    {item.description ? (
+                    {!isMobileViewport && item.description ? (
                       <p style={descriptionStyle}>{item.description}</p>
                     ) : null}
 
-                    <div style={infoGridStyle}>
+                    {isMobileViewport ? (
+                      <div style={mobileCardMetaStyle}>
+                        <span>{locationText || t.market.not_provided}</span>
+                        <span style={mobileCardMetaDividerStyle}>·</span>
+                        <span style={mobileCardSourceStyle}>
+                          {publisherName}{archiveTitle ? ` · ${archiveTitle}` : ""}
+                        </span>
+                      </div>
+                    ) : <div style={infoGridStyle}>
                       <div style={infoLineStyle}>
                         <span style={infoLabelStyle}>{t.market.location}</span>
                         <span style={infoValueStyle}>{locationText || t.market.not_provided}</span>
@@ -436,7 +477,7 @@ export default function MarketPage() {
                           ) : null}
                         </span>
                       </div>
-                    </div>
+                    </div>}
                   </div>
                 </Link>
               );
@@ -444,56 +485,32 @@ export default function MarketPage() {
           </section>
         )}
       </div>
-    </main>
+      </main>
+    </>
   );
 }
 
 function MobileMarketFilters({
-  typeFilter,
   categoryFilter,
   locationFilter,
   contentFilter,
   locationOptions,
-  onTypeChange,
   onCategoryChange,
   onLocationChange,
   onContentChange,
 }: {
-  typeFilter: "all" | MarketPostType;
   categoryFilter: "all" | MarketItemCategory;
   locationFilter: string;
   contentFilter: string;
   locationOptions: string[];
-  onTypeChange: (value: "all" | MarketPostType) => void;
   onCategoryChange: (value: "all" | MarketItemCategory) => void;
   onLocationChange: (value: string) => void;
   onContentChange: (value: string) => void;
 }) {
   const { language, t } = useLanguage();
-  const mobileTabs: Array<{ value: "all" | MarketPostType; label: string }> = [
-    { value: "all", label: t.market.all },
-    ...getMarketPostTypeOptions(language),
-  ];
 
   return (
     <section style={mobileFilterPanelStyle}>
-      <div style={mobileMarketTabsStyle} aria-label={t.market.type}>
-        {mobileTabs.map((tab) => {
-          const active = typeFilter === tab.value;
-
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => onTypeChange(tab.value)}
-              style={mobileMarketTabButtonStyle(active)}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
       <div style={mobileFilterTopGridStyle}>
         <label style={mobileFilterFieldStyle} aria-label={t.market.category}>
           <select
@@ -559,6 +576,11 @@ const pageStyle: CSSProperties = {
   padding: "16px 14px 36px",
 };
 
+const mobilePageStyle: CSSProperties = {
+  ...pageStyle,
+  padding: "9px 8px 28px",
+};
+
 const shellStyle: CSSProperties = {
   width: "100%",
   maxWidth: 1040,
@@ -576,15 +598,10 @@ const headerStyle: CSSProperties = {
 
 const mobileHeaderStyle: CSSProperties = {
   display: "flex",
-  alignItems: "flex-start",
+  alignItems: "center",
   justifyContent: "space-between",
   gap: 8,
-  marginBottom: 10,
-};
-
-const mobileHeaderCopyStyle: CSSProperties = {
-  minWidth: 0,
-  flex: 1,
+  marginBottom: 8,
 };
 
 const marketIntroStyle: CSSProperties = {
@@ -629,6 +646,19 @@ const mobileMineButtonStyle: CSSProperties = {
   fontSize: 14,
 };
 
+const mobileFilterToggleStyle: CSSProperties = {
+  minHeight: 34,
+  border: "1px solid #d7e2d2",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#40583a",
+  padding: "6px 11px",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 const filterPanelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e4ece0",
@@ -649,25 +679,6 @@ const mobileFilterPanelStyle: CSSProperties = {
   marginBottom: 10,
   overflowX: "visible",
 };
-
-const mobileMarketTabsStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-  gap: 5,
-};
-
-function mobileMarketTabButtonStyle(active: boolean): CSSProperties {
-  return {
-    minHeight: 34,
-    border: active ? "1px solid #8fc181" : "1px solid #dfe8da",
-    borderRadius: 999,
-    background: active ? "#edf8e9" : "#fff",
-    color: active ? "#2f6a31" : "#52634e",
-    fontSize: 14,
-    fontWeight: 800,
-    cursor: "pointer",
-  };
-}
 
 const mobileFilterTopGridStyle: CSSProperties = {
   display: "grid",
@@ -855,6 +866,32 @@ const infoGridStyle: CSSProperties = {
   gap: 1,
   marginTop: "auto",
   paddingTop: 3,
+};
+
+const mobileCardMetaStyle: CSSProperties = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  marginTop: "auto",
+  paddingTop: 4,
+  color: "#778173",
+  fontSize: 12,
+  lineHeight: 1.25,
+  overflow: "hidden",
+  whiteSpace: "nowrap",
+};
+
+const mobileCardMetaDividerStyle: CSSProperties = {
+  color: "#acb5a8",
+  flexShrink: 0,
+};
+
+const mobileCardSourceStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const infoLineStyle: CSSProperties = {

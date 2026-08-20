@@ -1,31 +1,163 @@
-.feed {
+.gallery {
   display: grid;
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.item {
+.previewCard {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #e1e8de;
+  border-radius: 14px;
+  background: #fff;
+  color: #273827;
+  text-align: left;
+  cursor: pointer;
+}
+
+.previewMedia {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 11px;
+  background: #edf3ea;
+}
+
+.previewImage,
+.previewPlaceholder {
+  width: 100%;
+  height: 100%;
+}
+
+.previewImage {
+  display: block;
+  object-fit: cover;
+}
+
+.previewPlaceholder {
+  display: grid;
+  place-items: center;
+  color: #7c8b78;
+}
+
+.previewPlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(20, 34, 20, 0.66);
+  transform: translate(-50%, -50%);
+}
+
+.previewPlay::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 9px;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 12px solid #fff;
+}
+
+.previewBody {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.previewTitle,
+.previewSource,
+.previewMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewTitle {
+  color: #273827;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.previewSource,
+.previewMeta {
+  color: #728071;
+  font-size: 12px;
+}
+
+.fullscreenOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  background: #101710;
+}
+
+.fullscreenScroller {
+  width: 100%;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.fullscreenScroller::-webkit-scrollbar {
+  display: none;
+}
+
+.fullscreenItem {
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
   scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.fullscreenClose {
+  position: fixed;
+  top: calc(10px + var(--app-safe-area-top));
+  left: 10px;
+  z-index: 2500;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(8, 14, 8, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.fullscreenLoading {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
 }
 
 @media (max-width: 759px) {
-  .feed {
-    display: block;
-    height: calc(100dvh - 205px);
-    min-height: 430px;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    scroll-snap-type: y mandatory;
-    scrollbar-width: none;
+  .gallery {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 
-  .feed::-webkit-scrollbar {
-    display: none;
+  .previewCard {
+    grid-template-columns: 88px minmax(0, 1fr);
+    min-height: 104px;
   }
 
-  .item {
-    min-height: 100%;
-    display: grid;
-    align-items: center;
-    scroll-snap-stop: always;
+  .previewMedia {
+    width: 88px;
+    height: 88px;
   }
 }
