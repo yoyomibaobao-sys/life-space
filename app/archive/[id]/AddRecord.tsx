@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
@@ -49,6 +49,11 @@ import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
+import {
+  deleteQuickCapture,
+  getQuickCapture,
+  quickCaptureToFile,
+} from "@/lib/quick-capture";
 
 type RecordVisibility = "public" | "private";
 
@@ -108,7 +113,10 @@ export default function AddRecord({
   const chooseInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const filePreviewsRef = useRef<SelectedPreview[]>([]);
+  const loadedQuickCaptureIdRef = useRef("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const quickCaptureId = searchParams.get("quickCapture") || "";
   const sortedActiveCycles = [...activeCycles].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
   );
@@ -195,6 +203,31 @@ export default function AddRecord({
 
     void loadMembership();
   }, []);
+
+  useEffect(() => {
+    if (!quickCaptureId || loadedQuickCaptureIdRef.current === quickCaptureId) {
+      return;
+    }
+
+    let cancelled = false;
+    async function loadCapturedPhoto() {
+      try {
+        const capture = await getQuickCapture(quickCaptureId);
+        if (!capture || cancelled) return;
+        loadedQuickCaptureIdRef.current = quickCaptureId;
+        appendFiles([quickCaptureToFile(capture)]);
+      } catch {
+        // The record form remains usable if a temporary capture expired.
+      }
+    }
+
+    void loadCapturedPhoto();
+    return () => {
+      cancelled = true;
+    };
+    // appendFiles intentionally uses the current file list once per capture id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickCaptureId]);
 
   useEffect(() => {
     return () => {
@@ -713,6 +746,10 @@ export default function AddRecord({
       setEndSelectedCycleAfterSave(false);
 
       await onRecordCreated?.();
+      if (quickCaptureId && createdRecordCount > 0) {
+        await deleteQuickCapture(quickCaptureId).catch(() => undefined);
+        loadedQuickCaptureIdRef.current = "";
+      }
       router.refresh();
       if (cycleEndFailed) {
         showToast(terminology.endAfterSaveFailureMessage);

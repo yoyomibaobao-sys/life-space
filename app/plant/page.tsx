@@ -21,6 +21,7 @@ import {
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref } from "@/lib/auth-return";
+import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 
 const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
 const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
@@ -838,6 +839,7 @@ export default function PlantIndexPage() {
 
   return (
     <main style={{ padding: isMobileViewport ? "10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
+      <HomeSectionTabs active="guide" />
       {isMobileSearchOpen ? (
         <div
           role="dialog"

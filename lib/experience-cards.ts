@@ -338,6 +338,21 @@ export async function saveExperienceCard(input: ExperienceCardSaveInput) {
   return data;
 }
 
+export async function saveExperienceCardPlaybackSelection(
+  cardId: string,
+  mediaIds: string[]
+) {
+  const { data, error } = await supabase.rpc(
+    "save_experience_card_playback_selection",
+    {
+      p_card_id: cardId,
+      p_media_ids: mediaIds,
+    }
+  );
+  if (error) throw error;
+  return firstBoolean(data);
+}
+
 export async function updateExperienceCardDescription(
   cardId: string,
   description: string

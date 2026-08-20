@@ -87,6 +87,11 @@ type ArchiveMediaRow = {
   display_thumb_url?: string | null;
 };
 
+type SpaceProfile = {
+  username: string | null;
+  avatar_url: string | null;
+};
+
 const emptySystemNameCandidateMap: Record<ArchiveCategory, SystemNameCandidate[]> = {
   plant: [],
   system: [],
@@ -132,6 +137,7 @@ export default function ArchivePage() {
   const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [experienceCardCount, setExperienceCardCount] = useState(0);
+  const [spaceProfile, setSpaceProfile] = useState<SpaceProfile | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
@@ -213,6 +219,7 @@ export default function ArchivePage() {
         setSpeciesList([]);
         setMembership(null);
         setExperienceCardCount(0);
+        setSpaceProfile(null);
         return;
       }
 
@@ -225,6 +232,7 @@ export default function ArchivePage() {
         { data: archiveFollowRows },
         membershipResult,
         experienceCardCountResult,
+        profileResult,
       ] = await Promise.all([
         supabase.from("archives").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
         supabase.from("group_tags").select("*").eq("user_id", user.id),
@@ -244,6 +252,11 @@ export default function ArchivePage() {
           .from("experience_cards")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id),
+        supabase
+          .from("profiles")
+          .select("username, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle(),
       ]);
 
       const aliasesBySpecies = new Map<string, string[]>();
@@ -415,6 +428,7 @@ export default function ArchivePage() {
       } else {
         setExperienceCardCount(Number(experienceCardCountResult.count || 0));
       }
+      setSpaceProfile((profileResult.data as SpaceProfile | null) || null);
     } finally {
       loadingRef.current = false;
     }
@@ -1889,22 +1903,37 @@ export default function ArchivePage() {
         margin: "0 auto",
       }}
     >
-      {!isMobileViewport ? (
-        <section style={personalSpaceHeaderStyle}>
-          <h1 style={personalSpaceTitleStyle}>{t.archive_workspace.my_space}</h1>
-          <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
-            <span>{t.archive_workspace.my_experience_cards} ({experienceCardCount})</span>
-            <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
-          </Link>
-        </section>
-      ) : (
-        <section style={personalSpaceEntryRowStyle}>
-          <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
-            <span>{t.archive_workspace.my_experience_cards} ({experienceCardCount})</span>
-            <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
-          </Link>
-        </section>
-      )}
+      <section style={personalSpaceIdentityStyle(isMobileViewport)}>
+        <div style={personalSpaceIdentityMainStyle}>
+          {spaceProfile?.avatar_url ? (
+            <img
+              src={spaceProfile.avatar_url}
+              alt={spaceProfile.username || t.archive_workspace.my_space}
+              style={personalSpaceAvatarStyle}
+            />
+          ) : (
+            <span style={personalSpaceAvatarFallbackStyle}>
+              <UiIcon name="user" size={20} />
+            </span>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <h1 style={personalSpaceTitleStyle}>{t.archive_workspace.my_space}</h1>
+            <div style={personalSpaceUsernameStyle}>
+              {spaceProfile?.username || t.nav.username_unset}
+            </div>
+          </div>
+        </div>
+        <Link href="/profile" style={personalInfoLinkStyle}>
+          {t.archive_workspace.personal_info}
+        </Link>
+      </section>
+
+      <section style={personalSpaceEntryRowStyle}>
+        <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
+          <span>{t.archive_workspace.my_experience_cards} ({experienceCardCount})</span>
+          <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
+        </Link>
+      </section>
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
         sourceOptions={[
@@ -2315,18 +2344,73 @@ function LocalArchiveFilters({
   );
 }
 
-const personalSpaceHeaderStyle: CSSProperties = {
+function personalSpaceIdentityStyle(mobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    marginBottom: mobile ? 8 : 12,
+    padding: mobile ? "2px 2px 10px" : "0 0 10px",
+    borderBottom: "1px solid #edf1ea",
+  };
+}
+
+const personalSpaceIdentityMainStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 14,
-  marginBottom: 10,
+  gap: 10,
+  minWidth: 0,
+};
+
+const personalSpaceAvatarStyle: CSSProperties = {
+  width: 42,
+  height: 42,
+  borderRadius: 999,
+  objectFit: "cover",
+  background: "#edf3ea",
+  flexShrink: 0,
+};
+
+const personalSpaceAvatarFallbackStyle: CSSProperties = {
+  width: 42,
+  height: 42,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: 999,
+  background: "#edf3ea",
+  color: "#587155",
+  flexShrink: 0,
 };
 
 const personalSpaceTitleStyle: CSSProperties = {
   margin: 0,
   color: "#1f2d1f",
-  fontSize: 26,
+  fontSize: 20,
   fontWeight: 700,
+};
+
+const personalSpaceUsernameStyle: CSSProperties = {
+  marginTop: 2,
+  overflow: "hidden",
+  color: "#768272",
+  fontSize: 13,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const personalInfoLinkStyle: CSSProperties = {
+  flexShrink: 0,
+  minHeight: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0 11px",
+  border: "1px solid #dfe7dc",
+  borderRadius: 999,
+  color: "#526d50",
+  textDecoration: "none",
+  fontSize: 13,
+  fontWeight: 750,
 };
 
 const personalSpaceEntryRowStyle: CSSProperties = {

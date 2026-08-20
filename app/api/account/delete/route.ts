@@ -15,6 +15,7 @@ type AccountDeletionBody = {
 type StoragePathSets = {
   avatars: Set<string>;
   media: Set<string>;
+  paymentProofs: Set<string>;
 };
 
 type OwnedAccountIds = {
@@ -255,7 +256,7 @@ async function selectRowsByIds<T>(
 
 async function listStoragePrefix(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  bucketName: "media" | "avatars",
+  bucketName: "media" | "avatars" | "payment-proofs",
   prefix: string
 ) {
   const bucket = supabase.storage.from(bucketName);
@@ -338,6 +339,7 @@ async function collectStoragePaths(
   const sets: StoragePathSets = {
     avatars: new Set<string>(),
     media: new Set<string>(),
+    paymentProofs: new Set<string>(),
   };
 
   const [
@@ -425,20 +427,22 @@ async function collectStoragePaths(
   const profile = profileRow as { avatar_url?: string | null } | null;
   addOwnedPublicUrl(sets, userId, profile?.avatar_url);
 
-  const [avatarPrefixPaths, mediaPrefixPaths] = await Promise.all([
+  const [avatarPrefixPaths, mediaPrefixPaths, paymentProofPrefixPaths] = await Promise.all([
     listStoragePrefix(supabase, "avatars", userId),
     listStoragePrefix(supabase, "media", userId),
+    listStoragePrefix(supabase, "payment-proofs", userId),
   ]);
 
   avatarPrefixPaths.forEach((path) => sets.avatars.add(path));
   mediaPrefixPaths.forEach((path) => sets.media.add(path));
+  paymentProofPrefixPaths.forEach((path) => sets.paymentProofs.add(path));
 
   return sets;
 }
 
 async function removeStoragePaths(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  bucketName: "media" | "avatars",
+  bucketName: "media" | "avatars" | "payment-proofs",
   paths: Set<string>
 ) {
   const list = Array.from(paths);
@@ -527,6 +531,7 @@ async function deleteAccountData(
 
   await removeStoragePaths(supabase, "avatars", storagePaths.avatars);
   await removeStoragePaths(supabase, "media", storagePaths.media);
+  await removeStoragePaths(supabase, "payment-proofs", storagePaths.paymentProofs);
 
   await deleteRows(supabase, "notifications", "user_id", userId);
   await deleteRowsIn(supabase, "notifications", "archive_id", ownedIds.archiveIds);
@@ -585,6 +590,24 @@ async function deleteAccountData(
   await deleteRows(supabase, "sub_tags", "user_id", userId);
   await deleteRows(supabase, "app_admins", "user_id", userId);
   await deleteRows(supabase, "user_memberships", "user_id", userId);
+  await updateRows(supabase, "membership_payments", "user_id", userId, {
+    proof_path: null,
+  });
+  const accountDeletedAt = new Date().toISOString();
+  const { error: cancelPaymentOrderError } = await supabase
+    .from("membership_payments")
+    .update({
+      status: "canceled",
+      review_note: "account_deleted",
+      reviewed_at: accountDeletedAt,
+      updated_at: accountDeletedAt,
+    })
+    .eq("user_id", userId)
+    .in("status", ["pending_payment", "submitted", "needs_update"]);
+  if (cancelPaymentOrderError) {
+    console.error("cancel open membership payment orders error:", cancelPaymentOrderError);
+    throw new Error("取消未完成付款订单失败");
+  }
 
   // membership_payments.user_id is NOT NULL and references auth.users.
   // Without a migration, it cannot be anonymized safely. We soft-delete the
@@ -602,6 +625,7 @@ async function deleteAccountData(
   return {
     avatarFileCount: storagePaths.avatars.size,
     mediaFileCount: storagePaths.media.size,
+    paymentProofFileCount: storagePaths.paymentProofs.size,
   };
 }
 

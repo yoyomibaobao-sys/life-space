@@ -61,6 +61,7 @@ function NewArchiveContent() {
   const searchParams = useSearchParams();
   const preselectedSpeciesId = searchParams.get("species");
   const selectedPlanId = searchParams.get("plan");
+  const quickCaptureId = searchParams.get("quickCapture") || "";
   const preselectedCategory = searchParams.get("category");
   const validPreselectedCategory = archiveCategoryOptions.some(
     (option) => option.value === preselectedCategory
@@ -315,7 +316,7 @@ function NewArchiveContent() {
       if (planError) {
         setLoading(false);
         showToast(copy.plan_link_failed);
-        router.push(`/archive/${createdArchive.id}`);
+        router.push(`/archive/${createdArchive.id}${quickCaptureId ? `?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record` : ""}`);
         return;
       }
     }
@@ -323,7 +324,7 @@ function NewArchiveContent() {
     setLoading(false);
 
     if (createdArchive?.id) {
-      router.push(`/archive/${createdArchive.id}`);
+      router.push(`/archive/${createdArchive.id}${quickCaptureId ? `?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record` : ""}`);
     } else {
       router.push("/archive");
     }

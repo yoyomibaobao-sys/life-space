@@ -35,6 +35,7 @@ import {
 } from "@/lib/followed-users";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref } from "@/lib/auth-return";
+import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 
 type MobileDiscoverTab = "feed" | "following";
 type FollowingContentTab = "projects" | "users";
@@ -621,6 +622,7 @@ export default function DiscoverPage() {
         margin: "0 auto",
       }}
     >
+      <HomeSectionTabs active="activity" />
       <div className="mobile-app-desktop-only">
         {showFollowing ? (
           <header style={followedDesktopHeaderStyle}>{t.discover.following}</header>

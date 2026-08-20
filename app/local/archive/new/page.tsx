@@ -54,6 +54,7 @@ export default function NewLocalArchivePage() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [systemCandidates, setSystemCandidates] = useState<SystemNameCandidate[]>([]);
+  const [quickCaptureId, setQuickCaptureId] = useState("");
 
   useEffect(() => {
     const initialCategory = normalizeInitialCategory(getInitialSearchParam("category"));
@@ -63,6 +64,7 @@ export default function NewLocalArchivePage() {
     const initialSystemName = getInitialSearchParam("system_name", "plant_name", "name");
     setSystemName((current) => current || initialSystemName);
     setSystemSearch((current) => current || initialSystemName);
+    setQuickCaptureId(getInitialSearchParam("quickCapture"));
   }, []);
 
   useEffect(() => {
@@ -123,7 +125,7 @@ export default function NewLocalArchivePage() {
       });
 
       showToast(copy.local_created);
-      router.push(`/local/archive/${archive.id}`);
+      router.push(`/local/archive/${archive.id}${quickCaptureId ? `?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record` : ""}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : copy.local_create_failed);
     } finally {
