@@ -1,0 +1,31 @@
+.feed {
+  display: grid;
+  gap: 16px;
+}
+
+.item {
+  scroll-snap-align: start;
+}
+
+@media (max-width: 759px) {
+  .feed {
+    display: block;
+    height: calc(100dvh - 205px);
+    min-height: 430px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+  }
+
+  .feed::-webkit-scrollbar {
+    display: none;
+  }
+
+  .item {
+    min-height: 100%;
+    display: grid;
+    align-items: center;
+    scroll-snap-stop: always;
+  }
+}

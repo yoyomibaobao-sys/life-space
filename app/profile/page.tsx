@@ -8,7 +8,7 @@ import { buildLoginHref } from "@/lib/auth-return";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
-import { formatProfileDateTime, formatStorage, loadUserProfileData, type UserProfileStats } from "@/lib/user-profile-shared";
+import { formatProfileDateTime, formatStorage, loadUserProfileData } from "@/lib/user-profile-shared";
 import {
   formatMembershipDate,
   getDaysRemaining,
@@ -36,6 +36,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type MembershipPaymentRow = {
   id: string;
+  order_number: string | null;
   plan: string | null;
   status: string | null;
   amount: number | string | null;
@@ -44,11 +45,14 @@ type MembershipPaymentRow = {
   payment_reference: string | null;
   note: string | null;
   paid_at: string | null;
+  submitted_at: string | null;
   service_started_at: string | null;
   service_ends_at: string | null;
+  review_note: string | null;
+  created_at: string | null;
 };
 
-type MobileProfileModule = "info" | "membership" | "space" | "account";
+type MobileProfileModule = "membership" | "payment" | "account";
 type MobileProfileNavItem = {
   label: string;
   value?: MobileProfileModule;
@@ -72,13 +76,22 @@ function getPaymentMethodLabel(method: string | null | undefined, language: "zh"
   return method || (language === "en" ? "Not recorded" : "未记录");
 }
 
+function getProfilePaymentStatusLabel(status: string | null | undefined, language: "zh" | "en") {
+  if (status === "pending_payment") return language === "en" ? "Payment pending" : "待付款";
+  if (status === "submitted") return language === "en" ? "Confirmation pending" : "待管理员确认";
+  if (status === "needs_update") return language === "en" ? "More proof needed" : "需补充凭证";
+  if (status === "confirmed") return language === "en" ? "Confirmed" : "已确认";
+  if (status === "refunded") return language === "en" ? "Refunded" : "已退款";
+  if (status === "canceled") return language === "en" ? "Canceled" : "已取消";
+  return language === "en" ? "Not recorded" : "未记录";
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { language, t } = useLanguage();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
-    { value: "info", label: t.profile.modules.info },
     { value: "membership", label: t.profile.modules.membership },
-    { value: "space", label: t.profile.modules.space },
+    { value: "payment", label: t.profile.modules.payment },
     { href: "/profile/trash", label: t.profile.modules.trash },
     { value: "account", label: t.profile.modules.account },
   ];
@@ -88,14 +101,12 @@ export default function ProfilePage() {
   };
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
-  const [stats, setStats] = useState<UserProfileStats | null>(null);
-  const [marketPostCount, setMarketPostCount] = useState(0);
-  const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipError, setMembershipError] = useState("");
   const [paymentRows, setPaymentRows] = useState<MembershipPaymentRow[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingPaymentCount, setPendingPaymentCount] = useState(0);
   const [username, setUsername] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [customCountryName, setCustomCountryName] = useState("");
@@ -112,7 +123,7 @@ export default function ProfilePage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [mobileProfileModule, setMobileProfileModule] =
-    useState<MobileProfileModule>("info");
+    useState<MobileProfileModule>("membership");
 
   useEffect(() => {
     const updateViewportWidth = () => setViewportWidth(window.innerWidth);
@@ -137,49 +148,20 @@ export default function ProfilePage() {
       setUser(user);
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
-      setStats(data.stats);
       const [
-        marketCountResult,
-        experienceCardCountResult,
         membershipResult,
         adminResult,
         paymentsResult,
       ] = await Promise.all([
-        supabase
-          .from("market_posts")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id),
-        supabase
-          .from("experience_cards")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id),
         supabase.rpc("get_my_membership"),
         supabase.rpc("is_app_admin", { p_user_id: user.id }),
         supabase
           .from("membership_payments")
-          .select("id, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, service_started_at, service_ends_at")
+          .select("id, order_number, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, submitted_at, service_started_at, service_ends_at, review_note, created_at")
           .eq("user_id", user.id)
-          .eq("status", "confirmed")
-          .order("paid_at", { ascending: false })
-          .limit(5),
+          .order("created_at", { ascending: false })
+          .limit(8),
       ]);
-
-      if (marketCountResult.error) {
-        console.error("load my market post count error:", marketCountResult.error);
-        setMarketPostCount(0);
-      } else {
-        setMarketPostCount(Number(marketCountResult.count || 0));
-      }
-
-      if (experienceCardCountResult.error) {
-        console.error(
-          "load my experience card count error:",
-          experienceCardCountResult.error
-        );
-        setExperienceCardCount(0);
-      } else {
-        setExperienceCardCount(Number(experienceCardCountResult.count || 0));
-      }
 
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
@@ -194,7 +176,19 @@ export default function ProfilePage() {
         console.error("load admin status error:", adminResult.error);
         setIsAdmin(false);
       } else {
-        setIsAdmin(Boolean(adminResult.data));
+        const allowed = Boolean(adminResult.data);
+        setIsAdmin(allowed);
+        if (allowed) {
+          const { data: queueCount, error: queueError } = await supabase.rpc(
+            "admin_get_membership_payment_queue_count"
+          );
+          if (queueError) {
+            console.error("load pending membership payment count error:", queueError);
+            setPendingPaymentCount(0);
+          } else {
+            setPendingPaymentCount(Number(queueCount || 0));
+          }
+        }
       }
 
       if (paymentsResult.error) {
@@ -256,17 +250,6 @@ export default function ProfilePage() {
   const membershipStatusText = membershipError
     ? t.profile.membership_load_failed
     : getMembershipSummary(membership, language);
-  const marketQuotaText = membership
-    ? `${Number(membership.active_market_post_count || 0)} / ${Number(membership.market_post_limit || 0)} ${t.profile.item_suffix}`
-    : `0 / 0 ${t.profile.item_suffix}`;
-
-  const privateArchiveCount = Math.max(0, Number(stats?.archiveCount || 0) - Number(stats?.publicArchiveCount || 0));
-  const endedArchiveCount = Number(stats?.endedArchiveCount || 0);
-  const planHint = getPlanHint(
-    stats?.planNames || [],
-    Number(stats?.planCount || 0),
-    language
-  );
   const isMobileViewport = viewportWidth < 760;
   const visibleMobileProfileModules = isAdmin
     ? [...baseMobileProfileModules, adminMembershipProfileModule]
@@ -285,26 +268,24 @@ export default function ProfilePage() {
   const primaryActionStyle = isMobileViewport ? mobilePrimaryButtonStyle : primaryButtonStyle;
   const secondaryActionStyle = isMobileViewport ? mobileSecondaryLinkStyle : secondaryLinkStyle;
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
-  const showInfoModule = mobileProfileModule === "info";
   const showMembershipModule = mobileProfileModule === "membership";
-  const showSpaceModule = mobileProfileModule === "space";
+  const showInfoModule = showMembershipModule;
+  const showPaymentModule = mobileProfileModule === "payment";
   const showAccountModule = mobileProfileModule === "account";
 
-  async function refreshStats(targetUserId: string) {
+  async function refreshProfile(targetUserId: string) {
     const data = await loadUserProfileData(supabase, targetUserId);
     setProfile(data.profile);
-    setStats(data.stats);
   }
 
   async function refreshPaymentRows(targetUserId: string) {
     setPaymentLoading(true);
     const { data, error } = await supabase
       .from("membership_payments")
-      .select("id, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, service_started_at, service_ends_at")
+      .select("id, order_number, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, submitted_at, service_started_at, service_ends_at, review_note, created_at")
       .eq("user_id", targetUserId)
-      .eq("status", "confirmed")
-      .order("paid_at", { ascending: false })
-      .limit(5);
+      .order("created_at", { ascending: false })
+      .limit(8);
 
     if (error) {
       console.error("refresh membership payments error:", error);
@@ -370,7 +351,7 @@ export default function ProfilePage() {
     }
 
     showToast(t.profile.saved);
-    void refreshStats(user.id);
+    void refreshProfile(user.id);
   }
 
 
@@ -548,10 +529,10 @@ export default function ProfilePage() {
     }
 
     showToast(t.profile.avatar_updated);
-    void refreshStats(user.id);
+    void refreshProfile(user.id);
   }
 
-  if (initLoading || !user || !profile || !stats) {
+  if (initLoading || !user || !profile) {
     return <div style={{ padding: 40 }}>{t.profile.loading}</div>;
   }
 
@@ -566,6 +547,17 @@ export default function ProfilePage() {
           <div style={{ marginTop: 16, background: "#fff2f0", border: "1px solid #ffd6cf", color: "#c23a2b", padding: "10px 12px", borderRadius: 12, fontSize: 14 }}>
             {errorMsg}
           </div>
+        ) : null}
+
+        {isAdmin && pendingPaymentCount > 0 ? (
+          <Link href="/admin/memberships#payment-review" style={adminPaymentAlertStyle}>
+            <span style={adminPaymentAlertCountStyle}>{pendingPaymentCount}</span>
+            <span>
+              <strong style={{ display: "block" }}>{t.profile.admin_payment_alert}</strong>
+              <span style={adminPaymentAlertHintStyle}>{t.profile.admin_payment_alert_hint}</span>
+            </span>
+            <UiIcon name="arrow-right" size={18} />
+          </Link>
         ) : null}
 
         <MobileProfileModuleTabs
@@ -667,7 +659,6 @@ export default function ProfilePage() {
             <div style={isMobileViewport ? mobileProfileActionRowStyle : { marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? t.profile.saving : t.profile.save_profile}</button>
               <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>{t.profile.view_public_profile}</Link>
-              <Link href="/archive" style={secondaryActionStyle}>{t.profile.my_projects}</Link>
             </div>
           </section>
         </div>
@@ -679,7 +670,7 @@ export default function ProfilePage() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.account_plan}</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.membership_capacity}</h2>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.membership_info}</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 {membershipStatusText}
               </p>
@@ -700,6 +691,22 @@ export default function ProfilePage() {
               </Link>
             </div>
           ) : null}
+
+          <div style={membershipRightsStyle}>
+            <div style={membershipRightsTitleStyle}>{t.profile.membership_rights_summary}</div>
+            <div style={membershipRightRowStyle}>
+              <strong>{t.profile.registered_user}</strong>
+              <span>{t.profile.registered_user_rights}</span>
+            </div>
+            <div style={membershipRightRowStyle}>
+              <strong>{t.profile.cloud_member}</strong>
+              <span>{t.profile.cloud_member_rights}</span>
+            </div>
+            <Link href="/membership/benefits" style={membershipRightsLinkStyle}>
+              {t.profile.view_full_membership_rights}
+              <UiIcon name="arrow-right" size={14} />
+            </Link>
+          </div>
 
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
             <InfoCard
@@ -723,46 +730,42 @@ export default function ProfilePage() {
               value={storageText}
               hint={t.profile.storage_hint}
             />
-            <InfoCard
-              label={t.profile.market_posts}
-              value={marketQuotaText}
-              hint={
-                !membership
-                  ? t.profile.local_cannot_post
-                  : membership.can_create_market_post === false
-                    ? t.profile.cannot_post
-                    : t.profile.active_post_limit
-              }
-            />
           </div>
         </section>
 
+        </>
+        ) : null}
+
+        {showPaymentModule ? (
         <section style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.payment_records}</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.membership_records}</h2>
+              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.payment_info}</h2>
               <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
                 {t.profile.payment_records_hint}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void refreshPaymentRows(user.id)}
-              disabled={paymentLoading}
-              style={{
-                ...secondaryLinkStyle,
-                cursor: paymentLoading ? "not-allowed" : "pointer",
-                opacity: paymentLoading ? 0.65 : 1,
-              }}
-            >
-              {paymentLoading ? t.profile.refreshing : t.profile.refresh_payments}
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link href="/membership/payment" style={primaryButtonStyle}>{t.profile.open_or_renew}</Link>
+              <button
+                type="button"
+                onClick={() => void refreshPaymentRows(user.id)}
+                disabled={paymentLoading}
+                style={{
+                  ...secondaryLinkStyle,
+                  cursor: paymentLoading ? "not-allowed" : "pointer",
+                  opacity: paymentLoading ? 0.65 : 1,
+                }}
+              >
+                {paymentLoading ? t.profile.refreshing : t.profile.refresh_payments}
+              </button>
+            </div>
           </div>
 
           <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
             {paymentRows.length === 0 ? (
-              <div style={emptyPaymentStyle}>{t.profile.no_confirmed_payments}</div>
+              <div style={emptyPaymentStyle}>{t.profile.no_payment_orders}</div>
             ) : (
               paymentRows.map((payment) => (
                 <div key={payment.id} style={paymentCardStyle}>
@@ -775,222 +778,43 @@ export default function ProfilePage() {
                         {getMembershipPlanLabel(payment.plan, language)} · {getPaymentMethodLabel(payment.payment_method, language)}
                       </div>
                     </div>
-                    <div style={{ fontSize: 13, color: "#6f7b69", textAlign: "right" }}>
-                      {t.profile.payment_time}{formatMembershipDate(payment.paid_at, language)}
-                    </div>
+                    <span style={profilePaymentStatusStyle(payment.status)}>
+                      {getProfilePaymentStatusLabel(payment.status, language)}
+                    </span>
                   </div>
 
-                  <div style={{ marginTop: 8, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
-                    {t.profile.service_period}{formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(payment.service_ends_at, language)}
+                  {payment.order_number ? (
+                    <div style={paymentMetaTextStyle}>{t.profile.order_number}{payment.order_number}</div>
+                  ) : null}
+                  <div style={paymentMetaTextStyle}>
+                    {payment.status === "confirmed" ? t.profile.payment_time : t.profile.order_time}
+                    {formatMembershipDate(payment.paid_at || payment.submitted_at || payment.created_at, language)}
                   </div>
+                  {payment.status === "confirmed" ? (
+                    <div style={paymentMetaTextStyle}>
+                      {t.profile.service_period}{formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(payment.service_ends_at, language)}
+                    </div>
+                  ) : null}
                   {payment.payment_reference ? (
-                    <div style={{ marginTop: 4, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
+                    <div style={paymentMetaTextStyle}>
                       {t.profile.transaction_reference}{payment.payment_reference}
                     </div>
                   ) : null}
+                  {payment.status === "needs_update" && payment.review_note ? (
+                    <div style={paymentReviewNoteStyle}>{payment.review_note}</div>
+                  ) : null}
                   {payment.note ? (
-                    <div style={{ marginTop: 4, fontSize: 13, color: "#6f7b69", lineHeight: 1.55 }}>
+                    <div style={paymentMetaTextStyle}>
                       {t.profile.note}{payment.note}
                     </div>
+                  ) : null}
+                  {payment.status === "needs_update" ? (
+                    <Link href="/membership/payment" style={paymentUpdateLinkStyle}>{t.profile.update_payment_proof}</Link>
                   ) : null}
                 </div>
               ))
             )}
           </div>
-        </section>
-        </>
-        ) : null}
-
-        {showSpaceModule ? (
-        <section style={isMobileViewport ? { ...statsSectionStyle, ...sectionCompactStyle } : statsSectionStyle}>
-          {!isMobileViewport ? (
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.personal_space}</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.projects_cards_interactions}</h2>
-            </div>
-          </div>
-          ) : null}
-
-          <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: isMobileViewport ? 0 : 14 }}>
-            {isMobileViewport ? (
-              <>
-                <ProjectStatsCard
-                  archiveCount={stats.archiveCount}
-                  publicArchiveCount={stats.publicArchiveCount}
-                  privateArchiveCount={privateArchiveCount}
-                  endedArchiveCount={endedArchiveCount}
-                />
-                <StatLinkCard
-                  href="/experience-cards"
-                  label={t.profile.my_experience_cards}
-                  value={String(experienceCardCount)}
-                  hint=""
-                  compact
-                />
-                <StatLinkCard
-                  href="/profile/recent"
-                  label={t.profile.recent_projects}
-                  value={t.profile.enter}
-                  hint=""
-                  compact
-                />
-                <StatLinkCard
-                  href="/profile/followers"
-                  label={t.profile.followers_entry}
-                  value={String(stats.followerCount)}
-                  hint=""
-                  compact
-                />
-                <StatLinkCard
-                  href="/profile/helpful"
-                  label={t.profile.received_helpful_entry}
-                  value={String(stats.receivedFlowerCount)}
-                  hint=""
-                  compact
-                />
-                <StatLinkCard
-                  href="/profile/helpful?tab=sent"
-                  label={t.profile.sent_helpful_entry}
-                  value={String(stats.sentFlowerCount || 0)}
-                  hint=""
-                  compact
-                />
-              </>
-            ) : (
-              <>
-                <StatLinkCard
-                  href="/archive"
-                  label={t.profile.my_projects}
-                  value={String(stats.archiveCount)}
-                  hint={`${t.profile.public_prefix} ${stats.publicArchiveCount} · ${t.profile.private_prefix} ${privateArchiveCount}`}
-                />
-                <StatLinkCard
-                  href="/experience-cards"
-                  label={t.profile.my_experience_cards}
-                  value={String(experienceCardCount)}
-                  hint={t.profile.experience_hint}
-                />
-                <StatLinkCard
-                  href="/profile/recent"
-                  label={t.profile.recent_browse}
-                  value={t.profile.enter}
-                  hint=""
-                />
-                <StatLinkCard
-                  href="/follow?tab=projects"
-                  label={t.profile.followed_projects}
-                  value={String(stats.projectFollowCount)}
-                  hint=""
-                />
-                <StatLinkCard
-                  href="/follow?tab=users"
-                  label={t.profile.followed_users}
-                  value={String(stats.followingCount)}
-                  hint=""
-                />
-                <StatLinkCard
-                  href="/profile/followers"
-                  label={t.profile.followers}
-                  value={String(stats.followerCount)}
-                  hint=""
-                />
-                <StatLinkCard
-                  href="/profile/helpful"
-                  label={t.profile.received_helpful_marks}
-                  value={String(stats.receivedFlowerCount)}
-                  hint={t.profile.received_helpful_hint}
-                />
-                <StatLinkCard
-                  href="/profile/helpful?tab=sent"
-                  label={t.profile.sent_helpful_marks}
-                  value={String(stats.sentFlowerCount || 0)}
-                  hint={t.profile.sent_helpful_hint}
-                />
-                <StatLinkCard
-                  href="/notifications"
-                  label={t.profile.notifications}
-                  value={t.profile.enter}
-                  hint={t.profile.notifications_hint}
-                />
-              </>
-            )}
-          </div>
-        </section>
-        ) : null}
-
-        {showSpaceModule && !isMobileViewport ? (
-        <section style={plantInfoSectionStyle}>
-          <div style={plantInfoHeaderStyle}>
-            <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.plant_info}</div>
-              <h2 style={plantInfoTitleStyle}>{t.profile.plant_plan_title}</h2>
-              <p style={plantInfoDescStyle}>
-                {t.profile.plant_plan_intro}
-              </p>
-            </div>
-          </div>
-
-          <div style={plantInfoGridStyle}>
-            <Link href="/archive/plans" style={plantInfoCardStyle}>
-              <div style={plantInfoCardLabelStyle}>{t.profile.planting_plan}</div>
-              <div style={plantInfoCardValueStyle}>{stats.planCount}</div>
-              <div style={plantInfoCardHintStyle}>{planHint}</div>
-            </Link>
-
-            <Link href="/archive/interests" style={plantInfoCardStyle}>
-              <div style={plantInfoCardLabelStyle}>{t.profile.plant_collection}</div>
-              <div style={plantInfoCardValueStyle}>{stats.interestCount}</div>
-              <div style={plantInfoCardHintStyle}>{getInterestHint(Number(stats.interestCount || 0), language)}</div>
-            </Link>
-          </div>
-        </section>
-        ) : null}
-
-        {showSpaceModule && !isMobileViewport ? (
-        <section style={marketInfoSectionStyle}>
-          <div style={marketInfoHeaderStyle}>
-            <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.market_info}</div>
-              <h2 style={marketInfoTitleStyle}>{t.profile.my_market}</h2>
-              <p style={marketInfoDescStyle}>
-                {t.profile.my_market_intro}
-              </p>
-            </div>
-          </div>
-
-          <div style={marketInfoGridStyle}>
-            <Link href="/market/mine" style={marketInfoCardStyle}>
-              <div style={marketInfoCardLabelStyle}>{t.profile.my_market_posts}</div>
-              <div style={marketInfoCardValueStyle}>{marketPostCount}</div>
-              <div style={marketInfoCardHintStyle}>
-                {t.profile.my_market_posts_hint}
-              </div>
-            </Link>
-
-            <Link href="/market/new" style={marketInfoCardStyle}>
-              <div style={marketInfoCardLabelStyle}>{t.profile.new_market_post}</div>
-              <div style={marketInfoCardValueStyle}><UiIcon name="plus" size={22} /></div>
-              <div style={marketInfoCardHintStyle}>
-                {t.profile.new_market_post_hint}
-              </div>
-            </Link>
-          </div>
-        </section>
-        ) : null}
-
-        {showSpaceModule && !isMobileViewport ? (
-        <section style={trashEntrySectionStyle}>
-          <div>
-            <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.cloud_content}</div>
-            <h2 style={trashEntryTitleStyle}>{t.profile.trash}</h2>
-            <p style={trashEntryDescStyle}>
-              {t.profile.trash_intro}
-            </p>
-          </div>
-          <Link href="/profile/trash" style={trashEntryLinkStyle}>
-            {t.profile.view_trash}
-          </Link>
         </section>
         ) : null}
 
@@ -1075,24 +899,6 @@ export default function ProfilePage() {
   );
 }
 
-function getPlanHint(
-  planNames: string[],
-  planCount: number,
-  language: "zh" | "en"
-) {
-  if (!planCount) return language === "en" ? "No planting plans yet" : "还没有种植计划";
-  if (!planNames.length) return language === "en" ? "View my planting plan" : "查看我的种植计划";
-  const suffix = planCount > planNames.length
-    ? language === "en" ? " and more" : "等"
-    : "";
-  return `${planNames.join(language === "en" ? ", " : "、")}${suffix}`;
-}
-
-function getInterestHint(interestCount: number, language: "zh" | "en") {
-  if (!interestCount) return language === "en" ? "No plants in the collection yet" : "还没有植物收藏";
-  return language === "en" ? "View plants I am interested in" : "查看我感兴趣的植物";
-}
-
 function MetaItem({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, color: "#5f6a5b" }}>
@@ -1119,7 +925,7 @@ function MobileProfileModuleTabs({
       style={{
         ...mobileProfileTabsStyle,
         gridTemplateColumns: compact
-          ? "repeat(3, minmax(0, 1fr))"
+          ? "repeat(2, minmax(0, 1fr))"
           : `repeat(${modules.length}, minmax(0, 1fr))`,
       }}
       aria-label={t.profile.module_aria}
@@ -1155,65 +961,6 @@ function MobileProfileModuleTabs({
   );
 }
 
-function ProjectStatsCard({
-  archiveCount,
-  publicArchiveCount,
-  privateArchiveCount,
-  endedArchiveCount,
-}: {
-  archiveCount: number;
-  publicArchiveCount: number;
-  privateArchiveCount: number;
-  endedArchiveCount: number;
-}) {
-  const { t } = useLanguage();
-  return (
-    <Link href="/archive" style={mobileProjectStatsCardStyle}>
-      <span style={mobileProjectStatsTitleRowStyle}>
-        <strong>{t.profile.project_archives}</strong>
-        <strong>{archiveCount} {t.profile.project_unit} <UiIcon name="arrow-right" size={14} /></strong>
-      </span>
-      <span style={mobileProjectStatsDetailStyle}>
-        {t.profile.public_prefix} {publicArchiveCount} · {t.profile.private_prefix} {privateArchiveCount} · {t.profile.ended_prefix} {endedArchiveCount}
-      </span>
-    </Link>
-  );
-}
-
-function StatLinkCard({
-  href,
-  label,
-  value,
-  hint,
-  compact = false,
-}: {
-  href: string;
-  label: string;
-  value: string;
-  hint: string;
-  compact?: boolean;
-}) {
-  if (compact) {
-    return (
-      <Link href={href} style={{ ...compactStatCardStyle, textDecoration: "none" }}>
-        <div style={compactStatLineStyle}>
-          <span>{label}</span>
-          <strong style={compactStatValueStyle}>{value}</strong>
-        </div>
-        {hint ? <div style={compactStatHintStyle}>{hint}</div> : null}
-      </Link>
-    );
-  }
-
-  return (
-    <Link href={href} style={{ ...statCardBaseStyle, textDecoration: "none" }}>
-      <div style={{ fontSize: 14, color: "#6d7968" }}>{label}</div>
-      <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
-      <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
-    </Link>
-  );
-}
-
 function InfoCard({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div style={statCardBaseStyle}>
@@ -1221,26 +968,6 @@ function InfoCard({ label, value, hint }: { label: string; value: string; hint: 
       <div style={{ marginTop: 6, fontSize: 22, fontWeight: 700, color: "#22301f" }}>{value}</div>
       <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
     </div>
-  );
-}
-
-function StatActionCard({
-  label,
-  value,
-  hint,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  onClick: () => void;
-}) {
-  return (
-    <button type="button" onClick={onClick} style={statActionCardStyle}>
-      <div style={{ fontSize: 14, color: "#6d7968" }}>{label}</div>
-      <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700, color: "#22301f" }}>{value}</div>
-      <div style={{ marginTop: 6, fontSize: 13, color: "#7b8676", lineHeight: 1.35 }}>{hint}</div>
-    </button>
   );
 }
 
@@ -1326,6 +1053,42 @@ const mobilePanelStyle: CSSProperties = {
   boxSizing: "border-box",
 };
 
+const adminPaymentAlertStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "auto minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: 10,
+  marginTop: 10,
+  padding: "11px 12px",
+  border: "1px solid #e7b886",
+  borderRadius: 14,
+  background: "#fff3e4",
+  color: "#7c3f20",
+  textDecoration: "none",
+  fontSize: 14,
+};
+
+const adminPaymentAlertCountStyle: CSSProperties = {
+  minWidth: 34,
+  height: 34,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "50%",
+  background: "#c95c2f",
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: 900,
+};
+
+const adminPaymentAlertHintStyle: CSSProperties = {
+  display: "block",
+  marginTop: 2,
+  color: "#965b3c",
+  fontSize: 12,
+  lineHeight: 1.4,
+};
+
 
 const membershipNoticeStyle: CSSProperties = {
   marginTop: 14,
@@ -1341,6 +1104,42 @@ const membershipNoticeStyle: CSSProperties = {
   justifyContent: "space-between",
   alignItems: "center",
   flexWrap: "wrap",
+};
+
+const membershipRightsStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+  marginTop: 12,
+  padding: "11px 12px",
+  border: "1px solid #dce9d5",
+  borderRadius: 14,
+  background: "#fff",
+};
+
+const membershipRightsTitleStyle: CSSProperties = {
+  color: "#274126",
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const membershipRightRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "90px minmax(0, 1fr)",
+  gap: 8,
+  color: "#667361",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const membershipRightsLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  justifySelf: "start",
+  color: "#3e703c",
+  fontSize: 13,
+  fontWeight: 800,
+  textDecoration: "none",
 };
 
 const membershipSectionStyle: CSSProperties = {
@@ -1374,6 +1173,47 @@ const paymentCardStyle: CSSProperties = {
   padding: "12px 13px",
 };
 
+const paymentMetaTextStyle: CSSProperties = {
+  marginTop: 5,
+  color: "#6f7b69",
+  fontSize: 13,
+  lineHeight: 1.55,
+  overflowWrap: "anywhere",
+};
+
+function profilePaymentStatusStyle(status: string | null | undefined): CSSProperties {
+  const needsUpdate = status === "needs_update";
+  const submitted = status === "submitted";
+  return {
+    alignSelf: "flex-start",
+    padding: "4px 8px",
+    borderRadius: 999,
+    color: needsUpdate ? "#994625" : submitted ? "#786018" : "#3d6c3b",
+    background: needsUpdate ? "#fff0e7" : submitted ? "#fff6d9" : "#eaf4e6",
+    fontSize: 12,
+    fontWeight: 800,
+  };
+}
+
+const paymentReviewNoteStyle: CSSProperties = {
+  marginTop: 8,
+  padding: "8px 9px",
+  borderRadius: 10,
+  background: "#fff0e7",
+  color: "#914628",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const paymentUpdateLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  marginTop: 8,
+  color: "#3f703d",
+  fontSize: 13,
+  fontWeight: 800,
+  textDecoration: "none",
+};
+
 const emptyPaymentStyle: CSSProperties = {
   border: "1px dashed #d9ceb8",
   borderRadius: 14,
@@ -1381,180 +1221,6 @@ const emptyPaymentStyle: CSSProperties = {
   color: "#7b6d55",
   background: "#fffaf2",
   fontSize: 13,
-};
-
-const statsSectionStyle: CSSProperties = {
-  marginTop: 14,
-  background: "#fbfdf9",
-  border: "1px solid #e6eee2",
-  borderRadius: 18,
-  padding: 14,
-};
-const plantInfoSectionStyle: CSSProperties = {
-  marginTop: 14,
-  background: "#f8fff8",
-  border: "1px solid #dcebd6",
-  borderRadius: 18,
-  padding: 14,
-};
-
-const plantInfoHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  alignItems: "flex-start",
-  marginBottom: 14,
-};
-
-const plantInfoTitleStyle: CSSProperties = {
-  margin: "4px 0 0",
-  color: "#1f2a1f",
-  fontSize: 20,
-};
-
-const plantInfoDescStyle: CSSProperties = {
-  margin: "5px 0 0",
-  color: "#6f7b69",
-  fontSize: 13,
-  lineHeight: 1.6,
-};
-
-const plantInfoGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 12,
-};
-
-const plantInfoCardStyle: CSSProperties = {
-  display: "block",
-  textDecoration: "none",
-  background: "#fff",
-  border: "1px solid #e2ecdc",
-  borderRadius: 16,
-  padding: 14,
-  color: "#1f2a1f",
-};
-
-const plantInfoCardLabelStyle: CSSProperties = {
-  fontSize: 14,
-  color: "#6d7968",
-};
-
-const plantInfoCardValueStyle: CSSProperties = {
-  marginTop: 6,
-  fontSize: 24,
-  fontWeight: 700,
-  color: "#22301f",
-};
-
-const plantInfoCardHintStyle: CSSProperties = {
-  marginTop: 6,
-  fontSize: 13,
-  color: "#7b8676",
-  lineHeight: 1.35,
-};
-
-const marketInfoSectionStyle: CSSProperties = {
-  marginTop: 14,
-  background: "#fffaf3",
-  border: "1px solid #efe1c9",
-  borderRadius: 18,
-  padding: 14,
-};
-
-const marketInfoHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  alignItems: "flex-start",
-  marginBottom: 14,
-};
-
-const marketInfoTitleStyle: CSSProperties = {
-  margin: "4px 0 0",
-  color: "#1f2a1f",
-  fontSize: 20,
-};
-
-const marketInfoDescStyle: CSSProperties = {
-  margin: "5px 0 0",
-  color: "#6f7b69",
-  fontSize: 13,
-  lineHeight: 1.6,
-};
-
-const marketInfoGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 10,
-};
-
-const marketInfoCardStyle: CSSProperties = {
-  textDecoration: "none",
-  color: "inherit",
-  background: "#fff",
-  border: "1px solid #eadfcf",
-  borderRadius: 16,
-  padding: 14,
-  display: "block",
-  minHeight: 104,
-  boxSizing: "border-box",
-};
-
-const marketInfoCardLabelStyle: CSSProperties = {
-  color: "#6d5f45",
-  fontSize: 14,
-};
-
-const marketInfoCardValueStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#22301f",
-  fontSize: 24,
-  fontWeight: 700,
-};
-
-const marketInfoCardHintStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#7b8676",
-  fontSize: 13,
-  lineHeight: 1.35,
-};
-
-const trashEntrySectionStyle: CSSProperties = {
-  marginTop: 14,
-  background: "#f8fbf6",
-  border: "1px solid #dce8d7",
-  borderRadius: 18,
-  padding: 14,
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 14,
-  flexWrap: "wrap",
-};
-
-const trashEntryTitleStyle: CSSProperties = {
-  margin: "4px 0 0",
-  color: "#263326",
-  fontSize: 20,
-};
-
-const trashEntryDescStyle: CSSProperties = {
-  margin: "6px 0 0",
-  color: "#687565",
-  fontSize: 13,
-  lineHeight: 1.6,
-};
-
-const trashEntryLinkStyle: CSSProperties = {
-  border: "1px solid #bfd5b9",
-  background: "#f2f9ef",
-  color: "#356231",
-  borderRadius: 12,
-  padding: "9px 13px",
-  fontSize: 14,
-  fontWeight: 700,
-  textDecoration: "none",
 };
 
 const dataSectionStyle: CSSProperties = {
@@ -1806,68 +1472,4 @@ const statCardBaseStyle: CSSProperties = {
   color: "inherit",
   minHeight: 104,
   boxSizing: "border-box",
-};
-
-const compactStatCardStyle: CSSProperties = {
-  ...statCardBaseStyle,
-  minHeight: 44,
-  borderRadius: 12,
-  padding: "9px 10px",
-};
-
-const compactStatLineStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "baseline",
-  justifyContent: "space-between",
-  gap: 8,
-  color: "#40513d",
-  fontSize: 13,
-  lineHeight: 1.25,
-};
-
-const compactStatValueStyle: CSSProperties = {
-  color: "#22301f",
-  fontSize: 15,
-  fontWeight: 800,
-  whiteSpace: "nowrap",
-};
-
-const compactStatHintStyle: CSSProperties = {
-  marginTop: 4,
-  color: "#7b8676",
-  fontSize: 12,
-  lineHeight: 1.25,
-};
-
-const mobileProjectStatsCardStyle: CSSProperties = {
-  ...compactStatCardStyle,
-  minHeight: 0,
-  display: "grid",
-  gap: 4,
-  color: "#22301f",
-  fontSize: 13,
-  fontWeight: 800,
-  lineHeight: 1.45,
-  textDecoration: "none",
-};
-
-const mobileProjectStatsTitleRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-};
-
-const mobileProjectStatsDetailStyle: CSSProperties = {
-  color: "#74806f",
-  fontSize: 12,
-  fontWeight: 600,
-};
-
-const statActionCardStyle: CSSProperties = {
-  ...statCardBaseStyle,
-  width: "100%",
-  textAlign: "left",
-  cursor: "pointer",
-  font: "inherit",
 };

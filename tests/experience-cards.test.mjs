@@ -16,6 +16,8 @@ const descriptionMigrationPath =
   "supabase/migrations/20260809050320_add_experience_card_description.sql";
 const descriptionHardeningMigrationPath =
   "supabase/migrations/20260809053213_harden_experience_card_description_update.sql";
+const playbackManifestMigrationPath =
+  "supabase/migrations/20260820101631_add_experience_playback_manifest.sql";
 
 test("experience cards reference at least three source records without a product cap or copied content", async () => {
   const [migration, unlimitedSourceMigration] = await Promise.all([
@@ -401,7 +403,7 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(archiveHeader, /生成经验卡/);
 });
 
-test("experience cards have a persistent personal-space entry", async () => {
+test("experience cards stay reachable from projects after profile space shortcuts are removed", async () => {
   const [profile, navbar, archivePage, archiveCards, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
     source("components/navbar.tsx"),
@@ -411,9 +413,8 @@ test("experience cards have a persistent personal-space entry", async () => {
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(profile, /href="\/experience-cards"/);
-  assert.match(profile, /label=\{t\.profile\.my_experience_cards\}/);
-  assert.match(profile, /value: "space", label: t\.profile\.modules\.space/);
+  assert.doesNotMatch(profile, /href="\/experience-cards"/);
+  assert.doesNotMatch(profile, /value: "space", label: t\.profile\.modules\.space/);
   assert.match(
     navbar,
     /isPersonalExperiencePath[\s\S]*?pathname === "\/experience-cards"/
@@ -598,6 +599,51 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(packageJson, /"mediabunny"/);
 });
 
+test("public Experience plays source records live without uploading another video", async () => {
+  const [
+    migration,
+    editor,
+    player,
+    feedItem,
+    feedPage,
+    feedStyles,
+    experienceSearch,
+    zhCopy,
+  ] = await Promise.all([
+    source(playbackManifestMigrationPath),
+    source("components/experience-card/ExperienceCardEditor.tsx"),
+    source("components/experience-card/PublicExperiencePlayer.tsx"),
+    source("components/experience-card/PublicExperienceFeedItem.tsx"),
+    source("app/experience/page.tsx"),
+    source("components/experience-card/PublicExperienceFeed.module.css"),
+    source("app/experience/search/page.tsx"),
+    source("lib/i18n/zh.ts"),
+  ]);
+
+  assert.match(migration, /add column if not exists playback_media_ids uuid\[\]/i);
+  assert.match(migration, /security definer[\s\S]*?set search_path = ''/i);
+  assert.match(migration, /v_card\.user_id is distinct from v_user_id/i);
+  assert.match(migration, /m\.id = any\(v_media_ids\)/i);
+  assert.match(migration, /cr\.card_id = v_card\.id[\s\S]*?cr\.record_id = m\.record_id/i);
+  assert.match(migration, /revoke all on function[\s\S]*?from public, anon, authenticated, service_role/i);
+  assert.match(migration, /grant execute on function[\s\S]*?to authenticated, service_role/i);
+  assert.doesNotMatch(migration, /storage\.objects|\.mp4|video\//i);
+
+  assert.match(editor, /saveExperienceCardPlaybackSelection/);
+  assert.match(editor, /selectedMediaIds/);
+  assert.match(player, /buildExperienceCardVideoScenes/);
+  assert.match(player, /detail\.card\.playback_media_ids/);
+  assert.doesNotMatch(player, /<video|Blob|\.mp4/);
+  assert.match(feedItem, /IntersectionObserver/);
+  assert.match(feedItem, /intersectionRatio >= 0\.55/);
+  assert.match(feedPage, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(feedPage, /PublicExperienceFeedItem/);
+  assert.match(feedStyles, /scroll-snap-type: y mandatory/);
+  assert.match(experienceSearch, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(zhCopy, /private: "私密"/);
+  assert.match(zhCopy, /public: "公开"/);
+});
+
 
 test("experience card MP4 is shown first, selects individual images, and preserves photo area", async () => {
   const [detail, panel, renderer] = await Promise.all([
@@ -761,6 +807,9 @@ test("personal space project page has a direct My Experience Cards entry", async
   ]);
 
   assert.match(personalSpace, /href="\/experience-cards"/);
+  assert.match(personalSpace, /href="\/profile"/);
+  assert.match(personalSpace, /spaceProfile\?\.avatar_url/);
+  assert.match(personalSpace, /t\.archive_workspace\.personal_info/);
   assert.match(
     personalSpace,
     /\{t\.archive_workspace\.my_experience_cards\} \(\{experienceCardCount\}\)/

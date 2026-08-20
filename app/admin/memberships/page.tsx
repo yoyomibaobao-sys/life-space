@@ -66,6 +66,23 @@ type MembershipPaymentRow = {
   updated_at: string | null;
 };
 
+type PendingPaymentQueueRow = {
+  id: string;
+  user_id: string;
+  email: string | null;
+  username: string | null;
+  order_number: string | null;
+  status: string | null;
+  amount: number | string | null;
+  currency: string | null;
+  payment_method: string | null;
+  payment_reference: string | null;
+  proof_path: string | null;
+  submitted_at: string | null;
+  created_at: string | null;
+  review_note: string | null;
+};
+
 type PlanKey = "trial" | "basic" | "large" | "seller" | "admin";
 type PaymentPlanKey = Exclude<PlanKey, "trial">;
 type PaymentCurrency = "CNY" | "USD";
@@ -180,6 +197,9 @@ function getPaymentMethodLabel(method: string | null | undefined, language: Lang
 
 function getPaymentStatusLabel(status: string | null | undefined, language: Language) {
   const copy = getTranslations(language).admin_memberships;
+  if (status === "pending_payment") return copy.status_pending_payment;
+  if (status === "submitted") return copy.status_submitted;
+  if (status === "needs_update") return copy.status_needs_update;
   if (status === "confirmed") return copy.status_confirmed;
   if (status === "refunded") return copy.status_refunded;
   if (status === "canceled") return copy.status_canceled;
@@ -362,6 +382,9 @@ export default function AdminMembershipsPage() {
   const [paymentPaidAtDate, setPaymentPaidAtDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentServiceMonths, setPaymentServiceMonths] = useState("12");
   const [paymentStatusSavingId, setPaymentStatusSavingId] = useState<string | null>(null);
+  const [pendingPaymentRows, setPendingPaymentRows] = useState<PendingPaymentQueueRow[]>([]);
+  const [pendingPaymentLoading, setPendingPaymentLoading] = useState(false);
+  const [pendingPaymentActionId, setPendingPaymentActionId] = useState<string | null>(null);
   const paymentSubmittingRef = useRef(false);
   const paymentStatusSubmittingRef = useRef(false);
 
@@ -434,6 +457,96 @@ export default function AdminMembershipsPage() {
     setRolloutLoading(false);
   }
 
+  async function loadPendingPaymentQueue() {
+    setPendingPaymentLoading(true);
+    const { data, error } = await supabase.rpc("admin_list_membership_payment_queue");
+
+    if (error) {
+      logSupabaseError("load pending membership payment queue error:", error);
+      setPendingPaymentRows([]);
+      setErrorMsg(t.admin_memberships.pending_payment_load_failed);
+    } else {
+      setPendingPaymentRows(Array.isArray(data) ? (data as PendingPaymentQueueRow[]) : []);
+    }
+    setPendingPaymentLoading(false);
+  }
+
+  async function openPaymentProof(row: PendingPaymentQueueRow) {
+    if (!row.proof_path) {
+      showToast(t.admin_memberships.payment_proof_missing);
+      return;
+    }
+
+    const proofWindow = window.open("about:blank", "_blank");
+    if (proofWindow) proofWindow.opener = null;
+
+    const { data, error } = await supabase.storage
+      .from("payment-proofs")
+      .createSignedUrl(row.proof_path, 300);
+
+    if (error || !data?.signedUrl) {
+      proofWindow?.close();
+      logSupabaseError("create payment proof signed url error:", error);
+      showToast(t.admin_memberships.payment_proof_open_failed);
+      return;
+    }
+
+    if (proofWindow) {
+      proofWindow.location.replace(data.signedUrl);
+    } else {
+      window.location.assign(data.signedUrl);
+    }
+  }
+
+  async function confirmPendingPayment(row: PendingPaymentQueueRow) {
+    if (pendingPaymentActionId) return;
+    const confirmed = window.confirm(
+      `${t.admin_memberships.confirm_submitted_payment_prefix}${row.email || row.user_id}${t.admin_memberships.confirm_submitted_payment_suffix}\n${row.order_number || ""}\n${formatPaymentAmount(row.amount, row.currency)}\n\n${t.admin_memberships.confirm_submitted_payment_notice}`
+    );
+    if (!confirmed) return;
+
+    setPendingPaymentActionId(row.id);
+    const { data, error } = await supabase.rpc(
+      "admin_confirm_submitted_membership_payment_json",
+      { p_payment_id: row.id }
+    );
+    const result = firstRpcRow<{ ok?: boolean; error_message?: string | null }>(data);
+
+    if (error || !result?.ok) {
+      logSupabaseError("confirm submitted membership payment error:", error || result);
+      showToast(t.admin_memberships.confirm_submitted_payment_failed);
+    } else {
+      showToast(t.admin_memberships.confirm_submitted_payment_success);
+      await Promise.all([loadPendingPaymentQueue(), loadRows(keyword)]);
+    }
+    setPendingPaymentActionId(null);
+  }
+
+  async function requestPaymentUpdate(row: PendingPaymentQueueRow) {
+    if (pendingPaymentActionId) return;
+    const note = window.prompt(
+      t.admin_memberships.request_payment_update_prompt,
+      t.admin_memberships.request_payment_update_default
+    )?.trim();
+    if (!note) return;
+
+    setPendingPaymentActionId(row.id);
+    const { data, error } = await supabase.rpc(
+      "admin_request_membership_payment_update_json",
+      { p_payment_id: row.id, p_review_note: note }
+    );
+    const result = firstRpcRow<{ ok?: boolean; error_message?: string | null }>(data);
+
+    if (error || !result?.ok) {
+      logSupabaseError("request membership payment update error:", error || result);
+      showToast(t.admin_memberships.request_payment_update_failed);
+    } else {
+      showToast(t.admin_memberships.request_payment_update_success);
+      await loadPendingPaymentQueue();
+    }
+    setPendingPaymentActionId(null);
+  }
+
   async function loadPaymentRows(userId: string) {
     setPaymentLoading(true);
 
@@ -441,6 +554,7 @@ export default function AdminMembershipsPage() {
       .from("membership_payments")
       .select("*")
       .eq("user_id", userId)
+      .in("status", ["confirmed", "refunded", "canceled"])
       .order("paid_at", { ascending: false })
       .limit(10);
 
@@ -502,7 +616,11 @@ export default function AdminMembershipsPage() {
       setChecking(false);
 
       if (allowed) {
-        await Promise.all([loadRows(""), loadSignupRolloutStatus()]);
+        await Promise.all([
+          loadPendingPaymentQueue(),
+          loadRows(""),
+          loadSignupRolloutStatus(),
+        ]);
       } else {
         setLoading(false);
       }
@@ -960,6 +1078,80 @@ export default function AdminMembershipsPage() {
           </p>
         </div>
         <Link href="/membership" style={secondaryButtonStyle}>{t.admin_memberships.view_membership_page}</Link>
+      </section>
+
+      <section
+        id="payment-review"
+        style={{
+          ...currentCardStyle,
+          ...pendingPaymentQueueStyle(pendingPaymentRows.length > 0),
+          marginBottom: isMobileViewport ? 12 : 16,
+        }}
+      >
+        <div style={detailTopStyle}>
+          <div>
+            <div style={sectionLabelStyle}>{t.admin_memberships.payment_review_eyebrow}</div>
+            <h2 style={sectionTitleStyle}>
+              {t.admin_memberships.pending_payment_title}（{pendingPaymentRows.length}）
+            </h2>
+            <p style={smallTextStyle}>{t.admin_memberships.pending_payment_intro}</p>
+          </div>
+          <button
+            type="button"
+            style={secondaryButtonStyle}
+            onClick={() => void loadPendingPaymentQueue()}
+            disabled={pendingPaymentLoading}
+          >
+            {pendingPaymentLoading ? t.admin_memberships.reading : t.admin_memberships.refresh_queue}
+          </button>
+        </div>
+
+        {pendingPaymentLoading && pendingPaymentRows.length === 0 ? (
+          <div style={emptyStyle}>{t.admin_memberships.loading_pending_payments}</div>
+        ) : pendingPaymentRows.length === 0 ? (
+          <div style={pendingPaymentEmptyStyle}>{t.admin_memberships.no_pending_payments}</div>
+        ) : (
+          <div style={pendingPaymentListStyle}>
+            {pendingPaymentRows.map((row) => (
+              <article key={row.id} style={pendingPaymentCardStyle}>
+                <div style={userTitleRowStyle}>
+                  <strong style={userNameStyle}>{row.username || row.email || row.user_id}</strong>
+                  <span style={pendingPaymentAmountStyle}>{formatPaymentAmount(row.amount, row.currency)}</span>
+                </div>
+                <div style={smallTextStyle}>{row.email || row.user_id}</div>
+                <div style={pendingPaymentMetaStyle}>
+                  <span>{t.admin_memberships.order_number_prefix}{row.order_number || t.admin_memberships.not_recorded}</span>
+                  <span>{getPaymentMethodLabel(row.payment_method, language)}</span>
+                  <span>{t.admin_memberships.submitted_at_prefix}{formatMembershipDate(row.submitted_at || row.created_at, language)}</span>
+                </div>
+                {row.payment_reference ? (
+                  <div style={smallTextStyle}>{t.admin_memberships.transaction_prefix}{row.payment_reference}</div>
+                ) : null}
+                <div style={pendingPaymentActionsStyle}>
+                  <button type="button" style={secondaryButtonStyle} onClick={() => void openPaymentProof(row)}>
+                    {t.admin_memberships.view_payment_proof}
+                  </button>
+                  <button
+                    type="button"
+                    style={primaryButtonStyle}
+                    onClick={() => void confirmPendingPayment(row)}
+                    disabled={pendingPaymentActionId !== null}
+                  >
+                    {pendingPaymentActionId === row.id ? t.admin_memberships.confirming : t.admin_memberships.confirm_and_open}
+                  </button>
+                  <button
+                    type="button"
+                    style={dangerMiniButtonStyle}
+                    onClick={() => void requestPaymentUpdate(row)}
+                    disabled={pendingPaymentActionId !== null}
+                  >
+                    {t.admin_memberships.request_more_proof}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}>
@@ -1783,6 +1975,58 @@ const dividerStyle: CSSProperties = {
   height: 1,
   background: "#e7dcc7",
   margin: "20px 0",
+};
+
+const pendingPaymentQueueStyle = (hasPending: boolean): CSSProperties => ({
+  borderColor: hasPending ? "#e1a46f" : "#dce8d7",
+  background: hasPending ? "#fff8ef" : "#f8fbf6",
+  boxShadow: hasPending ? "0 8px 24px rgba(170, 91, 36, 0.10)" : "none",
+});
+
+const pendingPaymentListStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginTop: 12,
+};
+
+const pendingPaymentCardStyle: CSSProperties = {
+  padding: "12px 13px",
+  border: "1px solid #ead0b7",
+  borderRadius: 14,
+  background: "#fff",
+};
+
+const pendingPaymentAmountStyle: CSSProperties = {
+  color: "#8b4925",
+  fontSize: 17,
+  fontWeight: 900,
+};
+
+const pendingPaymentMetaStyle: CSSProperties = {
+  display: "flex",
+  gap: "5px 12px",
+  flexWrap: "wrap",
+  marginTop: 7,
+  color: "#6f6657",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const pendingPaymentActionsStyle: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 10,
+};
+
+const pendingPaymentEmptyStyle: CSSProperties = {
+  marginTop: 12,
+  padding: "11px 12px",
+  border: "1px dashed #ccd9c7",
+  borderRadius: 13,
+  background: "#fff",
+  color: "#657160",
+  fontSize: 13,
 };
 
 const paymentSectionStyle: CSSProperties = {

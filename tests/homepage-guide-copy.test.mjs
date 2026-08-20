@@ -77,16 +77,19 @@ test("other project copy consistently refers to natural life", async () => {
   assert.match(homepage, /t\.home\.cards\.map/);
 });
 
-test("desktop and mobile navigation place guidance before marketplace", async () => {
-  const navbar = await source("components/navbar.tsx");
+test("desktop navigation keeps guidance before marketplace and Home tabs place guidance after Experience", async () => {
+  const [navbar, homeTabs] = await Promise.all([
+    source("components/navbar.tsx"),
+    source("components/home/HomeSectionTabs.tsx"),
+  ]);
   const desktopStart = navbar.indexOf("<div style={getNavItemsWrapStyle(isCompact)}>");
   const mobileStart = navbar.indexOf("function MobileBottomNav");
   const desktopNav = navbar.slice(desktopStart, mobileStart);
-  const mobileNav = navbar.slice(mobileStart);
 
   assert.ok(desktopStart >= 0 && mobileStart > desktopStart);
   assert.ok(desktopNav.indexOf('href="/plant"') < desktopNav.indexOf('href="/market"'));
-  assert.ok(mobileNav.indexOf("label: labels.guide") < mobileNav.indexOf("label: labels.market"));
+  assert.ok(homeTabs.indexOf('href: "/discover"') < homeTabs.indexOf('href: "/experience"'));
+  assert.ok(homeTabs.indexOf('href: "/experience"') < homeTabs.indexOf('href: "/plant"'));
 });
 
 test("local recording is offered only after a network registration or login failure", async () => {

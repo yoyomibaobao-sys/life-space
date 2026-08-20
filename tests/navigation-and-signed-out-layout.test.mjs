@@ -6,18 +6,26 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("mobile personal space project summary opens the project archive", async () => {
+test("profile combines user and membership information without a personal-space module", async () => {
   const [profile, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(profile, /<Link href="\/archive" style=\{mobileProjectStatsCardStyle\}>/);
-  assert.match(profile, /<strong>\{t\.profile\.project_archives\}<\/strong>/);
-  assert.match(profile, /\{t\.profile\.public_prefix\} \{publicArchiveCount\}/);
-  assert.match(zhCopy, /project_archives: "项目档案"/);
-  assert.match(enCopy, /project_archives: "Project archives"/);
+  assert.match(profile, /type MobileProfileModule = "membership" \| "payment" \| "account"/);
+  assert.match(profile, /const showInfoModule = showMembershipModule/);
+  assert.match(profile, /t\.profile\.registered_user_rights/);
+  assert.match(profile, /t\.profile\.cloud_member_rights/);
+  assert.match(profile, /href="\/membership\/benefits"/);
+  assert.doesNotMatch(profile, /value: "space"/);
+  assert.doesNotMatch(profile, /href="\/archive"/);
+  assert.match(zhCopy, /membership: "会员类信息"/);
+  assert.match(zhCopy, /payment: "支付类信息"/);
+  assert.match(zhCopy, /registered_user_rights: "仅浏览公开内容"/);
+  assert.match(zhCopy, /cloud_member_rights: "可发布公开记录"/);
+  assert.match(enCopy, /registered_user_rights: "Browse public content only"/);
+  assert.match(enCopy, /cloud_member_rights: "Can publish public records"/);
 });
 
 test("mobile shell keeps an ordered fixed navigation and returns within the app", async () => {
@@ -38,13 +46,16 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
     navbar.indexOf("function MobileBottomNav"),
     navbar.indexOf("function MobileBottomNavItem")
   );
-  assert.ok(mobileNav.indexOf("labels.discover") < mobileNav.indexOf("labels.following"));
-  assert.ok(mobileNav.indexOf("labels.following") < mobileNav.indexOf("labels.personal_space"));
-  assert.ok(mobileNav.indexOf("labels.personal_space") < mobileNav.indexOf("labels.guide"));
-  assert.ok(mobileNav.indexOf("labels.guide") < mobileNav.indexOf("labels.market"));
-  assert.doesNotMatch(mobileNav, /labels\.me/);
-  assert.match(navbar, /shouldShowMobileProfileEntry\(pathname\)/);
-  assert.match(navbar, /\{user \? t\.nav\.me : t\.nav\.login\}/);
+  assert.ok(mobileNav.indexOf("labels.home") < mobileNav.indexOf("labels.following"));
+  assert.ok(mobileNav.indexOf("labels.following") < mobileNav.indexOf("labels.market"));
+  assert.ok(mobileNav.indexOf("labels.market") < mobileNav.indexOf("labels.me"));
+  assert.match(
+    mobileNav,
+    /MobileBottomNavItem \{\.\.\.items\[1\]\}[\s\S]*?QuickCaptureNavAction[\s\S]*?MobileBottomNavItem \{\.\.\.items\[2\]\}/
+  );
+  assert.doesNotMatch(mobileNav, /labels\.personal_space|labels\.guide/);
+  assert.match(mobileNav, /href: user \? "\/archive" : buildLoginHref\("\/archive"\)/);
+  assert.match(navbar, /getMobilePageTitle\(pathname, t\.nav\)/);
   assert.match(navbar, /flexDirection: "column"/);
   assert.match(navbar, /transform: "translateZ\(0\)"/);
   assert.match(navbar, /<LanguageSwitcher compact \/>/);
@@ -78,6 +89,38 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.doesNotMatch(lightbox, /maxDistance >= 120/);
   assert.match(lightbox, /window\.history\.back\(\)/);
   assert.match(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.footer \{[\s\S]*?display: none/);
+});
+
+test("the center plus captures a photo and carries it into a new record", async () => {
+  const [navbar, action, quickCapture, chooser, cloudRecord, localRecord] = await Promise.all([
+    source("components/navbar.tsx"),
+    source("components/quick-record/QuickCaptureNavAction.tsx"),
+    source("lib/quick-capture.ts"),
+    source("app/quick-record/page.tsx"),
+    source("app/archive/[id]/AddRecord.tsx"),
+    source("app/local/archive/[id]/page.tsx"),
+  ]);
+
+  assert.match(navbar, /<QuickCaptureNavAction/);
+  assert.match(action, /type="file"/);
+  assert.match(action, /accept="image\/\*"/);
+  assert.match(action, /capture="environment"/);
+  assert.match(action, /standardizeRecordPhotoFile/);
+  assert.match(action, /saveQuickCapture/);
+  assert.match(quickCapture, /indexedDB\.open/);
+  assert.match(chooser, /listVisibleLocalArchiveSummaries/);
+  assert.match(chooser, /\.from\("archives"\)/);
+  assert.match(chooser, /!user && localResult\.archives\.length === 0/);
+  assert.match(chooser, /buildLoginHref\(`\/quick-record\?capture=/);
+  assert.match(chooser, /quickCapture=\$\{capture\.id\}/);
+  assert.ok(
+    chooser.indexOf("t.quick_record.create_cloud_project") <
+      chooser.indexOf("t.quick_record.create_local_project")
+  );
+  assert.match(cloudRecord, /quickCaptureToFile/);
+  assert.match(localRecord, /quickCaptureToFile/);
+  assert.match(cloudRecord, /deleteQuickCapture/);
+  assert.match(localRecord, /deleteQuickCapture/);
 });
 
 test("mobile archive creation and project controls stay compact without clipping", async () => {
@@ -142,14 +185,17 @@ test("account navigation keeps membership contextual and export under data manag
   ]);
 
   assert.match(profile, /value: "membership", label: t\.profile\.modules\.membership/);
+  assert.match(profile, /value: "payment", label: t\.profile\.modules\.payment/);
   assert.match(profile, /value: "account", label: t\.profile\.modules\.account/);
   assert.match(profile, /<MobileProfileModuleTabs/);
   assert.match(profile, /href: "\/admin\/memberships"/);
   assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
-  assert.match(profile, /compact[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(profile, /compact[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(profile, /gridColumn: compact \? "1 \/ -1" : undefined/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
-  assert.match(profile, /const showInfoModule = mobileProfileModule === "info"/);
+  assert.match(profile, /const showInfoModule = showMembershipModule/);
+  assert.match(profile, /admin_get_membership_payment_queue_count/);
+  assert.match(profile, /href="\/admin\/memberships#payment-review"/);
   assert.match(profile, /<h2 style=\{dataTitleStyle\}>\{t\.profile\.export_backup\}<\/h2>/);
   assert.match(profile, /\{t\.profile\.export_intro\}/);
   assert.ok(
@@ -211,6 +257,10 @@ test("mobile account actions, membership copy, and plant names stay compact", as
   assert.match(payment, /payment_page_title/);
   assert.match(payment, /domestic_payment_action/);
   assert.match(payment, /overseas_payment_action/);
+  assert.match(payment, /create_membership_payment_order_json/);
+  assert.match(payment, /submit_membership_payment_order_json/);
+  assert.match(payment, /from\("payment-proofs"\)/);
+  assert.doesNotMatch(payment, /createOrder\("wechat"\)/);
   assert.match(benefits, /cloudPlan\.items\.map/);
   assert.match(benefits, /t\.membership_page\.rules\.map/);
   assert.match(zhCopy, /mobile_items: \["1GB 云端存储与同步"/);
@@ -239,16 +289,15 @@ test("plant guide renders a small batch and restores the list position", async (
   assert.match(enCopy, /load_more: "Load more"/);
 });
 
-test("following stays in the bottom navigation and returns there after login", async () => {
-  const [navbar, discover, follow] = await Promise.all([
+test("following stays an independent bottom destination and returns there after login", async () => {
+  const [navbar, follow] = await Promise.all([
     source("components/navbar.tsx"),
-    source("app/discover/page.tsx"),
     source("app/follow/page.tsx"),
   ]);
 
   assert.match(navbar, /label: labels\.following/);
-  assert.match(navbar, /href: user[\s\S]*?"\/discover\?tab=following"/);
-  assert.match(discover, /buildLoginHref\("\/discover\?tab=following"\)/);
+  assert.match(navbar, /href: user \? "\/follow" : buildLoginHref\("\/follow"\)/);
+  assert.match(navbar, /active: pathname\.startsWith\("\/follow"\)/);
   assert.match(follow, /buildLoginHref\(getCurrentInternalPath\(\)\)/);
 });
 
@@ -447,8 +496,8 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
   assert.match(enCopy, /guide_tab: "Overview & growing guide"/);
 });
 
-test("discover search separates three result types with one shared card format", async () => {
-  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils, zhCopy, enCopy] = await Promise.all([
+test("activity search keeps projects and records while Experience has its own search", async () => {
+  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils, experienceSearch, zhCopy, enCopy] = await Promise.all([
     source("app/discover/search/page.tsx"),
     source("components/discover-search/DiscoverSearchTabs.tsx"),
     source("components/discover-search/DiscoverSearchForm.tsx"),
@@ -457,18 +506,23 @@ test("discover search separates three result types with one shared card format",
     source("components/discover-search/DiscoverSearchResultCard.module.css"),
     source("lib/discover-search-data.ts"),
     source("lib/discover-search-utils.ts"),
+    source("app/experience/search/page.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
 
   assert.match(tabs, /label: t\.discover\.search_ui\.projects/);
   assert.match(tabs, /label: t\.discover\.search_ui\.records/);
-  assert.match(tabs, /label: t\.discover\.search_ui\.experience_cards/);
+  assert.doesNotMatch(tabs, /label: t\.discover\.search_ui\.experience_cards/);
+  assert.match(tabs, /repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(zhCopy, /projects: "项目"/);
   assert.match(enCopy, /experience_cards: "Experience cards"/);
   assert.match(page, /fetchDiscoverProjectSearchResults/);
   assert.match(page, /fetchDiscoverSearchResults/);
-  assert.match(page, /fetchDiscoverExperienceCardSearchResults/);
+  assert.doesNotMatch(page, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(experienceSearch, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(experienceSearch, /kind="experience"/);
+  assert.match(experienceSearch, /window\.history\.pushState/);
   assert.match(form, /searchKind === "records"/);
   assert.match(form, /mobileGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(form, /t\.discover\.search_ui\.all_categories/);

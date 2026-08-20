@@ -12,6 +12,7 @@ import {
   loadExperienceCard,
   publishExperienceCard,
   saveExperienceCard,
+  saveExperienceCardPlaybackSelection,
 } from "@/lib/experience-cards";
 import {
   deleteCachedExperienceCardVideo,
@@ -259,6 +260,7 @@ export default function ExperienceCardEditor({
       let archiveId = requestedArchiveId;
       let existingRecordIds: string[] = [];
       let existingCoverMediaId: string | null = null;
+      let existingPlaybackMediaIds: string[] | null = null;
       let existingTitle = "";
 
       if (cardId) {
@@ -272,6 +274,9 @@ export default function ExperienceCardEditor({
         archiveId = detail.card.archive_id;
         existingRecordIds = detail.records.map((record) => record.id);
         existingCoverMediaId = detail.card.cover_media_id;
+        existingPlaybackMediaIds = Array.isArray(detail.card.playback_media_ids)
+          ? detail.card.playback_media_ids
+          : null;
         existingTitle = detail.card.title;
         setTitle(existingTitle);
         setWasPublished(detail.card.status === "published");
@@ -310,9 +315,23 @@ export default function ExperienceCardEditor({
       const nextSelectedRecordIds = cardId
         ? existingRecordIds
         : nextRecords.map((record) => record.id);
-      const storedSelection = cardId
+      const localStoredSelection = cardId
         ? getExperienceCardVideoSelection(cardId)
         : null;
+      const cloudStoredSelection = existingPlaybackMediaIds
+        ? {
+            selectedMediaIdsByRecordId: Object.fromEntries(
+              nextRecords.map((record) => [
+                record.id,
+                getRecordImages(record)
+                  .map((media) => media.id)
+                  .filter((mediaId) => existingPlaybackMediaIds?.includes(mediaId)),
+              ])
+            ),
+            coverMediaId: existingCoverMediaId,
+          }
+        : null;
+      const storedSelection = localStoredSelection || cloudStoredSelection;
       const nextMediaSelection = reconcileMediaSelection(
         nextRecords,
         storedSelection?.selectedMediaIdsByRecordId
@@ -642,6 +661,13 @@ export default function ExperienceCardEditor({
         ),
         coverMediaId: effectiveCoverMediaId,
       });
+
+      await saveExperienceCardPlaybackSelection(
+        savedCardId,
+        selectedRecords.flatMap(
+          (record) => selectedMediaIdsByRecordId[record.id] || []
+        )
+      );
 
       if (mode === "publish") {
         await publishExperienceCard(savedCardId);

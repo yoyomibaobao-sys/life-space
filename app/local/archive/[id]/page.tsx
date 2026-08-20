@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   useEffect,
   useMemo,
@@ -69,6 +69,11 @@ import {
   type TimedRecordPhoto,
 } from "@/lib/record-photo-batches";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import {
+  deleteQuickCapture,
+  getQuickCapture,
+  quickCaptureToFile,
+} from "@/lib/quick-capture";
 
 function formatDate(value?: string | null) {
   return formatPreciseDateTime(value);
@@ -113,6 +118,8 @@ export default function LocalArchiveDetailPage() {
   const params = useParams<{ id: string }>();
   const archiveId = params?.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const quickCaptureId = searchParams.get("quickCapture") || "";
 
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,6 +153,7 @@ export default function LocalArchiveDetailPage() {
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
   const localRecordObjectUrlsRef = useRef<string[]>([]);
+  const loadedQuickCaptureIdRef = useRef("");
   const cycleTerminology = getArchiveCycleTerminology(detail?.archive.category, language);
 
   const selectedSizeLabel = useMemo(() => {
@@ -179,6 +187,30 @@ export default function LocalArchiveDetailPage() {
     void loadDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [archiveId]);
+
+  useEffect(() => {
+    if (!quickCaptureId || loadedQuickCaptureIdRef.current === quickCaptureId) {
+      return;
+    }
+    let cancelled = false;
+
+    async function loadCapturedPhoto() {
+      try {
+        const capture = await getQuickCapture(quickCaptureId);
+        if (!capture || cancelled) return;
+        loadedQuickCaptureIdRef.current = quickCaptureId;
+        setSelectedFiles((current) => [quickCaptureToFile(capture), ...current]);
+        setAddRecordOpen(true);
+      } catch {
+        // The local record form remains available if a temporary capture expired.
+      }
+    }
+
+    void loadCapturedPhoto();
+    return () => {
+      cancelled = true;
+    };
+  }, [quickCaptureId]);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -382,6 +414,10 @@ export default function LocalArchiveDetailPage() {
       setSelectedCycleId(undefined);
       setEndSelectedCycleAfterSave(false);
       setAddRecordOpen(false);
+      if (quickCaptureId) {
+        await deleteQuickCapture(quickCaptureId).catch(() => undefined);
+        loadedQuickCaptureIdRef.current = "";
+      }
       showToast(
         groupsToSave.length > 1
           ? `${recordCopy.local_saved_split_prefix} ${groupsToSave.length} ${recordCopy.local_saved_split_suffix}`

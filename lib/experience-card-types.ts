@@ -14,6 +14,7 @@ export type ExperienceCardRow = {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  playback_media_ids?: string[] | null;
 };
 
 export type ExperienceCardListItem = ExperienceCardRow & {

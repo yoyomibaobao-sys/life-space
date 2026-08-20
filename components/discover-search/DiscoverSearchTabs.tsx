@@ -12,7 +12,6 @@ export default function DiscoverSearchTabs({
   const options: Array<{ value: DiscoverSearchKind; label: string }> = [
     { value: "projects", label: t.discover.search_ui.projects },
     { value: "records", label: t.discover.search_ui.records },
-    { value: "experience", label: t.discover.search_ui.experience_cards },
   ];
 
   return (
@@ -20,7 +19,7 @@ export default function DiscoverSearchTabs({
       aria-label={t.discover.search_ui.search_type}
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
         gap: 5,
         marginBottom: 10,
         padding: 4,

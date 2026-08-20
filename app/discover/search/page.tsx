@@ -7,7 +7,6 @@ import DiscoverSearchHeader from "@/components/discover-search/DiscoverSearchHea
 import DiscoverSearchResults from "@/components/discover-search/DiscoverSearchResults";
 import DiscoverSearchTabs from "@/components/discover-search/DiscoverSearchTabs";
 import {
-  fetchDiscoverExperienceCardSearchResults,
   fetchDiscoverProjectSearchResults,
   fetchDiscoverSearchResults,
 } from "@/lib/discover-search-data";
@@ -21,7 +20,6 @@ import {
   parseDiscoverSearchKind,
   parseSearchFiltersFromUrl,
 } from "@/lib/discover-search-utils";
-import type { ExperienceCardListItem } from "@/lib/experience-card-types";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import type { FeedItem } from "@/lib/discover-types";
 
@@ -32,8 +30,6 @@ export default function DiscoverSearchPage() {
   const [projectResults, setProjectResults] =
     useState<DiscoveryProjectFeedItem[]>([]);
   const [recordResults, setRecordResults] = useState<FeedItem[]>([]);
-  const [experienceResults, setExperienceResults] =
-    useState<ExperienceCardListItem[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchHasRun, setSearchHasRun] = useState(false);
   const [fromArchiveId, setFromArchiveId] = useState("");
@@ -44,6 +40,8 @@ async function performSearch(
   nextKind: DiscoverSearchKind,
   options?: { syncUrl?: boolean }
 ) {
+  const activityKind = nextKind === "records" ? "records" : "projects";
+
   if (options?.syncUrl) {
     const extraParams: Record<string, string> = {};
 
@@ -53,18 +51,14 @@ async function performSearch(
     window.history.pushState(
       null,
       "",
-      buildDiscoverSearchUrl(nextFilters, extraParams, nextKind)
+      buildDiscoverSearchUrl(nextFilters, extraParams, activityKind)
     );
   }
 
   setSearchLoading(true);
   setSearchHasRun(true);
-  if (nextKind === "projects") {
+  if (activityKind === "projects") {
     setProjectResults(await fetchDiscoverProjectSearchResults(nextFilters));
-  } else if (nextKind === "experience") {
-    setExperienceResults(
-      await fetchDiscoverExperienceCardSearchResults(nextFilters)
-    );
   } else {
     setRecordResults(await fetchDiscoverSearchResults(nextFilters));
   }
@@ -76,13 +70,14 @@ function runSearch() {
 }
 
 function changeSearchKind(nextKind: DiscoverSearchKind) {
+  const activityKind = nextKind === "records" ? "records" : "projects";
   const nextFilters =
-    nextKind === "records"
+    activityKind === "records"
       ? filters
       : { ...filters, tag: "", content: "", helpOnly: false };
-  setSearchKind(nextKind);
+  setSearchKind(activityKind);
   setFilters(nextFilters);
-  void performSearch(nextFilters, nextKind, { syncUrl: true });
+  void performSearch(nextFilters, activityKind, { syncUrl: true });
 }
 
   function resetSearchFilters() {
@@ -95,7 +90,8 @@ function changeSearchKind(nextKind: DiscoverSearchKind) {
  useEffect(() => {
   function loadFromUrl() {
     const initialFilters = parseSearchFiltersFromUrl(window.location.search);
-    const initialKind = parseDiscoverSearchKind(window.location.search);
+    const parsedKind = parseDiscoverSearchKind(window.location.search);
+    const initialKind = parsedKind === "records" ? "records" : "projects";
     const params = new URLSearchParams(window.location.search);
 
     setFromArchiveId(params.get("fromArchive") || "");
@@ -147,7 +143,7 @@ function changeSearchKind(nextKind: DiscoverSearchKind) {
         kind={searchKind}
         projectItems={projectResults}
         recordItems={recordResults}
-        experienceItems={experienceResults}
+        experienceItems={[]}
         loading={searchLoading}
         hasRun={searchHasRun}
       />

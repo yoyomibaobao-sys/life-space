@@ -10,6 +10,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
 import { buildLoginHref } from "@/lib/auth-return";
+import QuickCaptureNavAction from "@/components/quick-record/QuickCaptureNavAction";
 
 type MobileArchiveTitleInfo = {
   archiveId: string;
@@ -281,17 +282,7 @@ export default function Navbar() {
                 ) : null}
               </>
             ) : (
-              shouldShowMobileProfileEntry(pathname) ? (
-                <Link
-                  href={user ? "/profile" : buildLoginHref("/profile")}
-                  style={mobileProfileEntryStyle}
-                >
-                  <UiIcon name="user" size={18} strokeWidth={1.8} />
-                  {user ? t.nav.me : t.nav.login}
-                </Link>
-              ) : (
-                mobileTitle || t.nav.brand
-              )
+              mobileTitle || t.nav.brand
             )}
           </div>
 
@@ -548,8 +539,10 @@ function MobileBottomNav({
     pathname === "/experience-cards" ||
     pathname === "/experience-cards/new" ||
     pathname.endsWith("/edit");
-  const isDiscoverSection =
+  const isHomeSection =
     pathname.startsWith("/discover/") ||
+    isPathActive(pathname, "/experience") ||
+    isPathActive(pathname, "/plant") ||
     pathname.startsWith("/user/") ||
     isOtherUsersArchive ||
     isPublicExperienceDetail;
@@ -560,12 +553,12 @@ function MobileBottomNav({
 
   const items = [
     {
-      label: labels.discover,
+      label: labels.home,
       icon: "home" as UiIconName,
       href: "/discover",
       active:
         (pathname === "/discover" && discoverTab === "feed") ||
-        isDiscoverSection,
+        isHomeSection,
       onClick: () => {
         window.dispatchEvent(
           new CustomEvent("discover-tab-change", { detail: "feed" }),
@@ -575,30 +568,8 @@ function MobileBottomNav({
     {
       label: labels.following,
       icon: "follow" as UiIconName,
-      href: user
-        ? "/discover?tab=following"
-        : buildLoginHref("/discover?tab=following"),
-      active:
-        (pathname === "/discover" && discoverTab === "following") ||
-        pathname.startsWith("/follow"),
-      onClick: () => {
-        if (!user) return;
-        window.dispatchEvent(
-          new CustomEvent("discover-tab-change", { detail: "following" }),
-        );
-      },
-    },
-    {
-      label: labels.personal_space,
-      icon: "project" as UiIconName,
-      href: user ? "/archive" : buildLoginHref("/archive"),
-      active: isPersonalSection,
-    },
-    {
-      label: labels.guide,
-      icon: "sprout" as UiIconName,
-      href: "/plant",
-      active: isPathActive(pathname, "/plant"),
+      href: user ? "/follow" : buildLoginHref("/follow"),
+      active: pathname.startsWith("/follow"),
     },
     {
       label: labels.market,
@@ -606,7 +577,19 @@ function MobileBottomNav({
       href: "/market",
       active: isPathActive(pathname, "/market"),
     },
+    {
+      label: labels.me,
+      icon: "user" as UiIconName,
+      href: user ? "/archive" : buildLoginHref("/archive"),
+      active: isPersonalSection,
+    },
   ];
+  const currentLocalArchiveId =
+    pathname.match(/^\/local\/archive\/([^/]+)$/)?.[1] || null;
+  const currentCloudArchiveId =
+    archiveDetailPath && archiveOwnerId === user?.id
+      ? archiveDetailPath.split("/").pop() || null
+      : null;
 
   return (
     <nav
@@ -614,17 +597,15 @@ function MobileBottomNav({
       style={mobileBottomNavStyle}
       aria-label={labels.mobile_navigation}
     >
-      {items.map((item) => (
-        <MobileBottomNavItem
-          key={`${item.href}-${item.label}`}
-          href={item.href}
-          active={item.active}
-          icon={item.icon}
-          onClick={item.onClick}
-        >
-          {item.label}
-        </MobileBottomNavItem>
-      ))}
+      <MobileBottomNavItem {...items[0]}>{items[0].label}</MobileBottomNavItem>
+      <MobileBottomNavItem {...items[1]}>{items[1].label}</MobileBottomNavItem>
+      <QuickCaptureNavAction
+        pathname={pathname}
+        cloudArchiveId={currentCloudArchiveId}
+        localArchiveId={currentLocalArchiveId}
+      />
+      <MobileBottomNavItem {...items[2]}>{items[2].label}</MobileBottomNavItem>
+      <MobileBottomNavItem {...items[3]}>{items[3].label}</MobileBottomNavItem>
     </nav>
   );
 }
@@ -737,6 +718,7 @@ function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav
   if (pathname === "/archive") return labels.my_space;
   if (pathname === "/") return labels.brand;
   if (pathname.startsWith("/experience-cards")) return labels.my_experience_cards;
+  if (pathname.startsWith("/experience")) return labels.experience;
   if (pathname.startsWith("/discover")) return labels.discover;
   if (pathname.startsWith("/follow")) return labels.following;
   if (pathname.startsWith("/plant")) return labels.guide;
@@ -782,15 +764,6 @@ const mobileTopNavStyle: CSSProperties = {
   background: "rgba(255,255,255,0.96)",
   backdropFilter: "blur(10px)",
   boxSizing: "border-box",
-};
-
-const mobileProfileEntryStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  color: "#1f2a1f",
-  textDecoration: "none",
-  whiteSpace: "nowrap",
 };
 
 const mobilePageTitleStyle: CSSProperties = {
@@ -969,6 +942,7 @@ const mobileBottomNavStyle: CSSProperties = {
   WebkitBackfaceVisibility: "hidden",
   willChange: "transform",
   touchAction: "manipulation",
+  overflow: "visible",
 };
 
 function mobileBottomNavItemStyle(active: boolean): CSSProperties {

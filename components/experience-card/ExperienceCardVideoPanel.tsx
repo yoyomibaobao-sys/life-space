@@ -190,6 +190,22 @@ function persistVideoSelectionPreference(
   }
 }
 
+function getCloudPlaybackSelectionPreference(detail: ExperienceCardDetail) {
+  if (!Array.isArray(detail.card.playback_media_ids)) return null;
+  const selectedIds = new Set(detail.card.playback_media_ids);
+  return {
+    selectedMediaIdsByRecordId: Object.fromEntries(
+      detail.records.map((record) => [
+        record.id,
+        getRecordImageOptions(record)
+          .filter((option) => selectedIds.has(option.id))
+          .map((option) => option.id),
+      ])
+    ),
+    coverMediaId: detail.card.cover_media_id,
+  };
+}
+
 type ExperienceCardVideoPanelProps = {
   detail: ExperienceCardDetail;
   readOnly?: boolean;
@@ -330,7 +346,9 @@ const ExperienceCardVideoPanel = forwardRef<
         }
 
         const storedSelection =
-          validCached || getExperienceCardVideoSelection(detail.card.id);
+          validCached ||
+          getExperienceCardVideoSelection(detail.card.id) ||
+          getCloudPlaybackSelectionPreference(detail);
         if (!storedSelection) return;
 
         const optionsByRecordId = new Map(

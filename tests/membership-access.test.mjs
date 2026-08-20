@@ -10,6 +10,8 @@ const migrationPath =
   "supabase/migrations/20260726140000_align_membership_access_and_market_limits.sql";
 const signupRolloutMigrationPath =
   "supabase/migrations/20260730063743_add_signup_account_rollout.sql";
+const paymentOrderMigrationPath =
+  "supabase/migrations/20260814022739_add_membership_payment_orders.sql";
 
 test("new registrations use the bounded 30 MB signup rollout instead of the legacy automatic trial", async () => {
   const [migration, signupRolloutMigration, registration, zhCopy] = await Promise.all([
@@ -80,6 +82,57 @@ test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async 
   assert.match(membershipPage, /t\.membership_page/);
   assert.match(zhCopy, /¥64 \/ 年｜US\$8 \/ year/);
   assert.match(zhCopy, /暂不提供集市加量包/);
+});
+
+test("manual membership orders keep fixed prices, private proof, and transactional confirmation", async () => {
+  const [migration, paymentPage, profile, admin, accountDelete, docs] = await Promise.all([
+    source(paymentOrderMigrationPath),
+    source("app/membership/payment/page.tsx"),
+    source("app/profile/page.tsx"),
+    source("app/admin/memberships/page.tsx"),
+    source("app/api/account/delete/route.ts"),
+    source("docs/membership-access.md"),
+  ]);
+
+  assert.match(migration, /v_amount := case when v_currency = 'CNY' then 64\.00 else 8\.00 end/);
+  assert.match(migration, /v_currency = 'CNY' and v_payment_method = 'alipay'/);
+  assert.match(migration, /v_currency = 'USD' and v_payment_method = 'paypal'/);
+  assert.doesNotMatch(paymentPage, /createOrder\("wechat"\)/);
+  assert.match(migration, /'payment-proofs',[\s\S]*?false,[\s\S]*?5242880/);
+  assert.match(migration, /name = auth\.uid\(\)::text \|\| '\/' \|\| \(storage\.foldername\(name\)\)\[2\] \|\| '\/proof'/);
+  assert.match(paymentPage, /const proofPath = `\$\{userId\}\/\$\{order\.id\}\/proof`/);
+  assert.match(paymentPage, /upsert: true/);
+  assert.match(
+    migration,
+    /revoke all on table public\.membership_payments from public, anon, authenticated/
+  );
+  assert.match(
+    migration,
+    /grant select on table public\.membership_payments to authenticated/
+  );
+  assert.match(
+    migration,
+    /create unique index if not exists membership_payments_one_open_order_per_user_uidx[\s\S]*?status in \('pending_payment', 'submitted', 'needs_update'\)/
+  );
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /v_service_ends_at := v_service_started_at \+ interval '12 months'/);
+  assert.match(migration, /if v_payment\.status = 'confirmed' then[\s\S]*?'already_confirmed', true/);
+  assert.match(profile, /admin_get_membership_payment_queue_count/);
+  assert.match(profile, /href="\/admin\/memberships#payment-review"/);
+  assert.match(admin, /admin_confirm_submitted_membership_payment_json/);
+  assert.match(admin, /createSignedUrl\(row\.proof_path, 300\)/);
+  assert.match(accountDelete, /listStoragePrefix\(supabase, "payment-proofs", userId\)/);
+  assert.match(accountDelete, /removeStoragePaths\(supabase, "payment-proofs", storagePaths\.paymentProofs\)/);
+  assert.match(accountDelete, /proof_path: null/);
+  assert.match(
+    accountDelete,
+    /\.in\("status", \["pending_payment", "submitted", "needs_update"\]\)/
+  );
+  assert.match(
+    admin,
+    /\.in\("status", \["confirmed", "refunded", "canceled"\]\)/
+  );
+  assert.match(docs, /确认付款并开通.*同一数据库事务/);
 });
 
 test("plant guidance is split into visitor, registered, and cloud-member tiers", async () => {
@@ -418,6 +471,7 @@ test("isolated database CI runs membership behavior and all concurrency suites",
   );
   assert.match(runner, /supabase\/tests\/market_post_limit_concurrency\.sql/);
   assert.match(runner, /supabase\/tests\/signup_account_rollout_concurrency\.sql/);
+  assert.match(runner, /find "supabase\/tests"[\s\S]*?-name '\*\.sql'/);
   assert.match(
     runner,
     /run_concurrency_sql_file "\$\{test_file\}"/
