@@ -208,7 +208,6 @@ export default function ArchiveCard({
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
-
   if (mobileMode) {
     return (
       <MobileArchiveCard
@@ -220,7 +219,6 @@ export default function ArchiveCard({
         subTags={subTags}
         groupTags={groupTags}
         onNavigate={onNavigate}
-        shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
         onTogglePublic={onTogglePublic}
         onUpdateArchiveStatus={onUpdateArchiveStatus}
         onUpdateArchiveCategory={onUpdateArchiveCategory}
@@ -595,7 +593,6 @@ function MobileArchiveCard({
   subTags,
   groupTags,
   onNavigate,
-  shouldIgnoreCardNavigation,
   onTogglePublic,
   onUpdateArchiveStatus,
   onUpdateArchiveCategory,
@@ -610,7 +607,6 @@ function MobileArchiveCard({
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
   onNavigate: (id: string) => void;
-  shouldIgnoreCardNavigation: (target: EventTarget | null) => boolean;
   onTogglePublic: (item: ArchiveItem) => void;
   onUpdateArchiveStatus: (item: ArchiveItem, nextStatus: "active" | "ended") => void;
   onUpdateArchiveCategory: (item: ArchiveItem, value: string) => void;
@@ -627,6 +623,12 @@ function MobileArchiveCard({
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
+  const selectedSubcategory = item.sub_tag_id
+    ? subTags.find((tag) => String(tag.id) === String(item.sub_tag_id))
+    : null;
+  const selectedGroup = item.group_tag_id
+    ? groupTags.find((tag) => String(tag.id) === String(item.group_tag_id))
+    : null;
   const projectView: ArchiveProjectView = {
     id: item.id,
     mode: "cloud",
@@ -636,6 +638,8 @@ function MobileArchiveCard({
     categoryLabel: getArchiveCategoryLabel(item.category, language),
     categoryIcon: getArchiveCategoryIcon(item.category),
     systemName,
+    subcategoryLabel: selectedSubcategory?.name || null,
+    groupLabel: selectedGroup?.name || null,
     cover: imageUrl ? { kind: "url", url: imageUrl, alt: imageAlt } : null,
     latestText: latestRecordPreview || t.archive_workspace.no_record_content,
     latestTime: latestRecordTime,
@@ -651,24 +655,6 @@ function MobileArchiveCard({
     statusLabel: mobileEndedText,
     ended,
   };
-  const selectControls = (
-    <>
-      <ArchiveCategoryDropdown
-        value={item.sub_tag_id || item.category}
-        subTags={subTags}
-        compact
-        onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
-      />
-      {item.sub_tag_id && availableGroupTags.length > 0 ? (
-        <ArchiveGroupDropdown
-          value={item.group_tag_id || ""}
-          groupTags={availableGroupTags}
-          compact
-          onChange={(nextValue) => onUpdateArchiveGroupTag(item, nextValue)}
-        />
-      ) : null}
-    </>
-  );
   const actionSlot = (
     <div data-no-card-nav="true" onClick={(event) => event.stopPropagation()} style={{ position: "relative" }}>
       <button
@@ -685,6 +671,22 @@ function MobileArchiveCard({
 
       {menuOpen ? (
         <div style={mobileCardMenuStyle}>
+          <div style={mobileCardMenuControlsStyle}>
+            <ArchiveCategoryDropdown
+              value={item.sub_tag_id || item.category}
+              subTags={subTags}
+              compact
+              onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
+            />
+            {item.sub_tag_id && availableGroupTags.length > 0 ? (
+              <ArchiveGroupDropdown
+                value={item.group_tag_id || ""}
+                groupTags={availableGroupTags}
+                compact
+                onChange={(nextValue) => onUpdateArchiveGroupTag(item, nextValue)}
+              />
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -726,7 +728,6 @@ function MobileArchiveCard({
     <ArchiveProjectCard
       project={projectView}
       onClick={() => onNavigate(item.id)}
-      selectControls={selectControls}
       actionSlot={actionSlot}
       mobileMode
     />
@@ -741,76 +742,6 @@ function getMobileArchiveSystemName(item: ArchiveItem, language: Language) {
 
   return item.system_name?.trim() || copy.not_filled;
 }
-
-const mobileCardImageWrapStyle: CSSProperties = {
-  position: "relative",
-  width: 94,
-  height: 94,
-  flexShrink: 0,
-  borderRadius: 11,
-  overflow: "hidden",
-  background: "#f4f7f1",
-};
-
-const mobileCardPlaceholderStyle: CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
-  color: "#9aaa9a",
-  fontSize: 28,
-};
-
-const mobileCardBodyStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-};
-
-const mobileCardTitleRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  minWidth: 0,
-};
-
-const mobileCardMainTitleStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  color: "#1f2d1f",
-  fontSize: 15,
-  fontWeight: 800,
-  lineHeight: 1.3,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const mobileCardTitleDividerStyle: CSSProperties = {
-  color: "#9aa493",
-  fontWeight: 500,
-};
-
-const mobileCardSystemNameStyle: CSSProperties = {
-  color: "#53694d",
-  fontWeight: 700,
-};
-
-const mobileCardStatusBadgeStyle: CSSProperties = {
-  flexShrink: 0,
-  borderRadius: 999,
-  background: "#f4f8ef",
-  color: "#5f7a55",
-  border: "1px solid #dfe9d7",
-  fontSize: 11,
-  fontWeight: 800,
-  lineHeight: 1,
-  padding: "4px 7px",
-};
 
 const mobileCardMoreButtonStyle: CSSProperties = {
   flexShrink: 0,
@@ -828,71 +759,25 @@ const mobileCardMoreButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-const mobileCardMetaStyle: CSSProperties = {
-  color: "#60705b",
-  fontSize: 12,
-  lineHeight: 1.35,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const mobileCardSelectRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  minWidth: 0,
-  overflow: "visible",
-};
-
-const mobileCardBottomRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  columnGap: 8,
-  rowGap: 2,
-  flexWrap: "wrap",
-  minWidth: 0,
-};
-
-const mobileCardFourthLineStyle: CSSProperties = {
-  flex: "1 1 150px",
-  minWidth: 0,
-  color: "#7f887a",
-  fontSize: 12,
-  fontWeight: 600,
-  lineHeight: 1.35,
-  whiteSpace: "normal",
-};
-
-function mobileVisibilityTextStyle(isPublic?: boolean | null): CSSProperties {
-  return {
-    color: isPublic ? "#2f8f2f" : "#888",
-    fontWeight: 700,
-  };
-}
-
-const mobileCardEndedStatusStyle: CSSProperties = {
-  flex: "0 0 auto",
-  marginLeft: "auto",
-  color: "#767f73",
-  fontSize: 12,
-  fontWeight: 800,
-  lineHeight: 1.35,
-  whiteSpace: "nowrap",
-};
-
 const mobileCardMenuStyle: CSSProperties = {
   position: "absolute",
   top: 42,
   right: 8,
   zIndex: 20,
-  width: 132,
+  width: 184,
   border: "1px solid #e6ebdf",
   borderRadius: 12,
   background: "#fff",
   boxShadow: "0 16px 34px rgba(39, 58, 34, 0.16)",
   padding: 5,
+};
+
+const mobileCardMenuControlsStyle: CSSProperties = {
+  display: "grid",
+  gap: 5,
+  padding: "3px 3px 7px",
+  marginBottom: 3,
+  borderBottom: "1px solid #edf0e9",
 };
 
 const mobileCardMenuItemStyle: CSSProperties = {

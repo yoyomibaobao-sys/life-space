@@ -20,13 +20,17 @@ test("feedback entry is available globally and inside profile", () => {
   const navbar = read("components/navbar.tsx");
   const footer = read("components/SiteFooter.tsx");
   const profileFeedback = read("components/ProfileFeedbackEntry.tsx");
+  const profile = read("app/profile/page.tsx");
 
   assert.doesNotMatch(layout, /<SiteUtilityBar \/>/);
   assert.match(layout, /<SiteFooter \/>/);
   assert.match(profileLayout, /<ProfileFeedbackEntry \/>/);
   assert.match(navbar, /<DesktopUtilityActions feedbackLabel=\{t\.feedback\} \/>/);
   assert.match(navbar, /href="\/feedback"/);
-  assert.match(navbar, /<LanguageSwitcher compact \/>/);
+  assert.doesNotMatch(navbar, /LanguageSwitcher/);
+  assert.doesNotMatch(footer, /LanguageSwitcher/);
+  assert.match(profile, /setLanguage\("zh"\)/);
+  assert.match(profile, /setLanguage\("en"\)/);
   assert.match(navbar, /desktopUtilityDividerStyle/);
   assert.doesNotMatch(navbar, /\{user\.email\}/);
   assert.match(footer, /href="\/feedback"/);

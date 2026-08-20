@@ -293,7 +293,7 @@ function projectCardStyle(ended: boolean, mobileMode: boolean): CSSProperties {
     borderRadius: 14,
     padding: mobileMode ? 8 : 10,
     marginBottom: 10,
-    minHeight: mobileMode ? 136 : 124,
+    minHeight: mobileMode ? 112 : 124,
     boxSizing: "border-box",
     background: ended ? "#fafafa" : "#fff",
     opacity: ended ? 0.82 : 1,
@@ -305,8 +305,8 @@ function projectCardStyle(ended: boolean, mobileMode: boolean): CSSProperties {
 
 function coverStyle(mobileMode: boolean): CSSProperties {
   return {
-    width: mobileMode ? 120 : 104,
-    height: mobileMode ? 120 : 104,
+    width: mobileMode ? 96 : 104,
+    height: mobileMode ? 96 : 104,
     flexShrink: 0,
     alignSelf: "flex-start",
     borderRadius: 11,
@@ -353,7 +353,7 @@ const mobileTitleTextStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
   color: "#1f2d1f",
-  fontSize: 17,
+  fontSize: 16,
   fontWeight: 800,
   lineHeight: 1.3,
   overflow: "hidden",

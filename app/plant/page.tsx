@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   type EnvironmentFilters,
@@ -202,6 +202,7 @@ export default function PlantIndexPage() {
   );
   const [loading, setLoading] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const desktopSearchWrapRef = useRef<HTMLDivElement>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const resultsSectionRef = useRef<HTMLElement>(null);
@@ -585,6 +586,9 @@ export default function PlantIndexPage() {
       filters.temperature !== "all" ||
       filters.scene !== "all" ||
       filters.indoor !== "all");
+  const activeEnvironmentFilterCount = Object.values(filters).filter(
+    (value) => value !== "all",
+  ).length;
 
   function updateFilter<K extends keyof EnvironmentFilters>(key: K, value: EnvironmentFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -838,8 +842,9 @@ export default function PlantIndexPage() {
   }
 
   return (
-    <main style={{ padding: isMobileViewport ? "10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
+    <>
       <HomeSectionTabs active="guide" />
+      <main style={{ padding: isMobileViewport ? "10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
       {isMobileSearchOpen ? (
         <div
           role="dialog"
@@ -942,7 +947,7 @@ export default function PlantIndexPage() {
           boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
         }}
       >
-        <div
+        {!isMobileViewport ? <div
           style={{
             display: "flex",
             alignItems: "center",
@@ -961,42 +966,25 @@ export default function PlantIndexPage() {
           >
             {t.plant.title}
           </h1>
-          <Link
-            href={
-              isSignedIn
-                ? "/archive/interests"
-                : buildLoginHref("/archive/interests")
-            }
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              minHeight: isMobileViewport ? 30 : 34,
-              padding: isMobileViewport ? "4px 9px" : "5px 12px",
-              border: "1px solid #dbe7d7",
-              borderRadius: 999,
-              background: "#fbfdf9",
-              color: "#42663f",
-              fontSize: isMobileViewport ? 12 : 13,
-              fontWeight: 750,
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <UiIcon name="bookmark" size={14} style={{ marginRight: 5 }} />
-            {t.plant.my_saved}{isSignedIn && interestCount !== null ? `（${interestCount}）` : ""}
-          </Link>
-        </div>
+          <PlantMenu signedIn={isSignedIn} interestCount={interestCount} />
+        </div> : null}
 
         <div
           ref={desktopSearchWrapRef}
-          style={{ position: "relative", marginTop: isMobileViewport ? 10 : 16 }}
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            marginTop: isMobileViewport ? 0 : 16,
+          }}
         >
           <form
             onSubmit={(event) => {
               event.preventDefault();
               executeSearch();
             }}
-            style={{ display: "flex", gap: isMobileViewport ? 7 : 8 }}
+            style={{ display: "flex", gap: isMobileViewport ? 7 : 8, minWidth: 0, flex: 1 }}
           >
             <input
               value={searchInput}
@@ -1022,12 +1010,13 @@ export default function PlantIndexPage() {
             />
             <button
               type="submit"
+              aria-label={t.plant.search}
               style={{
-                minWidth: isMobileViewport ? 58 : 72,
+                minWidth: isMobileViewport ? 38 : 72,
                 height: isMobileViewport ? 38 : 44,
                 border: "1px solid #477a43",
                 borderRadius: 12,
-                padding: isMobileViewport ? "0 12px" : "0 18px",
+                padding: isMobileViewport ? 0 : "0 18px",
                 background: "#4f824b",
                 color: "#fff",
                 cursor: "pointer",
@@ -1035,9 +1024,12 @@ export default function PlantIndexPage() {
                 fontWeight: 700,
               }}
             >
-              {t.plant.search}
+              {isMobileViewport ? <UiIcon name="search" size={17} /> : t.plant.search}
             </button>
           </form>
+          {isMobileViewport ? (
+            <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact />
+          ) : null}
 
           {!isMobileViewport && searchPanelOpen ? (
             <div
@@ -1099,17 +1091,26 @@ export default function PlantIndexPage() {
 
         <div
           style={{
-            marginTop: 14,
-            padding: "10px 12px",
+            display: isMobileViewport && hasCloudAccess ? "none" : "block",
+            marginTop: isMobileViewport ? 8 : 14,
+            padding: isMobileViewport ? "6px 9px" : "10px 12px",
             borderRadius: 12,
             border: "1px solid #e0eadb",
             background: "#f8fbf6",
             color: "#5a6d55",
-            fontSize: 13,
-            lineHeight: 1.7,
+            fontSize: isMobileViewport ? 12 : 13,
+            lineHeight: isMobileViewport ? 1.35 : 1.7,
           }}
         >
-          {!isSignedIn ? (
+          {isMobileViewport ? !isSignedIn ? (
+            <Link href="/register" style={{ color: "#3f6f37", fontWeight: 700 }}>
+              {t.plant.register_for_summary}
+            </Link>
+          ) : !hasCloudAccess ? (
+            <Link href="/membership" style={{ color: "#3f6f37", fontWeight: 700 }}>
+              {t.plant.open_membership}
+            </Link>
+          ) : null : !isSignedIn ? (
             <>
               {t.plant.visitor_notice}
               <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
@@ -1138,98 +1139,77 @@ export default function PlantIndexPage() {
             gap: isMobileViewport ? 6 : 12,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: isMobileViewport ? 8 : 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontSize: isMobileViewport ? 13 : 14, fontWeight: 600 }}>
-              {hasCloudAccess ? t.plant.category_environment_filters : t.plant.category_filter}
-            </div>
-            {hasActiveEnvironmentFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                style={{
-                  border: "1px solid #eee",
-                  background: "#fff",
-                  borderRadius: 999,
-                  padding: isMobileViewport ? "4px 9px" : "6px 12px",
-                  fontSize: isMobileViewport ? 11 : 12,
-                  color: "#666",
-                  cursor: "pointer",
-                }}
-              >
-                {t.plant.clear_environment_filters}
-              </button>
-            )}
-          </div>
+          {isMobileViewport ? (
+            <>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
+                <FilterSelect
+                  label={t.plant.category}
+                  value={activeCategory}
+                  onChange={changeCategory}
+                  options={categoryFilterOptions}
+                  compact
+                />
+                {hasCloudAccess ? (
+                  <button
+                    type="button"
+                    onClick={() => setMobileFiltersOpen((open) => !open)}
+                    aria-expanded={mobileFiltersOpen}
+                    style={mobileFilterToggleStyle}
+                  >
+                    {mobileFiltersOpen ? t.plant.hide_filters : t.plant.show_filters}
+                    {activeEnvironmentFilterCount > 0 ? ` (${activeEnvironmentFilterCount})` : ""}
+                  </button>
+                ) : null}
+                {hasActiveEnvironmentFilters ? (
+                  <button type="button" onClick={resetFilters} style={mobileFilterClearStyle}>
+                    {t.plant.clear}
+                  </button>
+                ) : null}
+              </div>
 
-          <div
-            style={{
-              display: isMobileViewport ? "flex" : "grid",
-              gridTemplateColumns: isMobileViewport ? undefined : "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: isMobileViewport ? 6 : 12,
-              flexWrap: isMobileViewport ? "wrap" : undefined,
-              overflowX: "visible",
-              paddingBottom: 0,
-            }}
-          >
-            <FilterSelect
-              label={t.plant.category}
-              value={activeCategory}
-              onChange={changeCategory}
-              options={categoryFilterOptions}
-              compact={isMobileViewport}
-            />
-            {hasCloudAccess ? (
-              <>
-                <FilterSelect
-                  label={t.plant.light}
-                  value={filters.light}
-                  onChange={(value) => updateFilter("light", value)}
-                  options={lightOptions}
-                  compact={isMobileViewport}
-                />
-                <FilterSelect
-                  label={t.plant.water}
-                  value={filters.water}
-                  onChange={(value) => updateFilter("water", value)}
-                  options={waterOptions}
-                  compact={isMobileViewport}
-                />
-                <FilterSelect
-                  label={t.plant.temperature}
-                  value={filters.temperature}
-                  onChange={(value) => updateFilter("temperature", value)}
-                  options={temperatureOptions}
-                  compact={isMobileViewport}
-                />
-                <FilterSelect
-                  label={t.plant.scene}
-                  value={filters.scene}
-                  onChange={(value) => updateFilter("scene", value)}
-                  options={sceneOptions}
-                  compact={isMobileViewport}
-                />
-                <FilterSelect
-                  label={t.plant.indoor_reference}
-                  value={filters.indoor}
-                  onChange={(value) => updateFilter("indoor", value)}
-                  options={indoorOptions}
-                  compact={isMobileViewport}
-                />
-              </>
-            ) : null}
-          </div>
+              {hasCloudAccess && mobileFiltersOpen ? (
+                <div style={mobileAdvancedFiltersStyle}>
+                  <FilterSelect label={t.plant.light} value={filters.light} onChange={(value) => updateFilter("light", value)} options={lightOptions} compact />
+                  <FilterSelect label={t.plant.water} value={filters.water} onChange={(value) => updateFilter("water", value)} options={waterOptions} compact />
+                  <FilterSelect label={t.plant.temperature} value={filters.temperature} onChange={(value) => updateFilter("temperature", value)} options={temperatureOptions} compact />
+                  <FilterSelect label={t.plant.scene} value={filters.scene} onChange={(value) => updateFilter("scene", value)} options={sceneOptions} compact />
+                  <FilterSelect label={t.plant.indoor_reference} value={filters.indoor} onChange={(value) => updateFilter("indoor", value)} options={indoorOptions} compact />
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {hasCloudAccess ? t.plant.category_environment_filters : t.plant.category_filter}
+                </div>
+                {hasActiveEnvironmentFilters ? (
+                  <button type="button" onClick={resetFilters} style={desktopFilterClearStyle}>
+                    {t.plant.clear_environment_filters}
+                  </button>
+                ) : null}
+              </div>
+              <div style={desktopFiltersStyle}>
+                <FilterSelect label={t.plant.category} value={activeCategory} onChange={changeCategory} options={categoryFilterOptions} />
+                {hasCloudAccess ? (
+                  <>
+                    <FilterSelect label={t.plant.light} value={filters.light} onChange={(value) => updateFilter("light", value)} options={lightOptions} />
+                    <FilterSelect label={t.plant.water} value={filters.water} onChange={(value) => updateFilter("water", value)} options={waterOptions} />
+                    <FilterSelect label={t.plant.temperature} value={filters.temperature} onChange={(value) => updateFilter("temperature", value)} options={temperatureOptions} />
+                    <FilterSelect label={t.plant.scene} value={filters.scene} onChange={(value) => updateFilter("scene", value)} options={sceneOptions} />
+                    <FilterSelect label={t.plant.indoor_reference} value={filters.indoor} onChange={(value) => updateFilter("indoor", value)} options={indoorOptions} />
+                  </>
+                ) : null}
+              </div>
+            </>
+          )}
         </div>
       </section>
 
-      <section ref={resultsSectionRef} style={{ marginTop: 18, scrollMarginTop: 12 }}>
+      <section
+        ref={resultsSectionRef}
+        style={{ marginTop: isMobileViewport ? 10 : 18, scrollMarginTop: 12 }}
+      >
         <div
           style={{
             display: "flex",
@@ -1301,7 +1281,7 @@ export default function PlantIndexPage() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              gap: 12,
+              gap: isMobileViewport ? 8 : 12,
             }}
           >
             {visiblePlants.map((plant) => {
@@ -1323,12 +1303,12 @@ export default function PlantIndexPage() {
                   style={{
                     display: "block",
                     border: "1px solid #eee",
-                    borderRadius: 18,
+                    borderRadius: isMobileViewport ? 14 : 18,
                     background: "#fff",
-                    padding: 16,
+                    padding: isMobileViewport ? 10 : 16,
                     color: "inherit",
                     textDecoration: "none",
-                    minHeight: 196,
+                    minHeight: isMobileViewport ? 112 : 196,
                     boxShadow: "0 4px 14px rgba(0,0,0,0.03)",
                   }}
                 >
@@ -1340,7 +1320,7 @@ export default function PlantIndexPage() {
                       alignItems: "flex-start",
                     }}
                   >
-                    <h3 style={{ margin: 0, fontSize: 18, lineHeight: 1.35 }}>
+                    <h3 style={{ margin: 0, fontSize: isMobileViewport ? 16 : 18, lineHeight: 1.3 }}>
                       {plant.common_name ||
                         plant.scientific_name ||
                         t.plant.unnamed}
@@ -1361,7 +1341,13 @@ export default function PlantIndexPage() {
                     </span>
                   </div>
 
-                  {plant.scientific_name && (
+                  {isMobileViewport ? (
+                    plant.scientific_name || plantAliases.length > 0 ? (
+                      <div style={mobilePlantSecondaryNameStyle}>
+                        {uniqueTextList([plant.scientific_name, ...plantAliases]).join(" · ")}
+                      </div>
+                    ) : null
+                  ) : plant.scientific_name ? (
                     <div
                       style={{
                         marginTop: 6,
@@ -1373,9 +1359,9 @@ export default function PlantIndexPage() {
                     >
                       {t.plant.scientific_name}{plant.scientific_name}
                     </div>
-                  )}
+                  ) : null}
 
-                  {plantAliases.length > 0 && (
+                  {!isMobileViewport && plantAliases.length > 0 ? (
                     <div
                       style={{
                         marginTop: 4,
@@ -1386,18 +1372,19 @@ export default function PlantIndexPage() {
                     >
                       {t.plant.aliases}{plantAliases.join(t.plant.alias_separator)}
                     </div>
-                  )}
+                  ) : null}
 
                   {envTags.length > 0 && (
                     <div
                       style={{
                         display: "flex",
                         gap: 6,
-                        flexWrap: "wrap",
-                        marginTop: 12,
+                        flexWrap: isMobileViewport ? "nowrap" : "wrap",
+                        marginTop: isMobileViewport ? 6 : 12,
+                        overflow: "hidden",
                       }}
                     >
-                      {envTags.slice(0, 5).map((tag) => (
+                      {envTags.slice(0, isMobileViewport ? 2 : 5).map((tag) => (
                         <span
                           key={`${plant.id}-${tag}`}
                           style={{
@@ -1406,7 +1393,8 @@ export default function PlantIndexPage() {
                             background: "#f6fbf6",
                             border: "1px solid #dfeedd",
                             borderRadius: 999,
-                            padding: "3px 8px",
+                            padding: isMobileViewport ? "2px 7px" : "3px 8px",
+                            whiteSpace: "nowrap",
                           }}
                         >
                           {tag}
@@ -1417,11 +1405,15 @@ export default function PlantIndexPage() {
 
                   <p
                     style={{
-                      margin: "12px 0 0",
+                      display: "-webkit-box",
+                      overflow: "hidden",
+                      margin: isMobileViewport ? "6px 0 0" : "12px 0 0",
                       color: summary ? "#444" : "#999",
-                      fontSize: 14,
-                      lineHeight: 1.65,
-                      whiteSpace: "pre-wrap",
+                      fontSize: isMobileViewport ? 13 : 14,
+                      lineHeight: isMobileViewport ? 1.4 : 1.65,
+                      whiteSpace: isMobileViewport ? "normal" : "pre-wrap",
+                      WebkitBoxOrient: "vertical",
+                      WebkitLineClamp: isMobileViewport ? 2 : undefined,
                     }}
                   >
                     {summary ||
@@ -1468,6 +1460,104 @@ export default function PlantIndexPage() {
           </div>
         ) : null}
       </section>
-    </main>
+      </main>
+    </>
   );
 }
+
+function PlantMenu({
+  signedIn,
+  interestCount,
+  compact = false,
+}: {
+  signedIn: boolean;
+  interestCount: number | null;
+  compact?: boolean;
+}) {
+  const { t } = useLanguage();
+
+  return (
+    <Link
+      href={signedIn ? "/archive/interests" : buildLoginHref("/archive/interests")}
+      style={plantMenuSummaryStyle(compact)}
+    >
+      <UiIcon name="bookmark" size={14} style={{ marginRight: 4 }} />
+      {t.plant.my_saved}{signedIn && interestCount !== null ? `（${interestCount}）` : ""}
+    </Link>
+  );
+}
+
+function plantMenuSummaryStyle(compact: boolean): CSSProperties {
+  return {
+    minHeight: compact ? 38 : 34,
+    display: "inline-flex",
+    alignItems: "center",
+    padding: compact ? "0 8px" : "5px 12px",
+    border: "1px solid #dbe7d7",
+    borderRadius: 999,
+    background: "#fbfdf9",
+    color: "#42663f",
+    fontSize: compact ? 12 : 13,
+    fontWeight: 750,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    boxSizing: "border-box",
+    textDecoration: "none",
+  };
+}
+
+const mobileFilterToggleStyle: CSSProperties = {
+  minHeight: 30,
+  padding: "0 10px",
+  border: "1px solid #d6e4d2",
+  borderRadius: 10,
+  background: "#f8fbf6",
+  color: "#42633e",
+  fontSize: 12,
+  fontWeight: 750,
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+};
+
+const mobileFilterClearStyle: CSSProperties = {
+  ...mobileFilterToggleStyle,
+  borderColor: "transparent",
+  background: "transparent",
+  color: "#7c8779",
+  padding: "0 4px",
+};
+
+const mobileAdvancedFiltersStyle: CSSProperties = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap",
+  paddingTop: 7,
+  borderTop: "1px solid #edf1e9",
+};
+
+const desktopFilterClearStyle: CSSProperties = {
+  border: "1px solid #eee",
+  background: "#fff",
+  borderRadius: 999,
+  padding: "6px 12px",
+  fontSize: 12,
+  color: "#666",
+  cursor: "pointer",
+};
+
+const desktopFiltersStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+};
+
+const mobilePlantSecondaryNameStyle: CSSProperties = {
+  marginTop: 3,
+  overflow: "hidden",
+  color: "#747d71",
+  fontSize: 12,
+  fontStyle: "italic",
+  lineHeight: 1.3,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};

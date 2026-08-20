@@ -5,6 +5,7 @@ export default function DiscoverSearchHeader() {
   const { t } = useLanguage();
   return (
     <header
+      className="mobile-app-desktop-only"
       style={{
         display: "flex",
         alignItems: "center",

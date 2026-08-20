@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import styles from "./SiteFooter.module.css";
 
@@ -16,7 +15,6 @@ export default function SiteFooter() {
           <Link href="/feedback" className={styles.link}>
             {t.feedback_and_contact}
           </Link>
-          <LanguageSwitcher compact />
         </div>
       </div>
     </footer>

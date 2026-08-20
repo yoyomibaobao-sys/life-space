@@ -20,7 +20,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 type CloudArchiveOption = {
   id: string;
   title: string;
-  updated_at: string | null;
+  created_at: string | null;
   last_record_time: string | null;
 };
 
@@ -78,11 +78,11 @@ function QuickRecordContent() {
         user
           ? supabase
               .from("archives")
-              .select("id, title, updated_at, last_record_time")
+              .select("id, title, created_at, last_record_time")
               .eq("user_id", user.id)
               .is("trashed_at", null)
               .order("last_record_time", { ascending: false, nullsFirst: false })
-              .order("updated_at", { ascending: false })
+              .order("created_at", { ascending: false })
           : Promise.resolve({ data: [] as CloudArchiveOption[] }),
       ]);
 
@@ -111,7 +111,7 @@ function QuickRecordContent() {
       type: "cloud" as const,
       id: project.id,
       title: project.title,
-      updatedAt: project.last_record_time || project.updated_at || "",
+      updatedAt: project.last_record_time || project.created_at || "",
     }));
     const local = localProjects.map((project) => ({
       key: `local:${project.id}`,

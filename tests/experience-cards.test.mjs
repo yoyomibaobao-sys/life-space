@@ -599,12 +599,12 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(packageJson, /"mediabunny"/);
 });
 
-test("public Experience plays source records live without uploading another video", async () => {
+test("public Experience opens compact previews into live full-screen playback without another video", async () => {
   const [
     migration,
     editor,
     player,
-    feedItem,
+    gallery,
     feedPage,
     feedStyles,
     experienceSearch,
@@ -613,7 +613,7 @@ test("public Experience plays source records live without uploading another vide
     source(playbackManifestMigrationPath),
     source("components/experience-card/ExperienceCardEditor.tsx"),
     source("components/experience-card/PublicExperiencePlayer.tsx"),
-    source("components/experience-card/PublicExperienceFeedItem.tsx"),
+    source("components/experience-card/PublicExperienceGallery.tsx"),
     source("app/experience/page.tsx"),
     source("components/experience-card/PublicExperienceFeed.module.css"),
     source("app/experience/search/page.tsx"),
@@ -634,11 +634,17 @@ test("public Experience plays source records live without uploading another vide
   assert.match(player, /buildExperienceCardVideoScenes/);
   assert.match(player, /detail\.card\.playback_media_ids/);
   assert.doesNotMatch(player, /<video|Blob|\.mp4/);
-  assert.match(feedItem, /IntersectionObserver/);
-  assert.match(feedItem, /intersectionRatio >= 0\.55/);
+  assert.match(player, /!fullscreen \? \([\s\S]*?href=\{`\/experience-cards\/\$\{detail\.card\.id\}`\}/);
+  assert.match(gallery, /item\.coverUrl/);
+  assert.match(gallery, /loading="lazy"/);
+  assert.match(gallery, /loadExperienceCard\(item\.id\)/);
+  assert.match(gallery, /Math\.abs\(index - activeIndex\) <= 1/);
+  assert.match(gallery, /active=\{index === activeIndex\}/);
+  assert.match(gallery, /data-mobile-swipe-ignore="true"/);
   assert.match(feedPage, /fetchDiscoverExperienceCardSearchResults/);
-  assert.match(feedPage, /PublicExperienceFeedItem/);
+  assert.match(feedPage, /PublicExperienceGallery/);
   assert.match(feedStyles, /scroll-snap-type: y mandatory/);
+  assert.match(feedStyles, /grid-template-columns: 88px minmax\(0, 1fr\)/);
   assert.match(experienceSearch, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(zhCopy, /private: "私密"/);
   assert.match(zhCopy, /public: "公开"/);
@@ -698,7 +704,7 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
     ]);
 
   assert.match(guide, /buildLoginHref\("\/archive\/interests"\)/);
-  assert.match(guide, /\{t\.plant\.my_saved\}\{isSignedIn && interestCount !== null/);
+  assert.match(guide, /\{t\.plant\.my_saved\}\{signedIn && interestCount !== null/);
   assert.match(guide, /from\("user_plant_interests"\)[\s\S]*?count: "exact", head: true/);
   assert.match(guide, /placeholder=\{t\.plant\.search_placeholder\}/);
   assert.match(guide, /type="submit"[\s\S]*?\{t\.plant\.search\}[\s\S]*?<\/button>/);

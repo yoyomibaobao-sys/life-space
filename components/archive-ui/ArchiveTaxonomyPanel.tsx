@@ -225,7 +225,11 @@ function rowStyle(compact: boolean): CSSProperties {
     display: "flex",
     alignItems: "center",
     gap: compact ? 5 : 8,
-    flexWrap: "wrap",
+    flexWrap: compact ? "nowrap" : "wrap",
+    overflowX: compact ? "auto" : undefined,
+    paddingBottom: compact ? 2 : undefined,
+    scrollbarWidth: compact ? "none" : undefined,
+    WebkitOverflowScrolling: compact ? "touch" : undefined,
   };
 }
 
@@ -246,6 +250,8 @@ function pillStyle(active: boolean, compact: boolean): CSSProperties {
     fontWeight: 700,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
+    whiteSpace: "nowrap",
+    flex: compact ? "0 0 auto" : undefined,
   };
 }
 
@@ -256,6 +262,7 @@ function chipWrapperStyle(compact: boolean): CSSProperties {
     gap: compact ? 2 : 4,
     marginRight: compact ? 1 : 3,
     marginBottom: compact ? 2 : 4,
+    flex: compact ? "0 0 auto" : undefined,
   };
 }
 
@@ -270,6 +277,7 @@ function chipButtonStyle(active: boolean, compact: boolean): CSSProperties {
     fontWeight: active ? 700 : 500,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
+    whiteSpace: "nowrap",
     boxShadow: active ? "0 6px 14px rgba(63,125,61,0.18)" : "none",
   };
 }

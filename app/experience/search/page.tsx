@@ -55,35 +55,37 @@ function ExperienceSearchContent() {
   }
 
   return (
-    <main style={pageStyle}>
-      <HomeSectionTabs active="experience" />
-      <header style={headerStyle}>
-        <h1 style={titleStyle}>{t.experience.search_title}</h1>
-        <Link href="/experience" style={backLinkStyle}>
-          <UiIcon name="arrow-left" size={15} /> {t.experience.back_to_experience}
-        </Link>
-      </header>
-      <form onSubmit={handleSubmit} style={searchFormStyle}>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t.experience.search_placeholder}
-          aria-label={t.experience.search_title}
-          style={searchInputStyle}
+    <>
+      <HomeSectionTabs active="experience" searchEnabled={false} showNotification={false} />
+      <main style={pageStyle}>
+        <header className="mobile-app-desktop-only" style={headerStyle}>
+          <h1 style={titleStyle}>{t.experience.search_title}</h1>
+          <Link href="/experience" style={backLinkStyle}>
+            <UiIcon name="arrow-left" size={15} /> {t.experience.back_to_experience}
+          </Link>
+        </header>
+        <form onSubmit={handleSubmit} style={searchFormStyle}>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t.experience.search_placeholder}
+            aria-label={t.experience.search_title}
+            style={searchInputStyle}
+          />
+          <button type="submit" style={searchButtonStyle}>
+            <UiIcon name="search" size={16} /> {t.nav.search}
+          </button>
+        </form>
+        <DiscoverSearchResults
+          kind="experience"
+          projectItems={[]}
+          recordItems={[]}
+          experienceItems={items}
+          loading={loading}
+          hasRun={hasRun}
         />
-        <button type="submit" style={searchButtonStyle}>
-          <UiIcon name="search" size={16} /> {t.nav.search}
-        </button>
-      </form>
-      <DiscoverSearchResults
-        kind="experience"
-        projectItems={[]}
-        recordItems={[]}
-        experienceItems={items}
-        loading={loading}
-        hasRun={hasRun}
-      />
-    </main>
+      </main>
+    </>
   );
 }
 
