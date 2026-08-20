@@ -51,9 +51,11 @@ begin
     'public.save_experience_card_playback_selection(uuid,uuid[])'::regprocedure
   ) into v_definition;
 
+  v_definition := lower(v_definition);
+
   if v_definition not like '%is_user_membership_active%'
      or v_definition not like '%v_card.user_id is distinct from v_user_id%'
-     or v_definition not like '%m.id = ANY (v_media_ids)%'
+     or v_definition not like '%m.id = any(v_media_ids)%'
      or v_definition not like '%cr.record_id = m.record_id%'
      or v_definition like '%storage.objects%'
      or v_definition like '%.mp4%' then
