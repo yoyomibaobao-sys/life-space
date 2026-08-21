@@ -91,6 +91,8 @@ export function FollowedProjectCard({
             durationDays={durationDays}
             ended={Boolean(item.archive_ended_at)}
             commentCount={item.public_comment_count}
+            viewCount={item.view_count}
+            compactProjectStats
             className={styles.metaLine}
           />
           <div className={styles.owner}>

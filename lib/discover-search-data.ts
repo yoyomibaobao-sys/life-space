@@ -5,7 +5,10 @@ import type {
   ExperienceCardRow,
 } from "@/lib/experience-card-types";
 import { enrichDiscoverFeedItems } from "@/lib/discover-data";
-import { enrichDiscoveryProjectMedia } from "@/lib/discover-project-feed";
+import {
+  enrichDiscoveryProjectMedia,
+  enrichDiscoveryProjectViewCounts,
+} from "@/lib/discover-project-feed";
 import {
   normalizeDiscoveryProjectFeedRow,
 } from "@/lib/discover-project-feed";
@@ -303,7 +306,8 @@ export async function fetchDiscoverProjectSearchResults(
   const normalized = ((data || []) as unknown as DiscoveryProjectFeedRow[]).map(
     normalizeDiscoveryProjectFeedRow
   );
-  return enrichDiscoveryProjectMedia(normalized);
+  const withViews = await enrichDiscoveryProjectViewCounts(normalized);
+  return enrichDiscoveryProjectMedia(withViews);
 }
 
 export async function fetchDiscoverExperienceCardSearchResults(

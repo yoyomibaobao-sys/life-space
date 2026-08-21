@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import PublicExperiencePlayer from "@/components/experience-card/PublicExperiencePlayer";
@@ -28,14 +29,14 @@ export default function PublicExperienceGallery({
     <>
       <section className={styles.gallery} aria-label={t.experience.public_feed}>
         {items.map((item, index) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setOpenIndex(index)}
-            className={styles.previewCard}
-            aria-label={`${t.experience.open_fullscreen}${item.title}`}
-          >
-            <span className={styles.previewMedia}>
+          <article key={item.id} className={styles.previewCard}>
+            <button
+              type="button"
+              onClick={() => setOpenIndex(index)}
+              className={styles.previewMediaButton}
+              aria-label={`${t.experience.open_fullscreen}${item.title}`}
+            >
+              <span className={styles.previewMedia}>
               {item.coverUrl ? (
                 <img
                   src={item.coverUrl}
@@ -49,9 +50,10 @@ export default function PublicExperienceGallery({
                 </span>
               )}
               <span className={styles.previewPlay} aria-hidden="true" />
-            </span>
-            <span className={styles.previewBody}>
-              <strong className={styles.previewTitle}>{item.title}</strong>
+              </span>
+            </button>
+            <Link href={`/experience-cards/${item.id}`} className={styles.previewBody}>
+              <span className={styles.previewTitle}>{item.title}</span>
               <span className={styles.previewSource}>
                 {item.authorName}
                 {item.archiveTitle ? ` · ${item.archiveTitle}` : ""}
@@ -60,8 +62,8 @@ export default function PublicExperienceGallery({
                 {item.source_record_count}{t.experience.record_suffix}
                 {item.durationDays ? ` · ${item.durationDays}${t.experience.day_suffix}` : ""}
               </span>
-            </span>
-          </button>
+            </Link>
+          </article>
         ))}
       </section>
 

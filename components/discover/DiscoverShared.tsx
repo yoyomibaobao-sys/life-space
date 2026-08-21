@@ -338,6 +338,8 @@ export function ProjectCardRows({
             recordCount={archiveRecordCount}
             durationDays={archiveDurationDays}
             ended={lifecycleStatus === "ended"}
+            viewCount={archiveViewCount}
+            compactProjectStats
           />
         </div>
       </div>
@@ -494,6 +496,7 @@ export function ProjectCardRows({
           followerCount={archiveFollowerCount}
           viewCount={archiveViewCount}
           commentCount={commentCount}
+          compactProjectStats
         />
       </div>
     </div>

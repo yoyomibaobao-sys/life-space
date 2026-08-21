@@ -30,6 +30,7 @@ type FollowedArchiveRow = {
   archive_summary: string | null;
   created_at: string | null;
   ended_at: string | null;
+  view_count: number | null;
 };
 
 type PublicRecordRow = {
@@ -75,7 +76,7 @@ export async function fetchFollowedArchiveProjects(
   const { data: archiveData, error: archiveError } = await supabase
     .from("archives")
     .select(
-      "id, user_id, title, category, system_name, species_name_snapshot, archive_summary, created_at, ended_at"
+      "id, user_id, title, category, system_name, species_name_snapshot, archive_summary, created_at, ended_at, view_count"
     )
     .in("id", archiveIds)
     .eq("is_public", true);
@@ -155,6 +156,7 @@ export async function fetchFollowedArchiveProjects(
       profile_display_name: profile?.username || null,
       profile_avatar_url: profile?.avatar_url || null,
       profile_region: getPublicProfileRegion(profile),
+      view_count: archive.view_count,
     } satisfies DiscoveryProjectFeedRow;
   });
 

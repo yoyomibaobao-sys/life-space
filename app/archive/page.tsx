@@ -15,6 +15,7 @@ import ArchiveTaxonomyPanel, {
   type ArchiveTaxonomyChip,
 } from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import ArchiveCard from "@/components/archive/ArchiveCard";
+import MobileArchiveActions from "@/components/archive/MobileArchiveActions";
 import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
 import ArchiveCategoryDropdown from "@/components/archive/ArchiveCategoryDropdown";
 import ArchiveGroupDropdown from "@/components/archive/ArchiveGroupDropdown";
@@ -150,7 +151,6 @@ export default function ArchivePage() {
   const [localHiddenOwnedByOtherCount, setLocalHiddenOwnedByOtherCount] = useState(0);
   const [localOwnershipPromptDismissed, setLocalOwnershipPromptDismissed] = useState(false);
   const [markingLocalOwner, setMarkingLocalOwner] = useState(false);
-  const [localProjectMenuOpenId, setLocalProjectMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -1579,35 +1579,6 @@ export default function ArchivePage() {
     }
   }
 
-  async function editLocalArchiveCategoryAndGroup(archive: LocalArchiveSummary) {
-    const nextSubcategory = prompt(
-      t.archive_workspace.edit_local_subcategory,
-      archive.subcategory || ""
-    );
-    if (nextSubcategory === null) return;
-    const nextGroup = prompt(t.archive_workspace.edit_local_group, archive.group_name || "");
-    if (nextGroup === null) return;
-
-    try {
-      await updateLocalArchiveFields(
-        archive.id,
-        {
-          subcategory: nextSubcategory.trim() || null,
-          group_name: nextGroup.trim() || null,
-        },
-        currentOwnerContext
-      );
-      await loadLocalArchives(currentOwnerContext);
-      showToast(t.archive_workspace.local_category_updated);
-    } catch (error) {
-      showToast(
-        error instanceof Error
-          ? error.message
-          : t.archive_workspace.local_category_update_failed
-      );
-    }
-  }
-
   async function deleteLocalArchiveFromList(archive: LocalArchiveSummary) {
     if (
       !confirm(t.archive_workspace.delete_local_confirm)
@@ -1907,7 +1878,8 @@ export default function ArchivePage() {
       <section style={personalSpaceIdentityStyle(isMobileViewport)}>
         {isMobileViewport ? (
           <>
-            <Link href="/profile" style={personalSpaceIdentityLinkStyle}>
+            <div style={personalSpaceIdentityLinkStyle}>
+              <Link href="/profile" style={personalSpaceAvatarLinkStyle}>
               {spaceProfile?.avatar_url ? (
                 <img
                   src={spaceProfile.avatar_url}
@@ -1919,16 +1891,28 @@ export default function ArchivePage() {
                   <UiIcon name="user" size={17} />
                 </span>
               )}
+              </Link>
               <span style={{ minWidth: 0 }}>
-                <strong style={personalSpaceMobileUsernameStyle}>
+                <Link href="/profile" style={personalSpaceMobileUsernameStyle}>
                   {spaceProfile?.username || t.nav.username_unset}
-                </strong>
+                </Link>
                 <span style={personalSpaceMobileInfoLabelStyle}>
-                  {t.archive_workspace.personal_info}
+                  <Link href="/profile" style={personalSpaceInlineEntryStyle}>
+                    {t.archive_workspace.personal_info}
+                  </Link>
+                  <span aria-hidden="true"> · </span>
+                  <Link href="/experience-cards" style={personalSpaceInlineEntryStyle}>
+                    {t.archive_workspace.my_experience_cards} {experienceCardCount}
+                  </Link>
                 </span>
               </span>
-            </Link>
-            <MobileNotificationLink />
+            </div>
+            <div style={personalSpaceMobileActionsStyle}>
+              <Link href="/archive/new" style={personalSpaceCreateProjectStyle}>
+                +{t.nav.project}
+              </Link>
+              <MobileNotificationLink />
+            </div>
           </>
         ) : (
           <>
@@ -1956,13 +1940,6 @@ export default function ArchivePage() {
             </Link>
           </>
         )}
-      </section>
-
-      <section style={personalSpaceEntryRowStyle}>
-        <Link href="/experience-cards" style={personalSpaceExperienceCardEntryStyle}>
-          <span>{t.archive_workspace.my_experience_cards} ({experienceCardCount})</span>
-          <span style={personalSpaceExperienceCardArrowStyle}><UiIcon name="arrow-right" size={15} /></span>
-        </Link>
       </section>
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
@@ -2102,90 +2079,40 @@ export default function ArchivePage() {
                   }
                   actionSlot={
                     isMobileViewport ? (
-                      <div
-                        data-no-card-nav="true"
-                        onClick={(event) => event.stopPropagation()}
-                        style={localProjectMenuWrapStyle}
-                      >
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            setLocalProjectMenuOpenId((id) => (id === archive.id ? null : archive.id));
-                          }}
-                          aria-label={t.archive_workspace.more_local_actions}
-                          style={localProjectMoreButtonStyle}
-                        >
-                          <UiIcon name="more" size={20} />
-                        </button>
-                        {localProjectMenuOpenId === archive.id ? (
-                          <div style={localProjectMenuStyle}>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                setLocalProjectMenuOpenId(null);
-                                renameLocalArchiveTitle(archive);
-                              }}
-                              style={localProjectMenuItemStyle}
-                            >
-                              {t.archive_workspace.edit_name}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                setLocalProjectMenuOpenId(null);
-                                renameLocalArchiveSystemName(archive);
-                              }}
-                              style={localProjectMenuItemStyle}
-                            >
-                              {t.archive_workspace.edit_system_name}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                setLocalProjectMenuOpenId(null);
-                                editLocalArchiveCategoryAndGroup(archive);
-                              }}
-                              style={localProjectMenuItemStyle}
-                            >
-                              {t.archive_workspace.edit_category_group}
-                            </button>
-                            {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  setLocalProjectMenuOpenId(null);
-                                  void markSingleLocalArchiveAsMine(archive);
-                                }}
-                                style={localProjectMenuItemStyle}
-                              >
-                                {t.archive_workspace.mark_ownership}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                setLocalProjectMenuOpenId(null);
-                                deleteLocalArchiveFromList(archive);
-                              }}
-                              style={localProjectDangerMenuItemStyle}
-                            >
-                              {t.archive_workspace.delete_local_project}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
+                      <MobileArchiveActions
+                        category={archive.category}
+                        subTagId={archive.subcategory}
+                        groupTagId={archive.group_name}
+                        subTags={localSubTagItems}
+                        groupTags={localGroupTagItems}
+                        onChangeCategory={(value) => {
+                          void updateLocalArchiveCategoryValue(archive, value);
+                        }}
+                        onChangeGroup={(value) => {
+                          void updateLocalArchiveGroupValue(archive, value);
+                        }}
+                        extraActions={[
+                          {
+                            label: t.archive_workspace.edit_name,
+                            onClick: () => renameLocalArchiveTitle(archive),
+                          },
+                          {
+                            label: t.archive_workspace.edit_system_name,
+                            onClick: () => renameLocalArchiveSystemName(archive),
+                          },
+                          ...(!archive.local_owner_user_id && currentOwnerContext?.userId
+                            ? [{
+                                label: t.archive_workspace.mark_ownership,
+                                onClick: () => void markSingleLocalArchiveAsMine(archive),
+                              }]
+                            : []),
+                          {
+                            label: t.archive_workspace.delete_local_project,
+                            onClick: () => void deleteLocalArchiveFromList(archive),
+                            danger: true,
+                          },
+                        ]}
+                      />
                     ) : undefined
                   }
                   actionRailSlot={
@@ -2405,6 +2332,11 @@ const personalSpaceIdentityLinkStyle: CSSProperties = {
   alignItems: "center",
   gap: 9,
   color: "#253725",
+};
+
+const personalSpaceAvatarLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  flexShrink: 0,
   textDecoration: "none",
 };
 
@@ -2417,6 +2349,7 @@ const personalSpaceMobileUsernameStyle: CSSProperties = {
   lineHeight: 1.15,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  textDecoration: "none",
 };
 
 const personalSpaceMobileInfoLabelStyle: CSSProperties = {
@@ -2425,6 +2358,33 @@ const personalSpaceMobileInfoLabelStyle: CSSProperties = {
   color: "#7a8675",
   fontSize: 11,
   lineHeight: 1.1,
+};
+
+const personalSpaceInlineEntryStyle: CSSProperties = {
+  color: "inherit",
+  textDecoration: "none",
+};
+
+const personalSpaceMobileActionsStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  flexShrink: 0,
+};
+
+const personalSpaceCreateProjectStyle: CSSProperties = {
+  minHeight: 34,
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0 10px",
+  border: "1px solid #d8e5d4",
+  borderRadius: 999,
+  background: "#f4f9f1",
+  color: "#3e703c",
+  textDecoration: "none",
+  fontSize: 13,
+  fontWeight: 750,
+  whiteSpace: "nowrap",
 };
 
 const personalSpaceIdentityMainStyle: CSSProperties = {
@@ -2482,31 +2442,6 @@ const personalInfoLinkStyle: CSSProperties = {
   textDecoration: "none",
   fontSize: 13,
   fontWeight: 750,
-};
-
-const personalSpaceEntryRowStyle: CSSProperties = {
-  marginBottom: 8,
-};
-
-const personalSpaceExperienceCardEntryStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  minHeight: 34,
-  padding: "5px 10px",
-  border: "1px solid #e0e8dc",
-  borderRadius: 999,
-  background: "#f8faf7",
-  color: "#496047",
-  fontSize: 13,
-  fontWeight: 800,
-  textDecoration: "none",
-};
-
-const personalSpaceExperienceCardArrowStyle: CSSProperties = {
-  flexShrink: 0,
-  color: "#71836d",
-  fontSize: 12,
 };
 
 const workspaceFilterPanelStyle: CSSProperties = {
@@ -2665,60 +2600,6 @@ const localInlineEditCancelStyle: CSSProperties = {
   fontWeight: 700,
   padding: "5px 2px",
   cursor: "pointer",
-};
-
-const localProjectMenuWrapStyle: CSSProperties = {
-  position: "relative",
-  flexShrink: 0,
-};
-
-const localProjectMoreButtonStyle: CSSProperties = {
-  flexShrink: 0,
-  width: 30,
-  height: 30,
-  border: "1px solid #edf0e8",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#667066",
-  fontSize: 19,
-  lineHeight: 1,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-};
-
-const localProjectMenuStyle: CSSProperties = {
-  position: "absolute",
-  top: 42,
-  right: 0,
-  zIndex: 80,
-  width: 148,
-  border: "1px solid #e6ebdf",
-  borderRadius: 12,
-  background: "#fff",
-  boxShadow: "0 16px 34px rgba(39, 58, 34, 0.16)",
-  padding: 5,
-};
-
-const localProjectMenuItemStyle: CSSProperties = {
-  width: "100%",
-  minHeight: 34,
-  border: "none",
-  borderRadius: 9,
-  background: "transparent",
-  color: "#40583a",
-  padding: "0 10px",
-  textAlign: "left",
-  fontSize: 13,
-  fontWeight: 700,
-  whiteSpace: "nowrap",
-  cursor: "pointer",
-};
-
-const localProjectDangerMenuItemStyle: CSSProperties = {
-  ...localProjectMenuItemStyle,
-  color: "#c85f5a",
 };
 
 const localProjectRailButtonStyle: CSSProperties = {

@@ -1,6 +1,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import {
   enrichDiscoveryProjectMedia,
+  enrichDiscoveryProjectViewCounts,
   normalizeDiscoveryProjectFeedRow,
 } from "@/lib/discover-project-feed";
 import type {
@@ -70,7 +71,8 @@ export async function fetchFollowedPublicProjects({
   const hasExtraRow = rows.length > pageLimit;
   const pageRows = rows.slice(0, pageLimit);
   const normalizedItems = pageRows.map(normalizeDiscoveryProjectFeedRow);
-  const items = await enrichDiscoveryProjectMedia(normalizedItems);
+  const itemsWithViews = await enrichDiscoveryProjectViewCounts(normalizedItems);
+  const items = await enrichDiscoveryProjectMedia(itemsWithViews);
   const lastItem = items[items.length - 1];
   const nextCursor =
     hasExtraRow && lastItem?.public_activity_at

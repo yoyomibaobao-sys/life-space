@@ -372,7 +372,10 @@ test("experience-card creation and editing share one inline full-record picker",
   assert.doesNotMatch(detail, /记录与图片/);
   assert.doesNotMatch(detail, /editorSectionHeadingStyle/);
   assert.match(detail, /detail\.archive\.system_name/);
-  assert.match(detail, /href=\{`\/user\/\$\{detail\.card\.user_id\}`\}/);
+  assert.match(
+    detail,
+    /href=\{isOwner \? "\/archive" : `\/user\/\$\{detail\.card\.user_id\}`\}/
+  );
   assert.match(detail, /href=\{`\/archive\/\$\{detail\.archive\.id\}`\}/);
   assert.match(detail, /<span style=\{sourceLabelStyle\}>\{t\.experience\.user\}<\/span>/);
   assert.doesNotMatch(detail, /<span style=\{sourceLabelStyle\}>项目<\/span>/);
@@ -634,13 +637,15 @@ test("public Experience opens compact previews into live full-screen playback wi
   assert.match(player, /buildExperienceCardVideoScenes/);
   assert.match(player, /detail\.card\.playback_media_ids/);
   assert.doesNotMatch(player, /<video|Blob|\.mp4/);
-  assert.match(player, /!fullscreen \? \([\s\S]*?href=\{`\/experience-cards\/\$\{detail\.card\.id\}`\}/);
+  assert.match(player, /!fullscreen \? <div[\s\S]*?href=\{`\/experience-cards\/\$\{detail\.card\.id\}`\}/);
   assert.match(gallery, /item\.coverUrl/);
   assert.match(gallery, /loading="lazy"/);
   assert.match(gallery, /loadExperienceCard\(item\.id\)/);
   assert.match(gallery, /Math\.abs\(index - activeIndex\) <= 1/);
   assert.match(gallery, /active=\{index === activeIndex\}/);
   assert.match(gallery, /data-mobile-swipe-ignore="true"/);
+  assert.match(gallery, /role="dialog"/);
+  assert.match(gallery, /<Link href=\{`\/experience-cards\/\$\{item\.id\}`\} className=\{styles\.previewBody\}>/);
   assert.match(feedPage, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(feedPage, /PublicExperienceGallery/);
   assert.match(feedStyles, /scroll-snap-type: y mandatory/);
@@ -693,7 +698,7 @@ test("experience card MP4 is shown first, selects individual images, and preserv
   assert.doesNotMatch(detail, /imageCount/);
 });
 
-test("guidance favorites, plan toggles, and discovery cards use the simplified hierarchy", async () => {
+test("guidance favorites and discovery cards use the simplified hierarchy without duplicate plans", async () => {
   const [guide, plantDetail, plantHero, discoverCard, discoverStyles] =
     await Promise.all([
       source("app/plant/page.tsx"),
@@ -724,11 +729,12 @@ test("guidance favorites, plan toggles, and discovery cards use the simplified h
     /initialUrl\.pathname === window\.location\.pathname[\s\S]*?initialUrl\.search === window\.location\.search/
   );
   assert.match(guide, /pendingScrollYRef/);
-  assert.match(guide, /role="dialog"/);
-  assert.match(guide, /aria-label=\{t\.plant\.back_to_guide\}/);
+  assert.doesNotMatch(guide, /role="dialog"/);
+  assert.match(guide, /isMobileSearchOpen/);
+  assert.doesNotMatch(guide, /aria-label=\{t\.plant\.back_to_guide\}/);
   assert.match(plantDetail, /from\("user_plant_interests"\)[\s\S]*?\.delete\(\)/);
-  assert.match(plantDetail, /from\("user_plant_plans"\)[\s\S]*?\.delete\(\)/);
-  assert.match(plantDetail, /copy\.plan_already_added/);
+  assert.doesNotMatch(plantDetail, /from\("user_plant_plans"\)/);
+  assert.doesNotMatch(plantDetail, /copy\.plan_already_added/);
   assert.match(plantDetail, /copy\.saved/);
   assert.doesNotMatch(plantHero, /disabled=\{planAdded \|\|/);
   assert.doesNotMatch(plantHero, /disabled=\{interestAdded \|\|/);
@@ -818,7 +824,7 @@ test("personal space project page has a direct My Experience Cards entry", async
   assert.match(personalSpace, /t\.archive_workspace\.personal_info/);
   assert.match(
     personalSpace,
-    /\{t\.archive_workspace\.my_experience_cards\} \(\{experienceCardCount\}\)/
+    /\{t\.archive_workspace\.my_experience_cards\} \{experienceCardCount\}/
   );
   assert.match(zhCopy, /my_experience_cards: "我的经验卡"/);
   assert.match(enCopy, /my_experience_cards: "My experience cards"/);

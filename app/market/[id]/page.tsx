@@ -323,11 +323,41 @@ export default function MarketDetailPage() {
     <>
       <main style={pageStyle}>
         <div style={shellStyle}>
-          <Link href="/market" style={backLinkStyle}>
+          <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
           </Link>
 
+          <header className="mobile-app-flex-only" style={mobileDetailHeaderStyle}>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.history.length > 1) router.back();
+                else router.push("/market");
+              }}
+              aria-label={t.market.back_to_market}
+              style={mobileBackButtonStyle}
+            >
+              <UiIcon name="arrow-left" size={18} />
+            </button>
+            <strong style={mobileDetailTitleStyle}>{item.title}</strong>
+          </header>
+
           <section style={panelStyle}>
+            {coverImageUrl ? (
+              <button
+                type="button"
+                onClick={() => openMarketLightbox(coverImageUrl)}
+                aria-label={t.market.open_cover_preview}
+                style={coverButtonStyle}
+              >
+                <img
+                  src={coverThumbUrl || coverImageUrl}
+                  alt={item.title}
+                  style={coverImageStyle}
+                />
+              </button>
+            ) : null}
+
             <div style={topRowStyle}>
               <div style={badgeRowStyle}>
                 <span style={typeBadgeStyle}>
@@ -344,13 +374,13 @@ export default function MarketDetailPage() {
               <span style={timeStyle}>{formatPreciseDateTime(item.created_at)}</span>
             </div>
 
-            <h1 style={titleStyle}>{item.title}</h1>
+            {!isMobileViewport ? <h1 style={titleStyle}>{item.title}</h1> : null}
 
             <section style={summaryInlineStyle}>
               <span style={summaryInlineItemStyle}>
                 <span style={summaryLabelStyle}>{t.market.publisher}</span>
                 <Link
-                  href={`/user/${item.user_id}/profile`}
+                  href={isOwner ? "/archive" : `/user/${item.user_id}`}
                   style={publisherLinkStyle}
                 >
                   {profile?.username || t.market.unset_username}
@@ -414,21 +444,6 @@ export default function MarketDetailPage() {
                   {externalLabel}
                 </a>
               </section>
-            ) : null}
-
-            {coverImageUrl ? (
-              <button
-                type="button"
-                onClick={() => openMarketLightbox(coverImageUrl)}
-                aria-label={t.market.open_cover_preview}
-                style={coverButtonStyle}
-              >
-                <img
-                  src={coverThumbUrl || coverImageUrl}
-                  alt={item.title}
-                  style={coverImageStyle}
-                />
-              </button>
             ) : null}
 
             {marketMedia.length > 0 ? (
@@ -608,6 +623,36 @@ const backLinkStyle: CSSProperties = {
   marginBottom: 10,
 };
 
+const mobileDetailHeaderStyle: CSSProperties = {
+  minHeight: 44,
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 8,
+};
+
+const mobileBackButtonStyle: CSSProperties = {
+  width: 38,
+  height: 38,
+  flex: "0 0 38px",
+  display: "grid",
+  placeItems: "center",
+  border: 0,
+  borderRadius: 999,
+  background: "transparent",
+  color: "#52634e",
+  cursor: "pointer",
+};
+
+const mobileDetailTitleStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  color: "#253725",
+  fontSize: 19,
+  fontWeight: 750,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 const panelStyle: CSSProperties = {
   background: "#fff",
   border: "1px solid #e4ece0",
@@ -620,7 +665,8 @@ const topRowStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 10,
   alignItems: "center",
-  marginBottom: 10,
+  marginTop: 10,
+  marginBottom: 8,
 };
 
 const badgeRowStyle: CSSProperties = {

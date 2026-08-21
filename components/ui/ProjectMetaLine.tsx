@@ -9,6 +9,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 type MetaItem = {
   key: string;
   icon: UiIconName;
+  hideIcon?: boolean;
   accessibleLabel: string;
   value: string | number;
   dateValue?: string | null;
@@ -26,6 +27,7 @@ export default function ProjectMetaLine({
   bookmarkCount,
   helpfulCount,
   updatedAt,
+  compactProjectStats = false,
   className,
   style,
 }: {
@@ -40,6 +42,7 @@ export default function ProjectMetaLine({
   bookmarkCount?: number | null;
   helpfulCount?: number | null;
   updatedAt?: string | null;
+  compactProjectStats?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -70,6 +73,7 @@ export default function ProjectMetaLine({
     items.push({
       key: "record",
       icon: "record",
+      hideIcon: compactProjectStats,
       accessibleLabel: `${t.meta.records} ${count}`,
       value: `${compactNumberFormatter.format(count)}${t.meta.record_suffix}`,
     });
@@ -79,6 +83,7 @@ export default function ProjectMetaLine({
     items.push({
       key: "duration",
       icon: "duration",
+      hideIcon: compactProjectStats,
       accessibleLabel: `${ended ? t.meta.duration_ended : t.meta.duration_ongoing} ${days} ${t.meta.day_suffix}`,
       value: `${compactNumberFormatter.format(days)}${t.meta.day_suffix}`,
     });
@@ -122,7 +127,9 @@ export default function ProjectMetaLine({
           aria-label={item.accessibleLabel}
           style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
         >
-          <UiIcon name={item.icon} size={14} strokeWidth={1.75} />
+          {item.hideIcon ? null : (
+            <UiIcon name={item.icon} size={14} strokeWidth={1.75} />
+          )}
           {item.dateValue ? (
             <CompactActivityTime value={item.dateValue} />
           ) : (

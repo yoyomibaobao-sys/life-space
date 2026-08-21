@@ -86,11 +86,9 @@ export function DiscoverProjectCard({
       </div>
 
       <div className={styles.body}>
-        {item.card_summary ? (
-          <p className={styles.summary}>
-            {item.card_summary}
-          </p>
-        ) : null}
+        <p className={styles.summary} aria-hidden={!item.card_summary}>
+          {item.card_summary || "\u00a0"}
+        </p>
         {activityTime ? (
           <time
             className={styles.summaryTime}
@@ -106,6 +104,8 @@ export function DiscoverProjectCard({
         recordCount={item.public_record_count}
         durationDays={durationDays}
         ended={Boolean(item.archive_ended_at)}
+        viewCount={item.view_count}
+        compactProjectStats
         className={styles.projectMeta}
       />
 

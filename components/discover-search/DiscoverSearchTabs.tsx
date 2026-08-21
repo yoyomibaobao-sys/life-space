@@ -1,15 +1,17 @@
-import type { DiscoverSearchKind } from "@/lib/discover-search-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+
+export type ActivitySearchScope = "all" | "projects" | "records";
 
 export default function DiscoverSearchTabs({
   value,
   onChange,
 }: {
-  value: DiscoverSearchKind;
-  onChange: (value: DiscoverSearchKind) => void;
+  value: ActivitySearchScope;
+  onChange: (value: ActivitySearchScope) => void;
 }) {
   const { t } = useLanguage();
-  const options: Array<{ value: DiscoverSearchKind; label: string }> = [
+  const options: Array<{ value: ActivitySearchScope; label: string }> = [
+    { value: "all", label: t.discover.search_ui.all },
     { value: "projects", label: t.discover.search_ui.projects },
     { value: "records", label: t.discover.search_ui.records },
   ];
@@ -19,12 +21,11 @@ export default function DiscoverSearchTabs({
       aria-label={t.discover.search_ui.search_type}
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-        gap: 5,
+        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+        gap: 6,
         marginBottom: 10,
-        padding: 4,
-        borderRadius: 13,
-        background: "#f0f4ed",
+        padding: 0,
+        background: "transparent",
       }}
     >
       {options.map((option) => {
@@ -36,12 +37,12 @@ export default function DiscoverSearchTabs({
             aria-current={active ? "page" : undefined}
             onClick={() => onChange(option.value)}
             style={{
-              minHeight: 38,
-              border: active ? "1px solid #d6e3d1" : "1px solid transparent",
-              borderRadius: 10,
-              background: active ? "#fff" : "transparent",
+              minHeight: 36,
+              border: active ? "1px solid #8fb18a" : "1px solid #dce5d9",
+              borderRadius: 999,
+              background: active ? "#eef7eb" : "#fff",
               color: active ? "#31532f" : "#6c7869",
-              boxShadow: active ? "0 1px 4px rgba(41, 72, 39, 0.06)" : "none",
+              boxShadow: "none",
               fontSize: 14,
               fontWeight: active ? 800 : 650,
               cursor: "pointer",

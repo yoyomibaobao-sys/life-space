@@ -1,10 +1,7 @@
 import type { CSSProperties } from "react";
 
 export const categoryGroupStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  flexWrap: "wrap",
+  display: "contents",
 };
 
 export function mainFilterStyle(active: boolean): CSSProperties {
@@ -13,10 +10,12 @@ export function mainFilterStyle(active: boolean): CSSProperties {
     background: active ? "#edf6e9" : "transparent",
     color: active ? "#3f7d3d" : "#3d463b",
     borderRadius: 999,
-    padding: "6px 10px",
+    minHeight: 42,
+    padding: "5px 5px",
     cursor: "pointer",
-    fontSize: 15,
-    fontWeight: active ? 650 : 550,
+    fontSize: 13,
+    fontWeight: active ? 700 : 550,
+    whiteSpace: "normal",
   };
 }
 

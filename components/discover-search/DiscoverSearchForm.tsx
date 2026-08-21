@@ -15,37 +15,39 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getBehaviorTagLabel } from "@/lib/record-tags";
 
 type Props = {
-  searchKind: DiscoverSearchKind;
+  searchKind: DiscoverSearchKind | "all";
   filters: SearchFilters;
   onFiltersChange: (next: SearchFilters) => void;
-  onSubmit: () => void;
-  onReset: () => void;
 };
 
 export default function DiscoverSearchForm({
   searchKind,
   filters,
   onFiltersChange,
-  onSubmit,
-  onReset,
 }: Props) {
   const { language, t } = useLanguage();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const isRecordSearch = searchKind === "records";
   const keywordLabel =
-    searchKind === "projects"
+          searchKind === "all"
+            ? t.discover.search_ui.all_short_placeholder
+            : searchKind === "projects"
       ? t.discover.search_ui.project_search
       : searchKind === "experience"
         ? t.discover.search_ui.experience_search
         : t.discover.search_ui.record_search;
   const keywordPlaceholder =
-    searchKind === "projects"
+    searchKind === "all"
+      ? t.discover.search_ui.all_short_placeholder
+      : searchKind === "projects"
       ? t.discover.search_ui.project_placeholder
       : searchKind === "experience"
         ? t.discover.search_ui.experience_placeholder
         : t.discover.search_ui.record_placeholder;
   const mobileKeywordPlaceholder =
-    searchKind === "projects"
+    searchKind === "all"
+      ? t.discover.search_ui.all_short_placeholder
+      : searchKind === "projects"
       ? t.discover.search_ui.project_short_placeholder
       : searchKind === "experience"
         ? t.discover.search_ui.experience_short_placeholder
@@ -75,10 +77,7 @@ export default function DiscoverSearchForm({
   if (isMobileViewport) {
     return (
       <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
+        onSubmit={(event) => event.preventDefault()}
         style={mobileFormStyle}
       >
         <div style={mobileGridStyle}>
@@ -164,26 +163,13 @@ export default function DiscoverSearchForm({
           </div>
         ) : null}
 
-        <div style={mobileActionsStyle}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={onReset} style={secondaryButtonStyle}>
-              {t.discover.search_ui.reset}
-            </button>
-            <button type="submit" style={primaryButtonStyle}>
-              {t.discover.search_ui.search}
-            </button>
-          </div>
-        </div>
       </form>
     );
   }
 
   return (
     <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
+      onSubmit={(event) => event.preventDefault()}
       style={{
         padding: 12,
         border: "1px solid #e5ece2",
@@ -333,10 +319,7 @@ export default function DiscoverSearchForm({
           </label>
         ) : <span />}
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={onReset} style={secondaryButtonStyle}>{t.discover.search_ui.reset}</button>
-          <button type="submit" style={primaryButtonStyle}>{t.discover.search_ui.search}</button>
-        </div>
+        <span />
       </div>
     </form>
   );
@@ -403,14 +386,6 @@ const mobileTagFieldStyle: CSSProperties = {
   minWidth: 0,
 };
 
-const mobileActionsStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  gap: 10,
-  marginTop: 10,
-};
-
 const mobileHelpOnlyStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -418,24 +393,4 @@ const mobileHelpOnlyStyle: CSSProperties = {
   fontSize: 13,
   color: "#374737",
   cursor: "pointer",
-};
-
-const secondaryButtonStyle: CSSProperties = {
-  border: "1px solid #e1e8dd",
-  background: "#fff",
-  color: "#4d5d4d",
-  borderRadius: 999,
-  padding: "9px 14px",
-  cursor: "pointer",
-  fontSize: 14,
-};
-
-const primaryButtonStyle: CSSProperties = {
-  border: "1px solid #7eb87e",
-  background: "#4CAF50",
-  color: "#fff",
-  borderRadius: 999,
-  padding: "9px 16px",
-  cursor: "pointer",
-  fontSize: 14,
 };

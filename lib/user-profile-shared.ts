@@ -3,6 +3,7 @@ import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
 import { formatCardDate, formatPreciseDateTime } from "@/lib/date-time";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Language } from "@/lib/i18n";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 
 export type UserProfileStats = {
   archiveCount: number;
@@ -28,6 +29,11 @@ export type UserProfileArchiveItem = {
   last_record_time: string | null;
   record_count: number | null;
   view_count: number | null;
+  cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_url?: string | null;
+  cover_thumb_path?: string | null;
+  display_cover_url?: string | null;
 };
 
 type UserPlantPlanRow = {
@@ -120,7 +126,7 @@ async function loadUserProfileDataWithProfile(
     accountIdentityQuery,
     supabase
       .from("archives")
-      .select("id, title, system_name, category, status, last_record_time, record_count, view_count, is_public")
+      .select("id, title, system_name, category, status, last_record_time, record_count, view_count, is_public, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path")
       .eq("user_id", userId)
       .order("last_record_time", { ascending: false }),
     supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
@@ -193,6 +199,17 @@ async function loadUserProfileDataWithProfile(
     .filter(Boolean)
     .slice(0, 3);
 
+  const recentArchives = publicArchives.slice(0, 6);
+  const recentArchivePairs = await resolveMediaDisplayPairs(
+    supabase,
+    recentArchives.map((item) => ({
+      url: item.cover_image_url,
+      path: item.cover_image_path,
+      thumb_url: item.cover_thumb_url,
+      thumb_path: item.cover_thumb_path,
+    }))
+  );
+
   return {
     profile: mergedProfile,
     stats: {
@@ -209,7 +226,13 @@ async function loadUserProfileDataWithProfile(
       receivedFlowerCount: receivedFlowersResult.count || 0,
       sentFlowerCount: sentFlowersResult.count || 0,
     },
-    recentArchives: publicArchives.slice(0, 6),
+    recentArchives: recentArchives.map((item, index) => ({
+      ...item,
+      display_cover_url:
+        recentArchivePairs[index]?.display_thumb_url ||
+        recentArchivePairs[index]?.display_url ||
+        null,
+    })),
   };
 }
 

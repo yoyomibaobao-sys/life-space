@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .card {
@@ -17,6 +17,7 @@
   text-decoration: none;
   outline: none;
   transition: border-color 160ms ease;
+  height: 100%;
 }
 
 .card:hover {
@@ -30,7 +31,7 @@
 .imageRegion {
   position: relative;
   width: 100%;
-  aspect-ratio: 6 / 7;
+  aspect-ratio: 1 / 1.08;
   overflow: hidden;
   background: #edf2e8;
 }
@@ -118,7 +119,8 @@
   min-width: 0;
   display: grid;
   align-content: start;
-  padding: 8px 10px 0;
+  min-height: 49px;
+  padding: 7px 9px 0;
 }
 
 .summary {
@@ -147,7 +149,7 @@
   gap: 4px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 5px 10px 0;
+  padding: 4px 9px 0;
   color: #778375;
   font-size: 12px;
   line-height: 1.25;
@@ -164,10 +166,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 24px;
-  margin: 5px 10px 9px;
-  padding-top: 5px;
-  border-top: 1px solid #edf1eb;
+  min-height: 20px;
+  margin: 3px 9px 7px;
 }
 
 .owner {
@@ -297,6 +297,7 @@
 
   .body {
     flex: 1;
+    min-height: 58px;
     padding: 12px 12px 0;
   }
 

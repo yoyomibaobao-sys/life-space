@@ -127,13 +127,15 @@ test("the center plus captures a photo and carries it into a new record", async 
 });
 
 test("mobile primary pages use contextual top bars and keep notifications in My Space", async () => {
-  const [navbar, topBar, homeTabs, archivePage, followPage, marketPage, discoverFilters, projectCard] = await Promise.all([
+  const [navbar, topBar, homeTabs, archivePage, followPage, marketPage, experiencePage, plantPage, discoverFilters, projectCard] = await Promise.all([
     source("components/navbar.tsx"),
     source("components/mobile/MobileContentTopBar.tsx"),
     source("components/home/HomeSectionTabs.tsx"),
     source("app/archive/page.tsx"),
     source("app/follow/page.tsx"),
     source("app/market/page.tsx"),
+    source("app/experience/page.tsx"),
+    source("app/plant/page.tsx"),
     source("components/discover/DiscoverFilterBar.tsx"),
     source("components/archive-ui/ArchiveProjectCard.tsx"),
   ]);
@@ -142,15 +144,18 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
   assert.match(homeTabs, /label: t\.nav\.activity, href: "\/discover"/);
   assert.match(homeTabs, /label: t\.nav\.experience, href: "\/experience"/);
   assert.match(homeTabs, /label: t\.nav\.guide, href: "\/plant"/);
-  assert.match(homeTabs, /active === "activity"[\s\S]*?"\/discover\/search"[\s\S]*?active === "experience"[\s\S]*?"\/experience\/search"/);
-  assert.match(archivePage, /<Link href="\/profile" style=\{personalSpaceIdentityLinkStyle\}>[\s\S]*?<MobileNotificationLink \/>/);
+  assert.match(homeTabs, /active === "activity"[\s\S]*?"\/discover\/search"/);
+  assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen\(\(open\) => !open\)\}/);
+  assert.match(plantPage, /onSearch=\{\(\) => setIsMobileSearchOpen\(\(open\) => !open\)\}/);
+  assert.match(archivePage, /<Link href="\/profile" style=\{personalSpaceAvatarLinkStyle\}>/);
+  assert.match(archivePage, /<MobileNotificationLink \/>/);
   assert.doesNotMatch(followPage, /showNotification/);
   assert.doesNotMatch(marketPage, /showNotification/);
   assert.match(marketPage, /const \[mobileFiltersOpen, setMobileFiltersOpen\] = useState\(false\)/);
   assert.match(marketPage, /isMobileViewport \? \([\s\S]*?mobileFiltersOpen \? \([\s\S]*?<MobileMarketFilters/);
   assert.match(discoverFilters, /overflowX: "auto"/);
   assert.match(projectCard, /width: mobileMode \? 96 : 104/);
-  assert.match(navbar, /pathname\.startsWith\("\/quick-record"\)\) return false/);
+  assert.match(navbar, /function shouldShowMobileCreateAction\(pathname: string\)[\s\S]*?return false/);
   assert.match(navbar, /pathname\.startsWith\("\/quick-record"\)\) return labels\.add_record/);
 });
 
@@ -222,9 +227,10 @@ test("account navigation keeps membership contextual and export under data manag
   assert.match(profile, /<MobileProfileModuleTabs/);
   assert.match(profile, /href: "\/admin\/memberships"/);
   assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
-  assert.match(profile, /display: compact \? "flex" : "grid"/);
-  assert.match(profile, /overflowX: compact \? "auto" : "visible"/);
-  assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minWidth: 104/);
+  assert.match(profile, /display: "grid"/);
+  assert.match(profile, /overflowX: "visible"/);
+  assert.match(profile, /gridTemplateColumns: compact[\s\S]*?"1fr"/);
+  assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 50/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
   assert.match(profile, /const showInfoModule = mobileProfileModule === "settings"/);
   assert.match(profile, /admin_get_membership_payment_queue_count/);
@@ -370,7 +376,7 @@ test("mobile market keeps actions out of the global bar and uses readable manage
   assert.match(market, /<option value="all">\{t\.market\.all_categories\}<\/option>/);
   assert.doesNotMatch(market, /mobileFilterLabelStyle/);
   assert.match(market, /mobileFilterControlStyle[\s\S]*?height: 36[\s\S]*?fontSize: 13/);
-  assert.match(market, /cardStyle[\s\S]*?gridTemplateColumns: "96px minmax\(0, 1fr\)"/);
+  assert.match(market, /cardStyle[\s\S]*?gridTemplateColumns: "88px minmax\(0, 1fr\)"/);
   assert.match(market, /infoValueStyle[\s\S]*?whiteSpace: "nowrap"/);
   assert.doesNotMatch(market, /href="\/market\/new"/);
   assert.match(zhCopy, /my_posts: "我的发布"/);
@@ -378,11 +384,11 @@ test("mobile market keeps actions out of the global bar and uses readable manage
 
   assert.match(mine, /href="\/market\/new"[\s\S]*?t\.market\.post_information/);
   assert.doesNotMatch(mine, /getMarketPostQuotaHint/);
-  assert.match(mine, /cardMainStyle[\s\S]*?gridTemplateColumns: "104px minmax\(0, 1fr\)"/);
+  assert.match(mine, /cardMainStyle[\s\S]*?gridTemplateColumns: "88px minmax\(0, 1fr\)"/);
   assert.match(mine, /descriptionStyle[\s\S]*?WebkitLineClamp: 1/);
   assert.match(mine, /formatMarketTime\(item\.created_at\)[\s\S]*?views_prefix/);
   assert.match(mine, /actionRowStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(mine, /secondaryLinkStyle[\s\S]*?minHeight: 34/);
+  assert.match(mine, /secondaryLinkStyle[\s\S]*?minHeight: 30/);
 });
 
 test("mobile archive detail only offers Add record to the project owner", async () => {
@@ -471,12 +477,13 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(discoverCard, /className=\{styles\.projectMeta\}/);
   assert.match(discoverCard, /<ProjectMetaLine[\s\S]*?recordCount=\{item\.public_record_count\}[\s\S]*?durationDays=\{durationDays\}[\s\S]*?ended=\{Boolean\(item\.archive_ended_at\)\}/);
   assert.doesNotMatch(discoverCard, /item\.public_comment_count/);
-  assert.doesNotMatch(discoverCard, /view_count|浏览/);
+  assert.match(discoverCard, /viewCount=\{item\.view_count\}/);
   assert.doesNotMatch(discoverCard, /getProjectSystemName|species_name_snapshot/);
-  assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: start/);
-  assert.doesNotMatch(discoverCss, /^\.body \{[^}]*flex: 1/m);
+  assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: stretch/);
+  assert.match(discoverCss, /^\.body \{[^}]*min-height: 49px/m);
+  assert.match(discoverCard, /\{item\.card_summary \|\| "\\u00a0"\}/);
   assert.match(discoverCss, /\.imageTitleArea \{[\s\S]*?linear-gradient/);
-  assert.match(discoverCss, /\.imageRegion \{[\s\S]*?aspect-ratio: 6 \/ 7/);
+  assert.match(discoverCss, /\.imageRegion \{[\s\S]*?aspect-ratio: 1 \/ 1\.08/);
   assert.match(discoverCss, /\.summary \{[\s\S]*?line-height: 1\.35/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
   assert.match(discoverFormat, /formatCompactActivityTime as formatDiscoveryActivityTime/);
@@ -531,8 +538,8 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
   assert.match(enCopy, /guide_tab: "Overview & growing guide"/);
 });
 
-test("activity search keeps projects and records while Experience has its own search", async () => {
-  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils, experienceSearch, zhCopy, enCopy] = await Promise.all([
+test("activity search filters all, projects, and records while Experience searches inline", async () => {
+  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils, experiencePage, zhCopy, enCopy] = await Promise.all([
     source("app/discover/search/page.tsx"),
     source("components/discover-search/DiscoverSearchTabs.tsx"),
     source("components/discover-search/DiscoverSearchForm.tsx"),
@@ -541,23 +548,24 @@ test("activity search keeps projects and records while Experience has its own se
     source("components/discover-search/DiscoverSearchResultCard.module.css"),
     source("lib/discover-search-data.ts"),
     source("lib/discover-search-utils.ts"),
-    source("app/experience/search/page.tsx"),
+    source("app/experience/page.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
 
   assert.match(tabs, /label: t\.discover\.search_ui\.projects/);
   assert.match(tabs, /label: t\.discover\.search_ui\.records/);
+  assert.match(tabs, /label: t\.discover\.search_ui\.all/);
   assert.doesNotMatch(tabs, /label: t\.discover\.search_ui\.experience_cards/);
-  assert.match(tabs, /repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(tabs, /repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(zhCopy, /projects: "项目"/);
   assert.match(enCopy, /experience_cards: "Experience cards"/);
   assert.match(page, /fetchDiscoverProjectSearchResults/);
   assert.match(page, /fetchDiscoverSearchResults/);
   assert.doesNotMatch(page, /fetchDiscoverExperienceCardSearchResults/);
-  assert.match(experienceSearch, /fetchDiscoverExperienceCardSearchResults/);
-  assert.match(experienceSearch, /kind="experience"/);
-  assert.match(experienceSearch, /window\.history\.pushState/);
+  assert.match(experiencePage, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen/);
+  assert.doesNotMatch(experiencePage, /window\.history\.pushState/);
   assert.match(form, /searchKind === "records"/);
   assert.match(form, /mobileGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(form, /t\.discover\.search_ui\.all_categories/);
@@ -603,30 +611,30 @@ test("activity search keeps projects and records while Experience has its own se
 });
 
 test("user navigation opens a compact profile directly and keeps the space entry obvious", async () => {
-  const [userSpace, publicProfile, archiveDetail, zhCopy, enCopy] = await Promise.all([
+  const [userSpace, userSpaceHeader, publicProfile, archiveDetail, zhCopy, enCopy] = await Promise.all([
     source("app/user/[id]/page.tsx"),
+    source("components/user-space/UserSpaceHeader.tsx"),
     source("app/user/[id]/profile/page.tsx"),
     source("app/archive/[id]/page.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(userSpace, /href=\{`\/user\/\$\{userId\}\/profile`\}/);
-  assert.match(userSpace, /\{t\.profile\.space\.user_profile\}/);
+  assert.match(userSpace, /<UserSpaceHeader/);
+  assert.match(userSpaceHeader, /href=\{`\/user\/\$\{userId\}\/profile`\}/);
+  assert.match(userSpaceHeader, /\{t\.profile\.space\.user_profile\}/);
   assert.match(zhCopy, /user_profile: "用户资料"/);
   assert.match(enCopy, /user_profile: "User profile"/);
   assert.doesNotMatch(userSpace, /名片|showCard|UserProfileCard/);
 
   assert.match(publicProfile, /<UserAvatar/);
   assert.match(publicProfile, /profileStatsGridStyle/);
-  assert.match(publicProfile, /mobileProfileStatsGridStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(publicProfile, /mobileProfileStatsGridStyle[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(publicProfile, /mobileProfileActionRowStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(publicProfile, /t\.profile\.public_profile\.enter_prefix/);
-  assert.match(publicProfile, /t\.profile\.public_profile\.enter_suffix/);
+  assert.match(publicProfile, /href=\{isSelf \? "\/archive" : `\/user\/\$\{userId\}`\}/);
   assert.doesNotMatch(publicProfile, /用户信息页|当前正在进行的交换、赠送、转让或求购信息/);
 
-  assert.match(archiveDetail, /archiveCopy\.enter_user_space_prefix/);
-  assert.match(archiveDetail, /archiveCopy\.enter_user_space_suffix/);
+  assert.match(archiveDetail, /href=\{isOwner \? "\/archive" : `\/user\/\$\{activeArchive\.user_id\}`\}/);
   assert.match(archiveDetail, /displayUsername/);
   assert.match(archiveDetail, /<UiIcon name="arrow-right" size=\{14\} \/>/);
   assert.match(archiveDetail, /background: "#edf6e9"/);

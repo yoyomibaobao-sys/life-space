@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { buildLoginHref } from "@/lib/auth-return";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
-import { formatProfileDateTime, formatStorage, loadUserProfileData } from "@/lib/user-profile-shared";
+import { formatStorage, loadUserProfileData } from "@/lib/user-profile-shared";
 import {
   formatMembershipDate,
   getDaysRemaining,
@@ -29,7 +29,6 @@ import {
   parseLegacyLocation,
   type RegionOption,
 } from "@/lib/region-shared";
-import { getAccountRegistrationSummary } from "@/lib/account-number";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -93,6 +92,7 @@ export default function ProfilePage() {
     { value: "settings", label: t.profile.modules.settings },
     { value: "membership", label: t.profile.modules.membership },
     { value: "payment", label: t.profile.modules.payment },
+    { href: "/feedback", label: t.feedback_and_contact },
     { href: "/profile/trash", label: t.profile.modules.trash },
     { value: "account", label: t.profile.modules.account },
   ];
@@ -231,11 +231,6 @@ export default function ProfilePage() {
     const limit = formatStorage(Number(membership?.storage_limit_bytes || profile?.storage_limit || 0));
     return `${used} / ${limit}`;
   }, [profile, membership]);
-  const accountRegistrationSummary = getAccountRegistrationSummary(
-    profile?.account_number,
-    language
-  );
-
   const membershipEndDate = getMembershipEndDate(membership);
   const membershipDaysRemaining = getDaysRemaining(membershipEndDate);
   const showMembershipNotice = Boolean(
@@ -600,24 +595,9 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div style={metaListStyle}>
-              <MetaItem
-                label={t.profile.account_number}
-                value={
-                  profile.account_number ||
-                  (profile.is_internal_test ? t.profile.internal_test : t.profile.not_assigned)
-                }
-              />
-              {accountRegistrationSummary ? (
-                <MetaItem label={t.profile.registration_order} value={accountRegistrationSummary} />
-              ) : null}
-              <MetaItem label={t.profile.account_level} value={`Lv.${Number(profile.level || 1)}`} />
-              <MetaItem label={t.profile.received_helpful} value={<span><UiIcon name="helpful" size={13} /> {Number(profile.flower_count || 0)}</span>} />
-              <MetaItem label={t.profile.joined} value={formatProfileDateTime(profile.created_at, language)} />
-            </div>
           </section>
 
-          <section style={compactPanelStyle}>
+          <section id="language-settings" style={compactPanelStyle}>
             <div style={sectionTitleStyle}>{t.profile.settings}</div>
             <div style={languageSettingRowStyle}>
               <span style={fieldLabelStyle}>{t.profile.language_setting}</span>
@@ -638,7 +618,7 @@ export default function ProfilePage() {
                 </button>
               </div>
             </div>
-            <div style={{ ...sectionTitleStyle, marginTop: 14 }}>
+            <div id="address-settings" style={{ ...sectionTitleStyle, marginTop: 14 }}>
               {t.profile.address_setting}
             </div>
             <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns }}>
@@ -935,15 +915,6 @@ export default function ProfilePage() {
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, color: "#5f6a5b" }}>
-      <span>{label}</span>
-      <span style={{ color: "#1f2a1f", fontWeight: 600 }}>{value}</span>
-    </div>
-  );
-}
-
 function MobileProfileModuleTabs({
   active,
   modules,
@@ -960,10 +931,10 @@ function MobileProfileModuleTabs({
     <nav
       style={{
         ...mobileProfileTabsStyle,
-        display: compact ? "flex" : "grid",
-        overflowX: compact ? "auto" : "visible",
+        display: "grid",
+        overflowX: "visible",
         gridTemplateColumns: compact
-          ? undefined
+          ? "1fr"
           : `repeat(${modules.length}, minmax(0, 1fr))`,
       }}
       aria-label={t.profile.module_aria}
@@ -971,7 +942,7 @@ function MobileProfileModuleTabs({
       {modules.map((item) =>
         item.href ? (
           <Link
-            key={item.href}
+            key={`${item.href}-${item.label}`}
             href={item.href}
             style={
               item.href === "/admin/memberships"
@@ -989,7 +960,7 @@ function MobileProfileModuleTabs({
           </Link>
         ) : item.value ? (
           <button
-            key={item.value}
+            key={`${item.value}-${item.label}`}
             type="button"
             onClick={() => onChange(item.value as MobileProfileModule)}
             style={{
@@ -1057,9 +1028,12 @@ const mobileProfileTabsStyle: CSSProperties = {
 };
 
 const mobileProfileCompactTabStyle: CSSProperties = {
-  minWidth: 104,
-  flex: "0 0 auto",
-  padding: "0 12px",
+  width: "100%",
+  minWidth: 0,
+  minHeight: 50,
+  padding: "0 15px",
+  justifyContent: "flex-start",
+  textAlign: "left",
 };
 
 function mobileProfileTabButtonStyle(active: boolean): CSSProperties {
@@ -1067,12 +1041,12 @@ function mobileProfileTabButtonStyle(active: boolean): CSSProperties {
     minWidth: 0,
     minHeight: 40,
     border: active ? "1px solid #9bc98f" : "1px solid #dfe8da",
-    borderRadius: 999,
-    background: active ? "#edf8e9" : "#fff",
+    borderRadius: 13,
+    background: active ? "#edf8e9" : "#f7f8f6",
     color: active ? "#2f6a31" : "#52634e",
-    padding: "0 6px",
-    fontSize: 13,
-    fontWeight: 800,
+    padding: "0 14px",
+    fontSize: 15,
+    fontWeight: 700,
     whiteSpace: "normal",
     lineHeight: 1.15,
     cursor: "pointer",
@@ -1083,8 +1057,8 @@ const mobileProfileLinkTabStyle: CSSProperties = {
   ...mobileProfileTabButtonStyle(false),
   display: "flex",
   alignItems: "center",
-  justifyContent: "center",
-  textAlign: "center",
+  justifyContent: "flex-start",
+  textAlign: "left",
   textDecoration: "none",
   boxSizing: "border-box",
 };
@@ -1448,12 +1422,6 @@ const sectionTitleStyle: CSSProperties = {
   fontWeight: 700,
   color: "#1f2a1f",
   marginBottom: 10,
-};
-
-const metaListStyle: CSSProperties = {
-  display: "grid",
-  gap: 7,
-  marginTop: 12,
 };
 
 const primaryButtonStyle: CSSProperties = {

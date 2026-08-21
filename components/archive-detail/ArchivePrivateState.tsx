@@ -10,7 +10,7 @@ export default function ArchivePrivateState() {
   return (
     <main style={{ padding: "16px", maxWidth: 680, margin: "0 auto" }}>
       <Link href="/discover" style={{ fontSize: 14, color: "#666" }}>
-        <UiIcon name="arrow-left" size={15} /> {t.archive.back_to_discover}
+        <UiIcon name="arrow-left" size={15} /> {t.nav.home}
       </Link>
 
       <div

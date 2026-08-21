@@ -133,6 +133,8 @@ export default function ArchiveProjectCard({
             recordCount={project.recordCount}
             durationDays={project.durationDays}
             ended={Boolean(project.ended)}
+            viewCount={project.viewCount}
+            compactProjectStats
           />
         ) : mobilePrimaryStatsText ? (
           <div style={mobileStatsLineStyle}>{mobilePrimaryStatsText}</div>
@@ -199,6 +201,7 @@ export default function ArchiveProjectCard({
               viewCount={project.viewCount}
               followerCount={project.followerCount}
               commentCount={project.commentCount}
+              compactProjectStats
             />
           ) : (
             <span style={statusLineStyle}>{project.activityText || ""}</span>
@@ -288,12 +291,12 @@ function projectCardStyle(ended: boolean, mobileMode: boolean): CSSProperties {
     position: "relative",
     display: "flex",
     alignItems: "flex-start",
-    gap: mobileMode ? 10 : 12,
+    gap: mobileMode ? 8 : 12,
     border: "1px solid #e4e6df",
     borderRadius: 14,
     padding: mobileMode ? 8 : 10,
-    marginBottom: 10,
-    minHeight: mobileMode ? 112 : 124,
+    marginBottom: mobileMode ? 8 : 10,
+    minHeight: mobileMode ? 108 : 124,
     boxSizing: "border-box",
     background: ended ? "#fafafa" : "#fff",
     opacity: ended ? 0.82 : 1,
@@ -354,7 +357,7 @@ const mobileTitleTextStyle: CSSProperties = {
   minWidth: 0,
   color: "#1f2d1f",
   fontSize: 16,
-  fontWeight: 800,
+  fontWeight: 700,
   lineHeight: 1.3,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -510,7 +513,7 @@ function visibilityBadgeStyle(tone?: "public" | "private" | "neutral"): CSSPrope
     background: tone === "public" ? "#f1fff1" : "#fff",
     color: tone === "public" ? "#2f8f2f" : tone === "private" ? "#888" : "#697663",
     fontSize: 13,
-    fontWeight: 700,
+    fontWeight: 600,
     lineHeight: 1,
     padding: "4px 7px",
     whiteSpace: "nowrap",

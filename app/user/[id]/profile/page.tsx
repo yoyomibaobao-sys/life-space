@@ -25,7 +25,6 @@ import {
   getCreateContentBlockedText,
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
-import { getAccountRegistrationSummary } from "@/lib/account-number";
 import UiIcon from "@/components/ui/UiIcon";
 import UserAvatar from "@/components/social/UserAvatar";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -146,10 +145,6 @@ export default function PublicUserProfilePage() {
   const stats = data.stats;
   const isSelf = viewerId === userId;
   const isMobileViewport = viewportWidth < 760;
-  const accountRegistrationSummary = getAccountRegistrationSummary(
-    profile?.account_number,
-    language
-  );
 
   if (!profile) {
     return (
@@ -158,11 +153,6 @@ export default function PublicUserProfilePage() {
           <h1 style={{ marginTop: 0 }}>{t.profile.public_profile.not_found}</h1>
           <div style={{ color: "#66725f", lineHeight: 1.8 }}>
             {t.profile.public_profile.not_found_hint}
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <Link href="/discover" style={secondaryLinkStyle}>
-              {t.profile.public_profile.back_to_discover}
-            </Link>
           </div>
         </section>
       </main>
@@ -232,14 +222,6 @@ export default function PublicUserProfilePage() {
 
   return (
     <main style={isMobileViewport ? mobilePublicProfileMainStyle : publicProfileMainStyle}>
-      <div style={{ marginBottom: isMobileViewport ? 8 : 12 }}>
-        <Link href={isSelf ? "/profile" : "/discover"} style={backLinkStyle}>
-          <UiIcon name="arrow-left" size={15} />
-          {isSelf
-            ? ` ${t.profile.public_profile.back_my_space}`
-            : ` ${t.profile.public_profile.back_discover}`}
-        </Link>
-      </div>
       <section
         style={{
           ...panelStyle,
@@ -283,16 +265,6 @@ export default function PublicUserProfilePage() {
               >
                 {formatRegionDisplayFromProfile(profile, language)}
               </div>
-              {profile.account_number ? (
-                <div style={profileAccountStyle}>
-                  {t.profile.public_profile.account_number}{profile.account_number}
-                  {accountRegistrationSummary ? ` · ${accountRegistrationSummary}` : ""}
-                </div>
-              ) : null}
-              <div style={profileLevelStyle}>
-                Lv.{Number(profile.level || 1)} · <UiIcon name="helpful" size={13} /> {t.profile.public_profile.helpful}{" "}
-                {Number(profile.flower_count || 0)}
-              </div>
             </div>
           </div>
 
@@ -303,22 +275,21 @@ export default function PublicUserProfilePage() {
             }}
           >
             <Link
-              href={`/user/${userId}`}
+              href={isSelf ? "/archive" : `/user/${userId}`}
               style={{
                 ...secondaryLinkStyle,
                 ...(isMobileViewport ? mobileProfileActionTargetStyle : {}),
               }}
             >
-              {profile.username
-                ? `${t.profile.public_profile.enter_prefix}${profile.username}${t.profile.public_profile.enter_suffix}`
+              {isSelf
+                ? t.nav.my_space
                 : t.profile.space.user_space}
             </Link>
-
             {isSelf ? (
               <Link
                 href="/profile"
                 style={{
-                  ...secondaryLinkStyle,
+                  ...primaryButtonStyle,
                   ...(isMobileViewport ? mobileProfileActionTargetStyle : {}),
                 }}
               >
@@ -365,7 +336,7 @@ export default function PublicUserProfilePage() {
           <div style={sectionTitleStyle}>{t.profile.public_profile.recent_projects}</div>
 
           {data.recentArchives.length ? (
-            <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "grid", gap: 8 }}>
               {data.recentArchives.map((item) => (
                 <Link
                   key={item.id}
@@ -374,37 +345,37 @@ export default function PublicUserProfilePage() {
                     textDecoration: "none",
                     border: "1px solid #e5ece1",
                     borderRadius: isMobileViewport ? 11 : 14,
-                    padding: isMobileViewport ? 9 : 12,
+                    padding: isMobileViewport ? 7 : 10,
                     color: "#22301f",
                     background: "#fff",
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ fontWeight: 650 }}>
-                      {item.title || t.profile.public_profile.unnamed_project}
+                  <div style={recentProjectRowStyle}>
+                    {item.display_cover_url ? (
+                      <img src={item.display_cover_url} alt="" style={recentProjectImageStyle} />
+                    ) : (
+                      <div style={recentProjectImageFallbackStyle}>
+                        <UiIcon name="project" size={20} />
+                      </div>
+                    )}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={recentProjectTitleRowStyle}>
+                        <strong style={recentProjectTitleStyle}>
+                          {item.title || t.profile.public_profile.unnamed_project}
+                        </strong>
+                        <span style={recentProjectTimeStyle}>
+                          {formatProfileDate(item.last_record_time, language)}
+                        </span>
+                      </div>
+                      <div style={recentProjectMetaStyle}>
+                        {item.system_name || t.profile.public_profile.not_provided} · {item.category
+                          ? getArchiveCategoryLabel(item.category, language)
+                          : t.profile.public_profile.uncategorized}
+                      </div>
+                      <div style={recentProjectMetaStyle}>
+                        {Number(item.record_count || 0)}{t.meta.record_suffix} · <UiIcon name="view" size={13} /> {Number(item.view_count || 0)}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: "#75806f" }}>
-                      {formatProfileDate(item.last_record_time, language)}
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 6, fontSize: 13, color: "#63705d" }}>
-                    {t.profile.public_profile.specific_name}{item.system_name || t.profile.public_profile.not_provided} · {t.profile.public_profile.category}
-                    {item.category
-                      ? getArchiveCategoryLabel(item.category, language)
-                      : t.profile.public_profile.uncategorized}
-                  </div>
-
-                  <div style={{ marginTop: 6, fontSize: 12, color: "#7a8575" }}>
-                    {t.profile.public_profile.records} {Number(item.record_count || 0)} {t.profile.public_profile.record_unit} · {t.profile.public_profile.views}{" "}
-                    {Number(item.view_count || 0)}
                   </div>
                 </Link>
               ))}
@@ -416,7 +387,7 @@ export default function PublicUserProfilePage() {
           )}
         </section>
 
-        <section
+        {marketPosts.length > 0 ? <section
           style={{
             ...marketInfoSectionStyle,
             ...(isMobileViewport ? mobileMarketInfoSectionStyle : {}),
@@ -430,8 +401,7 @@ export default function PublicUserProfilePage() {
             </Link>
           </div>
 
-          {marketPosts.length > 0 ? (
-            <div style={marketListStyle}>
+          <div style={marketListStyle}>
               {marketPosts.map((item) => (
                 <Link key={item.id} href={`/market/${item.id}`} style={marketCardStyle}>
                   {item.display_cover_thumb_url || item.display_cover_image_url ? (
@@ -476,13 +446,8 @@ export default function PublicUserProfilePage() {
                   </div>
                 </Link>
               ))}
-            </div>
-          ) : (
-            <div style={emptyMarketStyle}>
-              {t.profile.public_profile.no_active_market}
-            </div>
-          )}
-        </section>
+          </div>
+        </section> : null}
       </section>
 
       <ConfirmDialog
@@ -599,15 +564,6 @@ const panelInnerStyle: CSSProperties = {
   padding: 16,
 };
 
-const backLinkStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  color: "#5d6c57",
-  textDecoration: "none",
-  fontSize: 14,
-};
-
 const profileHeaderStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -657,21 +613,6 @@ const profileRegionStyle: CSSProperties = {
   fontSize: 14,
 };
 
-const profileAccountStyle: CSSProperties = {
-  marginTop: 4,
-  color: "#7a8575",
-  fontSize: 12,
-};
-
-const profileLevelStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 3,
-  marginTop: 5,
-  color: "#64715f",
-  fontSize: 12,
-};
-
 const profileActionRowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -705,8 +646,8 @@ const profileStatsGridStyle: CSSProperties = {
 };
 
 const mobileProfileStatsGridStyle: CSSProperties = {
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 7,
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: 5,
   marginTop: 12,
 };
 
@@ -720,6 +661,64 @@ const sectionTitleStyle: CSSProperties = {
   fontWeight: 700,
   color: "#1f2a1f",
   marginBottom: 14,
+};
+
+const recentProjectRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  minWidth: 0,
+};
+
+const recentProjectImageStyle: CSSProperties = {
+  width: 66,
+  height: 66,
+  flexShrink: 0,
+  borderRadius: 10,
+  objectFit: "cover",
+  background: "#eef4eb",
+};
+
+const recentProjectImageFallbackStyle: CSSProperties = {
+  ...recentProjectImageStyle,
+  display: "grid",
+  placeItems: "center",
+  color: "#80907c",
+};
+
+const recentProjectTitleRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  minWidth: 0,
+};
+
+const recentProjectTitleStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: 15,
+};
+
+const recentProjectTimeStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#7d8979",
+  fontSize: 11,
+};
+
+const recentProjectMetaStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 3,
+  minWidth: 0,
+  marginTop: 4,
+  overflow: "hidden",
+  color: "#697566",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: 12,
 };
 
 const primaryButtonStyle: CSSProperties = {
@@ -889,13 +888,4 @@ const marketMetaStyle: CSSProperties = {
   marginTop: 6,
   color: "#7b8676",
   fontSize: 12,
-};
-
-const emptyMarketStyle: CSSProperties = {
-  color: "#7b8676",
-  fontSize: 13,
-  background: "#fff",
-  border: "1px solid #eadfcf",
-  borderRadius: 12,
-  padding: 12,
 };

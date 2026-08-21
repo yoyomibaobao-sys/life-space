@@ -185,6 +185,20 @@ function QuickRecordContent() {
             <button type="button" onClick={continueToRecord} style={primaryButtonStyle}>
               {t.quick_record.continue_editing}
             </button>
+            <div style={newProjectActionsStyle}>
+              <Link
+                href={`/archive/new?quickCapture=${encodeURIComponent(capture.id)}`}
+                style={secondaryLinkStyle}
+              >
+                {t.quick_record.create_cloud_project}
+              </Link>
+              <Link
+                href={`/local/archive/new?quickCapture=${encodeURIComponent(capture.id)}`}
+                style={secondaryLinkStyle}
+              >
+                {t.quick_record.create_local_project}
+              </Link>
+            </div>
           </>
         ) : (
           <div style={emptyStyle}>
@@ -258,6 +272,12 @@ const primaryButtonStyle: CSSProperties = {
   fontWeight: 800,
 };
 const emptyStyle: CSSProperties = { display: "grid", gap: 10 };
+const newProjectActionsStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+  marginTop: 9,
+};
 const mutedStyle: CSSProperties = { color: "#71806e", fontSize: 14, lineHeight: 1.65 };
 const primaryLinkStyle: CSSProperties = {
   display: "inline-flex",

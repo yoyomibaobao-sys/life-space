@@ -119,7 +119,7 @@ test("trial exhaustion pauses the allowance without blocking account registratio
   );
 });
 
-test("account identity is shown with a pre-migration compatibility path", async () => {
+test("account identity keeps a pre-migration compatibility path without crowding mobile profiles", async () => {
   const [profileLoader, ownProfile, publicProfile, accountNumber, zhCopy, enCopy] =
     await Promise.all([
       source("lib/user-profile-shared.ts"),
@@ -135,9 +135,9 @@ test("account identity is shown with a pre-migration compatibility path", async 
     /select\(\s*"account_number, registration_year, registration_sequence, is_internal_test"\s*\)/
   );
   assert.match(profileLoader, /isMissingDatabaseColumn/);
-  assert.match(ownProfile, /label=\{t\.profile\.account_number\}/);
-  assert.match(ownProfile, /t\.profile\.internal_test/);
-  assert.match(publicProfile, /t\.profile\.public_profile\.account_number/);
+  assert.doesNotMatch(ownProfile, /label=\{t\.profile\.account_number\}/);
+  assert.doesNotMatch(ownProfile, /t\.profile\.internal_test/);
+  assert.doesNotMatch(publicProfile, /t\.profile\.public_profile\.account_number/);
   assert.match(zhCopy, /account_number: "账号编号"/);
   assert.match(enCopy, /account_number: "Account number"/);
   assert.match(accountNumber, /\^LS\(\[a-z\]\)-\(\[0-9\]\{4\}\)-\(\[0-9\]\+\)\$/);

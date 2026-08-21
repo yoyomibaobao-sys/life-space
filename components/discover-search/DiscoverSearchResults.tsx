@@ -162,6 +162,8 @@ export default function DiscoverSearchResults({
                       item.archive_ended_at
                     )}
                     ended={Boolean(item.archive_ended_at)}
+                    viewCount={item.view_count}
+                    compactProjectStats
                     style={{ fontSize: 11, gap: "4px 8px" }}
                   />
                 }
@@ -255,6 +257,7 @@ export default function DiscoverSearchResults({
                   <ProjectMetaLine
                     photoCount={record.media_count}
                     commentCount={record.comment_count}
+                    viewCount={record.archive_view_count ?? record.view_count}
                     style={{ fontSize: 11, gap: "4px 8px" }}
                   />
                 }
