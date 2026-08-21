@@ -17,6 +17,7 @@ import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
+import MarketMessageLink from "@/components/market/MarketMessageLink";
 
 type ProfileBrief = {
   id: string;
@@ -306,6 +307,7 @@ export default function MarketPage() {
               >
                 {t.market.my_posts}
               </Link>
+              <MarketMessageLink compact={isMobileViewport} />
             </div>
           ) : null}
         </header>

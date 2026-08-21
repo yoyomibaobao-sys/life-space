@@ -1913,7 +1913,7 @@ export default function ArchivePage() {
             </div>
             <div style={personalSpaceMobileActionsStyle}>
               <Link href="/experience-cards" style={personalSpaceInlineEntryStyle}>
-                {t.archive_workspace.my_experience_cards} {experienceCardCount}
+                {t.archive_workspace.experience_cards} {experienceCardCount}
               </Link>
               <MobileNotificationLink />
             </div>
@@ -1940,7 +1940,7 @@ export default function ArchivePage() {
               </div>
             </div>
             <Link href="/experience-cards" style={personalInfoLinkStyle}>
-              {t.archive_workspace.my_experience_cards} {experienceCardCount}
+              {t.archive_workspace.experience_cards} {experienceCardCount}
             </Link>
           </>
         )}

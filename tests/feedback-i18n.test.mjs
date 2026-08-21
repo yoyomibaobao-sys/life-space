@@ -14,17 +14,16 @@ test("feedback page uses local email handoff without database writes", () => {
   assert.doesNotMatch(page, /fetch\(/);
 });
 
-test("feedback entry is available globally and inside profile", () => {
+test("feedback stays in navigation and the profile list without a duplicate banner", () => {
   const layout = read("app/layout.tsx");
   const profileLayout = read("app/profile/layout.tsx");
   const navbar = read("components/navbar.tsx");
   const footer = read("components/SiteFooter.tsx");
-  const profileFeedback = read("components/ProfileFeedbackEntry.tsx");
   const profile = read("app/profile/page.tsx");
 
   assert.doesNotMatch(layout, /<SiteUtilityBar \/>/);
   assert.match(layout, /<SiteFooter \/>/);
-  assert.match(profileLayout, /<ProfileFeedbackEntry \/>/);
+  assert.doesNotMatch(profileLayout, /ProfileFeedbackEntry/);
   assert.match(navbar, /<DesktopUtilityActions feedbackLabel=\{t\.feedback\} \/>/);
   assert.match(navbar, /href="\/feedback"/);
   assert.doesNotMatch(navbar, /LanguageSwitcher/);
@@ -34,9 +33,7 @@ test("feedback entry is available globally and inside profile", () => {
   assert.match(navbar, /desktopUtilityDividerStyle/);
   assert.doesNotMatch(navbar, /\{user\.email\}/);
   assert.match(footer, /href="\/feedback"/);
-  assert.match(profileFeedback, /fontSize: 15/);
-  assert.match(profileFeedback, /t\.feedback_and_contact/);
-  assert.doesNotMatch(profileFeedback, /t\.feedback_priority/);
+  assert.match(profile, /href: "\/feedback", label: t\.feedback_and_contact/);
 });
 
 test("Chinese and English feedback copy stay in the shared dictionaries", () => {
