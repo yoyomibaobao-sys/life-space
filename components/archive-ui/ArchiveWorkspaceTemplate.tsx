@@ -22,6 +22,7 @@ type Props<T extends string> = {
   showCreateToolbar?: boolean;
   filtersSlot?: ReactNode;
   noticeSlot?: ReactNode;
+  sourceTrailingSlot?: ReactNode;
   children: ReactNode;
 };
 
@@ -37,6 +38,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   showCreateToolbar = true,
   filtersSlot,
   noticeSlot,
+  sourceTrailingSlot,
   children,
 }: Props<T>) {
   return (
@@ -54,6 +56,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
             {item.label} {item.count}
           </button>
         ))}
+        {sourceTrailingSlot}
       </section>
 
       {showCreateToolbar ? (
