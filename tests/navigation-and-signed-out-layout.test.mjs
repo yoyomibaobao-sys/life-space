@@ -6,14 +6,23 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("profile combines user and membership information without a personal-space module", async () => {
+test("profile uses an editable identity card and explicit account entries", async () => {
   const [profile, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(profile, /type MobileProfileModule = "settings" \| "membership" \| "payment" \| "account"/);
+  assert.match(profile, /profileIdentityCardStyle/);
+  assert.match(profile, /会员编号/);
+  assert.match(profile, /收到有用/);
+  assert.match(profile, /空间用量/);
+  assert.match(profile, /开通／续费/);
+  assert.match(profile, /订单查询/);
+  assert.match(profile, /会员类别说明/);
+  assert.match(profile, /浏览历史/);
+  assert.match(profile, /备份与导出/);
+  assert.match(profile, /账号管理/);
   assert.match(profile, /const showInfoModule = mobileProfileModule === "settings"/);
   assert.match(profile, /t\.profile\.language_setting/);
   assert.match(profile, /t\.profile\.address_setting/);
@@ -108,8 +117,9 @@ test("the center plus captures a photo and carries it into a new record", async 
   assert.match(action, /type="file"/);
   assert.match(action, /accept="image\/\*"/);
   assert.match(action, /capture="environment"/);
-  assert.match(action, /standardizeRecordPhotoFile/);
+  assert.doesNotMatch(action, /standardizeRecordPhotoFile/);
   assert.match(action, /saveQuickCapture/);
+  assert.match(action, /processing_photo/);
   assert.match(quickCapture, /indexedDB\.open/);
   assert.match(chooser, /listVisibleLocalArchiveSummaries/);
   assert.match(chooser, /\.from\("archives"\)/);
@@ -209,7 +219,7 @@ test("mobile plant guides use compact parameters, actions, cards, and sticky tab
   assert.match(styles, /padding: 10px 10px calc\(34px \+ var\(--app-safe-area-bottom\)\)/);
 });
 
-test("account navigation keeps membership contextual and export under data management", async () => {
+test("account navigation exposes the confirmed independent menu entries", async () => {
   const [profile, navbar, membership, login, home, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
     source("components/navbar.tsx"),
@@ -220,10 +230,13 @@ test("account navigation keeps membership contextual and export under data manag
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(profile, /value: "membership", label: t\.profile\.modules\.membership/);
-  assert.match(profile, /value: "settings", label: t\.profile\.modules\.settings/);
-  assert.match(profile, /value: "payment", label: t\.profile\.modules\.payment/);
-  assert.match(profile, /value: "account", label: t\.profile\.modules\.account/);
+  assert.match(profile, /"Language settings" : "语言设置"/);
+  assert.match(profile, /"Open \/ renew" : "开通／续费"/);
+  assert.match(profile, /"Order history" : "订单查询"/);
+  assert.match(profile, /"Membership types" : "会员类别说明"/);
+  assert.match(profile, /"Browsing history" : "浏览历史"/);
+  assert.match(profile, /"Backup & export" : "备份与导出"/);
+  assert.match(profile, /"Account management" : "账号管理"/);
   assert.match(profile, /<MobileProfileModuleTabs/);
   assert.match(profile, /href: "\/admin\/memberships"/);
   assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
@@ -238,7 +251,7 @@ test("account navigation keeps membership contextual and export under data manag
   assert.match(profile, /<h2 style=\{dataTitleStyle\}>\{t\.profile\.export_backup\}<\/h2>/);
   assert.match(profile, /\{t\.profile\.export_intro\}/);
   assert.ok(
-    profile.indexOf("t.profile.export_records") > profile.indexOf("{showAccountModule ?")
+    profile.indexOf("t.profile.export_records") > profile.indexOf("{showBackupModule ?")
   );
   assert.match(zhCopy, /export_backup: "导出与备份"/);
   assert.match(enCopy, /export_backup: "Export & backup"/);
@@ -610,7 +623,7 @@ test("activity search filters all, projects, and records while Experience search
   assert.match(utils, /return "records"/);
 });
 
-test("user navigation opens a compact profile directly and keeps the space entry obvious", async () => {
+test("legacy user profile routes merge into the canonical user space", async () => {
   const [userSpace, userSpaceHeader, publicProfile, archiveDetail, zhCopy, enCopy] = await Promise.all([
     source("app/user/[id]/page.tsx"),
     source("components/user-space/UserSpaceHeader.tsx"),
@@ -621,18 +634,10 @@ test("user navigation opens a compact profile directly and keeps the space entry
   ]);
 
   assert.match(userSpace, /<UserSpaceHeader/);
-  assert.match(userSpaceHeader, /href=\{`\/user\/\$\{userId\}\/profile`\}/);
-  assert.match(userSpaceHeader, /\{t\.profile\.space\.user_profile\}/);
-  assert.match(zhCopy, /user_profile: "用户资料"/);
-  assert.match(enCopy, /user_profile: "User profile"/);
+  assert.match(publicProfile, /redirect\(`\/user\/\$\{encodeURIComponent\(id\)\}`\)/);
   assert.doesNotMatch(userSpace, /名片|showCard|UserProfileCard/);
 
-  assert.match(publicProfile, /<UserAvatar/);
-  assert.match(publicProfile, /profileStatsGridStyle/);
-  assert.match(publicProfile, /mobileProfileStatsGridStyle[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(publicProfile, /mobileProfileActionRowStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(publicProfile, /href=\{isSelf \? "\/archive" : `\/user\/\$\{userId\}`\}/);
-  assert.doesNotMatch(publicProfile, /用户信息页|当前正在进行的交换、赠送、转让或求购信息/);
+  assert.doesNotMatch(userSpaceHeader, /\/profile/);
 
   assert.match(archiveDetail, /href=\{isOwner \? "\/archive" : `\/user\/\$\{activeArchive\.user_id\}`\}/);
   assert.match(archiveDetail, /displayUsername/);
