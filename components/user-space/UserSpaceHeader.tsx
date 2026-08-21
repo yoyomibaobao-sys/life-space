@@ -3,7 +3,6 @@ import UserAvatar from "@/components/social/UserAvatar";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type Props = {
-  userId: string;
   username: string;
   avatarUrl?: string | null;
   isSelf?: boolean;
@@ -13,7 +12,6 @@ type Props = {
 };
 
 export default function UserSpaceHeader({
-  userId,
   username,
   avatarUrl,
   isSelf = false,
@@ -36,24 +34,20 @@ export default function UserSpaceHeader({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <Link
-          href={`/user/${userId}/profile`}
+        <span
           style={{
             display: "inline-flex",
             flexShrink: 0,
-            textDecoration: "none",
           }}
         >
           <UserAvatar avatarUrl={avatarUrl || null} size={40} iconSize={18} />
-        </Link>
+        </span>
         <div style={{ minWidth: 0 }}>
-          <Link
-            href={`/user/${userId}/profile`}
+          <div
             style={{
               display: "block",
               overflow: "hidden",
               color: "#243424",
-              textDecoration: "none",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               fontSize: 17,
@@ -61,13 +55,7 @@ export default function UserSpaceHeader({
             }}
           >
             {username || t.profile.space.user_space}
-          </Link>
-          <Link
-            href={`/user/${userId}/profile`}
-            style={{ color: "#7b8776", textDecoration: "none", fontSize: 12 }}
-          >
-            {t.profile.space.user_profile}
-          </Link>
+          </div>
         </div>
       </div>
 
