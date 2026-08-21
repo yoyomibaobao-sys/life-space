@@ -47,10 +47,12 @@ import {
 } from "@/lib/system-name-candidates";
 import {
   canCreateMembershipContent,
+  getMembershipPlanLabel,
   getCreateContentBlockedText,
   normalizeMembershipRpcResult,
   type MyMembership,
 } from "@/lib/membership";
+import { formatStorage } from "@/lib/user-profile-shared";
 import { requestCloudTrash } from "@/lib/cloud-trash";
 import {
   createLocalTaxonomyItem,
@@ -92,6 +94,8 @@ type ArchiveMediaRow = {
 type SpaceProfile = {
   username: string | null;
   avatar_url: string | null;
+  storage_used: number | null;
+  storage_limit: number | null;
 };
 
 const emptySystemNameCandidateMap: Record<ArchiveCategory, SystemNameCandidate[]> = {
@@ -255,7 +259,7 @@ export default function ArchivePage() {
           .eq("user_id", user.id),
         supabase
           .from("profiles")
-          .select("username, avatar_url")
+          .select("username, avatar_url, storage_used, storage_limit")
           .eq("id", user.id)
           .maybeSingle(),
       ]);
@@ -1102,6 +1106,10 @@ export default function ArchivePage() {
     (activeSource === "local" ? 0 : archiveCount) +
     (activeSource === "cloud" ? 0 : localArchives.length);
   const contentBlocked = !canCreateMembershipContent(membership);
+  const membershipLabel = getMembershipPlanLabel(membership?.plan, language);
+  const storageUsageLabel = `${formatStorage(spaceProfile?.storage_used)} / ${formatStorage(
+    membership?.storage_limit_bytes || spaceProfile?.storage_limit
+  )}`;
 
   const cloudSubcategoryChips: ArchiveTaxonomyChip[] = activeCategory
     ? subTags
@@ -1897,19 +1905,15 @@ export default function ArchivePage() {
                   {spaceProfile?.username || t.nav.username_unset}
                 </Link>
                 <span style={personalSpaceMobileInfoLabelStyle}>
-                  <Link href="/profile" style={personalSpaceInlineEntryStyle}>
-                    {t.archive_workspace.personal_info}
-                  </Link>
+                  <span>{membershipLabel}</span>
                   <span aria-hidden="true"> · </span>
-                  <Link href="/experience-cards" style={personalSpaceInlineEntryStyle}>
-                    {t.archive_workspace.my_experience_cards} {experienceCardCount}
-                  </Link>
+                  <span>{storageUsageLabel}</span>
                 </span>
               </span>
             </div>
             <div style={personalSpaceMobileActionsStyle}>
-              <Link href="/archive/new" style={personalSpaceCreateProjectStyle}>
-                +{t.nav.project}
+              <Link href="/experience-cards" style={personalSpaceInlineEntryStyle}>
+                {t.archive_workspace.my_experience_cards} {experienceCardCount}
               </Link>
               <MobileNotificationLink />
             </div>
@@ -1935,8 +1939,8 @@ export default function ArchivePage() {
                 </div>
               </div>
             </div>
-            <Link href="/profile" style={personalInfoLinkStyle}>
-              {t.archive_workspace.personal_info}
+            <Link href="/experience-cards" style={personalInfoLinkStyle}>
+              {t.archive_workspace.my_experience_cards} {experienceCardCount}
             </Link>
           </>
         )}
@@ -1959,6 +1963,11 @@ export default function ArchivePage() {
         createDisabledTitle={createDisabledText}
         createDisabledHref={createDisabled ? "/membership" : undefined}
         showCreateToolbar={!isMobileViewport}
+        sourceTrailingSlot={isMobileViewport ? (
+          <Link href="/archive/new" style={personalSpaceCreateProjectStyle}>
+            +{t.nav.project}
+          </Link>
+        ) : null}
         filtersSlot={workspaceFiltersSlot}
         noticeSlot={workspaceNoticeSlot}
       >
