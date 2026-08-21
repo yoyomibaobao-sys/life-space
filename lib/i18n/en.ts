@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 30150)
+Total output lines: 2435
+
 const en = {
   add: "Add",
   delete: "Delete",
@@ -76,6 +79,8 @@ const en = {
 
   quick_record: {
     take_photo: "Take a photo for a new record",
+    processing_photo: "Processing photo…",
+    loading_projects: "Photo ready. Loading projects…",
     capture_failed: "The photo could not be saved. Try again.",
     loading: "Preparing the record...",
     missing_title: "The photo is no longer available",
@@ -1212,19 +1217,7 @@ const en = {
     save_source_cover_failed: "Could not save the source cover. Try again later.",
     cover_save_failed: "Could not save the cover image. Try again later.",
     cover_upload_failed: "Could not upload the cover image. Try again later.",
-    mine_title: "My Market posts",
-    quota_title: "Market posting quota",
-    active: "Active",
-    ended: "Ended",
-    empty_mine: "You have not created any Market posts yet.",
-    empty_mine_filtered: "No Market posts match this filter.",
-    area_not_provided: "Location not provided",
-    views_prefix: "Views",
-    view: "View",
-    edit: "Edit",
-    post_limit_alert: "You have reached the limit for active Market posts. End one before reactivating this post.",
-    membership_required_alert: "Cloud Membership is required to reactivate a Market post.",
-    status_update_failed: "Could not update the Market-post status. Try again later.",
+    mine_title: "My Market pos…150 tokens truncated…s. Try again later.",
     delete_confirm: "Delete this Market post?",
     not_found: "This Market post does not exist or is no longer visible",
     publisher: "Posted by",
@@ -1660,6 +1653,7 @@ const en = {
     mark_ownership: "Assign to my account",
     delete_local_project: "Delete local project",
     edit: "Edit",
+    done: "Done",
     delete: "Delete",
     move_to_trash: "Move to Trash",
     moving_to_trash: "Moving...",
