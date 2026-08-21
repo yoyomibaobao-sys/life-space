@@ -86,10 +86,7 @@ type GroupTagRow = {
   name: string | null;
 };
 
-type FollowedUserArchiveRow = Pick<
-  ArchiveRow,
-  "id" | "user_id" | "title" | "last_record_time"
-> & {
+type FollowedUserArchiveRow = ArchiveRow & {
   is_public?: boolean;
 };
 
@@ -112,6 +109,7 @@ type FollowProjectCard = {
   statusLabel: string;
   statusKind: "help" | "resolved" | "ended" | "normal";
   coverUrl: string | null;
+  followedAt: string | null;
 };
 
 type FollowUserCard = {
@@ -121,6 +119,8 @@ type FollowUserCard = {
   latestRecordTime: string | null;
   publicArchiveCount: number;
   recentArchiveTitles: string[];
+  followedAt: string | null;
+  publicArchives: FollowProjectCard[];
 };
 
 export default function FollowPage() {
@@ -134,6 +134,15 @@ export default function FollowPage() {
   const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter>("all");
   const [projectCards, setProjectCards] = useState<FollowProjectCard[]>([]);
   const [userCards, setUserCards] = useState<FollowUserCard[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>("all");
+  const [readUpdates, setReadUpdates] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(localStorage.getItem("lifespace-follow-read") || "{}");
+    } catch {
+      return {};
+    }
+  });
   const [projectConfirmId, setProjectConfirmId] = useState<string | null>(null);
   const [userConfirmId, setUserConfirmId] = useState<string | null>(null);
   const [projectSubmitting, setProjectSubmitting] = useState(false);
@@ -141,7 +150,6 @@ export default function FollowPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
-  const [userMenuOpenId, setUserMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -203,7 +211,7 @@ export default function FollowPage() {
         ? supabase
             .from("archives")
             .select(
-              "id, user_id, title, last_record_time, is_public"
+              "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path, is_public"
             )
             .in("user_id", followedUserIds)
             .eq("is_public", true)
@@ -308,6 +316,16 @@ export default function FollowPage() {
         })
       );
 
+      const followedUserCoverPairs = await resolveMediaDisplayPairs(
+        supabase,
+        followedUsersArchives.map((archive) => ({
+          url: archive.cover_image_url,
+          path: archive.cover_image_path,
+          thumb_url: archive.cover_thumb_url,
+          thumb_path: archive.cover_thumb_path,
+        }))
+      );
+
       const nextProjectCards = archives
         .map((archive, index) => {
           const latestRecord = latestRecordMap.get(archive.id);
@@ -340,19 +358,38 @@ export default function FollowPage() {
               projectCoverPairs[index]?.display_thumb_url ||
               projectCoverPairs[index]?.display_url ||
               null,
+            followedAt: archiveFollowRows.find((row) => row.archive_id === archive.id)?.created_at || null,
           } satisfies FollowProjectCard;
         })
         .sort(byRecentProject);
 
-      const publicArchiveMap = new Map<string, Array<{ title: string; last_record_time: string | null }>>();
-      followedUsersArchives.forEach((archive) => {
+      const publicArchiveMap = new Map<string, FollowProjectCard[]>();
+      followedUsersArchives.forEach((archive, index) => {
         if (!archive.user_id) return;
         if (!publicArchiveMap.has(archive.user_id)) {
           publicArchiveMap.set(archive.user_id, []);
         }
+        const profile = profileMap.get(archive.user_id);
         publicArchiveMap.get(archive.user_id)?.push({
+          id: archive.id,
           title: archive.title || followT.untitled_project,
-          last_record_time: archive.last_record_time || null,
+          displaySystemName: archive.system_name || archive.species_name_snapshot || followT.not_provided,
+          ownerId: archive.user_id,
+          ownerName: profile?.username || followT.username_not_set,
+          ownerAvatarUrl: profile?.avatar_url || null,
+          categoryLabel: getArchiveCategoryLabel(archive.category, language),
+          categoryIcon: getArchiveCategoryIcon(archive.category),
+          subTagName: archive.sub_tag_id ? subTagMap.get(archive.sub_tag_id) || "" : "",
+          groupTagName: archive.group_tag_id ? groupTagMap.get(archive.group_tag_id) || "" : "",
+          latestNote: followT.new_record,
+          latestRecordTime: archive.last_record_time || null,
+          recordCount: Number(archive.record_count || 0),
+          durationDays: getDurationDays(archive.created_at, archive.ended_at || archive.last_record_time),
+          viewCount: Number(archive.view_count || 0),
+          statusLabel: getProjectStatusLabel(archive.help_status, archive.status, followT),
+          statusKind: getProjectStatusKind(archive.help_status, archive.status),
+          coverUrl: followedUserCoverPairs[index]?.display_thumb_url || followedUserCoverPairs[index]?.display_url || null,
+          followedAt: null,
         });
       });
 
@@ -360,16 +397,19 @@ export default function FollowPage() {
         .map((followedId) => {
           const profile = profileMap.get(followedId);
           const archivesOfUser = (publicArchiveMap.get(followedId) || []).sort(
-            (a, b) => getTimeValue(b.last_record_time) - getTimeValue(a.last_record_time)
+            (a, b) => getTimeValue(b.latestRecordTime) - getTimeValue(a.latestRecordTime)
           );
+          const followedAt = userFollowRows.find((row) => row.following_id === followedId)?.created_at || null;
 
           return {
             id: followedId,
             username: profile?.username || followT.username_not_set,
             avatarUrl: profile?.avatar_url || null,
-            latestRecordTime: archivesOfUser[0]?.last_record_time || null,
+            latestRecordTime: archivesOfUser[0]?.latestRecordTime || null,
             publicArchiveCount: archivesOfUser.length,
             recentArchiveTitles: archivesOfUser.slice(0, 3).map((item) => item.title),
+            followedAt,
+            publicArchives: archivesOfUser,
           } satisfies FollowUserCard;
         })
         .sort((a, b) => getTimeValue(b.latestRecordTime) - getTimeValue(a.latestRecordTime));
@@ -420,6 +460,28 @@ export default function FollowPage() {
         .includes(search);
     });
   }, [keyword, userCards]);
+
+  const selectedUserProjects = useMemo(() => {
+    const users = selectedUserId === "all"
+      ? filteredUserCards
+      : filteredUserCards.filter((item) => item.id === selectedUserId);
+    return users.flatMap((item) => item.publicArchives).sort(byRecentProject);
+  }, [filteredUserCards, selectedUserId]);
+
+  function hasUnread(key: string, updatedAt: string | null, followedAt: string | null) {
+    if (!updatedAt) return false;
+    const baseline = readUpdates[key] || followedAt;
+    return Boolean(baseline && getTimeValue(updatedAt) > getTimeValue(baseline));
+  }
+
+  function markRead(key: string, updatedAt: string | null) {
+    if (!updatedAt) return;
+    setReadUpdates((current) => {
+      const next = { ...current, [key]: updatedAt };
+      localStorage.setItem("lifespace-follow-read", JSON.stringify(next));
+      return next;
+    });
+  }
 
   async function handleUnfollowProject(archiveId: string) {
     if (!currentUserId || projectSubmitting) return;
@@ -558,7 +620,10 @@ export default function FollowPage() {
                     role={isMobileViewport ? "link" : undefined}
                     tabIndex={isMobileViewport ? 0 : undefined}
                     onClick={() => {
-                      if (isMobileViewport) router.push(`/archive/${item.id}`);
+                      if (isMobileViewport) {
+                        markRead(`project:${item.id}`, item.latestRecordTime);
+                        router.push(`/archive/${item.id}`);
+                      }
                     }}
                     onKeyDown={(event) => {
                       if (isMobileViewport && (event.key === "Enter" || event.key === " ")) {
@@ -579,6 +644,9 @@ export default function FollowPage() {
                       <div style={cardInlineTitleRowStyle}>
                         <span style={projectInlineMetaStyle}>{item.categoryLabel} ·</span>
                         <span style={projectTitleInlineStyle}>{item.title}</span>
+                        {hasUnread(`project:${item.id}`, item.latestRecordTime, item.followedAt) ? (
+                          <span style={unreadDotStyle} title={followT.new_record} />
+                        ) : null}
                         <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} />
                         {item.statusKind !== "normal" ? (
                           <StatusBadge kind={item.statusKind}>{item.statusLabel}</StatusBadge>
@@ -622,7 +690,10 @@ export default function FollowPage() {
                       {!isMobileViewport ? <div style={buttonRowStyle}>
                         <button
                           type="button"
-                          onClick={() => router.push(`/archive/${item.id}`)}
+                          onClick={() => {
+                            markRead(`project:${item.id}`, item.latestRecordTime);
+                            router.push(`/archive/${item.id}`);
+                          }}
                           style={primaryButtonStyle}
                         >
                           {followT.view_records}
@@ -652,97 +723,80 @@ export default function FollowPage() {
             />
           )
         ) : filteredUserCards.length ? (
-          <div style={listStyle}>
-            {filteredUserCards.map((item) => (
-              <article
-                key={item.id}
-                role={isMobileViewport ? "link" : undefined}
-                tabIndex={isMobileViewport ? 0 : undefined}
-                onClick={() => {
-                  if (isMobileViewport) router.push(`/user/${item.id}`);
-                }}
-                onKeyDown={(event) => {
-                  if (isMobileViewport && (event.key === "Enter" || event.key === " ")) {
-                    router.push(`/user/${item.id}`);
-                  }
-                }}
-                style={{ ...userCardStyle, cursor: isMobileViewport ? "pointer" : undefined }}
+          <div>
+            <div style={followedUserRailStyle}>
+              <button
+                type="button"
+                onClick={() => setSelectedUserId("all")}
+                style={followedUserPillStyle(selectedUserId === "all")}
               >
-                <div style={userAvatarWrapStyle}>
-                  {item.avatarUrl ? (
-                    <img src={item.avatarUrl} alt="" style={userAvatarStyle} />
-                  ) : (
-                    <div style={userAvatarFallbackStyle}><UiIcon name="sprout" size={22} /></div>
-                  )}
-                </div>
+                <span style={userAvatarFallbackSmallStyle}><UiIcon name="users" size={18} /></span>
+                <span>{followT.status_all}</span>
+              </button>
+              {filteredUserCards.map((item) => {
+                const unread = hasUnread(`user:${item.id}`, item.latestRecordTime, item.followedAt);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedUserId(item.id);
+                      markRead(`user:${item.id}`, item.latestRecordTime);
+                    }}
+                    style={followedUserPillStyle(selectedUserId === item.id)}
+                  >
+                    <span style={{ position: "relative" }}>
+                      {item.avatarUrl ? (
+                        <img src={item.avatarUrl} alt="" style={userAvatarSmallStyle} />
+                      ) : (
+                        <span style={userAvatarFallbackSmallStyle}><UiIcon name="sprout" size={18} /></span>
+                      )}
+                      {unread ? <span style={railUnreadDotStyle} /> : null}
+                    </span>
+                    <span style={railUsernameStyle}>{item.username}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-                <div style={cardBodyStyle}>
-                  <div style={cardTopRowStyle}>
-                    <div style={projectTitleStyle}>{item.username}</div>
-                    {isMobileViewport ? (
-                      <div style={followCardMenuWrapStyle} onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          aria-label={t.nav.more_actions}
-                          onClick={() => setUserMenuOpenId((id) => id === item.id ? null : item.id)}
-                          style={followCardMoreButtonStyle}
-                        >
-                          <UiIcon name="more" size={18} />
+            {selectedUserId !== "all" ? (
+              <div style={selectedUserActionStyle}>
+                <Link href={`/user/${selectedUserId}`} style={textLinkStyle}>{followT.enter_space}</Link>
+                <button type="button" onClick={() => setUserConfirmId(selectedUserId)} style={ghostButtonStyle}>
+                  {followT.unfollow}
+                </button>
+              </div>
+            ) : null}
+
+            {selectedUserProjects.length ? (
+              <div style={listStyle}>
+                {selectedUserProjects.map((item) => (
+                  <article key={`${item.ownerId}-${item.id}`} style={cardStyle}>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/archive/${item.id}`)}
+                      style={projectCoverButtonStyle}
+                    >
+                      <span style={coverStyle}>
+                        {item.coverUrl ? <img src={item.coverUrl} alt="" style={coverImageStyle} /> : <UiIcon name={item.categoryIcon} size={32} />}
+                      </span>
+                    </button>
+                    <div style={cardBodyStyle}>
+                      <div style={cardInlineTitleRowStyle}>
+                        <span style={projectInlineMetaStyle}>{item.categoryLabel} ·</span>
+                        <button type="button" onClick={() => router.push(`/archive/${item.id}`)} style={projectTitleButtonStyle}>
+                          {item.title}
                         </button>
-                        {userMenuOpenId === item.id ? (
-                          <div style={followCardMenuStyle}>
-                            <button type="button" onClick={() => router.push(`/user/${item.id}/profile`)} style={followCardMenuItemStyle}>
-                              {followT.view_profile}
-                            </button>
-                            <button type="button" onClick={() => { setUserMenuOpenId(null); setUserConfirmId(item.id); }} style={followCardDangerMenuItemStyle}>
-                              {followT.unfollow}
-                            </button>
-                          </div>
-                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-
-                  <div style={noteLineStyle}>
-                    {followT.latest_update}
-                    {item.recentArchiveTitles.length
-                      ? item.recentArchiveTitles.join(language === "zh" ? "、" : ", ")
-                      : followT.no_recent_update}
-                  </div>
-
-                  <div style={statsLineStyle}>
-                    <ProjectMetaLine
-                      projectCount={item.publicArchiveCount}
-                      updatedAt={item.latestRecordTime}
-                    />
-                  </div>
-
-                  {!isMobileViewport ? <div style={buttonRowStyle}>
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/user/${item.id}`)}
-                      style={primaryButtonStyle}
-                    >
-                      {followT.enter_space}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/user/${item.id}/profile`)}
-                      style={ghostButtonStyle}
-                    >
-                      {followT.view_profile}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUserConfirmId(item.id)}
-                      style={ghostButtonStyle}
-                    >
-                      {followT.unfollow}
-                    </button>
-                  </div> : null}
-                </div>
-              </article>
-            ))}
+                      <div style={metaLineStyle}>{item.displaySystemName} · {item.ownerName}</div>
+                      <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} updatedAt={item.latestRecordTime} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div style={emptyWrapStyle}>{followT.empty_users_intro}</div>
+            )}
           </div>
         ) : (
           <EmptyState
@@ -1291,4 +1345,95 @@ const emptyActionStyle: React.CSSProperties = {
   padding: "9px 14px",
   fontSize: 14,
   fontWeight: 600,
+};
+
+const unreadDotStyle: React.CSSProperties = {
+  width: 8,
+  height: 8,
+  flex: "0 0 auto",
+  borderRadius: "50%",
+  background: "#d94c43",
+};
+
+const followedUserRailStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  overflowX: "auto",
+  padding: "2px 2px 12px",
+  marginBottom: 10,
+  WebkitOverflowScrolling: "touch",
+};
+
+function followedUserPillStyle(active: boolean): React.CSSProperties {
+  return {
+    width: 68,
+    flex: "0 0 68px",
+    display: "grid",
+    justifyItems: "center",
+    gap: 5,
+    padding: "7px 4px",
+    border: active ? "1px solid #9fc796" : "1px solid transparent",
+    borderRadius: 14,
+    background: active ? "#eef7e8" : "transparent",
+    color: active ? "#315f31" : "#566553",
+    cursor: "pointer",
+  };
+}
+
+const userAvatarSmallStyle: React.CSSProperties = {
+  width: 42,
+  height: 42,
+  display: "block",
+  borderRadius: "50%",
+  objectFit: "cover",
+};
+
+const userAvatarFallbackSmallStyle: React.CSSProperties = {
+  width: 42,
+  height: 42,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: "50%",
+  background: "#edf5e8",
+  color: "#6f8f62",
+};
+
+const railUnreadDotStyle: React.CSSProperties = {
+  ...unreadDotStyle,
+  position: "absolute",
+  top: 0,
+  right: 0,
+  boxShadow: "0 0 0 2px #fff",
+};
+
+const railUsernameStyle: React.CSSProperties = {
+  width: "100%",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: 12,
+};
+
+const selectedUserActionStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  gap: 8,
+  margin: "0 2px 10px",
+};
+
+const projectCoverButtonStyle: React.CSSProperties = {
+  border: 0,
+  padding: 0,
+  background: "transparent",
+  cursor: "pointer",
+};
+
+const projectTitleButtonStyle: React.CSSProperties = {
+  ...projectTitleInlineStyle,
+  border: 0,
+  padding: 0,
+  background: "transparent",
+  textAlign: "left",
+  cursor: "pointer",
 };
