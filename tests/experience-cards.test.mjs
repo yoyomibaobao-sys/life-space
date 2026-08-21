@@ -811,7 +811,7 @@ test("project details expose details, archive, experience cards, and growth line
   assert.match(headerView, /profileAlwaysOpen \|\| profileOpen/);
 });
 
-test("personal space project page has a direct My Experience Cards entry", async () => {
+test("personal space project page has a direct Experience Cards entry", async () => {
   const [personalSpace, zhCopy, enCopy] = await Promise.all([
     source("app/archive/page.tsx"),
     source("lib/i18n/zh.ts"),
@@ -824,8 +824,10 @@ test("personal space project page has a direct My Experience Cards entry", async
   assert.match(personalSpace, /t\.archive_workspace\.personal_info/);
   assert.match(
     personalSpace,
-    /\{t\.archive_workspace\.my_experience_cards\} \{experienceCardCount\}/
+    /\{t\.archive_workspace\.experience_cards\} \{experienceCardCount\}/
   );
+  assert.match(zhCopy, /experience_cards: "经验卡"/);
+  assert.match(enCopy, /experience_cards: "Experience Cards"/);
   assert.match(zhCopy, /my_experience_cards: "我的经验卡"/);
   assert.match(enCopy, /my_experience_cards: "My experience cards"/);
   assert.match(personalSpace, /select\("id", \{ count: "exact", head: true \}\)/);

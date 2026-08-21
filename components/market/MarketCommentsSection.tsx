@@ -14,6 +14,7 @@ type MarketCommentRow = {
   market_post_id: string;
   user_id: string;
   content: string;
+  parent_comment_id: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -39,6 +40,8 @@ export default function MarketCommentsSection({
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<MarketCommentItem | null>(null);
+  const [repliesSupported, setRepliesSupported] = useState(false);
 
   const canWrite = Boolean(currentUserId && postStatus === "active");
 
@@ -47,23 +50,59 @@ export default function MarketCommentsSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketPostId, currentUserId]);
 
+  useEffect(() => {
+    if (loading || !comments.length || !window.location.hash) return;
+    const targetId = window.location.hash.slice(1);
+    if (!targetId.startsWith("market-comment-")) return;
+
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  }, [comments, loading]);
+
   async function loadComments() {
     setLoading(true);
 
-    const { data, error } = await supabase
+    const commentsResult = await supabase
       .from("market_comments")
-      .select("id, market_post_id, user_id, content, created_at, updated_at")
+      .select("id, market_post_id, user_id, content, parent_comment_id, created_at, updated_at")
       .eq("market_post_id", marketPostId)
       .order("created_at", { ascending: true });
 
-    if (error) {
-      console.error("load market comments error:", error);
+    let rows: MarketCommentRow[] = [];
+
+    if (commentsResult.error && isMissingParentCommentColumn(commentsResult.error)) {
+      setRepliesSupported(false);
+      const legacyResult = await supabase
+        .from("market_comments")
+        .select("id, market_post_id, user_id, content, created_at, updated_at")
+        .eq("market_post_id", marketPostId)
+        .order("created_at", { ascending: true });
+
+      if (legacyResult.error) {
+        console.error("load market comments error:", legacyResult.error);
+        setComments([]);
+        setLoading(false);
+        return;
+      }
+
+      rows = (legacyResult.data || []).map((row) => ({
+        ...(row as Omit<MarketCommentRow, "parent_comment_id">),
+        parent_comment_id: null,
+      }));
+    } else if (!commentsResult.error) {
+      setRepliesSupported(true);
+      rows = (commentsResult.data || []) as MarketCommentRow[];
+    } else {
+      console.error("load market comments error:", commentsResult.error);
       setComments([]);
       setLoading(false);
       return;
     }
 
-    const rows = (data || []) as MarketCommentRow[];
     const profileIds = Array.from(
       new Set(rows.map((item) => item.user_id).filter(Boolean))
     );
@@ -123,11 +162,21 @@ export default function MarketCommentsSection({
 
     setSubmitting(true);
 
-    const { error } = await supabase.from("market_comments").insert({
+    const payload: {
+      market_post_id: string;
+      user_id: string;
+      content: string;
+      parent_comment_id?: string;
+    } = {
       market_post_id: marketPostId,
       user_id: currentUserId,
       content,
-    });
+    };
+    if (repliesSupported && replyTarget) {
+      payload.parent_comment_id = replyTarget.id;
+    }
+
+    const { error } = await supabase.from("market_comments").insert(payload);
 
     setSubmitting(false);
 
@@ -138,6 +187,7 @@ export default function MarketCommentsSection({
     }
 
     setCommentText("");
+    setReplyTarget(null);
     showToast(t.market.comment_sent);
     await loadComments();
   }
@@ -172,7 +222,18 @@ export default function MarketCommentsSection({
     }
 
     showToast(t.market.comment_deleted);
+    if (replyTarget?.id === comment.id) setReplyTarget(null);
     await loadComments();
+  }
+
+  function startReply(comment: MarketCommentItem) {
+    setReplyTarget(comment);
+    window.requestAnimationFrame(() => {
+      document.getElementById("market-comment-composer")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
   }
 
   return (
@@ -193,7 +254,11 @@ export default function MarketCommentsSection({
               currentUserId === comment.user_id || currentUserId === postOwnerId;
 
             return (
-              <article key={comment.id} style={commentCardStyle}>
+              <article
+                key={comment.id}
+                id={`market-comment-${comment.id}`}
+                style={commentCardStyle}
+              >
                 <div style={commentTopStyle}>
                   <div style={profileWrapStyle}>
                     {comment.profile?.avatar_url ? (
@@ -219,18 +284,35 @@ export default function MarketCommentsSection({
                     </div>
                   </div>
 
-                  {canDelete ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteComment(comment)}
-                      disabled={deletingId === comment.id}
-                      style={deleteButtonStyle}
-                    >
-                      {deletingId === comment.id ? t.market.deleting : t.market.delete}
-                    </button>
-                  ) : null}
+                  <div style={commentActionRowStyle}>
+                    {repliesSupported && canWrite && comment.user_id !== currentUserId ? (
+                      <button
+                        type="button"
+                        onClick={() => startReply(comment)}
+                        style={replyButtonStyle}
+                      >
+                        {t.market.reply}
+                      </button>
+                    ) : null}
+                    {canDelete ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteComment(comment)}
+                        disabled={deletingId === comment.id}
+                        style={deleteButtonStyle}
+                      >
+                        {deletingId === comment.id ? t.market.deleting : t.market.delete}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
+                {comment.parent_comment_id ? (
+                  <div style={replyContextStyle}>
+                    {t.market.replying_to_prefix}
+                    {comments.find((item) => item.id === comment.parent_comment_id)?.profile?.username || t.discover.default_user}
+                  </div>
+                ) : null}
                 <div style={contentStyle}>{comment.content}</div>
               </article>
             );
@@ -238,13 +320,32 @@ export default function MarketCommentsSection({
         )}
       </div>
 
-      <div style={formWrapStyle}>
+      <div id="market-comment-composer" style={formWrapStyle}>
         {canWrite ? (
           <>
+              {replyTarget ? (
+                <div style={replyComposerStyle}>
+                  <span>
+                    {t.market.replying_to_prefix}
+                    {replyTarget.profile?.username || t.discover.default_user}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReplyTarget(null)}
+                    style={cancelReplyButtonStyle}
+                  >
+                    {t.market.cancel_reply}
+                  </button>
+                </div>
+              ) : null}
               <textarea
                 value={commentText}
                 onChange={(event) => setCommentText(event.target.value)}
-                placeholder={t.market.comment_placeholder}
+                placeholder={
+                  replyTarget
+                    ? `${t.market.reply_placeholder_prefix}${replyTarget.profile?.username || t.discover.default_user}…`
+                    : t.market.comment_placeholder
+                }
                 rows={3}
                 style={textareaStyle}
               />
@@ -277,6 +378,14 @@ function formatCommentTime(value?: string | null) {
   return formatPreciseDateTime(value);
 }
 
+function isMissingParentCommentColumn(error: { code?: string; message?: string }) {
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    String(error.message || "").includes("parent_comment_id")
+  );
+}
+
 const sectionStyle: CSSProperties = {
   marginTop: 16,
   borderTop: "1px solid #eef2ec",
@@ -299,6 +408,50 @@ const titleStyle: CSSProperties = {
 const countStyle: CSSProperties = {
   fontSize: 12,
   color: "#7a8676",
+};
+
+const commentActionRowStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  flexShrink: 0,
+};
+
+const replyButtonStyle: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#4f7b45",
+  padding: "5px 6px",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const replyContextStyle: CSSProperties = {
+  marginBottom: 5,
+  color: "#788473",
+  fontSize: 12,
+};
+
+const replyComposerStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  marginBottom: 8,
+  padding: "7px 10px",
+  borderRadius: 10,
+  background: "#f2f7ef",
+  color: "#566b51",
+  fontSize: 13,
+};
+
+const cancelReplyButtonStyle: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#7a8676",
+  fontSize: 12,
+  cursor: "pointer",
 };
 
 

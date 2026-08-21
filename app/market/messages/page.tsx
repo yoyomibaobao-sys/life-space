@@ -5,13 +5,13 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { SupabaseUser } from "@/lib/domain-types";
-import UiIcon from "@/components/ui/UiIcon";
-import { formatPreciseDateTime } from "@/lib/date-time";
+import { MARKET_NOTIFICATION_TYPES } from "@/lib/notification-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref } from "@/lib/auth-return";
-import { MARKET_NOTIFICATION_FILTER } from "@/lib/notification-types";
+import { formatPreciseDateTime } from "@/lib/date-time";
+import UiIcon from "@/components/ui/UiIcon";
 
-type NotificationItem = {
+type MarketNotificationItem = {
   id: string;
   type: string;
   title: string;
@@ -21,107 +21,88 @@ type NotificationItem = {
   created_at: string;
 };
 
-export default function NotificationsPage() {
+export default function MarketMessagesPage() {
   const router = useRouter();
   const { t } = useLanguage();
-
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [items, setItems] = useState<MarketNotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
 
   useEffect(() => {
-    async function init() {
+    async function load() {
       setLoading(true);
-
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push(buildLoginHref("/notifications"));
+        router.push(buildLoginHref("/market/messages"));
         return;
       }
 
       setUser(user);
-
       const { data, error } = await supabase
         .from("notifications")
         .select("id, type, title, body, related_url, is_read, created_at")
         .eq("user_id", user.id)
-        .not("type", "in", MARKET_NOTIFICATION_FILTER)
+        .in("type", [...MARKET_NOTIFICATION_TYPES])
         .order("created_at", { ascending: false })
         .limit(80);
 
       if (error) {
-        console.error("load notifications error:", error);
+        console.error("load market messages error:", error);
         setItems([]);
       } else {
-        setItems((data || []) as NotificationItem[]);
+        setItems((data || []) as MarketNotificationItem[]);
       }
-
       setLoading(false);
     }
 
-    void init();
+    void load();
   }, [router]);
 
   const unreadCount = items.filter((item) => !item.is_read).length;
 
-  async function markOneAsRead(item: NotificationItem) {
+  async function openItem(item: MarketNotificationItem) {
     if (!user) return;
 
     if (!item.is_read) {
       await supabase
         .from("notifications")
-        .update({
-          is_read: true,
-          read_at: new Date().toISOString(),
-        })
+        .update({ is_read: true, read_at: new Date().toISOString() })
         .eq("id", item.id)
         .eq("user_id", user.id);
 
       setItems((current) =>
-        current.map((oldItem) =>
-          oldItem.id === item.id ? { ...oldItem, is_read: true } : oldItem
+        current.map((entry) =>
+          entry.id === item.id ? { ...entry, is_read: true } : entry
         )
       );
       window.dispatchEvent(new Event("notifications-changed"));
     }
 
-    if (item.related_url) {
-      router.push(item.related_url);
-    }
+    if (item.related_url) router.push(item.related_url);
   }
 
   async function markAllAsRead() {
     if (!user || unreadCount === 0) return;
-
     setMarkingAll(true);
 
     const { error } = await supabase
       .from("notifications")
-      .update({
-        is_read: true,
-        read_at: new Date().toISOString(),
-      })
+      .update({ is_read: true, read_at: new Date().toISOString() })
       .eq("user_id", user.id)
       .eq("is_read", false)
-      .not("type", "in", MARKET_NOTIFICATION_FILTER);
+      .in("type", [...MARKET_NOTIFICATION_TYPES]);
 
     setMarkingAll(false);
-
     if (error) {
-      console.error("mark notifications read error:", error);
+      console.error("mark market messages read error:", error);
       return;
     }
 
-    setItems((current) =>
-      current.map((item) => ({
-        ...item,
-        is_read: true,
-      }))
-    );
+    setItems((current) => current.map((item) => ({ ...item, is_read: true })));
     window.dispatchEvent(new Event("notifications-changed"));
   }
 
@@ -130,19 +111,17 @@ export default function NotificationsPage() {
       <div style={shellStyle}>
         <div style={topBarStyle}>
           <div>
-            <Link href="/profile" style={backLinkStyle}>
-              <UiIcon name="arrow-left" size={15} /> {t.notifications.back_to_profile}
+            <Link href="/market" style={backLinkStyle}>
+              <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
             </Link>
-            <h1 style={titleStyle}>{t.notifications.title}</h1>
-            <div style={subtitleStyle}>
-              {t.notifications.subtitle}
-            </div>
+            <h1 style={titleStyle}>{t.market.messages_title}</h1>
+            <div style={subtitleStyle}>{t.market.messages_subtitle}</div>
           </div>
 
-          {unreadCount > 0 && (
+          {unreadCount > 0 ? (
             <button
               type="button"
-              onClick={markAllAsRead}
+              onClick={() => void markAllAsRead()}
               disabled={markingAll}
               style={markAllButtonStyle}
             >
@@ -150,20 +129,20 @@ export default function NotificationsPage() {
                 ? t.notifications.processing
                 : `${t.notifications.mark_all_read_prefix}${unreadCount}${t.notifications.mark_all_read_suffix}`}
             </button>
-          )}
+          ) : null}
         </div>
 
         {loading ? (
           <section style={emptyStyle}>{t.notifications.loading}</section>
         ) : items.length === 0 ? (
-          <section style={emptyStyle}>{t.notifications.empty}</section>
+          <section style={emptyStyle}>{t.market.messages_empty}</section>
         ) : (
           <section style={listStyle}>
             {items.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => markOneAsRead(item)}
+                onClick={() => void openItem(item)}
                 style={{
                   ...cardStyle,
                   background: item.is_read ? "#fff" : "#f7fbf2",
@@ -171,15 +150,16 @@ export default function NotificationsPage() {
                 }}
               >
                 <div style={cardHeaderStyle}>
-                  <span style={typeBadgeStyle}>{getNotificationTypeLabel(item.type, t.notifications.types)}</span>
-                  {!item.is_read && <span style={unreadBadgeStyle}>{t.notifications.unread}</span>}
+                  <span style={typeBadgeStyle}>
+                    {getNotificationTypeLabel(item.type, t.notifications.types)}
+                  </span>
+                  {!item.is_read ? (
+                    <span style={unreadBadgeStyle}>{t.notifications.unread}</span>
+                  ) : null}
                 </div>
-
                 <div style={itemTitleStyle}>{item.title}</div>
-
                 {item.body ? <div style={bodyStyle}>{item.body}</div> : null}
-
-                <div style={timeStyle}>{formatNotificationTime(item.created_at)}</div>
+                <div style={timeStyle}>{formatPreciseDateTime(item.created_at)}</div>
               </button>
             ))}
           </section>
@@ -189,15 +169,8 @@ export default function NotificationsPage() {
   );
 }
 
-function getNotificationTypeLabel(
-  type: string,
-  labels: Record<string, string>
-) {
+function getNotificationTypeLabel(type: string, labels: Record<string, string>) {
   return labels[type] || labels.fallback;
-}
-
-function formatNotificationTime(value: string) {
-  return formatPreciseDateTime(value);
 }
 
 const pageStyle: CSSProperties = {
@@ -206,12 +179,7 @@ const pageStyle: CSSProperties = {
   padding: "18px 12px 36px",
 };
 
-const shellStyle: CSSProperties = {
-  width: "100%",
-  maxWidth: 880,
-  margin: "0 auto",
-};
-
+const shellStyle: CSSProperties = { width: "100%", maxWidth: 880, margin: "0 auto" };
 const topBarStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -219,27 +187,17 @@ const topBarStyle: CSSProperties = {
   alignItems: "flex-start",
   marginBottom: 14,
 };
-
 const backLinkStyle: CSSProperties = {
-  display: "inline-block",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
   color: "#587050",
   textDecoration: "none",
   fontSize: 14,
   marginBottom: 8,
 };
-
-const titleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 26,
-  color: "#1f2a1f",
-};
-
-const subtitleStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#6f7b69",
-  fontSize: 14,
-};
-
+const titleStyle: CSSProperties = { margin: 0, fontSize: 26, color: "#1f2a1f" };
+const subtitleStyle: CSSProperties = { marginTop: 6, color: "#6f7b69", fontSize: 14 };
 const markAllButtonStyle: CSSProperties = {
   border: "1px solid #cfe4c4",
   background: "#fff",
@@ -250,77 +208,47 @@ const markAllButtonStyle: CSSProperties = {
   fontSize: 13,
   whiteSpace: "nowrap",
 };
-
-const listStyle: CSSProperties = {
-  display: "grid",
-  gap: 10,
+const emptyStyle: CSSProperties = {
+  padding: 28,
+  border: "1px dashed #d8e3d3",
+  borderRadius: 16,
+  background: "#fff",
+  color: "#778173",
+  textAlign: "center",
 };
-
+const listStyle: CSSProperties = { display: "grid", gap: 10 };
 const cardStyle: CSSProperties = {
   width: "100%",
-  textAlign: "left",
   border: "1px solid #e4ece0",
   borderRadius: 16,
   padding: 14,
+  textAlign: "left",
+  color: "#1f2a1f",
   cursor: "pointer",
-  color: "inherit",
 };
-
 const cardHeaderStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
+  alignItems: "center",
   gap: 8,
-  alignItems: "center",
-  marginBottom: 8,
+  marginBottom: 9,
 };
-
 const typeBadgeStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
   borderRadius: 999,
   background: "#edf4e8",
-  color: "#55704d",
-  padding: "3px 8px",
+  color: "#4f7b45",
+  padding: "4px 8px",
   fontSize: 12,
   fontWeight: 700,
 };
-
 const unreadBadgeStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
   borderRadius: 999,
-  background: "#e85d3f",
+  background: "#c94b3d",
   color: "#fff",
-  padding: "3px 8px",
-  fontSize: 12,
-  fontWeight: 700,
+  padding: "3px 7px",
+  fontSize: 11,
+  fontWeight: 800,
 };
-
-const itemTitleStyle: CSSProperties = {
-  color: "#1f2a1f",
-  fontSize: 15,
-  fontWeight: 700,
-  lineHeight: 1.5,
-};
-
-const bodyStyle: CSSProperties = {
-  marginTop: 6,
-  color: "#5f6a5b",
-  fontSize: 14,
-  lineHeight: 1.6,
-};
-
-const timeStyle: CSSProperties = {
-  marginTop: 8,
-  color: "#8a9585",
-  fontSize: 12,
-};
-
-const emptyStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e4ece0",
-  borderRadius: 16,
-  padding: 28,
-  color: "#6f7b69",
-  textAlign: "center",
-};
+const itemTitleStyle: CSSProperties = { fontSize: 16, fontWeight: 750 };
+const bodyStyle: CSSProperties = { marginTop: 5, color: "#63705f", fontSize: 14, lineHeight: 1.5 };
+const timeStyle: CSSProperties = { marginTop: 8, color: "#8a9585", fontSize: 12 };

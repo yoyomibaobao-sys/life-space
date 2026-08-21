@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { MARKET_NOTIFICATION_FILTER } from "@/lib/notification-types";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
 import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -70,7 +71,8 @@ export default function Navbar() {
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
-      .eq("is_read", false);
+      .eq("is_read", false)
+      .not("type", "in", MARKET_NOTIFICATION_FILTER);
 
     if (requestId !== unreadRequestSeq.current) return;
 
@@ -620,6 +622,7 @@ function hasPageManagedMobileTopNav(pathname: string) {
     "/follow",
     "/market",
     "/archive",
+    "/profile",
   ].includes(pathname)) return true;
 
   return (
