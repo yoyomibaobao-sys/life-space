@@ -9,20 +9,6 @@ export type RecordComment = {
   created_at: string;
 };
 
-export type RecordLikeRow = {
-  id?: string;
-  record_id: string;
-  user_id: string;
-  created_at?: string | null;
-};
-
-export type CommentLikeRow = {
-  id?: string;
-  comment_id: string;
-  user_id: string;
-  created_at?: string | null;
-};
-
 export type CommentFlowerRow = {
   id: string;
   record_id: string;

@@ -1144,8 +1144,7 @@ export default function PlantDetailPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [interestAdded, setInterestAdded] = useState(false);
-  const [planAdded, setPlanAdded] = useState(false);
-  const [actionLoading, setActionLoading] = useState<"interest" | "plan" | null>(null);
+  const [actionLoading, setActionLoading] = useState<"interest" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -1343,26 +1342,16 @@ export default function PlantDetailPage() {
       }
 
       if (user) {
-        const [{ data: interestData }, { data: planData }] = await Promise.all([
-          supabase
-            .from("user_plant_interests")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("species_id", id)
-            .maybeSingle(),
-          supabase
-            .from("user_plant_plans")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("species_id", id)
-            .maybeSingle(),
-        ]);
+        const { data: interestData } = await supabase
+          .from("user_plant_interests")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("species_id", id)
+          .maybeSingle();
 
         setInterestAdded(Boolean(interestData));
-        setPlanAdded(Boolean(planData));
       } else {
         setInterestAdded(false);
-        setPlanAdded(false);
       }
 
       setLoading(false);
@@ -1641,81 +1630,6 @@ export default function PlantDetailPage() {
     });
   }
 
-  async function handleAddPlan() {
-    if (!plant || actionLoading) return;
-
-    if (!isSignedIn) {
-      setActionMessage({
-        type: "error",
-        text: copy.login_before_plan,
-        href: buildLoginHref(getCurrentInternalPath()),
-        hrefText: copy.go_login,
-      });
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setActionMessage({
-        type: "error",
-        text: copy.login_before_plan,
-        href: buildLoginHref(getCurrentInternalPath()),
-        hrefText: copy.go_login,
-      });
-      return;
-    }
-
-    if (!planAdded && !hasCloudAccess) {
-      setActionMessage({
-        type: "error",
-        text: copy.cloud_plan_only,
-        href: "/membership",
-        hrefText: copy.learn_membership,
-      });
-      return;
-    }
-
-    setActionLoading("plan");
-    setActionMessage(null);
-
-    const { error } = planAdded
-      ? await supabase
-          .from("user_plant_plans")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("species_id", plant.id)
-      : await supabase.from("user_plant_plans").upsert(
-          {
-            user_id: user.id,
-            species_id: plant.id,
-            status: "want",
-          },
-          { onConflict: "user_id,species_id" }
-        );
-
-    setActionLoading(null);
-
-    if (error) {
-      setActionMessage({
-        type: "error",
-        text: `${planAdded ? copy.cancel_action : copy.add_action}${copy.action_failed_separator}${error.message}`,
-      });
-      return;
-    }
-
-    const nextPlanAdded = !planAdded;
-    setPlanAdded(nextPlanAdded);
-    setActionMessage({
-      type: "success",
-      text: nextPlanAdded ? copy.plan_added : copy.plan_removed,
-      href: nextPlanAdded ? "/archive/plans" : undefined,
-      hrefText: nextPlanAdded ? copy.view_plan : undefined,
-    });
-  }
-
   const experienceCardTabCount = relatedExperienceCards.length;
   const plantingRecordTabCount = Array.from(
     new Map(
@@ -1891,26 +1805,6 @@ export default function PlantDetailPage() {
           >
             {hasCloudAccess ? copy.new_cloud_project : copy.new_local_project}
           </Link>
-
-          {hasCloudAccess || planAdded ? (
-              <button
-                type="button"
-                onClick={handleAddPlan}
-                disabled={actionLoading !== null}
-                className={styles.heroAction}
-                style={{
-                  background: planAdded ? "#f5faf5" : "#fff",
-                  color: planAdded ? "#5f7f5f" : "#2f6f35",
-                  cursor: actionLoading !== null ? "default" : "pointer",
-                }}
-              >
-                {planAdded
-                  ? copy.plan_already_added
-                  : actionLoading === "plan"
-                    ? copy.adding
-                    : copy.add_to_plan}
-              </button>
-          ) : null}
 
           {hasCloudAccess || interestAdded ? (
               <button

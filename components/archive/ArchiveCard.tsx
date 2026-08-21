@@ -14,6 +14,7 @@ import type {
 import { getArchiveSystemName } from "@/lib/archive-page-utils";
 import ArchiveCategoryDropdown from "@/components/archive/ArchiveCategoryDropdown";
 import ArchiveGroupDropdown from "@/components/archive/ArchiveGroupDropdown";
+import MobileArchiveActions from "@/components/archive/MobileArchiveActions";
 import ArchivePlantNameEditor from "@/components/archive/ArchivePlantNameEditor";
 import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
@@ -614,15 +615,11 @@ function MobileArchiveCard({
   onDeleteArchive: (item: ArchiveItem) => void;
 }) {
   const { language, t } = useLanguage();
-  const [menuOpen, setMenuOpen] = useState(false);
   const ongoingDays = getOngoingDays(item.created_at);
   const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
   const latestRecordPreview = getLatestRecordPreview(item, language);
   const visibilityText = item.is_public ? t.archive.public_discover : t.archive.private_only;
   const mobileEndedText = ended ? t.archive_workspace.ended : "";
-  const availableGroupTags = item.sub_tag_id
-    ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
-    : [];
   const selectedSubcategory = item.sub_tag_id
     ? subTags.find((tag) => String(tag.id) === String(item.sub_tag_id))
     : null;
@@ -656,72 +653,20 @@ function MobileArchiveCard({
     ended,
   };
   const actionSlot = (
-    <div data-no-card-nav="true" onClick={(event) => event.stopPropagation()} style={{ position: "relative" }}>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          setMenuOpen((open) => !open);
-        }}
-        aria-label={t.archive_workspace.more_project_actions}
-        style={mobileCardMoreButtonStyle}
-      >
-        <UiIcon name="more" size={20} />
-      </button>
-
-      {menuOpen ? (
-        <div style={mobileCardMenuStyle}>
-          <div style={mobileCardMenuControlsStyle}>
-            <ArchiveCategoryDropdown
-              value={item.sub_tag_id || item.category}
-              subTags={subTags}
-              compact
-              onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
-            />
-            {item.sub_tag_id && availableGroupTags.length > 0 ? (
-              <ArchiveGroupDropdown
-                value={item.group_tag_id || ""}
-                groupTags={availableGroupTags}
-                compact
-                onChange={(nextValue) => onUpdateArchiveGroupTag(item, nextValue)}
-              />
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false);
-              onUpdateArchiveStatus(item, ended ? "active" : "ended");
-            }}
-            style={mobileCardMenuItemStyle}
-          >
-            {ended ? t.archive_workspace.restore : t.archive_workspace.end}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false);
-              onTogglePublic(item);
-            }}
-            style={mobileCardMenuItemStyle}
-          >
-            {item.is_public
-              ? t.archive_workspace.set_private
-              : t.archive_workspace.set_public}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false);
-              onDeleteArchive(item);
-            }}
-            style={mobileCardDangerMenuItemStyle}
-          >
-            {t.archive_workspace.move_to_trash}
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <MobileArchiveActions
+      category={item.category}
+      subTagId={item.sub_tag_id}
+      groupTagId={item.group_tag_id}
+      subTags={subTags}
+      groupTags={groupTags}
+      ended={ended}
+      isPublic={Boolean(item.is_public)}
+      onChangeCategory={(value) => onUpdateArchiveCategory(item, value)}
+      onChangeGroup={(value) => onUpdateArchiveGroupTag(item, value)}
+      onToggleEnded={() => onUpdateArchiveStatus(item, ended ? "active" : "ended")}
+      onTogglePublic={() => onTogglePublic(item)}
+      onMoveToTrash={() => onDeleteArchive(item)}
+    />
   );
 
   return (
@@ -742,60 +687,3 @@ function getMobileArchiveSystemName(item: ArchiveItem, language: Language) {
 
   return item.system_name?.trim() || copy.not_filled;
 }
-
-const mobileCardMoreButtonStyle: CSSProperties = {
-  flexShrink: 0,
-  width: 30,
-  height: 30,
-  border: "1px solid #edf0e8",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#667066",
-  fontSize: 19,
-  lineHeight: 1,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-};
-
-const mobileCardMenuStyle: CSSProperties = {
-  position: "absolute",
-  top: 42,
-  right: 8,
-  zIndex: 20,
-  width: 184,
-  border: "1px solid #e6ebdf",
-  borderRadius: 12,
-  background: "#fff",
-  boxShadow: "0 16px 34px rgba(39, 58, 34, 0.16)",
-  padding: 5,
-};
-
-const mobileCardMenuControlsStyle: CSSProperties = {
-  display: "grid",
-  gap: 5,
-  padding: "3px 3px 7px",
-  marginBottom: 3,
-  borderBottom: "1px solid #edf0e9",
-};
-
-const mobileCardMenuItemStyle: CSSProperties = {
-  width: "100%",
-  minHeight: 34,
-  border: "none",
-  borderRadius: 9,
-  background: "transparent",
-  color: "#40583a",
-  padding: "0 10px",
-  textAlign: "left",
-  fontSize: 13,
-  fontWeight: 700,
-  whiteSpace: "nowrap",
-  cursor: "pointer",
-};
-
-const mobileCardDangerMenuItemStyle: CSSProperties = {
-  ...mobileCardMenuItemStyle,
-  color: "#c85f5a",
-};

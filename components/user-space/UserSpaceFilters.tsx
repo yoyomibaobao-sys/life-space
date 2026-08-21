@@ -17,6 +17,7 @@ type Props = {
   activeGroupTag: string | null;
   visibleSubTags: UserSpaceTag[];
   visibleGroupTags: UserSpaceTag[];
+  visibleCategories: string[];
   onSelectCategory: (category: Category) => void;
   onSelectSubTag: (tag: UserSpaceTag) => void;
   onSelectGroupTag: (tagId: string) => void;
@@ -29,6 +30,7 @@ export default function UserSpaceFilters({
   activeGroupTag,
   visibleSubTags,
   visibleGroupTags,
+  visibleCategories,
   onSelectCategory,
   onSelectSubTag,
   onSelectGroupTag,
@@ -41,17 +43,15 @@ export default function UserSpaceFilters({
         background: "#fff",
         border: "1px solid #edf1e8",
         borderRadius: 16,
-        padding: 14,
-        marginBottom: 16,
+        padding: 8,
+        marginBottom: 10,
       }}
     >
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          rowGap: 10,
+          display: "grid",
+          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+          gap: 5,
         }}
       >
         <button
@@ -62,14 +62,16 @@ export default function UserSpaceFilters({
           {t.profile.space.all}
         </button>
 
-        {["plant", "system", "insect_fish", "other"].map((category) => (
+        {["plant", "system", "insect_fish", "other"].filter((category) =>
+          visibleCategories.includes(category)
+        ).map((category) => (
           <div key={category} style={categoryGroupStyle}>
             <button
               type="button"
               onClick={() => onSelectCategory(category as ArchiveCategory)}
               style={mainFilterStyle(activeCategory === category && !activeSubTag)}
             >
-              {getArchiveCategoryLabel(category, language)}：
+              {getArchiveCategoryLabel(category, language)}
             </button>
 
             {visibleSubTags

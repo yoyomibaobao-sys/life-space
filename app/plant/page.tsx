@@ -396,8 +396,6 @@ export default function PlantIndexPage() {
   useEffect(() => {
     if (!isMobileSearchOpen) return;
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     window.requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
 
     function closeOnEscape(event: KeyboardEvent) {
@@ -405,11 +403,23 @@ export default function PlantIndexPage() {
     }
 
     window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
-    };
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, [isMobileSearchOpen]);
+
+  useEffect(() => {
+    if (!isMobileViewport || !isMobileSearchOpen) return;
+
+    const timer = window.setTimeout(() => {
+      const keyword = searchInput.trim();
+      setQuery(keyword);
+      setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
+      persistSearchState(keyword, searchInput, INITIAL_VISIBLE_PLANT_COUNT);
+    }, 260);
+
+    return () => window.clearTimeout(timer);
+    // persistSearchState deliberately reads the current filters and category.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileSearchOpen, isMobileViewport, searchInput]);
 
   const aliasMap = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -843,101 +853,11 @@ export default function PlantIndexPage() {
 
   return (
     <>
-      <HomeSectionTabs active="guide" />
+      <HomeSectionTabs
+        active="guide"
+        onSearch={() => setIsMobileSearchOpen((open) => !open)}
+      />
       <main style={{ padding: isMobileViewport ? "10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
-      {isMobileSearchOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.plant.search_aria}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1200,
-            background: "#f7f8f5",
-            overflowY: "auto",
-          }}
-        >
-          <div
-            style={{
-              position: "sticky",
-              top: 0,
-              zIndex: 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "10px",
-              borderBottom: "1px solid #e6e9e3",
-              background: "rgba(255,255,255,0.96)",
-            }}
-          >
-            <button
-              type="button"
-              aria-label={t.plant.back_to_guide}
-              onClick={() => setIsMobileSearchOpen(false)}
-              style={{
-                width: 36,
-                height: 36,
-                border: 0,
-                borderRadius: 10,
-                background: "transparent",
-                color: "#52604f",
-                cursor: "pointer",
-                fontSize: 22,
-              }}
-            >
-              <UiIcon name="arrow-left" size={20} />
-            </button>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                executeSearch();
-              }}
-              style={{ display: "flex", gap: 7, minWidth: 0, flex: 1 }}
-            >
-              <input
-                ref={mobileSearchInputRef}
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder={t.plant.search_placeholder}
-                aria-label={t.plant.search_placeholder}
-                style={{
-                  width: "100%",
-                  minWidth: 0,
-                  height: 38,
-                  borderRadius: 11,
-                  border: "1px solid #dfe5dc",
-                  padding: "0 11px",
-                  background: "#fff",
-                  fontSize: 14,
-                  boxSizing: "border-box",
-                  outlineColor: "#89ad82",
-                }}
-              />
-              <button
-                type="submit"
-                style={{
-                  minWidth: 58,
-                  height: 38,
-                  border: "1px solid #477a43",
-                  borderRadius: 11,
-                  padding: "0 12px",
-                  background: "#4f824b",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontSize: 14,
-                  fontWeight: 700,
-                }}
-              >
-                {t.plant.search}
-              </button>
-            </form>
-          </div>
-
-          <div style={{ padding: "14px 16px 28px" }}>{renderSearchAssist()}</div>
-        </div>
-      ) : null}
-
       <section
         style={{
           padding: isMobileViewport ? 10 : 22,
@@ -969,7 +889,7 @@ export default function PlantIndexPage() {
           <PlantMenu signedIn={isSignedIn} interestCount={interestCount} />
         </div> : null}
 
-        <div
+        {!isMobileViewport || isMobileSearchOpen ? <div
           ref={desktopSearchWrapRef}
           style={{
             position: "relative",
@@ -987,9 +907,12 @@ export default function PlantIndexPage() {
             style={{ display: "flex", gap: isMobileViewport ? 7 : 8, minWidth: 0, flex: 1 }}
           >
             <input
+              ref={isMobileViewport ? mobileSearchInputRef : undefined}
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              onFocus={openSearch}
+              onFocus={() => {
+                if (!isMobileViewport) openSearch();
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Escape") setSearchPanelOpen(false);
               }}
@@ -1008,7 +931,7 @@ export default function PlantIndexPage() {
                 outlineColor: "#89ad82",
               }}
             />
-            <button
+            {!isMobileViewport ? <button
               type="submit"
               aria-label={t.plant.search}
               style={{
@@ -1024,12 +947,9 @@ export default function PlantIndexPage() {
                 fontWeight: 700,
               }}
             >
-              {isMobileViewport ? <UiIcon name="search" size={17} /> : t.plant.search}
-            </button>
+              {t.plant.search}
+            </button> : null}
           </form>
-          {isMobileViewport ? (
-            <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact />
-          ) : null}
 
           {!isMobileViewport && searchPanelOpen ? (
             <div
@@ -1049,7 +969,7 @@ export default function PlantIndexPage() {
               {renderSearchAssist()}
             </div>
           ) : null}
-        </div>
+        </div> : null}
 
         {!isMobileViewport ? (
           <div
@@ -1160,6 +1080,7 @@ export default function PlantIndexPage() {
                     {activeEnvironmentFilterCount > 0 ? ` (${activeEnvironmentFilterCount})` : ""}
                   </button>
                 ) : null}
+                <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact />
                 {hasActiveEnvironmentFilters ? (
                   <button type="button" onClick={resetFilters} style={mobileFilterClearStyle}>
                     {t.plant.clear}

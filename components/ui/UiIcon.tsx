@@ -24,8 +24,6 @@ export type UiIconName =
   | "fish"
   | "flower"
   | "follow"
-  | "heart"
-  | "heart-filled"
   | "helpful"
   | "home"
   | "image"
@@ -108,9 +106,6 @@ function IconPaths({ name }: { name: UiIconName }) {
       return <><circle cx="12" cy="12" r="2.3" /><path d="M12 9.7C8 8.5 8.1 4 12 3c3.9 1 4 5.5 0 6.7ZM14.3 12c1.2-4 5.7-3.9 6.7 0-1 3.9-5.5 4-6.7 0ZM12 14.3c4 1.2 3.9 5.7 0 6.7-3.9-1-4-5.5 0-6.7ZM9.7 12c-1.2 4-5.7 3.9-6.7 0 1-3.9 5.5-4 6.7 0Z" /></>;
     case "follow":
       return <><circle cx="9" cy="8" r="3.5" /><path d="M3 20c.5-4 2.5-6 6-6 2.1 0 3.8.7 4.8 2M17.5 10v6M14.5 13h6" /></>;
-    case "heart":
-    case "heart-filled":
-      return <path d="M20.8 8.7c0 5.1-8.8 10.3-8.8 10.3S3.2 13.8 3.2 8.7A4.7 4.7 0 0 1 12 6.4a4.7 4.7 0 0 1 8.8 2.3Z" fill={name === "heart-filled" ? "currentColor" : "none"} />;
     case "helpful":
       return <><path d="M19.5 4.5C12 4.8 7.2 8.6 6.8 14.8c4.6 1.1 9.1-.2 11.3-3.8 1.2-1.9 1.5-4.2 1.4-6.5Z" /><path d="M5 20c1.5-4.7 4.8-8 10-10.2M9.8 15.5l2.2 2.1 4.5-5" /></>;
     case "home":

@@ -22,6 +22,7 @@ export type DiscoveryProjectFeedRow = {
   profile_display_name: string | null;
   profile_avatar_url: string | null;
   profile_region: string | null;
+  view_count?: number | string | null;
 };
 
 export type DiscoveryProjectFeedItem = Omit<
@@ -31,6 +32,7 @@ export type DiscoveryProjectFeedItem = Omit<
   public_record_count: number;
   public_comment_count: number;
   has_public_help: boolean;
+  view_count: number;
   card_summary: string | null;
   display_image_url: string | null;
 };

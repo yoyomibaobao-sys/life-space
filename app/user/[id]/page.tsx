@@ -1,20 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import CompactActivityTime from "@/components/ui/CompactActivityTime";
-import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
-import UiIcon from "@/components/ui/UiIcon";
+import UserSpaceHeader from "@/components/user-space/UserSpaceHeader";
+import UserSpaceFilters from "@/components/user-space/UserSpaceFilters";
+import UserSpaceArchiveList from "@/components/user-space/UserSpaceArchiveList";
 import { type MediaItem } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { type ArchiveCategory } from "@/lib/archive-categories";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import {
-  type ArchiveCategory,
-  getArchiveCategoryIcon,
-  getArchiveCategoryLabel,
-} from "@/lib/archive-categories";
+  canCreateMembershipContent,
+  getCreateContentBlockedText,
+  normalizeMembershipRpcResult,
+} from "@/lib/membership";
+import { showToast } from "@/components/Toast";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import type { UserSpaceTag } from "@/lib/user-space-types";
 
 type Category = "all" | ArchiveCategory;
 
@@ -29,6 +32,8 @@ type UserSpaceArchive = {
   status: string | null;
   record_count: number | null;
   view_count: number | null;
+  created_at?: string | null;
+  ended_at?: string | null;
 };
 
 type UserSpaceRecord = {
@@ -80,6 +85,10 @@ export default function UserSpacePage() {
   const userId = params.id as string;
 
   const [username, setUsername] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [isFollowingUser, setIsFollowingUser] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
   const [archives, setArchives] = useState<UserSpaceArchive[]>([]);
   const [records, setRecords] = useState<UserSpaceRecord[]>([]);
   const [subTags, setSubTags] = useState<UserSpaceSubTag[]>([]);
@@ -100,11 +109,12 @@ export default function UserSpacePage() {
     try {
       const { data: profile } = await supabase
         .from("public_profiles")
-        .select("username")
+        .select("username, avatar_url")
         .eq("id", userId)
         .maybeSingle();
 
       setUsername(profile?.username || "");
+      setAvatarUrl(profile?.avatar_url || null);
 
       const { data: archivesData } = await supabase
         .from("archives")
@@ -121,6 +131,7 @@ export default function UserSpacePage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      setViewerId(user?.id || null);
 
       const [subTagResult, groupTagResult, recordsResult, followsResult] =
         await Promise.all([
@@ -161,6 +172,17 @@ export default function UserSpacePage() {
           (row) => row.archive_id
         )
       );
+      if (user?.id && user.id !== userId) {
+        const { data: userFollow } = await supabase
+          .from("follows")
+          .select("following_id")
+          .eq("follower_id", user.id)
+          .eq("following_id", userId)
+          .maybeSingle();
+        setIsFollowingUser(Boolean(userFollow));
+      } else {
+        setIsFollowingUser(false);
+      }
     } finally {
       loadingRef.current = false;
     }
@@ -306,7 +328,7 @@ export default function UserSpacePage() {
     setActiveGroupTag(null);
   }
 
-  function selectSubTag(tag: UserSpaceSubTag) {
+  function selectSubTag(tag: UserSpaceTag) {
     setActiveCategory((tag.category || "plant") as ArchiveCategory);
     setActiveSubTag(tag.id);
     setActiveGroupTag(null);
@@ -314,6 +336,52 @@ export default function UserSpacePage() {
 
   function selectGroupTag(tagId: string) {
     setActiveGroupTag((current) => (current === tagId ? null : tagId));
+  }
+
+  async function toggleUserFollow() {
+    if (!viewerId) {
+      router.push(buildLoginHref(getCurrentInternalPath()));
+      return;
+    }
+    if (viewerId === userId || followBusy) return;
+
+    setFollowBusy(true);
+    if (isFollowingUser) {
+      const { error } = await supabase
+        .from("follows")
+        .delete()
+        .eq("follower_id", viewerId)
+        .eq("following_id", userId);
+      setFollowBusy(false);
+      if (error) {
+        showToast(t.profile.public_profile.unfollow_failed);
+        return;
+      }
+      setIsFollowingUser(false);
+      return;
+    }
+
+    const { data: membershipData, error: membershipError } =
+      await supabase.rpc("get_my_membership");
+    const membership = membershipError
+      ? null
+      : normalizeMembershipRpcResult(membershipData);
+    if (!canCreateMembershipContent(membership)) {
+      setFollowBusy(false);
+      showToast(getCreateContentBlockedText(membership, language));
+      return;
+    }
+
+    const { error } = await supabase.from("follows").insert({
+      follower_id: viewerId,
+      following_id: userId,
+    });
+    setFollowBusy(false);
+    if (error) {
+      showToast(t.profile.public_profile.follow_failed);
+      return;
+    }
+    setIsFollowingUser(true);
   }
 
   return (
@@ -324,402 +392,36 @@ export default function UserSpacePage() {
         padding: "20px 16px 48px",
       }}
     >
-      <section
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 16,
-          marginBottom: 18,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 22,
-              color: "#1f2a1f",
-              fontWeight: 650,
-            }}
-          >
-            {username ? `${username}${t.profile.space.title_suffix}` : t.profile.space.user_space}
-          </h1>
-
-          <Link
-            href={`/user/${userId}/profile`}
-            style={{
-              border: "1px solid #dce8d8",
-              background: "#f5faf3",
-              color: "#4f7b45",
-              borderRadius: 999,
-              padding: "4px 10px",
-              cursor: "pointer",
-              fontSize: 13,
-              textDecoration: "none",
-            }}
-          >
-            {t.profile.space.user_profile}
-          </Link>
-        </div>
-
-        <Link
-          href="/discover"
-          style={{
-            color: "#6b7b66",
-            fontSize: 14,
-            textDecoration: "none",
-          }}
-        >
-          <UiIcon name="arrow-left" size={15} /> {t.profile.space.back_to_discover}
-        </Link>
-      </section>
-
-      <section
-        style={{
-          background: "#fff",
-          border: "1px solid #edf1e8",
-          borderRadius: 16,
-          padding: 14,
-          marginBottom: 16,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-            rowGap: 10,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => selectCategory("all")}
-            style={mainFilterStyle(activeCategory === "all")}
-          >
-            {t.profile.space.all}
-          </button>
-
-          {[
-            "plant",
-            "system",
-            "insect_fish",
-            "other",
-          ].map((category) => (
-            <div key={category} style={categoryGroupStyle}>
-              <button
-                type="button"
-                onClick={() => selectCategory(category as ArchiveCategory)}
-                style={mainFilterStyle(
-                  activeCategory === category && !activeSubTag
-                )}
-              >
-                {getArchiveCategoryLabel(category, language)}{language === "en" ? ":" : "："}
-              </button>
-
-              {visibleSubTags
-                .filter((tag) => tag.category === category)
-                .map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => selectSubTag(tag)}
-                    style={subFilterStyle(activeSubTag === tag.id)}
-                  >
-                    {tag.name}
-                  </button>
-                ))}
-            </div>
-          ))}
-        </div>
-
-        {activeSubTag && visibleGroupTags.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-              marginTop: 12,
-              paddingTop: 12,
-              borderTop: "1px dashed #edf1e8",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setActiveGroupTag(null)}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: activeGroupTag ? "#4f7b45" : "#777",
-                fontSize: 14,
-                cursor: "pointer",
-                padding: 0,
-              }}
-            >
-              {t.profile.space.group_prefix}
-            </button>
-
-            {visibleGroupTags.map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => selectGroupTag(tag.id)}
-                style={groupFilterStyle(activeGroupTag === tag.id)}
-              >
-                {tag.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        {filteredArchives.length === 0 ? (
-          <div
-            style={{
-              border: "1px solid #edf1e8",
-              borderRadius: 16,
-              padding: 28,
-              textAlign: "center",
-              color: "#8b9487",
-              background: "#fff",
-            }}
-          >
-            {t.profile.space.no_public_projects}
-          </div>
-        ) : (
-          filteredArchives.map((archive) => {
-            const stat = statsMap[archive.id];
-            const latest = stat?.latest;
-            const cover = coverMap[archive.id];
-            const subTagName =
-              subTags.find((tag) => tag.id === archive.sub_tag_id)?.name ||
-              t.profile.space.uncategorized;
-            const groupTagName =
-              groupTags.find((tag) => tag.id === archive.group_tag_id)?.name ||
-              "";
-            const isEnded = archive.status === "ended";
-            const hasHelp = stat?.hasHelp;
-
-            const metaItems = [subTagName, groupTagName].filter(Boolean);
-
-            return (
-              <article
-                key={archive.id}
-                onClick={() => router.push(`/archive/${archive.id}`)}
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  border: "1px solid #e4eadf",
-                  borderRadius: 16,
-                  padding: 12,
-                  marginBottom: 12,
-                  background: isEnded ? "#fbfbf8" : "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                <div
-                  style={{
-                    width: 96,
-                    height: 96,
-                    flex: "0 0 96px",
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#9aaa9a",
-                    fontSize: 28,
-                  }}
-                >
-                  {cover ? (
-                    <img
-                      src={cover}
-                      alt=""
-                      loading="lazy"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                      }}
-                    />
-                  ) : (
-                    <UiIcon name={getArchiveCategoryIcon(archive.category)} size={22} />
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    height: 96,
-                    display: "grid",
-                    gridTemplateRows: "1fr 1fr 1fr",
-                    alignItems: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      minWidth: 0,
-                    }}
-                  >
-                    <span style={typeBadgeStyle}>{getArchiveCategoryLabel(archive.category, language)}</span>
-
-                    {hasHelp && <span style={helpBadgeStyle}>{t.profile.space.help}</span>}
-
-                    {isEnded && <span style={endedBadgeStyle}>{t.profile.space.ended}</span>}
-
-                    {followedArchiveIds.includes(archive.id) && (
-                      <span style={followedBadgeStyle}>{t.profile.space.followed}</span>
-                    )}
-
-                    <span
-                      style={{
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        fontWeight: 650,
-                        color: "#263326",
-                      }}
-                    >
-                      {archive.title} · {archive.system_name || archive.species_name_snapshot || t.profile.public_profile.not_provided}
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      color: "#5f6b5c",
-                      fontSize: 14,
-                    }}
-                  >
-                    {latest?.note || t.profile.space.no_public_records}
-                    {latest?.record_time ? (
-                      <span style={{ color: "#9a9f94" }}>
-                        <span aria-hidden="true"> · </span>
-                        <CompactActivityTime value={latest.record_time} />
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div
-                    style={{
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      color: "#90998c",
-                      fontSize: 13,
-                    }}
-                  >
-                    {metaItems.length ? `${metaItems.join(" · ")} · ` : null}
-                    <ProjectMetaLine
-                      recordCount={stat?.count || archive.record_count || 0}
-                      viewCount={archive.view_count || 0}
-                    />
-                  </div>
-                </div>
-              </article>
-            );
-          })
-        )}
-      </section>
+      <UserSpaceHeader
+        userId={userId}
+        username={username}
+        avatarUrl={avatarUrl}
+        isSelf={viewerId === userId}
+        isFollowing={isFollowingUser}
+        followBusy={followBusy}
+        onToggleFollow={() => void toggleUserFollow()}
+      />
+      <UserSpaceFilters
+        activeCategory={activeCategory}
+        activeSubTag={activeSubTag}
+        activeGroupTag={activeGroupTag}
+        visibleSubTags={visibleSubTags}
+        visibleGroupTags={visibleGroupTags}
+        visibleCategories={Array.from(new Set(archives.map((archive) => archive.category).filter(Boolean))) as string[]}
+        onSelectCategory={selectCategory}
+        onSelectSubTag={selectSubTag}
+        onSelectGroupTag={selectGroupTag}
+        onClearGroupTag={() => setActiveGroupTag(null)}
+      />
+      <UserSpaceArchiveList
+        archives={filteredArchives}
+        subTags={subTags}
+        groupTags={groupTags}
+        statsMap={statsMap}
+        coverMap={coverMap}
+        followedArchiveIds={followedArchiveIds}
+        onOpenArchive={(archiveId) => router.push(`/archive/${archiveId}`)}
+      />
     </main>
   );
 }
-
-const categoryGroupStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  flexWrap: "wrap",
-};
-
-function mainFilterStyle(active: boolean): React.CSSProperties {
-  return {
-    border: active ? "1px solid #b9d5ae" : "1px solid transparent",
-    background: active ? "#edf6e9" : "transparent",
-    color: active ? "#3f7d3d" : "#3d463b",
-    borderRadius: 999,
-    padding: "6px 10px",
-    cursor: "pointer",
-    fontSize: 15,
-    fontWeight: active ? 650 : 550,
-  };
-}
-
-function subFilterStyle(active: boolean): React.CSSProperties {
-  return {
-    border: active ? "1px solid #4f8f46" : "1px solid #e1e9dc",
-    background: active ? "#4f8f46" : "#f7faf5",
-    color: active ? "#fff" : "#4f5d4a",
-    borderRadius: 999,
-    padding: "5px 10px",
-    cursor: "pointer",
-    fontSize: 14,
-    fontWeight: active ? 650 : 450,
-  };
-}
-
-function groupFilterStyle(active: boolean): React.CSSProperties {
-  return {
-    border: active ? "1px solid #6b8f62" : "1px solid #e4eadf",
-    background: active ? "#eef6ea" : "#fff",
-    color: active ? "#3f7d3d" : "#596456",
-    borderRadius: 999,
-    padding: "4px 10px",
-    cursor: "pointer",
-    fontSize: 14,
-    fontWeight: active ? 650 : 450,
-  };
-}
-
-const typeBadgeStyle: React.CSSProperties = {
-  flex: "0 0 auto",
-  padding: "3px 8px",
-  borderRadius: 999,
-  background: "#eef5e8",
-  color: "#4f7b45",
-  fontSize: 12,
-  fontWeight: 600,
-};
-
-const helpBadgeStyle: React.CSSProperties = {
-  flex: "0 0 auto",
-  padding: "3px 8px",
-  borderRadius: 999,
-  background: "#fff4e8",
-  color: "#a76524",
-  fontSize: 12,
-  fontWeight: 650,
-};
-
-const endedBadgeStyle: React.CSSProperties = {
-  flex: "0 0 auto",
-  padding: "3px 8px",
-  borderRadius: 999,
-  background: "#f0f0ec",
-  color: "#77756b",
-  fontSize: 12,
-  fontWeight: 550,
-};
-
-const followedBadgeStyle: React.CSSProperties = {
-  flex: "0 0 auto",
-  padding: "3px 8px",
-  borderRadius: 999,
-  background: "#eef4ff",
-  color: "#4b6bb0",
-  fontSize: 12,
-  fontWeight: 600,
-};

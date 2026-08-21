@@ -380,13 +380,13 @@ export default function ExperienceCardPage({
 
   return (
     <main style={pageStyle}>
-      <header style={topBarStyle}>
+      <header className="mobile-app-desktop-only" style={topBarStyle}>
         <Link
           href={isOwner ? "/experience-cards" : "/discover"}
           style={backLinkStyle}
         >
           <UiIcon name="arrow-left" size={15} />
-          {isOwner ? ` ${t.experience.back_my_cards}` : ` ${t.experience.back_to_discover}`}
+          {isOwner ? ` ${t.experience.back_my_cards}` : ` ${t.nav.home}`}
         </Link>
       </header>
 
@@ -575,7 +575,7 @@ export default function ExperienceCardPage({
           {!isOwner ? (
             <div style={sourceLinksStyle} aria-label={t.experience.author_aria}>
               <Link
-                href={`/user/${detail.card.user_id}`}
+                href={isOwner ? "/archive" : `/user/${detail.card.user_id}`}
                 style={sourceLinkStyle}
               >
                 <span style={sourceLabelStyle}>{t.experience.user}</span>

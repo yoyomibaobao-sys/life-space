@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   archiveCategoryOptions,
   getArchiveCategoryDescription,
@@ -63,11 +63,30 @@ export default function ArchiveTaxonomyPanel({
 }: Props) {
   const { language, t } = useLanguage();
   const compact = mobileMode;
+  const [manageOpen, setManageOpen] = useState(false);
+  const canManage = Boolean(
+    onCreateSubcategory ||
+      onRenameSubcategory ||
+      onDeleteSubcategory ||
+      onCreateGroup ||
+      onRenameGroup ||
+      onDeleteGroup
+  );
 
   return (
     <section style={panelStyle(compact)}>
+      {compact && showCategoryRow ? (
+        <div style={mobilePanelHeaderStyle}>
+          <span>{t.archive_workspace.main_category}</span>
+          {canManage ? (
+            <button type="button" onClick={() => setManageOpen((open) => !open)} style={manageButtonStyle}>
+              {manageOpen ? t.archive_workspace.cancel : t.nav.admin}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {showCategoryRow ? (
-        <div style={rowStyle(compact)}>
+        <div style={categoryRowStyle(compact)}>
           <button type="button" onClick={onReset} style={pillStyle(!activeCategory, compact)}>
             {t.archive_workspace.all}
           </button>
@@ -107,12 +126,12 @@ export default function ArchiveTaxonomyPanel({
               active={activeSubcategoryId === chip.id}
               compact={compact}
               onSelect={() => onSelectSubcategory(chip)}
-              onRename={onRenameSubcategory ? () => onRenameSubcategory(chip) : undefined}
-              onDelete={onDeleteSubcategory ? () => onDeleteSubcategory(chip) : undefined}
+              onRename={!compact && onRenameSubcategory ? () => onRenameSubcategory(chip) : undefined}
+              onDelete={!compact && onDeleteSubcategory ? () => onDeleteSubcategory(chip) : undefined}
             />
           ))}
 
-          {onCreateSubcategory ? (
+          {!compact && onCreateSubcategory ? (
             <button
               type="button"
               onClick={() => onCreateSubcategory(activeCategory)}
@@ -145,12 +164,12 @@ export default function ArchiveTaxonomyPanel({
                 active={activeGroupId === chip.id}
                 compact={compact}
                 onSelect={() => onSelectGroup(chip)}
-                onRename={onRenameGroup ? () => onRenameGroup(chip) : undefined}
-                onDelete={onDeleteGroup ? () => onDeleteGroup(chip) : undefined}
+                onRename={!compact && onRenameGroup ? () => onRenameGroup(chip) : undefined}
+                onDelete={!compact && onDeleteGroup ? () => onDeleteGroup(chip) : undefined}
               />
             ))}
 
-            {onCreateGroup ? (
+            {!compact && onCreateGroup ? (
               <button
                 type="button"
                 onClick={onCreateGroup}
@@ -162,6 +181,72 @@ export default function ArchiveTaxonomyPanel({
             ) : null}
           </div>
         </>
+      ) : null}
+
+      {compact && manageOpen ? (
+        <div style={managerStyle}>
+          {!activeCategory ? (
+            <p style={managerHintStyle}>{t.archive_workspace.show_all_category}</p>
+          ) : (
+            <>
+              <div style={managerSectionHeaderStyle}>
+                <strong>{t.archive_workspace.subcategory}</strong>
+                {onCreateSubcategory ? (
+                  <button type="button" onClick={() => onCreateSubcategory(activeCategory)} style={managerAddButtonStyle}>
+                    + {t.archive_workspace.add_subcategory}
+                  </button>
+                ) : null}
+              </div>
+              {subcategories.length ? subcategories.map((chip) => (
+                <div key={chip.id} style={managerRowStyle}>
+                  <button type="button" onClick={() => onSelectSubcategory(chip)} style={managerNameButtonStyle}>
+                    {chip.label}
+                  </button>
+                  {onRenameSubcategory ? (
+                    <button type="button" onClick={() => onRenameSubcategory(chip)} style={managerActionStyle}>
+                      {t.archive_workspace.edit}
+                    </button>
+                  ) : null}
+                  {onDeleteSubcategory ? (
+                    <button type="button" onClick={() => onDeleteSubcategory(chip)} style={managerDeleteStyle}>
+                      {t.archive_workspace.delete}
+                    </button>
+                  ) : null}
+                </div>
+              )) : <p style={managerHintStyle}>—</p>}
+
+              {activeSubcategoryId ? (
+                <>
+                  <div style={{ ...managerSectionHeaderStyle, marginTop: 14 }}>
+                    <strong>{t.archive_workspace.group}</strong>
+                    {onCreateGroup ? (
+                      <button type="button" onClick={onCreateGroup} style={managerAddButtonStyle}>
+                        + {t.archive_workspace.add_group}
+                      </button>
+                    ) : null}
+                  </div>
+                  {groups.length ? groups.map((chip) => (
+                    <div key={chip.id} style={managerRowStyle}>
+                      <button type="button" onClick={() => onSelectGroup(chip)} style={managerNameButtonStyle}>
+                        {chip.label}
+                      </button>
+                      {onRenameGroup ? (
+                        <button type="button" onClick={() => onRenameGroup(chip)} style={managerActionStyle}>
+                          {t.archive_workspace.edit}
+                        </button>
+                      ) : null}
+                      {onDeleteGroup ? (
+                        <button type="button" onClick={() => onDeleteGroup(chip)} style={managerDeleteStyle}>
+                          {t.archive_workspace.delete}
+                        </button>
+                      ) : null}
+                    </div>
+                  )) : <p style={managerHintStyle}>—</p>}
+                </>
+              ) : null}
+            </>
+          )}
+        </div>
       ) : null}
     </section>
   );
@@ -191,7 +276,6 @@ function TaxonomyChipButton({
         onClick={onSelect}
         onDoubleClick={onRename}
         style={chipButtonStyle(active, compact)}
-        title={onRename ? t.archive_workspace.double_click_edit : undefined}
       >
         {chip.label}
       </button>
@@ -225,11 +309,17 @@ function rowStyle(compact: boolean): CSSProperties {
     display: "flex",
     alignItems: "center",
     gap: compact ? 5 : 8,
-    flexWrap: compact ? "nowrap" : "wrap",
-    overflowX: compact ? "auto" : undefined,
+    flexWrap: "wrap",
     paddingBottom: compact ? 2 : undefined,
-    scrollbarWidth: compact ? "none" : undefined,
-    WebkitOverflowScrolling: compact ? "touch" : undefined,
+  };
+}
+
+function categoryRowStyle(compact: boolean): CSSProperties {
+  if (!compact) return rowStyle(false);
+  return {
+    display: "grid",
+    gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+    gap: 5,
   };
 }
 
@@ -250,10 +340,103 @@ function pillStyle(active: boolean, compact: boolean): CSSProperties {
     fontWeight: 700,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
-    whiteSpace: "nowrap",
-    flex: compact ? "0 0 auto" : undefined,
+    minHeight: compact ? 43 : undefined,
+    whiteSpace: compact ? "normal" : "nowrap",
+    flex: compact ? "1 1 auto" : undefined,
+    textAlign: "center",
   };
 }
+
+const mobilePanelHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 7,
+  color: "#6a7766",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const manageButtonStyle: CSSProperties = {
+  minHeight: 34,
+  border: "1px solid #dce6d8",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#476745",
+  padding: "0 12px",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const managerStyle: CSSProperties = {
+  marginTop: 12,
+  paddingTop: 12,
+  borderTop: "1px solid #e7ece3",
+};
+
+const managerSectionHeaderStyle: CSSProperties = {
+  minHeight: 42,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  color: "#30462f",
+};
+
+const managerAddButtonStyle: CSSProperties = {
+  minHeight: 38,
+  border: "1px solid #cfe0ca",
+  borderRadius: 10,
+  background: "#f6faf3",
+  color: "#3d713b",
+  padding: "0 11px",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const managerRowStyle: CSSProperties = {
+  minHeight: 50,
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+  alignItems: "center",
+  gap: 6,
+  borderTop: "1px solid #edf0e9",
+};
+
+const managerNameButtonStyle: CSSProperties = {
+  minWidth: 0,
+  minHeight: 44,
+  border: "none",
+  background: "transparent",
+  color: "#334533",
+  textAlign: "left",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: 15,
+};
+
+const managerActionStyle: CSSProperties = {
+  minHeight: 38,
+  border: "none",
+  borderRadius: 9,
+  background: "#f4f7f1",
+  color: "#4d684a",
+  padding: "0 10px",
+  fontSize: 13,
+};
+
+const managerDeleteStyle: CSSProperties = {
+  ...managerActionStyle,
+  color: "#b45d58",
+};
+
+const managerHintStyle: CSSProperties = {
+  margin: "8px 0",
+  color: "#7d8878",
+  fontSize: 13,
+};
 
 function chipWrapperStyle(compact: boolean): CSSProperties {
   return {

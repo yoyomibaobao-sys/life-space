@@ -9,10 +9,12 @@ export default function HomeSectionTabs({
   active,
   searchEnabled = true,
   showNotification = false,
+  onSearch,
 }: {
   active: HomeSection;
   searchEnabled?: boolean;
   showNotification?: boolean;
+  onSearch?: () => void;
 }) {
   const { t } = useLanguage();
   const items = [
@@ -28,11 +30,12 @@ export default function HomeSectionTabs({
         searchEnabled
           ? active === "activity"
             ? "/discover/search"
-            : active === "experience"
+            : active === "experience" && !onSearch
               ? "/experience/search"
               : undefined
           : undefined
       }
+      onSearch={searchEnabled ? onSearch : undefined}
       searchLabel={t.nav.search}
       showNotification={showNotification}
       items={items.map((item) => ({

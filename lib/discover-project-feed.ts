@@ -55,10 +55,38 @@ export function normalizeDiscoveryProjectFeedRow(
     latest_public_record_note: latestNote,
     public_record_count: normalizeCount(row.public_record_count),
     public_comment_count: normalizeCount(row.public_comment_count),
+    view_count: normalizeCount(row.view_count ?? null),
     has_public_help: row.has_public_help === true,
     card_summary: latestNote || archiveSummary,
     display_image_url: null,
   };
+}
+
+export async function enrichDiscoveryProjectViewCounts(
+  items: DiscoveryProjectFeedItem[]
+): Promise<DiscoveryProjectFeedItem[]> {
+  const archiveIds = Array.from(new Set(items.map((item) => item.archive_id).filter(Boolean)));
+  if (!archiveIds.length) return items;
+
+  const { data, error } = await supabase
+    .from("archives")
+    .select("id, view_count")
+    .in("id", archiveIds)
+    .eq("is_public", true);
+
+  if (error) {
+    console.warn("discovery project view count load failed:", error.message);
+    return items;
+  }
+
+  const countMap = new Map(
+    (data || []).map((row) => [String(row.id), normalizeCount(row.view_count)])
+  );
+
+  return items.map((item) => ({
+    ...item,
+    view_count: countMap.get(item.archive_id) ?? item.view_count,
+  }));
 }
 
 function normalizeLimit(value?: number) {
@@ -188,7 +216,8 @@ export async function fetchDiscoveryProjectCandidates(
   const hasMore = rows.length > limit;
   const pageRows = rows.slice(0, limit);
   const normalizedItems = pageRows.map(normalizeDiscoveryProjectFeedRow);
-  const items = await enrichDiscoveryProjectMedia(normalizedItems);
+  const itemsWithViews = await enrichDiscoveryProjectViewCounts(normalizedItems);
+  const items = await enrichDiscoveryProjectMedia(itemsWithViews);
   const lastItem = items[items.length - 1];
   const nextCursor =
     hasMore && lastItem?.public_activity_at

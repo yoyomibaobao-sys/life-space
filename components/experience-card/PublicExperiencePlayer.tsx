@@ -130,20 +130,18 @@ export default function PublicExperiencePlayer({
         <span style={{ ...progressFillStyle, width: `${progress * 100}%` }} />
       </span>
 
-      <div style={fullscreen ? fullscreenMetaStyle : metaStyle}>
+      {!fullscreen ? <div style={metaStyle}>
         <div style={{ minWidth: 0 }}>
-          <strong style={fullscreen ? fullscreenTitleStyle : titleStyle}>{detail.card.title}</strong>
-          <span style={fullscreen ? fullscreenAuthorStyle : authorStyle}>
+          <strong style={titleStyle}>{detail.card.title}</strong>
+          <span style={authorStyle}>
             {detail.author?.username || t.experience.default_user}
             {detail.archive.title ? ` · ${detail.archive.title}` : ""}
           </span>
         </div>
-        {!fullscreen ? (
-          <Link href={`/experience-cards/${detail.card.id}`} style={detailLinkStyle}>
-            {t.experience.view_details}
-          </Link>
-        ) : null}
-      </div>
+        <Link href={`/experience-cards/${detail.card.id}`} style={detailLinkStyle}>
+          {t.experience.view_details}
+        </Link>
+      </div> : null}
     </article>
   );
 }
@@ -222,7 +220,7 @@ const recordCaptionStyle: CSSProperties = {
 };
 const fullscreenRecordCaptionStyle: CSSProperties = {
   ...recordCaptionStyle,
-  bottom: "calc(92px + var(--app-safe-area-bottom))",
+  bottom: "calc(38px + var(--app-safe-area-bottom))",
 };
 const recordDateStyle: CSSProperties = { fontSize: 12, opacity: 0.82 };
 const recordTextStyle: CSSProperties = { fontSize: 15, lineHeight: 1.55 };
@@ -259,7 +257,7 @@ const fullscreenProgressTrackStyle: CSSProperties = {
   position: "absolute",
   left: 12,
   right: 12,
-  bottom: "calc(78px + var(--app-safe-area-bottom))",
+  bottom: "calc(18px + var(--app-safe-area-bottom))",
   zIndex: 4,
   margin: 0,
   background: "rgba(255,255,255,.28)",
@@ -278,16 +276,6 @@ const metaStyle: CSSProperties = {
   gap: 12,
   padding: "9px 4px 0",
 };
-const fullscreenMetaStyle: CSSProperties = {
-  ...metaStyle,
-  position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  zIndex: 4,
-  padding: "14px 16px calc(16px + var(--app-safe-area-bottom))",
-  background: "linear-gradient(180deg, transparent, rgba(8,14,8,.78))",
-};
 const titleStyle: CSSProperties = {
   display: "block",
   overflow: "hidden",
@@ -304,14 +292,6 @@ const authorStyle: CSSProperties = {
   fontSize: 12,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-};
-const fullscreenTitleStyle: CSSProperties = {
-  ...titleStyle,
-  color: "#fff",
-};
-const fullscreenAuthorStyle: CSSProperties = {
-  ...authorStyle,
-  color: "rgba(255,255,255,.78)",
 };
 const detailLinkStyle: CSSProperties = {
   flexShrink: 0,

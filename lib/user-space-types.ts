@@ -13,6 +13,8 @@ export type UserSpaceArchive = {
   status?: string | null;
   view_count?: number | null;
   record_count?: number | null;
+  created_at?: string | null;
+  ended_at?: string | null;
 };
 
 export type UserSpaceMedia = {
@@ -39,7 +41,7 @@ export type UserSpaceRecord = {
 
 export type UserSpaceTag = {
   id: string;
-  name: string;
+  name: string | null;
   category?: string | null;
   sub_tag_id?: string | null;
 };

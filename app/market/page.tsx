@@ -749,26 +749,26 @@ function filterButtonStyle(active: boolean): CSSProperties {
 const listStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: 9,
+  gap: 7,
 };
 
 const cardStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "96px minmax(0, 1fr)",
-  gap: 9,
+  gridTemplateColumns: "88px minmax(0, 1fr)",
+  gap: 8,
   textDecoration: "none",
   color: "inherit",
   background: "#fff",
   border: "1px solid #e4ece0",
   borderRadius: 14,
-  padding: 8,
+  padding: 7,
   alignItems: "start",
   boxShadow: "0 8px 20px rgba(32,56,24,0.04)",
 };
 
 const cardImageStyle: CSSProperties = {
-  width: "96px",
-  height: "96px",
+  width: "88px",
+  height: "88px",
   objectFit: "cover",
   borderRadius: 12,
   background: "#f0f4ed",
@@ -776,8 +776,8 @@ const cardImageStyle: CSSProperties = {
 };
 
 const cardImageFallbackStyle: CSSProperties = {
-  width: "96px",
-  height: "96px",
+  width: "88px",
+  height: "88px",
   borderRadius: 12,
   background: "#edf4e8",
   border: "1px solid #e4ece0",
@@ -791,7 +791,7 @@ const cardImageFallbackStyle: CSSProperties = {
 
 const cardContentStyle: CSSProperties = {
   minWidth: 0,
-  minHeight: 96,
+  minHeight: 88,
   display: "flex",
   flexDirection: "column",
 };

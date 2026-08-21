@@ -10,9 +10,7 @@ import {
 } from "@/lib/archive-detail-utils";
 import type {
   CommentFlowerRow,
-  CommentLikeRow,
   RecordComment,
-  RecordLikeRow,
 } from "@/lib/archive-detail-types";
 import { PUBLIC_PROFILE_SELECT, type AppProfile } from "@/lib/domain-types";
 import UiIcon from "@/components/ui/UiIcon";
@@ -26,8 +24,6 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type CommentItem = RecordComment & {
   profile: Pick<AppProfile, "id" | "username" | "avatar_url"> | null;
-  likeCount: number;
-  likedByMe: boolean;
   flowerCount: number;
   myFlower: CommentFlowerRow | null;
 };
@@ -56,8 +52,6 @@ export default function ArchiveCommentsSection({
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [recordLikeCount, setRecordLikeCount] = useState(0);
-  const [recordLikedByMe, setRecordLikedByMe] = useState(false);
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
@@ -129,12 +123,7 @@ export default function ArchiveCommentsSection({
       new Set(commentRows.map((item) => item.user_id).filter(Boolean)),
     );
 
-    const [
-      profilesResult,
-      commentLikesResult,
-      flowersResult,
-      recordLikesResult,
-    ] = await Promise.all([
+    const [profilesResult, flowersResult] = await Promise.all([
       profileIds.length
         ? supabase
             .from("public_profiles")
@@ -145,12 +134,6 @@ export default function ArchiveCommentsSection({
           }),
       commentIds.length
         ? supabase
-            .from("comment_likes")
-            .select("id, comment_id, user_id, created_at")
-            .in("comment_id", commentIds)
-        : Promise.resolve({ data: [] as CommentLikeRow[] }),
-      commentIds.length
-        ? supabase
             .from("comment_flowers")
             .select(
               "id, record_id, comment_id, sender_user_id, receiver_user_id, created_at, revoked_at, revoke_until, reason",
@@ -158,10 +141,6 @@ export default function ArchiveCommentsSection({
             .eq("record_id", recordId)
             .in("comment_id", commentIds)
         : Promise.resolve({ data: [] as CommentFlowerRow[] }),
-      supabase
-        .from("record_likes")
-        .select("id, record_id, user_id, created_at")
-        .eq("record_id", recordId),
     ]);
 
     const profileMap = new Map<
@@ -175,14 +154,9 @@ export default function ArchiveCommentsSection({
       profileMap.set(profile.id, profile);
     }
 
-    const commentLikes = (commentLikesResult.data || []) as CommentLikeRow[];
     const flowers = (flowersResult.data || []) as CommentFlowerRow[];
-    const recordLikes = (recordLikesResult.data || []) as RecordLikeRow[];
 
     const nextComments: CommentItem[] = commentRows.map((comment) => {
-      const likes = commentLikes.filter(
-        (item) => item.comment_id === comment.id,
-      );
       const flowerRows = flowers.filter(
         (item) => item.comment_id === comment.id && !item.revoked_at,
       );
@@ -196,66 +170,13 @@ export default function ArchiveCommentsSection({
       return {
         ...comment,
         profile: profileMap.get(comment.user_id) || null,
-        likeCount: likes.length,
-        likedByMe: likes.some((item) => item.user_id === currentUserId),
         flowerCount: flowerRows.length,
         myFlower,
       };
     });
 
     setComments(nextComments);
-    setRecordLikeCount(recordLikes.length);
-    setRecordLikedByMe(
-      recordLikes.some((item) => item.user_id === currentUserId),
-    );
     setLoading(false);
-  }
-
-  async function handleToggleRecordLike() {
-    if (!currentUserId) {
-      showToast(t.archive_comments.login_required);
-      return;
-    }
-
-    if (recordLikedByMe) {
-      const { error } = await supabase
-        .from("record_likes")
-        .delete()
-        .eq("record_id", recordId)
-        .eq("user_id", currentUserId);
-
-      if (error) {
-        showToast(t.archive_comments.unlike_failed);
-        return;
-      }
-
-      setRecordLikedByMe(false);
-      setRecordLikeCount((prev) => Math.max(0, prev - 1));
-      return;
-    }
-
-    if (membershipLoading) {
-      showToast(t.archive_comments.membership_loading);
-      return;
-    }
-
-    if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership, language));
-      return;
-    }
-
-    const { error } = await supabase.from("record_likes").insert({
-      record_id: recordId,
-      user_id: currentUserId,
-    });
-
-    if (error) {
-      showToast(t.archive_comments.like_failed);
-      return;
-    }
-
-    setRecordLikedByMe(true);
-    setRecordLikeCount((prev) => prev + 1);
   }
 
   async function handleSubmitComment() {
@@ -299,68 +220,7 @@ export default function ArchiveCommentsSection({
     await loadData();
   }
 
-  async function handleToggleCommentLike(comment: CommentItem) {
-    if (!currentUserId) {
-      showToast(t.archive_comments.login_required);
-      return;
-    }
-
-    if (comment.likedByMe) {
-      const { error } = await supabase
-        .from("comment_likes")
-        .delete()
-        .eq("comment_id", comment.id)
-        .eq("user_id", currentUserId);
-
-      if (error) {
-        showToast(t.archive_comments.unlike_failed);
-        return;
-      }
-
-      setComments((prev) =>
-        prev.map((item) =>
-          item.id === comment.id
-            ? {
-                ...item,
-                likedByMe: false,
-                likeCount: Math.max(0, item.likeCount - 1),
-              }
-            : item,
-        ),
-      );
-      return;
-    }
-
-    if (membershipLoading) {
-      showToast(t.archive_comments.membership_loading);
-      return;
-    }
-
-    if (!canCreateMembershipContent(membership)) {
-      showToast(getCreateContentBlockedText(membership, language));
-      return;
-    }
-
-    const { error } = await supabase.from("comment_likes").insert({
-      comment_id: comment.id,
-      user_id: currentUserId,
-    });
-
-    if (error) {
-      showToast(t.archive_comments.like_failed);
-      return;
-    }
-
-    setComments((prev) =>
-      prev.map((item) =>
-        item.id === comment.id
-          ? { ...item, likedByMe: true, likeCount: item.likeCount + 1 }
-          : item,
-      ),
-  );
-}
-
-function mobileCommentActionButtonStyle(active: boolean) {
+  function mobileCommentActionButtonStyle(active: boolean) {
   return {
     border: "none",
     background: "transparent",
@@ -370,7 +230,7 @@ function mobileCommentActionButtonStyle(active: boolean) {
     padding: "4px 0",
     cursor: "pointer",
   } as const;
-}
+  }
 
   async function handleDeleteComment(comment: CommentItem) {
     const canDelete = Boolean(
@@ -494,27 +354,6 @@ function mobileCommentActionButtonStyle(active: boolean) {
           flexWrap: "wrap",
         }}
       >
-        <button
-          type="button"
-          onClick={handleToggleRecordLike}
-          style={
-            compactMobile
-              ? mobileCommentActionButtonStyle(recordLikedByMe)
-              : smallActionButtonStyle(
-                  recordLikedByMe ? "#fff3f3" : "#fff",
-                  recordLikedByMe ? "#b64a4a" : "#667066",
-                  recordLikedByMe ? "#efc4c4" : "#dfe5dc",
-                )
-          }
-          aria-label={
-            recordLikedByMe
-              ? t.archive_comments.unlike_aria
-              : t.archive_comments.like_aria
-          }
-        >
-          <UiIcon name={recordLikedByMe ? "heart-filled" : "heart"} size={14} /> {recordLikeCount}
-        </button>
-
         <button
           type="button"
           onClick={() =>
@@ -681,27 +520,6 @@ function mobileCommentActionButtonStyle(active: boolean) {
                         <UiIcon name="helpful" size={13} /> {t.archive_comments.helpful} {comment.flowerCount}
                       </span>
                     ) : null}
-                    <button
-                      type="button"
-                      onClick={() => void handleToggleCommentLike(comment)}
-                      style={{
-                        border: "none",
-                        background: "transparent",
-                        color: comment.likedByMe ? "#b64a4a" : "#7b8776",
-                        fontSize: 12,
-                        padding: 0,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                      aria-label={
-                        comment.likedByMe
-                          ? t.archive_comments.unlike_aria
-                          : t.archive_comments.like_comment_aria
-                      }
-                    >
-                      <UiIcon name={comment.likedByMe ? "heart-filled" : "heart"} size={13} /> {comment.likeCount}
-                    </button>
-
                     {canDeleteComment ? (
                       <button
                         type="button"

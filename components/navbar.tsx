@@ -606,24 +606,29 @@ function getArchiveDetailPath(pathname: string) {
   return pathname;
 }
 
-function isMobileMePath(pathname: string) {
-  return pathname === "/profile" || pathname.startsWith("/profile/");
-}
-
 function isMobileDiscoverIndexPath(pathname: string) {
   return pathname === "/discover";
 }
 
 function hasPageManagedMobileTopNav(pathname: string) {
-  return [
+  if ([
     "/discover",
+    "/discover/search",
     "/experience",
     "/experience/search",
     "/plant",
     "/follow",
     "/market",
     "/archive",
-  ].includes(pathname);
+  ].includes(pathname)) return true;
+
+  return (
+    pathname.startsWith("/market/") ||
+    pathname.startsWith("/user/") ||
+    pathname.startsWith("/plant/") ||
+    pathname === "/archive/interests" ||
+    /^\/experience-cards\/[^/]+$/.test(pathname)
+  );
 }
 
 function shouldShowMobileProfileEntry(pathname: string) {
@@ -633,14 +638,8 @@ function shouldShowMobileProfileEntry(pathname: string) {
 }
 
 function shouldShowMobileCreateAction(pathname: string) {
-  if (pathname === "/archive/new" || pathname === "/local/archive/new") return false;
-  if (pathname.startsWith("/quick-record")) return false;
-  if (pathname.startsWith("/market")) return false;
-  if (pathname === "/plant" || pathname.startsWith("/plant/")) return false;
-  if (pathname.startsWith("/experience-cards")) return false;
-  if (isMobileMePath(pathname)) return false;
-  if (isMobileDiscoverIndexPath(pathname)) return false;
-  return true;
+  void pathname;
+  return false;
 }
 
 function shouldShowMobileLoginAction(pathname: string) {

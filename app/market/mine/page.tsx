@@ -124,7 +124,7 @@ export default function MyMarketPostsPage() {
       <div style={shellStyle}>
         <header style={headerStyle}>
           <div>
-            <Link href="/market" style={backLinkStyle}>
+            <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
               <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
             </Link>
             <h1 style={titleStyle}>{t.market.mine_title}</h1>
@@ -397,14 +397,14 @@ const cardStyle: CSSProperties = {
 
 const cardMainStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "104px minmax(0, 1fr)",
+  gridTemplateColumns: "88px minmax(0, 1fr)",
   gap: 9,
   alignItems: "start",
 };
 
 const cardMediaLinkStyle: CSSProperties = {
-  width: 104,
-  height: 104,
+  width: 88,
+  height: 88,
   display: "block",
   borderRadius: 13,
   overflow: "hidden",
@@ -439,7 +439,7 @@ const cardContentStyle: CSSProperties = {
   flex: 1,
   display: "flex",
   flexDirection: "column",
-  minHeight: 104,
+  minHeight: 88,
 };
 
 const badgeRowStyle: CSSProperties = {
@@ -538,8 +538,8 @@ const actionRowStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 8,
-  marginTop: 8,
-  paddingTop: 8,
+  marginTop: 5,
+  paddingTop: 5,
   borderTop: "1px solid #edf1eb",
 };
 
@@ -549,11 +549,11 @@ const secondaryLinkStyle: CSSProperties = {
   background: "#fff",
   color: "#40583a",
   borderRadius: 999,
-  minHeight: 34,
+  minHeight: 30,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "6px 10px",
+  padding: "4px 10px",
   fontSize: 13,
   fontWeight: 700,
 };
