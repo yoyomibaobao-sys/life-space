@@ -63,7 +63,7 @@ export default function ArchiveTaxonomyPanel({
 }: Props) {
   const { language, t } = useLanguage();
   const compact = mobileMode;
-  const [manageOpen, setManageOpen] = useState(false);
+  const [renameMode, setRenameMode] = useState(false);
   const canManage = Boolean(
     onCreateSubcategory ||
       onRenameSubcategory ||
@@ -75,12 +75,11 @@ export default function ArchiveTaxonomyPanel({
 
   return (
     <section style={panelStyle(compact)}>
-      {compact && showCategoryRow ? (
-        <div style={mobilePanelHeaderStyle}>
-          <span>{t.archive_workspace.main_category}</span>
+      {compact && showCategoryRow && canManage ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
           {canManage ? (
-            <button type="button" onClick={() => setManageOpen((open) => !open)} style={manageButtonStyle}>
-              {manageOpen ? t.archive_workspace.cancel : t.nav.admin}
+            <button type="button" onClick={() => setRenameMode((open) => !open)} style={manageButtonStyle}>
+              {renameMode ? t.archive_workspace.done : t.archive_workspace.edit}
             </button>
           ) : null}
         </div>
@@ -126,12 +125,12 @@ export default function ArchiveTaxonomyPanel({
               active={activeSubcategoryId === chip.id}
               compact={compact}
               onSelect={() => onSelectSubcategory(chip)}
-              onRename={!compact && onRenameSubcategory ? () => onRenameSubcategory(chip) : undefined}
-              onDelete={!compact && onDeleteSubcategory ? () => onDeleteSubcategory(chip) : undefined}
+              onRename={renameMode && onRenameSubcategory ? () => onRenameSubcategory(chip) : undefined}
+              onDelete={onDeleteSubcategory ? () => onDeleteSubcategory(chip) : undefined}
             />
           ))}
 
-          {!compact && onCreateSubcategory ? (
+          {onCreateSubcategory ? (
             <button
               type="button"
               onClick={() => onCreateSubcategory(activeCategory)}
@@ -164,12 +163,12 @@ export default function ArchiveTaxonomyPanel({
                 active={activeGroupId === chip.id}
                 compact={compact}
                 onSelect={() => onSelectGroup(chip)}
-                onRename={!compact && onRenameGroup ? () => onRenameGroup(chip) : undefined}
-                onDelete={!compact && onDeleteGroup ? () => onDeleteGroup(chip) : undefined}
+                onRename={renameMode && onRenameGroup ? () => onRenameGroup(chip) : undefined}
+                onDelete={onDeleteGroup ? () => onDeleteGroup(chip) : undefined}
               />
             ))}
 
-            {!compact && onCreateGroup ? (
+            {onCreateGroup ? (
               <button
                 type="button"
                 onClick={onCreateGroup}
@@ -183,71 +182,6 @@ export default function ArchiveTaxonomyPanel({
         </>
       ) : null}
 
-      {compact && manageOpen ? (
-        <div style={managerStyle}>
-          {!activeCategory ? (
-            <p style={managerHintStyle}>{t.archive_workspace.show_all_category}</p>
-          ) : (
-            <>
-              <div style={managerSectionHeaderStyle}>
-                <strong>{t.archive_workspace.subcategory}</strong>
-                {onCreateSubcategory ? (
-                  <button type="button" onClick={() => onCreateSubcategory(activeCategory)} style={managerAddButtonStyle}>
-                    + {t.archive_workspace.add_subcategory}
-                  </button>
-                ) : null}
-              </div>
-              {subcategories.length ? subcategories.map((chip) => (
-                <div key={chip.id} style={managerRowStyle}>
-                  <button type="button" onClick={() => onSelectSubcategory(chip)} style={managerNameButtonStyle}>
-                    {chip.label}
-                  </button>
-                  {onRenameSubcategory ? (
-                    <button type="button" onClick={() => onRenameSubcategory(chip)} style={managerActionStyle}>
-                      {t.archive_workspace.edit}
-                    </button>
-                  ) : null}
-                  {onDeleteSubcategory ? (
-                    <button type="button" onClick={() => onDeleteSubcategory(chip)} style={managerDeleteStyle}>
-                      {t.archive_workspace.delete}
-                    </button>
-                  ) : null}
-                </div>
-              )) : <p style={managerHintStyle}>—</p>}
-
-              {activeSubcategoryId ? (
-                <>
-                  <div style={{ ...managerSectionHeaderStyle, marginTop: 14 }}>
-                    <strong>{t.archive_workspace.group}</strong>
-                    {onCreateGroup ? (
-                      <button type="button" onClick={onCreateGroup} style={managerAddButtonStyle}>
-                        + {t.archive_workspace.add_group}
-                      </button>
-                    ) : null}
-                  </div>
-                  {groups.length ? groups.map((chip) => (
-                    <div key={chip.id} style={managerRowStyle}>
-                      <button type="button" onClick={() => onSelectGroup(chip)} style={managerNameButtonStyle}>
-                        {chip.label}
-                      </button>
-                      {onRenameGroup ? (
-                        <button type="button" onClick={() => onRenameGroup(chip)} style={managerActionStyle}>
-                          {t.archive_workspace.edit}
-                        </button>
-                      ) : null}
-                      {onDeleteGroup ? (
-                        <button type="button" onClick={() => onDeleteGroup(chip)} style={managerDeleteStyle}>
-                          {t.archive_workspace.delete}
-                        </button>
-                      ) : null}
-                    </div>
-                  )) : <p style={managerHintStyle}>—</p>}
-                </>
-              ) : null}
-            </>
-          )}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -274,11 +208,22 @@ function TaxonomyChipButton({
       <button
         type="button"
         onClick={onSelect}
-        onDoubleClick={onRename}
         style={chipButtonStyle(active, compact)}
       >
         {chip.label}
       </button>
+
+      {onRename ? (
+        <button
+          type="button"
+          onClick={onRename}
+          style={renameButtonStyle(compact)}
+          title={t.archive_workspace.edit}
+          aria-label={`${t.archive_workspace.edit} ${chip.label}`}
+        >
+          {t.archive_workspace.edit}
+        </button>
+      ) : null}
 
       {onDelete ? (
         <button
@@ -347,17 +292,6 @@ function pillStyle(active: boolean, compact: boolean): CSSProperties {
   };
 }
 
-const mobilePanelHeaderStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  marginBottom: 7,
-  color: "#6a7766",
-  fontSize: 13,
-  fontWeight: 700,
-};
-
 const manageButtonStyle: CSSProperties = {
   minHeight: 34,
   border: "1px solid #dce6d8",
@@ -368,6 +302,19 @@ const manageButtonStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
 };
+
+function renameButtonStyle(compact: boolean): CSSProperties {
+  return {
+    border: "1px solid #cfe0ca",
+    borderRadius: 999,
+    background: "#f2f8ef",
+    color: "#3f6f3d",
+    padding: compact ? "3px 7px" : "4px 8px",
+    fontSize: compact ? 11 : 12,
+    fontWeight: 700,
+    cursor: "pointer",
+  };
+}
 
 const managerStyle: CSSProperties = {
   marginTop: 12,

@@ -4,7 +4,6 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
-import { standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { saveQuickCapture, type QuickCaptureTarget } from "@/lib/quick-capture";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -29,20 +28,15 @@ export default function QuickCaptureNavAction({
     setBusy(true);
 
     try {
-      let file = selected;
-      try {
-        file = (await standardizeRecordPhotoFile(selected)).file;
-      } catch {
-        // Existing record editors will retry standardization before saving.
-      }
-
       const targetType: QuickCaptureTarget = cloudArchiveId
         ? "cloud"
         : localArchiveId
           ? "local"
           : null;
       const archiveId = cloudArchiveId || localArchiveId || null;
-      const capture = await saveQuickCapture(file, {
+      // The record editor performs the required standardisation when saving.
+      // Keeping the original blob here makes the camera return immediate.
+      const capture = await saveQuickCapture(selected, {
         sourcePath: pathname,
         targetType,
         archiveId,
@@ -86,6 +80,26 @@ export default function QuickCaptureNavAction({
       >
         <UiIcon name="plus" size={25} strokeWidth={2.2} />
       </button>
+      {busy ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "grid",
+            placeItems: "center",
+            background: "rgba(249, 251, 247, 0.82)",
+            backdropFilter: "blur(3px)",
+            color: "#355a34",
+            fontSize: 15,
+            fontWeight: 750,
+          }}
+        >
+          {t.quick_record.processing_photo}
+        </div>
+      ) : null}
       <input
         ref={inputRef}
         type="file"

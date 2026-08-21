@@ -393,7 +393,6 @@ export default function UserSpacePage() {
       }}
     >
       <UserSpaceHeader
-        userId={userId}
         username={username}
         avatarUrl={avatarUrl}
         isSelf={viewerId === userId}

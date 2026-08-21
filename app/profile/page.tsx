@@ -8,7 +8,7 @@ import { buildLoginHref } from "@/lib/auth-return";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
-import { formatStorage, loadUserProfileData } from "@/lib/user-profile-shared";
+import { formatStorage, loadUserProfileData, type UserProfileStats } from "@/lib/user-profile-shared";
 import {
   formatMembershipDate,
   getDaysRemaining,
@@ -51,7 +51,7 @@ type MembershipPaymentRow = {
   created_at: string | null;
 };
 
-type MobileProfileModule = "settings" | "membership" | "payment" | "account";
+type MobileProfileModule = "settings" | "membership" | "payment" | "backup" | "account";
 type MobileProfileNavItem = {
   label: string;
   value?: MobileProfileModule;
@@ -89,19 +89,23 @@ export default function ProfilePage() {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
-    { value: "settings", label: t.profile.modules.settings },
-    { value: "membership", label: t.profile.modules.membership },
-    { value: "payment", label: t.profile.modules.payment },
+    { value: "settings", label: language === "en" ? "Language settings" : "语言设置" },
+    { href: "/membership/payment", label: language === "en" ? "Open / renew" : "开通／续费" },
+    { value: "payment", label: language === "en" ? "Order history" : "订单查询" },
+    { href: "/membership/benefits", label: language === "en" ? "Membership types" : "会员类别说明" },
+    { href: "/profile/recent", label: language === "en" ? "Browsing history" : "浏览历史" },
+    { value: "backup", label: language === "en" ? "Backup & export" : "备份与导出" },
     { href: "/feedback", label: t.feedback_and_contact },
     { href: "/profile/trash", label: t.profile.modules.trash },
-    { value: "account", label: t.profile.modules.account },
+    { value: "account", label: language === "en" ? "Account management" : "账号管理" },
   ];
   const adminMembershipProfileModule: MobileProfileNavItem = {
     href: "/admin/memberships",
-    label: t.profile.modules.admin_membership,
+    label: language === "en" ? "User management" : "用户管理",
   };
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
+  const [profileStats, setProfileStats] = useState<UserProfileStats | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipError, setMembershipError] = useState("");
   const [paymentRows, setPaymentRows] = useState<MembershipPaymentRow[]>([]);
@@ -124,7 +128,7 @@ export default function ProfilePage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [mobileProfileModule, setMobileProfileModule] =
-    useState<MobileProfileModule>("settings");
+    useState<MobileProfileModule | null>(null);
 
   useEffect(() => {
     const updateViewportWidth = () => setViewportWidth(window.innerWidth);
@@ -149,6 +153,7 @@ export default function ProfilePage() {
       setUser(user);
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
+      setProfileStats(data.stats);
       const [
         membershipResult,
         adminResult,
@@ -268,10 +273,12 @@ export default function ProfilePage() {
   const showInfoModule = mobileProfileModule === "settings";
   const showPaymentModule = mobileProfileModule === "payment";
   const showAccountModule = mobileProfileModule === "account";
+  const showBackupModule = mobileProfileModule === "backup";
 
   async function refreshProfile(targetUserId: string) {
     const data = await loadUserProfileData(supabase, targetUserId);
     setProfile(data.profile);
+    setProfileStats(data.stats);
   }
 
   async function refreshPaymentRows(targetUserId: string) {
@@ -561,6 +568,33 @@ export default function ProfilePage() {
           </Link>
         ) : null}
 
+        <section style={profileIdentityCardStyle}>
+          <div style={profileIdentityTopStyle}>
+            {profile.avatar_url ? (
+              <img src={String(profile.avatar_url)} alt="" style={profileIdentityAvatarStyle} />
+            ) : (
+              <span style={profileIdentityAvatarFallbackStyle}><UiIcon name="sprout" size={24} /></span>
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={profileIdentityNameStyle}>{profile.username || t.profile.unset_username}</div>
+              <div style={profileIdentityEmailStyle}>{user.email}</div>
+              <div style={profileIdentityLocationStyle}>{locationPreview}</div>
+            </div>
+            <Link href="/notifications" aria-label={t.nav.notification} style={identityIconLinkStyle}>
+              <UiIcon name="bell" size={19} />
+            </Link>
+            <button type="button" onClick={() => setMobileProfileModule("settings")} style={identityEditButtonStyle}>
+              {t.archive_workspace.edit}
+            </button>
+          </div>
+          <div style={identityStatsStyle}>
+            <IdentityStat label={language === "en" ? "Member no." : "会员编号"} value={String(profile.account_number || "—")} />
+            <IdentityStat label={language === "en" ? "Helpful received" : "收到有用"} value={String(profileStats?.receivedFlowerCount || 0)} />
+            <IdentityStat label={language === "en" ? "Membership" : "会员类别"} value={getMembershipPlanLabel(membership?.plan, language)} />
+            <IdentityStat label={language === "en" ? "Storage" : "空间用量"} value={storageText} />
+          </div>
+        </section>
+
         <MobileProfileModuleTabs
           active={mobileProfileModule}
           modules={visibleMobileProfileModules}
@@ -826,8 +860,7 @@ export default function ProfilePage() {
         </section>
         ) : null}
 
-        {showAccountModule ? (
-        <>
+        {showBackupModule ? (
         <section style={isMobileViewport ? { ...dataSectionStyle, ...sectionCompactStyle } : dataSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.my_data}</div>
@@ -854,15 +887,9 @@ export default function ProfilePage() {
             </p>
           ) : null}
         </section>
+        ) : null}
 
-        <button
-          type="button"
-          onClick={() => void handleProfileLogout()}
-          style={accountLogoutButtonStyle}
-        >
-          {t.nav.logout_full}
-        </button>
-
+        {showAccountModule ? (
         <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#9a5b55" }}>{t.profile.danger}</div>
@@ -879,8 +906,15 @@ export default function ProfilePage() {
             {t.profile.delete_account}
           </button>
         </section>
-        </>
         ) : null}
+
+        <button
+          type="button"
+          onClick={() => void handleProfileLogout()}
+          style={accountLogoutButtonStyle}
+        >
+          {t.nav.logout_full}
+        </button>
       </section>
       <ConfirmDialog
         open={deleteDialogOpen}
@@ -921,7 +955,7 @@ function MobileProfileModuleTabs({
   onChange,
   compact,
 }: {
-  active: MobileProfileModule;
+  active: MobileProfileModule | null;
   modules: MobileProfileNavItem[];
   onChange: (value: MobileProfileModule) => void;
   compact: boolean;
@@ -976,6 +1010,15 @@ function MobileProfileModuleTabs({
   );
 }
 
+function IdentityStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ color: "#7a8676", fontSize: 11 }}>{label}</div>
+      <div style={{ marginTop: 3, color: "#2e422d", fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+    </div>
+  );
+}
+
 function InfoCard({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div style={statCardBaseStyle}>
@@ -991,6 +1034,44 @@ const profileMainStyle: CSSProperties = {
   margin: "0 auto",
   padding: "16px 14px 32px",
 };
+
+const profileIdentityCardStyle: CSSProperties = {
+  marginTop: 10,
+  padding: 12,
+  border: "1px solid #dfeadd",
+  borderRadius: 16,
+  background: "#f9fcf7",
+};
+
+const profileIdentityTopStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  minWidth: 0,
+};
+
+const profileIdentityAvatarStyle: CSSProperties = {
+  width: 54,
+  height: 54,
+  flex: "0 0 54px",
+  borderRadius: "50%",
+  objectFit: "cover",
+};
+
+const profileIdentityAvatarFallbackStyle: CSSProperties = {
+  ...profileIdentityAvatarStyle,
+  display: "grid",
+  placeItems: "center",
+  background: "#eaf3e6",
+  color: "#5e8057",
+};
+
+const profileIdentityNameStyle: CSSProperties = { color: "#223422", fontSize: 17, fontWeight: 850 };
+const profileIdentityEmailStyle: CSSProperties = { marginTop: 2, color: "#697766", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const profileIdentityLocationStyle: CSSProperties = { marginTop: 3, color: "#697766", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const identityIconLinkStyle: CSSProperties = { width: 34, height: 34, display: "grid", placeItems: "center", color: "#52714f", textDecoration: "none" };
+const identityEditButtonStyle: CSSProperties = { minHeight: 34, border: "1px solid #d7e5d2", borderRadius: 999, background: "#fff", color: "#426a40", padding: "0 10px", fontSize: 12, fontWeight: 800, cursor: "pointer" };
+const identityStatsStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginTop: 11, paddingTop: 10, borderTop: "1px solid #e4ece0" };
 
 const mobileProfileMainStyle: CSSProperties = {
   width: "100%",

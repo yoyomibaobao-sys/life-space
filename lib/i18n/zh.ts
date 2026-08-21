@@ -76,6 +76,8 @@ const zh = {
 
   quick_record: {
     take_photo: "拍照新建记录",
+    processing_photo: "正在处理照片…",
+    loading_projects: "照片已就绪，正在加载项目…",
     capture_failed: "照片暂时无法保存，请重试",
     loading: "正在准备记录...",
     missing_title: "照片已失效",
@@ -1660,6 +1662,7 @@ const zh = {
     mark_ownership: "标记归属",
     delete_local_project: "删除本地项目",
     edit: "编辑",
+    done: "完成",
     delete: "删除",
     move_to_trash: "移入回收站",
     moving_to_trash: "移入中...",

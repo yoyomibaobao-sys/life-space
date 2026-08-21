@@ -4,7 +4,6 @@ import {
 } from "@/lib/archive-categories";
 import type { Category, UserSpaceTag } from "@/lib/user-space-types";
 import {
-  categoryGroupStyle,
   groupFilterStyle,
   mainFilterStyle,
   subFilterStyle,
@@ -65,30 +64,28 @@ export default function UserSpaceFilters({
         {["plant", "system", "insect_fish", "other"].filter((category) =>
           visibleCategories.includes(category)
         ).map((category) => (
-          <div key={category} style={categoryGroupStyle}>
-            <button
-              type="button"
-              onClick={() => onSelectCategory(category as ArchiveCategory)}
-              style={mainFilterStyle(activeCategory === category && !activeSubTag)}
-            >
-              {getArchiveCategoryLabel(category, language)}
-            </button>
-
-            {visibleSubTags
-              .filter((tag) => tag.category === category)
-              .map((tag) => (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => onSelectSubTag(tag)}
-                  style={subFilterStyle(activeSubTag === tag.id)}
-                >
-                  {tag.name}
-                </button>
-              ))}
-          </div>
+          <button
+            key={category}
+            type="button"
+            onClick={() => onSelectCategory(category as ArchiveCategory)}
+            style={mainFilterStyle(activeCategory === category && !activeSubTag)}
+          >
+            {getArchiveCategoryLabel(category, language)}
+          </button>
         ))}
       </div>
+
+      {activeCategory !== "all" ? (
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid #edf1e8" }}>
+          {visibleSubTags
+            .filter((tag) => tag.category === activeCategory)
+            .map((tag) => (
+              <button key={tag.id} type="button" onClick={() => onSelectSubTag(tag)} style={subFilterStyle(activeSubTag === tag.id)}>
+                {tag.name}
+              </button>
+            ))}
+        </div>
+      ) : null}
 
       {activeSubTag && visibleGroupTags.length > 0 && (
         <div

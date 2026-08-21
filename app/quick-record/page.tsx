@@ -50,7 +50,8 @@ function QuickRecordContent() {
   const [cloudProjects, setCloudProjects] = useState<CloudArchiveOption[]>([]);
   const [localProjects, setLocalProjects] = useState<LocalArchiveSummary[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [captureLoading, setCaptureLoading] = useState(true);
+  const [projectsLoading, setProjectsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,13 +60,15 @@ function QuickRecordContent() {
     async function load() {
       const pending = captureId ? await getQuickCapture(captureId) : null;
       if (!pending || cancelled) {
-        setLoading(false);
+        setCaptureLoading(false);
+        setProjectsLoading(false);
         return;
       }
 
       setCapture(pending);
       objectUrl = URL.createObjectURL(quickCaptureToFile(pending));
       setPreviewUrl(objectUrl);
+      setCaptureLoading(false);
 
       const {
         data: { user },
@@ -95,7 +98,7 @@ function QuickRecordContent() {
       }
       setLocalProjects(localResult.archives);
       setCloudProjects((cloudResult.data || []) as CloudArchiveOption[]);
-      setLoading(false);
+      setProjectsLoading(false);
     }
 
     void load();
@@ -135,8 +138,8 @@ function QuickRecordContent() {
     router.push(`${base}/${selected.id}?quickCapture=${capture.id}#add-record`);
   }
 
-  if (loading) {
-    return <main style={pageStyle}>{t.quick_record.loading}</main>;
+  if (captureLoading) {
+    return <main style={pageStyle}>{t.quick_record.processing_photo}</main>;
   }
 
   if (!capture) {
@@ -166,7 +169,11 @@ function QuickRecordContent() {
           ) : null}
         </div>
 
-        {choices.length > 0 ? (
+        {projectsLoading ? (
+          <div role="status" aria-live="polite" style={projectLoadingStyle}>
+            {t.quick_record.loading_projects}
+          </div>
+        ) : choices.length > 0 ? (
           <>
             <label style={labelStyle}>
               {t.quick_record.choose_project}
@@ -279,6 +286,16 @@ const newProjectActionsStyle: CSSProperties = {
   marginTop: 9,
 };
 const mutedStyle: CSSProperties = { color: "#71806e", fontSize: 14, lineHeight: 1.65 };
+const projectLoadingStyle: CSSProperties = {
+  minHeight: 96,
+  display: "grid",
+  placeItems: "center",
+  border: "1px dashed #dce6d8",
+  borderRadius: 14,
+  background: "#f8fbf6",
+  color: "#657661",
+  fontSize: 14,
+};
 const primaryLinkStyle: CSSProperties = {
   display: "inline-flex",
   justifyContent: "center",

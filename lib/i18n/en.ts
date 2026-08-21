@@ -76,6 +76,8 @@ const en = {
 
   quick_record: {
     take_photo: "Take a photo for a new record",
+    processing_photo: "Processing photo…",
+    loading_projects: "Photo ready. Loading projects…",
     capture_failed: "The photo could not be saved. Try again.",
     loading: "Preparing the record...",
     missing_title: "The photo is no longer available",
@@ -1660,6 +1662,7 @@ const en = {
     mark_ownership: "Assign to my account",
     delete_local_project: "Delete local project",
     edit: "Edit",
+    done: "Done",
     delete: "Delete",
     move_to_trash: "Move to Trash",
     moving_to_trash: "Moving...",
