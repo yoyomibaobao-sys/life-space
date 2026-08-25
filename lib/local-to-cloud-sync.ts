@@ -179,6 +179,8 @@ async function ensureCloudArchive(params: {
     source: params.archive.source || null,
     note: params.archive.note || null,
     archive_summary: params.archive.archive_summary || null,
+    cycle_enabled: Boolean(params.archive.cycle_enabled),
+    next_cycle_name: params.archive.next_cycle_name || null,
     user_id: params.userId,
     is_public: isPublic,
   };
@@ -311,6 +313,7 @@ async function ensureCloudCycles(params: {
     const payload = {
       archive_id: params.archiveId,
       cycle_no: cycle.cycle_no,
+      display_name: cycle.display_name || null,
       status: cycle.status,
       started_at: cycle.started_at,
       ended_at: cycle.status === "ended" ? cycle.ended_at || cycle.updated_at : null,

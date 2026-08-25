@@ -66,6 +66,7 @@ export type ArchiveCycle = {
   id: string;
   archive_id: string;
   cycle_no: number;
+  display_name?: string | null;
   status: "active" | "ended";
   started_at: string;
   ended_at?: string | null;
@@ -97,6 +98,8 @@ export type ArchiveDetailArchive = {
   source?: string | null;
   note?: string | null;
   archive_summary?: string | null;
+  cycle_enabled?: boolean;
+  next_cycle_name?: string | null;
   help_status?: string | null;
   help_opened_at?: string | null;
   help_resolved_at?: string | null;

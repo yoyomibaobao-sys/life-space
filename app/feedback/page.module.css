@@ -4,6 +4,17 @@
   padding: 34px 0 18px;
 }
 
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 12px;
+  color: #63745e;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .hero {
   padding: 28px;
   border: 1px solid #e2e9dc;

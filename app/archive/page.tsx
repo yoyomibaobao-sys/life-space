@@ -701,9 +701,9 @@ export default function ArchivePage() {
     }
   }
 
-  async function renameSubTag(tag: SubTagItem) {
-    const name = prompt(t.archive_workspace.rename_category_prompt, tag.name);
-    if (!name?.trim()) return;
+  async function renameSubTag(tag: SubTagItem, suppliedName?: string) {
+    const name = suppliedName ?? prompt(t.archive_workspace.rename_category_prompt, tag.name);
+    if (!name?.trim() || name.trim() === tag.name) return;
 
     const { error } = await supabase.from("sub_tags").update({ name: name.trim() }).eq("id", tag.id);
     if (error) {
@@ -763,9 +763,9 @@ export default function ArchivePage() {
     }
   }
 
-  async function renameGroupTag(tag: GroupTagItem) {
-    const name = prompt(t.archive_workspace.rename_group_prompt, tag.name);
-    if (!name?.trim()) return;
+  async function renameGroupTag(tag: GroupTagItem, suppliedName?: string) {
+    const name = suppliedName ?? prompt(t.archive_workspace.rename_group_prompt, tag.name);
+    if (!name?.trim() || name.trim() === tag.name) return;
 
     const { error } = await supabase.from("group_tags").update({ name: name.trim() }).eq("id", tag.id);
     if (error) {
@@ -1107,9 +1107,17 @@ export default function ArchivePage() {
     (activeSource === "cloud" ? 0 : localArchives.length);
   const contentBlocked = !canCreateMembershipContent(membership);
   const membershipLabel = getMembershipPlanLabel(membership?.plan, language);
-  const storageUsageLabel = `${formatStorage(spaceProfile?.storage_used)} / ${formatStorage(
-    membership?.storage_limit_bytes || spaceProfile?.storage_limit
-  )}`;
+  const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
+  const storageLimitBytes = Math.max(
+    0,
+    Number(membership?.storage_limit_bytes || spaceProfile?.storage_limit || 0)
+  );
+  const storageUsagePercent = storageLimitBytes > 0
+    ? Math.min(100, (storageUsedBytes / storageLimitBytes) * 100)
+    : 0;
+  const storageTotalLabel = storageLimitBytes > 0
+    ? formatStorage(storageLimitBytes)
+    : "—";
 
   const cloudSubcategoryChips: ArchiveTaxonomyChip[] = activeCategory
     ? subTags
@@ -1355,9 +1363,9 @@ export default function ArchivePage() {
     }
   }
 
-  async function renameLocalSubcategory(chip: ArchiveTaxonomyChip) {
+  async function renameLocalSubcategory(chip: ArchiveTaxonomyChip, suppliedName?: string) {
     if (!activeCategory) return;
-    const name = prompt(t.archive_workspace.local_subcategory_rename_prompt, chip.label);
+    const name = suppliedName ?? prompt(t.archive_workspace.local_subcategory_rename_prompt, chip.label);
     const cleanName = name?.trim();
     if (!cleanName || cleanName === chip.label) return;
 
@@ -1440,9 +1448,9 @@ export default function ArchivePage() {
     }
   }
 
-  async function renameLocalGroup(chip: ArchiveTaxonomyChip) {
+  async function renameLocalGroup(chip: ArchiveTaxonomyChip, suppliedName?: string) {
     if (!activeCategory || !activeSubTag) return;
-    const name = prompt(t.archive_workspace.local_group_rename_prompt, chip.label);
+    const name = suppliedName ?? prompt(t.archive_workspace.local_group_rename_prompt, chip.label);
     const cleanName = name?.trim();
     if (!cleanName || cleanName === chip.label) return;
 
@@ -1653,9 +1661,9 @@ export default function ArchivePage() {
             setActiveGroupTag(null);
           })
         }
-        onRenameSubcategory={(chip) => {
+        onRenameSubcategory={(chip, nextName) => {
           const tag = subTags.find((item) => item.id === chip.id);
-          if (tag) renameSubTag(tag);
+          if (tag) return renameSubTag(tag, nextName);
         }}
         onDeleteSubcategory={(chip) => {
           const tag = subTags.find((item) => item.id === chip.id);
@@ -1672,9 +1680,9 @@ export default function ArchivePage() {
             setActiveGroupTag(activeGroupTag === chip.id ? null : chip.id);
           })
         }
-        onRenameGroup={(chip) => {
+        onRenameGroup={(chip, nextName) => {
           const tag = groupTags.find((item) => item.id === chip.id);
-          if (tag) renameGroupTag(tag);
+          if (tag) return renameGroupTag(tag, nextName);
         }}
         onDeleteGroup={(chip) => {
           const tag = groupTags.find((item) => item.id === chip.id);
@@ -1900,14 +1908,26 @@ export default function ArchivePage() {
                 </span>
               )}
               </Link>
-              <span style={{ minWidth: 0 }}>
-                <Link href="/profile" style={personalSpaceMobileUsernameStyle}>
-                  {spaceProfile?.username || t.nav.username_unset}
-                </Link>
-                <span style={personalSpaceMobileInfoLabelStyle}>
-                  <span>{membershipLabel}</span>
-                  <span aria-hidden="true"> · </span>
-                  <span>{storageUsageLabel}</span>
+              <span style={personalSpaceMobileIdentityTextStyle}>
+                <span style={personalSpaceMobileNameRowStyle}>
+                  <Link href="/profile" style={personalSpaceMobileUsernameStyle}>
+                    {spaceProfile?.username || t.nav.username_unset}
+                  </Link>
+                  <span style={personalSpaceMobileMembershipStyle}>{membershipLabel}</span>
+                </span>
+                <span
+                  style={personalSpaceStorageRowStyle}
+                  aria-label={`${language === "en" ? "Storage total" : "总空间"} ${storageTotalLabel}`}
+                >
+                  <span style={personalSpaceStorageTrackStyle}>
+                    <span
+                      style={{
+                        ...personalSpaceStorageFillStyle,
+                        width: `${storageUsagePercent}%`,
+                      }}
+                    />
+                  </span>
+                  <span style={personalSpaceStorageTotalStyle}>{storageTotalLabel}</span>
                 </span>
               </span>
             </div>
@@ -2351,6 +2371,7 @@ const personalSpaceAvatarLinkStyle: CSSProperties = {
 
 const personalSpaceMobileUsernameStyle: CSSProperties = {
   display: "block",
+  minWidth: 0,
   overflow: "hidden",
   color: "#253725",
   fontSize: 16,
@@ -2361,12 +2382,57 @@ const personalSpaceMobileUsernameStyle: CSSProperties = {
   textDecoration: "none",
 };
 
-const personalSpaceMobileInfoLabelStyle: CSSProperties = {
-  display: "block",
-  marginTop: 2,
-  color: "#7a8675",
+const personalSpaceMobileIdentityTextStyle: CSSProperties = {
+  minWidth: 0,
+  flex: 1,
+  display: "grid",
+  gap: 3,
+};
+
+const personalSpaceMobileNameRowStyle: CSSProperties = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "baseline",
+  gap: 6,
+};
+
+const personalSpaceMobileMembershipStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#6e7f69",
   fontSize: 11,
-  lineHeight: 1.1,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+};
+
+const personalSpaceStorageRowStyle: CSSProperties = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const personalSpaceStorageTrackStyle: CSSProperties = {
+  minWidth: 42,
+  maxWidth: 118,
+  flex: 1,
+  height: 6,
+  overflow: "hidden",
+  borderRadius: 999,
+  background: "#e3ebe0",
+};
+
+const personalSpaceStorageFillStyle: CSSProperties = {
+  display: "block",
+  height: "100%",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #78a96e, #3f7d3d)",
+};
+
+const personalSpaceStorageTotalStyle: CSSProperties = {
+  color: "#7a8675",
+  fontSize: 10,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
 };
 
 const personalSpaceInlineEntryStyle: CSSProperties = {

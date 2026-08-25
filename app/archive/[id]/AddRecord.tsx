@@ -828,7 +828,7 @@ export default function AddRecord({
           >
             {sortedActiveCycles.map((cycle) => (
               <option key={cycle.id} value={cycle.id}>
-                {terminology.cycleLabel(cycle.cycle_no)} ({formatLocalCycleDate(cycle.started_at)} {terminology.startDateSuffix})
+                {cycle.display_name || terminology.cycleLabel(cycle.cycle_no)} ({formatLocalCycleDate(cycle.started_at)} {terminology.startDateSuffix})
               </option>
             ))}
             <option value="">{terminology.unassignedOption}</option>

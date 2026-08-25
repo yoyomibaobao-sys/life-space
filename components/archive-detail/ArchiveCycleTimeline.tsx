@@ -22,6 +22,7 @@ type Props = {
   cycles: ArchiveCycle[];
   records: RecordItem[];
   category?: string | null;
+  nextCycleName?: string | null;
   mobileMode?: boolean;
   canManage?: boolean;
   busy?: boolean;
@@ -40,6 +41,7 @@ export default function ArchiveCycleTimeline({
   cycles,
   records,
   category,
+  nextCycleName,
   mobileMode = false,
   canManage = false,
   busy = false,
@@ -108,9 +110,14 @@ export default function ArchiveCycleTimeline({
     );
   }
 
-  const startActionLabel = cycles.length === 0
-    ? terminology.firstAction
-    : terminology.newAction;
+  const cleanNextCycleName = nextCycleName?.trim();
+  const startActionLabel = cleanNextCycleName
+    ? language === "en"
+      ? `Start ${cleanNextCycleName}`
+      : `开始${cleanNextCycleName}`
+    : cycles.length === 0
+      ? terminology.firstAction
+      : terminology.newAction;
 
   return (
     <>
@@ -153,7 +160,9 @@ export default function ArchiveCycleTimeline({
                     aria-expanded={isExpanded}
                     style={cycleHeaderStyle}
                   >
-                    <span style={cycleTitleStyle}>{terminology.cycleLabel(cycle.cycle_no)}</span>
+                    <span style={cycleTitleStyle}>
+                      {cycle.display_name || terminology.cycleLabel(cycle.cycle_no)}
+                    </span>
                     <span style={cycleStatusStyle(cycle.status)}>
                       {cycle.status === "active" ? copy.ongoing : copy.ended}
                     </span>

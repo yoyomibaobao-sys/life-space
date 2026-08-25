@@ -65,12 +65,8 @@ function sanitizeReferrer(value?: string | null) {
   }
 }
 
-export async function GET(request: Request) {
+async function recordAndroidDownload(request: Request) {
   const url = new URL(request.url);
-  const apkUrl =
-    process.env.ANDROID_APK_DOWNLOAD_URL ||
-    process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
-    null;
 
   try {
     const anonymousId = url.searchParams.get("anonymous_id");
@@ -88,10 +84,22 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("record apk download analytics failed:", error);
   }
+}
+
+export async function GET(request: Request) {
+  const apkUrl =
+    process.env.ANDROID_APK_DOWNLOAD_URL ||
+    process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
+    null;
 
   if (apkUrl) {
+    await recordAndroidDownload(request);
     return NextResponse.redirect(new URL(apkUrl, request.url));
   }
 
-  return serveBundledAndroidApk(request);
+  const response = await serveBundledAndroidApk(request);
+  if (response.ok) {
+    await recordAndroidDownload(request);
+  }
+  return response;
 }

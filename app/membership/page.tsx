@@ -180,10 +180,10 @@ export default function MembershipPage() {
             <div style={renewalNoticeStyle}>
               <strong>{t.membership_page.membership_reminder}</strong>{renewalNoticeText}
               <div style={{ marginTop: 8 }}>
-                {t.membership_page.payment_email_hint}
-                <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
-                  yoyomibaobao@gmail.com
-                </a>
+                {t.membership_page.payment_action_hint}{" "}
+                <Link href="/membership/payment" style={inlineLinkStyle}>
+                  {t.membership_page.open_payment_page}
+                </Link>
               </div>
             </div>
           ) : null}
@@ -294,34 +294,19 @@ export default function MembershipPage() {
               <div style={paymentItemStyle}>
                 <div style={paymentTitleStyle}>{t.membership_page.domestic_users}</div>
                 <div style={paymentPriceStyle}>{t.membership_page.domestic_price}</div>
-                <p style={paymentDescStyle}>
-                  {t.membership_page.domestic_before_email}{" "}
-                  <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
-                    yoyomibaobao@gmail.com
-                  </a>{" "}
-                  {t.membership_page.domestic_after_email}
-                </p>
+                <p style={paymentDescStyle}>{t.membership_page.domestic_payment_summary}</p>
+                <Link href="/membership/payment" style={paymentPageLinkStyle}>
+                  {t.membership_page.open_payment_page}
+                </Link>
               </div>
 
               <div style={paymentItemStyle}>
                 <div style={paymentTitleStyle}>{t.membership_page.overseas_users}</div>
                 <div style={paymentPriceStyle}>{t.membership_page.overseas_price}</div>
-                <p style={paymentDescStyle}>
-                  {t.membership_page.overseas_before_paypal}{" "}
-                  <a
-                    href="https://paypal.me/ying0chen/8"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={inlineLinkStyle}
-                  >
-                    paypal.me/ying0chen/8
-                  </a>
-                  {t.membership_page.overseas_after_paypal}{" "}
-                  <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>
-                    yoyomibaobao@gmail.com
-                  </a>{" "}
-                  {t.membership_page.overseas_after_email}
-                </p>
+                <p style={paymentDescStyle}>{t.membership_page.overseas_payment_summary}</p>
+                <Link href="/membership/payment" style={paymentPageLinkStyle}>
+                  {t.membership_page.open_payment_page}
+                </Link>
               </div>
             </div>
 
@@ -612,6 +597,12 @@ const primaryButtonStyle: CSSProperties = {
   textDecoration: "none",
   fontSize: 14,
   fontWeight: 700,
+};
+
+const paymentPageLinkStyle: CSSProperties = {
+  ...primaryButtonStyle,
+  alignSelf: "flex-start",
+  marginTop: "auto",
 };
 
 const secondaryButtonStyle: CSSProperties = {

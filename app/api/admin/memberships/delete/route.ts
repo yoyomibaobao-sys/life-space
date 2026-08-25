@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { hasValidMutationOrigin } from "@/lib/server/authenticated-request";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -14,6 +15,10 @@ function errorResponse(message: string, status: number) {
 }
 
 export async function POST(request: Request) {
+  if (!hasValidMutationOrigin(request)) {
+    return errorResponse("请求来源无效", 403);
+  }
+
   let body: DeleteMembershipBody;
 
   try {

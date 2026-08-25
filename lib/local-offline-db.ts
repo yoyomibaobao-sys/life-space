@@ -34,6 +34,7 @@ export type LocalArchiveCycle = {
   id: string;
   archive_id: string;
   cycle_no: number;
+  display_name?: string | null;
   status: "active" | "ended";
   started_at: string;
   ended_at?: string | null;
@@ -66,6 +67,8 @@ export type LocalArchive = {
   migrated_at?: string | null;
   note?: string | null;
   archive_summary?: string | null;
+  cycle_enabled?: boolean;
+  next_cycle_name?: string | null;
   cycles?: LocalArchiveCycle[];
   status: "active" | "ended";
   created_at: string;
@@ -190,6 +193,7 @@ function normalizeLocalArchiveCycle(
     ...cycle,
     archive_id: archiveId,
     cycle_no: cycleNo,
+    display_name: normalizeOptionalText(cycle.display_name),
     status,
     started_at: startedAt,
     ended_at: endedAt,
@@ -218,6 +222,12 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
   const category = normalizeLocalArchiveCategory(
     archive.category || archive.main_category
   );
+  const cycles = Array.isArray(archive.cycles)
+    ? archive.cycles
+        .map((cycle) => normalizeLocalArchiveCycle(cycle, archive.id))
+        .filter((cycle): cycle is LocalArchiveCycle => Boolean(cycle))
+        .sort((a, b) => a.cycle_no - b.cycle_no)
+    : [];
 
   return {
     ...archive,
@@ -247,12 +257,12 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
       null,
     migrated_at: normalizeOptionalText(archive.migrated_at),
     archive_summary: normalizeOptionalText(archive.archive_summary),
-    cycles: Array.isArray(archive.cycles)
-      ? archive.cycles
-          .map((cycle) => normalizeLocalArchiveCycle(cycle, archive.id))
-          .filter((cycle): cycle is LocalArchiveCycle => Boolean(cycle))
-          .sort((a, b) => a.cycle_no - b.cycle_no)
-      : [],
+    cycle_enabled:
+      typeof archive.cycle_enabled === "boolean"
+        ? archive.cycle_enabled
+        : cycles.length > 0,
+    next_cycle_name: normalizeOptionalText(archive.next_cycle_name),
+    cycles,
     sync: normalizeLocalSyncMeta(archive.sync),
   };
 }
@@ -864,6 +874,8 @@ export async function updateLocalArchiveFields(
     source?: string | null;
     note?: string | null;
     archive_summary?: string | null;
+    cycle_enabled?: boolean;
+    next_cycle_name?: string | null;
   },
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
@@ -932,6 +944,14 @@ export async function updateLocalArchiveFields(
         updates.archive_summary === undefined
           ? normalizedArchive.archive_summary
           : normalizeOptionalText(updates.archive_summary),
+      cycle_enabled:
+        updates.cycle_enabled === undefined
+          ? normalizedArchive.cycle_enabled
+          : Boolean(updates.cycle_enabled),
+      next_cycle_name:
+        updates.next_cycle_name === undefined
+          ? normalizedArchive.next_cycle_name
+          : normalizeOptionalText(updates.next_cycle_name)?.slice(0, 80) || null,
       updated_at: nowIso(),
     };
 
@@ -1378,6 +1398,8 @@ export async function createLocalArchive(input: {
   local_owner_marked_at?: string | null;
   note?: string | null;
   archive_summary?: string | null;
+  cycle_enabled?: boolean;
+  next_cycle_name?: string | null;
 }) {
   const timestamp = nowIso();
   const category = normalizeLocalArchiveCategory(input.category);
@@ -1404,6 +1426,8 @@ export async function createLocalArchive(input: {
     migrated_at: null,
     note: normalizeOptionalText(input.note),
     archive_summary: normalizeOptionalText(input.archive_summary),
+    cycle_enabled: Boolean(input.cycle_enabled),
+    next_cycle_name: normalizeOptionalText(input.next_cycle_name)?.slice(0, 80) || null,
     cycles: [],
     status: "active",
     created_at: timestamp,
@@ -1494,7 +1518,8 @@ async function prepareLocalImage(file: File, sortOrder: number) {
 export async function createLocalArchiveCycle(
   archiveId: string,
   startedAt: string,
-  ownerContext?: LocalArchiveOwnerContext | null
+  ownerContext?: LocalArchiveOwnerContext | null,
+  displayName?: string | null
 ) {
   const db = await openLocalDb();
 
@@ -1530,6 +1555,7 @@ export async function createLocalArchiveCycle(
       id: createId("local_cycle"),
       archive_id: archiveId,
       cycle_no: cycles.reduce((max, item) => Math.max(max, item.cycle_no), 0) + 1,
+      display_name: normalizeOptionalText(displayName)?.slice(0, 80) || null,
       status: "active",
       started_at: normalizedStartedAt,
       ended_at: null,

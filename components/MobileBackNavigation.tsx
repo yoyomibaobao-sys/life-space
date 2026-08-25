@@ -36,8 +36,11 @@ function getLogicalParent(pathname: string) {
   if (/^\/plant\/[^/]+/.test(pathname)) return "/plant";
   if (/^\/market\/(new|mine|[^/]+)/.test(pathname)) return "/market";
   if (pathname.startsWith("/notifications")) return "/profile";
-  if (/^\/membership\/(payment|benefits)/.test(pathname)) return "/membership";
+  if (/^\/membership\/(payment|benefits)/.test(pathname)) return "/profile";
   if (pathname.startsWith("/membership")) return "/profile";
+  if (/^\/legal\/(privacy|terms|refunds|contact)/.test(pathname)) return "/legal";
+  if (pathname.startsWith("/legal")) return "/profile";
+  if (pathname.startsWith("/feedback")) return "/profile";
   if (pathname.startsWith("/admin")) return "/profile";
   if (/^\/profile\/.+/.test(pathname)) return "/profile";
   if (pathname.startsWith("/follow")) return "/discover";

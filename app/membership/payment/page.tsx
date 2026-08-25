@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent } from "react";
+import { useEffect, useState, type CSSProperties, type ChangeEvent } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import { buildLoginHref } from "@/lib/auth-return";
@@ -42,6 +42,24 @@ const OPEN_ORDER_STATUSES: PaymentOrderStatus[] = [
   "needs_update",
 ];
 
+const DEFAULT_ALIPAY_PAYMENT_QR_URL =
+  "/payments/alipay-cloud-membership-64.jpg";
+const DEFAULT_ALIPAY_PAYEE_NAME = "有时空间";
+const configuredAlipayQrUrl =
+  process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL?.trim() ||
+  DEFAULT_ALIPAY_PAYMENT_QR_URL;
+const ALIPAY_PAYMENT_QR_URL =
+  configuredAlipayQrUrl.startsWith("/") ||
+  configuredAlipayQrUrl.startsWith("https://")
+    ? configuredAlipayQrUrl
+    : "";
+const ALIPAY_PAYEE_NAME =
+  process.env.NEXT_PUBLIC_ALIPAY_PAYEE_NAME?.trim() ||
+  DEFAULT_ALIPAY_PAYEE_NAME;
+const ALIPAY_PAYMENT_READY = Boolean(
+  ALIPAY_PAYMENT_QR_URL && ALIPAY_PAYEE_NAME
+);
+
 function normalizeOrder(value: unknown): PaymentOrder | null {
   const candidate = Array.isArray(value) ? value[0] : value;
   if (!candidate || typeof candidate !== "object") return null;
@@ -58,7 +76,7 @@ function formatAmount(order: Pick<PaymentOrder, "amount" | "currency">) {
 }
 
 export default function MembershipPaymentPage() {
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<PaymentOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -114,19 +132,13 @@ export default function MembershipPaymentPage() {
     };
   }, [t.membership_page.order_load_failed]);
 
-  const alipayMailHref = useMemo(() => {
-    const orderNumber = order?.order_number || "";
-    const subject = language === "en"
-      ? `Alipay details · ${orderNumber}`
-      : `支付宝收款方式 · ${orderNumber}`;
-    const body = language === "en"
-      ? `Order: ${orderNumber}\nRegistered email: ${userEmail}\nPlan: Cloud Membership, 1 year\nAmount: CNY 64`
-      : `订单号：${orderNumber}\n注册邮箱：${userEmail}\n开通方案：云会员 1 年\n金额：人民币 64 元`;
-    return `mailto:yoyomibaobao@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  }, [language, order?.order_number, userEmail]);
-
   async function createOrder(option: PaymentOption) {
-    if (creating || !userId) return;
+    if (creating || !userId || (option === "alipay" && !ALIPAY_PAYMENT_READY)) {
+      if (option === "alipay" && !ALIPAY_PAYMENT_READY) {
+        showToast(t.membership_page.alipay_not_configured);
+      }
+      return;
+    }
     setCreating(option);
     setErrorMessage("");
 
@@ -250,9 +262,9 @@ export default function MembershipPaymentPage() {
   return (
     <main style={pageStyle}>
       <div style={backRowStyle}>
-        <Link href="/membership" style={backLinkStyle}>
+        <Link href="/profile" style={backLinkStyle}>
           <UiIcon name="arrow-left" size={16} />
-          {t.membership_page.back_to_membership}
+          {t.membership_page.back_to_profile}
         </Link>
       </div>
 
@@ -292,9 +304,27 @@ export default function MembershipPaymentPage() {
                 <div style={paymentLabelStyle}>{t.membership_page.domestic_users}</div>
                 <div style={priceStyle}>{t.membership_page.domestic_price}</div>
                 <p style={bodyStyle}>{t.membership_page.alipay_order_hint}</p>
-                <button type="button" onClick={() => void createOrder("alipay")} disabled={creating !== null} style={primaryButtonStyle}>
-                  {creating === "alipay" ? t.membership_page.creating_order : t.membership_page.create_alipay_order}
+                <button
+                  type="button"
+                  onClick={() => void createOrder("alipay")}
+                  disabled={creating !== null || !ALIPAY_PAYMENT_READY}
+                  style={{
+                    ...primaryButtonStyle,
+                    opacity: ALIPAY_PAYMENT_READY ? 1 : 0.55,
+                    cursor: ALIPAY_PAYMENT_READY ? "pointer" : "not-allowed",
+                  }}
+                >
+                  {creating === "alipay"
+                    ? t.membership_page.creating_order
+                    : ALIPAY_PAYMENT_READY
+                      ? t.membership_page.create_alipay_order
+                      : t.membership_page.alipay_not_configured_action}
                 </button>
+                {!ALIPAY_PAYMENT_READY ? (
+                  <div style={paymentUnavailableStyle}>
+                    {t.membership_page.alipay_not_configured}
+                  </div>
+                ) : null}
               </article>
 
               <article style={paymentCardStyle}>
@@ -348,9 +378,37 @@ export default function MembershipPaymentPage() {
                         {order.payment_method === "alipay" ? t.membership_page.alipay_payment_steps : t.membership_page.paypal_payment_steps}
                       </p>
                       {order.payment_method === "alipay" ? (
-                        <a href={alipayMailHref} style={primaryButtonStyle}>{t.membership_page.domestic_payment_action}</a>
+                        ALIPAY_PAYMENT_READY ? (
+                          <div style={alipayQrPanelStyle}>
+                            <div style={alipayQrTitleStyle}>{t.membership_page.alipay_qr_title}</div>
+                            {/* Keep the original QR pixels and allow the configured public image host. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={ALIPAY_PAYMENT_QR_URL}
+                              alt={t.membership_page.alipay_qr_alt}
+                              style={alipayQrImageStyle}
+                            />
+                            <div style={alipayPayeeStyle}>
+                              <span>{t.membership_page.alipay_payee}</span>
+                              <strong>{ALIPAY_PAYEE_NAME}</strong>
+                            </div>
+                            <div style={alipayQrHintStyle}>{t.membership_page.alipay_qr_hint}</div>
+                            <a
+                              href={ALIPAY_PAYMENT_QR_URL}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={primaryButtonStyle}
+                            >
+                              {t.membership_page.domestic_payment_action}
+                            </a>
+                          </div>
+                        ) : (
+                          <div style={paymentUnavailableStyle}>
+                            {t.membership_page.alipay_not_configured}
+                          </div>
+                        )
                       ) : (
-                        <a href="https://paypal.me/ying0chen/8" target="_blank" rel="noreferrer" style={primaryButtonStyle}>
+                        <a href="https://www.paypal.com/ncp/payment/PZEB4Z4SDSLLE" target="_blank" rel="noreferrer" style={primaryButtonStyle}>
                           {t.membership_page.overseas_payment_action}
                         </a>
                       )}
@@ -394,6 +452,11 @@ export default function MembershipPaymentPage() {
             {t.membership_page.payment_mobile_contact}{" "}
             <a href="mailto:yoyomibaobao@gmail.com" style={inlineLinkStyle}>yoyomibaobao@gmail.com</a>
           </section>
+
+          <nav style={policyLinksStyle} aria-label={t.refund_request_page.policy_title}>
+            <Link href="/membership/refund" style={secondaryButtonStyle}>{t.profile.request_refund}</Link>
+            <Link href="/legal/refunds" style={secondaryButtonStyle}>{t.refund_request_page.read_full_policy}</Link>
+          </nav>
         </>
       )}
 
@@ -423,8 +486,15 @@ const bodyStyle: CSSProperties = { margin: 0, color: "#6f6655", fontSize: 14, li
 const primaryButtonStyle: CSSProperties = { minHeight: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", border: 0, borderRadius: 999, background: "#3f7d3d", color: "#fff", fontSize: 14, fontWeight: 800, textAlign: "center", textDecoration: "none", padding: "8px 16px", cursor: "pointer" };
 const secondaryButtonStyle: CSSProperties = { ...primaryButtonStyle, width: "100%", border: "1px solid #d7e5d0", background: "#fff", color: "#355235" };
 const contactCardStyle: CSSProperties = { ...cardStyle, display: "block", fontSize: 14, lineHeight: 1.7, overflowWrap: "anywhere" };
+const policyLinksStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 12 };
 const inlineLinkStyle: CSSProperties = { color: "#356b34", fontWeight: 800, textDecoration: "none" };
 const errorStyle: CSSProperties = { marginBottom: 12, padding: "10px 12px", borderRadius: 14, border: "1px solid #efc9bd", background: "#fff6f2", color: "#a04431", fontSize: 14, lineHeight: 1.55 };
+const paymentUnavailableStyle: CSSProperties = { padding: "9px 11px", borderRadius: 12, border: "1px solid #ead7b9", background: "#fffaf0", color: "#81653b", fontSize: 13, lineHeight: 1.5 };
+const alipayQrPanelStyle: CSSProperties = { width: "min(100%, 360px)", display: "grid", justifyItems: "center", gap: 10, marginTop: 12, padding: 14, border: "1px solid #dce8d7", borderRadius: 16, background: "#fff" };
+const alipayQrTitleStyle: CSSProperties = { color: "#2d422c", fontSize: 15, fontWeight: 850, textAlign: "center" };
+const alipayQrImageStyle: CSSProperties = { width: "min(100%, 320px)", height: "auto", display: "block", objectFit: "contain", borderRadius: 12, background: "#fff" };
+const alipayPayeeStyle: CSSProperties = { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6, color: "#6f7b69", fontSize: 13, textAlign: "center", flexWrap: "wrap" };
+const alipayQrHintStyle: CSSProperties = { color: "#6f7b69", fontSize: 12, lineHeight: 1.55, textAlign: "center" };
 const orderCardStyle: CSSProperties = { ...cardStyle, background: "#f8fbf5", borderColor: "#cfe0c6" };
 const orderHeaderStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 };
 const orderNumberStyle: CSSProperties = { display: "block", marginTop: 3, color: "#243123", fontSize: 18, overflowWrap: "anywhere" };

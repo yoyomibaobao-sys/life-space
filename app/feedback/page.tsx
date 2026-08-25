@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
+import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import styles from "./page.module.css";
 
@@ -61,6 +63,10 @@ export default function FeedbackPage() {
 
   return (
     <main className={styles.page}>
+      <Link href="/profile" className={styles.backLink}>
+        <UiIcon name="arrow-left" size={16} />
+        {t.feedback_back_user_info}
+      </Link>
       <section className={styles.hero}>
         <div className={styles.eyebrow}>{t.feedback_eyebrow}</div>
         <h1 className={styles.title}>{t.feedback_title}</h1>

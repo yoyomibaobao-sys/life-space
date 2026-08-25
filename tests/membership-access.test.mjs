@@ -118,7 +118,9 @@ test("manual membership orders keep fixed prices, private proof, and transaction
   assert.match(migration, /v_service_ends_at := v_service_started_at \+ interval '12 months'/);
   assert.match(migration, /if v_payment\.status = 'confirmed' then[\s\S]*?'already_confirmed', true/);
   assert.match(profile, /admin_get_membership_payment_queue_count/);
-  assert.match(profile, /href="\/admin\/memberships#payment-review"/);
+  assert.match(profile, /admin_get_membership_refund_queue_count/);
+  assert.match(profile, /"\/admin\/memberships#refund-review"/);
+  assert.match(profile, /"\/admin\/memberships#payment-review"/);
   assert.match(admin, /admin_confirm_submitted_membership_payment_json/);
   assert.match(admin, /createSignedUrl\(row\.proof_path, 300\)/);
   assert.match(accountDelete, /listStoragePrefix\(supabase, "payment-proofs", userId\)/);

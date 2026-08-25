@@ -45,7 +45,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
     <>
       {statsText ? <div style={statsStyle}>{statsText}</div> : null}
 
-      <section style={sourceSwitchStyle}>
+      <section style={sourceSwitchStyle(Boolean(sourceTrailingSlot))}>
         {sourceOptions.map((item) => (
           <button
             key={item.value}
@@ -82,13 +82,17 @@ const statsStyle: CSSProperties = {
   marginBottom: 18,
 };
 
-const sourceSwitchStyle: CSSProperties = {
-  margin: "0 0 12px",
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  flexWrap: "wrap",
-};
+function sourceSwitchStyle(singleLine: boolean): CSSProperties {
+  return {
+    margin: "0 0 12px",
+    display: "flex",
+    alignItems: "center",
+    gap: singleLine ? 6 : 8,
+    flexWrap: singleLine ? "nowrap" : "wrap",
+    overflowX: singleLine ? "auto" : undefined,
+    WebkitOverflowScrolling: singleLine ? "touch" : undefined,
+  };
+}
 
 function sourceButtonStyle(active: boolean): CSSProperties {
   return {
@@ -101,6 +105,8 @@ function sourceButtonStyle(active: boolean): CSSProperties {
     fontSize: 13,
     fontWeight: active ? 800 : 700,
     cursor: "pointer",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
   };
 }
 

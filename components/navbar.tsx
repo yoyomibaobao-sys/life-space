@@ -11,6 +11,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
 import { buildLoginHref } from "@/lib/auth-return";
 import QuickCaptureNavAction from "@/components/quick-record/QuickCaptureNavAction";
+import BrandMark from "@/components/BrandMark";
 
 type MobileArchiveTitleInfo = {
   archiveId: string;
@@ -341,7 +342,8 @@ export default function Navbar() {
     <nav style={getNavStyle(isCompact)}>
       <div style={getLeftGroupStyle(isCompact)}>
         <Link href="/" style={brandStyle}>
-          {t.nav.brand}
+          <BrandMark size={28} />
+          <span>{t.nav.brand}</span>
         </Link>
 
         <div style={getNavItemsWrapStyle(isCompact)}>
@@ -885,6 +887,9 @@ function getLeftGroupStyle(compact: boolean): CSSProperties {
 }
 
 const brandStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
   textDecoration: "none",
   color: "#1f2a1f",
   fontWeight: 800,

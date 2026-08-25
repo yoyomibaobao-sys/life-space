@@ -134,35 +134,41 @@ function FilterSelect({
   onChange,
   options,
   compact = false,
+  hideLabel = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   compact?: boolean;
+  hideLabel?: boolean;
 }) {
   return (
     <label
       style={{
         display: "grid",
-        gap: compact ? 4 : 6,
-        minWidth: compact ? 104 : undefined,
-        maxWidth: compact ? 132 : undefined,
-        flex: compact ? "1 1 104px" : undefined,
+        gap: compact && hideLabel ? 0 : compact ? 4 : 6,
+        minWidth: compact ? 138 : undefined,
+        maxWidth: compact ? 172 : undefined,
+        flex: compact ? "0 0 auto" : undefined,
       }}
     >
-      <span style={{ fontSize: compact ? 11 : 12, color: "#777" }}>{label}</span>
+      {hideLabel ? null : (
+        <span style={{ fontSize: compact ? 11 : 12, color: "#777" }}>{label}</span>
+      )}
       <select
+        aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={{
-          height: compact ? 30 : 38,
+          height: 38,
           borderRadius: compact ? 10 : 12,
           border: "1px solid #e5e7eb",
-          padding: compact ? "0 7px" : "0 12px",
+          padding: compact ? "0 10px" : "0 12px",
           background: "#fff",
           color: "#333",
-          fontSize: compact ? 12 : 14,
+          fontSize: compact ? 13 : 14,
+          fontWeight: compact ? 750 : undefined,
         }}
       >
         {options.map((option) => (
@@ -498,6 +504,15 @@ export default function PlantIndexPage() {
       label: categoryLabel(category, categoryLabels, t.plant.uncategorized),
     })),
     [categories, categoryLabels, t.plant.uncategorized]
+  );
+
+  const mobileCategoryFilterOptions = useMemo(
+    () =>
+      categoryFilterOptions.map((option) => ({
+        ...option,
+        label: `${t.plant.category}（${option.label}）`,
+      })),
+    [categoryFilterOptions, t.plant.category]
   );
 
   const filteredPlants = useMemo(() => {
@@ -1061,13 +1076,23 @@ export default function PlantIndexPage() {
         >
           {isMobileViewport ? (
             <>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  overflowX: "auto",
+                  scrollbarWidth: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 <FilterSelect
                   label={t.plant.category}
                   value={activeCategory}
                   onChange={changeCategory}
-                  options={categoryFilterOptions}
+                  options={mobileCategoryFilterOptions}
                   compact
+                  hideLabel
                 />
                 {hasCloudAccess ? (
                   <button
@@ -1418,7 +1443,7 @@ function plantMenuSummaryStyle(compact: boolean): CSSProperties {
     borderRadius: 999,
     background: "#fbfdf9",
     color: "#42663f",
-    fontSize: compact ? 12 : 13,
+    fontSize: 13,
     fontWeight: 750,
     whiteSpace: "nowrap",
     cursor: "pointer",
@@ -1428,13 +1453,13 @@ function plantMenuSummaryStyle(compact: boolean): CSSProperties {
 }
 
 const mobileFilterToggleStyle: CSSProperties = {
-  minHeight: 30,
+  minHeight: 38,
   padding: "0 10px",
   border: "1px solid #d6e4d2",
   borderRadius: 10,
   background: "#f8fbf6",
   color: "#42633e",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 750,
   whiteSpace: "nowrap",
   cursor: "pointer",

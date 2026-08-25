@@ -29,6 +29,7 @@ test("the homepage uses the confirmed natural-life-space copy without a local-re
   }
 
   assert.match(homepage, /\{t\.home\.brand\}/);
+  assert.match(homepage, /<BrandMark size=\{48\}/);
   assert.match(homepage, /\{t\.home\.cards\.map/);
   assert.match(enCopy, /space_title: "A Natural Living Space"/);
 

@@ -12,9 +12,9 @@ export default function MembershipBenefitsPage() {
 
   return (
     <main style={pageStyle}>
-      <Link href="/membership" style={backLinkStyle}>
+      <Link href="/profile" style={backLinkStyle}>
         <UiIcon name="arrow-left" size={16} />
-        {t.membership_page.back_to_membership}
+        {t.membership_page.back_to_profile}
       </Link>
 
       <header style={heroStyle}>

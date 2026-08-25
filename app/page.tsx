@@ -6,6 +6,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import UiIcon from "@/components/ui/UiIcon";
+import BrandMark from "@/components/BrandMark";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -86,9 +87,12 @@ export default function Home() {
       <div className="home-content" style={contentStyle}>
         <section className="home-hero" style={heroStyle}>
           <h1 className="home-brand" style={brandStyle}>
-            <span>{t.home.brand}</span>
-            <span className="home-english-brand" style={englishBrandStyle}>
-              {t.home.english_brand}
+            <BrandMark size={48} />
+            <span style={brandCopyStyle}>
+              <span>{t.home.brand}</span>
+              <span className="home-english-brand" style={englishBrandStyle}>
+                {t.home.english_brand}
+              </span>
             </span>
           </h1>
 
@@ -184,7 +188,7 @@ const brandStyle: CSSProperties = {
   margin: 0,
   display: "flex",
   justifyContent: "center",
-  alignItems: "baseline",
+  alignItems: "center",
   gap: 9,
   flexWrap: "wrap",
   color: "#243024",
@@ -192,6 +196,14 @@ const brandStyle: CSSProperties = {
   fontWeight: 650,
   letterSpacing: 1.2,
   lineHeight: 1.15,
+};
+
+const brandCopyStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "center",
+  gap: 9,
+  flexWrap: "wrap",
 };
 
 const englishBrandStyle: CSSProperties = {

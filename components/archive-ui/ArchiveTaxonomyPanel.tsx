@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   archiveCategoryOptions,
   getArchiveCategoryDescription,
@@ -13,6 +18,8 @@ export type ArchiveTaxonomyChip = {
   id: string;
   label: string;
 };
+
+type TaxonomyKind = "subcategory" | "group";
 
 type Props = {
   activeCategory: ArchiveCategory | null;
@@ -28,13 +35,19 @@ type Props = {
   onSelectCategory: (category: ArchiveCategory) => void;
   onResetSubcategory: () => void;
   onSelectSubcategory: (chip: ArchiveTaxonomyChip) => void;
-  onRenameSubcategory?: (chip: ArchiveTaxonomyChip) => void;
-  onDeleteSubcategory?: (chip: ArchiveTaxonomyChip) => void;
+  onRenameSubcategory?: (
+    chip: ArchiveTaxonomyChip,
+    nextName?: string
+  ) => void | Promise<void>;
+  onDeleteSubcategory?: (chip: ArchiveTaxonomyChip) => void | Promise<void>;
   onCreateSubcategory?: (category: ArchiveCategory) => void;
   onResetGroup: () => void;
   onSelectGroup: (chip: ArchiveTaxonomyChip) => void;
-  onRenameGroup?: (chip: ArchiveTaxonomyChip) => void;
-  onDeleteGroup?: (chip: ArchiveTaxonomyChip) => void;
+  onRenameGroup?: (
+    chip: ArchiveTaxonomyChip,
+    nextName?: string
+  ) => void | Promise<void>;
+  onDeleteGroup?: (chip: ArchiveTaxonomyChip) => void | Promise<void>;
   onCreateGroup?: () => void;
 };
 
@@ -63,126 +76,256 @@ export default function ArchiveTaxonomyPanel({
 }: Props) {
   const { language, t } = useLanguage();
   const compact = mobileMode;
-  const [renameMode, setRenameMode] = useState(false);
-  const canManage = Boolean(
-    onCreateSubcategory ||
-      onRenameSubcategory ||
-      onDeleteSubcategory ||
-      onCreateGroup ||
-      onRenameGroup ||
-      onDeleteGroup
-  );
+  const [actionTarget, setActionTarget] = useState<{
+    kind: TaxonomyKind;
+    chip: ArchiveTaxonomyChip;
+  } | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+
+  function openActions(kind: TaxonomyKind, chip: ArchiveTaxonomyChip) {
+    if (!compact) return;
+    setActionTarget({ kind, chip });
+    setRenameDraft(chip.label);
+    setRenameOpen(false);
+  }
+
+  async function saveRename() {
+    if (!actionTarget || actionBusy) return;
+    const nextName = renameDraft.trim();
+    if (!nextName || nextName === actionTarget.chip.label) {
+      setActionTarget(null);
+      setRenameOpen(false);
+      return;
+    }
+
+    const handler =
+      actionTarget.kind === "subcategory" ? onRenameSubcategory : onRenameGroup;
+    if (!handler) return;
+
+    setActionBusy(true);
+    try {
+      await handler(actionTarget.chip, nextName);
+      setActionTarget(null);
+      setRenameOpen(false);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function deleteTarget() {
+    if (!actionTarget || actionBusy) return;
+    const handler =
+      actionTarget.kind === "subcategory" ? onDeleteSubcategory : onDeleteGroup;
+    if (!handler) return;
+
+    setActionBusy(true);
+    try {
+      await handler(actionTarget.chip);
+      setActionTarget(null);
+      setRenameOpen(false);
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   return (
-    <section style={panelStyle(compact)}>
-      {compact && showCategoryRow && canManage ? (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
-          {canManage ? (
-            <button type="button" onClick={() => setRenameMode((open) => !open)} style={manageButtonStyle}>
-              {renameMode ? t.archive_workspace.done : t.archive_workspace.edit}
+    <>
+      <section style={panelStyle(compact)}>
+        {showCategoryRow ? (
+          <div style={categoryRowStyle(compact)}>
+            <button type="button" onClick={onReset} style={pillStyle(!activeCategory, compact)}>
+              {t.archive_workspace.all}
             </button>
-          ) : null}
-        </div>
-      ) : null}
-      {showCategoryRow ? (
-        <div style={categoryRowStyle(compact)}>
-          <button type="button" onClick={onReset} style={pillStyle(!activeCategory, compact)}>
-            {t.archive_workspace.all}
-          </button>
-          {archiveCategoryOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onSelectCategory(option.value)}
-              style={pillStyle(activeCategory === option.value && !activeSubcategoryId, compact)}
-              title={getArchiveCategoryDescription(option.value, language)}
-            >
-              {getArchiveCategoryLabel(option.value, language)}
-            </button>
-          ))}
-        </div>
-      ) : null}
+            {archiveCategoryOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onSelectCategory(option.value)}
+                style={pillStyle(activeCategory === option.value && !activeSubcategoryId, compact)}
+                title={getArchiveCategoryDescription(option.value, language)}
+              >
+                {getArchiveCategoryLabel(option.value, language)}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
-      {showCategoryRow && activeCategory && showSubcategoryRow ? (
-        <div style={separatorStyle} />
-      ) : null}
+        {showCategoryRow && activeCategory && showSubcategoryRow ? (
+          <div style={separatorStyle(compact)} />
+        ) : null}
 
-      {activeCategory && showSubcategoryRow ? (
-        <div style={rowStyle(compact)}>
-          <button
-            type="button"
-            onClick={onResetSubcategory}
-            style={pillStyle(!activeSubcategoryId, compact)}
-            title={t.archive_workspace.show_all_category}
-          >
-            {t.archive_workspace.subcategory_prefix}
-          </button>
-
-          {subcategories.map((chip) => (
-            <TaxonomyChipButton
-              key={chip.id}
-              chip={chip}
-              active={activeSubcategoryId === chip.id}
-              compact={compact}
-              onSelect={() => onSelectSubcategory(chip)}
-              onRename={renameMode && onRenameSubcategory ? () => onRenameSubcategory(chip) : undefined}
-              onDelete={onDeleteSubcategory ? () => onDeleteSubcategory(chip) : undefined}
-            />
-          ))}
-
-          {onCreateSubcategory ? (
-            <button
-              type="button"
-              onClick={() => onCreateSubcategory(activeCategory)}
-              style={addButtonStyle(compact)}
-              title={t.archive_workspace.add_subcategory}
-            >
-              +
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {activeCategory && activeSubcategoryId && showGroupRow ? (
-        <>
-          <div style={separatorStyle} />
+        {activeCategory && showSubcategoryRow ? (
           <div style={rowStyle(compact)}>
             <button
               type="button"
-              onClick={onResetGroup}
-              style={pillStyle(!activeGroupId, compact)}
-              title={t.archive_workspace.show_all_groups}
+              onClick={onResetSubcategory}
+              style={rowLabelStyle(!activeSubcategoryId, compact)}
+              title={t.archive_workspace.show_all_category}
             >
-              {t.archive_workspace.group_prefix}
+              {compact
+                ? t.archive_workspace.subcategory
+                : t.archive_workspace.subcategory_prefix}
             </button>
 
-            {groups.map((chip) => (
+            {subcategories.map((chip) => (
               <TaxonomyChipButton
                 key={chip.id}
                 chip={chip}
-                active={activeGroupId === chip.id}
+                active={activeSubcategoryId === chip.id}
                 compact={compact}
-                onSelect={() => onSelectGroup(chip)}
-                onRename={renameMode && onRenameGroup ? () => onRenameGroup(chip) : undefined}
-                onDelete={onDeleteGroup ? () => onDeleteGroup(chip) : undefined}
+                onSelect={() => onSelectSubcategory(chip)}
+                onDelete={onDeleteSubcategory ? () => onDeleteSubcategory(chip) : undefined}
+                onLongPress={() => openActions("subcategory", chip)}
               />
             ))}
 
-            {onCreateGroup ? (
+            {onCreateSubcategory ? (
               <button
                 type="button"
-                onClick={onCreateGroup}
+                onClick={() => onCreateSubcategory(activeCategory)}
                 style={addButtonStyle(compact)}
-                title={t.archive_workspace.add_group}
+                title={t.archive_workspace.add_subcategory}
+                aria-label={t.archive_workspace.add_subcategory}
               >
                 +
               </button>
             ) : null}
           </div>
-        </>
-      ) : null}
+        ) : null}
 
-    </section>
+        {activeCategory && activeSubcategoryId && showGroupRow ? (
+          <>
+            <div style={separatorStyle(compact)} />
+            <div style={rowStyle(compact)}>
+              <button
+                type="button"
+                onClick={onResetGroup}
+                style={rowLabelStyle(!activeGroupId, compact)}
+                title={t.archive_workspace.show_all_groups}
+              >
+                {compact ? t.archive_workspace.group : t.archive_workspace.group_prefix}
+              </button>
+
+              {groups.map((chip) => (
+                <TaxonomyChipButton
+                  key={chip.id}
+                  chip={chip}
+                  active={activeGroupId === chip.id}
+                  compact={compact}
+                  onSelect={() => onSelectGroup(chip)}
+                  onDelete={onDeleteGroup ? () => onDeleteGroup(chip) : undefined}
+                  onLongPress={() => openActions("group", chip)}
+                />
+              ))}
+
+              {onCreateGroup ? (
+                <button
+                  type="button"
+                  onClick={onCreateGroup}
+                  style={addButtonStyle(compact)}
+                  title={t.archive_workspace.add_group}
+                  aria-label={t.archive_workspace.add_group}
+                >
+                  +
+                </button>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      {compact && actionTarget ? (
+        <div
+          role="presentation"
+          style={dialogBackdropStyle}
+          onClick={() => {
+            if (!actionBusy) setActionTarget(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={actionTarget.chip.label}
+            style={dialogPanelStyle}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={dialogTitleStyle}>{actionTarget.chip.label}</div>
+            {renameOpen ? (
+              <>
+                <label style={dialogFieldStyle}>
+                  <span>
+                    {actionTarget.kind === "subcategory"
+                      ? t.archive_workspace.rename_category_prompt
+                      : t.archive_workspace.rename_group_prompt}
+                  </span>
+                  <input
+                    value={renameDraft}
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    autoFocus
+                    maxLength={80}
+                    style={dialogInputStyle}
+                  />
+                </label>
+                <div style={dialogActionRowStyle}>
+                  <button
+                    type="button"
+                    onClick={() => setRenameOpen(false)}
+                    disabled={actionBusy}
+                    style={dialogSecondaryButtonStyle}
+                  >
+                    {t.archive_workspace.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveRename()}
+                    disabled={actionBusy || !renameDraft.trim()}
+                    style={dialogPrimaryButtonStyle}
+                  >
+                    {t.archive_workspace.done}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={dialogMenuStyle}>
+                {(actionTarget.kind === "subcategory"
+                  ? onRenameSubcategory
+                  : onRenameGroup) ? (
+                  <button
+                    type="button"
+                    onClick={() => setRenameOpen(true)}
+                    style={dialogMenuButtonStyle}
+                  >
+                    {t.archive_workspace.edit}
+                  </button>
+                ) : null}
+                {(actionTarget.kind === "subcategory"
+                  ? onDeleteSubcategory
+                  : onDeleteGroup) ? (
+                  <button
+                    type="button"
+                    onClick={() => void deleteTarget()}
+                    disabled={actionBusy}
+                    style={dialogDangerButtonStyle}
+                  >
+                    {t.archive_workspace.delete}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setActionTarget(null)}
+                  disabled={actionBusy}
+                  style={dialogSecondaryButtonStyle}
+                >
+                  {t.archive_workspace.cancel}
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -191,46 +334,74 @@ function TaxonomyChipButton({
   active,
   compact,
   onSelect,
-  onRename,
   onDelete,
+  onLongPress,
 }: {
   chip: ArchiveTaxonomyChip;
   active: boolean;
   compact: boolean;
   onSelect: () => void;
-  onRename?: () => void;
-  onDelete?: () => void;
+  onDelete?: () => void | Promise<void>;
+  onLongPress?: () => void;
 }) {
   const { t } = useLanguage();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressedRef = useRef(false);
+
+  function clearTimer() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+
+  function beginLongPress(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!compact || !onLongPress) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    clearTimer();
+    longPressedRef.current = false;
+    timerRef.current = setTimeout(() => {
+      longPressedRef.current = true;
+      onLongPress();
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.(12);
+      }
+    }, 520);
+  }
 
   return (
     <span style={chipWrapperStyle(compact)}>
       <button
         type="button"
-        onClick={onSelect}
+        onPointerDown={beginLongPress}
+        onPointerUp={clearTimer}
+        onPointerLeave={clearTimer}
+        onPointerCancel={clearTimer}
+        onContextMenu={(event) => {
+          if (!compact || !onLongPress) return;
+          event.preventDefault();
+          clearTimer();
+          longPressedRef.current = true;
+          onLongPress();
+        }}
+        onClick={(event) => {
+          if (longPressedRef.current) {
+            event.preventDefault();
+            longPressedRef.current = false;
+            return;
+          }
+          onSelect();
+        }}
         style={chipButtonStyle(active, compact)}
       >
         {chip.label}
       </button>
 
-      {onRename ? (
+      {!compact && onDelete ? (
         <button
           type="button"
-          onClick={onRename}
-          style={renameButtonStyle(compact)}
-          title={t.archive_workspace.edit}
-          aria-label={`${t.archive_workspace.edit} ${chip.label}`}
-        >
-          {t.archive_workspace.edit}
-        </button>
-      ) : null}
-
-      {onDelete ? (
-        <button
-          type="button"
-          onClick={onDelete}
-          style={deleteButtonStyle(compact)}
+          onClick={() => void onDelete()}
+          style={deleteButtonStyle}
           title={t.archive_workspace.delete}
+          aria-label={`${t.archive_workspace.delete} ${chip.label}`}
         >
           x
         </button>
@@ -241,11 +412,12 @@ function TaxonomyChipButton({
 
 function panelStyle(compact: boolean): CSSProperties {
   return {
-    marginBottom: compact ? 10 : 18,
+    marginBottom: compact ? 8 : 18,
     padding: compact ? "7px 8px" : "12px 14px",
     border: "1px solid #edf0e8",
     borderRadius: compact ? 12 : 16,
     background: "#fff",
+    overflow: compact ? "hidden" : undefined,
   };
 }
 
@@ -254,8 +426,10 @@ function rowStyle(compact: boolean): CSSProperties {
     display: "flex",
     alignItems: "center",
     gap: compact ? 5 : 8,
-    flexWrap: "wrap",
+    flexWrap: compact ? "nowrap" : "wrap",
+    overflowX: compact ? "auto" : undefined,
     paddingBottom: compact ? 2 : undefined,
+    WebkitOverflowScrolling: compact ? "touch" : undefined,
   };
 }
 
@@ -268,11 +442,13 @@ function categoryRowStyle(compact: boolean): CSSProperties {
   };
 }
 
-const separatorStyle: CSSProperties = {
-  height: 1,
-  background: "#edf0e8",
-  margin: "10px 0",
-};
+function separatorStyle(compact: boolean): CSSProperties {
+  return {
+    height: 1,
+    background: "#edf0e8",
+    margin: compact ? "5px 0" : "10px 0",
+  };
+}
 
 function pillStyle(active: boolean, compact: boolean): CSSProperties {
   return {
@@ -280,119 +456,36 @@ function pillStyle(active: boolean, compact: boolean): CSSProperties {
     background: active ? "#3f7d3d" : "#f8fbf5",
     color: active ? "#fff" : "#335033",
     borderRadius: 999,
-    padding: compact ? "5px 9px" : "7px 14px",
+    padding: compact ? "5px 7px" : "7px 14px",
     fontSize: compact ? 13 : 15,
     fontWeight: 700,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
-    minHeight: compact ? 43 : undefined,
+    minHeight: compact ? 40 : undefined,
     whiteSpace: compact ? "normal" : "nowrap",
-    flex: compact ? "1 1 auto" : undefined,
     textAlign: "center",
   };
 }
 
-const manageButtonStyle: CSSProperties = {
-  minHeight: 34,
-  border: "1px solid #dce6d8",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#476745",
-  padding: "0 12px",
-  fontSize: 13,
-  fontWeight: 700,
-};
-
-function renameButtonStyle(compact: boolean): CSSProperties {
+function rowLabelStyle(active: boolean, compact: boolean): CSSProperties {
+  if (!compact) return pillStyle(active, false);
   return {
-    border: "1px solid #cfe0ca",
-    borderRadius: 999,
-    background: "#f2f8ef",
-    color: "#3f6f3d",
-    padding: compact ? "3px 7px" : "4px 8px",
-    fontSize: compact ? 11 : 12,
-    fontWeight: 700,
-    cursor: "pointer",
+    ...pillStyle(active, true),
+    minHeight: 34,
+    padding: "4px 9px",
+    whiteSpace: "nowrap",
+    flex: "0 0 auto",
   };
 }
-
-const managerStyle: CSSProperties = {
-  marginTop: 12,
-  paddingTop: 12,
-  borderTop: "1px solid #e7ece3",
-};
-
-const managerSectionHeaderStyle: CSSProperties = {
-  minHeight: 42,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-  color: "#30462f",
-};
-
-const managerAddButtonStyle: CSSProperties = {
-  minHeight: 38,
-  border: "1px solid #cfe0ca",
-  borderRadius: 10,
-  background: "#f6faf3",
-  color: "#3d713b",
-  padding: "0 11px",
-  fontSize: 13,
-  fontWeight: 700,
-};
-
-const managerRowStyle: CSSProperties = {
-  minHeight: 50,
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) auto auto",
-  alignItems: "center",
-  gap: 6,
-  borderTop: "1px solid #edf0e9",
-};
-
-const managerNameButtonStyle: CSSProperties = {
-  minWidth: 0,
-  minHeight: 44,
-  border: "none",
-  background: "transparent",
-  color: "#334533",
-  textAlign: "left",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  fontSize: 15,
-};
-
-const managerActionStyle: CSSProperties = {
-  minHeight: 38,
-  border: "none",
-  borderRadius: 9,
-  background: "#f4f7f1",
-  color: "#4d684a",
-  padding: "0 10px",
-  fontSize: 13,
-};
-
-const managerDeleteStyle: CSSProperties = {
-  ...managerActionStyle,
-  color: "#b45d58",
-};
-
-const managerHintStyle: CSSProperties = {
-  margin: "8px 0",
-  color: "#7d8878",
-  fontSize: 13,
-};
 
 function chipWrapperStyle(compact: boolean): CSSProperties {
   return {
     display: "inline-flex",
     alignItems: "center",
-    gap: compact ? 2 : 4,
-    marginRight: compact ? 1 : 3,
-    marginBottom: compact ? 2 : 4,
-    flex: compact ? "0 0 auto" : undefined,
+    gap: compact ? 0 : 4,
+    marginRight: compact ? 0 : 3,
+    marginBottom: compact ? 0 : 4,
+    flex: "0 0 auto",
   };
 }
 
@@ -402,37 +495,131 @@ function chipButtonStyle(active: boolean, compact: boolean): CSSProperties {
     background: active ? "#2f6d2f" : "#fff",
     color: active ? "#fff" : "#374437",
     borderRadius: 999,
-    padding: compact ? "5px 9px" : "7px 13px",
+    padding: compact ? "5px 10px" : "7px 13px",
     fontSize: compact ? 13 : 15,
     fontWeight: active ? 700 : 500,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
     whiteSpace: "nowrap",
     boxShadow: active ? "0 6px 14px rgba(63,125,61,0.18)" : "none",
+    touchAction: compact ? "pan-x" : undefined,
   };
 }
 
-function deleteButtonStyle(compact: boolean): CSSProperties {
-  return {
-    border: "none",
-    background: "transparent",
-    color: "#b7b7b7",
-    cursor: "pointer",
-    fontSize: compact ? 12 : 13,
-    padding: compact ? "2px 1px" : 0,
-    lineHeight: 1,
-  };
-}
+const deleteButtonStyle: CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#b7b7b7",
+  cursor: "pointer",
+  fontSize: 13,
+  padding: 0,
+  lineHeight: 1,
+};
 
 function addButtonStyle(compact: boolean): CSSProperties {
   return {
+    flex: "0 0 auto",
+    minWidth: compact ? 34 : undefined,
+    minHeight: compact ? 34 : undefined,
     border: "1px dashed #cbdcc2",
     background: "#fbfdf9",
     color: "#4CAF50",
     borderRadius: 999,
-    padding: compact ? "4px 8px" : "5px 10px",
+    padding: compact ? "4px 9px" : "5px 10px",
     cursor: "pointer",
-    fontSize: compact ? 13 : 14,
-    lineHeight: compact ? 1.15 : 1.3,
+    fontSize: compact ? 16 : 14,
+    lineHeight: 1.15,
   };
 }
+
+const dialogBackdropStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1500,
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "center",
+  padding: "16px 12px calc(16px + var(--app-safe-area-bottom))",
+  background: "rgba(28, 38, 27, 0.32)",
+};
+
+const dialogPanelStyle: CSSProperties = {
+  width: "min(100%, 420px)",
+  borderRadius: 20,
+  border: "1px solid #dfe8da",
+  background: "#fff",
+  padding: 16,
+  boxShadow: "0 18px 46px rgba(25, 39, 24, 0.24)",
+};
+
+const dialogTitleStyle: CSSProperties = {
+  color: "#243524",
+  fontSize: 18,
+  fontWeight: 850,
+  lineHeight: 1.35,
+  overflowWrap: "anywhere",
+};
+
+const dialogMenuStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+  marginTop: 14,
+};
+
+const dialogMenuButtonStyle: CSSProperties = {
+  minHeight: 48,
+  border: "1px solid #dbe6d7",
+  borderRadius: 13,
+  background: "#f8fbf6",
+  color: "#315c31",
+  fontSize: 16,
+  fontWeight: 750,
+};
+
+const dialogDangerButtonStyle: CSSProperties = {
+  ...dialogMenuButtonStyle,
+  borderColor: "#efd5d2",
+  background: "#fff8f7",
+  color: "#ad5049",
+};
+
+const dialogSecondaryButtonStyle: CSSProperties = {
+  ...dialogMenuButtonStyle,
+  background: "#fff",
+  color: "#657264",
+};
+
+const dialogPrimaryButtonStyle: CSSProperties = {
+  ...dialogMenuButtonStyle,
+  borderColor: "#3f7d3d",
+  background: "#3f7d3d",
+  color: "#fff",
+};
+
+const dialogFieldStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+  marginTop: 14,
+  color: "#657264",
+  fontSize: 14,
+};
+
+const dialogInputStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 48,
+  boxSizing: "border-box",
+  border: "1px solid #bdcfb8",
+  borderRadius: 13,
+  padding: "0 13px",
+  color: "#263526",
+  background: "#fff",
+  fontSize: 16,
+  outline: "none",
+};
+
+const dialogActionRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 8,
+  marginTop: 14,
+};

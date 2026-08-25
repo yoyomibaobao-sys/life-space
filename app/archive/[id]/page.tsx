@@ -12,6 +12,7 @@ import {
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import { showToast } from "@/components/Toast";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
+import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettings";
 import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
 import ArchiveDetailHeader from "@/components/archive-detail/ArchiveDetailHeader";
 import ArchiveExperienceCards from "@/components/archive-detail/ArchiveExperienceCards";
@@ -95,7 +96,7 @@ export default function ArchiveDetail({
   return <Content id={id} />;
 }
 
-type ArchiveDetailTab = "profile" | "records" | "experience" | "growth";
+type ArchiveDetailTab = "profile" | "records" | "experience";
 
 type MobileArchiveEditableField =
   | "title"
@@ -115,6 +116,7 @@ function Content({ id }: { id: string }) {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [cycles, setCycles] = useState<ArchiveCycle[]>([]);
   const [cycleBusy, setCycleBusy] = useState(false);
+  const [cycleSettingsSaving, setCycleSettingsSaving] = useState(false);
   const [me, setMe] = useState<string | null | undefined>(undefined);
   const [username, setUsername] = useState("");
   const [ownerAvatarUrl, setOwnerAvatarUrl] = useState<string | null>(null);
@@ -316,7 +318,7 @@ saveRecentArchiveBrowse({
 
       const { data: cycleRows, error: cycleError } = await supabase
         .from("archive_cycles")
-        .select("id, archive_id, cycle_no, status, started_at, ended_at, created_at, updated_at")
+        .select("id, archive_id, cycle_no, display_name, status, started_at, ended_at, created_at, updated_at")
         .eq("archive_id", archiveData.id)
         .order("cycle_no", { ascending: false });
 
@@ -680,14 +682,17 @@ saveRecentArchiveBrowse({
   const cycleTerminology = getArchiveCycleTerminology(activeArchive.category, language);
   const isOwner = me === activeArchive.user_id;
   const mode: ArchiveMode = isOwner ? ((modeParam as ArchiveMode | null) || "owner") : "viewer";
-  const activeCycles = cycles
+  const cycleEnabled = typeof activeArchive.cycle_enabled === "boolean"
+    ? activeArchive.cycle_enabled
+    : cycles.length > 0;
+  const activeCycles = (cycleEnabled ? cycles : [])
     .filter((cycle) => cycle.status === "active")
     .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-  const cycleOptions = [...cycles]
+  const cycleOptions = [...(cycleEnabled ? cycles : [])]
     .sort((a, b) => b.cycle_no - a.cycle_no)
     .map((cycle) => ({
       id: cycle.id,
-      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
+      label: `${cycle.display_name || cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
     }));
   const archiveDisplayName = getDisplayName(activeArchive, species);
   const latestUpdate = records[0]?.record_time || activeArchive.last_record_time || activeArchive.created_at;
@@ -1736,6 +1741,40 @@ saveRecentArchiveBrowse({
     );
   }
 
+  async function saveArchiveCycleSettings({
+    enabled,
+    nextName,
+  }: {
+    enabled: boolean;
+    nextName: string;
+  }) {
+    if (!isOwner || cycleSettingsSaving) return;
+    const cleanName = nextName.trim().slice(0, 80);
+    setCycleSettingsSaving(true);
+
+    const { error } = await supabase
+      .from("archives")
+      .update({
+        cycle_enabled: enabled,
+        next_cycle_name: cleanName || null,
+      })
+      .eq("id", activeArchive.id)
+      .eq("user_id", activeArchive.user_id);
+
+    setCycleSettingsSaving(false);
+    if (error) {
+      showToast(archiveCopy.cycle_setting_failed);
+      return;
+    }
+
+    setArchive((current) => current ? {
+      ...current,
+      cycle_enabled: enabled,
+      next_cycle_name: cleanName || null,
+    } : current);
+    showToast(archiveCopy.cycle_setting_saved);
+  }
+
   async function startArchiveCycle(startedAt: string) {
     if (!isOwner || cycleBusy) return;
     setCycleBusy(true);
@@ -1745,6 +1784,7 @@ saveRecentArchiveBrowse({
         {
           archive_id: activeArchive.id,
           cycle_no: nextCycleNo,
+          display_name: activeArchive.next_cycle_name?.trim() || null,
           status: "active",
           started_at: startedAt,
           ended_at: null,
@@ -1760,6 +1800,18 @@ saveRecentArchiveBrowse({
             : cycleTerminology.startFailure
         );
         return;
+      }
+
+      if (activeArchive.next_cycle_name) {
+        const { error: clearNameError } = await supabase
+          .from("archives")
+          .update({ next_cycle_name: null })
+          .eq("id", activeArchive.id)
+          .eq("user_id", activeArchive.user_id);
+
+        if (!clearNameError) {
+          setArchive((current) => current ? { ...current, next_cycle_name: null } : current);
+        }
       }
 
       showToast(cycleTerminology.startSuccess(nextCycleNo));
@@ -1993,13 +2045,6 @@ saveRecentArchiveBrowse({
             {archiveCopy.experience_cards}
             {language === "en" ? ` (${experienceCardCount})` : `（${experienceCardCount}）`}
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("growth")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "growth")}
-          >
-            {archiveCopy.growth_line}
-          </button>
         </nav>
 
         {isMobileViewport ? (
@@ -2095,11 +2140,21 @@ saveRecentArchiveBrowse({
                   { archive_summary: nextSummary || null },
                 );
               }}
+              profileExtra={isOwner ? (
+                <ArchiveCycleSettings
+                  key={`${activeArchive.id}:${activeArchive.next_cycle_name || ""}`}
+                  enabled={cycleEnabled}
+                  nextName={activeArchive.next_cycle_name}
+                  busy={cycleSettingsSaving}
+                  onSave={saveArchiveCycleSettings}
+                />
+              ) : null}
             />
           </div>
         ) : null}
 
         {isMobileViewport && activeDetailTab === "profile" ? (
+          <>
           <MobileArchiveProfile
             archive={activeArchive}
             archiveDisplayName={archiveDisplayName}
@@ -2148,6 +2203,16 @@ saveRecentArchiveBrowse({
             onPlantSuggestionsOpenChange={setMobilePlantSuggestionsOpen}
             onSystemSuggestionsOpenChange={setMobileSystemSuggestionsOpen}
           />
+          {isOwner ? (
+            <ArchiveCycleSettings
+              key={`${activeArchive.id}:${activeArchive.next_cycle_name || ""}`}
+              enabled={cycleEnabled}
+              nextName={activeArchive.next_cycle_name}
+              busy={cycleSettingsSaving}
+              onSave={saveArchiveCycleSettings}
+            />
+          ) : null}
+          </>
         ) : null}
 
         {activeDetailTab === "experience" ? (
@@ -2156,13 +2221,6 @@ saveRecentArchiveBrowse({
             isOwner={isOwner}
             onCountChange={setExperienceCardCount}
           />
-        ) : null}
-
-        {activeDetailTab === "growth" ? (
-          <section style={mobileGrowthLinePlaceholderStyle}>
-            <strong>{archiveCopy.growth_line}</strong>
-            <span>{archiveCopy.growth_line_coming}</span>
-          </section>
         ) : null}
 
         {mode === "owner" && activeDetailTab === "records" ? (
@@ -2186,16 +2244,17 @@ saveRecentArchiveBrowse({
 
         {activeDetailTab === "records" ? (
         <ArchiveCycleTimeline
-          cycles={cycles}
+          cycles={cycleEnabled ? cycles : []}
           records={records}
           category={activeArchive.category}
+          nextCycleName={activeArchive.next_cycle_name}
           mobileMode={isMobileViewport}
-          canManage={mode === "owner"}
+          canManage={mode === "owner" && cycleEnabled}
           busy={cycleBusy}
-          onStartCycle={startArchiveCycle}
-          onEndCycle={endArchiveCycle}
-          onUpdateCycleDates={updateArchiveCycleDates}
-          onDeleteCycle={deleteArchiveCycle}
+          onStartCycle={cycleEnabled ? startArchiveCycle : undefined}
+          onEndCycle={cycleEnabled ? endArchiveCycle : undefined}
+          onUpdateCycleDates={cycleEnabled ? updateArchiveCycleDates : undefined}
+          onDeleteCycle={cycleEnabled ? deleteArchiveCycle : undefined}
           emptyState={
             <div
               style={{
@@ -2848,7 +2907,7 @@ function mobileArchiveOwnerFollowStyle(followed: boolean): CSSProperties {
 
 const archiveDetailTabWrapStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: 6,
   marginBottom: 12,
   padding: 4,
@@ -2873,19 +2932,6 @@ function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
 
 const archiveDetailAnchorStyle: CSSProperties = {
   scrollMarginTop: 76,
-};
-
-const mobileGrowthLinePlaceholderStyle: CSSProperties = {
-  display: "grid",
-  gap: 8,
-  marginBottom: 14,
-  padding: 18,
-  border: "1px dashed #d6e3d0",
-  borderRadius: 16,
-  background: "#fbfdf9",
-  color: "#60705c",
-  fontSize: 13,
-  lineHeight: 1.65,
 };
 
 const mobileArchiveProfileStyle: CSSProperties = {

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+} from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import PublicExperiencePlayer from "@/components/experience-card/PublicExperiencePlayer";
 import styles from "@/components/experience-card/PublicExperienceFeed.module.css";
@@ -17,25 +23,59 @@ import {
   setAppStatusBarTheme,
 } from "@/components/StatusBarTheme";
 
+function getPublishedMeta(
+  value: string | null | undefined,
+  language: "zh" | "en",
+  label: string
+) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return ` · ${label}${new Intl.DateTimeFormat(
+    language === "en" ? "en" : "zh-CN",
+    { year: "numeric", month: "2-digit", day: "2-digit" },
+  ).format(date)}`;
+}
+
 export default function PublicExperienceGallery({
   items,
 }: {
   items: ExperienceCardListItem[];
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  function openPlayback(index: number) {
+    setOpenIndex(index);
+  }
+
+  function handleCardClick(event: MouseEvent<HTMLElement>, index: number) {
+    if ((event.target as HTMLElement).closest("a")) return;
+    openPlayback(index);
+  }
+
+  function handleCardKeyDown(event: ReactKeyboardEvent<HTMLElement>, index: number) {
+    if ((event.target as HTMLElement).closest("a")) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openPlayback(index);
+  }
 
   return (
     <>
       <section className={styles.gallery} aria-label={t.experience.public_feed}>
         {items.map((item, index) => (
-          <article key={item.id} className={styles.previewCard}>
-            <button
-              type="button"
-              onClick={() => setOpenIndex(index)}
-              className={styles.previewMediaButton}
-              aria-label={`${t.experience.open_fullscreen}${item.title}`}
-            >
+          <article
+            key={item.id}
+            className={styles.previewCard}
+            role="button"
+            tabIndex={0}
+            aria-label={`${t.experience.open_fullscreen}${item.title}`}
+            onClick={(event) => handleCardClick(event, index)}
+            onKeyDown={(event) => handleCardKeyDown(event, index)}
+          >
+            <span className={styles.previewMediaButton} aria-hidden="true">
               <span className={styles.previewMedia}>
               {item.coverUrl ? (
                 <img
@@ -51,8 +91,8 @@ export default function PublicExperienceGallery({
               )}
               <span className={styles.previewPlay} aria-hidden="true" />
               </span>
-            </button>
-            <Link href={`/experience-cards/${item.id}`} className={styles.previewBody}>
+            </span>
+            <span className={styles.previewBody}>
               <span className={styles.previewTitle}>{item.title}</span>
               <span className={styles.previewSource}>
                 {item.authorName}
@@ -60,9 +100,17 @@ export default function PublicExperienceGallery({
               </span>
               <span className={styles.previewMeta}>
                 {item.source_record_count}{t.experience.record_suffix}
-                {item.durationDays ? ` · ${item.durationDays}${t.experience.day_suffix}` : ""}
+                {getPublishedMeta(item.published_at, language, t.experience.published_on)}
               </span>
-            </Link>
+              <Link
+                href={`/experience-cards/${item.id}`}
+                className={styles.previewDetails}
+                aria-label={`${t.experience.view_details}：${item.title}`}
+              >
+                {t.experience.view_details}
+                <UiIcon name="arrow-right" size={13} />
+              </Link>
+            </span>
           </article>
         ))}
       </section>
@@ -118,7 +166,7 @@ function ExperienceFullscreenViewer({
       onClose();
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") requestClose();
     }
 

@@ -16,6 +16,12 @@
   background: #fff;
   color: #273827;
   text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.previewCard:focus-visible {
+  box-shadow: 0 0 0 3px rgba(63, 111, 55, 0.2);
 }
 
 .previewMediaButton {
@@ -30,6 +36,7 @@
 }
 
 .previewMedia {
+  display: block;
   position: relative;
   width: 96px;
   height: 96px;
@@ -105,6 +112,18 @@
 .previewMeta {
   color: #728071;
   font-size: 12px;
+}
+
+.previewDetails {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #3f6f37;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+  text-decoration: none;
 }
 
 .fullscreenOverlay {

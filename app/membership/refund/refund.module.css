@@ -1,0 +1,254 @@
+.page {
+  width: min(920px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 18px 0 42px;
+  color: #263426;
+}
+
+.backRow {
+  margin-bottom: 12px;
+}
+
+.backLink,
+.textLink,
+.contact a {
+  color: #4f724d;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.hero,
+.policyCard,
+.orderCard,
+.empty,
+.contact {
+  border: 1px solid #dfe8dc;
+  border-radius: 20px;
+  background: #fff;
+}
+
+.hero {
+  padding: 24px;
+  background: linear-gradient(145deg, #f6faf3, #fff);
+}
+
+.eyebrow {
+  color: #66805f;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: .05em;
+}
+
+.hero h1,
+.policyCard h2 {
+  margin: 7px 0 0;
+}
+
+.hero p,
+.policyCard p,
+.policyCard li {
+  color: #687565;
+  line-height: 1.75;
+}
+
+.policyCard,
+.empty,
+.contact {
+  margin-top: 14px;
+  padding: 20px;
+}
+
+.policyCard ol {
+  padding-left: 22px;
+}
+
+.error,
+.unavailable {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #f0d5d1;
+  border-radius: 14px;
+  background: #fff6f4;
+  color: #9d4138;
+  line-height: 1.6;
+}
+
+.orders {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.orderCard {
+  padding: 20px;
+}
+
+.orderHeader,
+.requestTitleRow,
+.quote {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amount {
+  color: #273e27;
+  font-size: 22px;
+  font-weight: 860;
+}
+
+.orderNumber {
+  max-width: 56%;
+  color: #5d6b59;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.meta {
+  margin-top: 5px;
+  color: #778273;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.details > div {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f6f8f3;
+}
+
+.details dt {
+  color: #7a8676;
+  font-size: 12px;
+}
+
+.details dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.requestPanel,
+.requestForm {
+  margin-top: 16px;
+  padding: 15px;
+  border-radius: 15px;
+  background: #f4f8f1;
+}
+
+.requestForm label {
+  display: grid;
+  gap: 7px;
+  margin-top: 13px;
+  color: #4f5d4b;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.requestForm textarea {
+  min-height: 86px;
+  padding: 11px 12px;
+  border: 1px solid #cedbc9;
+  border-radius: 12px;
+  background: #fff;
+  color: #253525;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.note,
+.notice {
+  margin-top: 10px;
+  color: #566552;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.primaryButton,
+.primaryLink,
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 13px;
+  padding: 0 17px;
+  border: 1px solid #5f875b;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 820;
+  text-decoration: none;
+}
+
+.primaryButton,
+.primaryLink {
+  background: #4e8249;
+  color: #fff;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.secondaryLink {
+  background: #fff;
+  color: #4e724a;
+}
+
+.contact {
+  color: #6e796a;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+@media (max-width: 759px) {
+  .page {
+    width: min(100% - 20px, 920px);
+    padding-top: 10px;
+    padding-bottom: 112px;
+  }
+
+  .hero,
+  .policyCard,
+  .orderCard,
+  .empty,
+  .contact {
+    border-radius: 17px;
+  }
+
+  .hero,
+  .policyCard,
+  .orderCard {
+    padding: 16px;
+  }
+
+  .details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .orderHeader {
+    align-items: flex-start;
+  }
+
+  .orderNumber {
+    max-width: 52%;
+  }
+
+  .primaryButton,
+  .primaryLink,
+  .secondaryLink {
+    width: 100%;
+  }
+}

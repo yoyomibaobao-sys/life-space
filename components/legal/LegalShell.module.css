@@ -1,0 +1,191 @@
+.page {
+  width: min(920px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 20px 0 48px;
+  color: #273527;
+}
+
+.hero,
+.document,
+.navCard {
+  border: 1px solid #dde7da;
+  border-radius: 22px;
+  background: #fff;
+}
+
+.hero {
+  padding: 28px;
+  background: linear-gradient(145deg, #f4f9f1 0%, #fff 72%);
+}
+
+.eyebrow {
+  color: #63805e;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+
+.hero h1 {
+  margin: 8px 0 0;
+  font-size: clamp(27px, 4vw, 38px);
+  line-height: 1.2;
+}
+
+.hero p {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: #647061;
+  line-height: 1.75;
+}
+
+.hero small {
+  display: block;
+  margin-top: 14px;
+  color: #899284;
+  line-height: 1.5;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.navCard {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 20px 50px 20px 20px;
+  color: #2f432e;
+  text-decoration: none;
+}
+
+.navCard strong {
+  font-size: 19px;
+}
+
+.navCard span {
+  color: #6f7b6b;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.navIcon {
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  color: #60805c;
+}
+
+.backRow,
+.bottomLinkRow {
+  margin-bottom: 12px;
+}
+
+.backRow a,
+.bottomLinkRow a,
+.related a {
+  color: #4f724d;
+  font-size: 14px;
+  font-weight: 780;
+  text-decoration: none;
+}
+
+.backRow a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bottomLinkRow {
+  margin: 18px 0 0;
+  text-align: center;
+}
+
+.document {
+  margin-top: 16px;
+  padding: 28px;
+}
+
+.document section + section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #edf1ea;
+}
+
+.document h2 {
+  margin: 0;
+  color: #31472f;
+  font-size: 20px;
+  line-height: 1.45;
+}
+
+.document p,
+.document li {
+  color: #596655;
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+.document p {
+  margin: 11px 0 0;
+}
+
+.document ul {
+  margin: 11px 0 0;
+  padding-left: 23px;
+}
+
+.document li + li {
+  margin-top: 7px;
+}
+
+.related {
+  display: flex;
+  justify-content: center;
+  gap: 10px 20px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 759px) {
+  .page {
+    width: min(100% - 20px, 920px);
+    padding-top: 10px;
+    padding-bottom: 116px;
+  }
+
+  .hero,
+  .document,
+  .navCard {
+    border-radius: 17px;
+  }
+
+  .hero,
+  .document {
+    padding: 17px;
+  }
+
+  .cardGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .navCard {
+    min-height: 108px;
+    padding: 17px 46px 17px 17px;
+  }
+
+  .navIcon {
+    right: 17px;
+    top: 17px;
+  }
+
+  .document p,
+  .document li {
+    font-size: 16px;
+    line-height: 1.8;
+  }
+}

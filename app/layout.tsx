@@ -24,6 +24,10 @@ export const metadata: Metadata = {
   title: "有时·耕作 | LifeSpace for Cultivation",
   description:
     "有时·耕作：围绕种植、养护、农法设施与生态观察的长期记录空间。 LifeSpace for long-term cultivation records.",
+  icons: {
+    icon: "/brand/youshi-space-mark.svg",
+    apple: "/brand/youshi-space-icon-192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

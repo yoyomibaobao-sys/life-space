@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -18,6 +24,11 @@ import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
+import { fetchFollowedPublicProjects } from "@/lib/followed-public-project-feed";
+import type {
+  DiscoveryProjectCursor,
+  DiscoveryProjectFeedItem,
+} from "@/lib/discover-project-types";
 
 type TabKey = "projects" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -86,10 +97,6 @@ type GroupTagRow = {
   name: string | null;
 };
 
-type FollowedUserArchiveRow = ArchiveRow & {
-  is_public?: boolean;
-};
-
 type FollowProjectCard = {
   id: string;
   title: string;
@@ -134,6 +141,8 @@ export default function FollowPage() {
   const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter>("all");
   const [projectCards, setProjectCards] = useState<FollowProjectCard[]>([]);
   const [userCards, setUserCards] = useState<FollowUserCard[]>([]);
+  const [userProjectsError, setUserProjectsError] = useState(false);
+  const [loadVersion, setLoadVersion] = useState(0);
   const [selectedUserId, setSelectedUserId] = useState<string>("all");
   const [readUpdates, setReadUpdates] = useState<Record<string, string>>(() => {
     if (typeof window === "undefined") return {};
@@ -150,6 +159,20 @@ export default function FollowPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
+  const [userMenuTargetId, setUserMenuTargetId] = useState<string | null>(null);
+  const [pinnedUserIds, setPinnedUserIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const value = JSON.parse(localStorage.getItem("lifespace-follow-pinned") || "[]");
+      return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const userLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userLongPressedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -165,6 +188,7 @@ export default function FollowPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setUserProjectsError(false);
 
       const {
         data: { user },
@@ -207,15 +231,9 @@ export default function FollowPage() {
             .in("id", archiveIds)
         : Promise.resolve({ data: [] as ArchiveRow[], error: null });
 
-      const followedUsersArchivesPromise = followedUserIds.length
-        ? supabase
-            .from("archives")
-            .select(
-              "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path, is_public"
-            )
-            .in("user_id", followedUserIds)
-            .eq("is_public", true)
-        : Promise.resolve({ data: [] as FollowedUserArchiveRow[], error: null });
+      const followedUsersProjectsPromise = followedUserIds.length
+        ? fetchAllFollowedPublicProjects()
+        : Promise.resolve({ items: [] as DiscoveryProjectFeedItem[], error: null });
 
       const recordsPromise = archiveIds.length
         ? supabase
@@ -225,12 +243,17 @@ export default function FollowPage() {
             .order("record_time", { ascending: false })
         : Promise.resolve({ data: [] as RecordRow[], error: null });
 
-      const [archivesResult, followedUsersArchivesResult, recordsResult] =
-        await Promise.all([archivesPromise, followedUsersArchivesPromise, recordsPromise]);
+      const [archivesResult, followedUsersProjectsResult, recordsResult] =
+        await Promise.all([archivesPromise, followedUsersProjectsPromise, recordsPromise]);
 
       const archives = (archivesResult.data || []) as ArchiveRow[];
-      const followedUsersArchives = (followedUsersArchivesResult.data || []) as FollowedUserArchiveRow[];
+      const followedUsersProjects = followedUsersProjectsResult.items;
       const records = (recordsResult.data || []) as RecordRow[];
+
+      if (followedUsersProjectsResult.error) {
+        console.error("load followed users' public projects error:", followedUsersProjectsResult.error);
+        setUserProjectsError(true);
+      }
 
       const profileIds = unique([
         ...archives.map((item) => item.user_id),
@@ -316,16 +339,6 @@ export default function FollowPage() {
         })
       );
 
-      const followedUserCoverPairs = await resolveMediaDisplayPairs(
-        supabase,
-        followedUsersArchives.map((archive) => ({
-          url: archive.cover_image_url,
-          path: archive.cover_image_path,
-          thumb_url: archive.cover_thumb_url,
-          thumb_path: archive.cover_thumb_path,
-        }))
-      );
-
       const nextProjectCards = archives
         .map((archive, index) => {
           const latestRecord = latestRecordMap.get(archive.id);
@@ -364,31 +377,44 @@ export default function FollowPage() {
         .sort(byRecentProject);
 
       const publicArchiveMap = new Map<string, FollowProjectCard[]>();
-      followedUsersArchives.forEach((archive, index) => {
-        if (!archive.user_id) return;
-        if (!publicArchiveMap.has(archive.user_id)) {
-          publicArchiveMap.set(archive.user_id, []);
+      followedUsersProjects.forEach((project) => {
+        if (!project.owner_user_id) return;
+        if (!publicArchiveMap.has(project.owner_user_id)) {
+          publicArchiveMap.set(project.owner_user_id, []);
         }
-        const profile = profileMap.get(archive.user_id);
-        publicArchiveMap.get(archive.user_id)?.push({
-          id: archive.id,
-          title: archive.title || followT.untitled_project,
-          displaySystemName: archive.system_name || archive.species_name_snapshot || followT.not_provided,
-          ownerId: archive.user_id,
-          ownerName: profile?.username || followT.username_not_set,
-          ownerAvatarUrl: profile?.avatar_url || null,
-          categoryLabel: getArchiveCategoryLabel(archive.category, language),
-          categoryIcon: getArchiveCategoryIcon(archive.category),
-          subTagName: archive.sub_tag_id ? subTagMap.get(archive.sub_tag_id) || "" : "",
-          groupTagName: archive.group_tag_id ? groupTagMap.get(archive.group_tag_id) || "" : "",
-          latestNote: followT.new_record,
-          latestRecordTime: archive.last_record_time || null,
-          recordCount: Number(archive.record_count || 0),
-          durationDays: getDurationDays(archive.created_at, archive.ended_at || archive.last_record_time),
-          viewCount: Number(archive.view_count || 0),
-          statusLabel: getProjectStatusLabel(archive.help_status, archive.status, followT),
-          statusKind: getProjectStatusKind(archive.help_status, archive.status),
-          coverUrl: followedUserCoverPairs[index]?.display_thumb_url || followedUserCoverPairs[index]?.display_url || null,
+        const profile = profileMap.get(project.owner_user_id);
+        const statusKind = project.has_public_help
+          ? "help"
+          : project.archive_ended_at
+            ? "ended"
+            : "normal";
+        publicArchiveMap.get(project.owner_user_id)?.push({
+          id: project.archive_id,
+          title: project.archive_title || followT.untitled_project,
+          displaySystemName: project.system_name || project.species_name_snapshot || followT.not_provided,
+          ownerId: project.owner_user_id,
+          ownerName: project.profile_display_name || profile?.username || followT.username_not_set,
+          ownerAvatarUrl: project.profile_avatar_url || profile?.avatar_url || null,
+          categoryLabel: getArchiveCategoryLabel(project.category, language),
+          categoryIcon: getArchiveCategoryIcon(project.category),
+          subTagName: "",
+          groupTagName: "",
+          latestNote: project.card_summary?.trim() || followT.new_record,
+          latestRecordTime: project.public_activity_at || null,
+          recordCount: Number(project.public_record_count || 0),
+          durationDays: getDurationDays(
+            project.archive_created_at,
+            project.archive_ended_at || project.public_activity_at
+          ),
+          viewCount: Number(project.view_count || 0),
+          statusLabel:
+            statusKind === "help"
+              ? followT.status_open
+              : statusKind === "ended"
+                ? followT.status_ended
+                : followT.status_ongoing,
+          statusKind,
+          coverUrl: project.display_image_url || null,
           followedAt: null,
         });
       });
@@ -412,7 +438,7 @@ export default function FollowPage() {
             publicArchives: archivesOfUser,
           } satisfies FollowUserCard;
         })
-        .sort((a, b) => getTimeValue(b.latestRecordTime) - getTimeValue(a.latestRecordTime));
+        .sort((a, b) => getTimeValue(b.followedAt) - getTimeValue(a.followedAt));
 
       setProjectCards(nextProjectCards);
       setUserCards(nextUserCards);
@@ -420,7 +446,7 @@ export default function FollowPage() {
     }
 
     load();
-  }, [followT, language, router]);
+  }, [followT, language, loadVersion, router]);
 
   const filteredProjectCards = useMemo(() => {
     const search = keyword.trim().toLowerCase();
@@ -452,14 +478,21 @@ export default function FollowPage() {
 
   const filteredUserCards = useMemo(() => {
     const search = keyword.trim().toLowerCase();
-    return userCards.filter((item) => {
-      if (!search) return true;
-      return [item.username, ...item.recentArchiveTitles]
-        .join(" ")
-        .toLowerCase()
-        .includes(search);
-    });
-  }, [keyword, userCards]);
+    const pinned = new Set(pinnedUserIds);
+    return userCards
+      .filter((item) => {
+        if (!search) return true;
+        return [item.username, ...item.recentArchiveTitles]
+          .join(" ")
+          .toLowerCase()
+          .includes(search);
+      })
+      .sort((a, b) => {
+        const pinDifference = Number(pinned.has(b.id)) - Number(pinned.has(a.id));
+        if (pinDifference) return pinDifference;
+        return getTimeValue(b.followedAt) - getTimeValue(a.followedAt);
+      });
+  }, [keyword, pinnedUserIds, userCards]);
 
   const selectedUserProjects = useMemo(() => {
     const users = selectedUserId === "all"
@@ -481,6 +514,39 @@ export default function FollowPage() {
       localStorage.setItem("lifespace-follow-read", JSON.stringify(next));
       return next;
     });
+  }
+
+  function clearUserLongPressTimer() {
+    if (userLongPressTimerRef.current) clearTimeout(userLongPressTimerRef.current);
+    userLongPressTimerRef.current = null;
+  }
+
+  function beginUserLongPress(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    userId: string
+  ) {
+    if (!isMobileViewport) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    clearUserLongPressTimer();
+    userLongPressedIdRef.current = null;
+    userLongPressTimerRef.current = setTimeout(() => {
+      userLongPressedIdRef.current = userId;
+      setUserMenuTargetId(userId);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.(12);
+      }
+    }, 520);
+  }
+
+  function togglePinnedUser(userId: string) {
+    setPinnedUserIds((current) => {
+      const next = current.includes(userId)
+        ? current.filter((id) => id !== userId)
+        : [userId, ...current];
+      localStorage.setItem("lifespace-follow-pinned", JSON.stringify(next));
+      return next;
+    });
+    setUserMenuTargetId(null);
   }
 
   async function handleUnfollowProject(archiveId: string) {
@@ -524,6 +590,13 @@ export default function FollowPage() {
     }
 
     setUserCards((prev) => prev.filter((item) => item.id !== userId));
+    setPinnedUserIds((current) => {
+      const next = current.filter((id) => id !== userId);
+      localStorage.setItem("lifespace-follow-pinned", JSON.stringify(next));
+      return next;
+    });
+    setSelectedUserId((current) => current === userId ? "all" : current);
+    setUserMenuTargetId(null);
     setUserSubmitting(false);
     setUserConfirmId(null);
     showToast(followT.user_unfollowed);
@@ -739,10 +812,27 @@ export default function FollowPage() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => {
+                    onPointerDown={(event) => beginUserLongPress(event, item.id)}
+                    onPointerUp={clearUserLongPressTimer}
+                    onPointerLeave={clearUserLongPressTimer}
+                    onPointerCancel={clearUserLongPressTimer}
+                    onContextMenu={(event) => {
+                      if (!isMobileViewport) return;
+                      event.preventDefault();
+                      clearUserLongPressTimer();
+                      userLongPressedIdRef.current = item.id;
+                      setUserMenuTargetId(item.id);
+                    }}
+                    onClick={(event) => {
+                      if (userLongPressedIdRef.current === item.id) {
+                        event.preventDefault();
+                        userLongPressedIdRef.current = null;
+                        return;
+                      }
                       setSelectedUserId(item.id);
                       markRead(`user:${item.id}`, item.latestRecordTime);
                     }}
+                    title={isMobileViewport ? followT.long_press_user_hint : undefined}
                     style={followedUserPillStyle(selectedUserId === item.id)}
                   >
                     <span style={{ position: "relative" }}>
@@ -752,6 +842,7 @@ export default function FollowPage() {
                         <span style={userAvatarFallbackSmallStyle}><UiIcon name="sprout" size={18} /></span>
                       )}
                       {unread ? <span style={railUnreadDotStyle} /> : null}
+                      {pinnedUserIds.includes(item.id) ? <span style={railPinnedDotStyle} /> : null}
                     </span>
                     <span style={railUsernameStyle}>{item.username}</span>
                   </button>
@@ -759,7 +850,11 @@ export default function FollowPage() {
               })}
             </div>
 
-            {selectedUserId !== "all" ? (
+            {isMobileViewport ? (
+              <div style={followedUserHintStyle}>{followT.long_press_user_hint}</div>
+            ) : null}
+
+            {!isMobileViewport && selectedUserId !== "all" ? (
               <div style={selectedUserActionStyle}>
                 <Link href={`/user/${selectedUserId}`} style={textLinkStyle}>{followT.enter_space}</Link>
                 <button type="button" onClick={() => setUserConfirmId(selectedUserId)} style={ghostButtonStyle}>
@@ -768,7 +863,18 @@ export default function FollowPage() {
               </div>
             ) : null}
 
-            {selectedUserProjects.length ? (
+            {userProjectsError ? (
+              <div style={emptyWrapStyle}>
+                <div>{followT.user_projects_load_failed}</div>
+                <button
+                  type="button"
+                  onClick={() => setLoadVersion((value) => value + 1)}
+                  style={{ ...ghostButtonStyle, marginTop: 14 }}
+                >
+                  {followT.reload}
+                </button>
+              </div>
+            ) : selectedUserProjects.length ? (
               <div style={listStyle}>
                 {selectedUserProjects.map((item) => (
                   <article key={`${item.ownerId}-${item.id}`} style={cardStyle}>
@@ -795,18 +901,69 @@ export default function FollowPage() {
                 ))}
               </div>
             ) : (
-              <div style={emptyWrapStyle}>{followT.empty_users_intro}</div>
+              <div style={isMobileViewport ? compactEmptyTextStyle : emptyWrapStyle}>
+                {selectedUserId === "all"
+                  ? followT.empty_followed_user_projects_short
+                  : followT.empty_selected_user_projects}
+              </div>
             )}
           </div>
         ) : (
           <EmptyState
             title={followT.empty_users}
-            description={followT.empty_users_intro}
+            description={isMobileViewport ? "" : followT.empty_users_intro}
             actionLabel={followT.browse_discover}
             href="/discover"
           />
         )}
       </section>
+
+      {isMobileViewport && userMenuTargetId ? (
+        <div style={userActionBackdropStyle} onClick={() => setUserMenuTargetId(null)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={userCards.find((item) => item.id === userMenuTargetId)?.username || followT.users}
+            style={userActionSheetStyle}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={userActionTitleStyle}>
+              {userCards.find((item) => item.id === userMenuTargetId)?.username || followT.username_not_set}
+            </div>
+            <button
+              type="button"
+              onClick={() => togglePinnedUser(userMenuTargetId)}
+              style={userActionButtonStyle}
+            >
+              {pinnedUserIds.includes(userMenuTargetId) ? followT.unpin_user : followT.pin_user}
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/user/${userMenuTargetId}`)}
+              style={userActionButtonStyle}
+            >
+              {followT.enter_space}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUserMenuTargetId(null);
+                setUserConfirmId(userMenuTargetId);
+              }}
+              style={userActionDangerButtonStyle}
+            >
+              {followT.unfollow}
+            </button>
+            <button
+              type="button"
+              onClick={() => setUserMenuTargetId(null)}
+              style={userActionCancelButtonStyle}
+            >
+              {followT.back}
+            </button>
+          </section>
+        </div>
+      ) : null}
 
       <ConfirmDialog
         open={!!projectConfirmId}
@@ -860,7 +1017,9 @@ function EmptyState({
   return (
     <div style={emptyWrapStyle}>
       <div style={{ fontSize: 18, fontWeight: 650, color: "#2f3a2f" }}>{title}</div>
-      <div style={{ marginTop: 8, color: "#7b8578", fontSize: 14 }}>{description}</div>
+      {description ? (
+        <div style={{ marginTop: 8, color: "#7b8578", fontSize: 14 }}>{description}</div>
+      ) : null}
       <Link href={href} style={emptyActionStyle}>
         {actionLabel}
       </Link>
@@ -912,6 +1071,23 @@ function getInitialTabFromUrl(): TabKey {
   if (typeof window === "undefined") return "projects";
   const tab = new URLSearchParams(window.location.search).get("tab");
   return tab === "users" ? "users" : "projects";
+}
+
+async function fetchAllFollowedPublicProjects() {
+  const items: DiscoveryProjectFeedItem[] = [];
+  let cursor: DiscoveryProjectCursor | null = null;
+
+  do {
+    const result = await fetchFollowedPublicProjects({ cursor, limit: 49 });
+    if (result.error) {
+      return { items: [] as DiscoveryProjectFeedItem[], error: result.error };
+    }
+
+    items.push(...result.items);
+    cursor = result.nextCursor;
+  } while (cursor);
+
+  return { items, error: null };
 }
 
 function unique<T>(items: T[]) {
@@ -1406,6 +1582,17 @@ const railUnreadDotStyle: React.CSSProperties = {
   boxShadow: "0 0 0 2px #fff",
 };
 
+const railPinnedDotStyle: React.CSSProperties = {
+  position: "absolute",
+  left: -1,
+  bottom: 2,
+  width: 9,
+  height: 9,
+  borderRadius: "50%",
+  background: "#527f4c",
+  boxShadow: "0 0 0 2px #fff",
+};
+
 const railUsernameStyle: React.CSSProperties = {
   width: "100%",
   overflow: "hidden",
@@ -1420,6 +1607,72 @@ const selectedUserActionStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 8,
   margin: "0 2px 10px",
+};
+
+const followedUserHintStyle: React.CSSProperties = {
+  margin: "-7px 4px 9px",
+  color: "#8a9586",
+  fontSize: 11,
+};
+
+const compactEmptyTextStyle: React.CSSProperties = {
+  padding: "18px 8px",
+  color: "#879083",
+  fontSize: 13,
+  textAlign: "center",
+};
+
+const userActionBackdropStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1500,
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "center",
+  padding: "16px 12px calc(16px + var(--app-safe-area-bottom))",
+  background: "rgba(28, 38, 27, 0.32)",
+};
+
+const userActionSheetStyle: React.CSSProperties = {
+  width: "min(100%, 420px)",
+  display: "grid",
+  gap: 8,
+  padding: 16,
+  border: "1px solid #dfe8da",
+  borderRadius: 20,
+  background: "#fff",
+  boxShadow: "0 18px 46px rgba(25, 39, 24, 0.24)",
+};
+
+const userActionTitleStyle: React.CSSProperties = {
+  marginBottom: 4,
+  color: "#243524",
+  fontSize: 18,
+  fontWeight: 850,
+  overflowWrap: "anywhere",
+};
+
+const userActionButtonStyle: React.CSSProperties = {
+  minHeight: 48,
+  border: "1px solid #dbe6d7",
+  borderRadius: 13,
+  background: "#f8fbf6",
+  color: "#315c31",
+  fontSize: 16,
+  fontWeight: 750,
+};
+
+const userActionDangerButtonStyle: React.CSSProperties = {
+  ...userActionButtonStyle,
+  borderColor: "#efd5d2",
+  background: "#fff8f7",
+  color: "#ad5049",
+};
+
+const userActionCancelButtonStyle: React.CSSProperties = {
+  ...userActionButtonStyle,
+  background: "#fff",
+  color: "#657264",
 };
 
 const projectCoverButtonStyle: React.CSSProperties = {

@@ -51,7 +51,7 @@ type MembershipPaymentRow = {
   created_at: string | null;
 };
 
-type MobileProfileModule = "settings" | "membership" | "payment" | "backup" | "account";
+type MobileProfileModule = "membership" | "payment" | "backup" | "account";
 type MobileProfileNavItem = {
   label: string;
   value?: MobileProfileModule;
@@ -89,12 +89,13 @@ export default function ProfilePage() {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
-    { value: "settings", label: language === "en" ? "Language settings" : "语言设置" },
     { href: "/membership/payment", label: language === "en" ? "Open / renew" : "开通／续费" },
     { value: "payment", label: language === "en" ? "Order history" : "订单查询" },
+    { href: "/membership/refund", label: t.profile.refund_request_nav },
     { href: "/membership/benefits", label: language === "en" ? "Membership types" : "会员类别说明" },
     { href: "/profile/recent", label: language === "en" ? "Browsing history" : "浏览历史" },
     { value: "backup", label: language === "en" ? "Backup & export" : "备份与导出" },
+    { href: "/legal", label: t.profile.legal_rules_nav },
     { href: "/feedback", label: t.feedback_and_contact },
     { href: "/profile/trash", label: t.profile.modules.trash },
     { value: "account", label: language === "en" ? "Account management" : "账号管理" },
@@ -112,6 +113,7 @@ export default function ProfilePage() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingPaymentCount, setPendingPaymentCount] = useState(0);
+  const [pendingRefundCount, setPendingRefundCount] = useState(0);
   const [username, setUsername] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [customCountryName, setCustomCountryName] = useState("");
@@ -136,6 +138,16 @@ export default function ProfilePage() {
     window.addEventListener("resize", updateViewportWidth);
     return () => window.removeEventListener("resize", updateViewportWidth);
   }, []);
+
+  useEffect(() => {
+    if (!mobileProfileModule) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(`profile-module-${mobileProfileModule}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mobileProfileModule]);
 
   useEffect(() => {
     async function init() {
@@ -185,14 +197,21 @@ export default function ProfilePage() {
         const allowed = Boolean(adminResult.data);
         setIsAdmin(allowed);
         if (allowed) {
-          const { data: queueCount, error: queueError } = await supabase.rpc(
-            "admin_get_membership_payment_queue_count"
-          );
-          if (queueError) {
-            console.error("load pending membership payment count error:", queueError);
+          const [paymentQueueResult, refundQueueResult] = await Promise.all([
+            supabase.rpc("admin_get_membership_payment_queue_count"),
+            supabase.rpc("admin_get_membership_refund_queue_count"),
+          ]);
+          if (paymentQueueResult.error) {
+            console.error("load pending membership payment count error:", paymentQueueResult.error);
             setPendingPaymentCount(0);
           } else {
-            setPendingPaymentCount(Number(queueCount || 0));
+            setPendingPaymentCount(Number(paymentQueueResult.data || 0));
+          }
+          if (refundQueueResult.error) {
+            console.error("load pending membership refund count error:", refundQueueResult.error);
+            setPendingRefundCount(0);
+          } else {
+            setPendingRefundCount(Number(refundQueueResult.data || 0));
           }
         }
       }
@@ -255,7 +274,6 @@ export default function ProfilePage() {
   const visibleMobileProfileModules = isAdmin
     ? [...baseMobileProfileModules, adminMembershipProfileModule]
     : baseMobileProfileModules;
-  const topGridColumns = isMobileViewport ? "minmax(0, 1fr)" : viewportWidth < 820 ? "1fr" : "minmax(280px, 0.95fr) minmax(420px, 1.05fr)";
   const formGridColumns = viewportWidth < 560 ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))";
   const statsGridColumns = isMobileViewport
     ? "1fr"
@@ -264,13 +282,11 @@ export default function ProfilePage() {
       : "repeat(3, minmax(0, 1fr))";
   const pageStyle = isMobileViewport ? mobileProfileMainStyle : profileMainStyle;
   const shellStyle = isMobileViewport ? mobileProfileShellStyle : profileShellStyle;
-  const compactPanelStyle = isMobileViewport ? { ...panelStyle, ...mobilePanelStyle } : panelStyle;
   const fieldInputStyle = isMobileViewport ? mobileInputStyle : inputStyle;
   const primaryActionStyle = isMobileViewport ? mobilePrimaryButtonStyle : primaryButtonStyle;
   const secondaryActionStyle = isMobileViewport ? mobileSecondaryLinkStyle : secondaryLinkStyle;
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
   const showMembershipModule = mobileProfileModule === "membership";
-  const showInfoModule = mobileProfileModule === "settings";
   const showPaymentModule = mobileProfileModule === "payment";
   const showAccountModule = mobileProfileModule === "account";
   const showBackupModule = mobileProfileModule === "backup";
@@ -557,12 +573,15 @@ export default function ProfilePage() {
           </div>
         ) : null}
 
-        {isAdmin && pendingPaymentCount > 0 ? (
-          <Link href="/admin/memberships#payment-review" style={adminPaymentAlertStyle}>
-            <span style={adminPaymentAlertCountStyle}>{pendingPaymentCount}</span>
+        {isAdmin && pendingPaymentCount + pendingRefundCount > 0 ? (
+          <Link
+            href={pendingRefundCount > 0 ? "/admin/memberships#refund-review" : "/admin/memberships#payment-review"}
+            style={adminPaymentAlertStyle}
+          >
+            <span style={adminPaymentAlertCountStyle}>{pendingPaymentCount + pendingRefundCount}</span>
             <span>
-              <strong style={{ display: "block" }}>{t.profile.admin_payment_alert}</strong>
-              <span style={adminPaymentAlertHintStyle}>{t.profile.admin_payment_alert_hint}</span>
+              <strong style={{ display: "block" }}>{t.profile.admin_finance_alert}</strong>
+              <span style={adminPaymentAlertHintStyle}>{t.profile.admin_finance_alert_hint}</span>
             </span>
             <UiIcon name="arrow-right" size={18} />
           </Link>
@@ -570,29 +589,131 @@ export default function ProfilePage() {
 
         <section style={profileIdentityCardStyle}>
           <div style={profileIdentityTopStyle}>
-            {profile.avatar_url ? (
-              <img src={String(profile.avatar_url)} alt="" style={profileIdentityAvatarStyle} />
-            ) : (
-              <span style={profileIdentityAvatarFallbackStyle}><UiIcon name="sprout" size={24} /></span>
-            )}
+            <label style={profileAvatarEditorStyle}>
+              {profile.avatar_url ? (
+                <img src={String(profile.avatar_url)} alt="" style={profileIdentityAvatarStyle} />
+              ) : (
+                <span style={profileIdentityAvatarFallbackStyle}><UiIcon name="sprout" size={24} /></span>
+              )}
+              <input type="file" accept="image/*" onChange={handleUpload} hidden />
+              <span style={profileAvatarChangeStyle}>
+                {uploading ? t.profile.uploading : t.profile.change_avatar}
+              </span>
+            </label>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={profileIdentityNameStyle}>{profile.username || t.profile.unset_username}</div>
+              <label style={fieldLabelStyle}>{t.profile.username}</label>
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                style={fieldInputStyle}
+                placeholder={t.profile.username_placeholder}
+              />
               <div style={profileIdentityEmailStyle}>{user.email}</div>
               <div style={profileIdentityLocationStyle}>{locationPreview}</div>
             </div>
             <Link href="/notifications" aria-label={t.nav.notification} style={identityIconLinkStyle}>
               <UiIcon name="bell" size={19} />
             </Link>
-            <button type="button" onClick={() => setMobileProfileModule("settings")} style={identityEditButtonStyle}>
-              {t.archive_workspace.edit}
-            </button>
           </div>
-          <div style={identityStatsStyle}>
+          <div
+            style={{
+              ...identityStatsStyle,
+              gridTemplateColumns: isMobileViewport
+                ? "repeat(2, minmax(0, 1fr))"
+                : "repeat(4, minmax(0, 1fr))",
+            }}
+          >
             <IdentityStat label={language === "en" ? "Member no." : "会员编号"} value={String(profile.account_number || "—")} />
             <IdentityStat label={language === "en" ? "Helpful received" : "收到有用"} value={String(profileStats?.receivedFlowerCount || 0)} />
             <IdentityStat label={language === "en" ? "Membership" : "会员类别"} value={getMembershipPlanLabel(membership?.plan, language)} />
             <IdentityStat label={language === "en" ? "Storage" : "空间用量"} value={storageText} />
           </div>
+
+          <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns, marginTop: 12 }}>
+            <div>
+              <label style={fieldLabelStyle}>{t.profile.country_region}</label>
+              <select
+                value={countryCode}
+                onChange={(event) => {
+                  setCountryCode(event.target.value);
+                  setRegionName("");
+                }}
+                style={fieldInputStyle}
+              >
+                <option value="">{t.profile.select}</option>
+                {getLocalizedCountryOptions(language).map((item) => (
+                  <option key={item.code} value={item.code}>{item.name}</option>
+                ))}
+              </select>
+            </div>
+            {showCustomCountryInput ? (
+              <div>
+                <label style={fieldLabelStyle}>{t.profile.custom_country_region}</label>
+                <input
+                  value={customCountryName}
+                  onChange={(event) => setCustomCountryName(event.target.value)}
+                  style={fieldInputStyle}
+                  placeholder={t.profile.country_example}
+                />
+              </div>
+            ) : null}
+            <div>
+              <label style={fieldLabelStyle}>{t.profile.region}</label>
+              {useRegionSelect ? (
+                <select value={regionName} onChange={(event) => setRegionName(event.target.value)} style={fieldInputStyle}>
+                  <option value="">{t.profile.select}</option>
+                  {regionOptions.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={regionName}
+                  onChange={(event) => setRegionName(event.target.value)}
+                  style={fieldInputStyle}
+                  placeholder={t.profile.region_example}
+                />
+              )}
+            </div>
+            <div>
+              <label style={fieldLabelStyle}>{t.profile.city}</label>
+              <input
+                value={cityName}
+                onChange={(event) => setCityName(event.target.value)}
+                style={fieldInputStyle}
+                placeholder={t.profile.city_example}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 8, fontSize: 13, color: "#5e6959", overflowWrap: "anywhere" }}>
+            {t.profile.display_as}<span style={{ fontWeight: 700, color: "#243123" }}>{locationPreview}</span>
+          </div>
+
+          <div style={isMobileViewport ? mobileProfileActionRowStyle : { marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>
+              {saving ? t.profile.saving : t.profile.save_profile}
+            </button>
+            <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>{t.profile.view_public_profile}</Link>
+          </div>
+        </section>
+
+        <section id="language-settings" style={languageInlineStyle}>
+          <span style={{ color: "#334c32", fontSize: 15, fontWeight: 800 }}>
+            {t.profile.language_setting}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={language === "en"}
+            aria-label={t.profile.language_setting}
+            onClick={() => setLanguage(language === "zh" ? "en" : "zh")}
+            style={languageSwitchStyle}
+          >
+            <span style={languageSwitchThumbStyle(language === "en")} />
+            <span style={languageSwitchLabelStyle(language === "zh")}>{t.profile.language_chinese}</span>
+            <span style={languageSwitchLabelStyle(language === "en")}>{t.profile.language_english}</span>
+          </button>
         </section>
 
         <MobileProfileModuleTabs
@@ -602,113 +723,9 @@ export default function ProfilePage() {
           compact={isMobileViewport}
         />
 
-        {showInfoModule ? (
-        <div style={{ display: "grid", gridTemplateColumns: topGridColumns, gap: isMobileViewport ? 10 : 14, marginTop: isMobileViewport ? 10 : 14, alignItems: "start" }}>
-          <section style={compactPanelStyle}>
-            <div style={{ display: "flex", alignItems: "center", gap: isMobileViewport ? 10 : 12, minWidth: 0 }}>
-              {profile.avatar_url ? (
-                <img src={String(profile.avatar_url)} alt="" style={isMobileViewport ? mobileAvatarStyle : { width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "1px solid #e4ebe0" }} />
-              ) : (
-                <div style={isMobileViewport ? mobileAvatarFallbackStyle : { width: 72, height: 72, borderRadius: "50%", background: "#eef5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}><UiIcon name="sprout" size={26} /></div>
-              )}
-
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: isMobileViewport ? 17 : 19, fontWeight: 700, color: "#1f2a1f" }}>{profile.username || t.profile.unset_username}</div>
-                <div style={{ marginTop: 3, fontSize: 13, color: "#6f7b69", wordBreak: "break-all" }}>{user.email}</div>
-                <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
-                  {t.profile.region_prefix}{locationPreview}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 12 }}>
-              <label style={fieldLabelStyle}>{t.profile.change_avatar}</label>
-              <input type="file" accept="image/*" onChange={handleUpload} style={isMobileViewport ? mobileFileInputStyle : undefined} />
-              <div style={{ marginTop: 4, fontSize: 12, color: "#7b8676" }}>
-                {t.profile.avatar_hint}{uploading ? t.profile.uploading : ""}
-              </div>
-            </div>
-
-          </section>
-
-          <section id="language-settings" style={compactPanelStyle}>
-            <div style={sectionTitleStyle}>{t.profile.settings}</div>
-            <div style={languageSettingRowStyle}>
-              <span style={fieldLabelStyle}>{t.profile.language_setting}</span>
-              <div style={languageChoiceStyle}>
-                <button
-                  type="button"
-                  onClick={() => setLanguage("zh")}
-                  style={languageChoiceButtonStyle(language === "zh")}
-                >
-                  {t.profile.language_chinese}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLanguage("en")}
-                  style={languageChoiceButtonStyle(language === "en")}
-                >
-                  {t.profile.language_english}
-                </button>
-              </div>
-            </div>
-            <div id="address-settings" style={{ ...sectionTitleStyle, marginTop: 14 }}>
-              {t.profile.address_setting}
-            </div>
-            <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns }}>
-              <div>
-                <label style={fieldLabelStyle}>{t.profile.username}</label>
-                <input value={username} onChange={(e) => setUsername(e.target.value)} style={fieldInputStyle} placeholder={t.profile.username_placeholder} />
-              </div>
-              <div>
-                <label style={fieldLabelStyle}>{t.profile.country_region}</label>
-                <select value={countryCode} onChange={(e) => { setCountryCode(e.target.value); setRegionName(""); }} style={fieldInputStyle}>
-                  <option value="">{t.profile.select}</option>
-                  {getLocalizedCountryOptions(language).map((item) => (
-                    <option key={item.code} value={item.code}>{item.name}</option>
-                  ))}
-                </select>
-              </div>
-              {showCustomCountryInput ? (
-                <div>
-                  <label style={fieldLabelStyle}>{t.profile.custom_country_region}</label>
-                  <input value={customCountryName} onChange={(e) => setCustomCountryName(e.target.value)} style={fieldInputStyle} placeholder={t.profile.country_example} />
-                </div>
-              ) : null}
-              <div>
-                <label style={fieldLabelStyle}>{t.profile.region}</label>
-                {useRegionSelect ? (
-                  <select value={regionName} onChange={(e) => setRegionName(e.target.value)} style={fieldInputStyle}>
-                    <option value="">{t.profile.select}</option>
-                    {regionOptions.map((item) => (
-                      <option key={item.value} value={item.value}>{item.label}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input value={regionName} onChange={(e) => setRegionName(e.target.value)} style={fieldInputStyle} placeholder={t.profile.region_example} />
-                )}
-              </div>
-              <div>
-                <label style={fieldLabelStyle}>{t.profile.city}</label>
-                <input value={cityName} onChange={(e) => setCityName(e.target.value)} style={fieldInputStyle} placeholder={t.profile.city_example} />
-              </div>
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 13, color: "#5e6959" }}>
-              {t.profile.display_as}<span style={{ fontWeight: 700, color: "#243123" }}>{locationPreview}</span>
-            </div>
-
-            <div style={isMobileViewport ? mobileProfileActionRowStyle : { marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>{saving ? t.profile.saving : t.profile.save_profile}</button>
-              <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>{t.profile.view_public_profile}</Link>
-            </div>
-          </section>
-        </div>
-        ) : null}
-
         {showMembershipModule ? (
         <>
-        <section style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
+        <section id="profile-module-membership" style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.account_plan}</div>
@@ -779,7 +796,7 @@ export default function ProfilePage() {
         ) : null}
 
         {showPaymentModule ? (
-        <section style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
+        <section id="profile-module-payment" style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.payment_records}</div>
@@ -790,6 +807,7 @@ export default function ProfilePage() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link href="/membership/payment" style={primaryButtonStyle}>{t.profile.open_or_renew}</Link>
+              <Link href="/membership/refund" style={secondaryLinkStyle}>{t.profile.request_refund}</Link>
               <button
                 type="button"
                 onClick={() => void refreshPaymentRows(user.id)}
@@ -861,7 +879,7 @@ export default function ProfilePage() {
         ) : null}
 
         {showBackupModule ? (
-        <section style={isMobileViewport ? { ...dataSectionStyle, ...sectionCompactStyle } : dataSectionStyle}>
+        <section id="profile-module-backup" style={isMobileViewport ? { ...dataSectionStyle, ...sectionCompactStyle } : dataSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.my_data}</div>
             <h2 style={dataTitleStyle}>{t.profile.export_backup}</h2>
@@ -890,7 +908,7 @@ export default function ProfilePage() {
         ) : null}
 
         {showAccountModule ? (
-        <section style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
+        <section id="profile-module-account" style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
           <div>
             <div style={{ fontSize: 13, color: "#9a5b55" }}>{t.profile.danger}</div>
             <h2 style={dangerTitleStyle}>{t.profile.delete_account}</h2>
@@ -1014,7 +1032,7 @@ function IdentityStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ color: "#7a8676", fontSize: 11 }}>{label}</div>
-      <div style={{ marginTop: 3, color: "#2e422d", fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+      <div style={{ marginTop: 3, color: "#2e422d", fontSize: 12, fontWeight: 800, lineHeight: 1.4, overflowWrap: "anywhere" }}>{value}</div>
     </div>
   );
 }
@@ -1045,7 +1063,7 @@ const profileIdentityCardStyle: CSSProperties = {
 
 const profileIdentityTopStyle: CSSProperties = {
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   gap: 10,
   minWidth: 0,
 };
@@ -1066,12 +1084,81 @@ const profileIdentityAvatarFallbackStyle: CSSProperties = {
   color: "#5e8057",
 };
 
-const profileIdentityNameStyle: CSSProperties = { color: "#223422", fontSize: 17, fontWeight: 850 };
-const profileIdentityEmailStyle: CSSProperties = { marginTop: 2, color: "#697766", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-const profileIdentityLocationStyle: CSSProperties = { marginTop: 3, color: "#697766", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const profileAvatarEditorStyle: CSSProperties = {
+  width: 66,
+  flex: "0 0 66px",
+  display: "grid",
+  justifyItems: "center",
+  gap: 4,
+  color: "#52714f",
+  cursor: "pointer",
+};
+const profileAvatarChangeStyle: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 750,
+  lineHeight: 1.25,
+  textAlign: "center",
+};
+const profileIdentityEmailStyle: CSSProperties = { marginTop: 6, color: "#697766", fontSize: 12, lineHeight: 1.4, overflowWrap: "anywhere" };
+const profileIdentityLocationStyle: CSSProperties = { marginTop: 3, color: "#697766", fontSize: 12, lineHeight: 1.4, overflowWrap: "anywhere" };
 const identityIconLinkStyle: CSSProperties = { width: 34, height: 34, display: "grid", placeItems: "center", color: "#52714f", textDecoration: "none" };
-const identityEditButtonStyle: CSSProperties = { minHeight: 34, border: "1px solid #d7e5d2", borderRadius: 999, background: "#fff", color: "#426a40", padding: "0 10px", fontSize: 12, fontWeight: 800, cursor: "pointer" };
 const identityStatsStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginTop: 11, paddingTop: 10, borderTop: "1px solid #e4ece0" };
+
+const languageInlineStyle: CSSProperties = {
+  minHeight: 58,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  margin: "10px 0",
+  padding: "8px 12px",
+  border: "1px solid #dfe8da",
+  borderRadius: 14,
+  background: "#f7f9f5",
+  boxSizing: "border-box",
+};
+
+const languageSwitchStyle: CSSProperties = {
+  position: "relative",
+  width: 154,
+  height: 40,
+  flex: "0 0 154px",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  alignItems: "center",
+  padding: 3,
+  border: "1px solid #cdddc8",
+  borderRadius: 999,
+  background: "#edf2ea",
+  cursor: "pointer",
+  overflow: "hidden",
+};
+
+function languageSwitchThumbStyle(english: boolean): CSSProperties {
+  return {
+    position: "absolute",
+    top: 3,
+    bottom: 3,
+    left: english ? "calc(50% + 1px)" : 3,
+    width: "calc(50% - 4px)",
+    borderRadius: 999,
+    background: "#4f7b45",
+    boxShadow: "0 2px 6px rgba(41, 72, 36, 0.22)",
+    transition: "left 180ms ease",
+  };
+}
+
+function languageSwitchLabelStyle(active: boolean): CSSProperties {
+  return {
+    position: "relative",
+    zIndex: 1,
+    color: active ? "#fff" : "#5f705b",
+    fontSize: 13,
+    fontWeight: active ? 850 : 700,
+    textAlign: "center",
+    transition: "color 180ms ease",
+  };
+}
 
 const mobileProfileMainStyle: CSSProperties = {
   width: "100%",
@@ -1141,20 +1228,6 @@ const mobileProfileLinkTabStyle: CSSProperties = {
   justifyContent: "flex-start",
   textAlign: "left",
   textDecoration: "none",
-  boxSizing: "border-box",
-};
-
-const panelStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e8efe4",
-  borderRadius: 16,
-  padding: 14,
-};
-
-const mobilePanelStyle: CSSProperties = {
-  borderRadius: 13,
-  padding: 10,
-  minWidth: 0,
   boxSizing: "border-box",
 };
 
@@ -1262,33 +1335,6 @@ const mobileProfileSectionStyle: CSSProperties = {
   minWidth: 0,
   boxSizing: "border-box",
 };
-
-const languageSettingRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  marginTop: 10,
-};
-
-const languageChoiceStyle: CSSProperties = {
-  display: "inline-flex",
-  gap: 5,
-};
-
-function languageChoiceButtonStyle(active: boolean): CSSProperties {
-  return {
-    minHeight: 34,
-    padding: "0 12px",
-    border: active ? "1px solid #8fbd84" : "1px solid #dfe8da",
-    borderRadius: 999,
-    background: active ? "#edf7e9" : "#fff",
-    color: active ? "#2f6a31" : "#60705d",
-    fontSize: 13,
-    fontWeight: active ? 850 : 700,
-    cursor: "pointer",
-  };
-}
 
 const paymentHistorySectionStyle: CSSProperties = {
   marginTop: 14,
@@ -1498,13 +1544,6 @@ const formGridStyle: CSSProperties = {
   gap: 10,
 };
 
-const sectionTitleStyle: CSSProperties = {
-  fontSize: 17,
-  fontWeight: 700,
-  color: "#1f2a1f",
-  marginBottom: 10,
-};
-
 const primaryButtonStyle: CSSProperties = {
   border: "none",
   background: "#4f7b45",
@@ -1569,31 +1608,6 @@ const mobileProfileActionRowStyle: CSSProperties = {
   display: "flex",
   gap: 7,
   flexWrap: "wrap",
-};
-
-const mobileAvatarStyle: CSSProperties = {
-  width: 58,
-  height: 58,
-  borderRadius: "50%",
-  objectFit: "cover",
-  border: "1px solid #e4ebe0",
-  flexShrink: 0,
-};
-
-const mobileAvatarFallbackStyle: CSSProperties = {
-  ...mobileAvatarStyle,
-  background: "#eef5e9",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 23,
-};
-
-const mobileFileInputStyle: CSSProperties = {
-  width: "100%",
-  maxWidth: "100%",
-  fontSize: 12,
-  color: "#5e6959",
 };
 
 const statsGridStyle: CSSProperties = {

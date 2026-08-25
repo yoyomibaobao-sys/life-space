@@ -3,6 +3,7 @@
 import { supabase } from "@/lib/supabase";
 
 export type AnalyticsEventName =
+  | "page_view"
   | "apk_download"
   | "app_first_open"
   | "app_open"
@@ -147,7 +148,7 @@ export async function trackAnalyticsEvent(
     platform: getPlatform(),
     app_version: APP_VERSION,
     user_agent: navigator.userAgent || null,
-    referrer: sanitizeReferrer(document.referrer),
+    referrer: eventName === "page_view" ? null : sanitizeReferrer(document.referrer),
     metadata,
     dedupe_key: options.dedupeKey,
   };

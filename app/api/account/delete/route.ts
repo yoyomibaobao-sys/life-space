@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { hasValidMutationOrigin } from "@/lib/server/authenticated-request";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,13 @@ const STORAGE_LIST_LIMIT = 1000;
 
 type AccountDeletionBody = {
   confirm?: boolean;
+  targetUserId?: unknown;
+  confirmPermanent?: unknown;
+  confirmationText?: unknown;
 };
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type StoragePathSets = {
   avatars: Set<string>;
@@ -589,11 +596,27 @@ async function deleteAccountData(
   await deleteRows(supabase, "group_tags", "user_id", userId);
   await deleteRows(supabase, "sub_tags", "user_id", userId);
   await deleteRows(supabase, "app_admins", "user_id", userId);
+
+  const { data: openRefundRequest, error: openRefundRequestError } = await supabase
+    .from("membership_refund_requests")
+    .select("id")
+    .eq("user_id", userId)
+    .in("status", ["submitted", "approved_pending_refund"])
+    .limit(1)
+    .maybeSingle();
+  if (openRefundRequestError) {
+    console.error("check open membership refund requests error:", openRefundRequestError);
+    throw new Error("核对未完成退款申请失败");
+  }
+  if (openRefundRequest) {
+    throw new Error("存在未完成的退款申请，请先完成退款或联系运营者后再注销账号");
+  }
+
+  const accountDeletedAt = new Date().toISOString();
   await deleteRows(supabase, "user_memberships", "user_id", userId);
   await updateRows(supabase, "membership_payments", "user_id", userId, {
     proof_path: null,
   });
-  const accountDeletedAt = new Date().toISOString();
   const { error: cancelPaymentOrderError } = await supabase
     .from("membership_payments")
     .update({
@@ -630,6 +653,10 @@ async function deleteAccountData(
 }
 
 export async function POST(request: Request) {
+  if (!hasValidMutationOrigin(request)) {
+    return Response.json({ error: "请求来源无效" }, { status: 403 });
+  }
+
   let body: AccountDeletionBody | null = null;
 
   try {
@@ -642,15 +669,203 @@ export async function POST(request: Request) {
     return Response.json({ error: "请先确认注销账号" }, { status: 400 });
   }
 
-  const userId = await getRequestUserId(request);
-  if (!userId) {
+  const requestedBy = await getRequestUserId(request);
+  if (!requestedBy) {
     return Response.json({ error: "请先登录后再注销账号" }, { status: 401 });
+  }
+
+  const requestedTargetUserId =
+    typeof body.targetUserId === "string" ? body.targetUserId.trim() : "";
+  const isAdminInitiated = Boolean(requestedTargetUserId);
+  const userId = requestedTargetUserId || requestedBy;
+
+  if (!UUID_PATTERN.test(userId)) {
+    return Response.json({ error: "账号 ID 不正确" }, { status: 400 });
   }
 
   try {
     const supabase = getSupabaseAdmin();
-    const result = await deleteAccountData(supabase, userId);
-    return Response.json({ ok: true, ...result });
+
+    const [
+      { data: accountRow, error: accountError },
+      { data: authUserData, error: authUserError },
+    ] =
+      await Promise.all([
+        supabase
+          .from("users")
+          .select("id, account_number")
+          .eq("id", userId)
+          .maybeSingle(),
+        supabase.auth.admin.getUserById(userId),
+      ]);
+
+    if (accountError) {
+      console.error("load account deletion identity error:", accountError);
+      return Response.json({ error: "读取账号信息失败" }, { status: 500 });
+    }
+
+    if (authUserError || !authUserData.user) {
+      return Response.json({ error: "账号不存在或已经注销" }, { status: 404 });
+    }
+
+    if (!isAdminInitiated) {
+      const { data: selfAdmin, error: selfAdminError } = await supabase
+        .from("app_admins")
+        .select("user_id")
+        .eq("user_id", requestedBy)
+        .maybeSingle();
+
+      if (selfAdminError) {
+        console.error("verify self-service admin deletion error:", selfAdminError);
+        return Response.json({ error: "无法核对账号权限" }, { status: 500 });
+      }
+
+      if (selfAdmin) {
+        return Response.json(
+          { error: "管理员账号不能自助注销，请先通过受控流程撤销管理员身份" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (isAdminInitiated) {
+      const [
+        { data: requesterAdmin, error: requesterAdminError },
+        { data: targetAdmin, error: targetAdminError },
+        { data: targetMembership, error: targetMembershipError },
+      ] =
+        await Promise.all([
+          supabase
+            .from("app_admins")
+            .select("user_id")
+            .eq("user_id", requestedBy)
+            .maybeSingle(),
+          supabase
+            .from("app_admins")
+            .select("user_id")
+            .eq("user_id", userId)
+            .maybeSingle(),
+          supabase
+            .from("user_memberships")
+            .select("plan")
+            .eq("user_id", userId)
+            .maybeSingle(),
+        ]);
+
+      if (requesterAdminError || targetAdminError || targetMembershipError) {
+        console.error("verify admin account deletion target error:", {
+          requesterAdminError,
+          targetAdminError,
+          targetMembershipError,
+        });
+        return Response.json({ error: "无法核对管理员与目标账号" }, { status: 500 });
+      }
+
+      if (!requesterAdmin) {
+        return Response.json({ error: "没有管理员权限" }, { status: 403 });
+      }
+
+      if (userId === requestedBy) {
+        return Response.json({ error: "不能通过管理员页面注销自己" }, { status: 400 });
+      }
+
+      if (targetAdmin || targetMembership?.plan === "admin") {
+        return Response.json({ error: "管理员账号不能在这里注销" }, { status: 400 });
+      }
+
+      const requiredConfirmation = accountRow?.account_number || userId;
+      const confirmationText =
+        typeof body.confirmationText === "string" ? body.confirmationText.trim() : "";
+
+      if (
+        body.confirmPermanent !== true ||
+        confirmationText !== requiredConfirmation
+      ) {
+        return Response.json(
+          { error: "请准确输入账号编号并确认永久注销" },
+          { status: 400 }
+        );
+      }
+    }
+
+    const { data: openRefund, error: openRefundError } = await supabase
+      .from("membership_refund_requests")
+      .select("id")
+      .eq("user_id", userId)
+      .in("status", ["submitted", "approved_pending_refund"])
+      .limit(1)
+      .maybeSingle();
+
+    if (openRefundError) {
+      console.error("verify refund status before account deletion error:", openRefundError);
+      return Response.json({ error: "无法核对退款状态，账号未注销" }, { status: 500 });
+    }
+
+    if (openRefund) {
+      return Response.json(
+        { error: "存在未完成的退款申请，请先完成退款或联系运营者后再注销账号" },
+        { status: 409 }
+      );
+    }
+
+    const { data: auditRow, error: auditError } = await supabase
+      .from("account_deletion_audits")
+      .insert({
+        target_user_id: userId,
+        target_account_number: accountRow?.account_number || null,
+        initiated_by: isAdminInitiated ? "admin" : "self",
+        requested_by: requestedBy,
+        status: "processing",
+      })
+      .select("id")
+      .single();
+
+    if (auditError || !auditRow?.id) {
+      console.error("create account deletion audit error:", auditError);
+      return Response.json(
+        { error: "无法建立销号操作记录，账号未注销" },
+        { status: 500 }
+      );
+    }
+
+    try {
+      const result = await deleteAccountData(supabase, userId);
+      const deletedStorageObjectCount =
+        result.avatarFileCount +
+        result.mediaFileCount +
+        result.paymentProofFileCount;
+
+      const { error: completeAuditError } = await supabase
+        .from("account_deletion_audits")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          deleted_storage_object_count: deletedStorageObjectCount,
+          error_code: null,
+        })
+        .eq("id", auditRow.id);
+
+      if (completeAuditError) {
+        console.error("complete account deletion audit error:", completeAuditError);
+      }
+
+      return Response.json({ ok: true, ...result });
+    } catch (error) {
+      const { error: failAuditError } = await supabase
+        .from("account_deletion_audits")
+        .update({
+          status: "failed",
+          failed_at: new Date().toISOString(),
+          error_code: "account_deletion_failed",
+        })
+        .eq("id", auditRow.id);
+
+      if (failAuditError) {
+        console.error("fail account deletion audit error:", failAuditError);
+      }
+
+      throw error;
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "注销账号失败";
     return Response.json({ error: message }, { status: 500 });

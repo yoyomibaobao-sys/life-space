@@ -23,9 +23,12 @@ test("profile uses an editable identity card and explicit account entries", asyn
   assert.match(profile, /浏览历史/);
   assert.match(profile, /备份与导出/);
   assert.match(profile, /账号管理/);
-  assert.match(profile, /const showInfoModule = mobileProfileModule === "settings"/);
+  assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
+  assert.match(profile, /<input[\s\S]*?value=\{username\}[\s\S]*?onChange=\{\(event\) => setUsername/);
+  assert.match(profile, /role="switch"/);
+  assert.doesNotMatch(profile, /identityEditButtonStyle/);
   assert.match(profile, /t\.profile\.language_setting/);
-  assert.match(profile, /t\.profile\.address_setting/);
+  assert.match(profile, /t\.profile\.country_region/);
   assert.match(profile, /t\.profile\.registered_user_rights/);
   assert.match(profile, /t\.profile\.cloud_member_rights/);
   assert.match(profile, /href="\/membership\/benefits"/);
@@ -100,7 +103,8 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(lightbox, /mobileOverlayOpen = "true"/);
   assert.doesNotMatch(lightbox, /maxDistance >= 120/);
   assert.match(lightbox, /window\.history\.back\(\)/);
-  assert.match(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.footer \{[\s\S]*?display: none/);
+  assert.match(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.inner \{[\s\S]*?padding: 16px 0 102px/);
+  assert.doesNotMatch(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.footer \{[\s\S]*?display: none/);
 });
 
 test("the center plus captures a photo and carries it into a new record", async () => {
@@ -230,7 +234,8 @@ test("account navigation exposes the confirmed independent menu entries", async 
     source("lib/i18n/en.ts"),
   ]);
 
-  assert.match(profile, /"Language settings" : "语言设置"/);
+  assert.match(profile, /id="language-settings"/);
+  assert.match(profile, /role="switch"/);
   assert.match(profile, /"Open \/ renew" : "开通／续费"/);
   assert.match(profile, /"Order history" : "订单查询"/);
   assert.match(profile, /"Membership types" : "会员类别说明"/);
@@ -245,9 +250,11 @@ test("account navigation exposes the confirmed independent menu entries", async 
   assert.match(profile, /gridTemplateColumns: compact[\s\S]*?"1fr"/);
   assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 50/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
-  assert.match(profile, /const showInfoModule = mobileProfileModule === "settings"/);
+  assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
   assert.match(profile, /admin_get_membership_payment_queue_count/);
-  assert.match(profile, /href="\/admin\/memberships#payment-review"/);
+  assert.match(profile, /admin_get_membership_refund_queue_count/);
+  assert.match(profile, /"\/admin\/memberships#refund-review"/);
+  assert.match(profile, /"\/admin\/memberships#payment-review"/);
   assert.match(profile, /<h2 style=\{dataTitleStyle\}>\{t\.profile\.export_backup\}<\/h2>/);
   assert.match(profile, /\{t\.profile\.export_intro\}/);
   assert.ok(
@@ -353,6 +360,13 @@ test("following stays an independent bottom destination and returns there after 
   assert.match(navbar, /href: user \? "\/follow" : buildLoginHref\("\/follow"\)/);
   assert.match(navbar, /active: pathname\.startsWith\("\/follow"\)/);
   assert.match(follow, /buildLoginHref\(getCurrentInternalPath\(\)\)/);
+  assert.match(follow, /fetchFollowedPublicProjects/);
+  assert.match(follow, /followT\.user_projects_load_failed/);
+  assert.match(follow, /followT\.empty_followed_user_projects/);
+  assert.doesNotMatch(
+    follow,
+    /followedUsersArchivesPromise[\s\S]*?\.from\("archives"\)/
+  );
 });
 
 test("signed-out market does not repeat login and registration actions inside the page", async () => {

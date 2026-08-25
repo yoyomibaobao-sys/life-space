@@ -19,7 +19,7 @@ test("Android download keeps environment overrides and assembles its bundled tes
     "process.env.ANDROID_APK_DOWNLOAD_URL",
   );
   const bundledFallback = route.indexOf(
-    "return serveBundledAndroidApk(request)",
+    "const response = await serveBundledAndroidApk(request)",
     environmentOverride,
   );
 
@@ -34,6 +34,8 @@ test("Android download keeps environment overrides and assembles its bundled tes
   assert.match(route, /application\/vnd\.android\.package-archive/);
   assert.match(route, /Content-Disposition/);
   assert.match(route, /event_name: "apk_download"/);
+  assert.match(route, /const response = await serveBundledAndroidApk\(request\)/);
+  assert.match(route, /if \(response\.ok\) \{[\s\S]*?recordAndroidDownload\(request\)/);
   assert.match(route, /NextResponse\.redirect/);
   assert.match(route, /serveBundledAndroidApk\(request\)/);
   assert.match(zh, /download_android: "下载 Android 测试版"/);

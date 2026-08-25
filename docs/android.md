@@ -43,7 +43,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 `/api/download/android` 会读取全部分片、校验总字节数，并以
-`youshi-cultivation-android-test.apk` 文件名返回完整 APK。
+`youshi-cultivation-android-1.0.3.apk` 文件名返回完整 APK。
 
 若配置了 `ANDROID_APK_DOWNLOAD_URL` 或
 `NEXT_PUBLIC_ANDROID_APK_URL`，网页下载入口会优先跳转到配置的正式地址。

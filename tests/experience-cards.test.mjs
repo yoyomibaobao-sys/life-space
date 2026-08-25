@@ -429,9 +429,10 @@ test("experience cards stay reachable from projects after profile space shortcut
   assert.doesNotMatch(navbar, />\s*本人空间\s*</);
 
   assert.match(archivePage, /activeDetailTab === "experience"/);
-  assert.doesNotMatch(
+  assert.match(archivePage, /profileExtra=\{isOwner \? \([\s\S]*?<ArchiveCycleSettings/);
+  assert.match(
     archivePage,
-    /profileExtra=\{[\s\S]*?<ArchiveExperienceCards/
+    /activeDetailTab === "experience" \? \([\s\S]*?<ArchiveExperienceCards/
   );
   assert.match(archiveCards, /\.eq\("archive_id", archiveId\)/);
   assert.match(archiveCards, /href=\{`\/experience-cards\/\$\{item\.id\}`\}/);
@@ -645,7 +646,10 @@ test("public Experience opens compact previews into live full-screen playback wi
   assert.match(gallery, /active=\{index === activeIndex\}/);
   assert.match(gallery, /data-mobile-swipe-ignore="true"/);
   assert.match(gallery, /role="dialog"/);
-  assert.match(gallery, /<Link href=\{`\/experience-cards\/\$\{item\.id\}`\} className=\{styles\.previewBody\}>/);
+  assert.match(gallery, /role="button"[\s\S]*?onClick=\{\(event\) => handleCardClick\(event, index\)\}/);
+  assert.match(gallery, /className=\{styles\.previewDetails\}/);
+  assert.match(gallery, /t\.experience\.published_on/);
+  assert.doesNotMatch(gallery, /item\.durationDays/);
   assert.match(feedPage, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(feedPage, /PublicExperienceGallery/);
   assert.match(feedStyles, /scroll-snap-type: y mandatory/);
@@ -786,7 +790,7 @@ test("guidance counts and public navigation use compact non-duplicated entries",
   assert.doesNotMatch(discoverHeader, /搜索记录/);
 });
 
-test("project details expose details, archive, experience cards, and growth line as peer tabs on every viewport", async () => {
+test("project details hide the unfinished growth line and keep the three complete peer tabs", async () => {
   const [archiveDetail, archiveHeader, headerView] = await Promise.all([
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveDetailHeader.tsx"),
@@ -795,16 +799,16 @@ test("project details expose details, archive, experience cards, and growth line
 
   assert.match(
     archiveDetail,
-    /type ArchiveDetailTab = "profile" \| "records" \| "experience" \| "growth"/
+    /type ArchiveDetailTab = "profile" \| "records" \| "experience"/
   );
   assert.match(archiveDetail, /\{archiveCopy\.details\}/);
   assert.match(archiveDetail, /\{archiveCopy\.dossier\}/);
   assert.match(archiveDetail, /\{archiveCopy\.experience_cards\}/);
-  assert.match(archiveDetail, /\{archiveCopy\.growth_line\}/);
+  assert.doesNotMatch(archiveDetail, /\{archiveCopy\.growth_line\}/);
   assert.match(archiveDetail, /experienceCardCount/);
   assert.match(archiveDetail, /activeDetailTab === "experience"/);
-  assert.match(archiveDetail, /activeDetailTab === "growth"/);
-  assert.match(archiveDetail, /repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.doesNotMatch(archiveDetail, /activeDetailTab === "growth"/);
+  assert.match(archiveDetail, /repeat\(3, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(archiveDetail, /className="mobile-app-grid-only"/);
   assert.match(archiveDetail, /onCountChange=\{setExperienceCardCount\}/);
   assert.match(archiveHeader, /profileAlwaysOpen/);

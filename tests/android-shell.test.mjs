@@ -13,6 +13,7 @@ test("Android shell keeps its identity, HTTPS host, and offline fallback explici
 
   assert.match(config, /appId: "com\.youshi\.cultivation"/);
   assert.match(config, /appName: "有时·耕作"/);
+  assert.match(read("android/app/src/main/res/values/strings.xml"), /有时·耕作/);
   assert.match(config, /CAPACITOR_SERVER_URL/);
   assert.match(config, /url\.protocol !== "https:"/);
   assert.match(config, /cleartext: false/);

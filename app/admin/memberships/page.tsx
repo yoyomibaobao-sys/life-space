@@ -30,6 +30,12 @@ type AdminMembershipRow = {
   market_post_limit: number | null;
   created_at: string | null;
   updated_at: string | null;
+  account_number: string | null;
+  is_internal_test: boolean | null;
+  registered_at: string | null;
+  last_sign_in_at: string | null;
+  archive_count: number | string | null;
+  record_count: number | string | null;
 };
 
 type SignupRolloutStatus = {
@@ -83,11 +89,96 @@ type PendingPaymentQueueRow = {
   review_note: string | null;
 };
 
+type MembershipRefundQueueRow = {
+  id: string;
+  payment_id: string;
+  user_id: string;
+  email: string | null;
+  username: string | null;
+  account_number: string | null;
+  status: "submitted" | "approved_pending_refund" | "completed" | "rejected" | "canceled";
+  policy_band: "full_7d" | "half_180d" | "unused_renewal_full";
+  original_amount: number | string | null;
+  refund_amount: number | string | null;
+  currency: string | null;
+  request_reason: string | null;
+  requested_at: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  refund_reference: string | null;
+  refunded_at: string | null;
+  benefits_ended_at: string | null;
+  order_number: string | null;
+  payment_method: string | null;
+  payment_reference: string | null;
+  paid_at: string | null;
+  service_started_at: string | null;
+  service_ends_at: string | null;
+};
+
+type AdminOperationsMetrics = {
+  page_views_today: number | string | null;
+  page_views_period: number | string | null;
+  visitors_7d: number | string | null;
+  registered_total: number | string | null;
+  registered_7d: number | string | null;
+  cloud_members: number | string | null;
+  payments_awaiting_confirmation: number | string | null;
+  apk_download_total: number | string | null;
+  apk_download_30d: number | string | null;
+  platform_storage_bytes: number | string | null;
+  platform_storage_pause_bytes: number | string | null;
+  account_deletions_30d: number | string | null;
+  account_deletion_failures: number | string | null;
+  tracking_started_at: string | null;
+};
+
+type DailyTrafficRow = {
+  day: string;
+  page_views: number | string | null;
+  visitors: number | string | null;
+};
+
+type TopPageRow = {
+  path: string;
+  page_views: number | string | null;
+  visitors: number | string | null;
+};
+
+type StorageLeaderRow = {
+  user_id: string;
+  account_number: string | null;
+  username: string | null;
+  storage_used: number | string | null;
+  storage_limit_bytes: number | string | null;
+};
+
+type AdminOperationsDashboard = {
+  generated_at: string | null;
+  period_days: number | string | null;
+  metrics: AdminOperationsMetrics;
+  daily_traffic: DailyTrafficRow[];
+  top_pages: TopPageRow[];
+  storage_leaders: StorageLeaderRow[];
+};
+
+type AccountDeletionAuditRow = {
+  id: string;
+  target_user_id: string;
+  target_account_number: string | null;
+  initiated_by: "self" | "admin" | string;
+  status: "processing" | "completed" | "failed" | string;
+  requested_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  deleted_storage_object_count: number | string | null;
+  error_code: string | null;
+};
+
 type PlanKey = "trial" | "basic" | "large" | "seller" | "admin";
 type PaymentPlanKey = Exclude<PlanKey, "trial">;
 type PaymentCurrency = "CNY" | "USD";
 type PaymentMethod = "wechat" | "alipay" | "paypal" | "manual" | "other";
-type PaymentStatusKey = "confirmed" | "refunded" | "canceled";
 
 type PlanPreset = {
   key: PlanKey;
@@ -158,6 +249,22 @@ function canDeleteMembership(row: AdminMembershipRow | null, currentUserId: stri
   return true;
 }
 
+function canPermanentlyDeleteAccount(
+  row: AdminMembershipRow | null,
+  currentUserId: string
+) {
+  if (!row) return false;
+  if (row.user_id === currentUserId) return false;
+  return row.plan !== "admin";
+}
+
+function formatAdminCount(value: number | string | null | undefined, language: Language) {
+  const count = Number(value || 0);
+  return Number.isFinite(count)
+    ? count.toLocaleString(language === "en" ? "en-US" : "zh-CN")
+    : "0";
+}
+
 function getDefaultPaymentAmount(plan: PaymentPlanKey, currency: PaymentCurrency) {
   if (plan === "basic") return currency === "CNY" ? 64 : 8;
   return 0;
@@ -204,6 +311,28 @@ function getPaymentStatusLabel(status: string | null | undefined, language: Lang
   if (status === "refunded") return copy.status_refunded;
   if (status === "canceled") return copy.status_canceled;
   return status || copy.not_recorded;
+}
+
+function getRefundStatusLabel(
+  status: MembershipRefundQueueRow["status"],
+  language: Language
+) {
+  const copy = getTranslations(language).admin_memberships;
+  if (status === "submitted") return copy.refund_status_submitted;
+  if (status === "approved_pending_refund") return copy.refund_status_approved;
+  if (status === "completed") return copy.refund_status_completed;
+  if (status === "rejected") return copy.refund_status_rejected;
+  return copy.refund_status_canceled;
+}
+
+function getRefundPolicyLabel(
+  band: MembershipRefundQueueRow["policy_band"],
+  language: Language
+) {
+  const copy = getTranslations(language).admin_memberships;
+  if (band === "full_7d") return copy.refund_band_full_7d;
+  if (band === "unused_renewal_full") return copy.refund_band_unused_renewal;
+  return copy.refund_band_half_180d;
 }
 
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
@@ -292,21 +421,6 @@ type PaymentCreateResult = {
   service_ends_at?: string | null;
 };
 
-type PaymentStatusUpdateResult = {
-  ok: boolean | null;
-  error_message: string | null;
-  error_detail: string | null;
-  id?: string | null;
-  user_id?: string | null;
-  plan?: string | null;
-  status?: string | null;
-  amount?: number | string | null;
-  currency?: string | null;
-  payment_method?: string | null;
-  payment_reference?: string | null;
-  note?: string | null;
-};
-
 function firstRpcRow<T>(data: T[] | T | null | undefined): T | null {
   if (!data) return null;
   if (Array.isArray(data)) return data[0] ?? null;
@@ -381,12 +495,24 @@ export default function AdminMembershipsPage() {
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentPaidAtDate, setPaymentPaidAtDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentServiceMonths, setPaymentServiceMonths] = useState("12");
-  const [paymentStatusSavingId, setPaymentStatusSavingId] = useState<string | null>(null);
   const [pendingPaymentRows, setPendingPaymentRows] = useState<PendingPaymentQueueRow[]>([]);
   const [pendingPaymentLoading, setPendingPaymentLoading] = useState(false);
   const [pendingPaymentActionId, setPendingPaymentActionId] = useState<string | null>(null);
+  const [refundRows, setRefundRows] = useState<MembershipRefundQueueRow[]>([]);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundActionId, setRefundActionId] = useState<string | null>(null);
+  const [operationsDashboard, setOperationsDashboard] =
+    useState<AdminOperationsDashboard | null>(null);
+  const [operationsLoading, setOperationsLoading] = useState(false);
+  const [operationsError, setOperationsError] = useState("");
+  const [deletionAuditRows, setDeletionAuditRows] = useState<AccountDeletionAuditRow[]>([]);
+  const [deletionAuditLoading, setDeletionAuditLoading] = useState(false);
+  const [accountDeleteTarget, setAccountDeleteTarget] =
+    useState<AdminMembershipRow | null>(null);
+  const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
+  const [accountDeleteAcknowledged, setAccountDeleteAcknowledged] = useState(false);
+  const [accountDeleteSaving, setAccountDeleteSaving] = useState(false);
   const paymentSubmittingRef = useRef(false);
-  const paymentStatusSubmittingRef = useRef(false);
 
   const isMobileViewport = viewportWidth < 760;
   const currentPageStyle = isMobileViewport ? mobilePageStyle : pageStyle;
@@ -397,6 +523,12 @@ export default function AdminMembershipsPage() {
   const currentSummaryGridStyle = isMobileViewport ? mobileSummaryGridStyle : summaryGridStyle;
   const currentPresetGridStyle = isMobileViewport ? mobilePresetGridStyle : presetGridStyle;
   const currentFormGridStyle = isMobileViewport ? mobileFormGridStyle : formGridStyle;
+  const currentOperationsGridStyle = isMobileViewport
+    ? mobileOperationsGridStyle
+    : operationsGridStyle;
+  const currentTrafficLayoutStyle = isMobileViewport
+    ? mobileTrafficLayoutStyle
+    : trafficLayoutStyle;
 
   useEffect(() => {
     const updateViewportWidth = () => setViewportWidth(window.innerWidth);
@@ -471,6 +603,66 @@ export default function AdminMembershipsPage() {
     setPendingPaymentLoading(false);
   }
 
+  async function loadRefundQueue() {
+    setRefundLoading(true);
+    const { data, error } = await supabase.rpc("admin_list_membership_refund_queue", {
+      p_limit: 100,
+    });
+
+    if (error) {
+      logSupabaseError("load membership refund queue error:", error);
+      setRefundRows([]);
+      setErrorMsg(t.admin_memberships.refund_queue_load_failed);
+    } else {
+      setRefundRows(
+        Array.isArray(data) ? (data as MembershipRefundQueueRow[]) : []
+      );
+    }
+    setRefundLoading(false);
+  }
+
+  async function loadOperationsDashboard() {
+    setOperationsLoading(true);
+    setOperationsError("");
+
+    const { data, error } = await supabase.rpc("admin_get_operations_dashboard", {
+      p_days: 30,
+    });
+
+    if (error) {
+      logSupabaseError("load admin operations dashboard error:", error);
+      setOperationsDashboard(null);
+      setOperationsError(t.admin_memberships.operations_load_failed);
+    } else {
+      setOperationsDashboard(
+        firstRpcRow<AdminOperationsDashboard>(
+          data as AdminOperationsDashboard | AdminOperationsDashboard[] | null
+        )
+      );
+    }
+
+    setOperationsLoading(false);
+  }
+
+  async function loadAccountDeletionAudits() {
+    setDeletionAuditLoading(true);
+
+    const { data, error } = await supabase.rpc("admin_list_account_deletions", {
+      p_limit: 30,
+    });
+
+    if (error) {
+      logSupabaseError("load account deletion audits error:", error);
+      setDeletionAuditRows([]);
+    } else {
+      setDeletionAuditRows(
+        Array.isArray(data) ? (data as AccountDeletionAuditRow[]) : []
+      );
+    }
+
+    setDeletionAuditLoading(false);
+  }
+
   async function openPaymentProof(row: PendingPaymentQueueRow) {
     if (!row.proof_path) {
       showToast(t.admin_memberships.payment_proof_missing);
@@ -517,7 +709,11 @@ export default function AdminMembershipsPage() {
       showToast(t.admin_memberships.confirm_submitted_payment_failed);
     } else {
       showToast(t.admin_memberships.confirm_submitted_payment_success);
-      await Promise.all([loadPendingPaymentQueue(), loadRows(keyword)]);
+      await Promise.all([
+        loadPendingPaymentQueue(),
+        loadRows(keyword),
+        loadOperationsDashboard(),
+      ]);
     }
     setPendingPaymentActionId(null);
   }
@@ -542,9 +738,114 @@ export default function AdminMembershipsPage() {
       showToast(t.admin_memberships.request_payment_update_failed);
     } else {
       showToast(t.admin_memberships.request_payment_update_success);
-      await loadPendingPaymentQueue();
+      await Promise.all([loadPendingPaymentQueue(), loadOperationsDashboard()]);
     }
     setPendingPaymentActionId(null);
+  }
+
+  async function refreshAfterRefundAction(userId: string) {
+    const tasks: Promise<void>[] = [
+      loadRefundQueue(),
+      loadRows(keyword),
+      loadOperationsDashboard(),
+    ];
+    if (selected?.user_id === userId) tasks.push(loadPaymentRows(userId));
+    await Promise.all(tasks);
+  }
+
+  async function approveRefund(row: MembershipRefundQueueRow) {
+    if (refundActionId || row.status !== "submitted") return;
+    const confirmed = window.confirm(
+      `${t.admin_memberships.refund_approve_confirm_prefix}${formatPaymentAmount(
+        row.refund_amount,
+        row.currency
+      )}${t.admin_memberships.refund_approve_confirm_suffix}\n\n${t.admin_memberships.refund_approve_notice}`
+    );
+    if (!confirmed) return;
+
+    setRefundActionId(row.id);
+    const { data, error } = await supabase.rpc(
+      "admin_approve_membership_refund_json",
+      { p_request_id: row.id, p_review_note: null }
+    );
+    const result = firstRpcRow<{ ok?: boolean; error_message?: string | null }>(data);
+
+    if (error || !result?.ok) {
+      logSupabaseError("approve membership refund error:", error || result);
+      showToast(t.admin_memberships.refund_approve_failed);
+    } else {
+      showToast(t.admin_memberships.refund_approve_success);
+      await refreshAfterRefundAction(row.user_id);
+    }
+    setRefundActionId(null);
+  }
+
+  async function rejectRefund(row: MembershipRefundQueueRow) {
+    if (refundActionId || row.status !== "submitted") return;
+    const note = window.prompt(t.admin_memberships.refund_reject_prompt)?.trim();
+    if (!note) return;
+
+    setRefundActionId(row.id);
+    const { data, error } = await supabase.rpc(
+      "admin_reject_membership_refund_json",
+      { p_request_id: row.id, p_review_note: note }
+    );
+    const result = firstRpcRow<{ ok?: boolean; error_message?: string | null }>(data);
+
+    if (error || !result?.ok) {
+      logSupabaseError("reject membership refund error:", error || result);
+      showToast(t.admin_memberships.refund_reject_failed);
+    } else {
+      showToast(t.admin_memberships.refund_reject_success);
+      await refreshAfterRefundAction(row.user_id);
+    }
+    setRefundActionId(null);
+  }
+
+  async function completeRefund(row: MembershipRefundQueueRow) {
+    if (refundActionId || row.status !== "approved_pending_refund") return;
+    const expectedAmount = Number(row.refund_amount || 0).toFixed(2);
+    const refundReference = window.prompt(
+      t.admin_memberships.refund_reference_prompt
+    )?.trim();
+    if (!refundReference) return;
+
+    const amountText = window.prompt(
+      t.admin_memberships.refund_amount_prompt,
+      expectedAmount
+    )?.trim();
+    if (!amountText || Number(amountText) !== Number(expectedAmount)) {
+      showToast(t.admin_memberships.refund_amount_mismatch);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${t.admin_memberships.refund_complete_confirm_prefix}${formatPaymentAmount(
+        expectedAmount,
+        row.currency
+      )}${t.admin_memberships.refund_complete_confirm_suffix}\n${refundReference}\n\n${t.admin_memberships.refund_complete_notice}`
+    );
+    if (!confirmed) return;
+
+    setRefundActionId(row.id);
+    const { data, error } = await supabase.rpc(
+      "admin_complete_membership_refund_json",
+      {
+        p_request_id: row.id,
+        p_refund_reference: refundReference,
+        p_confirmed_amount: Number(expectedAmount),
+      }
+    );
+    const result = firstRpcRow<{ ok?: boolean; error_message?: string | null }>(data);
+
+    if (error || !result?.ok) {
+      logSupabaseError("complete membership refund error:", error || result);
+      showToast(t.admin_memberships.refund_complete_failed);
+    } else {
+      showToast(t.admin_memberships.refund_complete_success);
+      await refreshAfterRefundAction(row.user_id);
+    }
+    setRefundActionId(null);
   }
 
   async function loadPaymentRows(userId: string) {
@@ -618,8 +919,11 @@ export default function AdminMembershipsPage() {
       if (allowed) {
         await Promise.all([
           loadPendingPaymentQueue(),
+          loadRefundQueue(),
           loadRows(""),
           loadSignupRolloutStatus(),
+          loadOperationsDashboard(),
+          loadAccountDeletionAudits(),
         ]);
       } else {
         setLoading(false);
@@ -662,6 +966,30 @@ export default function AdminMembershipsPage() {
     if (!selected) return "";
     return `${formatStorageBytes(selected.storage_used || 0)} / ${formatStorageBytes(selected.storage_limit_bytes || 0)}`;
   }, [selected]);
+
+  const operationsMetrics = operationsDashboard?.metrics || null;
+  const openRefundCount = refundRows.filter((row) =>
+    row.status === "submitted" || row.status === "approved_pending_refund"
+  ).length;
+  const maxDailyPageViews = Math.max(
+    1,
+    ...(operationsDashboard?.daily_traffic || []).map((item) =>
+      Number(item.page_views || 0)
+    )
+  );
+  const platformStorageBytes = Number(
+    operationsMetrics?.platform_storage_bytes ??
+      rolloutStatus?.platform_storage_bytes ??
+      0
+  );
+  const platformStorageLimitBytes = Number(
+    operationsMetrics?.platform_storage_pause_bytes ??
+      rolloutStatus?.platform_storage_pause_bytes ??
+      0
+  );
+  const platformStoragePercent = platformStorageLimitBytes
+    ? Math.min(100, Math.max(0, (platformStorageBytes / platformStorageLimitBytes) * 100))
+    : 0;
 
   function handleApplyPreset(nextPlan: PlanKey) {
     const preset = getPreset(nextPlan);
@@ -832,12 +1160,97 @@ export default function AdminMembershipsPage() {
 
       showToast(t.admin_memberships.delete_success);
       setDeleteTarget(null);
-      await loadRows(keyword);
+      await Promise.all([loadRows(keyword), loadOperationsDashboard()]);
     } catch {
       setErrorMsg(t.admin_memberships.delete_retry);
       showToast(t.admin_memberships.delete_retry);
     } finally {
       setDeleteSaving(false);
+    }
+  }
+
+  function openAccountDeletionDialog(row: AdminMembershipRow) {
+    if (!canPermanentlyDeleteAccount(row, currentUserId)) {
+      showToast(
+        row.user_id === currentUserId
+          ? t.admin_memberships.cannot_delete_account_self
+          : t.admin_memberships.cannot_delete_admin
+      );
+      return;
+    }
+
+    setAccountDeleteTarget(row);
+    setAccountDeleteConfirmation("");
+    setAccountDeleteAcknowledged(false);
+  }
+
+  function closeAccountDeletionDialog() {
+    if (accountDeleteSaving) return;
+    setAccountDeleteTarget(null);
+    setAccountDeleteConfirmation("");
+    setAccountDeleteAcknowledged(false);
+  }
+
+  async function handlePermanentAccountDeletion() {
+    if (!accountDeleteTarget || accountDeleteSaving) return;
+
+    const requiredConfirmation =
+      accountDeleteTarget.account_number || accountDeleteTarget.user_id;
+
+    if (
+      !accountDeleteAcknowledged ||
+      accountDeleteConfirmation.trim() !== requiredConfirmation
+    ) {
+      showToast(t.admin_memberships.account_delete_confirmation_mismatch);
+      return;
+    }
+
+    setAccountDeleteSaving(true);
+    setErrorMsg("");
+
+    try {
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirm: true,
+          targetUserId: accountDeleteTarget.user_id,
+          confirmPermanent: true,
+          confirmationText: accountDeleteConfirmation.trim(),
+        }),
+      });
+
+      const result = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+
+      if (!response.ok) {
+        const message =
+          language === "en"
+            ? t.admin_memberships.account_delete_failed
+            : result?.error || t.admin_memberships.account_delete_failed;
+        setErrorMsg(message);
+        showToast(message);
+        return;
+      }
+
+      showToast(t.admin_memberships.account_delete_success);
+      setSelected(null);
+      setAccountDeleteTarget(null);
+      setAccountDeleteConfirmation("");
+      setAccountDeleteAcknowledged(false);
+      await Promise.all([
+        loadRows(keyword),
+        loadSignupRolloutStatus(),
+        loadPendingPaymentQueue(),
+        loadOperationsDashboard(),
+        loadAccountDeletionAudits(),
+      ]);
+    } catch {
+      setErrorMsg(t.admin_memberships.account_delete_failed);
+      showToast(t.admin_memberships.account_delete_failed);
+    } finally {
+      setAccountDeleteSaving(false);
     }
   }
 
@@ -950,92 +1363,14 @@ export default function AdminMembershipsPage() {
       showToast(t.admin_memberships.payment_success);
       setPaymentReference(buildPaymentReference(selected, paymentMethod, paymentPaidAtDate));
       setPaymentNote("");
-      await loadPaymentRows(selected.user_id);
-      await loadRows(keyword);
+      await Promise.all([
+        loadPaymentRows(selected.user_id),
+        loadRows(keyword),
+        loadOperationsDashboard(),
+      ]);
     } finally {
       paymentSubmittingRef.current = false;
       setPaymentSaving(false);
-    }
-  }
-
-  async function handleUpdatePaymentStatus(payment: MembershipPaymentRow, nextStatus: PaymentStatusKey) {
-    if (!selected || paymentStatusSavingId || paymentStatusSubmittingRef.current) return;
-
-    const noteMap: Record<PaymentStatusKey, string> = {
-      confirmed: t.admin_memberships.note_restore_confirmed,
-      refunded: t.admin_memberships.note_mark_refunded,
-      canceled: t.admin_memberships.note_mark_canceled,
-    };
-
-    const confirmText = [
-      `${t.admin_memberships.status_confirm_prefix}${getPaymentStatusLabel(
-        nextStatus,
-        language
-      )}${t.admin_memberships.status_confirm_suffix}`,
-      `${t.admin_memberships.amount_prefix}${formatPaymentAmount(
-        payment.amount,
-        payment.currency
-      )}`,
-      `${t.admin_memberships.payment_method_prefix}${getPaymentMethodLabel(
-        payment.payment_method,
-        language
-      )}`,
-      payment.payment_reference
-        ? `${t.admin_memberships.transaction_prefix}${payment.payment_reference}`
-        : "",
-      "",
-      t.admin_memberships.status_change_notice,
-    ].filter(Boolean).join("\n");
-
-    if (!window.confirm(confirmText)) return;
-
-    paymentStatusSubmittingRef.current = true;
-    setPaymentStatusSavingId(payment.id);
-    setErrorMsg("");
-
-    try {
-      const { data, error } = await supabase.rpc("admin_update_membership_payment_status_json", {
-        p_payment_id: payment.id,
-        p_status: nextStatus,
-        p_note_append: noteMap[nextStatus],
-      });
-
-      if (error) {
-        logSupabaseError("admin update payment status rpc error:", error);
-        setErrorMsg(
-          describeSupabaseError(error, language) ||
-            t.admin_memberships.payment_status_update_failed
-        );
-        showToast(t.admin_memberships.payment_status_update_failed);
-        return;
-      }
-
-      const rawResult = firstRpcRow<unknown>(data as unknown);
-      const result =
-        rawResult && typeof rawResult === "object"
-          ? (rawResult as PaymentStatusUpdateResult)
-          : ({
-              ok: false,
-              error_message: "empty_rpc_result",
-              error_detail: typeof rawResult === "undefined" ? "undefined" : JSON.stringify(rawResult),
-            } as PaymentStatusUpdateResult);
-
-      if (!result.ok) {
-        const message =
-          [result.error_message, result.error_detail]
-            .filter(Boolean)
-            .join(language === "en" ? "; " : "；") ||
-          t.admin_memberships.payment_status_update_failed;
-        setErrorMsg(message);
-        showToast(t.admin_memberships.payment_status_update_failed);
-        return;
-      }
-
-      showToast(t.admin_memberships.payment_status_updated);
-      await loadPaymentRows(selected.user_id);
-    } finally {
-      paymentStatusSubmittingRef.current = false;
-      setPaymentStatusSavingId(null);
     }
   }
 
@@ -1078,6 +1413,180 @@ export default function AdminMembershipsPage() {
           </p>
         </div>
         <Link href="/membership" style={secondaryButtonStyle}>{t.admin_memberships.view_membership_page}</Link>
+      </section>
+
+      <nav style={anchorNavStyle} aria-label={t.admin_memberships.admin_sections_aria}>
+        <a href="#overview" style={anchorLinkStyle}>{t.admin_memberships.nav_overview}</a>
+        <a href="#traffic" style={anchorLinkStyle}>{t.admin_memberships.nav_traffic}</a>
+        <a href="#registrations" style={anchorLinkStyle}>{t.admin_memberships.nav_registrations}</a>
+        <a href="#payment-review" style={anchorLinkStyle}>{t.admin_memberships.nav_payments}</a>
+        <a href="#refund-review" style={anchorLinkStyle}>{t.admin_memberships.nav_refunds}</a>
+        <a href="#capacity" style={anchorLinkStyle}>{t.admin_memberships.nav_capacity}</a>
+        <a href="#account-closures" style={anchorLinkStyle}>{t.admin_memberships.nav_account_closures}</a>
+      </nav>
+
+      <section
+        id="overview"
+        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+      >
+        <div style={detailTopStyle}>
+          <div>
+            <div style={sectionLabelStyle}>{t.admin_memberships.operations_eyebrow}</div>
+            <h2 style={sectionTitleStyle}>{t.admin_memberships.operations_title}</h2>
+            <p style={smallTextStyle}>{t.admin_memberships.operations_intro}</p>
+          </div>
+          <button
+            type="button"
+            style={secondaryButtonStyle}
+            onClick={() => void Promise.all([
+              loadOperationsDashboard(),
+              loadSignupRolloutStatus(),
+              loadPendingPaymentQueue(),
+              loadRefundQueue(),
+            ])}
+            disabled={operationsLoading}
+          >
+            {operationsLoading
+              ? t.admin_memberships.reading
+              : t.admin_memberships.refresh_dashboard}
+          </button>
+        </div>
+
+        {operationsError ? <p style={errorStyle}>{operationsError}</p> : null}
+
+        <div style={currentOperationsGridStyle}>
+          <MetricCard
+            label={t.admin_memberships.views_today}
+            value={formatAdminCount(operationsMetrics?.page_views_today, language)}
+            hint={`${formatAdminCount(operationsMetrics?.page_views_period, language)} ${t.admin_memberships.views_30d_suffix}`}
+          />
+          <MetricCard
+            label={t.admin_memberships.visitors_7d}
+            value={formatAdminCount(operationsMetrics?.visitors_7d, language)}
+            hint={t.admin_memberships.visitors_privacy_hint}
+          />
+          <MetricCard
+            label={t.admin_memberships.registered_accounts}
+            value={formatAdminCount(operationsMetrics?.registered_total, language)}
+            hint={`+${formatAdminCount(operationsMetrics?.registered_7d, language)} ${t.admin_memberships.in_last_7d}`}
+          />
+          <MetricCard
+            label={t.admin_memberships.active_cloud_members}
+            value={formatAdminCount(operationsMetrics?.cloud_members, language)}
+            hint={t.admin_memberships.paid_members_hint}
+          />
+          <MetricCard
+            label={t.admin_memberships.awaiting_payment_confirmation}
+            value={formatAdminCount(
+              operationsMetrics?.payments_awaiting_confirmation ?? pendingPaymentRows.length,
+              language
+            )}
+            hint={t.admin_memberships.payment_queue_hint}
+            tone={Number(operationsMetrics?.payments_awaiting_confirmation || pendingPaymentRows.length) > 0 ? "attention" : "normal"}
+          />
+          <MetricCard
+            label={t.admin_memberships.awaiting_refunds}
+            value={formatAdminCount(openRefundCount, language)}
+            hint={t.admin_memberships.refund_queue_hint}
+            tone={openRefundCount > 0 ? "attention" : "normal"}
+          />
+          <MetricCard
+            label={t.admin_memberships.apk_downloads}
+            value={formatAdminCount(operationsMetrics?.apk_download_total, language)}
+            hint={`${formatAdminCount(operationsMetrics?.apk_download_30d, language)} ${t.admin_memberships.in_last_30d}`}
+          />
+          <MetricCard
+            label={t.admin_memberships.actual_storage}
+            value={formatStorageBytes(platformStorageBytes)}
+            hint={`${platformStoragePercent.toFixed(1)}% · ${t.admin_memberships.safety_line} ${formatStorageBytes(platformStorageLimitBytes)}`}
+          />
+          <MetricCard
+            label={t.admin_memberships.account_closures_30d}
+            value={formatAdminCount(operationsMetrics?.account_deletions_30d, language)}
+            hint={`${formatAdminCount(operationsMetrics?.account_deletion_failures, language)} ${t.admin_memberships.failed_operations}`}
+            tone={Number(operationsMetrics?.account_deletion_failures || 0) > 0 ? "danger" : "normal"}
+          />
+        </div>
+
+        <div style={storageProgressBlockStyle}>
+          <div style={storageProgressMetaStyle}>
+            <span>{t.admin_memberships.website_storage_usage}</span>
+            <strong>{formatStorageBytes(platformStorageBytes)} / {formatStorageBytes(platformStorageLimitBytes)}</strong>
+          </div>
+          <div style={storageProgressTrackStyle}>
+            <span
+              style={storageProgressFillStyle(platformStoragePercent)}
+              aria-label={`${t.admin_memberships.website_storage_usage} ${platformStoragePercent.toFixed(1)}%`}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="traffic"
+        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+      >
+        <div style={detailTopStyle}>
+          <div>
+            <div style={sectionLabelStyle}>{t.admin_memberships.traffic_eyebrow}</div>
+            <h2 style={sectionTitleStyle}>{t.admin_memberships.traffic_title}</h2>
+            <p style={smallTextStyle}>{t.admin_memberships.traffic_intro}</p>
+          </div>
+          <span style={pillStyle}>{t.admin_memberships.last_14_days}</span>
+        </div>
+
+        <div style={currentTrafficLayoutStyle}>
+          <div style={trafficPanelStyle}>
+            <div style={trafficChartStyle}>
+              {(operationsDashboard?.daily_traffic || []).map((item) => {
+                const views = Number(item.page_views || 0);
+                const visitors = Number(item.visitors || 0);
+                const barHeight = Math.max(3, (views / maxDailyPageViews) * 100);
+                return (
+                  <div
+                    key={item.day}
+                    style={trafficBarColumnStyle}
+                    title={`${item.day} · ${views} ${t.admin_memberships.page_view_unit} · ${visitors} ${t.admin_memberships.visitor_unit}`}
+                  >
+                    <span style={trafficBarValueStyle}>{views || ""}</span>
+                    <span style={trafficBarStyle(barHeight)} />
+                    <span style={trafficBarLabelStyle}>{String(item.day).slice(5)}</span>
+                  </div>
+                );
+              })}
+              {!operationsLoading && (operationsDashboard?.daily_traffic || []).length === 0 ? (
+                <div style={chartEmptyStyle}>{t.admin_memberships.no_traffic_yet}</div>
+              ) : null}
+            </div>
+          </div>
+
+          <div style={trafficPanelStyle}>
+            <h3 style={subsectionTitleStyle}>{t.admin_memberships.top_pages}</h3>
+            <div style={topPageListStyle}>
+              {(operationsDashboard?.top_pages || []).map((item) => (
+                <div key={item.path} style={topPageRowStyle}>
+                  <code style={topPagePathStyle}>{item.path}</code>
+                  <span style={topPageMetricStyle}>
+                    {formatAdminCount(item.page_views, language)} / {formatAdminCount(item.visitors, language)}
+                  </span>
+                </div>
+              ))}
+              {!operationsLoading && (operationsDashboard?.top_pages || []).length === 0 ? (
+                <div style={smallTextStyle}>{t.admin_memberships.no_top_pages_yet}</div>
+              ) : null}
+            </div>
+            <div style={topPageLegendStyle}>
+              {t.admin_memberships.top_page_legend}
+            </div>
+          </div>
+        </div>
+
+        <p style={privacyNoticeStyle}>
+          {t.admin_memberships.analytics_privacy_notice}
+          {operationsMetrics?.tracking_started_at
+            ? ` ${t.admin_memberships.tracking_since}${formatMembershipDate(operationsMetrics.tracking_started_at, language)}`
+            : ` ${t.admin_memberships.tracking_starts_after_release}`}
+        </p>
       </section>
 
       <section
@@ -1154,7 +1663,140 @@ export default function AdminMembershipsPage() {
         )}
       </section>
 
-      <section style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}>
+      <section
+        id="refund-review"
+        style={{
+          ...currentCardStyle,
+          ...refundQueueStyle(openRefundCount > 0),
+          marginBottom: isMobileViewport ? 12 : 16,
+        }}
+      >
+        <div style={detailTopStyle}>
+          <div>
+            <div style={sectionLabelStyle}>{t.admin_memberships.refund_review_eyebrow}</div>
+            <h2 style={sectionTitleStyle}>
+              {t.admin_memberships.refund_review_title}（{openRefundCount}）
+            </h2>
+            <p style={smallTextStyle}>{t.admin_memberships.refund_review_intro}</p>
+          </div>
+          <button
+            type="button"
+            style={secondaryButtonStyle}
+            onClick={() => void loadRefundQueue()}
+            disabled={refundLoading}
+          >
+            {refundLoading ? t.admin_memberships.reading : t.admin_memberships.refresh_refunds}
+          </button>
+        </div>
+
+        <div style={refundWorkflowNoticeStyle}>
+          <strong>{t.admin_memberships.refund_two_stage_title}</strong>
+          <span>{t.admin_memberships.refund_two_stage_intro}</span>
+          <Link href="/legal/refunds" style={anchorLinkStyle}>
+            {t.admin_memberships.view_refund_policy}
+          </Link>
+        </div>
+
+        {refundLoading && refundRows.length === 0 ? (
+          <div style={emptyStyle}>{t.admin_memberships.loading_refunds}</div>
+        ) : refundRows.length === 0 ? (
+          <div style={pendingPaymentEmptyStyle}>{t.admin_memberships.no_refund_requests}</div>
+        ) : (
+          <div style={pendingPaymentListStyle}>
+            {refundRows.map((row) => (
+              <article key={row.id} style={refundCardStyle(row.status)}>
+                <div style={userTitleRowStyle}>
+                  <strong style={userNameStyle}>{row.username || row.email || row.user_id}</strong>
+                  <span style={refundStatusStyle(row.status)}>
+                    {getRefundStatusLabel(row.status, language)}
+                  </span>
+                </div>
+                <div style={smallTextStyle}>{row.email || row.user_id}</div>
+                <div style={refundAmountRowStyle}>
+                  <span>{t.admin_memberships.refund_requested_amount}</span>
+                  <strong>{formatPaymentAmount(row.refund_amount, row.currency)}</strong>
+                  <small>
+                    {t.admin_memberships.refund_original_amount}
+                    {formatPaymentAmount(row.original_amount, row.currency)}
+                  </small>
+                </div>
+                <div style={pendingPaymentMetaStyle}>
+                  <span>{t.admin_memberships.order_number_prefix}{row.order_number || t.admin_memberships.not_recorded}</span>
+                  <span>{getPaymentMethodLabel(row.payment_method, language)}</span>
+                  <span>{getRefundPolicyLabel(row.policy_band, language)}</span>
+                  <span>{t.admin_memberships.refund_requested_at}{formatMembershipDate(row.requested_at, language)}</span>
+                </div>
+                {row.payment_reference ? (
+                  <div style={smallTextStyle}>{t.admin_memberships.transaction_prefix}{row.payment_reference}</div>
+                ) : null}
+                {row.request_reason ? (
+                  <div style={refundReasonStyle}>
+                    <strong>{t.admin_memberships.refund_reason}</strong>
+                    <span>{row.request_reason}</span>
+                  </div>
+                ) : null}
+                {row.review_note ? (
+                  <div style={smallTextStyle}>{t.admin_memberships.refund_review_note}{row.review_note}</div>
+                ) : null}
+                {row.status === "approved_pending_refund" ? (
+                  <div style={refundApprovedNoticeStyle}>
+                    <strong>{t.admin_memberships.refund_external_action_title}</strong>
+                    <span>
+                      {t.admin_memberships.refund_external_action_prefix}
+                      {formatPaymentAmount(row.refund_amount, row.currency)}
+                      {t.admin_memberships.refund_external_action_suffix}
+                    </span>
+                    {row.payment_method === "paypal" && Number(row.refund_amount) < Number(row.original_amount) ? (
+                      <span>{t.admin_memberships.paypal_partial_refund_notice}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {row.refund_reference ? (
+                  <div style={smallTextStyle}>{t.admin_memberships.refund_reference_prefix}{row.refund_reference}</div>
+                ) : null}
+                {row.status === "submitted" ? (
+                  <div style={pendingPaymentActionsStyle}>
+                    <button
+                      type="button"
+                      style={primaryButtonStyle}
+                      onClick={() => void approveRefund(row)}
+                      disabled={refundActionId !== null}
+                    >
+                      {refundActionId === row.id ? t.admin_memberships.processing_refund : t.admin_memberships.approve_refund}
+                    </button>
+                    <button
+                      type="button"
+                      style={dangerMiniButtonStyle}
+                      onClick={() => void rejectRefund(row)}
+                      disabled={refundActionId !== null}
+                    >
+                      {t.admin_memberships.reject_refund}
+                    </button>
+                  </div>
+                ) : row.status === "approved_pending_refund" ? (
+                  <div style={pendingPaymentActionsStyle}>
+                    <button
+                      type="button"
+                      style={primaryButtonStyle}
+                      onClick={() => void completeRefund(row)}
+                      disabled={refundActionId !== null}
+                    >
+                      {refundActionId === row.id
+                        ? t.admin_memberships.processing_refund
+                        : t.admin_memberships.confirm_external_refund}
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section
+        id="capacity"
+        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+      >
         <div style={detailTopStyle}>
           <div>
             <div style={sectionLabelStyle}>{t.admin_memberships.rollout_eyebrow}</div>
@@ -1217,6 +1859,26 @@ export default function AdminMembershipsPage() {
           </div>
         ) : null}
 
+        {(operationsDashboard?.storage_leaders || []).length > 0 ? (
+          <div style={capacityLeaderBlockStyle}>
+            <h3 style={subsectionTitleStyle}>{t.admin_memberships.largest_storage_accounts}</h3>
+            <div style={accountClosureListStyle}>
+              {(operationsDashboard?.storage_leaders || []).slice(0, 6).map((item) => (
+                <article key={item.user_id} style={accountClosureRowStyle}>
+                  <div style={userTitleRowStyle}>
+                    <strong>{item.username || item.account_number || item.user_id}</strong>
+                    <span style={pillStyle}>{formatStorageBytes(Number(item.storage_used || 0))}</span>
+                  </div>
+                  <div style={smallTextStyle}>
+                    {t.admin_memberships.account_number_prefix}{item.account_number || t.admin_memberships.not_recorded}
+                    {" · "}{formatStorageBytes(Number(item.storage_used || 0))} / {formatStorageBytes(Number(item.storage_limit_bytes || 0))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <button
           type="button"
           style={secondaryButtonStyle}
@@ -1227,7 +1889,18 @@ export default function AdminMembershipsPage() {
         </button>
       </section>
 
-      <section style={currentCardStyle}>
+      <section
+        id="registrations"
+        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+      >
+        <div style={detailTopStyle}>
+          <div>
+            <div style={sectionLabelStyle}>{t.admin_memberships.registration_eyebrow}</div>
+            <h2 style={sectionTitleStyle}>{t.admin_memberships.registration_title}</h2>
+            <p style={smallTextStyle}>{t.admin_memberships.registration_intro}</p>
+          </div>
+          <span style={pillStyle}>{formatAdminCount(rows.length, language)} {t.admin_memberships.current_results}</span>
+        </div>
         <form onSubmit={handleSearch} style={searchRowStyle}>
           <input
             value={keyword}
@@ -1286,9 +1959,19 @@ export default function AdminMembershipsPage() {
                     </div>
                     <div style={smallTextStyle}>{row.email || row.user_id}</div>
                     <div style={smallTextStyle}>
+                      {t.admin_memberships.account_number_prefix}{row.account_number || t.admin_memberships.not_recorded}
+                      {" · "}{t.admin_memberships.registered_at_prefix}{formatMembershipDate(row.registered_at, language)}
+                      {row.is_internal_test ? ` · ${t.admin_memberships.internal_account_short}` : ""}
+                    </div>
+                    <div style={smallTextStyle}>
                       {getMembershipPlanLabel(row.plan, language)} · {t.admin_memberships.capacity}{" "}
                       {formatStorageBytes(row.storage_used || 0)} / {formatStorageBytes(row.storage_limit_bytes || 0)} · {t.admin_memberships.market}{" "}
                       {Number(row.active_market_post_count || 0)} / {Number(row.market_post_limit || 0)}
+                    </div>
+                    <div style={smallTextStyle}>
+                      {t.admin_memberships.last_login_prefix}{formatMembershipDate(row.last_sign_in_at, language)}
+                      {" · "}{formatAdminCount(row.archive_count, language)} {t.admin_memberships.project_unit}
+                      {" · "}{formatAdminCount(row.record_count, language)} {t.admin_memberships.record_unit}
                     </div>
                     <div style={memberRowActionStyle}>
                       {canDeleteMembership(row, currentUserId) ? (
@@ -1330,6 +2013,22 @@ export default function AdminMembershipsPage() {
                 </div>
 
                 <div style={currentSummaryGridStyle}>
+                  <InfoItem
+                    label={t.admin_memberships.account_number}
+                    value={selected.account_number || t.admin_memberships.not_recorded}
+                  />
+                  <InfoItem
+                    label={t.admin_memberships.registration_time}
+                    value={formatMembershipDate(selected.registered_at, language)}
+                  />
+                  <InfoItem
+                    label={t.admin_memberships.last_login}
+                    value={formatMembershipDate(selected.last_sign_in_at, language)}
+                  />
+                  <InfoItem
+                    label={t.admin_memberships.user_content_total}
+                    value={`${formatAdminCount(selected.archive_count, language)} ${t.admin_memberships.project_unit} · ${formatAdminCount(selected.record_count, language)} ${t.admin_memberships.record_unit}`}
+                  />
                   <InfoItem
                     label={t.admin_memberships.current_plan}
                     value={getMembershipPlanLabel(selected.plan, language)}
@@ -1433,6 +2132,16 @@ export default function AdminMembershipsPage() {
                   {canDeleteMembership(selected, currentUserId) ? (
                     <button type="button" style={dangerButtonStyle} onClick={() => openDeleteMembershipDialog(selected)} disabled={deleteSaving}>
                       {t.admin_memberships.delete_membership}
+                    </button>
+                  ) : null}
+                  {canPermanentlyDeleteAccount(selected, currentUserId) ? (
+                    <button
+                      type="button"
+                      style={permanentDeleteButtonStyle}
+                      onClick={() => openAccountDeletionDialog(selected)}
+                      disabled={accountDeleteSaving}
+                    >
+                      {t.admin_memberships.permanent_account_delete}
                     </button>
                   ) : null}
                 </div>
@@ -1613,38 +2322,6 @@ export default function AdminMembershipsPage() {
                               {t.admin_memberships.note_prefix}{payment.note}
                             </div>
                           ) : null}
-                          <div style={paymentActionRowStyle}>
-                            {payment.status !== "confirmed" ? (
-                              <button
-                                type="button"
-                                style={miniButtonStyle}
-                                onClick={() => void handleUpdatePaymentStatus(payment, "confirmed")}
-                                disabled={paymentStatusSavingId === payment.id}
-                              >
-                                {t.admin_memberships.restore_confirmation}
-                              </button>
-                            ) : null}
-                            {payment.status !== "refunded" ? (
-                              <button
-                                type="button"
-                                style={miniButtonStyle}
-                                onClick={() => void handleUpdatePaymentStatus(payment, "refunded")}
-                                disabled={paymentStatusSavingId === payment.id}
-                              >
-                                {t.admin_memberships.mark_refund}
-                              </button>
-                            ) : null}
-                            {payment.status !== "canceled" ? (
-                              <button
-                                type="button"
-                                style={miniButtonStyle}
-                                onClick={() => void handleUpdatePaymentStatus(payment, "canceled")}
-                                disabled={paymentStatusSavingId === payment.id}
-                              >
-                                {t.admin_memberships.mark_cancel}
-                              </button>
-                            ) : null}
-                          </div>
                         </div>
                       ))
                     )}
@@ -1659,6 +2336,71 @@ export default function AdminMembershipsPage() {
           </aside>
         </div>
       </section>
+
+      <section id="account-closures" style={currentCardStyle}>
+        <div style={detailTopStyle}>
+          <div>
+            <div style={sectionLabelStyle}>{t.admin_memberships.account_closure_eyebrow}</div>
+            <h2 style={sectionTitleStyle}>{t.admin_memberships.account_closure_title}</h2>
+            <p style={smallTextStyle}>{t.admin_memberships.account_closure_intro}</p>
+          </div>
+          <button
+            type="button"
+            style={secondaryButtonStyle}
+            onClick={() => void loadAccountDeletionAudits()}
+            disabled={deletionAuditLoading}
+          >
+            {deletionAuditLoading
+              ? t.admin_memberships.reading
+              : t.admin_memberships.refresh_account_closures}
+          </button>
+        </div>
+
+        <div style={accountClosureNoticeStyle}>
+          <strong>{t.admin_memberships.membership_suspend_vs_delete_title}</strong>
+          <span>{t.admin_memberships.membership_suspend_vs_delete_intro}</span>
+        </div>
+
+        {deletionAuditLoading && deletionAuditRows.length === 0 ? (
+          <div style={emptyStyle}>{t.admin_memberships.loading_account_closures}</div>
+        ) : deletionAuditRows.length === 0 ? (
+          <div style={emptyStyle}>{t.admin_memberships.no_account_closures}</div>
+        ) : (
+          <div style={accountClosureListStyle}>
+            {deletionAuditRows.map((row) => (
+              <article key={row.id} style={accountClosureRowStyle}>
+                <div style={userTitleRowStyle}>
+                  <strong>{row.target_account_number || row.target_user_id}</strong>
+                  <span style={accountClosureStatusStyle(row.status)}>
+                    {row.status === "completed"
+                      ? t.admin_memberships.account_closure_completed
+                      : row.status === "failed"
+                        ? t.admin_memberships.account_closure_failed
+                        : t.admin_memberships.account_closure_processing}
+                  </span>
+                </div>
+                <div style={smallTextStyle}>
+                  {t.admin_memberships.account_number_prefix}{row.target_account_number || t.admin_memberships.not_recorded}
+                  {" · "}
+                  {row.initiated_by === "admin"
+                    ? t.admin_memberships.initiated_by_admin
+                    : t.admin_memberships.initiated_by_self}
+                </div>
+                <div style={smallTextStyle}>
+                  {t.admin_memberships.requested_at_prefix}{formatMembershipDate(row.requested_at, language)}
+                  {row.status === "completed"
+                    ? ` · ${formatAdminCount(row.deleted_storage_object_count, language)} ${t.admin_memberships.deleted_file_unit}`
+                    : ""}
+                  {row.status === "failed"
+                    ? ` · ${t.admin_memberships.needs_manual_review}`
+                    : ""}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title={t.admin_memberships.delete_membership}
@@ -1682,6 +2424,61 @@ export default function AdminMembershipsPage() {
           </div>
         ) : null}
       </ConfirmDialog>
+      <ConfirmDialog
+        open={Boolean(accountDeleteTarget)}
+        title={t.admin_memberships.permanent_account_delete}
+        message={t.admin_memberships.permanent_account_delete_message}
+        confirmText={
+          accountDeleteSaving
+            ? t.admin_memberships.account_deleting
+            : t.admin_memberships.confirm_permanent_account_delete
+        }
+        cancelText={t.cancel}
+        danger
+        confirmDisabled={
+          accountDeleteSaving ||
+          !accountDeleteAcknowledged ||
+          accountDeleteConfirmation.trim() !==
+            (accountDeleteTarget?.account_number || accountDeleteTarget?.user_id || "")
+        }
+        cancelDisabled={accountDeleteSaving}
+        onClose={closeAccountDeletionDialog}
+        onConfirm={handlePermanentAccountDeletion}
+      >
+        {accountDeleteTarget ? (
+          <div style={accountDeleteConfirmBoxStyle}>
+            <div style={deleteTargetBoxStyle}>
+              <strong>
+                {accountDeleteTarget.username ||
+                  accountDeleteTarget.email ||
+                  accountDeleteTarget.user_id}
+              </strong>
+              <span>{accountDeleteTarget.email || accountDeleteTarget.user_id}</span>
+            </div>
+            <label style={labelStyle}>
+              {t.admin_memberships.type_account_number_prefix}
+              <strong style={confirmationCodeStyle}>
+                {accountDeleteTarget.account_number || accountDeleteTarget.user_id}
+              </strong>
+              <input
+                value={accountDeleteConfirmation}
+                onChange={(event) => setAccountDeleteConfirmation(event.target.value)}
+                style={inputStyle}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label style={acknowledgementStyle}>
+              <input
+                type="checkbox"
+                checked={accountDeleteAcknowledged}
+                onChange={(event) => setAccountDeleteAcknowledged(event.target.checked)}
+              />
+              <span>{t.admin_memberships.permanent_delete_acknowledgement}</span>
+            </label>
+          </div>
+        ) : null}
+      </ConfirmDialog>
     </main>
   );
 }
@@ -1691,6 +2488,26 @@ function InfoItem({ label, value }: { label: string; value: string }) {
     <div style={infoItemStyle}>
       <div style={infoLabelStyle}>{label}</div>
       <div style={infoValueStyle}>{value}</div>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  tone = "normal",
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: "normal" | "attention" | "danger";
+}) {
+  return (
+    <div style={metricCardStyle(tone)}>
+      <div style={metricLabelStyle}>{label}</div>
+      <div style={metricValueStyle}>{value}</div>
+      <div style={metricHintStyle}>{hint}</div>
     </div>
   );
 }
@@ -1719,6 +2536,32 @@ const mobileHeaderStyle: CSSProperties = {
   ...headerStyle,
   gap: 10,
   marginBottom: 12,
+};
+
+const anchorNavStyle: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
+  padding: "2px 1px 12px",
+  marginBottom: 4,
+  scrollbarWidth: "thin",
+};
+
+const anchorLinkStyle: CSSProperties = {
+  flex: "0 0 auto",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 38,
+  padding: "8px 13px",
+  borderRadius: 999,
+  border: "1px solid #d8e0d2",
+  background: "#fbfdf8",
+  color: "#40563a",
+  fontSize: 13,
+  fontWeight: 700,
+  textDecoration: "none",
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -1879,6 +2722,219 @@ const mobileSummaryGridStyle: CSSProperties = {
   gap: 8,
 };
 
+const operationsGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: 10,
+  marginBottom: 16,
+};
+
+const mobileOperationsGridStyle: CSSProperties = {
+  ...operationsGridStyle,
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+};
+
+const metricCardStyle = (
+  tone: "normal" | "attention" | "danger"
+): CSSProperties => ({
+  minWidth: 0,
+  padding: "12px 13px",
+  borderRadius: 15,
+  border:
+    tone === "danger"
+      ? "1px solid #e7beb8"
+      : tone === "attention"
+        ? "1px solid #e8cf9d"
+        : "1px solid #dfe7da",
+  background:
+    tone === "danger"
+      ? "#fff7f5"
+      : tone === "attention"
+        ? "#fffaf0"
+        : "#f9fcf6",
+});
+
+const metricLabelStyle: CSSProperties = {
+  color: "#727b6a",
+  fontSize: 12,
+  lineHeight: 1.45,
+};
+
+const metricValueStyle: CSSProperties = {
+  marginTop: 5,
+  color: "#203020",
+  fontSize: 24,
+  lineHeight: 1.15,
+  fontWeight: 800,
+  wordBreak: "break-word",
+};
+
+const metricHintStyle: CSSProperties = {
+  marginTop: 5,
+  color: "#7a806f",
+  fontSize: 11,
+  lineHeight: 1.45,
+};
+
+const storageProgressBlockStyle: CSSProperties = {
+  borderTop: "1px solid #e6ebdf",
+  paddingTop: 13,
+};
+
+const storageProgressMetaStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 8,
+  color: "#4b5945",
+  fontSize: 12,
+};
+
+const storageProgressTrackStyle: CSSProperties = {
+  height: 12,
+  borderRadius: 999,
+  background: "#e8eee3",
+  overflow: "hidden",
+};
+
+const storageProgressFillStyle = (percent: number): CSSProperties => ({
+  display: "block",
+  width: `${percent}%`,
+  minWidth: percent > 0 ? 3 : 0,
+  height: "100%",
+  borderRadius: 999,
+  background: percent >= 90 ? "#bf6659" : percent >= 70 ? "#c99a49" : "#668957",
+  transition: "width 180ms ease",
+});
+
+const trafficLayoutStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.25fr) minmax(280px, 0.75fr)",
+  gap: 12,
+};
+
+const mobileTrafficLayoutStyle: CSSProperties = {
+  ...trafficLayoutStyle,
+  gridTemplateColumns: "minmax(0, 1fr)",
+};
+
+const trafficPanelStyle: CSSProperties = {
+  minWidth: 0,
+  border: "1px solid #e2e9dc",
+  borderRadius: 15,
+  padding: 12,
+  background: "#fbfdf9",
+};
+
+const trafficChartStyle: CSSProperties = {
+  minHeight: 170,
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 4,
+  overflowX: "auto",
+  padding: "12px 2px 2px",
+};
+
+const trafficBarColumnStyle: CSSProperties = {
+  flex: "1 0 24px",
+  minWidth: 24,
+  height: 150,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "flex-end",
+  alignItems: "stretch",
+  gap: 4,
+};
+
+const trafficBarValueStyle: CSSProperties = {
+  minHeight: 15,
+  color: "#667061",
+  fontSize: 9,
+  lineHeight: 1,
+  textAlign: "center",
+};
+
+const trafficBarStyle = (heightPercent: number): CSSProperties => ({
+  display: "block",
+  height: `${heightPercent}%`,
+  minHeight: 3,
+  borderRadius: "6px 6px 2px 2px",
+  background: "linear-gradient(180deg, #7da36c 0%, #547948 100%)",
+});
+
+const trafficBarLabelStyle: CSSProperties = {
+  color: "#858b7d",
+  fontSize: 9,
+  lineHeight: 1,
+  textAlign: "center",
+  whiteSpace: "nowrap",
+};
+
+const chartEmptyStyle: CSSProperties = {
+  width: "100%",
+  alignSelf: "center",
+  color: "#7b8174",
+  fontSize: 13,
+  textAlign: "center",
+};
+
+const topPageListStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 7,
+  marginTop: 11,
+};
+
+const topPageRowStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  borderBottom: "1px solid #edf0e9",
+  paddingBottom: 7,
+};
+
+const topPagePathStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: "#3e5340",
+  fontSize: 11,
+};
+
+const topPageMetricStyle: CSSProperties = {
+  flex: "0 0 auto",
+  color: "#65705f",
+  fontSize: 11,
+  fontWeight: 700,
+};
+
+const topPageLegendStyle: CSSProperties = {
+  marginTop: 10,
+  color: "#8a8f84",
+  fontSize: 10,
+  textAlign: "right",
+};
+
+const privacyNoticeStyle: CSSProperties = {
+  margin: "12px 0 0",
+  padding: "9px 11px",
+  borderRadius: 12,
+  background: "#f5f7f2",
+  color: "#697166",
+  fontSize: 11,
+  lineHeight: 1.6,
+};
+
+const capacityLeaderBlockStyle: CSSProperties = {
+  margin: "4px 0 14px",
+  paddingTop: 13,
+  borderTop: "1px solid #e6ebdf",
+};
+
 const infoItemStyle: CSSProperties = {
   border: "1px solid #eadfcd",
   borderRadius: 14,
@@ -2029,6 +3085,91 @@ const pendingPaymentEmptyStyle: CSSProperties = {
   fontSize: 13,
 };
 
+const refundQueueStyle = (hasPending: boolean): CSSProperties => ({
+  borderColor: hasPending ? "#d3b06d" : "#dce8d7",
+  background: hasPending ? "#fffaf0" : "#f8fbf6",
+  boxShadow: hasPending ? "0 8px 24px rgba(143, 99, 35, 0.10)" : "none",
+});
+
+const refundWorkflowNoticeStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "7px 12px",
+  flexWrap: "wrap",
+  marginBottom: 12,
+  padding: "11px 12px",
+  border: "1px solid #dfd2b8",
+  borderRadius: 13,
+  background: "#fffdf7",
+  color: "#62533e",
+  fontSize: 12,
+  lineHeight: 1.6,
+};
+
+const refundCardStyle = (
+  status: MembershipRefundQueueRow["status"]
+): CSSProperties => ({
+  ...pendingPaymentCardStyle,
+  borderColor: status === "approved_pending_refund" ? "#d5a24d" : "#ded6c5",
+  background: status === "approved_pending_refund" ? "#fffaf0" : "#fff",
+});
+
+const refundStatusStyle = (
+  status: MembershipRefundQueueRow["status"]
+): CSSProperties => ({
+  ...pillStyle,
+  background:
+    status === "submitted"
+      ? "#f6ecd5"
+      : status === "approved_pending_refund"
+        ? "#fff0c9"
+        : status === "completed"
+          ? "#e7f2df"
+          : "#f4e8e6",
+  color:
+    status === "submitted" || status === "approved_pending_refund"
+      ? "#7b5a20"
+      : status === "completed"
+        ? "#47693a"
+        : "#8c514a",
+});
+
+const refundAmountRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: "4px 10px",
+  flexWrap: "wrap",
+  marginTop: 10,
+  color: "#6a654f",
+  fontSize: 12,
+};
+
+const refundReasonStyle: CSSProperties = {
+  display: "grid",
+  gap: 3,
+  marginTop: 9,
+  padding: "9px 10px",
+  borderRadius: 11,
+  background: "#f7f8f3",
+  color: "#586253",
+  fontSize: 12,
+  lineHeight: 1.55,
+  overflowWrap: "anywhere",
+};
+
+const refundApprovedNoticeStyle: CSSProperties = {
+  display: "grid",
+  gap: 4,
+  marginTop: 10,
+  padding: "10px 11px",
+  border: "1px solid #e2c684",
+  borderRadius: 12,
+  background: "#fff8e6",
+  color: "#6f5521",
+  fontSize: 12,
+  lineHeight: 1.6,
+};
+
 const paymentSectionStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -2065,13 +3206,6 @@ const paymentItemStyle: CSSProperties = {
   background: "#fffdf8",
   borderRadius: 14,
   padding: "11px 12px",
-};
-
-const paymentActionRowStyle: CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginTop: 10,
 };
 
 const memberRowActionStyle: CSSProperties = {
@@ -2117,6 +3251,13 @@ const dangerButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
+const permanentDeleteButtonStyle: CSSProperties = {
+  ...dangerButtonStyle,
+  border: "1px solid #a85249",
+  background: "#a85249",
+  color: "#fff",
+};
+
 const deletedHintStyle: CSSProperties = {
   color: "#8d554f",
   fontSize: 12,
@@ -2135,6 +3276,68 @@ const deleteTargetBoxStyle: CSSProperties = {
   fontSize: 13,
   wordBreak: "break-all",
 };
+
+const accountDeleteConfirmBoxStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+};
+
+const confirmationCodeStyle: CSSProperties = {
+  display: "block",
+  padding: "7px 9px",
+  borderRadius: 9,
+  background: "#f3eee8",
+  color: "#7c302b",
+  fontSize: 14,
+  letterSpacing: 0.4,
+  wordBreak: "break-all",
+};
+
+const acknowledgementStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 9,
+  color: "#5a3d39",
+  fontSize: 13,
+  lineHeight: 1.55,
+};
+
+const accountClosureNoticeStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  marginBottom: 12,
+  padding: "11px 12px",
+  border: "1px solid #ead7bd",
+  borderRadius: 13,
+  background: "#fffaf1",
+  color: "#62533e",
+  fontSize: 12,
+  lineHeight: 1.6,
+};
+
+const accountClosureListStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 9,
+};
+
+const accountClosureRowStyle: CSSProperties = {
+  minWidth: 0,
+  padding: "11px 12px",
+  border: "1px solid #e5dfd5",
+  borderRadius: 13,
+  background: "#fffdf9",
+};
+
+const accountClosureStatusStyle = (status: string): CSSProperties => ({
+  ...pillStyle,
+  background:
+    status === "failed" ? "#fbe5e2" : status === "completed" ? "#e7f2df" : "#f6ecd5",
+  color:
+    status === "failed" ? "#98473f" : status === "completed" ? "#47693a" : "#826128",
+});
 
 const primaryButtonStyle: CSSProperties = {
   display: "inline-flex",

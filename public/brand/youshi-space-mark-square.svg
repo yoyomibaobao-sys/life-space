@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">有时空间</title>
+  <rect width="1024" height="1024" rx="224" fill="#4f7b45"/>
+  <g transform="translate(0 8) scale(9.48148)">
+    <path fill="#fff" d="M51.5 84h5V49h-5z"/>
+    <path fill="#fff" d="M54 59C41 58 32 49 30 35c14 0 23 8 24 22z"/>
+    <path fill="#fff" d="M54 50c2-14 11-22 24-22-1 14-10 22-24 23z"/>
+  </g>
+</svg>

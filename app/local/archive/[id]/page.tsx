@@ -13,6 +13,7 @@ import {
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
+import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettings";
 import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchiveDetailHeaderView, {
@@ -131,6 +132,7 @@ export default function LocalArchiveDetailPage() {
   const [mergeMode, setMergeMode] = useState(true);
   const [saving, setSaving] = useState(false);
   const [cycleBusy, setCycleBusy] = useState(false);
+  const [cycleSettingsSaving, setCycleSettingsSaving] = useState(false);
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
   const [endSelectedCycleAfterSave, setEndSelectedCycleAfterSave] = useState(false);
   const [addRecordOpen, setAddRecordOpen] = useState(false);
@@ -368,9 +370,11 @@ export default function LocalArchiveDetailPage() {
             },
           ];
 
-    const activeCycles = [...(detail?.archive.cycles || [])]
+    const activeCycles = detail?.archive.cycle_enabled
+      ? [...(detail.archive.cycles || [])]
       .filter((cycle) => cycle.status === "active")
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+      : [];
     const defaultCycleId = activeCycles[0]?.id || "";
     const effectiveCycleId =
       selectedCycleId === undefined
@@ -435,7 +439,19 @@ export default function LocalArchiveDetailPage() {
     if (!archiveId || cycleBusy) return;
     setCycleBusy(true);
     try {
-      const cycle = await createLocalArchiveCycle(archiveId, startedAt, ownerContext);
+      const cycle = await createLocalArchiveCycle(
+        archiveId,
+        startedAt,
+        ownerContext,
+        detail?.archive.next_cycle_name
+      );
+      if (detail?.archive.next_cycle_name) {
+        await updateLocalArchiveFields(
+          archiveId,
+          { next_cycle_name: null },
+          ownerContext
+        );
+      }
       showToast(cycleTerminology.startSuccess(cycle.cycle_no));
       await loadDetail();
     } catch (err) {
@@ -654,6 +670,33 @@ export default function LocalArchiveDetailPage() {
     }
   }
 
+  async function saveLocalCycleSettings({
+    enabled,
+    nextName,
+  }: {
+    enabled: boolean;
+    nextName: string;
+  }) {
+    if (!archiveId || cycleSettingsSaving) return;
+    setCycleSettingsSaving(true);
+    try {
+      const nextArchive = await updateLocalArchiveFields(
+        archiveId,
+        {
+          cycle_enabled: enabled,
+          next_cycle_name: nextName.trim().slice(0, 80) || null,
+        },
+        ownerContext
+      );
+      setDetail((current) => current ? { ...current, archive: nextArchive } : current);
+      showToast(archiveCopy.cycle_setting_saved);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : archiveCopy.cycle_setting_failed);
+    } finally {
+      setCycleSettingsSaving(false);
+    }
+  }
+
   async function saveLocalArchiveProfileField(change: ArchiveProfileFieldSave) {
     if (!detail) return;
 
@@ -741,7 +784,10 @@ export default function LocalArchiveDetailPage() {
 
   const { archive, records } = detail;
   const cycles = archive.cycles || [];
-  const activeCycles = cycles
+  const cycleEnabled = typeof archive.cycle_enabled === "boolean"
+    ? archive.cycle_enabled
+    : cycles.length > 0;
+  const activeCycles = (cycleEnabled ? cycles : [])
     .filter((cycle) => cycle.status === "active")
     .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
   const defaultCycleId = activeCycles[0]?.id || "";
@@ -752,11 +798,11 @@ export default function LocalArchiveDetailPage() {
         ? selectedCycleId
         : defaultCycleId;
   const selectedActiveCycle = activeCycles.find((cycle) => cycle.id === effectiveCycleId) || null;
-  const cycleOptions = [...cycles]
+  const cycleOptions = [...(cycleEnabled ? cycles : [])]
     .sort((a, b) => b.cycle_no - a.cycle_no)
     .map((cycle) => ({
       id: cycle.id,
-      label: `${cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
+      label: `${cycle.display_name || cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
     }));
   const startTime = records.length
     ? records[records.length - 1]?.record_time || archive.created_at
@@ -936,6 +982,15 @@ export default function LocalArchiveDetailPage() {
               </button>
             </div>
           }
+          profileExtra={
+            <ArchiveCycleSettings
+              key={`${archive.id}:${archive.next_cycle_name || ""}`}
+              enabled={cycleEnabled}
+              nextName={archive.next_cycle_name}
+              busy={cycleSettingsSaving}
+              onSave={saveLocalCycleSettings}
+            />
+          }
         />
       </section>
 
@@ -1074,7 +1129,7 @@ export default function LocalArchiveDetailPage() {
                 >
                   {activeCycles.map((cycle) => (
                     <option key={cycle.id} value={cycle.id}>
-                      {cycleTerminology.cycleLabel(cycle.cycle_no)} ({formatLocalCycleDate(cycle.started_at)} {cycleTerminology.startDateSuffix})
+                      {cycle.display_name || cycleTerminology.cycleLabel(cycle.cycle_no)} ({formatLocalCycleDate(cycle.started_at)} {cycleTerminology.startDateSuffix})
                     </option>
                   ))}
                   <option value="">{cycleTerminology.unassignedOption}</option>
@@ -1200,16 +1255,17 @@ export default function LocalArchiveDetailPage() {
       </ArchiveRecordComposer>
 
       <ArchiveCycleTimeline
-        cycles={cycles}
+        cycles={cycleEnabled ? cycles : []}
         records={localRecordItems}
         category={archive.category}
+        nextCycleName={archive.next_cycle_name}
         mobileMode={isMobileViewport}
-        canManage
+        canManage={cycleEnabled}
         busy={cycleBusy}
-        onStartCycle={startLocalCycle}
-        onEndCycle={endLocalCycle}
-        onUpdateCycleDates={updateLocalCycleDates}
-        onDeleteCycle={deleteLocalCycle}
+        onStartCycle={cycleEnabled ? startLocalCycle : undefined}
+        onEndCycle={cycleEnabled ? endLocalCycle : undefined}
+        onUpdateCycleDates={cycleEnabled ? updateLocalCycleDates : undefined}
+        onDeleteCycle={cycleEnabled ? deleteLocalCycle : undefined}
         emptyState={
           <div style={emptyRecordsStyle}>
             <div>{recordCopy.no_local_records}</div>
