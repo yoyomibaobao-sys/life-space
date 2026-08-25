@@ -1123,6 +1123,7 @@ const zh = {
     pin_user: "置顶用户",
     unpin_user: "取消置顶",
     user_projects_load_failed: "公开项目加载失败，请重新加载。",
+    project_load_failed: "关注项目加载失败，请重新加载。",
     reload: "重新加载",
     latest_update: "最近更新：",
     no_recent_update: "最近还没有公开项目更新",

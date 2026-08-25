@@ -14,7 +14,7 @@ export default function SiteFooter() {
     <footer className={styles.footer}>
       <div className={styles.inner}>
         <div className={styles.brand}>
-          <BrandMark size={24} />
+          <BrandMark size={20} tone="quiet" />
           <span>{legal.serviceName}</span>
         </div>
         <div className={styles.actions}>

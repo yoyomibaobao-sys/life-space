@@ -103,8 +103,7 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(lightbox, /mobileOverlayOpen = "true"/);
   assert.doesNotMatch(lightbox, /maxDistance >= 120/);
   assert.match(lightbox, /window\.history\.back\(\)/);
-  assert.match(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.inner \{[\s\S]*?padding: 16px 0 102px/);
-  assert.doesNotMatch(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.footer \{[\s\S]*?display: none/);
+  assert.match(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.footer \{[\s\S]*?display: none/);
 });
 
 test("the center plus captures a photo and carries it into a new record", async () => {

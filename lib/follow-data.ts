@@ -65,7 +65,7 @@ export async function loadFollowPageData(
     ? supabase
         .from("archives")
         .select(
-          "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
+          "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url, cover_image_path, cover_thumb_path"
         )
         .in("id", archiveIds)
     : Promise.resolve({ data: [] as ArchiveRow[], error: null });
@@ -164,7 +164,6 @@ export async function loadFollowPageData(
         return {
           url: archive.cover_image_url,
           path: archive.cover_image_path,
-          thumb_url: archive.cover_thumb_url,
           thumb_path: archive.cover_thumb_path,
         };
       }

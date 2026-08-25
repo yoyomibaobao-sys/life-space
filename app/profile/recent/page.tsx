@@ -29,7 +29,6 @@ type RecentArchiveRow = {
   view_count: number | null;
   cover_image_url: string | null;
   cover_image_path: string | null;
-  cover_thumb_url: string | null;
   cover_thumb_path: string | null;
   display_cover_image_url?: string | null;
 };
@@ -72,7 +71,7 @@ export default function RecentBrowsePage() {
       const { data, error } = await supabase
         .from("archives")
         .select(
-          "id, user_id, title, category, system_name, species_name_snapshot, is_public, record_count, view_count, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
+          "id, user_id, title, category, system_name, species_name_snapshot, is_public, record_count, view_count, cover_image_url, cover_image_path, cover_thumb_path"
         )
         .in("id", ids);
 
@@ -95,7 +94,6 @@ export default function RecentBrowsePage() {
         sortedRows.map((row) => ({
           url: row.cover_image_url,
           path: row.cover_image_path,
-          thumb_url: row.cover_thumb_url,
           thumb_path: row.cover_thumb_path,
         }))
       );

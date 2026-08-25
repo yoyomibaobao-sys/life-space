@@ -351,7 +351,6 @@ export default function ArchivePage() {
         ...archiveItems.map((item) => ({
           url: item.cover_image_url,
           path: item.cover_image_path,
-          thumb_url: item.cover_thumb_url,
           thumb_path: item.cover_thumb_path,
         })),
         ...latestRecords.map((record) => ({ url: record.primary_image_url })),
@@ -2024,7 +2023,9 @@ export default function ArchivePage() {
           ) : localError ? (
             <div style={emptyPanelStyle}>{localError}</div>
           ) : localArchives.length === 0 ? (
-            <div style={emptyPanelStyle}>{t.archive_workspace.no_local_projects}</div>
+            isMobileViewport ? null : (
+              <div style={emptyPanelStyle}>{t.archive_workspace.no_local_projects}</div>
+            )
           ) : filteredLocalArchives.length === 0 ? (
             <div style={emptyPanelStyle}>{t.archive_workspace.no_local_matches}</div>
           ) : (
@@ -2412,9 +2413,9 @@ const personalSpaceStorageRowStyle: CSSProperties = {
 };
 
 const personalSpaceStorageTrackStyle: CSSProperties = {
-  minWidth: 42,
-  maxWidth: 118,
-  flex: 1,
+  width: 76,
+  maxWidth: 76,
+  flex: "0 1 76px",
   height: 6,
   overflow: "hidden",
   borderRadius: 999,
@@ -2436,14 +2437,21 @@ const personalSpaceStorageTotalStyle: CSSProperties = {
 };
 
 const personalSpaceInlineEntryStyle: CSSProperties = {
-  color: "inherit",
+  minHeight: 32,
+  display: "inline-flex",
+  alignItems: "center",
+  color: "#4f604d",
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  whiteSpace: "nowrap",
   textDecoration: "none",
 };
 
 const personalSpaceMobileActionsStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 5,
+  gap: 3,
   flexShrink: 0,
 };
 

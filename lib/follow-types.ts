@@ -31,7 +31,6 @@ export type ArchiveRow = {
   view_count: number | null;
   cover_image_url?: string | null;
   cover_image_path?: string | null;
-  cover_thumb_url?: string | null;
   cover_thumb_path?: string | null;
 };
 

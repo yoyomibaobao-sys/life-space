@@ -529,6 +529,9 @@ export default function AdminMembershipsPage() {
   const currentTrafficLayoutStyle = isMobileViewport
     ? mobileTrafficLayoutStyle
     : trafficLayoutStyle;
+  const adminSectionScrollMarginTop = isMobileViewport
+    ? "calc(112px + var(--app-safe-area-top))"
+    : 112;
 
   useEffect(() => {
     const updateViewportWidth = () => setViewportWidth(window.innerWidth);
@@ -536,6 +539,17 @@ export default function AdminMembershipsPage() {
     window.addEventListener("resize", updateViewportWidth);
     return () => window.removeEventListener("resize", updateViewportWidth);
   }, []);
+
+  useEffect(() => {
+    if (checking || !isAdmin || !window.location.hash) return;
+
+    const sectionId = window.location.hash.slice(1);
+    const frameId = window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [checking, isAdmin]);
 
   async function loadRows(searchKeyword = keyword) {
     setLoading(true);
@@ -1415,7 +1429,11 @@ export default function AdminMembershipsPage() {
         <Link href="/membership" style={secondaryButtonStyle}>{t.admin_memberships.view_membership_page}</Link>
       </section>
 
-      <nav style={anchorNavStyle} aria-label={t.admin_memberships.admin_sections_aria}>
+      <nav
+        id="admin-section-navigation"
+        style={adminAnchorNavStyle(isMobileViewport)}
+        aria-label={t.admin_memberships.admin_sections_aria}
+      >
         <a href="#overview" style={anchorLinkStyle}>{t.admin_memberships.nav_overview}</a>
         <a href="#traffic" style={anchorLinkStyle}>{t.admin_memberships.nav_traffic}</a>
         <a href="#registrations" style={anchorLinkStyle}>{t.admin_memberships.nav_registrations}</a>
@@ -1427,7 +1445,11 @@ export default function AdminMembershipsPage() {
 
       <section
         id="overview"
-        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+        style={{
+          ...currentCardStyle,
+          marginBottom: isMobileViewport ? 12 : 16,
+          scrollMarginTop: adminSectionScrollMarginTop,
+        }}
       >
         <div style={detailTopStyle}>
           <div>
@@ -1524,7 +1546,11 @@ export default function AdminMembershipsPage() {
 
       <section
         id="traffic"
-        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+        style={{
+          ...currentCardStyle,
+          marginBottom: isMobileViewport ? 12 : 16,
+          scrollMarginTop: adminSectionScrollMarginTop,
+        }}
       >
         <div style={detailTopStyle}>
           <div>
@@ -1595,6 +1621,7 @@ export default function AdminMembershipsPage() {
           ...currentCardStyle,
           ...pendingPaymentQueueStyle(pendingPaymentRows.length > 0),
           marginBottom: isMobileViewport ? 12 : 16,
+          scrollMarginTop: adminSectionScrollMarginTop,
         }}
       >
         <div style={detailTopStyle}>
@@ -1669,6 +1696,7 @@ export default function AdminMembershipsPage() {
           ...currentCardStyle,
           ...refundQueueStyle(openRefundCount > 0),
           marginBottom: isMobileViewport ? 12 : 16,
+          scrollMarginTop: adminSectionScrollMarginTop,
         }}
       >
         <div style={detailTopStyle}>
@@ -1795,7 +1823,11 @@ export default function AdminMembershipsPage() {
 
       <section
         id="capacity"
-        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+        style={{
+          ...currentCardStyle,
+          marginBottom: isMobileViewport ? 12 : 16,
+          scrollMarginTop: adminSectionScrollMarginTop,
+        }}
       >
         <div style={detailTopStyle}>
           <div>
@@ -1891,7 +1923,11 @@ export default function AdminMembershipsPage() {
 
       <section
         id="registrations"
-        style={{ ...currentCardStyle, marginBottom: isMobileViewport ? 12 : 16 }}
+        style={{
+          ...currentCardStyle,
+          marginBottom: isMobileViewport ? 12 : 16,
+          scrollMarginTop: adminSectionScrollMarginTop,
+        }}
       >
         <div style={detailTopStyle}>
           <div>
@@ -2337,7 +2373,13 @@ export default function AdminMembershipsPage() {
         </div>
       </section>
 
-      <section id="account-closures" style={currentCardStyle}>
+      <section
+        id="account-closures"
+        style={{
+          ...currentCardStyle,
+          scrollMarginTop: adminSectionScrollMarginTop,
+        }}
+      >
         <div style={detailTopStyle}>
           <div>
             <div style={sectionLabelStyle}>{t.admin_memberships.account_closure_eyebrow}</div>
@@ -2538,15 +2580,23 @@ const mobileHeaderStyle: CSSProperties = {
   marginBottom: 12,
 };
 
-const anchorNavStyle: CSSProperties = {
-  display: "flex",
-  gap: 8,
-  overflowX: "auto",
-  WebkitOverflowScrolling: "touch",
-  padding: "2px 1px 12px",
-  marginBottom: 4,
-  scrollbarWidth: "thin",
-};
+function adminAnchorNavStyle(mobile: boolean): CSSProperties {
+  return {
+    position: "sticky",
+    top: mobile ? "calc(50px + var(--app-safe-area-top))" : 58,
+    zIndex: 90,
+    display: "flex",
+    gap: 8,
+    overflowX: "auto",
+    WebkitOverflowScrolling: "touch",
+    padding: "8px 4px",
+    margin: "0 -4px 8px",
+    borderBottom: "1px solid #e6ece2",
+    background: "rgba(248, 250, 246, 0.96)",
+    backdropFilter: "blur(10px)",
+    scrollbarWidth: "thin",
+  };
+}
 
 const anchorLinkStyle: CSSProperties = {
   flex: "0 0 auto",

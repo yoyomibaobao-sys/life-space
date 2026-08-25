@@ -37,25 +37,6 @@
 
 @media (max-width: 759px) {
   .footer {
-    margin-top: 18px;
-  }
-
-  .inner {
-    width: min(100% - 28px, 1180px);
-    padding: 16px 0 102px;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .actions {
-    gap: 8px 14px;
-    flex-wrap: wrap;
-  }
-
-  .link {
-    min-height: 30px;
-    display: inline-flex;
-    align-items: center;
+    display: none;
   }
 }

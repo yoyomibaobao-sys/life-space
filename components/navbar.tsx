@@ -342,7 +342,7 @@ export default function Navbar() {
     <nav style={getNavStyle(isCompact)}>
       <div style={getLeftGroupStyle(isCompact)}>
         <Link href="/" style={brandStyle}>
-          <BrandMark size={28} />
+          <BrandMark size={24} tone="quiet" />
           <span>{t.nav.brand}</span>
         </Link>
 

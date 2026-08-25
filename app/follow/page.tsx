@@ -61,7 +61,6 @@ type ArchiveRow = {
   view_count: number | null;
   cover_image_url?: string | null;
   cover_image_path?: string | null;
-  cover_thumb_url?: string | null;
   cover_thumb_path?: string | null;
 };
 
@@ -141,6 +140,7 @@ export default function FollowPage() {
   const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter>("all");
   const [projectCards, setProjectCards] = useState<FollowProjectCard[]>([]);
   const [userCards, setUserCards] = useState<FollowUserCard[]>([]);
+  const [projectLoadError, setProjectLoadError] = useState(false);
   const [userProjectsError, setUserProjectsError] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
   const [selectedUserId, setSelectedUserId] = useState<string>("all");
@@ -188,6 +188,7 @@ export default function FollowPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setProjectLoadError(false);
       setUserProjectsError(false);
 
       const {
@@ -201,7 +202,7 @@ export default function FollowPage() {
 
       setCurrentUserId(user.id);
 
-      const [{ data: archiveFollows }, { data: userFollows }] = await Promise.all([
+      const [archiveFollowsResult, userFollowsResult] = await Promise.all([
         supabase
           .from("archive_follows")
           .select("archive_id, created_at")
@@ -214,8 +215,17 @@ export default function FollowPage() {
           .order("created_at", { ascending: false }),
       ]);
 
-      const archiveFollowRows = (archiveFollows || []) as ArchiveFollowRow[];
-      const userFollowRows = (userFollows || []) as UserFollowRow[];
+      if (archiveFollowsResult.error) {
+        console.error("load followed projects error:", archiveFollowsResult.error);
+        setProjectLoadError(true);
+      }
+      if (userFollowsResult.error) {
+        console.error("load followed users error:", userFollowsResult.error);
+        setUserProjectsError(true);
+      }
+
+      const archiveFollowRows = (archiveFollowsResult.data || []) as ArchiveFollowRow[];
+      const userFollowRows = (userFollowsResult.data || []) as UserFollowRow[];
 
       const archiveIds = unique(archiveFollowRows.map((item) => item.archive_id).filter(Boolean));
       const followedUserIds = unique(
@@ -226,9 +236,10 @@ export default function FollowPage() {
         ? supabase
             .from("archives")
             .select(
-              "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path"
+              "id, user_id, title, category, system_name, species_name_snapshot, group_tag_id, sub_tag_id, created_at, status, ended_at, help_status, record_count, last_record_time, view_count, cover_image_url, cover_image_path, cover_thumb_path"
             )
             .in("id", archiveIds)
+            .eq("is_public", true)
         : Promise.resolve({ data: [] as ArchiveRow[], error: null });
 
       const followedUsersProjectsPromise = followedUserIds.length
@@ -249,6 +260,14 @@ export default function FollowPage() {
       const archives = (archivesResult.data || []) as ArchiveRow[];
       const followedUsersProjects = followedUsersProjectsResult.items;
       const records = (recordsResult.data || []) as RecordRow[];
+
+      if (archivesResult.error || recordsResult.error) {
+        console.error("load followed project details error:", {
+          archives: archivesResult.error,
+          records: recordsResult.error,
+        });
+        setProjectLoadError(true);
+      }
 
       if (followedUsersProjectsResult.error) {
         console.error("load followed users' public projects error:", followedUsersProjectsResult.error);
@@ -326,7 +345,6 @@ export default function FollowPage() {
             return {
               url: archive.cover_image_url,
               path: archive.cover_image_path,
-              thumb_url: archive.cover_thumb_url,
               thumb_path: archive.cover_thumb_path,
             };
           }
@@ -680,7 +698,18 @@ export default function FollowPage() {
         {loading ? (
           <div style={emptyWrapStyle}>{followT.loading}</div>
         ) : tab === "projects" ? (
-          filteredProjectCards.length ? (
+          projectLoadError ? (
+            <div style={emptyWrapStyle}>
+              <div>{followT.project_load_failed}</div>
+              <button
+                type="button"
+                onClick={() => setLoadVersion((value) => value + 1)}
+                style={{ ...ghostButtonStyle, marginTop: 14 }}
+              >
+                {followT.reload}
+              </button>
+            </div>
+          ) : filteredProjectCards.length ? (
             <div style={listStyle}>
               {filteredProjectCards.map((item) => {
                 const meta = [item.displaySystemName, item.ownerName];
@@ -801,58 +830,64 @@ export default function FollowPage() {
               <button
                 type="button"
                 onClick={() => setSelectedUserId("all")}
-                style={followedUserPillStyle(selectedUserId === "all")}
+                style={followedUserAllButtonStyle(selectedUserId === "all")}
               >
-                <span style={userAvatarFallbackSmallStyle}><UiIcon name="users" size={18} /></span>
                 <span>{followT.status_all}</span>
               </button>
               {filteredUserCards.map((item) => {
                 const unread = hasUnread(`user:${item.id}`, item.latestRecordTime, item.followedAt);
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onPointerDown={(event) => beginUserLongPress(event, item.id)}
-                    onPointerUp={clearUserLongPressTimer}
-                    onPointerLeave={clearUserLongPressTimer}
-                    onPointerCancel={clearUserLongPressTimer}
-                    onContextMenu={(event) => {
-                      if (!isMobileViewport) return;
-                      event.preventDefault();
-                      clearUserLongPressTimer();
-                      userLongPressedIdRef.current = item.id;
-                      setUserMenuTargetId(item.id);
-                    }}
-                    onClick={(event) => {
-                      if (userLongPressedIdRef.current === item.id) {
+                  <div key={item.id} style={followedUserItemWrapStyle}>
+                    <button
+                      type="button"
+                      onPointerDown={(event) => beginUserLongPress(event, item.id)}
+                      onPointerUp={clearUserLongPressTimer}
+                      onPointerLeave={clearUserLongPressTimer}
+                      onPointerCancel={clearUserLongPressTimer}
+                      onContextMenu={(event) => {
+                        if (!isMobileViewport) return;
                         event.preventDefault();
-                        userLongPressedIdRef.current = null;
-                        return;
-                      }
-                      setSelectedUserId(item.id);
-                      markRead(`user:${item.id}`, item.latestRecordTime);
-                    }}
-                    title={isMobileViewport ? followT.long_press_user_hint : undefined}
-                    style={followedUserPillStyle(selectedUserId === item.id)}
-                  >
-                    <span style={{ position: "relative" }}>
-                      {item.avatarUrl ? (
-                        <img src={item.avatarUrl} alt="" style={userAvatarSmallStyle} />
-                      ) : (
-                        <span style={userAvatarFallbackSmallStyle}><UiIcon name="sprout" size={18} /></span>
-                      )}
-                      {unread ? <span style={railUnreadDotStyle} /> : null}
-                      {pinnedUserIds.includes(item.id) ? <span style={railPinnedDotStyle} /> : null}
-                    </span>
-                    <span style={railUsernameStyle}>{item.username}</span>
-                  </button>
+                        clearUserLongPressTimer();
+                        userLongPressedIdRef.current = item.id;
+                        setUserMenuTargetId(item.id);
+                      }}
+                      onClick={(event) => {
+                        if (userLongPressedIdRef.current === item.id) {
+                          event.preventDefault();
+                          userLongPressedIdRef.current = null;
+                          return;
+                        }
+                        setSelectedUserId(item.id);
+                        markRead(`user:${item.id}`, item.latestRecordTime);
+                      }}
+                      title={isMobileViewport ? followT.long_press_user_hint : undefined}
+                      style={followedUserPillStyle(selectedUserId === item.id)}
+                    >
+                      <span style={{ position: "relative" }}>
+                        {item.avatarUrl ? (
+                          <img src={item.avatarUrl} alt="" style={userAvatarSmallStyle} />
+                        ) : (
+                          <span style={userAvatarFallbackSmallStyle}><UiIcon name="sprout" size={18} /></span>
+                        )}
+                        {unread ? <span style={railUnreadDotStyle} /> : null}
+                        {pinnedUserIds.includes(item.id) ? <span style={railPinnedDotStyle} /> : null}
+                      </span>
+                      <span style={railUsernameStyle}>{item.username}</span>
+                    </button>
+                    {!isMobileViewport ? (
+                      <Link
+                        href={`/user/${item.id}`}
+                        aria-label={`${followT.enter_space}: ${item.username}`}
+                        title={followT.enter_space}
+                        style={followedUserSpaceShortcutStyle}
+                      >
+                        <UiIcon name="arrow-right" size={12} strokeWidth={2} />
+                      </Link>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
-
-            {isMobileViewport ? (
-              <div style={followedUserHintStyle}>{followT.long_press_user_hint}</div>
-            ) : null}
 
             {!isMobileViewport && selectedUserId !== "all" ? (
               <div style={selectedUserActionStyle}>
@@ -1540,6 +1575,12 @@ const followedUserRailStyle: React.CSSProperties = {
   WebkitOverflowScrolling: "touch",
 };
 
+const followedUserItemWrapStyle: React.CSSProperties = {
+  position: "relative",
+  width: 68,
+  flex: "0 0 68px",
+};
+
 function followedUserPillStyle(active: boolean): React.CSSProperties {
   return {
     width: 68,
@@ -1552,6 +1593,43 @@ function followedUserPillStyle(active: boolean): React.CSSProperties {
     borderRadius: 14,
     background: active ? "#eef7e8" : "transparent",
     color: active ? "#315f31" : "#566553",
+    cursor: "pointer",
+  };
+}
+
+const followedUserSpaceShortcutStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 32,
+  right: 3,
+  width: 21,
+  height: 21,
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid #d5dfd0",
+  borderRadius: "50%",
+  background: "rgba(255, 255, 255, 0.96)",
+  color: "#587152",
+  boxShadow: "0 2px 6px rgba(54, 78, 50, 0.10)",
+  textDecoration: "none",
+};
+
+function followedUserAllButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    minHeight: 34,
+    alignSelf: "center",
+    flex: "0 0 auto",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 13px",
+    border: active ? "1px solid #9fc796" : "1px solid #dfe7d9",
+    borderRadius: 999,
+    background: active ? "#eef7e8" : "#fff",
+    color: active ? "#315f31" : "#566553",
+    fontSize: 13,
+    fontWeight: active ? 750 : 650,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
     cursor: "pointer",
   };
 }
@@ -1598,7 +1676,8 @@ const railUsernameStyle: React.CSSProperties = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-  fontSize: 12,
+  fontSize: 13,
+  fontWeight: 600,
 };
 
 const selectedUserActionStyle: React.CSSProperties = {
@@ -1607,12 +1686,6 @@ const selectedUserActionStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 8,
   margin: "0 2px 10px",
-};
-
-const followedUserHintStyle: React.CSSProperties = {
-  margin: "-7px 4px 9px",
-  color: "#8a9586",
-  fontSize: 11,
 };
 
 const compactEmptyTextStyle: React.CSSProperties = {

@@ -87,7 +87,7 @@ export default function Home() {
       <div className="home-content" style={contentStyle}>
         <section className="home-hero" style={heroStyle}>
           <h1 className="home-brand" style={brandStyle}>
-            <BrandMark size={48} />
+            <BrandMark size={40} tone="quiet" />
             <span style={brandCopyStyle}>
               <span>{t.home.brand}</span>
               <span className="home-english-brand" style={englishBrandStyle}>

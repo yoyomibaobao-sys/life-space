@@ -31,7 +31,6 @@ export type UserProfileArchiveItem = {
   view_count: number | null;
   cover_image_url?: string | null;
   cover_image_path?: string | null;
-  cover_thumb_url?: string | null;
   cover_thumb_path?: string | null;
   display_cover_url?: string | null;
 };
@@ -126,7 +125,7 @@ async function loadUserProfileDataWithProfile(
     accountIdentityQuery,
     supabase
       .from("archives")
-      .select("id, title, system_name, category, status, last_record_time, record_count, view_count, is_public, cover_image_url, cover_image_path, cover_thumb_url, cover_thumb_path")
+      .select("id, title, system_name, category, status, last_record_time, record_count, view_count, is_public, cover_image_url, cover_image_path, cover_thumb_path")
       .eq("user_id", userId)
       .order("last_record_time", { ascending: false }),
     supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
@@ -205,7 +204,6 @@ async function loadUserProfileDataWithProfile(
     recentArchives.map((item) => ({
       url: item.cover_image_url,
       path: item.cover_image_path,
-      thumb_url: item.cover_thumb_url,
       thumb_path: item.cover_thumb_path,
     }))
   );

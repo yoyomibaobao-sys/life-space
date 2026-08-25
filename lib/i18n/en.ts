@@ -1123,6 +1123,7 @@ const en = {
     pin_user: "Pin person",
     unpin_user: "Unpin person",
     user_projects_load_failed: "Public projects could not be loaded. Try again.",
+    project_load_failed: "Followed projects could not be loaded. Try again.",
     reload: "Reload",
     latest_update: "Latest update: ",
     no_recent_update: "No recent public-project updates",
