@@ -1,7 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ChangeEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { buildLoginHref } from "@/lib/auth-return";
@@ -49,6 +59,10 @@ type MembershipPaymentRow = {
   service_ends_at: string | null;
   review_note: string | null;
   created_at: string | null;
+  expires_at: string | null;
+  payment_destination_label: string | null;
+  payment_destination_version: string | null;
+  close_reason: string | null;
 };
 
 type MobileProfileModule = "membership" | "payment" | "backup" | "account";
@@ -57,6 +71,8 @@ type MobileProfileNavItem = {
   value?: MobileProfileModule;
   href?: string;
 };
+
+const PROFILE_RETURN_STATE_KEY = "lifespace:profile-return-state:v1";
 
 function formatPaymentAmount(amount?: number | string | null, currency?: string | null) {
   const value = Number(amount || 0);
@@ -82,6 +98,7 @@ function getProfilePaymentStatusLabel(status: string | null | undefined, languag
   if (status === "confirmed") return language === "en" ? "Confirmed" : "已确认";
   if (status === "refunded") return language === "en" ? "Refunded" : "已退款";
   if (status === "canceled") return language === "en" ? "Canceled" : "已取消";
+  if (status === "expired") return language === "en" ? "Expired" : "已失效";
   return language === "en" ? "Not recorded" : "未记录";
 }
 
@@ -119,6 +136,7 @@ export default function ProfilePage() {
   const [customCountryName, setCustomCountryName] = useState("");
   const [regionName, setRegionName] = useState("");
   const [cityName, setCityName] = useState("");
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -131,23 +149,66 @@ export default function ProfilePage() {
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [mobileProfileModule, setMobileProfileModule] =
     useState<MobileProfileModule | null>(null);
+  const restoringProfilePositionRef = useRef(false);
+  const isMobileViewport = viewportWidth < 760;
 
   useEffect(() => {
-    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    const updateViewportWidth = () => {
+      const width = window.innerWidth;
+      setViewportWidth(width);
+      if (width >= 760) {
+        setMobileProfileModule((current) => current || "membership");
+      }
+    };
     updateViewportWidth();
     window.addEventListener("resize", updateViewportWidth);
     return () => window.removeEventListener("resize", updateViewportWidth);
   }, []);
 
   useEffect(() => {
-    if (!mobileProfileModule) return;
+    if (initLoading) return;
+
+    let stored: { scrollY?: number; module?: MobileProfileModule | null } | null = null;
+    try {
+      stored = JSON.parse(
+        sessionStorage.getItem(PROFILE_RETURN_STATE_KEY) || "null"
+      ) as { scrollY?: number; module?: MobileProfileModule | null } | null;
+      sessionStorage.removeItem(PROFILE_RETURN_STATE_KEY);
+    } catch {
+      stored = null;
+    }
+
+    if (!stored) return;
+    if (stored.module) {
+      if (isMobileViewport) restoringProfilePositionRef.current = true;
+      setMobileProfileModule(stored.module);
+    }
+    const targetY = Math.max(0, Number(stored.scrollY || 0));
+    let secondFrame: number | null = null;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        window.scrollTo({ top: targetY, behavior: "auto" });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [initLoading, isMobileViewport]);
+
+  useEffect(() => {
+    if (!isMobileViewport || !mobileProfileModule) return;
+    if (restoringProfilePositionRef.current) {
+      restoringProfilePositionRef.current = false;
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       document
         .getElementById(`profile-module-${mobileProfileModule}`)
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [mobileProfileModule]);
+  }, [isMobileViewport, mobileProfileModule]);
 
   useEffect(() => {
     async function init() {
@@ -166,6 +227,14 @@ export default function ProfilePage() {
       const data = await loadUserProfileData(supabase, user.id);
       setProfile(data.profile);
       setProfileStats(data.stats);
+
+      const openOrderRefresh = await supabase.rpc(
+        "get_my_open_membership_payment_order_json"
+      );
+      if (openOrderRefresh.error) {
+        console.error("refresh open membership order error:", openOrderRefresh.error);
+      }
+
       const [
         membershipResult,
         adminResult,
@@ -175,7 +244,7 @@ export default function ProfilePage() {
         supabase.rpc("is_app_admin", { p_user_id: user.id }),
         supabase
           .from("membership_payments")
-          .select("id, order_number, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, submitted_at, service_started_at, service_ends_at, review_note, created_at")
+          .select("id, order_number, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, submitted_at, service_started_at, service_ends_at, review_note, created_at, expires_at, payment_destination_label, payment_destination_version, close_reason")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(8),
@@ -270,11 +339,9 @@ export default function ProfilePage() {
   const membershipStatusText = membershipError
     ? t.profile.membership_load_failed
     : getMembershipSummary(membership, language);
-  const isMobileViewport = viewportWidth < 760;
   const visibleMobileProfileModules = isAdmin
     ? [...baseMobileProfileModules, adminMembershipProfileModule]
     : baseMobileProfileModules;
-  const formGridColumns = viewportWidth < 560 ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))";
   const statsGridColumns = isMobileViewport
     ? "1fr"
     : viewportWidth < 900
@@ -284,7 +351,6 @@ export default function ProfilePage() {
   const shellStyle = isMobileViewport ? mobileProfileShellStyle : profileShellStyle;
   const fieldInputStyle = isMobileViewport ? mobileInputStyle : inputStyle;
   const primaryActionStyle = isMobileViewport ? mobilePrimaryButtonStyle : primaryButtonStyle;
-  const secondaryActionStyle = isMobileViewport ? mobileSecondaryLinkStyle : secondaryLinkStyle;
   const sectionCompactStyle = isMobileViewport ? mobileProfileSectionStyle : {};
   const showMembershipModule = mobileProfileModule === "membership";
   const showPaymentModule = mobileProfileModule === "payment";
@@ -301,7 +367,7 @@ export default function ProfilePage() {
     setPaymentLoading(true);
     const { data, error } = await supabase
       .from("membership_payments")
-      .select("id, order_number, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, submitted_at, service_started_at, service_ends_at, review_note, created_at")
+      .select("id, order_number, plan, status, amount, currency, payment_method, payment_reference, note, paid_at, submitted_at, service_started_at, service_ends_at, review_note, created_at, expires_at, payment_destination_label, payment_destination_version, close_reason")
       .eq("user_id", targetUserId)
       .order("created_at", { ascending: false })
       .limit(8);
@@ -370,7 +436,41 @@ export default function ProfilePage() {
     }
 
     showToast(t.profile.saved);
+    setIsEditingProfile(false);
     void refreshProfile(user.id);
+  }
+
+  function beginProfileEdit() {
+    setUsername(String(profile?.username || ""));
+    const legacy = parseLegacyLocation(profile?.location);
+    setCountryCode(String(profile?.country_code || legacy.countryCode || ""));
+    setCustomCountryName(String(profile?.country_name || legacy.countryName || ""));
+    setRegionName(String(profile?.region_name || legacy.regionName || ""));
+    setCityName(String(profile?.city_name || legacy.cityName || ""));
+    setErrorMsg("");
+    setIsEditingProfile(true);
+  }
+
+  function cancelProfileEdit() {
+    beginProfileEdit();
+    setIsEditingProfile(false);
+    setErrorMsg("");
+  }
+
+  function rememberProfileReturnPosition(event: ReactMouseEvent<HTMLElement>) {
+    const target = event.target as Element | null;
+    const link = target?.closest("a[href]") as HTMLAnchorElement | null;
+    if (!link || link.target === "_blank") return;
+    const destination = new URL(link.href, window.location.href);
+    if (destination.origin !== window.location.origin || destination.pathname === "/profile") return;
+    try {
+      sessionStorage.setItem(
+        PROFILE_RETURN_STATE_KEY,
+        JSON.stringify({ scrollY: window.scrollY, module: mobileProfileModule })
+      );
+    } catch {
+      // Browser navigation still works if session storage is unavailable.
+    }
   }
 
 
@@ -562,7 +662,7 @@ export default function ProfilePage() {
 
   return (
     <main style={pageStyle}>
-      <section style={shellStyle}>
+      <section style={shellStyle} onClickCapture={rememberProfileReturnPosition}>
         {!isMobileViewport ? (
           <h1 style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>{t.profile.title}</h1>
         ) : null}
@@ -587,7 +687,12 @@ export default function ProfilePage() {
           </Link>
         ) : null}
 
-        <section style={profileIdentityCardStyle}>
+        <section
+          style={{
+            ...profileIdentityCardStyle,
+            ...(isEditingProfile ? profileIdentityEditingStyle : {}),
+          }}
+        >
           <div style={profileIdentityTopStyle}>
             <label style={profileAvatarEditorStyle}>
               {profile.avatar_url ? (
@@ -602,19 +707,29 @@ export default function ProfilePage() {
             </label>
             <div style={{ minWidth: 0, flex: 1 }}>
               <label style={fieldLabelStyle}>{t.profile.username}</label>
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                style={fieldInputStyle}
-                placeholder={t.profile.username_placeholder}
-              />
-              <div style={profileIdentityEmailStyle}>{user.email}</div>
-              <div style={profileIdentityLocationStyle}>{locationPreview}</div>
+              {isEditingProfile ? (
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  style={fieldInputStyle}
+                  placeholder={t.profile.username_placeholder}
+                  autoFocus
+                />
+              ) : (
+                <div style={savedUsernameStyle}>
+                  {username || t.profile.unset_username}
+                </div>
+              )}
             </div>
-            <Link href="/notifications" aria-label={t.nav.notification} style={identityIconLinkStyle}>
-              <UiIcon name="bell" size={19} />
-            </Link>
+            <button
+              type="button"
+              onClick={isEditingProfile ? cancelProfileEdit : beginProfileEdit}
+              style={profileEditButtonStyle}
+            >
+              {isEditingProfile ? t.profile.cancel_edit : t.profile.edit_profile}
+            </button>
           </div>
+          <div style={profileIdentityEmailStyle} title={user.email || ""}>{user.email}</div>
           <div
             style={{
               ...identityStatsStyle,
@@ -624,29 +739,64 @@ export default function ProfilePage() {
             }}
           >
             <IdentityStat label={language === "en" ? "Member no." : "会员编号"} value={String(profile.account_number || "—")} />
-            <IdentityStat label={language === "en" ? "Helpful received" : "收到有用"} value={String(profileStats?.receivedFlowerCount || 0)} />
+            <IdentityStat
+              label={language === "en" ? "Helpful received" : "收到有用"}
+              value={String(profileStats?.receivedFlowerCount || 0)}
+              href="/profile/helpful"
+            />
             <IdentityStat label={language === "en" ? "Membership" : "会员类别"} value={getMembershipPlanLabel(membership?.plan, language)} />
             <IdentityStat label={language === "en" ? "Storage" : "空间用量"} value={storageText} />
           </div>
 
-          <div style={{ ...formGridStyle, gridTemplateColumns: formGridColumns, marginTop: 12 }}>
-            <div>
-              <label style={fieldLabelStyle}>{t.profile.country_region}</label>
-              <select
-                value={countryCode}
-                onChange={(event) => {
-                  setCountryCode(event.target.value);
-                  setRegionName("");
-                }}
-                style={fieldInputStyle}
-              >
-                <option value="">{t.profile.select}</option>
-                {getLocalizedCountryOptions(language).map((item) => (
-                  <option key={item.code} value={item.code}>{item.name}</option>
-                ))}
-              </select>
-            </div>
-            {showCustomCountryInput ? (
+          {isEditingProfile ? (
+            <div style={profileEditPanelStyle}>
+              <div style={profileEditHeadingStyle}>{t.profile.editing_profile}</div>
+              <div style={locationEditGridStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <label style={fieldLabelStyle}>{t.profile.country_region}</label>
+                  <select
+                    value={countryCode}
+                    onChange={(event) => {
+                      setCountryCode(event.target.value);
+                      setRegionName("");
+                    }}
+                    style={fieldInputStyle}
+                  >
+                    <option value="">{t.profile.select}</option>
+                    {getLocalizedCountryOptions(language).map((item) => (
+                      <option key={item.code} value={item.code}>{item.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={fieldLabelStyle}>{t.profile.region}</label>
+                  {useRegionSelect ? (
+                    <select value={regionName} onChange={(event) => setRegionName(event.target.value)} style={fieldInputStyle}>
+                      <option value="">{t.profile.select}</option>
+                      {regionOptions.map((item) => (
+                        <option key={item.value} value={item.value}>{item.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={regionName}
+                      onChange={(event) => setRegionName(event.target.value)}
+                      style={fieldInputStyle}
+                      placeholder={t.profile.region_example}
+                    />
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={fieldLabelStyle}>{t.profile.city}</label>
+                  <input
+                    value={cityName}
+                    onChange={(event) => setCityName(event.target.value)}
+                    style={fieldInputStyle}
+                    placeholder={t.profile.city_example}
+                  />
+                </div>
+              </div>
+              {showCustomCountryInput ? (
               <div>
                 <label style={fieldLabelStyle}>{t.profile.custom_country_region}</label>
                 <input
@@ -656,46 +806,22 @@ export default function ProfilePage() {
                   placeholder={t.profile.country_example}
                 />
               </div>
-            ) : null}
-            <div>
-              <label style={fieldLabelStyle}>{t.profile.region}</label>
-              {useRegionSelect ? (
-                <select value={regionName} onChange={(event) => setRegionName(event.target.value)} style={fieldInputStyle}>
-                  <option value="">{t.profile.select}</option>
-                  {regionOptions.map((item) => (
-                    <option key={item.value} value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={regionName}
-                  onChange={(event) => setRegionName(event.target.value)}
-                  style={fieldInputStyle}
-                  placeholder={t.profile.region_example}
-                />
-              )}
+              ) : null}
+              <div style={profileEditActionsStyle}>
+                <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>
+                  {saving ? t.profile.saving : t.profile.save_profile}
+                </button>
+                <button type="button" onClick={cancelProfileEdit} disabled={saving} style={secondaryEditButtonStyle}>
+                  {t.profile.cancel_edit}
+                </button>
+              </div>
             </div>
-            <div>
-              <label style={fieldLabelStyle}>{t.profile.city}</label>
-              <input
-                value={cityName}
-                onChange={(event) => setCityName(event.target.value)}
-                style={fieldInputStyle}
-                placeholder={t.profile.city_example}
-              />
+          ) : (
+            <div style={savedLocationStyle}>
+              <span>{t.profile.location_summary}</span>
+              <strong>{locationPreview || t.profile.not_assigned}</strong>
             </div>
-          </div>
-
-          <div style={{ marginTop: 8, fontSize: 13, color: "#5e6959", overflowWrap: "anywhere" }}>
-            {t.profile.display_as}<span style={{ fontWeight: 700, color: "#243123" }}>{locationPreview}</span>
-          </div>
-
-          <div style={isMobileViewport ? mobileProfileActionRowStyle : { marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>
-              {saving ? t.profile.saving : t.profile.save_profile}
-            </button>
-            <Link href={`/user/${user.id}/profile`} style={secondaryActionStyle}>{t.profile.view_public_profile}</Link>
-          </div>
+          )}
         </section>
 
         <section id="language-settings" style={languageInlineStyle}>
@@ -719,9 +845,13 @@ export default function ProfilePage() {
         <MobileProfileModuleTabs
           active={mobileProfileModule}
           modules={visibleMobileProfileModules}
-          onChange={setMobileProfileModule}
+          onChange={(value) => {
+            setMobileProfileModule((current) =>
+              isMobileViewport && current === value ? null : value
+            );
+          }}
           compact={isMobileViewport}
-        />
+        >
 
         {showMembershipModule ? (
         <>
@@ -846,10 +976,20 @@ export default function ProfilePage() {
                   {payment.order_number ? (
                     <div style={paymentMetaTextStyle}>{t.profile.order_number}{payment.order_number}</div>
                   ) : null}
+                  {payment.payment_destination_label ? (
+                    <div style={paymentMetaTextStyle}>
+                      {t.profile.order_payment_destination}{payment.payment_destination_label}
+                    </div>
+                  ) : null}
                   <div style={paymentMetaTextStyle}>
                     {payment.status === "confirmed" ? t.profile.payment_time : t.profile.order_time}
                     {formatMembershipDate(payment.paid_at || payment.submitted_at || payment.created_at, language)}
                   </div>
+                  {payment.status === "pending_payment" && payment.expires_at ? (
+                    <div style={paymentMetaTextStyle}>
+                      {t.profile.order_expires_at}{formatMembershipDate(payment.expires_at, language)}
+                    </div>
+                  ) : null}
                   {payment.status === "confirmed" ? (
                     <div style={paymentMetaTextStyle}>
                       {t.profile.service_period}{formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(payment.service_ends_at, language)}
@@ -925,6 +1065,7 @@ export default function ProfilePage() {
           </button>
         </section>
         ) : null}
+        </MobileProfileModuleTabs>
 
         <button
           type="button"
@@ -972,68 +1113,91 @@ function MobileProfileModuleTabs({
   modules,
   onChange,
   compact,
+  children,
 }: {
   active: MobileProfileModule | null;
   modules: MobileProfileNavItem[];
   onChange: (value: MobileProfileModule) => void;
   compact: boolean;
+  children: ReactNode;
 }) {
   const { t } = useLanguage();
-  return (
+  const navigation = (
     <nav
       style={{
         ...mobileProfileTabsStyle,
-        display: "grid",
-        overflowX: "visible",
-        gridTemplateColumns: compact
-          ? "1fr"
-          : `repeat(${modules.length}, minmax(0, 1fr))`,
+        gridTemplateColumns: "1fr",
       }}
       aria-label={t.profile.module_aria}
     >
-      {modules.map((item) =>
-        item.href ? (
-          <Link
-            key={`${item.href}-${item.label}`}
-            href={item.href}
-            style={
-              item.href === "/admin/memberships"
-                ? {
-                    ...mobileAdminMembershipEntryStyle,
-                    ...(compact ? mobileProfileCompactTabStyle : {}),
-                  }
-                : {
-                    ...mobileProfileLinkTabStyle,
-                    ...(compact ? mobileProfileCompactTabStyle : {}),
-                  }
-            }
-          >
-            {item.label}
-          </Link>
-        ) : item.value ? (
-          <button
-            key={`${item.value}-${item.label}`}
-            type="button"
-            onClick={() => onChange(item.value as MobileProfileModule)}
-            style={{
-              ...mobileProfileTabButtonStyle(active === item.value),
-              ...(compact ? mobileProfileCompactTabStyle : {}),
-            }}
-          >
-            {item.label}
-          </button>
-        ) : null,
-      )}
+      {modules.map((item) => {
+        const key = `${item.href || item.value}-${item.label}`;
+        const isActive = Boolean(item.value && active === item.value);
+        return (
+          <Fragment key={key}>
+            {item.href ? (
+              <Link
+                href={item.href}
+                style={
+                  item.href === "/admin/memberships"
+                    ? {
+                        ...mobileAdminMembershipEntryStyle,
+                        ...(compact ? mobileProfileCompactTabStyle : {}),
+                      }
+                    : {
+                        ...mobileProfileLinkTabStyle,
+                        ...(compact ? mobileProfileCompactTabStyle : {}),
+                      }
+                }
+              >
+                <span>{item.label}</span>
+                <UiIcon name="arrow-right" size={15} />
+              </Link>
+            ) : item.value ? (
+              <button
+                type="button"
+                onClick={() => onChange(item.value as MobileProfileModule)}
+                style={{
+                  ...mobileProfileTabButtonStyle(isActive),
+                  ...(compact ? mobileProfileCompactTabStyle : {}),
+                }}
+                aria-expanded={isActive}
+              >
+                <span>{item.label}</span>
+                <UiIcon name={isActive ? "chevron-up" : "chevron-down"} size={15} />
+              </button>
+            ) : null}
+            {compact && isActive ? (
+              <div style={mobileInlineModuleStyle}>{children}</div>
+            ) : null}
+          </Fragment>
+        );
+      })}
     </nav>
+  );
+
+  if (compact) return navigation;
+
+  return (
+    <div style={desktopProfileModulesStyle}>
+      {navigation}
+      <div style={desktopProfileModuleContentStyle}>{children}</div>
+    </div>
   );
 }
 
-function IdentityStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ minWidth: 0 }}>
+function IdentityStat({ label, value, href }: { label: string; value: string; href?: string }) {
+  const content = (
+    <>
       <div style={{ color: "#7a8676", fontSize: 11 }}>{label}</div>
       <div style={{ marginTop: 3, color: "#2e422d", fontSize: 12, fontWeight: 800, lineHeight: 1.4, overflowWrap: "anywhere" }}>{value}</div>
-    </div>
+    </>
+  );
+
+  return href ? (
+    <Link href={href} style={identityStatLinkStyle}>{content}</Link>
+  ) : (
+    <div style={{ minWidth: 0 }}>{content}</div>
   );
 }
 
@@ -1059,6 +1223,12 @@ const profileIdentityCardStyle: CSSProperties = {
   border: "1px solid #dfeadd",
   borderRadius: 16,
   background: "#f9fcf7",
+};
+
+const profileIdentityEditingStyle: CSSProperties = {
+  borderColor: "#9fbe94",
+  background: "#f5faf2",
+  boxShadow: "0 0 0 2px rgba(91, 130, 79, 0.08)",
 };
 
 const profileIdentityTopStyle: CSSProperties = {
@@ -1099,10 +1269,17 @@ const profileAvatarChangeStyle: CSSProperties = {
   lineHeight: 1.25,
   textAlign: "center",
 };
-const profileIdentityEmailStyle: CSSProperties = { marginTop: 6, color: "#697766", fontSize: 12, lineHeight: 1.4, overflowWrap: "anywhere" };
-const profileIdentityLocationStyle: CSSProperties = { marginTop: 3, color: "#697766", fontSize: 12, lineHeight: 1.4, overflowWrap: "anywhere" };
-const identityIconLinkStyle: CSSProperties = { width: 34, height: 34, display: "grid", placeItems: "center", color: "#52714f", textDecoration: "none" };
+const savedUsernameStyle: CSSProperties = { minHeight: 40, display: "flex", alignItems: "center", color: "#253523", fontSize: 19, fontWeight: 850, lineHeight: 1.3 };
+const profileEditButtonStyle: CSSProperties = { minHeight: 34, flexShrink: 0, border: "1px solid #cad9c4", borderRadius: 999, background: "#fff", color: "#466842", padding: "0 11px", fontSize: 12, fontWeight: 800, cursor: "pointer" };
+const profileIdentityEmailStyle: CSSProperties = { width: "100%", marginTop: 8, padding: "7px 9px", borderRadius: 10, background: "#fff", color: "#536250", fontSize: 14, lineHeight: 1.35, whiteSpace: "nowrap", overflowX: "auto", boxSizing: "border-box" };
 const identityStatsStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginTop: 11, paddingTop: 10, borderTop: "1px solid #e4ece0" };
+const identityStatLinkStyle: CSSProperties = { minWidth: 0, padding: "2px 4px", margin: "-2px -4px", borderRadius: 8, color: "inherit", textDecoration: "none", background: "#f0f7ec" };
+const savedLocationStyle: CSSProperties = { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 10, paddingTop: 9, borderTop: "1px solid #e4ece0", color: "#71806d", fontSize: 12, lineHeight: 1.4 };
+const profileEditPanelStyle: CSSProperties = { display: "grid", gap: 9, marginTop: 11, padding: 10, border: "1px solid #d5e3cf", borderRadius: 13, background: "#fff" };
+const profileEditHeadingStyle: CSSProperties = { color: "#365c34", fontSize: 13, fontWeight: 850 };
+const locationEditGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6, alignItems: "end" };
+const profileEditActionsStyle: CSSProperties = { display: "flex", justifyContent: "flex-end", gap: 7, flexWrap: "wrap" };
+const secondaryEditButtonStyle: CSSProperties = { minHeight: 36, border: "1px solid #d5dfd1", borderRadius: 10, background: "#fff", color: "#536550", padding: "0 12px", fontSize: 13, fontWeight: 750, cursor: "pointer" };
 
 const languageInlineStyle: CSSProperties = {
   minHeight: 58,
@@ -1200,7 +1377,7 @@ const mobileProfileCompactTabStyle: CSSProperties = {
   minWidth: 0,
   minHeight: 50,
   padding: "0 15px",
-  justifyContent: "flex-start",
+  justifyContent: "space-between",
   textAlign: "left",
 };
 
@@ -1208,6 +1385,10 @@ function mobileProfileTabButtonStyle(active: boolean): CSSProperties {
   return {
     minWidth: 0,
     minHeight: 40,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
     border: active ? "1px solid #9bc98f" : "1px solid #dfe8da",
     borderRadius: 13,
     background: active ? "#edf8e9" : "#f7f8f6",
@@ -1225,10 +1406,27 @@ const mobileProfileLinkTabStyle: CSSProperties = {
   ...mobileProfileTabButtonStyle(false),
   display: "flex",
   alignItems: "center",
-  justifyContent: "flex-start",
+  justifyContent: "space-between",
   textAlign: "left",
   textDecoration: "none",
   boxSizing: "border-box",
+};
+
+const mobileInlineModuleStyle: CSSProperties = {
+  minWidth: 0,
+  padding: "0 2px 4px",
+};
+
+const desktopProfileModulesStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "220px minmax(0, 1fr)",
+  gap: 14,
+  alignItems: "start",
+  marginTop: 10,
+};
+
+const desktopProfileModuleContentStyle: CSSProperties = {
+  minWidth: 0,
 };
 
 const adminPaymentAlertStyle: CSSProperties = {
@@ -1538,12 +1736,6 @@ const mobileInputStyle: CSSProperties = {
   fontSize: 13,
 };
 
-const formGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 10,
-};
-
 const primaryButtonStyle: CSSProperties = {
   border: "none",
   background: "#4f7b45",
@@ -1574,18 +1766,6 @@ const secondaryLinkStyle: CSSProperties = {
   fontWeight: 600,
 };
 
-const mobileSecondaryLinkStyle: CSSProperties = {
-  ...secondaryLinkStyle,
-  minHeight: 34,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "0 10px",
-  borderRadius: 10,
-  fontSize: 13,
-  boxSizing: "border-box",
-};
-
 const mobileAdminMembershipEntryStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -1601,13 +1781,6 @@ const mobileAdminMembershipEntryStyle: CSSProperties = {
   fontWeight: 800,
   lineHeight: 1.2,
   boxSizing: "border-box",
-};
-
-const mobileProfileActionRowStyle: CSSProperties = {
-  marginTop: 12,
-  display: "flex",
-  gap: 7,
-  flexWrap: "wrap",
 };
 
 const statsGridStyle: CSSProperties = {

@@ -33,6 +33,7 @@ import {
   isStorageUploadMaintenance,
 } from "@/lib/storage-upload-maintenance";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { extractExternalHttpUrl } from "@/lib/external-url";
 
 type ArchiveOption = {
   id: string;
@@ -77,7 +78,6 @@ export default function EditMarketPostPage() {
   const [archiveId, setArchiveId] = useState("");
   const [locationText, setLocationText] = useState("");
   const [externalUrl, setExternalUrl] = useState("");
-  const [externalLabel, setExternalLabel] = useState("");
 
   const [uploading, setUploading] = useState(false);
   const [workingMediaId, setWorkingMediaId] = useState<string | null>(null);
@@ -139,7 +139,6 @@ export default function EditMarketPostPage() {
       setArchiveId(row.archive_id || "");
       setLocationText(row.location_text || "");
       setExternalUrl(row.external_url || "");
-      setExternalLabel(row.external_label || "");
 
       const [archiveResult, mediaResult] = await Promise.all([
         supabase
@@ -220,8 +219,7 @@ export default function EditMarketPostPage() {
     const safeTitle = title.trim();
     const safeDescription = description.trim();
     const safeLocation = locationText.trim();
-    const safeExternalUrl = normalizeExternalUrl(externalUrl);
-    const safeExternalLabel = externalLabel.trim();
+    const safeExternalUrl = extractExternalHttpUrl(externalUrl);
 
     if (externalUrl.trim() && !safeExternalUrl) {
       setErrorMsg(t.market.invalid_external_link);
@@ -246,7 +244,7 @@ export default function EditMarketPostPage() {
         item_category: itemCategory,
         location_text: safeLocation || null,
         external_url: safeExternalUrl || null,
-        external_label: safeExternalLabel || null,
+        external_label: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", item.id)
@@ -667,16 +665,6 @@ export default function EditMarketPostPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>{t.market.optional_external_label}</label>
-              <input
-                value={externalLabel}
-                onChange={(event) => setExternalLabel(event.target.value)}
-                style={inputStyle}
-                placeholder={t.market.external_label_placeholder}
-              />
-            </div>
-
-            <div>
               <label style={labelStyle}>{t.market.description}</label>
               <textarea
                 value={description}
@@ -709,19 +697,6 @@ export default function EditMarketPostPage() {
       </div>
     </main>
   );
-}
-
-function normalizeExternalUrl(value: string) {
-  const raw = value.trim();
-  if (!raw) return "";
-
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
-    return url.toString();
-  } catch {
-    return "";
-  }
 }
 
 const pageStyle: CSSProperties = {

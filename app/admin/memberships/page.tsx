@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEven
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   formatMembershipDate,
   formatStorageBytes,
@@ -87,6 +88,10 @@ type PendingPaymentQueueRow = {
   submitted_at: string | null;
   created_at: string | null;
   review_note: string | null;
+  payment_destination_key: string | null;
+  payment_destination_label: string | null;
+  payment_destination_url: string | null;
+  payment_destination_version: string | null;
 };
 
 type MembershipRefundQueueRow = {
@@ -512,6 +517,7 @@ export default function AdminMembershipsPage() {
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
   const [accountDeleteAcknowledged, setAccountDeleteAcknowledged] = useState(false);
   const [accountDeleteSaving, setAccountDeleteSaving] = useState(false);
+  const [activeAdminSection, setActiveAdminSection] = useState("overview");
   const paymentSubmittingRef = useRef(false);
 
   const isMobileViewport = viewportWidth < 760;
@@ -544,11 +550,41 @@ export default function AdminMembershipsPage() {
     if (checking || !isAdmin || !window.location.hash) return;
 
     const sectionId = window.location.hash.slice(1);
+    setActiveAdminSection(sectionId);
     const frameId = window.requestAnimationFrame(() => {
       document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
     });
 
     return () => window.cancelAnimationFrame(frameId);
+  }, [checking, isAdmin]);
+
+  useEffect(() => {
+    if (checking || !isAdmin) return;
+    const sectionIds = [
+      "overview",
+      "traffic",
+      "registrations",
+      "payment-review",
+      "refund-review",
+      "capacity",
+      "account-closures",
+    ];
+    const sections = sectionIds
+      .map((id) => document.getElementById(id))
+      .filter((item): item is HTMLElement => Boolean(item));
+    if (sections.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (visible?.target.id) setActiveAdminSection(visible.target.id);
+      },
+      { rootMargin: "-120px 0px -68% 0px", threshold: [0, 0.01] }
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
   }, [checking, isAdmin]);
 
   async function loadRows(searchKeyword = keyword) {
@@ -605,7 +641,7 @@ export default function AdminMembershipsPage() {
 
   async function loadPendingPaymentQueue() {
     setPendingPaymentLoading(true);
-    const { data, error } = await supabase.rpc("admin_list_membership_payment_queue");
+    const { data, error } = await supabase.rpc("admin_list_membership_payment_queue_v2");
 
     if (error) {
       logSupabaseError("load pending membership payment queue error:", error);
@@ -1418,6 +1454,10 @@ export default function AdminMembershipsPage() {
 
   return (
     <main style={currentPageStyle}>
+      <Link href="/profile" style={adminBackLinkStyle}>
+        <UiIcon name="arrow-left" size={15} />
+        {t.admin_memberships.back_profile}
+      </Link>
       <section style={currentHeaderStyle}>
         <div>
           <div style={eyebrowStyle}>{t.admin_memberships.admin_eyebrow}</div>
@@ -1434,13 +1474,13 @@ export default function AdminMembershipsPage() {
         style={adminAnchorNavStyle(isMobileViewport)}
         aria-label={t.admin_memberships.admin_sections_aria}
       >
-        <a href="#overview" style={anchorLinkStyle}>{t.admin_memberships.nav_overview}</a>
-        <a href="#traffic" style={anchorLinkStyle}>{t.admin_memberships.nav_traffic}</a>
-        <a href="#registrations" style={anchorLinkStyle}>{t.admin_memberships.nav_registrations}</a>
-        <a href="#payment-review" style={anchorLinkStyle}>{t.admin_memberships.nav_payments}</a>
-        <a href="#refund-review" style={anchorLinkStyle}>{t.admin_memberships.nav_refunds}</a>
-        <a href="#capacity" style={anchorLinkStyle}>{t.admin_memberships.nav_capacity}</a>
-        <a href="#account-closures" style={anchorLinkStyle}>{t.admin_memberships.nav_account_closures}</a>
+        <a href="#overview" style={adminAnchorLinkStyle(activeAdminSection === "overview")} onClick={() => setActiveAdminSection("overview")}>{t.admin_memberships.nav_overview}</a>
+        <a href="#traffic" style={adminAnchorLinkStyle(activeAdminSection === "traffic")} onClick={() => setActiveAdminSection("traffic")}>{t.admin_memberships.nav_traffic}</a>
+        <a href="#registrations" style={adminAnchorLinkStyle(activeAdminSection === "registrations")} onClick={() => setActiveAdminSection("registrations")}>{t.admin_memberships.nav_registrations}</a>
+        <a href="#payment-review" style={adminAnchorLinkStyle(activeAdminSection === "payment-review")} onClick={() => setActiveAdminSection("payment-review")}>{t.admin_memberships.nav_payments}</a>
+        <a href="#refund-review" style={adminAnchorLinkStyle(activeAdminSection === "refund-review")} onClick={() => setActiveAdminSection("refund-review")}>{t.admin_memberships.nav_refunds}</a>
+        <a href="#capacity" style={adminAnchorLinkStyle(activeAdminSection === "capacity")} onClick={() => setActiveAdminSection("capacity")}>{t.admin_memberships.nav_capacity}</a>
+        <a href="#account-closures" style={adminAnchorLinkStyle(activeAdminSection === "account-closures")} onClick={() => setActiveAdminSection("account-closures")}>{t.admin_memberships.nav_account_closures}</a>
       </nav>
 
       <section
@@ -1659,6 +1699,13 @@ export default function AdminMembershipsPage() {
                   <span>{t.admin_memberships.order_number_prefix}{row.order_number || t.admin_memberships.not_recorded}</span>
                   <span>{getPaymentMethodLabel(row.payment_method, language)}</span>
                   <span>{t.admin_memberships.submitted_at_prefix}{formatMembershipDate(row.submitted_at || row.created_at, language)}</span>
+                </div>
+                <div style={smallTextStyle}>
+                  {t.admin_memberships.payment_destination_prefix}
+                  <strong>{row.payment_destination_label || t.admin_memberships.not_recorded}</strong>
+                  {row.payment_destination_version
+                    ? ` · ${row.payment_destination_version}`
+                    : ""}
                 </div>
                 {row.payment_reference ? (
                   <div style={smallTextStyle}>{t.admin_memberships.transaction_prefix}{row.payment_reference}</div>
@@ -2611,6 +2658,27 @@ const anchorLinkStyle: CSSProperties = {
   color: "#40563a",
   fontSize: 13,
   fontWeight: 700,
+  textDecoration: "none",
+};
+
+function adminAnchorLinkStyle(active: boolean): CSSProperties {
+  return {
+    ...anchorLinkStyle,
+    borderColor: active ? "#8fba83" : anchorLinkStyle.borderColor,
+    background: active ? "#eaf5e5" : anchorLinkStyle.background,
+    color: active ? "#2f6530" : anchorLinkStyle.color,
+    boxShadow: active ? "inset 0 0 0 1px rgba(79, 123, 69, 0.08)" : undefined,
+  };
+}
+
+const adminBackLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  marginBottom: 10,
+  color: "#557050",
+  fontSize: 14,
+  fontWeight: 800,
   textDecoration: "none",
 };
 

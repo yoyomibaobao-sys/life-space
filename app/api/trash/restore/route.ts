@@ -10,7 +10,7 @@ export const revalidate = 0;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type TrashItemType = "archive" | "record" | "media";
+type TrashItemType = "archive" | "cycle" | "record" | "media";
 
 type RestoreRpcRow = {
   ok?: boolean | null;
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
   const type = values.type;
   const id = values.id;
-  if (type !== "archive" && type !== "record" && type !== "media") {
+  if (type !== "archive" && type !== "cycle" && type !== "record" && type !== "media") {
     return noStoreJson({ error: "invalid_type" }, 400);
   }
 
@@ -69,11 +69,13 @@ export async function POST(request: Request) {
 
   const rpcNames: Record<TrashItemType, string> = {
     archive: "restore_archive_from_trash",
+    cycle: "restore_archive_cycle_from_trash",
     record: "restore_record_from_trash",
     media: "restore_media_from_trash",
   };
   const parameterNames: Record<TrashItemType, string> = {
     archive: "p_archive_id",
+    cycle: "p_cycle_id",
     record: "p_record_id",
     media: "p_media_id",
   };

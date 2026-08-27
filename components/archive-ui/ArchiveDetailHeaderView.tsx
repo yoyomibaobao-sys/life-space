@@ -77,6 +77,7 @@ type Props = {
   profileExtra?: ReactNode;
   profileEditor?: ArchiveProfileEditorConfig;
   profileAlwaysOpen?: boolean;
+  showSystemNameInTitle?: boolean;
 };
 
 export default function ArchiveDetailHeaderView({
@@ -93,6 +94,7 @@ export default function ArchiveDetailHeaderView({
   profileExtra,
   profileEditor,
   profileAlwaysOpen = false,
+  showSystemNameInTitle = true,
 }: Props) {
   const { t } = useLanguage();
   const copy = t.archive;
@@ -400,12 +402,12 @@ export default function ArchiveDetailHeaderView({
             <span style={titleTextDisplayStyle}>
               {project.title}
             </span>
-            {project.systemName ? <span style={titleDividerStyle}> · </span> : null}
-            {project.systemName && encyclopediaHref ? (
+            {showSystemNameInTitle && project.systemName ? <span style={titleDividerStyle}> · </span> : null}
+            {showSystemNameInTitle && project.systemName && encyclopediaHref ? (
               <a href={encyclopediaHref} style={systemNameLinkStyle}>
                 {project.systemName}
               </a>
-            ) : project.systemName ? (
+            ) : showSystemNameInTitle && project.systemName ? (
               <span style={systemNameStyle}>{project.systemName}</span>
             ) : null}
             {project.storageLabel ? (
@@ -628,7 +630,9 @@ const systemNameStyle: CSSProperties = {
 
 const systemNameLinkStyle: CSSProperties = {
   ...systemNameStyle,
-  textDecoration: "none",
+  color: "#356f39",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
 };
 
 const statusWrapStyle: CSSProperties = {

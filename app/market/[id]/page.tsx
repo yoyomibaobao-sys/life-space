@@ -18,6 +18,7 @@ import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { requestMarketPostDeletion } from "@/lib/market-media-storage";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { extractExternalHttpUrl } from "@/lib/external-url";
 
 type ProfileBrief = {
   id: string;
@@ -208,6 +209,9 @@ export default function MarketDetailPage() {
   const isLightboxOpen = lightboxImages.length > 0;
   const coverImageUrl = item?.display_cover_image_url || null;
   const coverThumbUrl = item?.display_cover_thumb_url || coverImageUrl;
+  const additionalMarketMedia = marketMedia.filter(
+    (media) => Boolean(media.display_url) && media.display_url !== coverImageUrl
+  );
 
   useEffect(() => {
     if (!isLightboxOpen) return;
@@ -314,10 +318,7 @@ export default function MarketDetailPage() {
   const sourceTime = sourceRecord?.photo_time ? formatSourceRecordTime(sourceRecord.photo_time) : "";
   const sourceNoteText = sourceRecord?.note?.trim() || "";
   const hasSource = Boolean(archive || sourceRecord);
-  const externalUrl = normalizeExternalUrl(item.external_url || "");
-  const externalLabel =
-    item.external_label?.trim() ||
-    getExternalLinkLabel(externalUrl, t.market.open_external_link);
+  const externalUrl = extractExternalHttpUrl(item.external_url || "");
 
   return (
     <>
@@ -356,6 +357,34 @@ export default function MarketDetailPage() {
                   style={coverImageStyle}
                 />
               </button>
+            ) : null}
+
+            {additionalMarketMedia.length > 0 ? (
+              <section style={marketMediaSectionStyle}>
+                <div style={marketMediaTitleStyle}>{t.market.images}</div>
+                <div style={marketMediaGridStyle}>
+                  {additionalMarketMedia.map((media) => {
+                    const mediaImageUrl = media.display_url;
+                    if (!mediaImageUrl) return null;
+                    return (
+                      <button
+                        key={media.id}
+                        type="button"
+                        onClick={() => openMarketLightbox(mediaImageUrl)}
+                        aria-label={t.market.open_image_preview}
+                        style={marketMediaItemStyle}
+                      >
+                        <img
+                          src={media.display_thumb_url || mediaImageUrl}
+                          alt=""
+                          style={marketMediaImageStyle}
+                          loading="lazy"
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             ) : null}
 
             <div style={topRowStyle}>
@@ -441,46 +470,8 @@ export default function MarketDetailPage() {
                   rel="noreferrer noopener"
                   style={externalLinkStyle}
                 >
-                  {externalLabel}
+                  {externalUrl}
                 </a>
-              </section>
-            ) : null}
-
-            {marketMedia.length > 0 ? (
-              <section style={marketMediaSectionStyle}>
-                <div style={marketMediaTitleStyle}>{t.market.images}</div>
-                <div style={marketMediaGridStyle}>
-                  {marketMedia.map((media) => {
-                    const mediaImageUrl = media.display_url;
-                    const isCover = item.cover_image_path
-                      ? item.cover_image_path === media.path
-                      : item.cover_image_url === media.url;
-
-                    if (!mediaImageUrl) return null;
-                    const mediaThumbUrl =
-                      media.display_thumb_url || mediaImageUrl;
-
-                    return (
-                      <button
-                        key={media.id}
-                        type="button"
-                        onClick={() => openMarketLightbox(mediaImageUrl)}
-                        aria-label={t.market.open_image_preview}
-                        style={marketMediaItemStyle}
-                      >
-                        <img
-                          src={mediaThumbUrl}
-                          alt=""
-                          style={marketMediaImageStyle}
-                          loading="lazy"
-                        />
-                        {isCover ? (
-                          <span style={marketMediaCoverBadgeStyle}>{t.market.cover}</span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
               </section>
             ) : null}
 
@@ -549,30 +540,6 @@ export default function MarketDetailPage() {
       ) : null}
     </>
   );
-}
-
-function normalizeExternalUrl(value?: string | null) {
-  const raw = (value || "").trim();
-  if (!raw) return "";
-
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
-    return url.toString();
-  } catch {
-    return "";
-  }
-}
-
-function getExternalLinkLabel(url: string, fallback: string) {
-  if (!url) return fallback;
-
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./, "") || fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 function buildMarketLightboxImages(
@@ -850,18 +817,6 @@ const marketMediaImageStyle: CSSProperties = {
   aspectRatio: "1 / 1",
   objectFit: "cover",
   display: "block",
-};
-
-const marketMediaCoverBadgeStyle: CSSProperties = {
-  position: "absolute",
-  right: 6,
-  top: 6,
-  background: "#4f7b45",
-  color: "#fff",
-  borderRadius: 999,
-  padding: "3px 7px",
-  fontSize: 11,
-  fontWeight: 700,
 };
 
 const publisherLinkStyle: CSSProperties = {

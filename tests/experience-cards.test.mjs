@@ -777,8 +777,9 @@ test("guidance counts and public navigation use compact non-duplicated entries",
   );
   assert.match(
     archiveDetail,
-    /aria-label=\{`\$\{archiveCopy\.enter_user_space_prefix\}\$\{displayUsername\}\$\{archiveCopy\.enter_user_space_suffix\}`\}/
+    /archiveCopy\.enter_user_space_prefix\}\{displayUsername\}\{archiveCopy\.enter_user_space_suffix/
   );
+  assert.match(archiveDetail, /style=\{attributeCreatorLinkStyle\}/);
   assert.doesNotMatch(archiveHeader, /进入\{username\}的空间/);
 
   assert.match(discoverHeader, /href="\/discover\/search"/);

@@ -153,6 +153,10 @@ function ProfileFlowersContent() {
 
   return (
     <main style={{ maxWidth: 920, margin: "0 auto", padding: "24px 16px 48px" }}>
+      <Link href="/profile" style={backLinkStyle}>
+        <UiIcon name="arrow-left" size={15} />
+        {helpfulT.back}
+      </Link>
       <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -163,7 +167,6 @@ function ProfileFlowersContent() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/profile" style={linkStyle}>{helpfulT.back}</Link>
             <Link href="/follow" style={linkStyle}>{helpfulT.following}</Link>
           </div>
         </div>
@@ -308,6 +311,17 @@ const linkStyle: React.CSSProperties = {
   padding: "11px 16px",
   fontSize: 14,
   fontWeight: 600,
+};
+
+const backLinkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  marginBottom: 10,
+  color: "#557050",
+  fontSize: 14,
+  fontWeight: 800,
+  textDecoration: "none",
 };
 
 const dangerButtonStyle: React.CSSProperties = {

@@ -26,11 +26,9 @@ export default function ArchiveDetailHeader({
   latestUpdate,
   recordCount,
   encyclopediaHref,
-  isProjectFollowed,
   systemNameCandidates,
   systemNameMode,
   onToggleArchiveVisibility,
-  onToggleProjectFollow,
   onToggleArchiveStatus,
   onDeleteArchive,
   onSaveTitle,
@@ -51,11 +49,9 @@ export default function ArchiveDetailHeader({
   latestUpdate?: string | null;
   recordCount: number;
   encyclopediaHref?: string | null;
-  isProjectFollowed: boolean;
   systemNameCandidates?: ArchiveSystemNameCandidate[];
   systemNameMode?: "candidate" | "text";
   onToggleArchiveVisibility: () => void;
-  onToggleProjectFollow: () => void;
   onToggleArchiveStatus?: () => void;
   onDeleteArchive?: () => void;
   onSaveTitle?: (value: string) => Promise<void> | void;
@@ -115,7 +111,15 @@ export default function ArchiveDetailHeader({
     { label: copy.category, value: localizedCategoryLabel, field: "category" as const },
     {
       label: systemNameLabel,
-      value: systemNameText,
+      value: encyclopediaHref ? (
+        <a
+          href={encyclopediaHref}
+          onClick={(event) => event.stopPropagation()}
+          style={guideProfileLinkStyle}
+        >
+          {systemNameText}
+        </a>
+      ) : systemNameText,
       field: "systemName" as const,
     },
     { label: copy.source, value: archive.source || copy.not_filled, field: "source" as const },
@@ -171,46 +175,6 @@ export default function ArchiveDetailHeader({
     }
   }
 
-  const actionSlot = (
-    <>
-      {mode === "owner" ? (
-        <button
-          type="button"
-          onClick={onToggleArchiveVisibility}
-          style={{
-            fontSize: 13,
-            padding: "9px 14px",
-            borderRadius: 999,
-            border: archive.is_public ? "1px solid #b7dfbb" : "1px solid #ddd",
-            background: archive.is_public ? "#f1fff3" : "#f7f7f7",
-            color: archive.is_public ? "#2f6f3a" : "#666",
-            cursor: "pointer",
-          }}
-        >
-          {archive.is_public ? copy.public_discover : copy.private_only}
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={onToggleProjectFollow}
-          style={{
-            fontSize: 14,
-            padding: "10px 16px",
-            borderRadius: 999,
-            border: isProjectFollowed ? "1px solid #d6dde9" : "1px solid #c8dfc5",
-            background: isProjectFollowed ? "#f5f7fa" : "#edf7ea",
-            color: isProjectFollowed ? "#4f5e73" : "#35693d",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {isProjectFollowed ? copy.followed_project : copy.follow_project}
-        </button>
-      )}
-
-    </>
-  );
-
   return (
     <ArchiveDetailHeaderView
       project={projectView}
@@ -230,7 +194,6 @@ export default function ArchiveDetailHeader({
       recordCountText={`${copy.records} ${recordCount}`}
       durationText={ongoingDays ? durationText : undefined}
       encyclopediaHref={encyclopediaHref}
-      actionSlot={actionSlot}
       profileRows={profileRows}
       profileEditor={
         mode === "owner"
@@ -270,6 +233,7 @@ export default function ArchiveDetailHeader({
       }
       profileExtra={profileExtra}
       profileAlwaysOpen
+      showSystemNameInTitle={false}
     />
   );
 }
@@ -325,4 +289,11 @@ const profileDangerButtonStyle = {
   ...profileActionButtonStyle,
   color: "#c85f5a",
   border: "1px solid #efd8d5",
+} as const;
+
+const guideProfileLinkStyle = {
+  color: "#356f39",
+  fontWeight: 750,
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
 } as const;

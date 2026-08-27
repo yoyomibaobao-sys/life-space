@@ -1148,6 +1148,7 @@ export default function PlantDetailPage() {
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [projectChooserOpen, setProjectChooserOpen] = useState(false);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -1390,11 +1391,13 @@ export default function PlantDetailPage() {
         fromRecord ? `?record=${encodeURIComponent(fromRecord)}` : ""
       }`
     : null;
-  const newProjectHref = hasCloudAccess
-    ? `/archive/new?species=${encodeURIComponent(plant?.id || id || "")}`
-    : `/local/archive/new?category=plant&plant_id=${encodeURIComponent(
-        plant?.id || id || ""
-      )}&system_name=${encodeURIComponent(displayName)}`;
+  const plantProjectId = encodeURIComponent(plant?.id || id || "");
+  const cloudProjectHref = hasCloudAccess
+    ? `/archive/new?species=${plantProjectId}`
+    : isSignedIn
+      ? "/membership"
+      : buildLoginHref(`/archive/new?species=${plantProjectId}`);
+  const localProjectHref = `/local/archive/new?category=plant&plant_id=${plantProjectId}&system_name=${encodeURIComponent(displayName)}`;
 
   const difficulty = difficultyMeta(parameters?.management_difficulty_score, copy);
   const environmentTags = getEnvironmentTags(
@@ -1676,42 +1679,49 @@ export default function PlantDetailPage() {
             {copy.back_to_record}
           </Link>
         ) : null}
-        <Link href="/plant" style={{ color: "#666", fontSize: 14 }}>
+        <Link href="/plant" className={styles.backLink}>
           <UiIcon name="arrow-left" size={15} /> {t.plant.back_to_guide}
         </Link>
-        {!isMobileViewport ? (
+        {isMobileViewport ? (
+          <span className={styles.archiveLabel}>{copy.plant_archive}</span>
+        ) : (
           <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
             {copy.back_to_space}
           </Link>
-        ) : null}
+        )}
       </div>
 
       <section className={styles.hero}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              padding: "2px 8px",
-              border: "1px solid #dcebd5",
-              borderRadius: 999,
-              color: "#4d7044",
-              background: "#f7fbf4",
-              fontSize: 12,
-              fontWeight: 700,
-            }}
+        <div className={styles.heroHeadingRow}>
+          <h1 className={styles.heroTitle}>{displayName}</h1>
+          <button
+            type="button"
+            className={styles.heroAction}
+            onClick={() => setProjectChooserOpen(true)}
           >
-            {copy.plant_archive}
-          </span>
-        </div>
+            {copy.new_project}
+          </button>
 
-        <h1 className={styles.heroTitle}>{displayName}</h1>
+          {hasCloudAccess || interestAdded ? (
+            <button
+              type="button"
+              onClick={handleAddInterest}
+              disabled={actionLoading !== null}
+              className={styles.heroAction}
+              style={{
+                background: interestAdded ? "#f5faf5" : "#fff",
+                color: interestAdded ? "#5f7f5f" : "#2f6f35",
+                cursor: actionLoading !== null ? "default" : "pointer",
+              }}
+            >
+              {interestAdded
+                ? copy.saved
+                : actionLoading === "interest"
+                  ? copy.adding
+                  : copy.add_to_saved}
+            </button>
+          ) : null}
+        </div>
 
         <div className={styles.heroMeta}>
           {plant.scientific_name && <div>{t.plant.scientific_name}{plant.scientific_name}</div>}
@@ -1796,37 +1806,6 @@ export default function PlantDetailPage() {
             ))}
           </div>
         )}
-
-
-        <div className={styles.heroActions}>
-          <Link
-            href={newProjectHref}
-            className={styles.heroAction}
-          >
-            {hasCloudAccess ? copy.new_cloud_project : copy.new_local_project}
-          </Link>
-
-          {hasCloudAccess || interestAdded ? (
-              <button
-                type="button"
-                onClick={handleAddInterest}
-                disabled={actionLoading !== null}
-                className={styles.heroAction}
-                style={{
-                  background: interestAdded ? "#f5faf5" : "#fff",
-                  color: interestAdded ? "#5f7f5f" : "#2f6f35",
-                  cursor: actionLoading !== null ? "default" : "pointer",
-                }}
-              >
-                {interestAdded
-                  ? copy.saved
-                  : actionLoading === "interest"
-                    ? copy.adding
-                    : copy.add_to_saved}
-              </button>
-          ) : null}
-        </div>
-
         {actionMessage && (
           <div
             style={{
@@ -2034,6 +2013,42 @@ export default function PlantDetailPage() {
         ) : (
           <PlantTabAccessNotice label={copy.related_growing_records} copy={copy} />
         )
+      ) : null}
+
+      {projectChooserOpen ? (
+        <div
+          className={styles.chooserBackdrop}
+          role="presentation"
+          onMouseDown={() => setProjectChooserOpen(false)}
+        >
+          <section
+            className={styles.chooserDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="project-type-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h2 id="project-type-title" className={styles.chooserTitle}>
+              {copy.choose_project_type}
+            </h2>
+            <p className={styles.chooserHint}>{copy.choose_project_type_hint}</p>
+            <div className={styles.chooserActions}>
+              <Link href={localProjectHref} className={styles.chooserOption}>
+                {copy.new_local_project}
+              </Link>
+              <Link href={cloudProjectHref} className={styles.chooserOption}>
+                {copy.new_cloud_project}
+              </Link>
+            </div>
+            <button
+              type="button"
+              className={styles.chooserCancel}
+              onClick={() => setProjectChooserOpen(false)}
+            >
+              {t.cancel}
+            </button>
+          </section>
+        </div>
       ) : null}
     </main>
   );

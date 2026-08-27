@@ -59,12 +59,12 @@ const plantTerminology: ArchiveCycleTerminology = {
   deleteTitle: (cycleNo) => `删除第${cycleNo}茬？`,
   deleteMessage: (recordCount) =>
     recordCount > 0
-      ? `这茬包含 ${recordCount} 条记录。\n删除茬后，这些记录会保留并移到“未分茬记录”。`
-      : "删除后无法恢复。",
+      ? `这茬包含 ${recordCount} 条记录。删除后会连同记录和照片整组移入回收站，可从回收站恢复。`
+      : "删除后会移入回收站，可从回收站恢复。",
   deleteSuccess: (cycleNo, movedRecordCount) =>
     movedRecordCount > 0
-      ? `已删除第${cycleNo}茬，${movedRecordCount}条记录已移到未分茬。`
-      : `已删除第${cycleNo}茬。`,
+      ? `第${cycleNo}茬及${movedRecordCount}条记录已移入回收站。`
+      : `第${cycleNo}茬已移入回收站。`,
   recordAssignedSuccess: "记录茬次已更新。",
   recordUnassignedSuccess: "记录已设为未分茬。",
 };
@@ -96,12 +96,12 @@ const roundTerminology: ArchiveCycleTerminology = {
   deleteTitle: (cycleNo) => `删除第${cycleNo}轮？`,
   deleteMessage: (recordCount) =>
     recordCount > 0
-      ? `本轮包含 ${recordCount} 条记录。\n删除本轮后，这些记录会保留并移到“未归入轮次的记录”。`
-      : "删除后无法恢复。",
+      ? `本轮包含 ${recordCount} 条记录。删除后会连同记录和照片整组移入回收站，可从回收站恢复。`
+      : "删除后会移入回收站，可从回收站恢复。",
   deleteSuccess: (cycleNo, movedRecordCount) =>
     movedRecordCount > 0
-      ? `已删除第${cycleNo}轮，${movedRecordCount}条记录已移到未归入轮次。`
-      : `已删除第${cycleNo}轮。`,
+      ? `第${cycleNo}轮及${movedRecordCount}条记录已移入回收站。`
+      : `第${cycleNo}轮已移入回收站。`,
   recordAssignedSuccess: "记录轮次已更新。",
   recordUnassignedSuccess: "记录已设为未归入轮次。",
 };
@@ -133,12 +133,12 @@ const plantTerminologyEn: ArchiveCycleTerminology = {
   deleteTitle: (cycleNo) => `Delete crop ${cycleNo}?`,
   deleteMessage: (recordCount) =>
     recordCount > 0
-      ? `This crop cycle contains ${recordCount} records.\nDeleting the cycle keeps those records and moves them to “Records without a crop cycle”.`
-      : "This cannot be undone.",
+      ? `This crop cycle contains ${recordCount} records. The cycle, records, and photos will move to Trash together and can be restored there.`
+      : "This crop cycle will move to Trash and can be restored there.",
   deleteSuccess: (cycleNo, movedRecordCount) =>
     movedRecordCount > 0
-      ? `Crop ${cycleNo} deleted. ${movedRecordCount} records were moved out of the cycle.`
-      : `Crop ${cycleNo} deleted.`,
+      ? `Crop ${cycleNo} and ${movedRecordCount} records moved to Trash.`
+      : `Crop ${cycleNo} moved to Trash.`,
   recordAssignedSuccess: "The record’s crop cycle was updated.",
   recordUnassignedSuccess: "The record is no longer assigned to a crop cycle.",
 };
@@ -170,12 +170,12 @@ const roundTerminologyEn: ArchiveCycleTerminology = {
   deleteTitle: (cycleNo) => `Delete round ${cycleNo}?`,
   deleteMessage: (recordCount) =>
     recordCount > 0
-      ? `This round contains ${recordCount} records.\nDeleting the round keeps those records and moves them to “Records without a round”.`
-      : "This cannot be undone.",
+      ? `This round contains ${recordCount} records. The round, records, and photos will move to Trash together and can be restored there.`
+      : "This round will move to Trash and can be restored there.",
   deleteSuccess: (cycleNo, movedRecordCount) =>
     movedRecordCount > 0
-      ? `Round ${cycleNo} deleted. ${movedRecordCount} records were moved out of the round.`
-      : `Round ${cycleNo} deleted.`,
+      ? `Round ${cycleNo} and ${movedRecordCount} records moved to Trash.`
+      : `Round ${cycleNo} moved to Trash.`,
   recordAssignedSuccess: "The record’s round was updated.",
   recordUnassignedSuccess: "The record is no longer assigned to a round.",
 };

@@ -7,8 +7,27 @@
 .backRow {
   margin-bottom: 16px;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4d7044;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.archiveLabel {
+  color: #536552;
+  font-size: 14px;
+  font-weight: 750;
 }
 
 .hero {
@@ -25,6 +44,13 @@
   line-height: 1.25;
 }
 
+.heroHeadingRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
 .heroMeta {
   margin-top: 10px;
   color: #666;
@@ -36,14 +62,6 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-}
-
-.heroActions {
-  margin-top: 22px;
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  flex-wrap: wrap;
 }
 
 .heroAction {
@@ -66,6 +84,69 @@
   text-decoration: none;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.chooserBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(31, 42, 29, 0.42);
+}
+
+.chooserDialog {
+  width: min(430px, 100%);
+  padding: 20px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 54px rgba(24, 34, 23, 0.24);
+}
+
+.chooserTitle {
+  margin: 0;
+  color: #253725;
+  font-size: 21px;
+}
+
+.chooserHint {
+  margin: 9px 0 16px;
+  color: #6b7868;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.chooserActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.chooserOption,
+.chooserCancel {
+  min-height: 46px;
+  display: grid;
+  place-items: center;
+  padding: 9px 12px;
+  border: 1px solid #cfe1d0;
+  border-radius: 12px;
+  background: #f8fbf6;
+  color: #315d33;
+  font: inherit;
+  font-weight: 750;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chooserCancel {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 9px;
+  border-color: transparent;
+  background: transparent;
+  color: #697567;
 }
 
 .parameterGrid {
@@ -148,8 +229,9 @@
   }
 
   .backRow {
-    margin-bottom: 10px;
+    margin-bottom: 6px;
     gap: 9px;
+    min-height: 38px;
   }
 
   .hero {
@@ -159,7 +241,15 @@
   }
 
   .heroTitle {
+    min-width: 0;
+    overflow: hidden;
     font-size: 25px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .heroHeadingRow {
+    gap: 6px;
   }
 
   .heroMeta {
@@ -179,20 +269,17 @@
     backdrop-filter: blur(8px);
   }
 
-  .heroActions {
-    margin-top: 16px;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+  .heroAction {
+    min-height: 40px;
+    padding: 7px 9px;
+    border-radius: 11px;
+    font-size: 12.5px;
+    line-height: 1.25;
+    white-space: nowrap;
   }
 
-  .heroAction {
-    width: 100%;
-    min-height: 54px;
-    padding: 9px 7px;
-    border-radius: 12px;
-    font-size: 13px;
-    line-height: 1.35;
+  .chooserActions {
+    grid-template-columns: 1fr;
   }
 
   .parameterGrid {

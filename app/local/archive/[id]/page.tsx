@@ -51,7 +51,9 @@ import {
   endLocalArchiveCycle,
   getLocalArchiveDetail,
   markLocalArchiveForOwner,
+  restoreLocalArchiveCycle,
   updateLocalArchiveCycleDates,
+  updateLocalArchiveCycleName,
   updateLocalArchiveFields,
   updateLocalRecordFields,
   type LocalArchiveOwnerContext,
@@ -442,16 +444,8 @@ export default function LocalArchiveDetailPage() {
       const cycle = await createLocalArchiveCycle(
         archiveId,
         startedAt,
-        ownerContext,
-        detail?.archive.next_cycle_name
+        ownerContext
       );
-      if (detail?.archive.next_cycle_name) {
-        await updateLocalArchiveFields(
-          archiveId,
-          { next_cycle_name: null },
-          ownerContext
-        );
-      }
       showToast(cycleTerminology.startSuccess(cycle.cycle_no));
       await loadDetail();
     } catch (err) {
@@ -497,6 +491,25 @@ export default function LocalArchiveDetailPage() {
     }
   }
 
+  async function renameLocalCycle(cycle: ArchiveCycle, displayName: string) {
+    if (!archiveId || cycleBusy) return;
+    setCycleBusy(true);
+    try {
+      await updateLocalArchiveCycleName(
+        archiveId,
+        cycle.id,
+        displayName,
+        ownerContext
+      );
+      showToast(archiveCopy.cycle_name_saved);
+      await loadDetail();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : archiveCopy.cycle_name_failed);
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
   async function deleteLocalCycle(cycle: ArchiveCycle) {
     if (!archiveId || cycleBusy) return false;
     setCycleBusy(true);
@@ -517,6 +530,23 @@ export default function LocalArchiveDetailPage() {
       console.error("delete local archive cycle failed", err);
       showToast(recordCopy.delete_failed);
       return false;
+    } finally {
+      setCycleBusy(false);
+    }
+  }
+
+  async function restoreLocalCycle(trashEntryId: string) {
+    if (!archiveId || cycleBusy) return;
+    setCycleBusy(true);
+    try {
+      await restoreLocalArchiveCycle(archiveId, trashEntryId, ownerContext);
+      showToast(archiveCopy.cycle_restored);
+      await loadDetail();
+    } catch (err) {
+      console.error("restore local archive cycle failed", err);
+      showToast(
+        err instanceof Error ? err.message : archiveCopy.cycle_restore_failed
+      );
     } finally {
       setCycleBusy(false);
     }
@@ -672,10 +702,8 @@ export default function LocalArchiveDetailPage() {
 
   async function saveLocalCycleSettings({
     enabled,
-    nextName,
   }: {
     enabled: boolean;
-    nextName: string;
   }) {
     if (!archiveId || cycleSettingsSaving) return;
     setCycleSettingsSaving(true);
@@ -684,7 +712,7 @@ export default function LocalArchiveDetailPage() {
         archiveId,
         {
           cycle_enabled: enabled,
-          next_cycle_name: nextName.trim().slice(0, 80) || null,
+          next_cycle_name: null,
         },
         ownerContext
       );
@@ -983,13 +1011,48 @@ export default function LocalArchiveDetailPage() {
             </div>
           }
           profileExtra={
-            <ArchiveCycleSettings
-              key={`${archive.id}:${archive.next_cycle_name || ""}`}
-              enabled={cycleEnabled}
-              nextName={archive.next_cycle_name}
-              busy={cycleSettingsSaving}
-              onSave={saveLocalCycleSettings}
-            />
+            <div style={localCycleProfileExtraStyle}>
+              <ArchiveCycleSettings
+                key={archive.id}
+                enabled={cycleEnabled}
+                busy={cycleSettingsSaving}
+                onSave={saveLocalCycleSettings}
+              />
+              {(archive.trashed_cycles || []).length > 0 ? (
+                <section style={localCycleTrashStyle}>
+                  <div style={localCycleTrashTitleStyle}>
+                    {archiveCopy.deleted_cycles}（{archive.trashed_cycles?.length || 0}）
+                  </div>
+                  <div style={localCycleTrashHintStyle}>
+                    {archiveCopy.deleted_cycles_hint}
+                  </div>
+                  <div style={localCycleTrashListStyle}>
+                    {(archive.trashed_cycles || []).map((item) => (
+                      <div key={item.id} style={localCycleTrashRowStyle}>
+                        <div style={localCycleTrashNameStyle}>
+                          <strong>
+                            {item.cycle.display_name ||
+                              cycleTerminology.cycleLabel(item.cycle.cycle_no)}
+                          </strong>
+                          <span>
+                            {formatLocalCycleDate(item.cycle.started_at)} · {item.record_ids.length}
+                            {language === "en" ? ` ${archiveCopy.records}` : `条${archiveCopy.records}`}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => restoreLocalCycle(item.id)}
+                          disabled={cycleBusy}
+                          style={localCycleRestoreButtonStyle}
+                        >
+                          {archiveCopy.restore_cycle}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
           }
         />
       </section>
@@ -1258,13 +1321,13 @@ export default function LocalArchiveDetailPage() {
         cycles={cycleEnabled ? cycles : []}
         records={localRecordItems}
         category={archive.category}
-        nextCycleName={archive.next_cycle_name}
         mobileMode={isMobileViewport}
         canManage={cycleEnabled}
         busy={cycleBusy}
         onStartCycle={cycleEnabled ? startLocalCycle : undefined}
         onEndCycle={cycleEnabled ? endLocalCycle : undefined}
         onUpdateCycleDates={cycleEnabled ? updateLocalCycleDates : undefined}
+        onRenameCycle={cycleEnabled ? renameLocalCycle : undefined}
         onDeleteCycle={cycleEnabled ? deleteLocalCycle : undefined}
         emptyState={
           <div style={emptyRecordsStyle}>
@@ -1410,6 +1473,66 @@ const localProfileActionsStyle = {
   justifyContent: "flex-end",
   gap: 10,
   flexWrap: "wrap",
+} satisfies CSSProperties;
+
+const localCycleProfileExtraStyle = {
+  display: "grid",
+  gap: 12,
+} satisfies CSSProperties;
+
+const localCycleTrashStyle = {
+  borderTop: "1px solid #e4eadf",
+  paddingTop: 12,
+} satisfies CSSProperties;
+
+const localCycleTrashTitleStyle = {
+  color: "#344b32",
+  fontSize: 14,
+  fontWeight: 850,
+} satisfies CSSProperties;
+
+const localCycleTrashHintStyle = {
+  marginTop: 4,
+  color: "#7b8878",
+  fontSize: 12,
+  lineHeight: 1.55,
+} satisfies CSSProperties;
+
+const localCycleTrashListStyle = {
+  display: "grid",
+  gap: 7,
+  marginTop: 9,
+} satisfies CSSProperties;
+
+const localCycleTrashRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  border: "1px solid #e0e7dc",
+  borderRadius: 12,
+  background: "#fbfcf9",
+  padding: "9px 10px",
+} satisfies CSSProperties;
+
+const localCycleTrashNameStyle = {
+  minWidth: 0,
+  display: "grid",
+  gap: 2,
+  color: "#657062",
+  fontSize: 12,
+} satisfies CSSProperties;
+
+const localCycleRestoreButtonStyle = {
+  flex: "0 0 auto",
+  border: "1px solid #cbdcc4",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#41643c",
+  fontSize: 13,
+  fontWeight: 800,
+  padding: "6px 11px",
+  cursor: "pointer",
 } satisfies CSSProperties;
 
 const headerActionSlotStyle = {

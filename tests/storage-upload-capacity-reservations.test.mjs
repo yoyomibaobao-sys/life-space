@@ -259,7 +259,8 @@ test("market uploads are target-bound and shared record media is not reserved ag
   assert.match(migration, /add column upload_reservation_id uuid/i);
   assert.match(migration, /foreign key \(cover_upload_reservation_id, user_id\)/i);
   assert.match(migration, /foreign key \(upload_reservation_id, user_id\)/i);
-  assert.match(createPage, /targetType: "market_cover"/);
+  assert.match(createPage, /targetType: "market_media"/);
+  assert.match(createPage, /setMarketPostCover/);
   assert.match(editPage, /targetType: "market_media"/);
   assert.match(createPage, /source_media_id: item\.id/);
   assert.match(migration, /shared_media_must_not_use_reservation/);

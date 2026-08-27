@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
 export type CloudTrashKind = "archives" | "records" | "media";
-export type CloudTrashItemType = "archive" | "record" | "media";
+export type CloudTrashItemType = "archive" | "cycle" | "record" | "media";
 export type CloudTrashItemStatus = "active" | "purging" | "failed";
 
 export type CloudTrashItem = {

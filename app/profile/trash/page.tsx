@@ -13,6 +13,7 @@ import {
 
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   emptyCloudTrash,
   fetchCloudTrash,
@@ -26,6 +27,12 @@ import { buildLoginHref } from "@/lib/auth-return";
 import { formatPreciseDateTime } from "@/lib/date-time";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
+import {
+  listLocalArchiveCycleTrash,
+  restoreLocalArchiveCycle,
+  type LocalArchiveOwnerContext,
+  type LocalArchiveCycleTrashListItem,
+} from "@/lib/local-offline-db";
 
 type LoadOptions = {
   silent?: boolean;
@@ -37,10 +44,17 @@ export default function CloudTrashPage() {
   const trashT = t.profile.trash_page;
   const loadSequence = useRef(0);
   const [items, setItems] = useState<CloudTrashItem[]>([]);
+  const [localCycleItems, setLocalCycleItems] = useState<
+    LocalArchiveCycleTrashListItem[]
+  >([]);
+  const [localOwnerContext, setLocalOwnerContext] =
+    useState<LocalArchiveOwnerContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<CloudTrashItem | null>(null);
+  const [localRestoreTarget, setLocalRestoreTarget] =
+    useState<LocalArchiveCycleTrashListItem | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<CloudTrashItem | null>(null);
   const [emptyConfirmOpen, setEmptyConfirmOpen] = useState(false);
   const [actionKey, setActionKey] = useState<string | null>(null);
@@ -92,6 +106,21 @@ export default function CloudTrashPage() {
       if (userResult.error || !userResult.data.user) {
         router.replace(buildLoginHref("/profile/trash"));
         return;
+      }
+
+      try {
+        const user = userResult.data.user;
+        const ownerContext = {
+          userId: user.id,
+          email: user.email || null,
+        } satisfies LocalArchiveOwnerContext;
+        setLocalOwnerContext(ownerContext);
+        setLocalCycleItems(
+          await listLocalArchiveCycleTrash(ownerContext)
+        );
+      } catch (localError) {
+        console.warn("load local cycle trash failed", localError);
+        setLocalCycleItems([]);
       }
 
       await loadTrash(controller.signal);
@@ -152,6 +181,30 @@ export default function CloudTrashPage() {
         ? trashT.photo_restored
         : trashT.restored,
     );
+  }
+
+  async function confirmLocalRestore() {
+    if (!localRestoreTarget || actionBusy) return;
+
+    const target = localRestoreTarget;
+    setActionKey(`local-restore:${target.trash.id}`);
+    try {
+      await restoreLocalArchiveCycle(
+        target.archive_id,
+        target.trash.id,
+        localOwnerContext
+      );
+      setLocalCycleItems((current) =>
+        current.filter((item) => item.trash.id !== target.trash.id)
+      );
+      setLocalRestoreTarget(null);
+      showToast(trashT.local_cycle_restored);
+    } catch (restoreError) {
+      console.error("restore local cycle from trash failed", restoreError);
+      showToast(trashT.restore_failed);
+    } finally {
+      setActionKey(null);
+    }
   }
 
   async function confirmPurge() {
@@ -236,11 +289,12 @@ export default function CloudTrashPage() {
 
   return (
     <main style={pageStyle}>
+      <Link href="/profile" style={backLinkStyle}>
+        <UiIcon name="arrow-left" size={15} />
+        {trashT.back}
+      </Link>
       <div style={topRowStyle}>
-        <div>
-          <div style={eyebrowStyle}>{trashT.cloud_content}</div>
-          <h1 style={titleStyle}>{trashT.title}</h1>
-        </div>
+        <h1 style={titleStyle}>{trashT.title}</h1>
         <div style={topActionsStyle}>
           {activeCount > 0 ? (
             <button
@@ -252,9 +306,6 @@ export default function CloudTrashPage() {
               {trashT.empty_trash}
             </button>
           ) : null}
-          <Link href="/profile" style={backLinkStyle}>
-            {trashT.back}
-          </Link>
         </div>
       </div>
 
@@ -262,6 +313,60 @@ export default function CloudTrashPage() {
         <strong>{trashT.capacity_notice}</strong>
         <span>{trashT.recover_notice}</span>
       </section>
+
+      {localCycleItems.length > 0 ? (
+        <section style={localTrashSectionStyle} aria-label={trashT.local_list_aria}>
+          <div style={sectionHeadingRowStyle}>
+            <h2 style={sectionHeadingStyle}>{trashT.local_content}</h2>
+            <span style={sectionCountStyle}>{localCycleItems.length}</span>
+          </div>
+          <p style={localTrashNoticeStyle}>{trashT.local_cycle_notice}</p>
+          <div style={listStyle}>
+            {localCycleItems.map((item) => (
+              <article key={item.trash.id} style={itemStyle}>
+                <div style={previewStyle}>
+                  <span style={previewPlaceholderStyle} aria-hidden="true">
+                    {trashT.cycle}
+                  </span>
+                </div>
+                <div style={itemContentStyle}>
+                  <div style={itemMetaRowStyle}>
+                    <span style={typeChipStyle}>{trashT.cycle}</span>
+                    <time dateTime={item.trash.deleted_at} style={deletedTimeStyle}>
+                      {formatDeletedAt(item.trash.deleted_at, trashT)}
+                    </time>
+                  </div>
+                  <h2 style={itemTitleStyle}>
+                    {item.trash.cycle.display_name ||
+                      `${trashT.cycle} ${item.trash.cycle.cycle_no}`}
+                  </h2>
+                  <div style={parentTitleStyle}>
+                    {trashT.original_project}{item.archive_title}
+                  </div>
+                  <div style={countStyle}>
+                    {trashT.record_prefix} {item.trash.record_ids.length}{trashT.item_suffix}
+                  </div>
+                </div>
+                <div style={itemActionsStyle}>
+                  <button
+                    type="button"
+                    onClick={() => setLocalRestoreTarget(item)}
+                    disabled={actionBusy}
+                    style={restoreButtonStyle}
+                  >
+                    {trashT.restore}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <div style={sectionHeadingRowStyle}>
+        <h2 style={sectionHeadingStyle}>{trashT.cloud_content}</h2>
+        <span style={sectionCountStyle}>{items.length}</span>
+      </div>
 
       {refreshError && items.length > 0 ? (
         <div style={refreshErrorStyle} role="status">
@@ -290,7 +395,9 @@ export default function CloudTrashPage() {
           </button>
         </section>
       ) : items.length === 0 ? (
-        <section style={stateStyle}>{trashT.empty}</section>
+        <section style={stateStyle}>
+          {localCycleItems.length > 0 ? trashT.cloud_empty : trashT.empty}
+        </section>
       ) : (
         <section style={listStyle} aria-label={trashT.list_aria}>
           {items.map((item) => {
@@ -400,6 +507,20 @@ export default function CloudTrashPage() {
       />
 
       <ConfirmDialog
+        open={Boolean(localRestoreTarget)}
+        title={`${trashT.restore_title_prefix}${trashT.cycle}`}
+        message={trashT.restore_message}
+        confirmText={actionKey?.startsWith("local-restore:") ? trashT.restoring : trashT.restore}
+        cancelText={trashT.cancel}
+        confirmDisabled={actionBusy}
+        cancelDisabled={actionBusy}
+        onClose={() => {
+          if (!actionBusy) setLocalRestoreTarget(null);
+        }}
+        onConfirm={confirmLocalRestore}
+      />
+
+      <ConfirmDialog
         open={Boolean(purgeTarget)}
         title={trashT.purge_title}
         message={purgeTarget ? getPurgeConfirmMessage(purgeTarget.type, trashT) : trashT.purge_fallback}
@@ -439,6 +560,7 @@ function getTrashTypeLabel(
   translations: TrashTranslations
 ) {
   if (type === "archive") return translations.project;
+  if (type === "cycle") return translations.cycle;
   if (type === "record") return translations.record;
   return translations.photo;
 }
@@ -452,6 +574,9 @@ function getPurgeConfirmMessage(
   }
   if (type === "record") {
     return translations.record_purge_message;
+  }
+  if (type === "cycle") {
+    return translations.cycle_purge_message;
   }
   return translations.purge_fallback;
 }
@@ -480,9 +605,8 @@ const topActionsStyle: CSSProperties = {
   gap: 10,
   flexWrap: "wrap",
 };
-const eyebrowStyle: CSSProperties = { color: "#6a7d63", fontSize: 13 };
-const titleStyle: CSSProperties = { margin: "4px 0 0", color: "#1f2a1f", fontSize: 27 };
-const backLinkStyle: CSSProperties = { color: "#4e6948", fontSize: 14 };
+const titleStyle: CSSProperties = { margin: 0, color: "#1f2a1f", fontSize: 27 };
+const backLinkStyle: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, marginBottom: 10, color: "#4e6948", fontSize: 14, fontWeight: 800, textDecoration: "none" };
 const emptyButtonStyle: CSSProperties = {
   border: "1px solid #d8a9a9",
   borderRadius: 9,
@@ -503,6 +627,36 @@ const noticeStyle: CSSProperties = {
   color: "#53634f",
   fontSize: 13,
   lineHeight: 1.65,
+};
+const localTrashSectionStyle: CSSProperties = {
+  marginTop: 0,
+};
+const sectionHeadingRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginTop: 18,
+};
+const sectionHeadingStyle: CSSProperties = {
+  margin: 0,
+  color: "#354b34",
+  fontSize: 17,
+};
+const sectionCountStyle: CSSProperties = {
+  minWidth: 24,
+  borderRadius: 999,
+  background: "#edf4e9",
+  color: "#547050",
+  padding: "2px 7px",
+  fontSize: 12,
+  fontWeight: 800,
+  textAlign: "center",
+};
+const localTrashNoticeStyle: CSSProperties = {
+  margin: "6px 0 0",
+  color: "#748071",
+  fontSize: 12,
+  lineHeight: 1.55,
 };
 const refreshErrorStyle: CSSProperties = {
   display: "flex",

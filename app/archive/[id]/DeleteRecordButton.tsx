@@ -7,6 +7,7 @@ import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { requestCloudTrash } from "@/lib/cloud-trash";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { supabase } from "@/lib/supabase";
 
 export default function DeleteRecordButton({
   id,
@@ -22,6 +23,28 @@ export default function DeleteRecordButton({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCheckingReferences, setIsCheckingReferences] = useState(false);
+  const [hasMarketReference, setHasMarketReference] = useState(false);
+
+  async function openDeleteDialog() {
+    if (isCheckingReferences || isDeleting) return;
+    setIsCheckingReferences(true);
+    const [postResult, mediaResult] = await Promise.all([
+      supabase
+        .from("market_posts")
+        .select("id", { count: "exact", head: true })
+        .eq("source_record_id", id),
+      supabase
+        .from("market_media")
+        .select("id", { count: "exact", head: true })
+        .eq("source_record_id", id),
+    ]);
+    setHasMarketReference(
+      Number(postResult.count || 0) > 0 || Number(mediaResult.count || 0) > 0
+    );
+    setIsCheckingReferences(false);
+    setOpen(true);
+  }
 
   async function handleDelete() {
     if (isDeleting) return;
@@ -50,10 +73,10 @@ export default function DeleteRecordButton({
     <>
     <button
       type="button"
-      disabled={isDeleting}
+      disabled={isDeleting || isCheckingReferences}
       onClick={(e) => {
         e.stopPropagation();
-        setOpen(true);
+        void openDeleteDialog();
       }}
       style={{
         fontSize: "12px",
@@ -67,12 +90,16 @@ export default function DeleteRecordButton({
         ...style,
       }}
     >
-      {copy.move_to_trash}
+      {isCheckingReferences ? copy.processing : copy.move_to_trash}
     </button>
     <ConfirmDialog
       open={open}
       title={copy.trash_title}
-      message={copy.record_trash_message}
+      message={
+        hasMarketReference
+          ? `${copy.record_trash_message}\n\n${copy.record_trash_market_reference}`
+          : copy.record_trash_message
+      }
       confirmText={isDeleting ? copy.moving_to_trash : copy.move_to_trash}
       cancelText={t.cancel}
       onClose={() => { if (!isDeleting) setOpen(false); }}

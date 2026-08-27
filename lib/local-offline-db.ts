@@ -42,6 +42,20 @@ export type LocalArchiveCycle = {
   updated_at: string;
 };
 
+export type LocalArchiveCycleTrash = {
+  id: string;
+  archive_id: string;
+  cycle: LocalArchiveCycle;
+  record_ids: string[];
+  deleted_at: string;
+};
+
+export type LocalArchiveCycleTrashListItem = {
+  archive_id: string;
+  archive_title: string;
+  trash: LocalArchiveCycleTrash;
+};
+
 export type LocalArchive = {
   id: string;
   title: string;
@@ -70,6 +84,7 @@ export type LocalArchive = {
   cycle_enabled?: boolean;
   next_cycle_name?: string | null;
   cycles?: LocalArchiveCycle[];
+  trashed_cycles?: LocalArchiveCycleTrash[];
   status: "active" | "ended";
   created_at: string;
   updated_at: string;
@@ -202,6 +217,26 @@ function normalizeLocalArchiveCycle(
   };
 }
 
+function normalizeLocalArchiveCycleTrash(
+  item: LocalArchiveCycleTrash,
+  archiveId: string
+): LocalArchiveCycleTrash | null {
+  const cycle = item?.cycle
+    ? normalizeLocalArchiveCycle(item.cycle, archiveId)
+    : null;
+  if (!item?.id || !cycle) return null;
+
+  return {
+    id: item.id,
+    archive_id: archiveId,
+    cycle,
+    record_ids: Array.isArray(item.record_ids)
+      ? [...new Set(item.record_ids.filter((id): id is string => Boolean(id)))]
+      : [],
+    deleted_at: normalizeOptionalText(item.deleted_at) || nowIso(),
+  };
+}
+
 function normalizeOptionalText(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed || null;
@@ -227,6 +262,15 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
         .map((cycle) => normalizeLocalArchiveCycle(cycle, archive.id))
         .filter((cycle): cycle is LocalArchiveCycle => Boolean(cycle))
         .sort((a, b) => a.cycle_no - b.cycle_no)
+    : [];
+  const trashedCycles = Array.isArray(archive.trashed_cycles)
+    ? archive.trashed_cycles
+        .map((item) => normalizeLocalArchiveCycleTrash(item, archive.id))
+        .filter((item): item is LocalArchiveCycleTrash => Boolean(item))
+        .sort(
+          (a, b) =>
+            new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime()
+        )
     : [];
 
   return {
@@ -263,8 +307,27 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
         : cycles.length > 0,
     next_cycle_name: normalizeOptionalText(archive.next_cycle_name),
     cycles,
+    trashed_cycles: trashedCycles,
     sync: normalizeLocalSyncMeta(archive.sync),
   };
+}
+
+function getTrashedLocalCycleIds(archive: LocalArchive) {
+  return new Set(
+    (archive.trashed_cycles || []).map((item) => item.cycle.id)
+  );
+}
+
+function getVisibleLocalRecordsForArchive(
+  archive: LocalArchive,
+  records: LocalRecord[]
+) {
+  const trashedCycleIds = getTrashedLocalCycleIds(archive);
+  return records.filter(
+    (record) =>
+      record.archive_id === archive.id &&
+      (!record.cycle_id || !trashedCycleIds.has(record.cycle_id))
+  );
 }
 
 function normalizeLocalTaxonomyItem(item: LocalTaxonomyItem): LocalTaxonomyItem {
@@ -493,8 +556,14 @@ async function refreshLocalUsageHints() {
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
   ]);
+  const normalizedArchives = archives.map(normalizeLocalArchive);
+  const visibleRecordCount = normalizedArchives.reduce(
+    (total, archive) =>
+      total + getVisibleLocalRecordsForArchive(archive, records).length,
+    0
+  );
 
-  updateLocalUsageHints(archives.length, records.length);
+  updateLocalUsageHints(normalizedArchives.length, visibleRecordCount);
 }
 
 function buildSummary(
@@ -502,14 +571,17 @@ function buildSummary(
   records: LocalRecord[],
   images: LocalImage[]
 ): LocalArchiveSummary {
-  const archiveRecords = records
-    .filter((record) => record.archive_id === archive.id)
+  const archiveRecords = getVisibleLocalRecordsForArchive(archive, records)
     .sort(
       (a, b) =>
         new Date(b.record_time || b.created_at).getTime() -
         new Date(a.record_time || a.created_at).getTime()
     );
-  const archiveImages = images.filter((image) => image.archive_id === archive.id);
+  const visibleRecordIds = new Set(archiveRecords.map((record) => record.id));
+  const archiveImages = images.filter(
+    (image) =>
+      image.archive_id === archive.id && visibleRecordIds.has(image.record_id)
+  );
   const latestRecord = archiveRecords[0] || null;
   const coverRecord = archiveRecords.find((record) =>
     archiveImages.some((image) => image.record_id === record.id)
@@ -539,14 +611,44 @@ export async function listLocalArchiveSummaries() {
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
 
-  updateLocalUsageHints(archives.length, records.length);
+  const normalizedArchives = archives.map(normalizeLocalArchive);
+  updateLocalUsageHints(
+    normalizedArchives.length,
+    normalizedArchives.reduce(
+      (total, archive) =>
+        total + getVisibleLocalRecordsForArchive(archive, records).length,
+      0
+    )
+  );
 
-  return archives
-    .map((archive) => buildSummary(normalizeLocalArchive(archive), records, images))
+  return normalizedArchives
+    .map((archive) => buildSummary(archive, records, images))
     .sort(
       (a, b) =>
         new Date(b.updated_at || b.created_at).getTime() -
         new Date(a.updated_at || a.created_at).getTime()
+    );
+}
+
+export async function listLocalArchiveCycleTrash(
+  ownerContext?: LocalArchiveOwnerContext | null
+): Promise<LocalArchiveCycleTrashListItem[]> {
+  const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
+
+  return archives
+    .map(normalizeLocalArchive)
+    .filter((archive) => isLocalArchiveVisibleToOwner(archive, ownerContext))
+    .flatMap((archive) =>
+      (archive.trashed_cycles || []).map((trash) => ({
+        archive_id: archive.id,
+        archive_title: archive.title,
+        trash,
+      }))
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.trash.deleted_at).getTime() -
+        new Date(a.trash.deleted_at).getTime()
     );
 }
 
@@ -560,10 +662,17 @@ export async function listVisibleLocalArchiveSummaries(
   ]);
   const currentUserId = getOwnerUserId(ownerContext);
 
-  updateLocalUsageHints(archives.length, records.length);
-
-  const summaries = archives.map((archive) =>
-    buildSummary(normalizeLocalArchive(archive), records, images)
+  const normalizedArchives = archives.map(normalizeLocalArchive);
+  updateLocalUsageHints(
+    normalizedArchives.length,
+    normalizedArchives.reduce(
+      (total, archive) =>
+        total + getVisibleLocalRecordsForArchive(archive, records).length,
+      0
+    )
+  );
+  const summaries = normalizedArchives.map((archive) =>
+    buildSummary(archive, records, images)
   );
   const visible = summaries.filter((archive) =>
     isLocalArchiveVisibleToOwner(archive, ownerContext)
@@ -1472,8 +1581,7 @@ export async function getLocalArchiveDetail(
       imageMap.set(image.record_id, list);
     });
 
-  const detailRecords = records
-    .filter((record) => record.archive_id === archiveId)
+  const detailRecords = getVisibleLocalRecordsForArchive(normalizedArchive, records)
     .sort(
       (a, b) =>
         new Date(b.record_time || b.created_at).getTime() -
@@ -1550,11 +1658,15 @@ export async function createLocalArchiveCycle(
     }
 
     const cycles = normalizedArchive.cycles || [];
+    const trashedCycles = normalizedArchive.trashed_cycles || [];
     const timestamp = nowIso();
     const cycle: LocalArchiveCycle = {
       id: createId("local_cycle"),
       archive_id: archiveId,
-      cycle_no: cycles.reduce((max, item) => Math.max(max, item.cycle_no), 0) + 1,
+      cycle_no: [...cycles, ...trashedCycles.map((item) => item.cycle)].reduce(
+        (max, item) => Math.max(max, item.cycle_no),
+        0
+      ) + 1,
       display_name: normalizeOptionalText(displayName)?.slice(0, 80) || null,
       status: "active",
       started_at: normalizedStartedAt,
@@ -1728,6 +1840,62 @@ export async function updateLocalArchiveCycleDates(
   }
 }
 
+export async function updateLocalArchiveCycleName(
+  archiveId: string,
+  cycleId: string,
+  displayName: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(store.get(archiveId));
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const cycles = normalizedArchive.cycles || [];
+    if (!cycles.some((cycle) => cycle.id === cycleId)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个周期不存在。");
+    }
+
+    const cleanName = normalizeOptionalText(displayName)?.slice(0, 80) || null;
+    const timestamp = nowIso();
+    const nextCycles = cycles.map((cycle) =>
+      cycle.id === cycleId
+        ? { ...cycle, display_name: cleanName, updated_at: timestamp }
+        : cycle
+    );
+
+    await requestToPromise(
+      store.put({
+        ...normalizedArchive,
+        cycles: nextCycles,
+        updated_at: timestamp,
+      } satisfies LocalArchive)
+    );
+    await done;
+    return nextCycles.find((cycle) => cycle.id === cycleId) || null;
+  } finally {
+    db.close();
+  }
+}
+
 export async function deleteLocalArchiveCycle(
   archiveId: string,
   cycleId: string,
@@ -1758,7 +1926,8 @@ export async function deleteLocalArchiveCycle(
     }
 
     const cycles = normalizedArchive.cycles || [];
-    if (!cycles.some((cycle) => cycle.id === cycleId)) {
+    const targetCycle = cycles.find((cycle) => cycle.id === cycleId);
+    if (!targetCycle) {
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("这个周期不存在。");
@@ -1767,30 +1936,106 @@ export async function deleteLocalArchiveCycle(
     const archiveRecords = await requestToPromise<LocalRecord[]>(
       recordStore.index("archive_id").getAll(archiveId)
     );
-    const recordsToUngroup = archiveRecords.filter(
+    const recordsToTrash = archiveRecords.filter(
       (record) => record.cycle_id === cycleId
     );
-
-    for (const record of recordsToUngroup) {
-      await requestToPromise(
-        recordStore.put({
-          ...record,
-          cycle_id: null,
-        } satisfies LocalRecord)
-      );
-    }
+    const timestamp = nowIso();
+    const trashEntry: LocalArchiveCycleTrash = {
+      id: createId("local_cycle_trash"),
+      archive_id: archiveId,
+      cycle: targetCycle,
+      record_ids: recordsToTrash.map((record) => record.id),
+      deleted_at: timestamp,
+    };
 
     await requestToPromise(
       archiveStore.put({
         ...normalizedArchive,
         cycles: cycles.filter((cycle) => cycle.id !== cycleId),
-        updated_at: nowIso(),
+        trashed_cycles: [
+          trashEntry,
+          ...(normalizedArchive.trashed_cycles || []),
+        ],
+        updated_at: timestamp,
       } satisfies LocalArchive)
     );
 
     await done;
     await refreshLocalUsageHints();
-    return recordsToUngroup.length;
+    return recordsToTrash.length;
+  } finally {
+    db.close();
+  }
+}
+
+export async function restoreLocalArchiveCycle(
+  archiveId: string,
+  trashEntryId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      store.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const trashedCycles = normalizedArchive.trashed_cycles || [];
+    const trashEntry = trashedCycles.find((item) => item.id === trashEntryId);
+    if (!trashEntry) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个已删除茬不存在。");
+    }
+
+    const cycles = normalizedArchive.cycles || [];
+    if (cycles.some((cycle) => cycle.id === trashEntry.cycle.id)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个茬已经恢复。");
+    }
+
+    const timestamp = nowIso();
+    const restoredCycle = {
+      ...trashEntry.cycle,
+      archive_id: archiveId,
+      updated_at: timestamp,
+    } satisfies LocalArchiveCycle;
+
+    await requestToPromise(
+      store.put({
+        ...normalizedArchive,
+        cycles: [...cycles, restoredCycle].sort(
+          (a, b) => a.cycle_no - b.cycle_no
+        ),
+        trashed_cycles: trashedCycles.filter(
+          (item) => item.id !== trashEntryId
+        ),
+        updated_at: timestamp,
+      } satisfies LocalArchive)
+    );
+    await done;
+    await refreshLocalUsageHints();
+    return {
+      cycle: restoredCycle,
+      recordCount: trashEntry.record_ids.length,
+    };
   } finally {
     db.close();
   }

@@ -22,7 +22,6 @@ type Props = {
   cycles: ArchiveCycle[];
   records: RecordItem[];
   category?: string | null;
-  nextCycleName?: string | null;
   mobileMode?: boolean;
   canManage?: boolean;
   busy?: boolean;
@@ -34,6 +33,7 @@ type Props = {
     cycle: ArchiveCycle,
     dates: CycleDateUpdate
   ) => void | Promise<void>;
+  onRenameCycle?: (cycle: ArchiveCycle, displayName: string) => void | Promise<void>;
   onDeleteCycle?: (cycle: ArchiveCycle) => boolean | Promise<boolean>;
 };
 
@@ -41,7 +41,6 @@ export default function ArchiveCycleTimeline({
   cycles,
   records,
   category,
-  nextCycleName,
   mobileMode = false,
   canManage = false,
   busy = false,
@@ -50,6 +49,7 @@ export default function ArchiveCycleTimeline({
   onStartCycle,
   onEndCycle,
   onUpdateCycleDates,
+  onRenameCycle,
   onDeleteCycle,
 }: Props) {
   const { language, t } = useLanguage();
@@ -64,6 +64,8 @@ export default function ArchiveCycleTimeline({
   const [adjustStartDate, setAdjustStartDate] = useState("");
   const [adjustEndDate, setAdjustEndDate] = useState("");
   const [cycleToDelete, setCycleToDelete] = useState<ArchiveCycle | null>(null);
+  const [cycleToRename, setCycleToRename] = useState<ArchiveCycle | null>(null);
+  const [cycleNameDraft, setCycleNameDraft] = useState("");
   const [dateError, setDateError] = useState("");
   const sortedCycles = useMemo(() => {
     const byStartedAtDescending = (a: ArchiveCycle, b: ArchiveCycle) =>
@@ -101,6 +103,13 @@ export default function ArchiveCycleTimeline({
     setCycleToAdjust(cycle);
   }
 
+  function openRenameDialog(cycle: ArchiveCycle) {
+    setCycleNameDraft(
+      cycle.display_name || terminology.cycleLabel(cycle.cycle_no)
+    );
+    setCycleToRename(cycle);
+  }
+
   function dateFields(error: string, children: ReactNode) {
     return (
       <div style={dialogFieldsStyle}>
@@ -110,14 +119,9 @@ export default function ArchiveCycleTimeline({
     );
   }
 
-  const cleanNextCycleName = nextCycleName?.trim();
-  const startActionLabel = cleanNextCycleName
-    ? language === "en"
-      ? `Start ${cleanNextCycleName}`
-      : `开始${cleanNextCycleName}`
-    : cycles.length === 0
-      ? terminology.firstAction
-      : terminology.newAction;
+  const startActionLabel = cycles.length === 0
+    ? terminology.firstAction
+    : terminology.newAction;
 
   return (
     <>
@@ -175,6 +179,16 @@ export default function ArchiveCycleTimeline({
                   </button>
                   {canManage ? (
                     <div style={cycleActionGroupStyle}>
+                      {onRenameCycle ? (
+                        <button
+                          type="button"
+                          onClick={() => openRenameDialog(cycle)}
+                          disabled={busy}
+                          style={adjustDateButtonStyle}
+                        >
+                          {copy.rename_cycle}
+                        </button>
+                      ) : null}
                       {onUpdateCycleDates ? (
                         <button
                           type="button"
@@ -196,14 +210,22 @@ export default function ArchiveCycleTimeline({
                         </button>
                       ) : null}
                       {onDeleteCycle ? (
-                        <button
-                          type="button"
-                          onClick={() => setCycleToDelete(cycle)}
-                          disabled={busy}
-                          style={deleteCycleButtonStyle}
-                        >
-                          {terminology.deleteAction}
-                        </button>
+                        <details style={cycleMoreStyle}>
+                          <summary style={cycleMoreSummaryStyle} aria-label={t.nav.more_actions}>
+                            <UiIcon name="more" size={18} />
+                          </summary>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.currentTarget.closest("details")?.removeAttribute("open");
+                              setCycleToDelete(cycle);
+                            }}
+                            disabled={busy}
+                            style={deleteCycleButtonStyle}
+                          >
+                            {terminology.deleteAction}
+                          </button>
+                        </details>
                       ) : null}
                     </div>
                   ) : null}
@@ -394,6 +416,36 @@ export default function ArchiveCycleTimeline({
       </ConfirmDialog>
 
       <ConfirmDialog
+        open={Boolean(cycleToRename)}
+        title={copy.rename_cycle_title}
+        message=""
+        confirmText={t.save}
+        confirmDisabled={busy || !cycleNameDraft.trim()}
+        cancelDisabled={busy}
+        onClose={() => {
+          if (!busy) setCycleToRename(null);
+        }}
+        onConfirm={async () => {
+          if (!cycleToRename || !onRenameCycle || !cycleNameDraft.trim()) return;
+          await onRenameCycle(cycleToRename, cycleNameDraft.trim().slice(0, 80));
+          setCycleToRename(null);
+        }}
+      >
+        <label style={dateFieldStyle}>
+          <span>{copy.cycle_name}</span>
+          <input
+            value={cycleNameDraft}
+            maxLength={80}
+            autoFocus
+            disabled={busy}
+            placeholder={copy.cycle_name_placeholder}
+            onChange={(event) => setCycleNameDraft(event.target.value)}
+            style={dateInputStyle}
+          />
+        </label>
+      </ConfirmDialog>
+
+      <ConfirmDialog
         open={Boolean(cycleToDelete)}
         title={cycleToDelete ? terminology.deleteTitle(cycleToDelete.cycle_no) : `${terminology.deleteAction}？`}
         message={(() => {
@@ -452,10 +504,10 @@ const cycleHeaderStyle: CSSProperties = {
   cursor: "pointer",
   textAlign: "left",
 };
-const cycleTitleStyle: CSSProperties = { fontSize: 15, fontWeight: 800 };
-const cycleCountStyle: CSSProperties = { color: "#7b8978", fontSize: 12 };
+const cycleTitleStyle: CSSProperties = { fontSize: 16, fontWeight: 820 };
+const cycleCountStyle: CSSProperties = { color: "#71806f", fontSize: 13 };
 const cycleChevronStyle: CSSProperties = { marginLeft: "auto", color: "#6e806b", fontSize: 16 };
-const cycleDateStyle: CSSProperties = { marginTop: 3, color: "#8a9588", fontSize: 12 };
+const cycleDateStyle: CSSProperties = { marginTop: 5, color: "#758373", fontSize: 14, lineHeight: 1.45 };
 const cycleRecordsStyle: CSSProperties = { marginTop: 10 };
 const cycleEmptyStyle: CSSProperties = { padding: "10px 12px", color: "#899486", fontSize: 13 };
 const adjustDateButtonStyle: CSSProperties = {
@@ -463,7 +515,7 @@ const adjustDateButtonStyle: CSSProperties = {
   border: 0,
   background: "transparent",
   color: "#61745e",
-  fontSize: 12,
+  fontSize: 13.5,
   textDecoration: "underline",
   cursor: "pointer",
 };
@@ -471,14 +523,42 @@ const cycleActionGroupStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "flex-end",
-  flexWrap: "wrap",
-  gap: 8,
+  flexWrap: "nowrap",
+  gap: 5,
   flexShrink: 0,
   marginLeft: "auto",
 };
 const deleteCycleButtonStyle: CSSProperties = {
-  ...adjustDateButtonStyle,
+  position: "absolute",
+  zIndex: 3,
+  top: 38,
+  right: 0,
+  width: "max-content",
+  minWidth: 116,
+  minHeight: 42,
+  border: 0,
+  borderRadius: 9,
+  background: "#fff7f6",
   color: "#a0524b",
+  padding: "8px 11px",
+  fontSize: 13,
+  fontWeight: 700,
+  textAlign: "left",
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+};
+const cycleMoreStyle: CSSProperties = { position: "relative", flexShrink: 0 };
+const cycleMoreSummaryStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid #e0e7dd",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#667462",
+  cursor: "pointer",
+  listStyle: "none",
 };
 const dialogFieldsStyle: CSSProperties = { display: "grid", gap: 10 };
 const dateFieldStyle: CSSProperties = { display: "grid", gap: 6, color: "#4f5e4f", fontSize: 13 };

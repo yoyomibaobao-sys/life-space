@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import { saveQuickCapture, type QuickCaptureTarget } from "@/lib/quick-capture";
@@ -20,6 +21,42 @@ export default function QuickCaptureNavAction({
   const { t } = useLanguage();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const isMarketPath = pathname === "/market" || pathname.startsWith("/market/");
+
+  if (isMarketPath) {
+    return (
+      <div style={{ position: "relative", display: "grid", placeItems: "center" }}>
+        <Link
+          href="/market/new"
+          aria-label={t.market.post_information}
+          title={t.market.post_information}
+          style={{
+            minWidth: 64,
+            height: 43,
+            marginTop: -11,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 3,
+            padding: "0 7px",
+            border: "3px solid #fff",
+            borderRadius: 14,
+            background: "#8a6a32",
+            boxShadow: "0 5px 14px rgba(104, 76, 30, 0.22)",
+            color: "#fff",
+            textDecoration: "none",
+            fontSize: 11.5,
+            lineHeight: 1,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <UiIcon name="plus" size={14} strokeWidth={2.2} />
+          {t.market.post_information}
+        </Link>
+      </div>
+    );
+  }
 
   async function handleCapture(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] || null;

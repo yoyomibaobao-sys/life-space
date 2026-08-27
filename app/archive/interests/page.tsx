@@ -16,6 +16,7 @@ import {
   normalizeMembershipRpcResult,
 } from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { formatCardDate } from "@/lib/date-time";
 
 export default function PlantInterestsPage() {
   const router = useRouter();
@@ -122,6 +123,11 @@ export default function PlantInterestsPage() {
                       {plantDisplayName(item.plant_species)}
                     </Link>
                     <div style={categoryStyle}>{categoryLabel(item.plant_species?.category)}</div>
+                    {item.created_at ? (
+                      <div style={savedDateStyle}>
+                        {t.plant_lists.saved_on}{formatCardDate(item.created_at)}
+                      </div>
+                    ) : null}
                   </div>
                   <details style={moreStyle}>
                     <summary style={moreSummaryStyle} aria-label={t.nav.more_actions}>
@@ -172,6 +178,7 @@ const cardStyle: CSSProperties = { padding: 12, border: "1px solid #e1e8de", bor
 const cardHeadingStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 };
 const plantNameStyle: CSSProperties = { display: "block", overflow: "hidden", color: "#263726", fontSize: 18, fontWeight: 750, textDecoration: "none", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const categoryStyle: CSSProperties = { marginTop: 3, color: "#738171", fontSize: 13 };
+const savedDateStyle: CSSProperties = { marginTop: 3, color: "#879184", fontSize: 12.5 };
 const moreStyle: CSSProperties = { position: "relative" };
 const moreSummaryStyle: CSSProperties = { width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid #e0e7dd", borderRadius: 999, color: "#667462", cursor: "pointer", listStyle: "none" };
 const removeButtonStyle: CSSProperties = { position: "absolute", top: 41, right: 0, zIndex: 5, minWidth: 100, minHeight: 42, border: "1px solid #edd7d4", borderRadius: 11, background: "#fff", color: "#b34f45", fontSize: 14, cursor: "pointer" };

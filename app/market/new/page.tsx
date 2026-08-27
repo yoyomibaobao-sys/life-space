@@ -5,6 +5,7 @@ import {
   Suspense,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -47,6 +48,7 @@ import {
 } from "@/lib/storage-upload-maintenance";
 import { getStoredLanguage, getTranslations } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { extractExternalHttpUrl } from "@/lib/external-url";
 
 type ArchiveOption = {
   id: string;
@@ -81,6 +83,12 @@ type SourceMediaOption = {
   display_thumb_url?: string | null;
   created_at: string | null;
 };
+
+type PendingMarketImage = {
+  id: string;
+  file: File;
+  previewUrl: string;
+};
 export default function NewMarketPostPage() {
   const { t } = useLanguage();
   return (
@@ -108,7 +116,6 @@ function NewMarketPostPageContent() {
   const [archiveId, setArchiveId] = useState("");
   const [locationText, setLocationText] = useState("");
   const [externalUrl, setExternalUrl] = useState("");
-  const [externalLabel, setExternalLabel] = useState("");
 
   const [sourceRecordId, setSourceRecordId] = useState("");
   const [sourceRecordHint, setSourceRecordHint] = useState("");
@@ -119,8 +126,8 @@ function NewMarketPostPageContent() {
     []
   );
 
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreviewUrl, setCoverPreviewUrl] = useState("");
+  const [pendingImages, setPendingImages] = useState<PendingMarketImage[]>([]);
+  const pendingImagesRef = useRef<PendingMarketImage[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -256,12 +263,12 @@ function NewMarketPostPageContent() {
   }, [router, sourceArchiveIdParam, sourceRecordIdParam]);
 
   useEffect(() => {
-    return () => {
-      if (coverPreviewUrl) {
-        URL.revokeObjectURL(coverPreviewUrl);
-      }
-    };
-  }, [coverPreviewUrl]);
+    pendingImagesRef.current = pendingImages;
+  }, [pendingImages]);
+
+  useEffect(() => () => {
+    pendingImagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+  }, []);
 
   const selectedArchive = useMemo(() => {
     return archives.find((item) => item.id === archiveId) || null;
@@ -283,45 +290,37 @@ function NewMarketPostPageContent() {
     });
   }
 
-  function handleCoverFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  function handleImageFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (files.length === 0) return;
 
-    if (!file) {
-      setCoverFile(null);
-      setCoverPreviewUrl("");
+    if (files.some((file) => !file.type.startsWith("image/"))) {
+      setErrorMsg(t.market.image_only);
       return;
     }
-
-    if (!file.type.startsWith("image/")) {
-      setErrorMsg(t.market.image_file_required);
-      setCoverFile(null);
-      setCoverPreviewUrl("");
+    if (files.some((file) => file.size > 6 * 1024 * 1024)) {
+      setErrorMsg(t.market.single_image_size_limit);
       return;
-    }
-
-    if (file.size > 6 * 1024 * 1024) {
-      setErrorMsg(t.market.image_size_limit);
-      setCoverFile(null);
-      setCoverPreviewUrl("");
-      return;
-    }
-
-    if (coverPreviewUrl) {
-      URL.revokeObjectURL(coverPreviewUrl);
     }
 
     setErrorMsg("");
-    setCoverFile(file);
-    setCoverPreviewUrl(URL.createObjectURL(file));
+    setPendingImages((current) => [
+      ...current,
+      ...files.map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+      })),
+    ]);
   }
 
-  function clearCoverFile() {
-    if (coverPreviewUrl) {
-      URL.revokeObjectURL(coverPreviewUrl);
-    }
-
-    setCoverFile(null);
-    setCoverPreviewUrl("");
+  function removePendingImage(id: string) {
+    setPendingImages((current) => {
+      const target = current.find((image) => image.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return current.filter((image) => image.id !== id);
+    });
   }
 
   async function refreshMembership() {
@@ -350,8 +349,7 @@ function NewMarketPostPageContent() {
     const safeTitle = title.trim();
     const safeDescription = description.trim();
     const safeLocation = locationText.trim();
-    const safeExternalUrl = normalizeExternalUrl(externalUrl);
-    const safeExternalLabel = externalLabel.trim();
+    const safeExternalUrl = extractExternalHttpUrl(externalUrl);
 
     if (externalUrl.trim() && !safeExternalUrl) {
       setErrorMsg(t.market.invalid_external_link);
@@ -363,7 +361,7 @@ function NewMarketPostPageContent() {
       return;
     }
 
-    if (!isFromSourceRecord && coverFile && (await isStorageUploadMaintenance())) {
+    if (pendingImages.length > 0 && (await isStorageUploadMaintenance())) {
       setErrorMsg(t.market.upload_maintenance);
       return;
     }
@@ -385,7 +383,7 @@ function NewMarketPostPageContent() {
         item_category: itemCategory,
         location_text: safeLocation || null,
         external_url: safeExternalUrl || null,
-        external_label: safeExternalLabel || null,
+        external_label: null,
         cover_image_url: null,
         cover_image_path: null,
         cover_thumb_url: null,
@@ -414,7 +412,7 @@ function NewMarketPostPageContent() {
         thumb_path: getMediaThumbObjectPath(item),
         source_media_id: item.id,
         source_record_id: sourceRecordId || null,
-        sort_order: index,
+        sort_order: pendingImages.length + index,
       }));
 
       const { error: marketMediaError } = await supabase
@@ -430,63 +428,61 @@ function NewMarketPostPageContent() {
         return;
       }
 
-      if (firstSourceMedia) {
-        const coverResult = await setMarketPostCover({
-          postId,
-          path: getMediaObjectPath(firstSourceMedia),
-          thumbPath: getMediaThumbObjectPath(firstSourceMedia),
-        });
-        if (!coverResult.ok) {
-          await requestMarketPostDeletion(postId);
-          setSaving(false);
-          setErrorMsg(t.market.save_source_cover_failed);
-          return;
-        }
-      }
     }
 
-    if (!isFromSourceRecord && coverFile) {
-      let cover: ReservedMarketImage | null = null;
-      let rollbackAttempted = false;
+    let firstUploadedImage: ReservedMarketImage | null = null;
+    for (let index = 0; index < pendingImages.length; index += 1) {
+      const mediaId = crypto.randomUUID();
+      let uploaded: ReservedMarketImage | null = null;
+      let committed = false;
       try {
-        cover = await uploadReservedMarketImage({
+        uploaded = await uploadReservedMarketImage({
           userId: user.id,
           postId,
-          targetType: "market_cover",
-          targetId: postId,
-          file: coverFile,
+          targetType: "market_media",
+          targetId: mediaId,
+          file: pendingImages[index].file,
         });
 
-        const coverResult = await setMarketPostCover({
-          postId,
-          path: cover.path,
-          thumbPath: cover.thumbPath,
-          reservationId: cover.reservation.reservation_id,
-        });
+        const insertResult = await supabase
+          .from("market_media")
+          .insert({
+            id: mediaId,
+            market_post_id: postId,
+            user_id: user.id,
+            url: null,
+            path: uploaded.path,
+            thumb_url: null,
+            thumb_path: uploaded.thumbPath,
+            source_media_id: null,
+            source_record_id: null,
+            sort_order: index,
+            ...(uploaded.reservation.reservation_id
+              ? { upload_reservation_id: uploaded.reservation.reservation_id }
+              : {}),
+          })
+          .select("id")
+          .single();
 
-        if (!coverResult.ok) {
+        if (insertResult.error || !insertResult.data?.id) {
           const reconciliation = await supabase
-            .from("market_posts")
-            .select("cover_image_path, cover_upload_reservation_id")
-            .eq("id", postId)
+            .from("market_media")
+            .select("id, path, upload_reservation_id")
+            .eq("id", mediaId)
             .maybeSingle();
-          const committed =
+          const reconciliationCommitted =
             !reconciliation.error &&
-            reconciliation.data?.cover_image_path === cover.path &&
-            reconciliation.data?.cover_upload_reservation_id ===
-              cover.reservation.reservation_id;
-          if (!committed) {
-            rollbackAttempted = true;
-            await rollbackReservedMarketImage(cover);
-            await requestMarketPostDeletion(postId);
-            throw new Error(t.market.cover_save_failed);
-          }
+            reconciliation.data?.path === uploaded.path &&
+            reconciliation.data?.upload_reservation_id === uploaded.reservation.reservation_id;
+          if (!reconciliationCommitted) throw new Error(t.market.image_save_failed);
         }
 
-        await settleReservedMarketImage(cover);
+        committed = true;
+        await settleReservedMarketImage(uploaded);
+        firstUploadedImage ||= uploaded;
       } catch (uploadError) {
-        if (cover && !rollbackAttempted) {
-          await rollbackReservedMarketImage(cover);
+        if (uploaded && !committed) {
+          await rollbackReservedMarketImage(uploaded);
         }
         await requestMarketPostDeletion(postId);
         setSaving(false);
@@ -495,8 +491,25 @@ function NewMarketPostPageContent() {
             ? t.market.upload_maintenance
             : uploadError instanceof Error
               ? uploadError.message
-              : t.market.cover_upload_failed,
+              : t.market.image_upload_failed,
         );
+        return;
+      }
+    }
+
+    const coverPath = firstUploadedImage?.path || getMediaObjectPath(firstSourceMedia);
+    const coverThumbPath =
+      firstUploadedImage?.thumbPath || getMediaThumbObjectPath(firstSourceMedia);
+    if (coverPath) {
+      const coverResult = await setMarketPostCover({
+        postId,
+        path: coverPath,
+        thumbPath: coverThumbPath,
+      });
+      if (!coverResult.ok) {
+        await requestMarketPostDeletion(postId);
+        setSaving(false);
+        setErrorMsg(t.market.save_source_cover_failed);
         return;
       }
     }
@@ -535,6 +548,84 @@ function NewMarketPostPageContent() {
           </div>
 
           <div style={formStyle}>
+            <section style={imagePickerSectionStyle}>
+              <div style={imagePickerHeaderStyle}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>{t.market.market_images}</label>
+                <label style={imagePickerButtonStyle}>
+                  {t.market.upload_or_camera}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageFilesChange}
+                    style={{ display: "none" }}
+                  />
+                </label>
+              </div>
+
+              {pendingImages.length > 0 ? (
+                <div style={sourceMediaGridStyle}>
+                  {pendingImages.map((image, index) => (
+                    <div key={image.id} style={pendingImageCardStyle}>
+                      <img src={image.previewUrl} alt="" style={sourceMediaImageStyle} />
+                      {index === 0 ? (
+                        <span style={sourceMediaSelectedBadgeStyle}>{t.market.cover}</span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => removePendingImage(image.id)}
+                        aria-label={t.market.remove_cover}
+                        style={pendingImageRemoveStyle}
+                      >
+                        <UiIcon name="close" size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {isFromSourceRecord ? (
+                <div style={sourceImagePickerStyle}>
+                  <div style={sourceImagePickerTitleStyle}>{t.market.source_images}</div>
+                  {sourceMediaOptions.length > 0 ? (
+                    <div style={sourceMediaGridStyle}>
+                      {sourceMediaOptions.map((media) => {
+                        const active = selectedSourceMediaIds.includes(media.id);
+                        const selectedIndex = selectedSourceMediaIds.indexOf(media.id);
+                        const isCover = pendingImages.length === 0 && selectedIndex === 0;
+                        return (
+                          <button
+                            key={media.id}
+                            type="button"
+                            onClick={() => toggleSourceMedia(media.id)}
+                            style={sourceMediaButtonStyle(active)}
+                          >
+                            <img
+                              src={media.display_thumb_url || media.display_url || ""}
+                              alt=""
+                              style={sourceMediaImageStyle}
+                              loading="lazy"
+                            />
+                            {active ? (
+                              <span style={sourceMediaSelectedBadgeStyle}>
+                                {isCover ? t.market.cover : `${t.market.selected_prefix} ${selectedIndex + 1}`}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={coverHintStyle}>{t.market.source_no_images}</div>
+                  )}
+                </div>
+              ) : null}
+
+              <div style={coverHintStyle}>
+                {t.market.selected_prefix} {pendingImages.length + selectedSourceMediaIds.length} {t.market.selected_suffix}
+              </div>
+            </section>
+
             <div>
               <label style={labelStyle}>{t.market.type}</label>
               <select
@@ -578,87 +669,6 @@ function NewMarketPostPageContent() {
                 placeholder={t.market.title_placeholder}
               />
             </div>
-
-            {isFromSourceRecord ? (
-              <div>
-                <label style={labelStyle}>{t.market.source_images}</label>
-
-                {sourceMediaOptions.length > 0 ? (
-                  <>
-                    <div style={sourceMediaGridStyle}>
-                      {sourceMediaOptions.map((media) => {
-                        const active = selectedSourceMediaIds.includes(media.id);
-                        const selectedIndex = selectedSourceMediaIds.indexOf(
-                          media.id
-                        );
-
-                        return (
-                          <button
-                            key={media.id}
-                            type="button"
-                            onClick={() => toggleSourceMedia(media.id)}
-                            style={sourceMediaButtonStyle(active)}
-                          >
-                            <img
-                              src={media.display_thumb_url || media.display_url || ""}
-                              alt=""
-                              style={sourceMediaImageStyle}
-                              loading="lazy"
-                            />
-                            {active ? (
-                              <span style={sourceMediaSelectedBadgeStyle}>
-                                {selectedIndex === 0
-                                  ? t.market.cover
-                                  : `${t.market.selected_prefix} ${selectedIndex + 1}`}
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div style={coverHintStyle}>
-                      {t.market.selected_prefix} {selectedSourceMediaIds.length} {t.market.selected_suffix}
-                    </div>
-                  </>
-                ) : (
-                  <div style={coverHintStyle}>
-                    {t.market.source_no_images}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <label style={labelStyle}>{t.market.optional_cover}</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleCoverFileChange}
-                  style={fileInputStyle}
-                />
-
-                {coverPreviewUrl ? (
-                  <div style={coverPreviewWrapStyle}>
-                    <img
-                      src={coverPreviewUrl}
-                      alt={t.market.cover_preview}
-                      style={coverPreviewStyle}
-                    />
-                    <button
-                      type="button"
-                      onClick={clearCoverFile}
-                      style={removeImageButtonStyle}
-                    >
-                      {t.market.remove_cover}
-                    </button>
-                  </div>
-                ) : (
-                  <div style={coverHintStyle}>
-                    {t.market.cover_hint}
-                  </div>
-                )}
-              </div>
-            )}
 
             <div>
               <label style={labelStyle}>{t.market.optional_archive}</label>
@@ -721,16 +731,6 @@ function NewMarketPostPageContent() {
             </div>
 
             <div>
-              <label style={labelStyle}>{t.market.optional_external_label}</label>
-              <input
-                value={externalLabel}
-                onChange={(event) => setExternalLabel(event.target.value)}
-                style={inputStyle}
-                placeholder={t.market.external_label_placeholder}
-              />
-            </div>
-
-            <div>
               <label style={labelStyle}>{t.market.description}</label>
               <textarea
                 value={description}
@@ -763,19 +763,6 @@ function NewMarketPostPageContent() {
       </div>
     </main>
   );
-}
-
-function normalizeExternalUrl(value: string) {
-  const raw = value.trim();
-  if (!raw) return "";
-
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
-    return url.toString();
-  } catch {
-    return "";
-  }
 }
 
 function formatSourceRecordTime(value?: string | null) {
@@ -867,14 +854,32 @@ const textareaStyle: CSSProperties = {
   lineHeight: 1.6,
 };
 
-const fileInputStyle: CSSProperties = {
-  width: "100%",
-  boxSizing: "border-box",
-  border: "1px solid #d8e3d3",
-  borderRadius: 12,
-  padding: "9px 10px",
-  fontSize: 14,
-  background: "#fff",
+const imagePickerSectionStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  padding: 12,
+  border: "1px solid #dfe8da",
+  borderRadius: 16,
+  background: "#fafcf8",
+};
+
+const imagePickerHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const imagePickerButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  borderRadius: 999,
+  padding: "7px 12px",
+  background: "#4f7b45",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
 const sourceMediaGridStyle: CSSProperties = {
@@ -922,29 +927,40 @@ const coverHintStyle: CSSProperties = {
   lineHeight: 1.6,
 };
 
-const coverPreviewWrapStyle: CSSProperties = {
-  marginTop: 10,
+const pendingImageCardStyle: CSSProperties = {
+  position: "relative",
+  overflow: "hidden",
+  padding: 3,
+  border: "2px solid #dfe8da",
+  borderRadius: 14,
+  background: "#fff",
+};
+
+const pendingImageRemoveStyle: CSSProperties = {
+  position: "absolute",
+  left: 6,
+  top: 6,
+  width: 26,
+  height: 26,
+  display: "grid",
+  placeItems: "center",
+  border: 0,
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.94)",
+  color: "#9a493f",
+  fontSize: 19,
+  lineHeight: 1,
+  cursor: "pointer",
+};
+
+const sourceImagePickerStyle: CSSProperties = {
   display: "grid",
   gap: 8,
+  paddingTop: 4,
 };
 
-const coverPreviewStyle: CSSProperties = {
-  width: "100%",
-  maxHeight: 260,
-  objectFit: "cover",
-  borderRadius: 14,
-  border: "1px solid #e4ece0",
-  background: "#f6f8f3",
-};
-
-const removeImageButtonStyle: CSSProperties = {
-  width: "fit-content",
-  border: "1px solid #eadbd7",
-  background: "#fff",
-  color: "#b74636",
-  borderRadius: 999,
-  padding: "6px 11px",
-  cursor: "pointer",
+const sourceImagePickerTitleStyle: CSSProperties = {
+  color: "#64715f",
   fontSize: 13,
   fontWeight: 700,
 };

@@ -10,9 +10,10 @@ async function bytes(path) {
   return readFile(new URL(`../${path}`, import.meta.url));
 }
 
-test("crop cycles are opt-in and keep an optional custom display name", async () => {
+test("crop cycles stay opt-in and support concurrent rename, trash, and restore", async () => {
   const [
     migration,
+    trashMigration,
     settings,
     cloudDetail,
     localDetail,
@@ -21,6 +22,7 @@ test("crop cycles are opt-in and keep an optional custom display name", async ()
     localSync,
   ] = await Promise.all([
     source("supabase/migrations/20260824120000_add_archive_cycle_preferences.sql"),
+    source("supabase/migrations/20260827000119_add_archive_cycle_trash.sql"),
     source("components/archive-detail/ArchiveCycleSettings.tsx"),
     source("app/archive/[id]/page.tsx"),
     source("app/local/archive/[id]/page.tsx"),
@@ -34,14 +36,26 @@ test("crop cycles are opt-in and keep an optional custom display name", async ()
   assert.match(migration, /display_name text/i);
   assert.match(migration, /char_length\(btrim\(next_cycle_name\)\) between 1 and 80/i);
   assert.match(settings, /role="switch"/);
-  assert.match(settings, /\{enabled \? \(/);
+  assert.match(settings, /enabled \? copy\.cycle_enabled : copy\.cycle_disabled/);
+  assert.doesNotMatch(settings, /nextCycleName/);
   assert.match(cloudDetail, /cycleEnabled \? cycles : \[\]/);
-  assert.match(cloudDetail, /display_name: activeArchive\.next_cycle_name\?\.trim\(\) \|\| null/);
-  assert.match(localDetail, /nextCycleName=\{archive\.next_cycle_name\}/);
-  assert.match(timeline, /cleanNextCycleName[\s\S]*?`开始\$\{cleanNextCycleName\}`/);
+  assert.match(cloudDetail, /rpc\("create_archive_cycle"/);
+  assert.match(cloudDetail, /rpc\("move_archive_cycle_to_trash"/);
+  assert.match(cloudDetail, /update\(\{ display_name: displayName\.trim\(\)\.slice\(0, 80\) \|\| null \}\)/);
+  assert.match(localDetail, /onRenameCycle=\{cycleEnabled \? renameLocalCycle : undefined\}/);
+  assert.match(localDetail, /restoreLocalArchiveCycle/);
+  assert.match(timeline, /copy\.rename_cycle/);
+  assert.match(timeline, /<details style=\{cycleMoreStyle\}>/);
   assert.match(timeline, /cycle\.display_name \|\| terminology\.cycleLabel/);
   assert.match(localDb, /display_name: normalizeOptionalText\(displayName\)\?\.slice\(0, 80\) \|\| null/);
+  assert.match(localDb, /trashed_cycles\?: LocalArchiveCycleTrash\[\]/);
+  assert.match(localDb, /export async function deleteLocalArchiveCycle/);
+  assert.match(localDb, /export async function restoreLocalArchiveCycle/);
   assert.match(localSync, /display_name: cycle\.display_name \|\| null/);
+  assert.match(trashMigration, /create or replace function public\.create_archive_cycle/);
+  assert.match(trashMigration, /max\(ac\.cycle_no\)/);
+  assert.match(trashMigration, /create or replace function public\.restore_archive_cycle_from_trash/);
+  assert.match(trashMigration, /Duplicate display names are allowed/i);
 });
 
 test("mobile My Space is single-line and taxonomy actions move to long press", async () => {
@@ -137,7 +151,7 @@ test("mobile Guide combines the category label and Experience uses publication d
     source("lib/i18n/zh.ts"),
   ]);
 
-  assert.match(plantPage, /label: `\$\{t\.plant\.category\}（\$\{option\.label\}）`/);
+  assert.match(plantPage, /option\.value === "all"[\s\S]*?`\$\{t\.plant\.category\}（\$\{option\.label\}）`[\s\S]*?: option\.label/);
   assert.match(plantPage, /options=\{mobileCategoryFilterOptions\}[\s\S]*?hideLabel/);
   assert.match(plantPage, /options=\{categoryFilterOptions\}/);
   assert.match(gallery, /role="button"/);
@@ -184,8 +198,9 @@ test("Alipay is direct on-page payment and never falls back to email", async () 
   assert.match(payment, /NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL/);
   assert.match(payment, /NEXT_PUBLIC_ALIPAY_PAYEE_NAME/);
   assert.match(payment, /ALIPAY_PAYMENT_READY/);
-  assert.match(payment, /src=\{ALIPAY_PAYMENT_QR_URL\}/);
-  assert.match(payment, /\{ALIPAY_PAYEE_NAME\}/);
+  assert.match(payment, /src=\{orderDestinationUrl\}/);
+  assert.match(payment, /\{orderDestinationLabel\}/);
+  assert.match(payment, /order\?\.payment_destination_label/);
   assert.match(payment, /option === "alipay" && !ALIPAY_PAYMENT_READY/);
   assert.doesNotMatch(payment, /alipayMailHref|mailto:[^\n]*alipay/i);
   assert.match(membership, /domestic_payment_summary/);

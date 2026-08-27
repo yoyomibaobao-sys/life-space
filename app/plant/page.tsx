@@ -135,6 +135,7 @@ function FilterSelect({
   options,
   compact = false,
   hideLabel = false,
+  fill = false,
 }: {
   label: string;
   value: string;
@@ -142,15 +143,17 @@ function FilterSelect({
   options: { value: string; label: string }[];
   compact?: boolean;
   hideLabel?: boolean;
+  fill?: boolean;
 }) {
   return (
     <label
       style={{
         display: "grid",
         gap: compact && hideLabel ? 0 : compact ? 4 : 6,
-        minWidth: compact ? 138 : undefined,
-        maxWidth: compact ? 172 : undefined,
-        flex: compact ? "0 0 auto" : undefined,
+        minWidth: compact && !fill ? 118 : 0,
+        maxWidth: compact && !fill ? 154 : undefined,
+        width: fill ? "100%" : undefined,
+        flex: compact && !fill ? "0 0 auto" : undefined,
       }}
     >
       {hideLabel ? null : (
@@ -510,7 +513,10 @@ export default function PlantIndexPage() {
     () =>
       categoryFilterOptions.map((option) => ({
         ...option,
-        label: `${t.plant.category}（${option.label}）`,
+        label:
+          option.value === "all"
+            ? `${t.plant.category}（${option.label}）`
+            : option.label,
       })),
     [categoryFilterOptions, t.plant.category]
   );
@@ -634,6 +640,11 @@ export default function PlantIndexPage() {
       indoor: "all",
     });
     setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
+  }
+
+  function toggleMobileFilters() {
+    if (mobileFiltersOpen) resetFilters();
+    setMobileFiltersOpen((open) => !open);
   }
 
   function persistSearchState(
@@ -872,10 +883,10 @@ export default function PlantIndexPage() {
         active="guide"
         onSearch={() => setIsMobileSearchOpen((open) => !open)}
       />
-      <main style={{ padding: isMobileViewport ? "10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
+      <main style={{ padding: isMobileViewport ? "6px 10px 10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
       <section
         style={{
-          padding: isMobileViewport ? 10 : 22,
+          padding: isMobileViewport ? "6px 10px 8px" : 22,
           border: "1px solid #eee",
           borderRadius: isMobileViewport ? 16 : 20,
           background: "#fff",
@@ -1067,8 +1078,8 @@ export default function PlantIndexPage() {
 
         <div
           style={{
-            marginTop: isMobileViewport ? 8 : 16,
-            paddingTop: isMobileViewport ? 8 : 16,
+            marginTop: isMobileViewport ? 2 : 16,
+            paddingTop: isMobileViewport ? 4 : 16,
             borderTop: "1px solid #f0f0f0",
             display: "grid",
             gap: isMobileViewport ? 6 : 12,
@@ -1078,12 +1089,13 @@ export default function PlantIndexPage() {
             <>
               <div
                 style={{
-                  display: "flex",
+                  display: "grid",
+                  gridTemplateColumns: hasCloudAccess
+                    ? "minmax(0, 1fr) auto auto"
+                    : "minmax(0, 1fr) auto",
                   alignItems: "center",
                   gap: 6,
-                  overflowX: "auto",
-                  scrollbarWidth: "none",
-                  whiteSpace: "nowrap",
+                  width: "100%",
                 }}
               >
                 <FilterSelect
@@ -1093,11 +1105,12 @@ export default function PlantIndexPage() {
                   options={mobileCategoryFilterOptions}
                   compact
                   hideLabel
+                  fill
                 />
                 {hasCloudAccess ? (
                   <button
                     type="button"
-                    onClick={() => setMobileFiltersOpen((open) => !open)}
+                    onClick={toggleMobileFilters}
                     aria-expanded={mobileFiltersOpen}
                     style={mobileFilterToggleStyle}
                   >
@@ -1106,20 +1119,15 @@ export default function PlantIndexPage() {
                   </button>
                 ) : null}
                 <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact />
-                {hasActiveEnvironmentFilters ? (
-                  <button type="button" onClick={resetFilters} style={mobileFilterClearStyle}>
-                    {t.plant.clear}
-                  </button>
-                ) : null}
               </div>
 
               {hasCloudAccess && mobileFiltersOpen ? (
                 <div style={mobileAdvancedFiltersStyle}>
-                  <FilterSelect label={t.plant.light} value={filters.light} onChange={(value) => updateFilter("light", value)} options={lightOptions} compact />
-                  <FilterSelect label={t.plant.water} value={filters.water} onChange={(value) => updateFilter("water", value)} options={waterOptions} compact />
-                  <FilterSelect label={t.plant.temperature} value={filters.temperature} onChange={(value) => updateFilter("temperature", value)} options={temperatureOptions} compact />
-                  <FilterSelect label={t.plant.scene} value={filters.scene} onChange={(value) => updateFilter("scene", value)} options={sceneOptions} compact />
-                  <FilterSelect label={t.plant.indoor_reference} value={filters.indoor} onChange={(value) => updateFilter("indoor", value)} options={indoorOptions} compact />
+                  <FilterSelect label={t.plant.light} value={filters.light} onChange={(value) => updateFilter("light", value)} options={lightOptions} compact hideLabel fill />
+                  <FilterSelect label={t.plant.water} value={filters.water} onChange={(value) => updateFilter("water", value)} options={waterOptions} compact hideLabel fill />
+                  <FilterSelect label={t.plant.temperature} value={filters.temperature} onChange={(value) => updateFilter("temperature", value)} options={temperatureOptions} compact hideLabel fill />
+                  <FilterSelect label={t.plant.scene} value={filters.scene} onChange={(value) => updateFilter("scene", value)} options={sceneOptions} compact hideLabel fill />
+                  <FilterSelect label={t.plant.indoor_reference} value={filters.indoor} onChange={(value) => updateFilter("indoor", value)} options={indoorOptions} compact hideLabel fill />
                 </div>
               ) : null}
             </>
@@ -1427,7 +1435,7 @@ function PlantMenu({
       href={signedIn ? "/archive/interests" : buildLoginHref("/archive/interests")}
       style={plantMenuSummaryStyle(compact)}
     >
-      <UiIcon name="bookmark" size={14} style={{ marginRight: 4 }} />
+      {compact ? null : <UiIcon name="bookmark" size={14} style={{ marginRight: 4 }} />}
       {t.plant.my_saved}{signedIn && interestCount !== null ? `（${interestCount}）` : ""}
     </Link>
   );
@@ -1465,18 +1473,10 @@ const mobileFilterToggleStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-const mobileFilterClearStyle: CSSProperties = {
-  ...mobileFilterToggleStyle,
-  borderColor: "transparent",
-  background: "transparent",
-  color: "#7c8779",
-  padding: "0 4px",
-};
-
 const mobileAdvancedFiltersStyle: CSSProperties = {
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 6,
-  flexWrap: "wrap",
   paddingTop: 7,
   borderTop: "1px solid #edf1e9",
 };

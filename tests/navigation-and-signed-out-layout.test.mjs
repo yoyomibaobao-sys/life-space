@@ -213,8 +213,8 @@ test("mobile plant guides use compact parameters, actions, cards, and sticky tab
   assert.match(detail, /className=\{styles\.section\}/);
   assert.match(styles, /@media \(max-width: 759px\)[\s\S]*?\.parameterGrid \{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.contentTabs \{[\s\S]*?position: sticky;[\s\S]*?top: calc\(50px \+ var\(--app-safe-area-top\)\);/);
-  assert.match(detail, /className=\{styles\.heroActions\}/);
-  assert.match(styles, /\.heroActions \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(detail, /className=\{styles\.heroHeadingRow\}/);
+  assert.match(styles, /\.heroHeadingRow \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/);
   assert.match(styles, /\.heroAction \{[\s\S]*?white-space: normal;[\s\S]*?overflow-wrap: anywhere;/);
   assert.match(experienceCard, /<div className=\{styles\.headerRow\}>[\s\S]*?styles\.title[\s\S]*?styles\.statusRow/);
   assert.match(experienceStyles, /\.headerRow \{[\s\S]*?align-items: flex-start/);
@@ -246,7 +246,9 @@ test("account navigation exposes the confirmed independent menu entries", async 
   assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
   assert.match(profile, /display: "grid"/);
   assert.match(profile, /overflowX: "visible"/);
-  assert.match(profile, /gridTemplateColumns: compact[\s\S]*?"1fr"/);
+  assert.match(profile, /gridTemplateColumns: "1fr"/);
+  assert.match(profile, /compact && isActive/);
+  assert.match(profile, /desktopProfileModulesStyle/);
   assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 50/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
   assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
@@ -637,13 +639,11 @@ test("activity search filters all, projects, and records while Experience search
 });
 
 test("legacy user profile routes merge into the canonical user space", async () => {
-  const [userSpace, userSpaceHeader, publicProfile, archiveDetail, zhCopy, enCopy] = await Promise.all([
+  const [userSpace, userSpaceHeader, publicProfile, archiveDetail] = await Promise.all([
     source("app/user/[id]/page.tsx"),
     source("components/user-space/UserSpaceHeader.tsx"),
     source("app/user/[id]/profile/page.tsx"),
     source("app/archive/[id]/page.tsx"),
-    source("lib/i18n/zh.ts"),
-    source("lib/i18n/en.ts"),
   ]);
 
   assert.match(userSpace, /<UserSpaceHeader/);
@@ -654,9 +654,10 @@ test("legacy user profile routes merge into the canonical user space", async () 
 
   assert.match(archiveDetail, /href=\{isOwner \? "\/archive" : `\/user\/\$\{activeArchive\.user_id\}`\}/);
   assert.match(archiveDetail, /displayUsername/);
-  assert.match(archiveDetail, /<UiIcon name="arrow-right" size=\{14\} \/>/);
-  assert.match(archiveDetail, /background: "#edf6e9"/);
-  assert.match(archiveDetail, /border: "1px solid #bfd5b8"/);
+  assert.match(archiveDetail, /<UiIcon name="arrow-right" size=\{15\} \/>/);
+  assert.match(archiveDetail, /style=\{attributeCreatorLinkStyle\}/);
+  assert.match(archiveDetail, /style=\{projectPageFollowStyle\(isProjectFollowed\)\}/);
+  assert.match(archiveDetail, /background: followed \? "#f6f7f5" : "#edf7ea"/);
 });
 
 test("page headings omit copy that only restates the visible interface", async () => {

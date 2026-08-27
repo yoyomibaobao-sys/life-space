@@ -39,6 +39,8 @@ function getSnapshotMediaId(
   const value =
     item.type === "archive"
       ? snapshot?.archive_cover_media_id
+      : item.type === "cycle"
+        ? snapshot?.cycle_primary_media_id
       : item.type === "record"
         ? snapshot?.record_primary_media_id
         : null;
@@ -76,7 +78,7 @@ export async function GET(request: Request) {
     const deletedAt = row.deleted_at;
 
     if (
-      (type !== "archive" && type !== "record" && type !== "media") ||
+      (type !== "archive" && type !== "cycle" && type !== "record" && type !== "media") ||
       typeof trashEntryId !== "string" ||
       typeof id !== "string" ||
       typeof deletedAt !== "string" ||
@@ -95,6 +97,8 @@ export async function GET(request: Request) {
             ? row.display_title.trim()
             : type === "archive"
               ? "未命名项目"
+            : type === "cycle"
+              ? "茬/轮"
               : type === "record"
                 ? "记录"
                 : "照片",

@@ -5,8 +5,11 @@ declare
   v_function_names text[] := array[
     'create_membership_payment_order_json',
     'submit_membership_payment_order_json',
+    'cancel_membership_payment_order_json',
+    'get_my_open_membership_payment_order_json',
     'admin_get_membership_payment_queue_count',
     'admin_list_membership_payment_queue',
+    'admin_list_membership_payment_queue_v2',
     'admin_confirm_submitted_membership_payment_json',
     'admin_request_membership_payment_update_json'
   ];
@@ -53,6 +56,28 @@ begin
     raise exception 'membership payment order columns are incomplete';
   end if;
 
+  if exists (
+    select 1
+    from unnest(array[
+      'expires_at',
+      'payment_destination_key',
+      'payment_destination_label',
+      'payment_destination_url',
+      'payment_destination_version',
+      'closed_at',
+      'close_reason'
+    ]) as required(column_name)
+    where not exists (
+      select 1
+      from information_schema.columns as c
+      where c.table_schema = 'public'
+        and c.table_name = 'membership_payments'
+        and c.column_name = required.column_name
+    )
+  ) then
+    raise exception 'payment expiry or destination snapshot columns are incomplete';
+  end if;
+
   if not exists (
     select 1
     from storage.buckets
@@ -79,6 +104,30 @@ begin
 
   if not exists (
     select 1
+    from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'membership_payments'
+      and indexname = 'membership_payments_pending_expiry_idx'
+      and indexdef like '%WHERE (status = ''pending_payment''%'
+  ) then
+    raise exception 'pending payment expiry index is missing';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger as tg
+    join pg_class as c on c.oid = tg.tgrelid
+    join pg_namespace as n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'membership_payments'
+      and tg.tgname = 'trg_protect_membership_payment_order_snapshot'
+      and not tg.tgisinternal
+  ) then
+    raise exception 'payment destination snapshot immutability trigger is missing';
+  end if;
+
+  if not exists (
+    select 1
     from pg_policies
     where schemaname = 'storage'
       and tablename = 'objects'
@@ -101,12 +150,17 @@ begin
 
   if has_function_privilege('anon', 'public.create_membership_payment_order_json(text,text)', 'execute')
      or has_function_privilege('anon', 'public.submit_membership_payment_order_json(uuid,text,text)', 'execute')
+     or has_function_privilege('anon', 'public.cancel_membership_payment_order_json(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.get_my_open_membership_payment_order_json()', 'execute')
+     or has_function_privilege('anon', 'public.admin_list_membership_payment_queue_v2()', 'execute')
      or has_function_privilege('anon', 'public.admin_get_membership_payment_queue_count()', 'execute')
      or has_function_privilege('anon', 'public.admin_list_membership_payment_queue()', 'execute')
      or has_function_privilege('anon', 'public.admin_confirm_submitted_membership_payment_json(uuid)', 'execute')
      or has_function_privilege('anon', 'public.admin_request_membership_payment_update_json(uuid,text)', 'execute')
      or not has_function_privilege('authenticated', 'public.create_membership_payment_order_json(text,text)', 'execute')
-     or not has_function_privilege('authenticated', 'public.submit_membership_payment_order_json(uuid,text,text)', 'execute') then
+     or not has_function_privilege('authenticated', 'public.submit_membership_payment_order_json(uuid,text,text)', 'execute')
+     or not has_function_privilege('authenticated', 'public.cancel_membership_payment_order_json(uuid)', 'execute')
+     or not has_function_privilege('authenticated', 'public.get_my_open_membership_payment_order_json()', 'execute') then
     raise exception 'user payment-order function grants are invalid';
   end if;
 
@@ -142,6 +196,50 @@ begin
      or v_definition not like '%interval ''12 months''%'
      or v_definition not like '%for update%' then
     raise exception 'payment confirmation is not transactional or idempotent';
+  end if;
+
+  select lower(pg_get_functiondef(
+    'public.create_membership_payment_order_json(text,text)'::regprocedure
+  )) into v_definition;
+
+  if v_definition not like '%interval ''24 hours''%'
+     or v_definition not like '%payment_destination_version%'
+     or v_definition not like '%close_reason = ''destination_changed''%'
+     or v_definition not like '%status in (''submitted'', ''needs_update'')%'
+     or v_definition not like '%pg_advisory_xact_lock%' then
+    raise exception 'payment creation does not preserve destination and expiry semantics';
+  end if;
+
+  select lower(pg_get_functiondef(
+    'public.submit_membership_payment_order_json(uuid,text,text)'::regprocedure
+  )) into v_definition;
+
+  if v_definition not like '%v_order.status = ''pending_payment''%'
+     or v_definition not like '%v_order.status not in (''pending_payment'', ''needs_update'')%'
+     or v_definition not like '%expires_at = null%'
+     or v_definition not like '%payment_destination_url%' then
+    raise exception 'payment submission expiry or destination behavior is unsafe';
+  end if;
+
+  select lower(pg_get_functiondef(
+    'public.cancel_membership_payment_order_json(uuid)'::regprocedure
+  )) into v_definition;
+
+  if v_definition not like '%v_order.status <> ''pending_payment''%'
+     or v_definition not like '%close_reason = ''user_canceled''%' then
+    raise exception 'payment cancellation is not limited to unpaid orders';
+  end if;
+
+  select lower(pg_get_functiondef(
+    'public.protect_membership_payment_order_snapshot()'::regprocedure
+  )) into v_definition;
+
+  if v_definition not like '%payment_destination_key%'
+     or v_definition not like '%payment_destination_label%'
+     or v_definition not like '%payment_destination_url%'
+     or v_definition not like '%payment_destination_version%'
+     or v_definition not like '%payment_order_snapshot_is_immutable%' then
+    raise exception 'payment destination snapshot can be rewritten';
   end if;
 end;
 $$;

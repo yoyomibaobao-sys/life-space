@@ -14,6 +14,12 @@ export function LegalIndex() {
 
   return (
     <main className={styles.page}>
+      <div className={styles.backRow}>
+        <Link href="/profile">
+          <UiIcon name="arrow-left" size={16} />
+          {content.backToProfile}
+        </Link>
+      </div>
       <header className={styles.hero}>
         <div className={styles.eyebrow}>{content.index.eyebrow}</div>
         <h1>{content.index.title}</h1>
@@ -30,10 +36,6 @@ export function LegalIndex() {
           </Link>
         ))}
       </nav>
-
-      <div className={styles.bottomLinkRow}>
-        <Link href="/profile">{content.backToProfile}</Link>
-      </div>
     </main>
   );
 }

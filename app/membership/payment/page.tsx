@@ -15,7 +15,8 @@ type PaymentOrderStatus =
   | "needs_update"
   | "confirmed"
   | "refunded"
-  | "canceled";
+  | "canceled"
+  | "expired";
 
 type PaymentOrder = {
   id: string;
@@ -29,22 +30,24 @@ type PaymentOrder = {
   submitted_at: string | null;
   review_note: string | null;
   created_at: string | null;
+  expires_at: string | null;
+  payment_destination_key: string | null;
+  payment_destination_label: string | null;
+  payment_destination_url: string | null;
+  payment_destination_version: string | null;
 };
 
 type PaymentOrderRpcResult = Partial<PaymentOrder> & {
   ok?: boolean;
+  found?: boolean;
   error_message?: string | null;
 };
-
-const OPEN_ORDER_STATUSES: PaymentOrderStatus[] = [
-  "pending_payment",
-  "submitted",
-  "needs_update",
-];
 
 const DEFAULT_ALIPAY_PAYMENT_QR_URL =
   "/payments/alipay-cloud-membership-64.jpg";
 const DEFAULT_ALIPAY_PAYEE_NAME = "有时空间";
+const DEFAULT_PAYPAL_PAYMENT_URL =
+  "https://www.paypal.com/ncp/payment/PZEB4Z4SDSLLE";
 const configuredAlipayQrUrl =
   process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL?.trim() ||
   DEFAULT_ALIPAY_PAYMENT_QR_URL;
@@ -75,11 +78,19 @@ function formatAmount(order: Pick<PaymentOrder, "amount" | "currency">) {
   return order.currency === "CNY" ? `¥${amount.toFixed(2)}` : `US$${amount.toFixed(2)}`;
 }
 
+function safePaymentDestinationUrl(value: string | null | undefined, fallback: string) {
+  const candidate = value?.trim() || fallback;
+  return candidate.startsWith("/") || candidate.startsWith("https://")
+    ? candidate
+    : fallback;
+}
+
 export default function MembershipPaymentPage() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<PaymentOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [order, setOrder] = useState<PaymentOrder | null>(null);
@@ -104,22 +115,17 @@ export default function MembershipPaymentPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("membership_payments")
-        .select("id, order_number, status, amount, currency, payment_method, payment_reference, proof_path, submitted_at, review_note, created_at")
-        .eq("user_id", user.id)
-        .not("order_number", "is", null)
-        .in("status", OPEN_ORDER_STATUSES)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc(
+        "get_my_open_membership_payment_order_json"
+      );
 
       if (!active) return;
       if (error) {
         console.error("load membership payment order error:", error);
         setErrorMessage(t.membership_page.order_load_failed);
       } else {
-        const nextOrder = normalizeOrder(data);
+        const result = (Array.isArray(data) ? data[0] : data) as PaymentOrderRpcResult | null;
+        const nextOrder = result?.ok && result.found !== false ? normalizeOrder(result) : null;
         setOrder(nextOrder);
         setPaymentReference(nextOrder?.payment_reference || "");
       }
@@ -176,6 +182,32 @@ export default function MembershipPaymentPage() {
     } catch {
       showToast(t.membership_page.copy_failed);
     }
+  }
+
+  async function cancelPendingOrder() {
+    if (!order || order.status !== "pending_payment" || canceling) return;
+    if (!window.confirm(t.membership_page.cancel_order_confirm)) return;
+
+    setCanceling(true);
+    setErrorMessage("");
+    const { data, error } = await supabase.rpc(
+      "cancel_membership_payment_order_json",
+      { p_order_id: order.id }
+    );
+    setCanceling(false);
+
+    const result = (Array.isArray(data) ? data[0] : data) as PaymentOrderRpcResult | null;
+    if (error || !result?.ok) {
+      console.error("cancel membership payment order error:", error || result);
+      setErrorMessage(t.membership_page.cancel_order_failed);
+      showToast(t.membership_page.cancel_order_failed);
+      return;
+    }
+
+    setOrder(null);
+    setProofFile(null);
+    setPaymentReference("");
+    showToast(t.membership_page.order_canceled);
   }
 
   function selectProof(event: ChangeEvent<HTMLInputElement>) {
@@ -241,8 +273,16 @@ export default function MembershipPaymentPage() {
     const result = (Array.isArray(data) ? data[0] : data) as PaymentOrderRpcResult | null;
     const nextOrder = normalizeOrder(result);
     if (!result?.ok || !nextOrder) {
-      setErrorMessage(t.membership_page.order_submit_failed);
-      showToast(t.membership_page.order_submit_failed);
+      const expired = result?.error_message === "order_expired";
+      const message = expired
+        ? t.membership_page.order_expired
+        : t.membership_page.order_submit_failed;
+      if (expired) {
+        setOrder(null);
+        setProofFile(null);
+      }
+      setErrorMessage(message);
+      showToast(message);
       return;
     }
 
@@ -257,6 +297,28 @@ export default function MembershipPaymentPage() {
       : order.status === "needs_update"
         ? t.membership_page.order_status_needs_update
         : t.membership_page.order_status_pending
+    : "";
+  const orderDestinationUrl = order
+    ? safePaymentDestinationUrl(
+        order.payment_destination_url,
+        order.payment_method === "alipay"
+          ? ALIPAY_PAYMENT_QR_URL
+          : DEFAULT_PAYPAL_PAYMENT_URL
+      )
+    : "";
+  const orderDestinationLabel = order?.payment_destination_label
+    || (order?.payment_method === "alipay" ? ALIPAY_PAYEE_NAME : "LifeSpace");
+  const orderDestinationReady = Boolean(
+    orderDestinationUrl && orderDestinationLabel
+  );
+  const expiryText = order?.expires_at
+    ? new Intl.DateTimeFormat(language === "en" ? "en" : "zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(order.expires_at))
     : "";
 
   return (
@@ -349,10 +411,31 @@ export default function MembershipPaymentPage() {
                 <div style={orderMetaGridStyle}>
                   <div><span>{t.membership_page.order_amount}</span><strong>{formatAmount(order)}</strong></div>
                   <div><span>{t.membership_page.payment_method_label}</span><strong>{order.payment_method === "alipay" ? t.profile.payment_methods.alipay : "PayPal"}</strong></div>
+                  <div><span>{t.membership_page.payment_destination}</span><strong>{orderDestinationLabel}</strong></div>
+                  {order.status === "pending_payment" && expiryText ? (
+                    <div><span>{t.membership_page.order_expires_at}</span><strong>{expiryText}</strong></div>
+                  ) : null}
                 </div>
-                <button type="button" style={copyButtonStyle} onClick={() => void copyOrderNumber()}>
-                  {t.membership_page.copy_order_number}
-                </button>
+                <div style={orderActionsStyle}>
+                  <button type="button" style={copyButtonStyle} onClick={() => void copyOrderNumber()}>
+                    {t.membership_page.copy_order_number}
+                  </button>
+                  {order.status === "pending_payment" ? (
+                    <button
+                      type="button"
+                      style={cancelOrderButtonStyle}
+                      onClick={() => void cancelPendingOrder()}
+                      disabled={canceling}
+                    >
+                      {canceling
+                        ? t.membership_page.canceling_order
+                        : t.membership_page.cancel_and_choose_again}
+                    </button>
+                  ) : null}
+                </div>
+                {order.status === "pending_payment" ? (
+                  <div style={expiryNoticeStyle}>{t.membership_page.order_expiry_notice}</div>
+                ) : null}
               </section>
 
               {order.status === "submitted" ? (
@@ -378,23 +461,23 @@ export default function MembershipPaymentPage() {
                         {order.payment_method === "alipay" ? t.membership_page.alipay_payment_steps : t.membership_page.paypal_payment_steps}
                       </p>
                       {order.payment_method === "alipay" ? (
-                        ALIPAY_PAYMENT_READY ? (
+                        orderDestinationReady ? (
                           <div style={alipayQrPanelStyle}>
                             <div style={alipayQrTitleStyle}>{t.membership_page.alipay_qr_title}</div>
                             {/* Keep the original QR pixels and allow the configured public image host. */}
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={ALIPAY_PAYMENT_QR_URL}
+                              src={orderDestinationUrl}
                               alt={t.membership_page.alipay_qr_alt}
                               style={alipayQrImageStyle}
                             />
                             <div style={alipayPayeeStyle}>
                               <span>{t.membership_page.alipay_payee}</span>
-                              <strong>{ALIPAY_PAYEE_NAME}</strong>
+                              <strong>{orderDestinationLabel}</strong>
                             </div>
                             <div style={alipayQrHintStyle}>{t.membership_page.alipay_qr_hint}</div>
                             <a
-                              href={ALIPAY_PAYMENT_QR_URL}
+                              href={orderDestinationUrl}
                               target="_blank"
                               rel="noreferrer"
                               style={primaryButtonStyle}
@@ -408,7 +491,7 @@ export default function MembershipPaymentPage() {
                           </div>
                         )
                       ) : (
-                        <a href="https://www.paypal.com/ncp/payment/PZEB4Z4SDSLLE" target="_blank" rel="noreferrer" style={primaryButtonStyle}>
+                        <a href={orderDestinationUrl} target="_blank" rel="noreferrer" style={primaryButtonStyle}>
                           {t.membership_page.overseas_payment_action}
                         </a>
                       )}
@@ -500,7 +583,10 @@ const orderHeaderStyle: CSSProperties = { display: "flex", justifyContent: "spac
 const orderNumberStyle: CSSProperties = { display: "block", marginTop: 3, color: "#243123", fontSize: 18, overflowWrap: "anywhere" };
 const orderStatusStyle = (status: PaymentOrderStatus): CSSProperties => ({ flexShrink: 0, padding: "5px 9px", borderRadius: 999, color: status === "needs_update" ? "#9d4a27" : "#3f6f3e", background: status === "needs_update" ? "#fff0e7" : "#eaf4e5", fontSize: 12, fontWeight: 800 });
 const orderMetaGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 };
+const orderActionsStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
 const copyButtonStyle: CSSProperties = { justifySelf: "start", border: "1px solid #d4dfce", borderRadius: 999, background: "#fff", color: "#40613f", padding: "7px 12px", fontSize: 13, fontWeight: 800 };
+const cancelOrderButtonStyle: CSSProperties = { ...copyButtonStyle, color: "#9a4f3d", borderColor: "#ead2ca", cursor: "pointer" };
+const expiryNoticeStyle: CSSProperties = { color: "#7a6b4f", fontSize: 12, lineHeight: 1.55 };
 const stepCardStyle: CSSProperties = { ...cardStyle, gridTemplateColumns: "32px minmax(0, 1fr)", alignItems: "start" };
 const stepNumberStyle: CSSProperties = { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", color: "#fff", background: "#547d4d", fontSize: 14, fontWeight: 900 };
 const stepTitleStyle: CSSProperties = { margin: "2px 0 7px", color: "#243123", fontSize: 18 };
