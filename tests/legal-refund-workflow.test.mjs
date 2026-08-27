@@ -69,7 +69,7 @@ test("users can request and track refunds from profile and payment surfaces", as
   assert.match(refundPage, /href="\/legal\/refunds"/);
   assert.match(profile, /href: "\/membership\/refund"/);
   assert.match(profile, /admin_get_membership_refund_queue_count/);
-  assert.match(payment, /href="\/membership\/refund"/);
+  assert.doesNotMatch(payment, /href="\/membership\/refund"/);
   assert.match(accountDelete, /存在未完成的退款申请/);
   assert.match(accountDelete, /"submitted", "approved_pending_refund"/);
   assert.match(analytics, /"\/membership\/refund"/);

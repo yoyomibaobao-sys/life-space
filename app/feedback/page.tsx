@@ -139,7 +139,6 @@ export default function FeedbackPage() {
               {t.feedback_copy_email}
             </button>
           </div>
-          <p className={styles.sideText}>{t.feedback_priority}</p>
         </aside>
       </div>
 

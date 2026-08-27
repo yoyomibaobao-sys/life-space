@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -42,7 +42,6 @@ function ProfileFlowersContent() {
   const [tab, setTab] = useState<TabKey>(defaultTab);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<FlowerSourceItem | null>(null);
-  const [itemsLoadedAt, setItemsLoadedAt] = useState(0);
 
   useEffect(() => {
     setTab(defaultTab);
@@ -109,7 +108,6 @@ function ProfileFlowersContent() {
           archive_id: recordMap.get(item.record_id)?.archive_id || null,
         }))
       );
-      setItemsLoadedAt(Date.now());
       setLoading(false);
     }
 
@@ -119,7 +117,6 @@ function ProfileFlowersContent() {
   const receivedItems = useMemo(() => items.filter((item) => item.receiver_user_id === currentUserId), [items, currentUserId]);
   const sentItems = useMemo(() => items.filter((item) => item.sender_user_id === currentUserId), [items, currentUserId]);
   const visibleItems = tab === "received" ? receivedItems : sentItems;
-  const activeCount = useMemo(() => visibleItems.filter((item) => !item.revoked_at).length, [visibleItems]);
 
   async function handleConfirmRevoke() {
     const target = revokeTarget;
@@ -128,18 +125,10 @@ function ProfileFlowersContent() {
       return;
     }
 
-    const revokeUntil = target.revoke_until ? new Date(target.revoke_until).getTime() : 0;
-    if (!revokeUntil || Date.now() > revokeUntil) {
-      showToast(helpfulT.revoke_expired);
-      setRevokeTarget(null);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("comment_flowers")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", target.id)
-      .eq("sender_user_id", currentUserId);
+    const { error } = await supabase.rpc("set_comment_adoption", {
+      p_comment_id: target.comment_id,
+      p_active: false,
+    });
 
     if (error) {
       showToast(helpfulT.revoke_failed);
@@ -152,36 +141,20 @@ function ProfileFlowersContent() {
   }
 
   return (
-    <main style={{ maxWidth: 920, margin: "0 auto", padding: "24px 16px 48px" }}>
+    <main style={{ maxWidth: 760, margin: "0 auto", padding: "14px 12px 48px" }}>
       <Link href="/profile" style={backLinkStyle}>
         <UiIcon name="arrow-left" size={15} />
         {helpfulT.back}
       </Link>
-      <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 20, padding: 24, boxShadow: "0 12px 28px rgba(32,56,24,0.06)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 13, color: "#6d7968" }}>{helpfulT.eyebrow}</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, color: "#1f2a1f" }}>{helpfulT.title}</h1>
-            <div style={{ marginTop: 8, fontSize: 14, color: "#62705d" }}>
-              {helpfulT.intro}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/follow" style={linkStyle}>{helpfulT.following}</Link>
-          </div>
-        </div>
+      <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 18, padding: 16, boxShadow: "0 8px 22px rgba(32,56,24,0.05)" }}>
+        <h1 style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>{helpfulT.title}</h1>
 
-        <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           <TabButton active={tab === "received"} onClick={() => setTab("received")}>{helpfulT.received_tab} ({receivedItems.length})</TabButton>
           <TabButton active={tab === "sent"} onClick={() => setTab("sent")}>{helpfulT.sent_tab} ({sentItems.length})</TabButton>
         </div>
 
-        <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <StatPill label={tab === "received" ? helpfulT.active_marks : helpfulT.current_active} value={<span><UiIcon name="helpful" size={13} /> {activeCount}</span>} />
-          <StatPill label={helpfulT.current_list} value={String(visibleItems.length)} />
-        </div>
-
-        <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
+        <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
           {loading ? (
             <div style={{ color: "#6f7b69" }}>{t.archive.loading}</div>
           ) : visibleItems.length === 0 ? (
@@ -192,42 +165,44 @@ function ProfileFlowersContent() {
             </div>
           ) : (
             visibleItems.map((item) => {
-              const revokeUntilTime = item.revoke_until ? new Date(item.revoke_until).getTime() : 0;
-              const canRevoke = tab === "sent" && !item.revoked_at && item.sender_user_id === currentUserId && revokeUntilTime > itemsLoadedAt;
+              const canRevoke = tab === "sent" && !item.revoked_at && item.sender_user_id === currentUserId;
               const statusText = item.revoked_at
                 ? language === "en"
                   ? `${helpfulT.revoked_prefix} ${formatProfileDateTime(item.revoked_at, language)}`
                   : `${helpfulT.revoked_prefix} ${formatProfileDateTime(item.revoked_at, language)} ${helpfulT.revoked_suffix}`
-                : helpfulT.active;
+                : "";
               const senderName = item.sender_name || helpfulT.default_user;
               const receiverName = item.receiver_name || helpfulT.default_user;
               const activityText = tab === "received"
-                ? `${senderName} ${helpfulT.thinks_helpful}`
+                ? `${senderName} ${helpfulT.adopted_your_suggestion}`
                 : language === "en"
-                  ? `${helpfulT.you_marked_prefix} ${receiverName}'s ${helpfulT.you_marked_suffix}`
-                  : `${helpfulT.you_marked_prefix}${receiverName}${helpfulT.you_marked_suffix}`;
+                  ? `${helpfulT.you_adopted_prefix} ${receiverName}'s ${helpfulT.you_adopted_suffix}`
+                  : `${helpfulT.you_adopted_prefix}${receiverName}${helpfulT.you_adopted_suffix}`;
               return (
-                <article key={item.id} style={{ border: "1px solid #e6ece2", borderRadius: 18, padding: 16, background: item.revoked_at ? "#fcfcfb" : "#fffdf7" }}>
+                <article key={item.id} style={{ border: "1px solid #e6ece2", borderRadius: 15, padding: 13, background: item.revoked_at ? "#fcfcfb" : "#fbfdf9" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "#233022" }}>
                         {activityText}
                       </div>
-                      <div style={{ marginTop: 6, fontSize: 12, color: "#768271" }}>{formatProfileDateTime(item.created_at, language)} · {statusText}</div>
+                      <div style={{ marginTop: 4, fontSize: 12, color: "#768271" }}>
+                        {formatProfileDateTime(item.created_at, language)}
+                        {statusText ? ` · ${statusText}` : ""}
+                      </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {item.archive_id ? <Link href={`/archive/${item.archive_id}?record=${item.record_id}`} style={linkStyle}>{helpfulT.view_record}</Link> : null}
-                      {canRevoke ? <button type="button" onClick={() => setRevokeTarget(item)} style={dangerButtonStyle}>{helpfulT.revoke}</button> : null}
+                      {canRevoke ? <button type="button" onClick={() => setRevokeTarget(item)} style={dangerButtonStyle}>{helpfulT.cancel_adoption}</button> : null}
                     </div>
                   </div>
 
                   <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                     <div>
-                      <div style={labelStyle}>{helpfulT.related_comment}</div>
+                      <div style={labelStyle}>{helpfulT.suggestion}</div>
                       <div style={contentStyle}>{item.comment_content || helpfulT.comment_unavailable}</div>
                     </div>
                     <div>
-                      <div style={labelStyle}>{helpfulT.related_help_record}</div>
+                      <div style={labelStyle}>{helpfulT.original_record}</div>
                       <div style={contentStyle}>{item.record_note || helpfulT.record_empty}</div>
                     </div>
                   </div>
@@ -242,7 +217,7 @@ function ProfileFlowersContent() {
         open={Boolean(revokeTarget)}
         title={helpfulT.revoke_title}
         message={helpfulT.revoke_message}
-        confirmText={helpfulT.revoke}
+        confirmText={helpfulT.cancel_adoption}
         danger
         onClose={() => setRevokeTarget(null)}
         onConfirm={handleConfirmRevoke}
@@ -294,14 +269,6 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function StatPill({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div style={{ border: "1px solid #e2ebdd", background: "#f9fcf7", borderRadius: 999, padding: "9px 14px", fontSize: 13, color: "#50614b" }}>
-      {label}：<span style={{ color: "#1f2a1f", fontWeight: 700 }}>{value}</span>
-    </div>
-  );
-}
-
 const linkStyle: React.CSSProperties = {
   textDecoration: "none",
   border: "1px solid #d7e2d2",
@@ -329,8 +296,8 @@ const dangerButtonStyle: React.CSSProperties = {
   background: "#fff7f7",
   color: "#a44a4a",
   borderRadius: 12,
-  padding: "11px 16px",
-  fontSize: 14,
+  padding: "8px 11px",
+  fontSize: 12,
   fontWeight: 600,
   cursor: "pointer",
 };

@@ -1148,7 +1148,6 @@ export default function PlantDetailPage() {
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [projectChooserOpen, setProjectChooserOpen] = useState(false);
 
   useEffect(() => {
     function updateViewportMode() {
@@ -1392,12 +1391,9 @@ export default function PlantDetailPage() {
       }`
     : null;
   const plantProjectId = encodeURIComponent(plant?.id || id || "");
-  const cloudProjectHref = hasCloudAccess
+  const createProjectHref = isSignedIn
     ? `/archive/new?species=${plantProjectId}`
-    : isSignedIn
-      ? "/membership"
-      : buildLoginHref(`/archive/new?species=${plantProjectId}`);
-  const localProjectHref = `/local/archive/new?category=plant&plant_id=${plantProjectId}&system_name=${encodeURIComponent(displayName)}`;
+    : buildLoginHref(`/archive/new?species=${plantProjectId}`);
 
   const difficulty = difficultyMeta(parameters?.management_difficulty_score, copy);
   const environmentTags = getEnvironmentTags(
@@ -1694,13 +1690,12 @@ export default function PlantDetailPage() {
       <section className={styles.hero}>
         <div className={styles.heroHeadingRow}>
           <h1 className={styles.heroTitle}>{displayName}</h1>
-          <button
-            type="button"
+          <Link
+            href={createProjectHref}
             className={styles.heroAction}
-            onClick={() => setProjectChooserOpen(true)}
           >
             {copy.new_project}
-          </button>
+          </Link>
 
           {hasCloudAccess || interestAdded ? (
             <button
@@ -2015,41 +2010,6 @@ export default function PlantDetailPage() {
         )
       ) : null}
 
-      {projectChooserOpen ? (
-        <div
-          className={styles.chooserBackdrop}
-          role="presentation"
-          onMouseDown={() => setProjectChooserOpen(false)}
-        >
-          <section
-            className={styles.chooserDialog}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="project-type-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <h2 id="project-type-title" className={styles.chooserTitle}>
-              {copy.choose_project_type}
-            </h2>
-            <p className={styles.chooserHint}>{copy.choose_project_type_hint}</p>
-            <div className={styles.chooserActions}>
-              <Link href={localProjectHref} className={styles.chooserOption}>
-                {copy.new_local_project}
-              </Link>
-              <Link href={cloudProjectHref} className={styles.chooserOption}>
-                {copy.new_cloud_project}
-              </Link>
-            </div>
-            <button
-              type="button"
-              className={styles.chooserCancel}
-              onClick={() => setProjectChooserOpen(false)}
-            >
-              {t.cancel}
-            </button>
-          </section>
-        </div>
-      ) : null}
     </main>
   );
 }

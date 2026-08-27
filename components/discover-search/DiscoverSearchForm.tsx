@@ -13,17 +13,20 @@ import {
 } from "@/lib/region-shared";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getBehaviorTagLabel } from "@/lib/record-tags";
+import type { ActivitySearchScope } from "@/components/discover-search/DiscoverSearchTabs";
 
 type Props = {
   searchKind: DiscoverSearchKind | "all";
   filters: SearchFilters;
   onFiltersChange: (next: SearchFilters) => void;
+  onSearchKindChange: (next: ActivitySearchScope) => void;
 };
 
 export default function DiscoverSearchForm({
   searchKind,
   filters,
   onFiltersChange,
+  onSearchKindChange,
 }: Props) {
   const { language, t } = useLanguage();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -55,12 +58,59 @@ export default function DiscoverSearchForm({
   const hasCustomTag =
     filters.tag.trim() && !commonSearchTags.includes(filters.tag.trim() as (typeof commonSearchTags)[number]);
 
-  const regionOptions = getRegionOptions(filters.countryCode);
+  const regionOptions = getRegionOptions(filters.countryCode, language);
   const useRegionSelect = hasPresetRegions(filters.countryCode);
   const customCountry = filters.countryCode === "OTHER";
 
   function patch(next: Partial<SearchFilters>) {
     onFiltersChange({ ...filters, ...next });
+  }
+
+  function toggleSearchKind(kind: "projects" | "records") {
+    if (searchKind === "all") {
+      onSearchKindChange(kind === "projects" ? "records" : "projects");
+      return;
+    }
+
+    if (searchKind === kind) return;
+
+    // The other option is the only active one, so selecting this one enables both.
+    onSearchKindChange("all");
+  }
+
+  const searchKindLabel =
+    searchKind === "all"
+      ? t.discover.search_ui.projects_records
+      : searchKind === "projects"
+        ? t.discover.search_ui.projects
+        : t.discover.search_ui.records;
+
+  function renderSearchKindControl(mobile: boolean) {
+    return (
+      <details style={mobile ? mobileKindDetailsStyle : kindDetailsStyle}>
+        <summary style={mobile ? mobileKindSummaryStyle : kindSummaryStyle}>
+          {searchKindLabel}
+        </summary>
+        <div style={mobile ? mobileKindMenuStyle : kindMenuStyle}>
+          <label style={kindOptionStyle}>
+            <input
+              type="checkbox"
+              checked={searchKind !== "records"}
+              onChange={() => toggleSearchKind("projects")}
+            />
+            {t.discover.search_ui.projects}
+          </label>
+          <label style={kindOptionStyle}>
+            <input
+              type="checkbox"
+              checked={searchKind !== "projects"}
+              onChange={() => toggleSearchKind("records")}
+            />
+            {t.discover.search_ui.records}
+          </label>
+        </div>
+      </details>
+    );
   }
 
   useEffect(() => {
@@ -133,6 +183,8 @@ export default function DiscoverSearchForm({
               style={mobileInputStyle}
             />
           </label>
+
+          {renderSearchKindControl(true)}
         </div>
 
         {isRecordSearch ? (
@@ -256,6 +308,8 @@ export default function DiscoverSearchForm({
           />
         </label>
 
+        {renderSearchKindControl(false)}
+
         <label style={fieldLabelStyle}>
           {t.discover.search_ui.category}
           <select
@@ -354,8 +408,9 @@ const mobileFormStyle: CSSProperties = {
 
 const mobileGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gridTemplateColumns: "minmax(82px, .95fr) minmax(58px, .7fr) minmax(72px, 1fr) auto",
   gap: 5,
+  alignItems: "stretch",
 };
 
 const mobileFieldLabelStyle: CSSProperties = {
@@ -392,5 +447,72 @@ const mobileHelpOnlyStyle: CSSProperties = {
   gap: 6,
   fontSize: 13,
   color: "#374737",
+  cursor: "pointer",
+};
+
+const kindDetailsStyle: CSSProperties = {
+  position: "relative",
+  minWidth: 132,
+  alignSelf: "end",
+};
+
+const kindSummaryStyle: CSSProperties = {
+  minHeight: 36,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  padding: "0 10px",
+  border: "1px solid #dfe8dc",
+  borderRadius: 10,
+  background: "#fff",
+  color: "#1f2d1f",
+  fontSize: 13,
+  cursor: "pointer",
+  listStyle: "none",
+  whiteSpace: "nowrap",
+};
+
+const kindMenuStyle: CSSProperties = {
+  position: "absolute",
+  top: 42,
+  right: 0,
+  zIndex: 30,
+  minWidth: 150,
+  display: "grid",
+  gap: 8,
+  padding: 11,
+  border: "1px solid #dce6d8",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 10px 24px rgba(39, 59, 34, .12)",
+};
+
+const mobileKindDetailsStyle: CSSProperties = {
+  ...kindDetailsStyle,
+  minWidth: 90,
+};
+
+const mobileKindSummaryStyle: CSSProperties = {
+  ...kindSummaryStyle,
+  minHeight: 36,
+  padding: "0 7px",
+  borderRadius: 9,
+  fontSize: 12,
+};
+
+const mobileKindMenuStyle: CSSProperties = {
+  ...kindMenuStyle,
+  top: 40,
+  minWidth: 132,
+};
+
+const kindOptionStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  minHeight: 32,
+  color: "#334632",
+  fontSize: 14,
   cursor: "pointer",
 };

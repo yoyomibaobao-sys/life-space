@@ -15,6 +15,9 @@ type Props = {
   eyebrow: string;
   title: string;
   subtitle?: string;
+  storageMode?: "cloud" | "local";
+  cloudHref?: string;
+  localHref?: string;
   category: ArchiveCategory;
   onCategoryChange: (category: ArchiveCategory) => void;
   projectTitle: string;
@@ -38,6 +41,9 @@ export default function ArchiveNewProjectFormShell({
   eyebrow,
   title,
   subtitle,
+  storageMode,
+  cloudHref,
+  localHref,
   category,
   onCategoryChange,
   projectTitle,
@@ -98,6 +104,22 @@ export default function ArchiveNewProjectFormShell({
           <h1 style={titleStyle}>{title}</h1>
           {subtitle ? <p style={subtitleStyle}>{subtitle}</p> : null}
         </header>
+
+        {storageMode ? (
+          <div style={storageModeRowStyle}>
+            <span style={storageModeLabelStyle}>{copy.storage_location}</span>
+            {storageMode === "cloud" ? (
+              <span style={storageModeActiveStyle}>{copy.cloud_default}</span>
+            ) : cloudHref ? (
+              <Link href={cloudHref} style={storageModeLinkStyle}>{copy.cloud_default}</Link>
+            ) : null}
+            {storageMode === "local" ? (
+              <span style={storageModeActiveStyle}>{copy.local_device}</span>
+            ) : localHref ? (
+              <Link href={localHref} style={storageModeLinkStyle}>{copy.local_device}</Link>
+            ) : null}
+          </div>
+        ) : null}
 
         {disabledNotice ? <div style={disabledNoticeStyle}>{disabledNotice}</div> : null}
 
@@ -286,6 +308,44 @@ const disabledNoticeStyle: CSSProperties = {
   color: "#7a5c24",
   fontSize: 13,
   lineHeight: 1.7,
+};
+
+const storageModeRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  marginTop: 12,
+  padding: "8px 10px",
+  border: "1px solid #e2e9de",
+  borderRadius: 12,
+  background: "#f8fbf6",
+  flexWrap: "wrap",
+};
+
+const storageModeLabelStyle: CSSProperties = {
+  marginRight: 2,
+  color: "#6f7d6c",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const storageModeActiveStyle: CSSProperties = {
+  padding: "5px 10px",
+  borderRadius: 999,
+  background: "#4f7f4b",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 750,
+};
+
+const storageModeLinkStyle: CSSProperties = {
+  padding: "5px 10px",
+  border: "1px solid #d4e0d0",
+  borderRadius: 999,
+  color: "#4e654c",
+  fontSize: 12,
+  fontWeight: 700,
+  textDecoration: "none",
 };
 
 const fieldStyle: CSSProperties = {

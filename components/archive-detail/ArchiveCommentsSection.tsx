@@ -64,9 +64,8 @@ export default function ArchiveCommentsSection({
       !canCreateMembershipContent(membership),
   );
   const canWrite = Boolean(currentUserId && !membershipLoading && !membershipBlocked);
-  const canAwardFlowers = Boolean(
+  const canAdoptSuggestions = Boolean(
     currentUserId &&
-    currentUserId === recordOwnerId &&
     (recordStatusTag === "help" || recordStatusTag === "resolved"),
   );
 
@@ -263,8 +262,8 @@ export default function ArchiveCommentsSection({
   }
 
   async function handleSendFlower(comment: CommentItem) {
-    if (!currentUserId || !canAwardFlowers) {
-      showToast(t.archive_comments.owner_only_helpful);
+    if (!currentUserId || !canAdoptSuggestions) {
+      showToast(t.archive_comments.adoption_unavailable);
       return;
     }
     if (comment.user_id === currentUserId) {
@@ -286,12 +285,9 @@ export default function ArchiveCommentsSection({
       return;
     }
 
-    const { error } = await supabase.from("comment_flowers").insert({
-      record_id: recordId,
-      comment_id: comment.id,
-      sender_user_id: currentUserId,
-      receiver_user_id: comment.user_id,
-      reason: "求助回答有帮助",
+    const { error } = await supabase.rpc("set_comment_adoption", {
+      p_comment_id: comment.id,
+      p_active: true,
     });
 
     if (error) {
@@ -307,19 +303,10 @@ export default function ArchiveCommentsSection({
     const flower = comment.myFlower;
     if (!flower || !currentUserId) return;
 
-    const revokeUntil = flower.revoke_until
-      ? new Date(flower.revoke_until).getTime()
-      : 0;
-    if (!revokeUntil || Date.now() > revokeUntil) {
-      showToast(t.archive_comments.revoke_expired);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("comment_flowers")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", flower.id)
-      .eq("sender_user_id", currentUserId);
+    const { error } = await supabase.rpc("set_comment_adoption", {
+      p_comment_id: comment.id,
+      p_active: false,
+    });
 
     if (error) {
       showToast(t.archive_comments.revoke_failed);
@@ -452,14 +439,7 @@ export default function ArchiveCommentsSection({
               </div>
             ) : (
               comments.map((comment) => {
-                const revokeUntilTime = comment.myFlower?.revoke_until
-                  ? new Date(comment.myFlower.revoke_until).getTime()
-                  : 0;
-                const canRevoke = Boolean(
-                  comment.myFlower &&
-                  !comment.myFlower.revoked_at &&
-                  revokeUntilTime > Date.now(),
-                );
+                const adoptedByMe = Boolean(comment.myFlower && !comment.myFlower.revoked_at);
                 const username = comment.profile?.username || t.archive_comments.default_user;
                 const canDeleteComment = Boolean(
                   currentUserId &&
@@ -515,9 +495,30 @@ export default function ArchiveCommentsSection({
                       <span>·</span>
                       <span>{formatDateTime(comment.created_at)}</span>
                     </span>
-                    {comment.flowerCount > 0 ? (
-                      <span style={{ color: "#9d6f1f", whiteSpace: "nowrap" }}>
-                        <UiIcon name="helpful" size={13} /> {t.archive_comments.helpful} {comment.flowerCount}
+                    {comment.user_id !== currentUserId && canAdoptSuggestions ? (
+                      <button
+                        type="button"
+                        onClick={() => void (adoptedByMe
+                          ? handleRevokeFlower(comment)
+                          : handleSendFlower(comment))}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: adoptedByMe ? "#39753a" : "#557a4f",
+                          fontSize: 12,
+                          fontWeight: adoptedByMe ? 750 : 650,
+                          padding: 0,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <UiIcon name={adoptedByMe ? "helpful-filled" : "helpful"} size={14} />{" "}
+                        {adoptedByMe ? t.archive_comments.marked : t.archive_comments.helpful}
+                        {comment.flowerCount > 0 ? ` ${comment.flowerCount}` : ""}
+                      </button>
+                    ) : comment.flowerCount > 0 ? (
+                      <span style={{ color: "#557a4f", whiteSpace: "nowrap" }}>
+                        <UiIcon name="helpful" size={14} /> {t.archive_comments.helpful} {comment.flowerCount}
                       </span>
                     ) : null}
                     {canDeleteComment ? (
@@ -544,49 +545,6 @@ export default function ArchiveCommentsSection({
                       </button>
                     ) : null}
 
-                    {canAwardFlowers && comment.user_id !== currentUserId ? (
-                      comment.myFlower && !comment.myFlower.revoked_at ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleRevokeFlower(comment)}
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            color: "#9f5d22",
-                            fontSize: 12,
-                            padding: 0,
-                            cursor: canRevoke ? "pointer" : "default",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {canRevoke
-                            ? t.archive_comments.marked_revoke
-                            : t.archive_comments.marked}
-                        </button>
-                      ) : comment.myFlower?.revoked_at ? (
-                        <span
-                          style={{ color: "#9b8771", whiteSpace: "nowrap" }}
-                        >
-                          {t.archive_comments.mark_revoked}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void handleSendFlower(comment)}
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            color: "#9d6f1f",
-                            fontSize: 12,
-                            padding: 0,
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {t.archive_comments.helpful}
-                        </button>
-                      )
-                    ) : null}
                   </article>
                 );
               })

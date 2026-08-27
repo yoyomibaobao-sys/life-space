@@ -5,9 +5,7 @@ import DiscoverSearchForm from "@/components/discover-search/DiscoverSearchForm"
 import DiscoverSearchFromArchiveNotice from "@/components/discover-search/DiscoverSearchFromArchiveNotice";
 import DiscoverSearchHeader from "@/components/discover-search/DiscoverSearchHeader";
 import DiscoverSearchResults from "@/components/discover-search/DiscoverSearchResults";
-import DiscoverSearchTabs, {
-  type ActivitySearchScope,
-} from "@/components/discover-search/DiscoverSearchTabs";
+import type { ActivitySearchScope } from "@/components/discover-search/DiscoverSearchTabs";
 import {
   fetchDiscoverProjectSearchResults,
   fetchDiscoverSearchResults,
@@ -128,7 +126,6 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
     window.removeEventListener("popstate", loadFromUrl);
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
  useEffect(() => {
@@ -154,8 +151,6 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
     >
       <DiscoverSearchHeader />
 
-      <DiscoverSearchTabs value={searchKind} onChange={changeSearchKind} />
-
       {searchKind === "records" ? (
         <DiscoverSearchFromArchiveNotice
           fromArchiveId={fromArchiveId}
@@ -167,6 +162,7 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
         searchKind={searchKind}
         filters={filters}
         onFiltersChange={setFilters}
+        onSearchKindChange={changeSearchKind}
       />
 
       {hasFilters ? (

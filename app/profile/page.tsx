@@ -102,12 +102,33 @@ function getProfilePaymentStatusLabel(status: string | null | undefined, languag
   return language === "en" ? "Not recorded" : "未记录";
 }
 
+function formatExportSize(bytes: number) {
+  const safeBytes = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
+  if (safeBytes < 1024 * 1024) {
+    return `${Math.ceil(safeBytes / 1024)} KB`;
+  }
+  if (safeBytes < 1024 * 1024 * 1024) {
+    return `${(safeBytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+  return `${(safeBytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function fillExportTemplate(
+  template: string,
+  values: Record<string, string | number>
+) {
+  return Object.entries(values).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+    template
+  );
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
-    { href: "/membership/payment", label: language === "en" ? "Open / renew" : "开通／续费" },
-    { value: "payment", label: language === "en" ? "Order history" : "订单查询" },
+    { href: "/membership/payment", label: language === "en" ? "Cloud Membership" : "开通云会员" },
+    { value: "payment", label: language === "en" ? "Order progress" : "订单进度查询" },
     { href: "/membership/refund", label: t.profile.refund_request_nav },
     { href: "/membership/benefits", label: language === "en" ? "Membership types" : "会员类别说明" },
     { href: "/profile/recent", label: language === "en" ? "Browsing history" : "浏览历史" },
@@ -141,6 +162,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportPhase, setExportPhase] = useState<"idle" | "estimating" | "packaging">("idle");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -305,7 +327,10 @@ export default function ProfilePage() {
     void init();
   }, [router]);
 
-  const regionOptions = useMemo<RegionOption[]>(() => getRegionOptions(countryCode), [countryCode]);
+  const regionOptions = useMemo<RegionOption[]>(
+    () => getRegionOptions(countryCode, language),
+    [countryCode, language]
+  );
   const useRegionSelect = hasPresetRegions(countryCode);
   const showCustomCountryInput = countryCode === "OTHER";
 
@@ -381,6 +406,29 @@ export default function ProfilePage() {
 
     setPaymentLoading(false);
   }
+
+  useEffect(() => {
+    if (!user?.id || !showPaymentModule) return;
+
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        void refreshPaymentRows(user.id);
+      }
+    };
+
+    void refreshPaymentRows(user.id);
+    window.addEventListener("pageshow", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.removeEventListener("pageshow", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  // The refresh function intentionally follows the currently opened module.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPaymentModule, user?.id]);
 
   async function handleSave() {
     if (!user) return;
@@ -478,6 +526,7 @@ export default function ProfilePage() {
     if (!user || exporting) return;
 
     setExporting(true);
+    setExportPhase("estimating");
     setErrorMsg("");
 
     try {
@@ -493,9 +542,46 @@ export default function ProfilePage() {
         return;
       }
 
+      const headers = {
+        Authorization: `Bearer ${session.access_token}`,
+      };
+      const estimateResponse = await fetch("/api/export/my-records?estimate=1", {
+        headers,
+      });
+
+      if (!estimateResponse.ok) {
+        const text = await estimateResponse.text();
+        const message = text || t.profile.export_failed;
+        setErrorMsg(message);
+        showToast(message);
+        return;
+      }
+
+      const estimate = (await estimateResponse.json()) as {
+        projects?: number;
+        records?: number;
+        media?: number;
+        sizeBytes?: number;
+      };
+      const sizeBytes = Number(estimate.sizeBytes || 0);
+      const estimateText = fillExportTemplate(t.profile.export_estimate, {
+        projects: Number(estimate.projects || 0),
+        records: Number(estimate.records || 0),
+        media: Number(estimate.media || 0),
+        size: formatExportSize(sizeBytes),
+      });
+      const largeHint = sizeBytes >= 50 * 1024 * 1024
+        ? `\n\n${t.profile.export_large_hint}`
+        : "";
+
+      if (!window.confirm(`${estimateText}\n\n${t.profile.export_confirm}${largeHint}`)) {
+        return;
+      }
+
+      setExportPhase("packaging");
       const response = await fetch("/api/export/my-records", {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          ...headers,
         },
       });
 
@@ -528,6 +614,7 @@ export default function ProfilePage() {
       showToast(t.profile.export_failed);
     } finally {
       setExporting(false);
+      setExportPhase("idle");
     }
   }
 
@@ -740,8 +827,10 @@ export default function ProfilePage() {
           >
             <IdentityStat label={language === "en" ? "Member no." : "会员编号"} value={String(profile.account_number || "—")} />
             <IdentityStat
-              label={language === "en" ? "Helpful received" : "收到有用"}
-              value={String(profileStats?.receivedFlowerCount || 0)}
+              label={language === "en" ? "Suggestions adopted" : "被采纳的次数"}
+              value={language === "en"
+                ? String(profileStats?.receivedFlowerCount || 0)
+                : `${profileStats?.receivedFlowerCount || 0}次`}
               href="/profile/helpful"
             />
             <IdentityStat label={language === "en" ? "Membership" : "会员类别"} value={getMembershipPlanLabel(membership?.plan, language)} />
@@ -927,30 +1016,24 @@ export default function ProfilePage() {
 
         {showPaymentModule ? (
         <section id="profile-module-payment" style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.payment_records}</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.payment_info}</h2>
-              <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
-                {t.profile.payment_records_hint}
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link href="/membership/payment" style={primaryButtonStyle}>{t.profile.open_or_renew}</Link>
-              <Link href="/membership/refund" style={secondaryLinkStyle}>{t.profile.request_refund}</Link>
-              <button
-                type="button"
-                onClick={() => void refreshPaymentRows(user.id)}
-                disabled={paymentLoading}
-                style={{
-                  ...secondaryLinkStyle,
-                  cursor: paymentLoading ? "not-allowed" : "pointer",
-                  opacity: paymentLoading ? 0.65 : 1,
-                }}
-              >
-                {paymentLoading ? t.profile.refreshing : t.profile.refresh_payments}
-              </button>
-            </div>
+          <div style={paymentHeadingStyle}>
+            <h2 style={{ margin: 0, fontSize: 20, color: "#1f2a1f" }}>
+              {language === "en" ? "Order progress" : "订单进度查询"}
+            </h2>
+            <button
+              type="button"
+              onClick={() => void refreshPaymentRows(user.id)}
+              disabled={paymentLoading}
+              aria-label={t.profile.refresh_payments}
+              title={t.profile.refresh_payments}
+              style={{
+                ...paymentRefreshButtonStyle,
+                cursor: paymentLoading ? "not-allowed" : "pointer",
+                opacity: paymentLoading ? 0.55 : 1,
+              }}
+            >
+              <UiIcon name="refresh" size={17} />
+            </button>
           </div>
 
           <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
@@ -1037,9 +1120,13 @@ export default function ProfilePage() {
               opacity: exporting ? 0.65 : 1,
             }}
           >
-            {exporting ? t.profile.packaging : t.profile.export_records}
+            {exportPhase === "estimating"
+              ? t.profile.estimating_export
+              : exportPhase === "packaging"
+                ? t.profile.packaging
+                : t.profile.export_records}
           </button>
-          {exporting ? (
+          {exportPhase === "packaging" ? (
             <p style={exportProgressStyle}>
               {t.profile.packaging_hint}
             </p>
@@ -1540,6 +1627,26 @@ const paymentHistorySectionStyle: CSSProperties = {
   border: "1px solid #eadfca",
   borderRadius: 18,
   padding: 14,
+};
+
+const paymentHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const paymentRefreshButtonStyle: CSSProperties = {
+  width: 36,
+  height: 36,
+  flex: "0 0 36px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid #d9e3d4",
+  borderRadius: 999,
+  background: "#ffffff",
+  color: "#4d6949",
 };
 
 const paymentCardStyle: CSSProperties = {

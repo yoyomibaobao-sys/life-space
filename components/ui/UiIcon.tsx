@@ -25,6 +25,7 @@ export type UiIconName =
   | "flower"
   | "follow"
   | "helpful"
+  | "helpful-filled"
   | "home"
   | "image"
   | "lock"
@@ -107,7 +108,9 @@ function IconPaths({ name }: { name: UiIconName }) {
     case "follow":
       return <><circle cx="9" cy="8" r="3.5" /><path d="M3 20c.5-4 2.5-6 6-6 2.1 0 3.8.7 4.8 2M17.5 10v6M14.5 13h6" /></>;
     case "helpful":
-      return <><path d="M19.5 4.5C12 4.8 7.2 8.6 6.8 14.8c4.6 1.1 9.1-.2 11.3-3.8 1.2-1.9 1.5-4.2 1.4-6.5Z" /><path d="M5 20c1.5-4.7 4.8-8 10-10.2M9.8 15.5l2.2 2.1 4.5-5" /></>;
+      return <><path d="M12 21v-8M12 13C8.1 13 5.2 10.5 5.2 6.2c3.9 0 6.8 2.5 6.8 6.8ZM12 15.8c3.9 0 6.8-2.5 6.8-6.8-3.9 0-6.8 2.5-6.8 6.8Z" /></>;
+    case "helpful-filled":
+      return <><path d="M11.35 13.55C7.2 13.2 4.5 10.4 4.65 5.5c4.55.2 7.15 2.9 6.7 8.05ZM12.65 16.3c4.15-.35 6.85-3.15 6.7-8.05-4.55.2-7.15 2.9-6.7 8.05Z" fill="currentColor" stroke="none" /><path d="M12 21v-9" /></>;
     case "home":
       return <><path d="m3 11 9-8 9 8" /><path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7" /></>;
     case "image":

@@ -164,14 +164,14 @@ function FilterSelect({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={{
-          height: 38,
+          height: compact ? 36 : 38,
           borderRadius: compact ? 10 : 12,
           border: "1px solid #e5e7eb",
           padding: compact ? "0 10px" : "0 12px",
           background: "#fff",
           color: "#333",
-          fontSize: compact ? 13 : 14,
-          fontWeight: compact ? 750 : undefined,
+          fontSize: compact ? 12.5 : 14,
+          fontWeight: compact ? 650 : undefined,
         }}
       >
         {options.map((option) => (
@@ -1091,8 +1091,8 @@ export default function PlantIndexPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: hasCloudAccess
-                    ? "minmax(0, 1fr) auto auto"
-                    : "minmax(0, 1fr) auto",
+                    ? "minmax(0, 1fr) auto"
+                    : "minmax(0, 1fr)",
                   alignItems: "center",
                   gap: 6,
                   width: "100%",
@@ -1118,7 +1118,6 @@ export default function PlantIndexPage() {
                     {activeEnvironmentFilterCount > 0 ? ` (${activeEnvironmentFilterCount})` : ""}
                   </button>
                 ) : null}
-                <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact />
               </div>
 
               {hasCloudAccess && mobileFiltersOpen ? (
@@ -1171,7 +1170,7 @@ export default function PlantIndexPage() {
             alignItems: "center",
             marginBottom: 10,
             gap: 12,
-            flexWrap: "wrap",
+            flexWrap: isMobileViewport ? "nowrap" : "wrap",
           }}
         >
           {!isMobileViewport || query ? (
@@ -1182,7 +1181,15 @@ export default function PlantIndexPage() {
             </h2>
           ) : null}
 
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <div
+            style={{
+              width: isMobileViewport && !query ? "100%" : undefined,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: isMobileViewport && !query ? "space-between" : undefined,
+              gap: 9,
+            }}
+          >
             <span style={{ fontSize: 13, color: "#888" }}>
               {loading ? t.plant.loading : `${filteredPlants.length}${t.plant.result_suffix}`}
             </span>
@@ -1201,6 +1208,9 @@ export default function PlantIndexPage() {
               >
                 {t.plant.clear_search}
               </button>
+            ) : null}
+            {isMobileViewport ? (
+              <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact />
             ) : null}
           </div>
         </div>
@@ -1443,16 +1453,16 @@ function PlantMenu({
 
 function plantMenuSummaryStyle(compact: boolean): CSSProperties {
   return {
-    minHeight: compact ? 38 : 34,
+    minHeight: 34,
     display: "inline-flex",
     alignItems: "center",
-    padding: compact ? "0 8px" : "5px 12px",
-    border: "1px solid #dbe7d7",
+    padding: compact ? "0 9px" : "5px 12px",
+    border: compact ? "1px solid #bcd3b5" : "1px solid #dbe7d7",
     borderRadius: 999,
-    background: "#fbfdf9",
+    background: compact ? "#f3f8ef" : "#fbfdf9",
     color: "#42663f",
-    fontSize: 13,
-    fontWeight: 750,
+    fontSize: compact ? 12.5 : 13,
+    fontWeight: compact ? 700 : 750,
     whiteSpace: "nowrap",
     cursor: "pointer",
     boxSizing: "border-box",
@@ -1461,14 +1471,14 @@ function plantMenuSummaryStyle(compact: boolean): CSSProperties {
 }
 
 const mobileFilterToggleStyle: CSSProperties = {
-  minHeight: 38,
+  minHeight: 36,
   padding: "0 10px",
   border: "1px solid #d6e4d2",
   borderRadius: 10,
   background: "#f8fbf6",
   color: "#42633e",
-  fontSize: 13,
-  fontWeight: 750,
+  fontSize: 12.5,
+  fontWeight: 650,
   whiteSpace: "nowrap",
   cursor: "pointer",
 };

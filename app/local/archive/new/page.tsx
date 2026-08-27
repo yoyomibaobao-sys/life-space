@@ -92,6 +92,11 @@ export default function NewLocalArchivePage() {
           : true
       )
       .slice(0, 8);
+  const cloudCreateHref = (() => {
+    const params = new URLSearchParams({ category });
+    if (category === "plant" && plantId) params.set("species", plantId);
+    return `/archive/new?${params.toString()}`;
+  })();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -148,6 +153,8 @@ export default function NewLocalArchivePage() {
       backLabel={copy.back_to_space}
       eyebrow={copy.local_offline}
       title={copy.new_project}
+      storageMode="local"
+      cloudHref={cloudCreateHref}
       category={category}
       onCategoryChange={handleCategoryChange}
       projectTitle={title}

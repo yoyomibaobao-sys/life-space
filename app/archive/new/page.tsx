@@ -94,6 +94,15 @@ function NewArchiveContent() {
   const [loading, setLoading] = useState(false);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(true);
+  const localCreateHref = useMemo(() => {
+    const params = new URLSearchParams({ category });
+    const currentSpeciesId = speciesId || preselectedSpeciesId || "";
+    const currentSystemName =
+      category === "plant" ? speciesSearch : systemName || systemSearch;
+    if (currentSpeciesId) params.set("plant_id", currentSpeciesId);
+    if (currentSystemName.trim()) params.set("system_name", currentSystemName.trim());
+    return `/local/archive/new?${params.toString()}`;
+  }, [category, preselectedSpeciesId, speciesId, speciesSearch, systemName, systemSearch]);
 
   useEffect(() => {
     async function loadCandidates() {
@@ -336,6 +345,8 @@ function NewArchiveContent() {
       backLabel={copy.back_to_space}
       eyebrow={copy.cloud_space}
       title={copy.new_project}
+      storageMode="cloud"
+      localHref={localCreateHref}
       category={category}
       onCategoryChange={(nextCategory) => {
         switchCategory(nextCategory);

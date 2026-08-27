@@ -713,6 +713,7 @@ export default function FollowPage() {
             <div style={listStyle}>
               {filteredProjectCards.map((item) => {
                 const meta = [item.displaySystemName, item.ownerName];
+                const separateStats = isMobileViewport && language === "en";
                 if (item.subTagName) meta.push(item.subTagName);
                 if (item.groupTagName) meta.push(item.groupTagName);
 
@@ -744,12 +745,12 @@ export default function FollowPage() {
 
                     <div style={cardBodyStyle}>
                       <div style={cardInlineTitleRowStyle}>
-                        <span style={projectInlineMetaStyle}>{item.categoryLabel} ·</span>
+                        <span style={language === "en" ? projectInlineMetaEnglishStyle : projectInlineMetaStyle}>{item.categoryLabel} ·</span>
                         <span style={projectTitleInlineStyle}>{item.title}</span>
                         {hasUnread(`project:${item.id}`, item.latestRecordTime, item.followedAt) ? (
                           <span style={unreadDotStyle} title={followT.new_record} />
                         ) : null}
-                        <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} />
+                        {separateStats ? null : <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} />}
                         {item.statusKind !== "normal" ? (
                           <StatusBadge kind={item.statusKind}>{item.statusLabel}</StatusBadge>
                         ) : null}
@@ -778,6 +779,14 @@ export default function FollowPage() {
                       </div>
 
                       <div style={metaLineStyle}>{meta.filter(Boolean).join(" · ") || followT.projects}</div>
+
+                      {separateStats ? (
+                        <ProjectMetaLine
+                          recordCount={item.recordCount}
+                          durationDays={item.durationDays}
+                          style={{ fontSize: 11, gap: "3px 8px" }}
+                        />
+                      ) : null}
 
                       <div style={noteLineStyle}>
                         {item.latestNote}
@@ -924,7 +933,7 @@ export default function FollowPage() {
                     </button>
                     <div style={cardBodyStyle}>
                       <div style={cardInlineTitleRowStyle}>
-                        <span style={projectInlineMetaStyle}>{item.categoryLabel} ·</span>
+                        <span style={language === "en" ? projectInlineMetaEnglishStyle : projectInlineMetaStyle}>{item.categoryLabel} ·</span>
                         <button type="button" onClick={() => router.push(`/archive/${item.id}`)} style={projectTitleButtonStyle}>
                           {item.title}
                         </button>
@@ -1416,6 +1425,14 @@ const projectInlineMetaStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
+const projectInlineMetaEnglishStyle: React.CSSProperties = {
+  ...projectInlineMetaStyle,
+  maxWidth: "42%",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  fontSize: 10.5,
+};
+
 const metaLineStyle: React.CSSProperties = {
   color: "#7a8578",
   fontSize: 11,
@@ -1568,27 +1585,27 @@ const unreadDotStyle: React.CSSProperties = {
 
 const followedUserRailStyle: React.CSSProperties = {
   display: "flex",
-  gap: 10,
+  gap: 3,
   overflowX: "auto",
-  padding: "2px 2px 12px",
-  marginBottom: 10,
+  padding: "0 1px 2px",
+  marginBottom: 2,
   WebkitOverflowScrolling: "touch",
 };
 
 const followedUserItemWrapStyle: React.CSSProperties = {
   position: "relative",
-  width: 68,
-  flex: "0 0 68px",
+  width: 56,
+  flex: "0 0 56px",
 };
 
 function followedUserPillStyle(active: boolean): React.CSSProperties {
   return {
-    width: 68,
-    flex: "0 0 68px",
+    width: 56,
+    flex: "0 0 56px",
     display: "grid",
     justifyItems: "center",
-    gap: 5,
-    padding: "7px 4px",
+    gap: 1,
+    padding: "2px 2px 3px",
     border: active ? "1px solid #9fc796" : "1px solid transparent",
     borderRadius: 14,
     background: active ? "#eef7e8" : "transparent",
@@ -1599,8 +1616,8 @@ function followedUserPillStyle(active: boolean): React.CSSProperties {
 
 const followedUserSpaceShortcutStyle: React.CSSProperties = {
   position: "absolute",
-  top: 32,
-  right: 3,
+  top: 24,
+  right: 1,
   width: 21,
   height: 21,
   display: "grid",
@@ -1615,13 +1632,13 @@ const followedUserSpaceShortcutStyle: React.CSSProperties = {
 
 function followedUserAllButtonStyle(active: boolean): React.CSSProperties {
   return {
-    minHeight: 34,
+    minHeight: 32,
     alignSelf: "center",
     flex: "0 0 auto",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "0 13px",
+    padding: "0 11px",
     border: active ? "1px solid #9fc796" : "1px solid #dfe7d9",
     borderRadius: 999,
     background: active ? "#eef7e8" : "#fff",
@@ -1635,16 +1652,16 @@ function followedUserAllButtonStyle(active: boolean): React.CSSProperties {
 }
 
 const userAvatarSmallStyle: React.CSSProperties = {
-  width: 42,
-  height: 42,
+  width: 35,
+  height: 35,
   display: "block",
   borderRadius: "50%",
   objectFit: "cover",
 };
 
 const userAvatarFallbackSmallStyle: React.CSSProperties = {
-  width: 42,
-  height: 42,
+  width: 35,
+  height: 35,
   display: "grid",
   placeItems: "center",
   borderRadius: "50%",
@@ -1676,8 +1693,9 @@ const railUsernameStyle: React.CSSProperties = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-  fontSize: 13,
+  fontSize: 11.5,
   fontWeight: 600,
+  lineHeight: 1.1,
 };
 
 const selectedUserActionStyle: React.CSSProperties = {

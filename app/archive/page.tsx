@@ -2231,7 +2231,7 @@ function MainCategoryFilters({
   return (
     <section style={workspaceFilterPanelStyle}>
       <div style={workspaceChipRowStyle}>
-        <button type="button" onClick={onReset} style={workspacePillStyle(!activeCategory)}>
+        <button type="button" onClick={onReset} style={workspacePillStyle(!activeCategory, language === "en")}>
           {t.archive_workspace.all}
         </button>
         {archiveCategoryOptions.map((option) => (
@@ -2239,7 +2239,7 @@ function MainCategoryFilters({
             key={option.value}
             type="button"
             onClick={() => onSelectCategory(option.value)}
-            style={workspacePillStyle(activeCategory === option.value)}
+            style={workspacePillStyle(activeCategory === option.value, language === "en")}
           >
             {getArchiveCategoryLabel(option.value, language)}
           </button>
@@ -2270,7 +2270,7 @@ function LocalArchiveFilters({
   onSelectSubTag: (name: string) => void;
   onSelectGroup: (name: string) => void;
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   return (
     <>
@@ -2287,7 +2287,7 @@ function LocalArchiveFilters({
             <button
               type="button"
               onClick={() => onSelectCategory(activeCategory)}
-              style={workspacePillStyle(!activeSubTag)}
+              style={workspacePillStyle(!activeSubTag, language === "en")}
             >
               {t.archive_workspace.all_subcategories}
             </button>
@@ -2296,7 +2296,7 @@ function LocalArchiveFilters({
                 key={tag}
                 type="button"
                 onClick={() => onSelectSubTag(tag)}
-                style={workspacePillStyle(activeSubTag === tag)}
+                style={workspacePillStyle(activeSubTag === tag, language === "en")}
               >
                 {tag}
               </button>
@@ -2312,7 +2312,7 @@ function LocalArchiveFilters({
             <button
               type="button"
               onClick={() => onSelectGroup("")}
-              style={workspacePillStyle(!activeGroupTag)}
+              style={workspacePillStyle(!activeGroupTag, language === "en")}
             >
               {t.archive_workspace.all_groups}
             </button>
@@ -2321,7 +2321,7 @@ function LocalArchiveFilters({
                 key={tag}
                 type="button"
                 onClick={() => onSelectGroup(tag)}
-                style={workspacePillStyle(activeGroupTag === tag)}
+                style={workspacePillStyle(activeGroupTag === tag, language === "en")}
               >
                 {tag}
               </button>
@@ -2549,17 +2549,18 @@ const workspaceFilterLabelStyle: CSSProperties = {
   fontWeight: 800,
 };
 
-function workspacePillStyle(active: boolean): CSSProperties {
+function workspacePillStyle(active: boolean, compactEnglish = false): CSSProperties {
   return {
     border: active ? "1px solid #3f7d3d" : "1px solid #cfe3c8",
     background: active ? "#3f7d3d" : "#f8fbf5",
     color: active ? "#fff" : "#335033",
     borderRadius: 999,
-    padding: "7px 14px",
-    fontSize: 15,
+    padding: compactEnglish ? "7px 8px" : "7px 14px",
+    fontSize: compactEnglish ? 12 : 15,
     fontWeight: 700,
     cursor: "pointer",
-    lineHeight: 1.3,
+    lineHeight: compactEnglish ? 1.1 : 1.3,
+    overflowWrap: compactEnglish ? "anywhere" : undefined,
   };
 }
 

@@ -163,7 +163,8 @@ test("registration, membership, and admin copy use the confirmed rollout rules",
   assert.match(registration, /t\.auth\.registration_intro/);
   assert.match(membership, /t\.membership_page/);
   assert.match(zhCopy, /永久账号编号/);
-  assert.match(zhCopy, /不设6个月期限/);
+  assert.match(zhCopy, /获得后长期保留/);
+  assert.doesNotMatch(zhCopy, /6个月/);
   assert.match(admin, /admin_get_signup_rollout_status/);
   assert.match(admin, /t\.admin_memberships\.rollout_title/);
   assert.match(admin, /t\.admin_memberships\.platform_storage/);

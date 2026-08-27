@@ -172,9 +172,7 @@ export default function MembershipRefundPage() {
       </div>
 
       <header className={styles.hero}>
-        <div className={styles.eyebrow}>{copy.eyebrow}</div>
         <h1>{copy.title}</h1>
-        <p>{copy.intro}</p>
       </header>
 
       <section className={styles.policyCard}>
@@ -203,7 +201,6 @@ export default function MembershipRefundPage() {
       ) : items.length === 0 ? (
         <section className={styles.empty}>
           <p>{copy.no_orders}</p>
-          <Link href="/membership/payment" className={styles.secondaryLink}>{copy.open_payment_page}</Link>
         </section>
       ) : (
         <section className={styles.orders} aria-label={copy.orders_aria}>
@@ -279,9 +276,6 @@ export default function MembershipRefundPage() {
         </section>
       )}
 
-      <section className={styles.contact}>
-        {copy.contact_prefix}<a href="mailto:yoyomibaobao@gmail.com">yoyomibaobao@gmail.com</a>
-      </section>
     </main>
   );
 }

@@ -10,8 +10,7 @@
 }
 
 .backLink,
-.textLink,
-.contact a {
+.textLink {
   color: #4f724d;
   font-weight: 760;
   text-decoration: none;
@@ -20,31 +19,23 @@
 .hero,
 .policyCard,
 .orderCard,
-.empty,
-.contact {
+.empty {
   border: 1px solid #dfe8dc;
   border-radius: 20px;
   background: #fff;
 }
 
 .hero {
-  padding: 24px;
-  background: linear-gradient(145deg, #f6faf3, #fff);
-}
-
-.eyebrow {
-  color: #66805f;
-  font-size: 13px;
-  font-weight: 850;
-  letter-spacing: .05em;
+  padding: 4px 0 8px;
+  border: 0;
+  background: transparent;
 }
 
 .hero h1,
 .policyCard h2 {
-  margin: 7px 0 0;
+  margin: 0;
 }
 
-.hero p,
 .policyCard p,
 .policyCard li {
   color: #687565;
@@ -52,8 +43,7 @@
 }
 
 .policyCard,
-.empty,
-.contact {
+.empty {
   margin-top: 14px;
   padding: 20px;
 }
@@ -207,12 +197,6 @@
   color: #4e724a;
 }
 
-.contact {
-  color: #6e796a;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
 @media (max-width: 759px) {
   .page {
     width: min(100% - 20px, 920px);
@@ -223,12 +207,10 @@
   .hero,
   .policyCard,
   .orderCard,
-  .empty,
-  .contact {
+  .empty {
     border-radius: 17px;
   }
 
-  .hero,
   .policyCard,
   .orderCard {
     padding: 16px;

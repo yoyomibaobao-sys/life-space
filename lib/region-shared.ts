@@ -77,6 +77,36 @@ const regionPresets: Record<string, RegionOption[]> = {
   KR: ["首尔", "京畿道", "釜山", "济州", "江原"].map((item) => ({ value: item, label: item })),
 };
 
+const regionNamesEn: Record<string, Record<string, string>> = {
+  JP: {
+    "北海道": "Hokkaido",
+    "东北": "Tohoku",
+    "关东": "Kanto",
+    "中部": "Chubu",
+    "近畿": "Kinki",
+    "中国": "Chugoku",
+    "四国": "Shikoku",
+    "九州": "Kyushu",
+    "冲绳": "Okinawa",
+    "东京": "Tokyo",
+    "神奈川": "Kanagawa",
+    "埼玉": "Saitama",
+    "千叶": "Chiba",
+    "大阪": "Osaka",
+    "京都": "Kyoto",
+    "兵库": "Hyogo",
+    "爱知": "Aichi",
+    "福冈": "Fukuoka",
+  },
+  KR: {
+    "首尔": "Seoul",
+    "京畿道": "Gyeonggi",
+    "釜山": "Busan",
+    "济州": "Jeju",
+    "江原": "Gangwon",
+  },
+};
+
 export function normalizeRegionPart(value?: string | null) {
   return String(value || "")
     .replace(/[·•]/g, " ")
@@ -99,8 +129,18 @@ export function getCountryName(
   return getCountryOption(code)?.name || normalizeRegionPart(fallbackName);
 }
 
-export function getRegionOptions(countryCode?: string | null) {
-  return regionPresets[String(countryCode || "")] || [];
+export function getRegionOptions(
+  countryCode?: string | null,
+  language: Language = "zh"
+) {
+  const code = String(countryCode || "");
+  const options = regionPresets[code] || [];
+  if (language !== "en") return options;
+  const labels = regionNamesEn[code] || {};
+  return options.map((option) => ({
+    ...option,
+    label: labels[option.value] || option.label,
+  }));
 }
 
 export function hasPresetRegions(countryCode?: string | null) {
@@ -150,7 +190,11 @@ export function buildRegionDisplay(parts: {
   location?: string | null;
 }, language: Language = "zh") {
   const country = getCountryName(parts.countryCode, parts.countryName, language);
-  const region = normalizeRegionPart(parts.regionName);
+  const storedRegion = normalizeRegionPart(parts.regionName);
+  const region =
+    language === "en" && parts.countryCode
+      ? regionNamesEn[parts.countryCode]?.[storedRegion] || storedRegion
+      : storedRegion;
   const city = normalizeRegionPart(parts.cityName);
   const values = [country, region, city].filter(Boolean);
   if (values.length) return values.join(" · ");
@@ -178,7 +222,11 @@ export function buildLocationTextFromFields(parts: {
   cityName?: string | null;
 }, language: Language = "zh") {
   const country = getCountryName(parts.countryCode, parts.countryName, language);
-  const region = normalizeRegionPart(parts.regionName);
+  const storedRegion = normalizeRegionPart(parts.regionName);
+  const region =
+    language === "en" && parts.countryCode
+      ? regionNamesEn[parts.countryCode]?.[storedRegion] || storedRegion
+      : storedRegion;
   const city = normalizeRegionPart(parts.cityName);
   return [country, region, city].filter(Boolean).join(" ");
 }

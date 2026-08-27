@@ -34,11 +34,25 @@ type ArchiveRow = {
   ended_at: string | null;
   record_count: number | null;
   last_record_time: string | null;
+  cycle_enabled: boolean | null;
+  next_cycle_name: string | null;
+};
+
+type ArchiveCycleRow = {
+  id: string;
+  archive_id: string;
+  cycle_no: number;
+  display_name: string | null;
+  status: string;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string | null;
 };
 
 type RecordRow = {
   id: string;
   archive_id: string | null;
+  cycle_id: string | null;
   note: string | null;
   photo_time: string | null;
   record_time: string | null;
@@ -176,6 +190,9 @@ function uniquePath(basePath: string, usedPaths: Set<string>) {
 }
 
 function inferExtension(url: string | null | undefined, contentType?: string | null) {
+  if (contentType?.includes("mp4")) return "mp4";
+  if (contentType?.includes("webm")) return "webm";
+  if (contentType?.includes("quicktime")) return "mov";
   if (contentType?.includes("png")) return "png";
   if (contentType?.includes("webp")) return "webp";
   if (contentType?.includes("gif")) return "gif";
@@ -272,7 +289,7 @@ async function downloadUrlAsBytes({
 }
 
 function buildReadme() {
-  return `有时·耕作导出说明\n\n1. 双击 index.html，可以查看所有项目目录。\n2. 每个项目文件夹里也有一个 index.html，可以查看该项目的记录时间线。\n3. images 文件夹里保存该项目相关图片。\n4. data.json 是内部备份数据，普通查看不需要打开。\n5. 本导出包只包含你自己的项目、记录、图片和基础资料，不包含评论、他人资料或社交互动数据。\n`;
+  return `有时·耕作导出说明\n\n1. 双击 index.html，可以查看所有项目目录。\n2. 每个项目文件夹里也有一个 index.html，可以查看该项目的记录时间线。\n3. images 文件夹里保存该项目相关图片或视频。\n4. data.json 和各项目 records.json 保存档案、茬和记录的结构化备份。\n5. 导出仅包含你本人创建的项目、档案、茬、记录及记录中的图片或视频。集市发布、经验卡成品和互动数据不在导出范围内；经验卡引用的本人原始记录和原始图片仍会包含在记录备份中。\n`;
 }
 
 function buildRootHtml({
@@ -329,17 +346,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
 
 function buildArchiveHtml({
   archive,
+  cycles,
   records,
   mediaByRecord,
 }: {
   archive: ArchiveRow;
+  cycles: ArchiveCycleRow[];
   records: RecordRow[];
   mediaByRecord: Map<string, ExportMedia[]>;
 }) {
+  const cycleNames = new Map(
+    cycles.map((cycle) => [
+      cycle.id,
+      cycle.display_name?.trim() || `第${cycle.cycle_no}茬`,
+    ])
+  );
   const recordItems = records.map((record) => {
     const media = mediaByRecord.get(record.id) || [];
     const images = media.map((item) => {
       if (item.relative_path && !item.download_failed) {
+        if (item.type === "video") {
+          return `<video src="${escapeHtml(item.relative_path)}" controls preload="metadata"></video>`;
+        }
         return `<img src="${escapeHtml(item.relative_path)}" alt="" />`;
       }
       if (item.url) {
@@ -348,8 +376,9 @@ function buildArchiveHtml({
       return "";
     }).join("\n");
 
+    const cycleName = record.cycle_id ? cycleNames.get(record.cycle_id) : null;
     return `<article class="record">
-  <div class="time">${escapeHtml(formatDate(record.photo_time || record.record_time || record.created_at))}</div>
+  <div class="time">${escapeHtml(formatDate(record.photo_time || record.record_time || record.created_at))}${cycleName ? ` · ${escapeHtml(cycleName)}` : " · 未分茬"}</div>
   <div class="note">${escapeHtml(record.note || "（无文字记录）").replace(/\n/g, "<br />")}</div>
   ${images ? `<div class="images">${images}</div>` : ""}
 </article>`;
@@ -362,7 +391,7 @@ function buildArchiveHtml({
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(archive.title || "项目档案")}</title>
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f8f1;color:#1f2a1f;line-height:1.7}.wrap{max-width:900px;margin:0 auto;padding:28px 16px}.hero,.record{background:#fff;border:1px solid #e4ecdc;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(32,56,24,.05)}a{color:#4f762c;text-decoration:none}.back{display:inline-flex;align-items:center;gap:5px;font-size:14px}.back svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.muted,.time{color:#6f7b69;font-size:13px}h1{margin:8px 0 6px;font-size:26px}.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tag{background:#f1f6ec;border:1px solid #dfead5;border-radius:999px;padding:4px 10px;font-size:13px;color:#506345}.record{margin-top:14px}.note{margin-top:8px;white-space:normal}.images{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}.images img{width:100%;border-radius:14px;border:1px solid #e7efe3;object-fit:cover}.missing{display:block;background:#fff8ea;border:1px solid #ead9b8;border-radius:12px;padding:10px;color:#7a5c24}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f8f1;color:#1f2a1f;line-height:1.7}.wrap{max-width:900px;margin:0 auto;padding:28px 16px}.hero,.record{background:#fff;border:1px solid #e4ecdc;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(32,56,24,.05)}a{color:#4f762c;text-decoration:none}.back{display:inline-flex;align-items:center;gap:5px;font-size:14px}.back svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.muted,.time{color:#6f7b69;font-size:13px}h1{margin:8px 0 6px;font-size:26px}.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.tag{background:#f1f6ec;border:1px solid #dfead5;border-radius:999px;padding:4px 10px;font-size:13px;color:#506345}.record{margin-top:14px}.note{margin-top:8px;white-space:normal}.images{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}.images img,.images video{width:100%;border-radius:14px;border:1px solid #e7efe3;object-fit:cover}.missing{display:block;background:#fff8ea;border:1px solid #ead9b8;border-radius:12px;padding:10px;color:#7a5c24}
 </style>
 </head>
 <body>
@@ -386,6 +415,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
 }
 
 export async function GET(request: Request) {
+  const estimateOnly = new URL(request.url).searchParams.get("estimate") === "1";
   let supabase = await getSupabaseServer();
   let {
     data: { user },
@@ -422,7 +452,7 @@ export async function GET(request: Request) {
       .maybeSingle(),
     supabase
       .from("archives")
-      .select("id,title,category,note,system_name,species_name_snapshot,cover_image_url,cover_image_path,is_public,status,created_at,ended_at,record_count,last_record_time")
+      .select("id,title,category,note,system_name,species_name_snapshot,cover_image_url,cover_image_path,is_public,status,created_at,ended_at,record_count,last_record_time,cycle_enabled,next_cycle_name")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true }),
   ]);
@@ -439,11 +469,26 @@ export async function GET(request: Request) {
   const archives = (archivesResult.data || []) as ArchiveRow[];
   const archiveIds = archives.map((archive) => archive.id);
 
+  let cycles: ArchiveCycleRow[] = [];
+  if (archiveIds.length > 0) {
+    const cyclesResult = await supabase
+      .from("archive_cycles")
+      .select("id,archive_id,cycle_no,display_name,status,started_at,ended_at,created_at")
+      .in("archive_id", archiveIds)
+      .order("started_at", { ascending: true });
+
+    if (cyclesResult.error) {
+      return new Response(`读取茬记录失败：${cyclesResult.error.message}`, { status: 500 });
+    }
+
+    cycles = (cyclesResult.data || []) as ArchiveCycleRow[];
+  }
+
   let records: RecordRow[] = [];
   if (archiveIds.length > 0) {
     const recordsResult = await supabase
       .from("records")
-      .select("id,archive_id,note,photo_time,record_time,upload_time,created_at,visibility,status_tag,primary_image_url")
+      .select("id,archive_id,cycle_id,note,photo_time,record_time,upload_time,created_at,visibility,status_tag,primary_image_url")
       .eq("user_id", user.id)
       .in("archive_id", archiveIds)
       .order("record_time", { ascending: false });
@@ -498,10 +543,33 @@ export async function GET(request: Request) {
     }));
   }
 
+  if (estimateOnly) {
+    const sizeBytes = mediaRows.reduce((total, media) => {
+      const exact = Number(media.size_bytes || 0);
+      if (Number.isFinite(exact) && exact > 0) return total + exact;
+      const megabytes = Number(media.size_mb || 0);
+      return total + (Number.isFinite(megabytes) && megabytes > 0
+        ? Math.round(megabytes * 1024 * 1024)
+        : 0);
+    }, 0);
+
+    return Response.json(
+      {
+        projects: archives.length,
+        cycles: cycles.length,
+        records: records.length,
+        media: mediaRows.length,
+        sizeBytes,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const zip = new SimpleZipBuilder();
   const usedPaths = new Set<string>();
   const archiveDirs = new Map<string, string>();
   const recordsByArchive = new Map<string, RecordRow[]>();
+  const cyclesByArchive = new Map<string, ArchiveCycleRow[]>();
   const mediaByRecord = new Map<string, ExportMedia[]>();
   const failedDownloads: string[] = [];
 
@@ -510,6 +578,12 @@ export async function GET(request: Request) {
     const list = recordsByArchive.get(record.archive_id) || [];
     list.push(record);
     recordsByArchive.set(record.archive_id, list);
+  });
+
+  cycles.forEach((cycle) => {
+    const list = cyclesByArchive.get(cycle.archive_id) || [];
+    list.push(cycle);
+    cyclesByArchive.set(cycle.archive_id, list);
   });
 
   mediaRows.forEach((media) => {
@@ -595,15 +669,17 @@ export async function GET(request: Request) {
   for (const archive of archives) {
     const archiveDir = archiveDirs.get(archive.id) || `项目档案/${archive.id}/`;
     const archiveRecords = recordsByArchive.get(archive.id) || [];
+    const archiveCycles = cyclesByArchive.get(archive.id) || [];
     zip.addFile(
       `${archiveDir}index.html`,
-      buildArchiveHtml({ archive, records: archiveRecords, mediaByRecord })
+      buildArchiveHtml({ archive, cycles: archiveCycles, records: archiveRecords, mediaByRecord })
     );
     zip.addFile(
       `${archiveDir}records.json`,
       JSON.stringify(
         {
           archive,
+          cycles: archiveCycles,
           records: archiveRecords.map((record) => ({
             ...record,
             media: mediaByRecord.get(record.id) || [],
@@ -618,10 +694,11 @@ export async function GET(request: Request) {
   const exportData = {
     exported_at: new Date().toISOString(),
     product: "有时·耕作",
-    scope: "仅包含用户本人项目、记录、图片和基础资料；不包含评论或他人数据。",
+    scope: "仅包含用户本人创建的项目、档案、茬、记录及记录媒体；不包含集市发布、经验卡成品或互动数据。",
     profile,
     archives: archives.map((archive) => ({
       ...archive,
+      cycles: cyclesByArchive.get(archive.id) || [],
       records: (recordsByArchive.get(archive.id) || []).map((record) => ({
         ...record,
         media: mediaByRecord.get(record.id) || [],

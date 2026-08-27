@@ -15,10 +15,10 @@ test("profile uses an editable identity card and explicit account entries", asyn
 
   assert.match(profile, /profileIdentityCardStyle/);
   assert.match(profile, /会员编号/);
-  assert.match(profile, /收到有用/);
+  assert.match(profile, /被采纳的次数/);
   assert.match(profile, /空间用量/);
-  assert.match(profile, /开通／续费/);
-  assert.match(profile, /订单查询/);
+  assert.match(profile, /开通云会员/);
+  assert.match(profile, /订单进度查询/);
   assert.match(profile, /会员类别说明/);
   assert.match(profile, /浏览历史/);
   assert.match(profile, /备份与导出/);
@@ -235,8 +235,8 @@ test("account navigation exposes the confirmed independent menu entries", async 
 
   assert.match(profile, /id="language-settings"/);
   assert.match(profile, /role="switch"/);
-  assert.match(profile, /"Open \/ renew" : "开通／续费"/);
-  assert.match(profile, /"Order history" : "订单查询"/);
+  assert.match(profile, /"Cloud Membership" : "开通云会员"/);
+  assert.match(profile, /"Order progress" : "订单进度查询"/);
   assert.match(profile, /"Membership types" : "会员类别说明"/);
   assert.match(profile, /"Browsing history" : "浏览历史"/);
   assert.match(profile, /"Backup & export" : "备份与导出"/);
@@ -595,7 +595,12 @@ test("activity search filters all, projects, and records while Experience search
   assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen/);
   assert.doesNotMatch(experiencePage, /window\.history\.pushState/);
   assert.match(form, /searchKind === "records"/);
-  assert.match(form, /mobileGridStyle[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(
+    form,
+    /mobileGridStyle[\s\S]*?minmax\(82px, \.95fr\) minmax\(58px, \.7fr\) minmax\(72px, 1fr\) auto/
+  );
+  assert.match(form, /renderSearchKindControl\(true\)/);
+  assert.match(form, /projects_records/);
   assert.match(form, /t\.discover\.search_ui\.all_categories/);
   assert.match(form, /t\.discover\.search_ui\.region_short_placeholder/);
   assert.match(form, /mobileKeywordPlaceholder/);

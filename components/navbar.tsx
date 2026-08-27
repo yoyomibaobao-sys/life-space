@@ -572,7 +572,13 @@ function MobileBottomNavItem({
 }) {
   return (
     <Link href={href} style={mobileBottomNavItemStyle(active)} onClick={onClick}>
-      <span style={mobileBottomNavLabelStyle}>
+      <span
+        style={{
+          ...mobileBottomNavLabelStyle,
+          fontSize:
+            typeof children === "string" && children.length > 8 ? 10.5 : undefined,
+        }}
+      >
         <UiIcon name={icon} size={17} strokeWidth={1.7} />
         {children}
         {badge ? <span style={mobileBottomBadgeStyle}>{badge}</span> : null}

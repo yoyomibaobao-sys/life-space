@@ -267,7 +267,7 @@ export default function ExperienceCardInteractions({
             aria-pressed={summary.helpfulByMe}
             onClick={() => void toggleHelpful()}
           >
-            <UiIcon name="helpful" size={15} />
+            <UiIcon name={summary.helpfulByMe ? "helpful-filled" : "helpful"} size={15} />
             {summary.helpfulByMe ? t.experience.marked : t.experience.helpful} {summary.helpfulCount}
           </button>
         )}

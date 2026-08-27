@@ -18,12 +18,13 @@ export default function QuickCaptureNavAction({
   localArchiveId?: string | null;
 }) {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const isMarketPath = pathname === "/market" || pathname.startsWith("/market/");
 
   if (isMarketPath) {
+    const publishLabel = language === "en" ? "Post" : "发布";
     return (
       <div style={{ position: "relative", display: "grid", placeItems: "center" }}>
         <Link
@@ -31,28 +32,37 @@ export default function QuickCaptureNavAction({
           aria-label={t.market.post_information}
           title={t.market.post_information}
           style={{
-            minWidth: 64,
-            height: 43,
-            marginTop: -11,
-            display: "inline-flex",
+            minWidth: 44,
+            marginTop: -12,
+            display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            gap: 3,
-            padding: "0 7px",
-            border: "3px solid #fff",
-            borderRadius: 14,
-            background: "#8a6a32",
-            boxShadow: "0 5px 14px rgba(104, 76, 30, 0.22)",
-            color: "#fff",
+            gap: 2,
+            color: "#806128",
             textDecoration: "none",
-            fontSize: 11.5,
+            fontSize: 11,
             lineHeight: 1,
             fontWeight: 800,
             whiteSpace: "nowrap",
           }}
         >
-          <UiIcon name="plus" size={14} strokeWidth={2.2} />
-          {t.market.post_information}
+          <span
+            style={{
+              width: 34,
+              height: 34,
+              display: "grid",
+              placeItems: "center",
+              border: "3px solid #fff",
+              borderRadius: 999,
+              background: "#8a6a32",
+              boxShadow: "0 5px 14px rgba(104, 76, 30, 0.22)",
+              color: "#fff",
+            }}
+          >
+            <UiIcon name="plus" size={18} strokeWidth={2.2} />
+          </span>
+          {publishLabel}
         </Link>
       </div>
     );

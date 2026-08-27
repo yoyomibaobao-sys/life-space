@@ -11,10 +11,6 @@ import type { PlantInterestRow } from "@/lib/domain-types";
 import { buildLoginHref } from "@/lib/auth-return";
 import ArchivePlantEmptyState from "@/components/archive-plant/ArchivePlantEmptyState";
 import { categoryLabel, plantDisplayName } from "@/lib/archive-plant-shared";
-import {
-  canCreateMembershipContent,
-  normalizeMembershipRpcResult,
-} from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { formatCardDate } from "@/lib/date-time";
 
@@ -24,7 +20,6 @@ export default function PlantInterestsPage() {
   const [userId, setUserId] = useState("");
   const [interests, setInterests] = useState<PlantInterestRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<PlantInterestRow | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
@@ -36,27 +31,16 @@ export default function PlantInterestsPage() {
     }
 
     setUserId(user.id);
-    const [{ data, error }, membershipResult] = await Promise.all([
-      supabase
-        .from("user_plant_interests")
-        .select(`
+    const { data, error } = await supabase
+      .from("user_plant_interests")
+      .select(`
           *,
           plant_species:species_id (
             id, common_name, scientific_name, slug, category, sub_category
           )
         `)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase.rpc("get_my_membership"),
-    ]);
-
-    setHasCloudAccess(
-      canCreateMembershipContent(
-        membershipResult.error
-          ? null
-          : normalizeMembershipRpcResult(membershipResult.data)
-      )
-    );
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
     if (error) {
       showToast(t.plant_lists.read_interests_failed + error.message);
       setInterests([]);
@@ -112,9 +96,7 @@ export default function PlantInterestsPage() {
       ) : (
         <section style={listStyle} aria-label={t.plant.my_saved}>
           {interests.map((item) => {
-            const projectHref = hasCloudAccess
-              ? `/archive/new?species=${item.species_id}`
-              : `/local/archive/new?category=plant&plant_id=${encodeURIComponent(item.species_id)}&system_name=${encodeURIComponent(plantDisplayName(item.plant_species))}`;
+            const projectHref = `/archive/new?species=${item.species_id}`;
             return (
               <article key={item.id} style={cardStyle}>
                 <div style={cardHeadingStyle}>
@@ -143,9 +125,7 @@ export default function PlantInterestsPage() {
                     {t.plant_lists.view_guide}
                   </Link>
                   <Link href={projectHref} style={primaryActionStyle}>
-                    {hasCloudAccess
-                      ? t.plant_lists.create_cloud_project
-                      : t.plant_lists.create_local_project}
+                    {t.plant.detail.new_project}
                   </Link>
                 </div>
               </article>
