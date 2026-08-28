@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import type { PlantInterestRow } from "@/lib/domain-types";
@@ -77,8 +78,15 @@ export default function PlantInterestsPage() {
   if (loading) return <main style={pageStyle}>{t.loading}</main>;
 
   return (
-    <main style={pageStyle}>
-      <header style={headerStyle}>
+    <>
+      <MobilePageHeader
+        title={t.plant.my_saved}
+        fallbackHref="/plant"
+        ariaLabel={t.nav.back}
+        right={<Link href="/plant" style={mobileGuideLinkStyle}>{t.plant_lists.guide_browse}</Link>}
+      />
+      <main style={pageStyle}>
+      <header className="mobile-app-desktop-only" style={headerStyle}>
         <Link href="/plant" style={backLinkStyle} aria-label={t.plant.back_to_guide}>
           <UiIcon name="arrow-left" size={18} />
         </Link>
@@ -144,7 +152,8 @@ export default function PlantInterestsPage() {
         onClose={() => { if (!removingId) setRemoveTarget(null); }}
         onConfirm={confirmRemove}
       />
-    </main>
+      </main>
+    </>
   );
 }
 
@@ -153,6 +162,7 @@ const headerStyle: CSSProperties = { minHeight: 42, display: "grid", gridTemplat
 const backLinkStyle: CSSProperties = { width: 36, height: 36, display: "grid", placeItems: "center", color: "#52634e", textDecoration: "none" };
 const titleStyle: CSSProperties = { margin: 0, color: "#253725", fontSize: 22, lineHeight: 1.25 };
 const guideLinkStyle: CSSProperties = { color: "#4f744d", fontSize: 13, fontWeight: 750, textDecoration: "none" };
+const mobileGuideLinkStyle: CSSProperties = { ...guideLinkStyle, maxWidth: 92, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const listStyle: CSSProperties = { display: "grid", gap: 8 };
 const cardStyle: CSSProperties = { padding: 12, border: "1px solid #e1e8de", borderRadius: 15, background: "#fff" };
 const cardHeadingStyle: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 };

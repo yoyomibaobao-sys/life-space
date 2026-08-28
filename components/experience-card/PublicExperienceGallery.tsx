@@ -102,14 +102,23 @@ export default function PublicExperienceGallery({
                 {item.source_record_count}{t.experience.record_suffix}
                 {getPublishedMeta(item.published_at, language, t.experience.published_on)}
               </span>
-              <Link
-                href={`/experience-cards/${item.id}`}
-                className={styles.previewDetails}
-                aria-label={`${t.experience.view_details}：${item.title}`}
-              >
-                {t.experience.view_details}
-                <UiIcon name="arrow-right" size={13} />
-              </Link>
+              <span className={styles.previewFooter}>
+                <span
+                  className={styles.previewHelpful}
+                  aria-label={`${t.experience.helpful} ${item.helpfulCount}`}
+                >
+                  <UiIcon name="helpful" size={13} />
+                  {item.helpfulCount}
+                </span>
+                <Link
+                  href={`/experience-cards/${item.id}`}
+                  className={styles.previewDetails}
+                  aria-label={`${t.experience.view_details}：${item.title}`}
+                >
+                  {t.experience.view_details}
+                  <UiIcon name="arrow-right" size={13} />
+                </Link>
+              </span>
             </span>
           </article>
         ))}

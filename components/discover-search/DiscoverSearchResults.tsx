@@ -26,6 +26,7 @@ type Props = {
   experienceItems: ExperienceCardListItem[];
   loading: boolean;
   hasRun: boolean;
+  hideHeader?: boolean;
 };
 
 function getProjectSystemName(item: DiscoveryProjectFeedItem) {
@@ -60,6 +61,7 @@ export default function DiscoverSearchResults({
   experienceItems,
   loading,
   hasRun,
+  hideHeader = false,
 }: Props) {
   const { language, t } = useLanguage();
   const kindLabels: Record<DiscoverSearchKind, { title: string; unit: string }> = {
@@ -86,7 +88,7 @@ export default function DiscoverSearchResults({
 
   return (
     <section>
-      <div
+      {!hideHeader ? <div
         style={{
           display: "flex",
           alignItems: "center",
@@ -99,7 +101,7 @@ export default function DiscoverSearchResults({
       >
         <span>{labels.title}</span>
         {hasRun && !loading ? <span>{itemCount} {labels.unit}</span> : null}
-      </div>
+      </div> : null}
 
       {loading ? (
         <div
@@ -162,7 +164,7 @@ export default function DiscoverSearchResults({
                       item.archive_ended_at
                     )}
                     ended={Boolean(item.archive_ended_at)}
-                    viewCount={item.view_count}
+                    viewCount={hideHeader ? undefined : item.view_count}
                     compactProjectStats
                     style={{ fontSize: 11, gap: "4px 8px" }}
                   />

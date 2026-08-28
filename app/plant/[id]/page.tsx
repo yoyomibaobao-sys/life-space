@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -1147,18 +1148,6 @@ export default function PlantDetailPage() {
   const [actionLoading, setActionLoading] = useState<"interest" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
-
-  useEffect(() => {
-    function updateViewportMode() {
-      setIsMobileViewport(window.innerWidth < 760);
-    }
-
-    updateViewportMode();
-    window.addEventListener("resize", updateViewportMode);
-
-    return () => window.removeEventListener("resize", updateViewportMode);
-  }, []);
 
   useEffect(() => {
     async function load() {
@@ -1668,27 +1657,49 @@ export default function PlantDetailPage() {
   }
 
   return (
-    <main className={styles.page}>
-      <div className={styles.backRow}>
-        {isMobileViewport && returnRecordHref ? (
-          <Link href={returnRecordHref} style={{ color: "#4d7044", fontSize: 14, fontWeight: 700 }}>
-            {copy.back_to_record}
-          </Link>
-        ) : null}
+    <>
+      <MobilePageHeader
+        title={displayName}
+        fallbackHref={returnRecordHref || "/plant"}
+        ariaLabel={t.nav.back}
+        right={
+          <button
+            type="button"
+            onClick={handleAddInterest}
+            disabled={actionLoading !== null}
+            className={styles.mobileSavedAction}
+            data-active={interestAdded ? "true" : "false"}
+          >
+            {interestAdded
+              ? copy.saved
+              : actionLoading === "interest"
+                ? copy.adding
+                : copy.add_to_saved}
+          </button>
+        }
+      />
+
+      <main className={styles.page}>
+      <div className={`${styles.backRow} mobile-app-desktop-only`}>
         <Link href="/plant" className={styles.backLink}>
           <UiIcon name="arrow-left" size={15} /> {t.plant.back_to_guide}
         </Link>
-        {isMobileViewport ? (
-          <span className={styles.archiveLabel}>{copy.plant_archive}</span>
-        ) : (
-          <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
-            {copy.back_to_space}
-          </Link>
-        )}
+        <Link href="/archive" style={{ color: "#666", fontSize: 14 }}>
+          {copy.back_to_space}
+        </Link>
+      </div>
+
+      <div className={`${styles.mobileActions} mobile-app-grid-only`}>
+        <Link href="/plant" className={styles.mobileGuideLink}>
+          {copy.plant_guide}
+        </Link>
+        <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+          {copy.new_project}
+        </Link>
       </div>
 
       <section className={styles.hero}>
-        <div className={styles.heroHeadingRow}>
+        <div className={`${styles.heroHeadingRow} mobile-app-desktop-only`}>
           <h1 className={styles.heroTitle}>{displayName}</h1>
           <Link
             href={createProjectHref}
@@ -1775,26 +1786,11 @@ export default function PlantDetailPage() {
         ) : null}
 
         {isSignedIn && environmentTags.length > 0 && (
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
+          <div className={styles.environmentTagList}>
             {environmentTags.map((tag) => (
               <span
                 key={`${plant.id}-hero-env-${tag}`}
-                style={{
-                  fontSize: 16,
-                  fontWeight: 600,
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  background: "#f6fbf6",
-                  border: "1px solid #dfeedd",
-                  color: "#2e7d32",
-                }}
+                className={styles.environmentTag}
               >
                 {tag}
               </span>
@@ -2010,6 +2006,7 @@ export default function PlantDetailPage() {
         )
       ) : null}
 
-    </main>
+      </main>
+    </>
   );
 }

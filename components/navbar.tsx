@@ -12,6 +12,7 @@ import type { TranslationDictionary } from "@/lib/i18n";
 import { buildLoginHref } from "@/lib/auth-return";
 import QuickCaptureNavAction from "@/components/quick-record/QuickCaptureNavAction";
 import BrandMark from "@/components/BrandMark";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 
 type MobileArchiveTitleInfo = {
   archiveId: string;
@@ -248,84 +249,90 @@ export default function Navbar() {
 
   if (isCompact) {
     const pageOwnsMobileTopNav = hasPageManagedMobileTopNav(pathname);
+    const mobileHeaderTitle = mobileArchiveTitleInfo ? (
+      <>
+        <span style={mobileArchiveTitleTextStyle}>
+          {mobileArchiveTitleInfo.title}
+        </span>
+        {mobileArchiveTitleInfo.systemName ? (
+          <>
+            <span style={mobileArchiveTitleDotStyle}> · </span>
+            {mobileArchiveTitleInfo.href ? (
+              <Link
+                href={mobileArchiveTitleInfo.href}
+                style={mobileArchiveTitleLinkStyle}
+              >
+                {mobileArchiveTitleInfo.systemName}
+              </Link>
+            ) : (
+              <span style={mobileArchiveTitleSystemStyle}>
+                {mobileArchiveTitleInfo.systemName}
+              </span>
+            )}
+          </>
+        ) : null}
+      </>
+    ) : (
+      mobileTitle || t.nav.brand
+    );
+
+    const mobileHeaderActions = (
+      <div style={mobileTopActionGroupStyle}>
+        {isMobileDiscoverIndexPath(pathname) ? (
+          <button
+            type="button"
+            onClick={() => {
+              const tab = new URLSearchParams(window.location.search).get("tab");
+              if (tab === "following") {
+                window.dispatchEvent(new Event("mobile-discover-follow-search-request"));
+                return;
+              }
+
+              router.push("/discover/search");
+            }}
+            style={mobileSearchButtonStyle}
+          >
+            {t.nav.search}
+          </button>
+        ) : canShowMobileCreateAction ? (
+          <Link
+            href={getMobileCreateHref(pathname, true)}
+            style={mobileCreateButtonStyle}
+            aria-label={getMobileCreateLabel(pathname, t.nav)}
+            title={getMobileCreateLabel(pathname, t.nav)}
+            onClick={(event) => {
+              if (getArchiveDetailPath(pathname)) {
+                event.preventDefault();
+                window.dispatchEvent(new Event("mobile-add-record-request"));
+              }
+            }}
+          >
+            <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname, t.nav)}
+          </Link>
+        ) : !user && shouldShowMobileLoginAction(pathname) ? (
+          <Link href={buildLoginHref(pathname)} style={mobileLoginActionStyle}>
+            {t.nav.login}
+          </Link>
+        ) : null}
+      </div>
+    );
+
     return (
       <>
-        {!pageOwnsMobileTopNav ? <nav style={mobileTopNavStyle}>
-          <div
-            style={mobilePageTitleStyle}
-            title={
+        {!pageOwnsMobileTopNav ? (
+          <MobilePageHeader
+            title={mobileHeaderTitle}
+            titleText={
               mobileArchiveTitleInfo?.systemName
                 ? `${mobileArchiveTitleInfo.title} · ${mobileArchiveTitleInfo.systemName}`
                 : mobileTitle || t.nav.brand
             }
-          >
-            {mobileArchiveTitleInfo ? (
-              <>
-                <span style={mobileArchiveTitleTextStyle}>
-                  {mobileArchiveTitleInfo.title}
-                </span>
-                {mobileArchiveTitleInfo.systemName ? (
-                  <>
-                    <span style={mobileArchiveTitleDotStyle}> · </span>
-                    {mobileArchiveTitleInfo.href ? (
-                      <Link
-                        href={mobileArchiveTitleInfo.href}
-                        style={mobileArchiveTitleLinkStyle}
-                      >
-                        {mobileArchiveTitleInfo.systemName}
-                      </Link>
-                    ) : (
-                      <span style={mobileArchiveTitleSystemStyle}>
-                        {mobileArchiveTitleInfo.systemName}
-                      </span>
-                    )}
-                  </>
-                ) : null}
-              </>
-            ) : (
-              mobileTitle || t.nav.brand
-            )}
-          </div>
-
-          <div style={mobileTopActionGroupStyle}>
-            {isMobileDiscoverIndexPath(pathname) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const tab = new URLSearchParams(window.location.search).get("tab");
-                  if (tab === "following") {
-                    window.dispatchEvent(new Event("mobile-discover-follow-search-request"));
-                    return;
-                  }
-
-                  router.push("/discover/search");
-                }}
-                style={mobileSearchButtonStyle}
-              >
-                {t.nav.search}
-              </button>
-            ) : canShowMobileCreateAction ? (
-              <Link
-                href={getMobileCreateHref(pathname, true)}
-                style={mobileCreateButtonStyle}
-                aria-label={getMobileCreateLabel(pathname, t.nav)}
-                title={getMobileCreateLabel(pathname, t.nav)}
-                onClick={(event) => {
-                  if (getArchiveDetailPath(pathname)) {
-                    event.preventDefault();
-                    window.dispatchEvent(new Event("mobile-add-record-request"));
-                  }
-                }}
-              >
-                <UiIcon name="plus" size={16} /> {getMobileCreateLabel(pathname, t.nav)}
-              </Link>
-            ) : !user && shouldShowMobileLoginAction(pathname) ? (
-              <Link href={buildLoginHref(pathname)} style={mobileLoginActionStyle}>
-                {t.nav.login}
-              </Link>
-            ) : null}
-          </div>
-        </nav> : null}
+            fallbackHref={getMobileBackFallback(pathname)}
+            showBack={shouldShowMobileBackButton(pathname)}
+            ariaLabel={t.nav.back}
+            right={mobileHeaderActions}
+          />
+        ) : null}
 
         <MobileBottomNav
           pathname={pathname}
@@ -637,9 +644,39 @@ function hasPageManagedMobileTopNav(pathname: string) {
     pathname.startsWith("/market/") ||
     pathname.startsWith("/user/") ||
     pathname.startsWith("/plant/") ||
+    Boolean(getArchiveDetailPath(pathname)) ||
     pathname === "/archive/interests" ||
     /^\/experience-cards\/[^/]+$/.test(pathname)
   );
+}
+
+function shouldShowMobileBackButton(pathname: string) {
+  return ![
+    "/",
+    "/discover",
+    "/experience",
+    "/plant",
+    "/follow",
+    "/market",
+    "/archive",
+    "/profile",
+  ].includes(pathname);
+}
+
+function getMobileBackFallback(pathname: string) {
+  if (pathname.startsWith("/archive")) return "/archive";
+  if (pathname.startsWith("/experience-cards")) return "/archive";
+  if (pathname.startsWith("/experience")) return "/experience";
+  if (pathname.startsWith("/plant")) return "/plant";
+  if (pathname.startsWith("/market")) return "/market";
+  if (pathname.startsWith("/profile")) return "/profile";
+  if (pathname.startsWith("/membership")) return "/profile";
+  if (pathname.startsWith("/notifications")) return "/archive";
+  if (pathname.startsWith("/user")) return "/discover";
+  if (pathname.startsWith("/feedback") || pathname.startsWith("/legal")) {
+    return "/profile";
+  }
+  return "/discover";
 }
 
 function shouldShowMobileProfileEntry(pathname: string) {
@@ -710,34 +747,6 @@ function getNavStyle(compact: boolean): CSSProperties {
     boxSizing: "border-box",
   };
 }
-
-const mobileTopNavStyle: CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 100,
-  minHeight: "calc(50px + var(--app-safe-area-top))",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  padding: "calc(8px + var(--app-safe-area-top)) 14px 8px",
-  borderBottom: "1px solid #e4ece0",
-  background: "rgba(255,255,255,0.96)",
-  backdropFilter: "blur(10px)",
-  boxSizing: "border-box",
-};
-
-const mobilePageTitleStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  color: "#1f2a1f",
-  fontSize: 17,
-  fontWeight: 800,
-  lineHeight: 1.2,
-};
 
 const mobileArchiveTitleTextStyle: CSSProperties = {
   minWidth: 0,

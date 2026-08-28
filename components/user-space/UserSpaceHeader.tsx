@@ -1,6 +1,7 @@
 import Link from "next/link";
 import UserAvatar from "@/components/social/UserAvatar";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 
 type Props = {
   username: string;
@@ -21,7 +22,38 @@ export default function UserSpaceHeader({
 }: Props) {
   const { t } = useLanguage();
   return (
+    <>
+    <MobilePageHeader
+      title={
+        <span style={mobileTitleStyle}>
+          <UserAvatar avatarUrl={avatarUrl || null} size={28} iconSize={14} />
+          <span style={mobileTitleTextStyle}>
+            {username || t.profile.space.user_space}
+          </span>
+        </span>
+      }
+      titleText={username || t.profile.space.user_space}
+      fallbackHref="/discover"
+      ariaLabel={t.nav.back}
+      right={
+        !isSelf && onToggleFollow ? (
+          <button
+            type="button"
+            disabled={followBusy}
+            onClick={onToggleFollow}
+            style={mobileFollowButtonStyle}
+          >
+            {followBusy
+              ? t.profile.public_profile.processing
+              : isFollowing
+                ? t.profile.public_profile.following
+                : t.profile.public_profile.follow}
+          </button>
+        ) : null
+      }
+    />
     <section
+      className="mobile-app-desktop-only"
       style={{
         display: "flex",
         justifyContent: "space-between",
@@ -71,8 +103,43 @@ export default function UserSpaceHeader({
         </button>
       ) : null}
     </section>
+    </>
   );
 }
+
+const mobileTitleStyle = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 7,
+} as const;
+
+const mobileTitleTextStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} as const;
+
+const mobileFollowButtonStyle = {
+  minHeight: 34,
+  maxWidth: 94,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
+  border: "1px solid #d6e4d2",
+  borderRadius: 999,
+  background: "#f2f8ef",
+  color: "#3f703e",
+  padding: "0 9px",
+  fontSize: 12,
+  fontWeight: 750,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+} as const;
 
 const spaceButtonStyle = {
   minHeight: 38,

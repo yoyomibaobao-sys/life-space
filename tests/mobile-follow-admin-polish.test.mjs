@@ -43,6 +43,36 @@ test("mobile personal and following views stay compact", async () => {
   assert.match(followPage, /href=\{`\/user\/\$\{item\.id\}`\}/);
 });
 
+test("mobile Following has records, saved Experience Cards, and people in the confirmed order", async () => {
+  const [followPage, zhCopy, enCopy] = await Promise.all([
+    source("app/follow/page.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
+
+  assert.match(followPage, /type TabKey = "projects" \| "experience" \| "users"/);
+  assert.match(followPage, /key: "projects",[\s\S]*?label: followT\.records/);
+  assert.match(followPage, /key: "experience",[\s\S]*?label: followT\.experience_cards/);
+  assert.match(followPage, /key: "users",[\s\S]*?label: followT\.users_mobile/);
+  assert.match(followPage, /\.from\("experience_card_bookmarks"\)/);
+  assert.match(followPage, /hydrateExperienceCardListItems/);
+  assert.match(zhCopy, /records: "记录"[\s\S]*?experience_cards: "经验卡"[\s\S]*?users_mobile: "用户"/);
+  assert.match(enCopy, /records: "Records"[\s\S]*?experience_cards: "Experience Cards"[\s\S]*?users_mobile: "People"/);
+});
+
+test("mobile followed-user projects use one tappable project-card format", async () => {
+  const followPage = await source("app/follow/page.tsx");
+
+  assert.match(followPage, /function MobileFollowProjectCard\(/);
+  assert.match(followPage, /role="link"[\s\S]*?onClick=\{onOpen\}/);
+  assert.match(followPage, /mobileProjectCategoryBadgeStyle/);
+  assert.match(followPage, /item\.title[\s\S]*?item\.displaySystemName/);
+  assert.match(followPage, /item\.latestNote[\s\S]*?CompactActivityTime/);
+  assert.match(followPage, /recordCount=\{item\.recordCount\}[\s\S]*?durationDays=\{item\.durationDays\}/);
+  assert.match(followPage, /item\.ownerName[\s\S]*?item\.ownerRegion/);
+  assert.doesNotMatch(followPage, /projectMenuOpenId/);
+});
+
 test("admin section links remain reachable without long reverse scrolling", async () => {
   const admin = await source("app/admin/memberships/page.tsx");
 

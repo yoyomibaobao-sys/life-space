@@ -157,10 +157,55 @@ test("mobile Guide combines the category label and Experience uses publication d
   assert.match(gallery, /role="button"/);
   assert.match(gallery, /closest\("a"\)/);
   assert.match(gallery, /className=\{styles\.previewDetails\}/);
+  assert.match(gallery, /className=\{styles\.previewHelpful\}/);
+  assert.match(gallery, /\{item\.helpfulCount\}[\s\S]*?className=\{styles\.previewDetails\}/);
   assert.match(gallery, /getPublishedMeta\(item\.published_at/);
   assert.doesNotMatch(gallery, /durationDays/);
   assert.match(galleryStyles, /\.previewMedia \{[\s\S]*?display: block;[\s\S]*?position: relative/);
   assert.match(zhCopy, /published_on: "发布于 "/);
+});
+
+test("mobile secondary pages share a left back arrow in the title row", async () => {
+  const [
+    sharedHeader,
+    mySpace,
+    userSpace,
+    projectDetail,
+    plantDetail,
+    experienceDetail,
+  ] = await Promise.all([
+    source("components/mobile/MobilePageHeader.tsx"),
+    source("app/archive/page.tsx"),
+    source("components/user-space/UserSpaceHeader.tsx"),
+    source("app/archive/[id]/page.tsx"),
+    source("app/plant/[id]/page.tsx"),
+    source("app/experience-cards/[id]/page.tsx"),
+  ]);
+
+  assert.match(sharedHeader, /gridTemplateColumns: "96px minmax\(0, 1fr\) 96px"/);
+  assert.match(sharedHeader, /name="arrow-left"/);
+  assert.match(sharedHeader, /router\.back\(\)/);
+  for (const page of [mySpace, userSpace, projectDetail, plantDetail, experienceDetail]) {
+    assert.match(page, /<MobilePageHeader/);
+  }
+  assert.match(projectDetail, /mobileProjectHeaderProjectStyle[\s\S]*?mobileProjectHeaderSystem/);
+  assert.match(projectDetail, /right=\{[\s\S]*?toggleProjectFollow/);
+});
+
+test("mobile owner attributes expose direct project actions without a management menu", async () => {
+  const projectDetail = await source("app/archive/[id]/page.tsx");
+
+  assert.match(projectDetail, /isMobileViewport && activeDetailTab === "profile"/);
+  assert.match(projectDetail, /<MobileArchiveOwnerFields/);
+  assert.match(projectDetail, /onChangeSubcategory=/);
+  assert.match(projectDetail, /onChangeGroup=/);
+  assert.match(projectDetail, /onToggleEnded=/);
+  assert.match(projectDetail, /onTogglePublic=/);
+  assert.match(projectDetail, /<ArchiveCycleSettings[\s\S]*?mobileArchiveTrashButtonStyle/);
+  assert.doesNotMatch(
+    projectDetail.match(/\{isMobileViewport && activeDetailTab === "profile" \? \([\s\S]*?\n        \) : null\}/)?.[0] || "",
+    /MobileArchiveActions|project_management/
+  );
 });
 
 test("public views and payment policies have a reproducible hardening migration", async () => {

@@ -35,6 +35,7 @@ export default function DiscoverSearchPage() {
   const [fromArchiveId, setFromArchiveId] = useState("");
   const [fromArchiveTitle, setFromArchiveTitle] = useState("");
   const [initialized, setInitialized] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const skipNextUrlSyncRef = useRef(false);
 
 async function performSearch(
@@ -98,19 +99,25 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
 
  useEffect(() => {
   function loadFromUrl() {
+    const mobile = window.innerWidth < 760;
     const initialFilters = parseSearchFiltersFromUrl(window.location.search);
     const params = new URLSearchParams(window.location.search);
     const rawKind = params.get("type");
     const parsedKind = parseDiscoverSearchKind(window.location.search);
-    const initialKind: ActivitySearchScope = rawKind === "all"
-      ? "all"
-      : parsedKind === "records"
+    const initialKind: ActivitySearchScope = mobile
+      ? parsedKind === "records"
         ? "records"
-        : rawKind === "projects"
-          ? "projects"
-          : "all";
+        : "projects"
+      : rawKind === "all"
+        ? "all"
+        : parsedKind === "records"
+          ? "records"
+          : rawKind === "projects"
+            ? "projects"
+            : "all";
 
     skipNextUrlSyncRef.current = true;
+    setIsMobileViewport(mobile);
     setFromArchiveId(params.get("fromArchive") || "");
     setFromArchiveTitle(params.get("fromTitle") || "");
     setFilters(initialFilters);
@@ -120,10 +127,20 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
 
   loadFromUrl();
 
+  function updateViewportMode() {
+    const mobile = window.innerWidth < 760;
+    setIsMobileViewport(mobile);
+    if (mobile) {
+      setSearchKind((current) => current === "all" ? "projects" : current);
+    }
+  }
+
   window.addEventListener("popstate", loadFromUrl);
+  window.addEventListener("resize", updateViewportMode);
 
   return () => {
     window.removeEventListener("popstate", loadFromUrl);
+    window.removeEventListener("resize", updateViewportMode);
   };
 
 }, []);
@@ -142,15 +159,18 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
 }, [filters, initialized, searchKind]);
 
   return (
-    <main
+    <>
+      <DiscoverSearchHeader
+        searchKind={searchKind}
+        onSearchKindChange={changeSearchKind}
+      />
+      <main
       style={{
         padding: "10px 14px 14px",
         maxWidth: 960,
         margin: "0 auto",
       }}
     >
-      <DiscoverSearchHeader />
-
       {searchKind === "records" ? (
         <DiscoverSearchFromArchiveNotice
           fromArchiveId={fromArchiveId}
@@ -179,6 +199,7 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
           experienceItems={[]}
           loading={searchLoading}
           hasRun={searchHasRun}
+          hideHeader={isMobileViewport}
         />
       ) : null}
       {searchKind !== "projects" ? (
@@ -189,9 +210,11 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
           experienceItems={[]}
           loading={searchLoading}
           hasRun={searchHasRun}
+          hideHeader={isMobileViewport}
         />
       ) : null}
-    </main>
+      </main>
+    </>
   );
 }
 

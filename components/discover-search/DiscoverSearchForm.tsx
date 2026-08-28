@@ -183,8 +183,6 @@ export default function DiscoverSearchForm({
               style={mobileInputStyle}
             />
           </label>
-
-          {renderSearchKindControl(true)}
         </div>
 
         {isRecordSearch ? (
@@ -408,7 +406,7 @@ const mobileFormStyle: CSSProperties = {
 
 const mobileGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(82px, .95fr) minmax(58px, .7fr) minmax(72px, 1fr) auto",
+  gridTemplateColumns: "minmax(82px, .95fr) minmax(64px, .72fr) minmax(94px, 1.15fr)",
   gap: 5,
   alignItems: "stretch",
 };

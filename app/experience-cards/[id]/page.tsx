@@ -18,6 +18,7 @@ import ExperienceCardVideoPanel, {
 } from "@/components/experience-card/ExperienceCardVideoPanel";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import { getInclusiveDaySpan } from "@/lib/date-time";
@@ -379,7 +380,13 @@ export default function ExperienceCardPage({
   const isPublished = detail.card.status === "published";
 
   return (
-    <main style={pageStyle}>
+    <>
+      <MobilePageHeader
+        title={detail.card.title}
+        fallbackHref={isOwner ? "/experience-cards" : "/discover"}
+        ariaLabel={t.nav.back}
+      />
+      <main style={pageStyle}>
       <header className="mobile-app-desktop-only" style={topBarStyle}>
         <Link
           href={isOwner ? "/experience-cards" : "/discover"}
@@ -812,7 +819,8 @@ export default function ExperienceCardPage({
         }}
         onConfirm={() => runAction("delete")}
       />
-    </main>
+      </main>
+    </>
   );
 }
 

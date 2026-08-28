@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
@@ -25,12 +26,17 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
 import { fetchFollowedPublicProjects } from "@/lib/followed-public-project-feed";
+import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
+import type {
+  ExperienceCardListItem,
+  ExperienceCardRow,
+} from "@/lib/experience-card-types";
 import type {
   DiscoveryProjectCursor,
   DiscoveryProjectFeedItem,
 } from "@/lib/discover-project-types";
 
-type TabKey = "projects" | "users";
+type TabKey = "projects" | "experience" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
 
 type ArchiveFollowRow = {
@@ -84,6 +90,9 @@ type ProfileRow = {
   id: string;
   username: string | null;
   avatar_url: string | null;
+  country_name?: string | null;
+  region_name?: string | null;
+  city_name?: string | null;
 };
 
 type SubTagRow = {
@@ -102,6 +111,7 @@ type FollowProjectCard = {
   displaySystemName: string;
   ownerId: string;
   ownerName: string;
+  ownerRegion: string;
   ownerAvatarUrl: string | null;
   categoryLabel: string;
   categoryIcon: UiIconName;
@@ -140,8 +150,10 @@ export default function FollowPage() {
   const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter>("all");
   const [projectCards, setProjectCards] = useState<FollowProjectCard[]>([]);
   const [userCards, setUserCards] = useState<FollowUserCard[]>([]);
+  const [savedExperienceCards, setSavedExperienceCards] = useState<ExperienceCardListItem[]>([]);
   const [projectLoadError, setProjectLoadError] = useState(false);
   const [userProjectsError, setUserProjectsError] = useState(false);
+  const [experienceLoadError, setExperienceLoadError] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
   const [selectedUserId, setSelectedUserId] = useState<string>("all");
   const [readUpdates, setReadUpdates] = useState<Record<string, string>>(() => {
@@ -157,8 +169,8 @@ export default function FollowPage() {
   const [projectSubmitting, setProjectSubmitting] = useState(false);
   const [userSubmitting, setUserSubmitting] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const activeTab = !isMobileViewport && tab === "experience" ? "projects" : tab;
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
   const [userMenuTargetId, setUserMenuTargetId] = useState<string | null>(null);
   const [pinnedUserIds, setPinnedUserIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -190,6 +202,7 @@ export default function FollowPage() {
       setLoading(true);
       setProjectLoadError(false);
       setUserProjectsError(false);
+      setExperienceLoadError(false);
 
       const {
         data: { user },
@@ -202,7 +215,7 @@ export default function FollowPage() {
 
       setCurrentUserId(user.id);
 
-      const [archiveFollowsResult, userFollowsResult] = await Promise.all([
+      const [archiveFollowsResult, userFollowsResult, bookmarksResult] = await Promise.all([
         supabase
           .from("archive_follows")
           .select("archive_id, created_at")
@@ -212,6 +225,11 @@ export default function FollowPage() {
           .from("follows")
           .select("following_id, created_at")
           .eq("follower_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("experience_card_bookmarks")
+          .select("card_id, created_at")
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
       ]);
 
@@ -223,9 +241,18 @@ export default function FollowPage() {
         console.error("load followed users error:", userFollowsResult.error);
         setUserProjectsError(true);
       }
+      if (bookmarksResult.error) {
+        console.error("load saved experience cards error:", bookmarksResult.error);
+        setExperienceLoadError(true);
+      }
 
       const archiveFollowRows = (archiveFollowsResult.data || []) as ArchiveFollowRow[];
       const userFollowRows = (userFollowsResult.data || []) as UserFollowRow[];
+      const bookmarkedIds = unique(
+        (bookmarksResult.data || [])
+          .map((item) => String(item.card_id || ""))
+          .filter(Boolean)
+      );
 
       const archiveIds = unique(archiveFollowRows.map((item) => item.archive_id).filter(Boolean));
       const followedUserIds = unique(
@@ -254,12 +281,30 @@ export default function FollowPage() {
             .order("record_time", { ascending: false })
         : Promise.resolve({ data: [] as RecordRow[], error: null });
 
-      const [archivesResult, followedUsersProjectsResult, recordsResult] =
-        await Promise.all([archivesPromise, followedUsersProjectsPromise, recordsPromise]);
+      const savedCardsPromise = bookmarkedIds.length
+        ? supabase
+            .from("experience_cards")
+            .select("*")
+            .in("id", bookmarkedIds)
+            .eq("status", "published")
+        : Promise.resolve({ data: [] as ExperienceCardRow[], error: null });
+
+      const [archivesResult, followedUsersProjectsResult, recordsResult, savedCardsResult] =
+        await Promise.all([
+          archivesPromise,
+          followedUsersProjectsPromise,
+          recordsPromise,
+          savedCardsPromise,
+        ]);
 
       const archives = (archivesResult.data || []) as ArchiveRow[];
       const followedUsersProjects = followedUsersProjectsResult.items;
       const records = (recordsResult.data || []) as RecordRow[];
+
+      if (savedCardsResult.error) {
+        console.error("load saved experience card details error:", savedCardsResult.error);
+        setExperienceLoadError(true);
+      }
 
       if (archivesResult.error || recordsResult.error) {
         console.error("load followed project details error:", {
@@ -371,6 +416,7 @@ export default function FollowPage() {
             displaySystemName: systemName,
             ownerId: archive.user_id,
             ownerName: profile?.username || followT.username_not_set,
+            ownerRegion: formatProfileRegion(profile),
             ownerAvatarUrl: profile?.avatar_url || null,
             categoryLabel: getArchiveCategoryLabel(archive.category, language),
             categoryIcon: getArchiveCategoryIcon(archive.category),
@@ -412,6 +458,7 @@ export default function FollowPage() {
           displaySystemName: project.system_name || project.species_name_snapshot || followT.not_provided,
           ownerId: project.owner_user_id,
           ownerName: project.profile_display_name || profile?.username || followT.username_not_set,
+          ownerRegion: project.profile_region || formatProfileRegion(profile),
           ownerAvatarUrl: project.profile_avatar_url || profile?.avatar_url || null,
           categoryLabel: getArchiveCategoryLabel(project.category, language),
           categoryIcon: getArchiveCategoryIcon(project.category),
@@ -458,8 +505,32 @@ export default function FollowPage() {
         })
         .sort((a, b) => getTimeValue(b.followedAt) - getTimeValue(a.followedAt));
 
+      const savedRows = (savedCardsResult.data || []) as ExperienceCardRow[];
+      const savedPublicStates = await Promise.all(
+        savedRows.map(async (row) => {
+          const { data, error } = await supabase.rpc("is_experience_card_public", {
+            p_card_id: row.id,
+          });
+          if (error) {
+            console.error("check saved experience card visibility error:", error);
+            return false;
+          }
+          return Boolean(Array.isArray(data) ? data[0] : data);
+        })
+      );
+      const hydratedSavedCards = await hydrateExperienceCardListItems(
+        savedRows.filter((_row, index) => savedPublicStates[index]),
+        language
+      );
+      const savedCardById = new Map(hydratedSavedCards.map((item) => [item.id, item]));
+
       setProjectCards(nextProjectCards);
       setUserCards(nextUserCards);
+      setSavedExperienceCards(
+        bookmarkedIds
+          .map((cardId) => savedCardById.get(cardId))
+          .filter((item): item is ExperienceCardListItem => Boolean(item))
+      );
       setLoading(false);
     }
 
@@ -511,6 +582,18 @@ export default function FollowPage() {
         return getTimeValue(b.followedAt) - getTimeValue(a.followedAt);
       });
   }, [keyword, pinnedUserIds, userCards]);
+
+  const filteredExperienceCards = useMemo(() => {
+    const search = keyword.trim().toLowerCase();
+    if (!search) return savedExperienceCards;
+    return savedExperienceCards.filter((item) =>
+      [item.title, item.archiveTitle, item.authorName, item.authorRegion]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search)
+    );
+  }, [keyword, savedExperienceCards]);
 
   const selectedUserProjects = useMemo(() => {
     const users = selectedUserId === "all"
@@ -625,19 +708,31 @@ export default function FollowPage() {
       {isMobileViewport ? (
         <MobileContentTopBar
           ariaLabel={followT.title}
-          searchLabel={tab === "projects" ? followT.search_projects : followT.search_users}
+          searchLabel={
+            activeTab === "projects"
+              ? followT.search_projects
+              : activeTab === "experience"
+                ? followT.search_experience_cards
+                : followT.search_users
+          }
           onSearch={() => setMobileSearchOpen((open) => !open)}
           items={[
             {
               key: "projects",
-              label: `${followT.projects} (${projectCards.length})`,
-              active: tab === "projects",
+              label: followT.records,
+              active: activeTab === "projects",
               onClick: () => setTab("projects"),
             },
             {
+              key: "experience",
+              label: followT.experience_cards,
+              active: activeTab === "experience",
+              onClick: () => setTab("experience"),
+            },
+            {
               key: "users",
-              label: `${followT.users} (${userCards.length})`,
-              active: tab === "users",
+              label: followT.users_mobile,
+              active: activeTab === "users",
               onClick: () => setTab("users"),
             },
           ]}
@@ -660,14 +755,14 @@ export default function FollowPage() {
           <button
             type="button"
             onClick={() => setTab("projects")}
-            style={tabButtonStyle(tab === "projects")}
+            style={tabButtonStyle(activeTab === "projects")}
           >
             {isMobileViewport ? `${followT.projects} (${projectCards.length})` : followT.projects}
           </button>
           <button
             type="button"
             onClick={() => setTab("users")}
-            style={tabButtonStyle(tab === "users")}
+            style={tabButtonStyle(activeTab === "users")}
           >
             {isMobileViewport ? `${followT.users} (${userCards.length})` : followT.users}
           </button>
@@ -677,11 +772,17 @@ export default function FollowPage() {
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder={tab === "projects" ? followT.search_projects : followT.search_users}
+            placeholder={
+              activeTab === "projects"
+                ? followT.search_projects
+                : activeTab === "experience"
+                  ? followT.search_experience_cards
+                  : followT.search_users
+            }
             style={isMobileViewport ? mobileSearchInputStyle : searchInputStyle}
           />
 
-          {tab === "projects" ? (
+          {activeTab === "projects" ? (
             <select
               value={projectStatus}
               onChange={(e) => setProjectStatus(e.target.value as ProjectStatusFilter)}
@@ -697,7 +798,185 @@ export default function FollowPage() {
 
         {loading ? (
           <div style={emptyWrapStyle}>{followT.loading}</div>
-        ) : tab === "projects" ? (
+        ) : isMobileViewport ? (
+          activeTab === "projects" ? (
+            projectLoadError ? (
+              <div style={emptyWrapStyle}>
+                <div>{followT.project_load_failed}</div>
+                <button
+                  type="button"
+                  onClick={() => setLoadVersion((value) => value + 1)}
+                  style={{ ...ghostButtonStyle, marginTop: 14 }}
+                >
+                  {followT.reload}
+                </button>
+              </div>
+            ) : filteredProjectCards.length ? (
+              <div style={mobileProjectListStyle}>
+                {filteredProjectCards.map((item) => (
+                  <MobileFollowProjectCard
+                    key={item.id}
+                    item={item}
+                    unread={hasUnread(
+                      `project:${item.id}`,
+                      item.latestRecordTime,
+                      item.followedAt
+                    )}
+                    onOpen={() => {
+                      markRead(`project:${item.id}`, item.latestRecordTime);
+                      router.push(`/archive/${item.id}`);
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title={followT.empty_projects}
+                description={followT.empty_projects_intro}
+                actionLabel={followT.browse_discover}
+                href="/discover"
+              />
+            )
+          ) : activeTab === "experience" ? (
+            experienceLoadError ? (
+              <div style={emptyWrapStyle}>
+                <div>{followT.experience_cards_load_failed}</div>
+                <button
+                  type="button"
+                  onClick={() => setLoadVersion((value) => value + 1)}
+                  style={{ ...ghostButtonStyle, marginTop: 14 }}
+                >
+                  {followT.reload}
+                </button>
+              </div>
+            ) : filteredExperienceCards.length ? (
+              <div style={mobileExperienceListStyle}>
+                {filteredExperienceCards.map((item) => (
+                  <ExperienceCardListCard
+                    key={item.id}
+                    item={item}
+                    dateValue={item.published_at}
+                    showAuthor
+                    status={<span style={savedExperienceStatusStyle}>{t.experience.saved}</span>}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title={followT.empty_experience_cards}
+                description={followT.empty_experience_cards_intro}
+                actionLabel={followT.browse_experience_cards}
+                href="/discover?tab=experience"
+              />
+            )
+          ) : filteredUserCards.length ? (
+            <div>
+              <div style={followedUserRailStyle}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserId("all")}
+                  style={followedUserAllButtonStyle(selectedUserId === "all")}
+                >
+                  <span>{followT.status_all}</span>
+                </button>
+                {filteredUserCards.map((item) => {
+                  const unread = hasUnread(
+                    `user:${item.id}`,
+                    item.latestRecordTime,
+                    item.followedAt
+                  );
+                  return (
+                    <div key={item.id} style={followedUserItemWrapStyle}>
+                      <button
+                        type="button"
+                        onPointerDown={(event) => beginUserLongPress(event, item.id)}
+                        onPointerUp={clearUserLongPressTimer}
+                        onPointerLeave={clearUserLongPressTimer}
+                        onPointerCancel={clearUserLongPressTimer}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          clearUserLongPressTimer();
+                          userLongPressedIdRef.current = item.id;
+                          setUserMenuTargetId(item.id);
+                        }}
+                        onClick={(event) => {
+                          if (userLongPressedIdRef.current === item.id) {
+                            event.preventDefault();
+                            userLongPressedIdRef.current = null;
+                            return;
+                          }
+                          setSelectedUserId(item.id);
+                          markRead(`user:${item.id}`, item.latestRecordTime);
+                        }}
+                        title={followT.long_press_user_hint}
+                        style={followedUserPillStyle(selectedUserId === item.id)}
+                      >
+                        <span style={{ position: "relative" }}>
+                          {item.avatarUrl ? (
+                            <img src={item.avatarUrl} alt="" style={userAvatarSmallStyle} />
+                          ) : (
+                            <span style={userAvatarFallbackSmallStyle}>
+                              <UiIcon name="sprout" size={18} />
+                            </span>
+                          )}
+                          {unread ? <span style={railUnreadDotStyle} /> : null}
+                          {pinnedUserIds.includes(item.id) ? (
+                            <span style={railPinnedDotStyle} />
+                          ) : null}
+                        </span>
+                        <span style={railUsernameStyle}>{item.username}</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {userProjectsError ? (
+                <div style={emptyWrapStyle}>
+                  <div>{followT.user_projects_load_failed}</div>
+                  <button
+                    type="button"
+                    onClick={() => setLoadVersion((value) => value + 1)}
+                    style={{ ...ghostButtonStyle, marginTop: 14 }}
+                  >
+                    {followT.reload}
+                  </button>
+                </div>
+              ) : selectedUserProjects.length ? (
+                <div style={mobileProjectListStyle}>
+                  {selectedUserProjects.map((item) => (
+                    <MobileFollowProjectCard
+                      key={`${item.ownerId}-${item.id}`}
+                      item={item}
+                      unread={hasUnread(
+                        `user:${item.ownerId}`,
+                        item.latestRecordTime,
+                        null
+                      )}
+                      onOpen={() => {
+                        markRead(`user:${item.ownerId}`, item.latestRecordTime);
+                        router.push(`/archive/${item.id}`);
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div style={compactEmptyTextStyle}>
+                  {selectedUserId === "all"
+                    ? followT.empty_followed_user_projects_short
+                    : followT.empty_selected_user_projects}
+                </div>
+              )}
+            </div>
+          ) : (
+            <EmptyState
+              title={followT.empty_users}
+              description=""
+              actionLabel={followT.browse_discover}
+              href="/discover"
+            />
+          )
+        ) : activeTab === "projects" ? (
           projectLoadError ? (
             <div style={emptyWrapStyle}>
               <div>{followT.project_load_failed}</div>
@@ -753,28 +1032,6 @@ export default function FollowPage() {
                         {separateStats ? null : <ProjectMetaLine recordCount={item.recordCount} durationDays={item.durationDays} />}
                         {item.statusKind !== "normal" ? (
                           <StatusBadge kind={item.statusKind}>{item.statusLabel}</StatusBadge>
-                        ) : null}
-                        {isMobileViewport ? (
-                          <div style={followCardMenuWrapStyle} onClick={(event) => event.stopPropagation()}>
-                            <button
-                              type="button"
-                              aria-label={t.nav.more_actions}
-                              onClick={() => setProjectMenuOpenId((id) => id === item.id ? null : item.id)}
-                              style={followCardMoreButtonStyle}
-                            >
-                              <UiIcon name="more" size={18} />
-                            </button>
-                            {projectMenuOpenId === item.id ? (
-                              <div style={followCardMenuStyle}>
-                                <button type="button" onClick={() => router.push(`/user/${item.ownerId}`)} style={followCardMenuItemStyle}>
-                                  {followT.enter_space}
-                                </button>
-                                <button type="button" onClick={() => { setProjectMenuOpenId(null); setProjectConfirmId(item.id); }} style={followCardDangerMenuItemStyle}>
-                                  {followT.unfollow}
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
                         ) : null}
                       </div>
 
@@ -1111,10 +1368,75 @@ function StatusBadge({
   );
 }
 
+function MobileFollowProjectCard({
+  item,
+  unread,
+  onOpen,
+}: {
+  item: FollowProjectCard;
+  unread: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <article
+      role="link"
+      tabIndex={0}
+      aria-label={`${item.title} · ${item.displaySystemName}`}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onOpen();
+      }}
+      style={mobileProjectCardStyle}
+    >
+      <div style={mobileProjectCoverStyle}>
+        {item.coverUrl ? (
+          <img src={item.coverUrl} alt="" style={coverImageStyle} />
+        ) : (
+          <UiIcon name={item.categoryIcon} size={30} strokeWidth={1.6} />
+        )}
+        <span style={mobileProjectCategoryBadgeStyle}>{item.categoryLabel}</span>
+      </div>
+
+      <div style={mobileProjectBodyStyle}>
+        <div style={mobileProjectTitleLineStyle}>
+          <strong style={mobileProjectTitleStyle}>{item.title}</strong>
+          <span aria-hidden="true">·</span>
+          <span style={mobileProjectSystemNameStyle}>{item.displaySystemName}</span>
+          {unread ? <span style={unreadDotStyle} /> : null}
+        </div>
+
+        <div style={mobileProjectUpdateLineStyle}>
+          <span style={mobileProjectNoteStyle}>{item.latestNote}</span>
+          {item.latestRecordTime ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <CompactActivityTime value={item.latestRecordTime} />
+            </>
+          ) : null}
+        </div>
+
+        <ProjectMetaLine
+          recordCount={item.recordCount}
+          durationDays={item.durationDays}
+          style={mobileProjectStatsStyle}
+        />
+
+        <div style={mobileProjectOwnerStyle}>
+          {item.ownerName}
+          {item.ownerRegion ? ` · ${item.ownerRegion}` : ""}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function getInitialTabFromUrl(): TabKey {
   if (typeof window === "undefined") return "projects";
   const tab = new URLSearchParams(window.location.search).get("tab");
-  return tab === "users" ? "users" : "projects";
+  if (tab === "users" || tab === "experience") return tab;
+  return "projects";
 }
 
 async function fetchAllFollowedPublicProjects() {
@@ -1136,6 +1458,10 @@ async function fetchAllFollowedPublicProjects() {
 
 function unique<T>(items: T[]) {
   return Array.from(new Set(items));
+}
+
+function formatProfileRegion(profile?: ProfileRow | null) {
+  return profile?.city_name || profile?.region_name || profile?.country_name || "";
 }
 
 function getTimeValue(value?: string | null) {
@@ -1312,6 +1638,143 @@ const listStyle: React.CSSProperties = {
   gap: 10,
 };
 
+const mobileProjectListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const mobileExperienceListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 9,
+};
+
+const savedExperienceStatusStyle: React.CSSProperties = {
+  color: "#4e754d",
+  fontWeight: 750,
+};
+
+const mobileProjectCardStyle: React.CSSProperties = {
+  minWidth: 0,
+  minHeight: 128,
+  display: "grid",
+  gridTemplateColumns: "112px minmax(0, 1fr)",
+  alignItems: "stretch",
+  gap: 11,
+  padding: 8,
+  overflow: "hidden",
+  border: "1px solid #e1e8de",
+  borderRadius: 16,
+  background: "#fff",
+  cursor: "pointer",
+};
+
+const mobileProjectCoverStyle: React.CSSProperties = {
+  position: "relative",
+  width: 112,
+  height: 112,
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+  alignSelf: "start",
+  borderRadius: 13,
+  background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
+  color: "#91a18e",
+};
+
+const mobileProjectCategoryBadgeStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 8,
+  left: 8,
+  maxWidth: 92,
+  overflow: "hidden",
+  padding: "3px 7px",
+  border: "1px solid rgba(191, 218, 187, 0.9)",
+  borderRadius: 999,
+  background: "rgba(247, 252, 245, 0.92)",
+  color: "#477546",
+  fontSize: 11.5,
+  fontWeight: 750,
+  lineHeight: 1.2,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileProjectBodyStyle: React.CSSProperties = {
+  minWidth: 0,
+  minHeight: 112,
+  display: "flex",
+  flexDirection: "column",
+  padding: "2px 1px",
+};
+
+const mobileProjectTitleLineStyle: React.CSSProperties = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "baseline",
+  gap: 4,
+  overflow: "hidden",
+  color: "#6e796b",
+  whiteSpace: "nowrap",
+};
+
+const mobileProjectTitleStyle: React.CSSProperties = {
+  minWidth: 0,
+  maxWidth: "58%",
+  overflow: "hidden",
+  color: "#263527",
+  fontSize: 16,
+  fontWeight: 850,
+  lineHeight: 1.35,
+  textOverflow: "ellipsis",
+};
+
+const mobileProjectSystemNameStyle: React.CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  color: "#5e6d5c",
+  fontSize: 13,
+  fontWeight: 650,
+  textOverflow: "ellipsis",
+};
+
+const mobileProjectUpdateLineStyle: React.CSSProperties = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  marginTop: 7,
+  overflow: "hidden",
+  color: "#6f7c6d",
+  fontSize: 12,
+  lineHeight: 1.35,
+  whiteSpace: "nowrap",
+};
+
+const mobileProjectNoteStyle: React.CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileProjectStatsStyle: React.CSSProperties = {
+  marginTop: "auto",
+  color: "#748071",
+  fontSize: 11.5,
+  gap: "3px 9px",
+};
+
+const mobileProjectOwnerStyle: React.CSSProperties = {
+  minWidth: 0,
+  marginTop: 5,
+  overflow: "hidden",
+  color: "#7a8578",
+  fontSize: 11.5,
+  lineHeight: 1.3,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 const cardStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "100px minmax(0, 1fr)",
@@ -1321,16 +1784,6 @@ const cardStyle: React.CSSProperties = {
   borderRadius: 16,
   background: "#fff",
   alignItems: "start",
-};
-
-const userCardStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "72px minmax(0, 1fr)",
-  gap: 14,
-  padding: 14,
-  border: "1px solid #ebf0e7",
-  borderRadius: 20,
-  background: "#fff",
 };
 
 const coverStyle: React.CSSProperties = {
@@ -1354,30 +1807,6 @@ const coverImageStyle: React.CSSProperties = {
   objectFit: "cover",
 };
 
-const userAvatarWrapStyle: React.CSSProperties = {
-  width: 72,
-  height: 72,
-};
-
-const userAvatarStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  borderRadius: "50%",
-  objectFit: "cover",
-};
-
-const userAvatarFallbackStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  borderRadius: "50%",
-  background: "#edf5e8",
-  color: "#6f8f62",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 30,
-};
-
 const cardBodyStyle: React.CSSProperties = {
   minWidth: 0,
   display: "grid",
@@ -1394,14 +1823,6 @@ const cardInlineTitleRowStyle: React.CSSProperties = {
   minWidth: 0,
   overflow: "hidden",
   whiteSpace: "nowrap",
-};
-
-const cardTopRowStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  minWidth: 0,
 };
 
 const projectTitleStyle: React.CSSProperties = {
@@ -1451,15 +1872,6 @@ const noteLineStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const statsLineStyle: React.CSSProperties = {
-  color: "#8a9287",
-  fontSize: 13,
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const buttonRowStyle: React.CSSProperties = {
   display: "flex",
   gap: 5,
@@ -1501,57 +1913,6 @@ const textLinkStyle: React.CSSProperties = {
   fontWeight: 600,
   whiteSpace: "nowrap",
   flexShrink: 0,
-};
-
-const followCardMenuWrapStyle: React.CSSProperties = {
-  position: "relative",
-  marginLeft: "auto",
-  flexShrink: 0,
-};
-
-const followCardMoreButtonStyle: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  display: "grid",
-  placeItems: "center",
-  border: "1px solid #e8ede4",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#697567",
-  padding: 0,
-  cursor: "pointer",
-};
-
-const followCardMenuStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 34,
-  right: 0,
-  zIndex: 30,
-  width: 124,
-  display: "grid",
-  gap: 2,
-  padding: 5,
-  border: "1px solid #e2e9df",
-  borderRadius: 11,
-  background: "#fff",
-  boxShadow: "0 12px 28px rgba(39,58,34,0.16)",
-};
-
-const followCardMenuItemStyle: React.CSSProperties = {
-  minHeight: 34,
-  border: 0,
-  borderRadius: 8,
-  background: "transparent",
-  color: "#40583a",
-  padding: "0 9px",
-  textAlign: "left",
-  fontSize: 13,
-  cursor: "pointer",
-};
-
-const followCardDangerMenuItemStyle: React.CSSProperties = {
-  ...followCardMenuItemStyle,
-  color: "#b5574f",
 };
 
 const emptyWrapStyle: React.CSSProperties = {

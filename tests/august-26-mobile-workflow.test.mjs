@@ -41,7 +41,7 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
   assert.match(zhCopy, /my_saved: "我的收藏"/);
 });
 
-test("plant detail uses a compact archive header and opens the cloud-first project form", async () => {
+test("plant detail uses the unified mobile header and opens the cloud-first project form", async () => {
   const [detail, styles, zhCopy, projectForm] = await Promise.all([
     source("app/plant/[id]/page.tsx"),
     source("app/plant/[id]/page.module.css"),
@@ -49,16 +49,21 @@ test("plant detail uses a compact archive header and opens the cloud-first proje
     source("components/archive-ui/ArchiveNewProjectFormShell.tsx"),
   ]);
 
-  assert.match(detail, /className=\{styles\.backRow\}[\s\S]*?className=\{styles\.backLink\}/);
-  assert.match(detail, /className=\{styles\.archiveLabel\}>\{copy\.plant_archive\}/);
-  assert.match(detail, /className=\{styles\.heroHeadingRow\}/);
+  assert.match(detail, /<MobilePageHeader[\s\S]*?title=\{displayName\}/);
+  assert.match(detail, /className=\{styles\.mobileSavedAction\}/);
+  assert.match(detail, /className=\{`\$\{styles\.mobileActions\} mobile-app-grid-only`\}/);
+  assert.match(detail, /\{copy\.plant_guide\}/);
+  assert.doesNotMatch(detail, /copy\.plant_archive|copy\.back_to_record/);
+  assert.match(detail, /className=\{`\$\{styles\.heroHeadingRow\} mobile-app-desktop-only`\}/);
   assert.match(detail, /href=\{createProjectHref\}/);
   assert.doesNotMatch(detail, /projectChooserOpen|setProjectChooserOpen/);
   assert.match(projectForm, /storageMode === "cloud"/);
   assert.match(projectForm, /localHref/);
   assert.match(styles, /\.backLink \{[\s\S]*?text-decoration: underline/);
+  assert.match(styles, /\.mobileActions \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(styles, /\.heroHeadingRow \{[\s\S]*?minmax\(0, 1fr\) auto auto/);
-  assert.match(zhCopy, /plant_archive: "植物档案"/);
+  assert.match(zhCopy, /plant_guide: "植物指引"/);
+  assert.match(zhCopy, /new_project: "新建项目"/);
 });
 
 test("cycle trash preserves records, allows duplicate display names, and ignores the display switch", async () => {

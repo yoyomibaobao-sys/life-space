@@ -70,6 +70,7 @@ import {
 } from "@/lib/local-offline-db";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileNotificationLink from "@/components/mobile/MobileNotificationLink";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 
 type LatestArchiveRecord = {
   id: string;
@@ -1883,6 +1884,13 @@ export default function ArchivePage() {
   if (!ready) return null;
 
   return (
+    <>
+    <MobilePageHeader
+      title={t.archive_workspace.my_space}
+      titleText={t.archive_workspace.my_space}
+      fallbackHref="/discover"
+      ariaLabel={t.nav.back}
+    />
     <main
       style={{
         padding: isMobileViewport ? "8px 8px 24px" : "22px 18px 42px",
@@ -2214,6 +2222,7 @@ export default function ArchivePage() {
         onConfirm={confirmDeleteArchive}
       />
     </main>
+    </>
   );
 }
 
@@ -2335,23 +2344,20 @@ function LocalArchiveFilters({
 
 function personalSpaceIdentityStyle(mobile: boolean): CSSProperties {
   return {
-    position: mobile ? "sticky" : "static",
-    top: mobile ? 0 : undefined,
-    zIndex: mobile ? 100 : undefined,
+    position: "static",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: mobile ? 8 : 14,
     marginBottom: mobile ? 8 : 12,
-    marginTop: mobile ? -8 : 0,
-    marginLeft: mobile ? -8 : 0,
-    marginRight: mobile ? -8 : 0,
+    marginTop: 0,
+    marginLeft: 0,
+    marginRight: 0,
     padding: mobile
-      ? "calc(7px + var(--app-safe-area-top)) 10px 7px"
+      ? "7px 2px"
       : "0 0 10px",
     borderBottom: "1px solid #edf1ea",
-    background: mobile ? "rgba(250,252,248,0.97)" : "transparent",
-    backdropFilter: mobile ? "blur(10px)" : undefined,
+    background: "transparent",
   };
 }
 

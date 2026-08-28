@@ -83,6 +83,7 @@ import {
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 
 export default function ArchiveDetail({
   params,
@@ -2000,8 +2001,41 @@ saveRecentArchiveBrowse({
 
   return (
     <>
-      <main style={{ padding: "18px 16px 46px", maxWidth: 760, margin: "0 auto" }}>
-        <header style={projectPageHeaderStyle}>
+      <MobilePageHeader
+        title={
+          <span style={mobileProjectHeaderTitleStyle}>
+            <span style={mobileProjectHeaderProjectStyle}>{activeArchive.title}</span>
+            {archiveDisplayName ? (
+              <>
+                <span style={mobileProjectHeaderDotStyle}> · </span>
+                {encyclopediaHref ? (
+                  <Link href={encyclopediaHref} style={mobileProjectHeaderSystemLinkStyle}>
+                    {archiveDisplayName}
+                  </Link>
+                ) : (
+                  <span style={mobileProjectHeaderSystemStyle}>{archiveDisplayName}</span>
+                )}
+              </>
+            ) : null}
+          </span>
+        }
+        titleText={archiveDisplayName ? `${activeArchive.title} · ${archiveDisplayName}` : activeArchive.title}
+        fallbackHref={isOwner ? "/archive" : `/user/${activeArchive.user_id}`}
+        ariaLabel={t.nav.back}
+        right={
+          !isOwner ? (
+            <button
+              type="button"
+              onClick={() => void toggleProjectFollow()}
+              style={mobileProjectFollowStyle(isProjectFollowed)}
+            >
+              {isProjectFollowed ? archiveCopy.followed_project : archiveCopy.follow_project}
+            </button>
+          ) : null
+        }
+      />
+      <main style={{ padding: isMobileViewport ? "10px 10px 46px" : "18px 16px 46px", maxWidth: 760, margin: "0 auto" }}>
+        <header className="mobile-app-desktop-only" style={projectPageHeaderStyle}>
           <Link
             href={isOwner ? "/archive" : `/user/${activeArchive.user_id}`}
             style={projectPageBackLinkStyle}
@@ -2187,46 +2221,48 @@ saveRecentArchiveBrowse({
             onSaveArchiveSummary={saveMobileArchiveSummary}
             onPlantSuggestionsOpenChange={setMobilePlantSuggestionsOpen}
             onSystemSuggestionsOpenChange={setMobileSystemSuggestionsOpen}
+            headerAction={!isOwner ? (
+              <Link href={`/user/${activeArchive.user_id}`} style={mobileAttributeSpaceLinkStyle}>
+                <span>{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
+                <UiIcon name="chevron-right" size={14} />
+              </Link>
+            ) : null}
           />
           {isOwner ? (
             <>
-              <div style={projectManagementRowStyle}>
-                <strong>{archiveCopy.project_management}</strong>
-                <MobileArchiveActions
-                  category={normalizeArchiveCategory(activeArchive.category)}
-                  subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
-                  groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
-                  subTags={ownerSubTags}
-                  groupTags={ownerGroupTags}
-                  ended={activeArchive.status === "ended"}
-                  isPublic={Boolean(activeArchive.is_public)}
-                  onChangeCategory={(value) => void updateArchiveTaxonomy(value)}
-                  onChangeGroup={(value) => void updateArchiveGroup(value)}
-                  onToggleEnded={() =>
-                    void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
-                  }
-                  onTogglePublic={() => void toggleArchiveVisibility()}
-                  onMoveToTrash={() => setDeleteArchiveDialogOpen(true)}
-                />
-              </div>
+              <MobileArchiveOwnerFields
+                category={normalizeArchiveCategory(activeArchive.category)}
+                subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
+                groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
+                subTags={ownerSubTags}
+                groupTags={ownerGroupTags}
+                ended={activeArchive.status === "ended"}
+                isPublic={Boolean(activeArchive.is_public)}
+                busy={Boolean(mobileArchiveSavingField)}
+                onChangeSubcategory={(value) =>
+                  void updateArchiveTaxonomy(value || normalizeArchiveCategory(activeArchive.category))
+                }
+                onChangeGroup={(value) => void updateArchiveGroup(value)}
+                onToggleEnded={() =>
+                  void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
+                }
+                onTogglePublic={() => void toggleArchiveVisibility()}
+              />
               <ArchiveCycleSettings
                 key={activeArchive.id}
                 enabled={cycleEnabled}
                 busy={cycleSettingsSaving}
                 onSave={saveArchiveCycleSettings}
               />
+              <button
+                type="button"
+                onClick={() => setDeleteArchiveDialogOpen(true)}
+                style={mobileArchiveTrashButtonStyle}
+              >
+                {archiveCopy.move_to_trash}
+              </button>
             </>
-          ) : (
-            <Link href={`/user/${activeArchive.user_id}`} style={attributeCreatorLinkStyle}>
-              {ownerAvatarUrl ? (
-                <img src={ownerAvatarUrl} alt="" style={attributeCreatorAvatarStyle} />
-              ) : (
-                <span style={attributeCreatorAvatarFallbackStyle}><UiIcon name="user" size={16} /></span>
-              )}
-              <span>{archiveCopy.enter_user_space_prefix}{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
-              <UiIcon name="arrow-right" size={15} />
-            </Link>
-          )}
+          ) : null}
           </>
         ) : null}
 
@@ -2407,6 +2443,111 @@ saveRecentArchiveBrowse({
   );
 }
 
+function MobileArchiveOwnerFields({
+  category,
+  subTagId,
+  groupTagId,
+  subTags,
+  groupTags,
+  ended,
+  isPublic,
+  busy,
+  onChangeSubcategory,
+  onChangeGroup,
+  onToggleEnded,
+  onTogglePublic,
+}: {
+  category: ArchiveCategory;
+  subTagId: string | null;
+  groupTagId: string | null;
+  subTags: SubTagItem[];
+  groupTags: GroupTagItem[];
+  ended: boolean;
+  isPublic: boolean;
+  busy: boolean;
+  onChangeSubcategory: (value: string) => void;
+  onChangeGroup: (value: string) => void;
+  onToggleEnded: () => void;
+  onTogglePublic: () => void;
+}) {
+  const { t } = useLanguage();
+  const copy = t.archive;
+  const availableSubTags = subTags.filter((tag) => tag.category === category);
+  const availableGroupTags = subTagId
+    ? groupTags.filter((tag) => String(tag.sub_tag_id) === subTagId)
+    : [];
+
+  return (
+    <section style={mobileArchiveOwnerFieldsStyle} aria-label={copy.project_settings}>
+      <label style={mobileArchiveOwnerSelectRowStyle}>
+        <span style={mobileArchiveLabelStyle}>{copy.subcategory}</span>
+        <span style={mobileArchiveOwnerSelectWrapStyle}>
+          <select
+            value={subTagId || ""}
+            disabled={busy}
+            onChange={(event) => onChangeSubcategory(event.target.value)}
+            style={mobileArchiveOwnerSelectStyle}
+          >
+            <option value="">{copy.no_subcategory}</option>
+            {availableSubTags.map((tag) => (
+              <option key={tag.id} value={tag.id}>{tag.name}</option>
+            ))}
+          </select>
+          <span aria-hidden="true" style={mobileArchiveOwnerSelectIconStyle}>
+            <UiIcon name="chevron-down" size={14} />
+          </span>
+        </span>
+      </label>
+
+      <label style={mobileArchiveOwnerSelectRowStyle}>
+        <span style={mobileArchiveLabelStyle}>{copy.group}</span>
+        <span style={mobileArchiveOwnerSelectWrapStyle}>
+          <select
+            value={groupTagId || ""}
+            disabled={busy || !subTagId}
+            onChange={(event) => onChangeGroup(event.target.value)}
+            style={mobileArchiveOwnerSelectStyle}
+          >
+            <option value="">{copy.no_group}</option>
+            {availableGroupTags.map((tag) => (
+              <option key={tag.id} value={tag.id}>{tag.name}</option>
+            ))}
+          </select>
+          <span aria-hidden="true" style={mobileArchiveOwnerSelectIconStyle}>
+            <UiIcon name="chevron-down" size={14} />
+          </span>
+        </span>
+      </label>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onToggleEnded}
+        style={mobileArchiveOwnerActionRowStyle}
+      >
+        <span style={mobileArchiveLabelStyle}>{copy.project_status}</span>
+        <span style={mobileArchiveOwnerActionValueStyle}>
+          {ended ? copy.ended : copy.ongoing}
+          <UiIcon name="chevron-right" size={14} />
+        </span>
+      </button>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onTogglePublic}
+        style={mobileArchiveOwnerActionRowStyle}
+      >
+        <span style={mobileArchiveLabelStyle}>{copy.visibility}</span>
+        <span style={mobileArchiveOwnerActionValueStyle}>
+          {isPublic ? copy.public_discover : copy.private_only}
+          <UiIcon name="chevron-right" size={14} />
+        </span>
+      </button>
+    </section>
+  );
+}
+
 function MobileArchiveProfile({
   archive,
   archiveDisplayName,
@@ -2444,6 +2585,7 @@ function MobileArchiveProfile({
   onSaveArchiveSummary,
   onPlantSuggestionsOpenChange,
   onSystemSuggestionsOpenChange,
+  headerAction,
 }: {
   archive: ArchiveDetailArchive;
   archiveDisplayName: string;
@@ -2481,6 +2623,7 @@ function MobileArchiveProfile({
   onSaveArchiveSummary: () => void;
   onPlantSuggestionsOpenChange: (open: boolean) => void;
   onSystemSuggestionsOpenChange: (open: boolean) => void;
+  headerAction?: ReactNode;
 }) {
   const { t } = useLanguage();
   const copy = t.archive;
@@ -2499,7 +2642,10 @@ function MobileArchiveProfile({
     <section id="archive-profile" style={mobileArchiveProfileStyle}>
       <div style={mobileArchiveProfileHeaderStyle}>
         <div style={{ fontSize: 16, fontWeight: 800, color: "#1f2d1f" }}>{copy.dossier}</div>
-        {savingField ? <div style={mobileArchiveSavingTextStyle}>{copy.saving}</div> : null}
+        <div style={mobileArchiveProfileHeaderActionStyle}>
+          {savingField ? <div style={mobileArchiveSavingTextStyle}>{copy.saving}</div> : null}
+          {headerAction}
+        </div>
       </div>
 
       <MobileArchiveEditableField
@@ -2782,6 +2928,76 @@ function normalizeArchiveCategory(value?: string | null): ArchiveCategory {
   return "other";
 }
 
+const mobileProjectHeaderTitleStyle: CSSProperties = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "center",
+  gap: 4,
+  overflow: "hidden",
+  whiteSpace: "nowrap",
+};
+
+const mobileProjectHeaderProjectStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  color: "#243424",
+  fontSize: 16,
+  fontWeight: 850,
+  textOverflow: "ellipsis",
+};
+
+const mobileProjectHeaderDotStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#879284",
+};
+
+const mobileProjectHeaderSystemStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  color: "#5f705c",
+  fontSize: 14,
+  fontWeight: 700,
+  textOverflow: "ellipsis",
+};
+
+const mobileProjectHeaderSystemLinkStyle: CSSProperties = {
+  ...mobileProjectHeaderSystemStyle,
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+};
+
+function mobileProjectFollowStyle(followed: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    maxWidth: 94,
+    minHeight: 34,
+    overflow: "hidden",
+    border: followed ? "1px solid #dce3db" : "1px solid #c9ddc4",
+    borderRadius: 999,
+    background: followed ? "#f6f7f5" : "#edf7ea",
+    color: followed ? "#687267" : "#35693d",
+    padding: "0 8px",
+    fontSize: 11.5,
+    fontWeight: 750,
+    lineHeight: 1.15,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  };
+}
+
+const mobileAttributeSpaceLinkStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  color: "#3d653d",
+  fontSize: 12.5,
+  fontWeight: 750,
+  textDecoration: "none",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 const projectPageHeaderStyle: CSSProperties = {
   minHeight: 48,
   display: "grid",
@@ -2876,6 +3092,12 @@ const mobileArchiveProfileHeaderStyle: CSSProperties = {
   marginBottom: 10,
 };
 
+const mobileArchiveProfileHeaderActionStyle: CSSProperties = {
+  minWidth: 0,
+  marginLeft: "auto",
+  overflow: "hidden",
+};
+
 const mobileArchiveSavingTextStyle: CSSProperties = {
   color: "#6d7b68",
   fontSize: 12,
@@ -2951,6 +3173,98 @@ const mobileArchiveInlineEditStyle: CSSProperties = {
   padding: "2px 0",
   fontSize: 13,
   fontWeight: 700,
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+  cursor: "pointer",
+};
+
+const mobileArchiveOwnerFieldsStyle: CSSProperties = {
+  overflow: "hidden",
+  marginBottom: 14,
+  border: "1px solid #e6ece1",
+  borderRadius: 16,
+  background: "#fff",
+  padding: "0 14px",
+};
+
+const mobileArchiveOwnerSelectRowStyle: CSSProperties = {
+  minHeight: 48,
+  display: "grid",
+  gridTemplateColumns: "84px minmax(0, 1fr)",
+  alignItems: "center",
+  gap: 10,
+  borderBottom: "1px solid #f0f3ed",
+  color: "#6f7b6c",
+  fontSize: 13.5,
+};
+
+const mobileArchiveOwnerSelectWrapStyle: CSSProperties = {
+  position: "relative",
+  minWidth: 0,
+};
+
+const mobileArchiveOwnerSelectIconStyle: CSSProperties = {
+  position: "absolute",
+  top: "50%",
+  right: 0,
+  display: "inline-flex",
+  color: "#748171",
+  pointerEvents: "none",
+  transform: "translateY(-50%)",
+};
+
+const mobileArchiveOwnerSelectStyle: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  border: 0,
+  outline: 0,
+  background: "transparent",
+  color: "#273327",
+  padding: "8px 20px 8px 0",
+  fontSize: 14,
+  textAlign: "right",
+  cursor: "pointer",
+};
+
+const mobileArchiveOwnerActionRowStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 48,
+  display: "grid",
+  gridTemplateColumns: "84px minmax(0, 1fr)",
+  alignItems: "center",
+  gap: 10,
+  border: 0,
+  borderBottom: "1px solid #f0f3ed",
+  background: "transparent",
+  color: "#6f7b6c",
+  padding: 0,
+  fontSize: 13.5,
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const mobileArchiveOwnerActionValueStyle: CSSProperties = {
+  minWidth: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 4,
+  overflow: "hidden",
+  color: "#273327",
+  fontSize: 14,
+  textAlign: "right",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const mobileArchiveTrashButtonStyle: CSSProperties = {
+  display: "block",
+  margin: "12px auto 6px",
+  border: 0,
+  background: "transparent",
+  color: "#aa514a",
+  padding: "8px 12px",
+  fontSize: 13,
   textDecoration: "underline",
   textUnderlineOffset: 3,
   cursor: "pointer",

@@ -213,9 +213,11 @@ test("mobile plant guides use compact parameters, actions, cards, and sticky tab
   assert.match(detail, /className=\{styles\.section\}/);
   assert.match(styles, /@media \(max-width: 759px\)[\s\S]*?\.parameterGrid \{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.contentTabs \{[\s\S]*?position: sticky;[\s\S]*?top: calc\(50px \+ var\(--app-safe-area-top\)\);/);
-  assert.match(detail, /className=\{styles\.heroHeadingRow\}/);
+  assert.match(detail, /<MobilePageHeader[\s\S]*?className=\{styles\.mobileSavedAction\}/);
+  assert.match(detail, /className=\{`\$\{styles\.heroHeadingRow\} mobile-app-desktop-only`\}/);
   assert.match(styles, /\.heroHeadingRow \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/);
   assert.match(styles, /\.heroAction \{[\s\S]*?white-space: normal;[\s\S]*?overflow-wrap: anywhere;/);
+  assert.match(styles, /\.environmentTagList \{[\s\S]*?gap: 5px 6px/);
   assert.match(experienceCard, /<div className=\{styles\.headerRow\}>[\s\S]*?styles\.title[\s\S]*?styles\.statusRow/);
   assert.match(experienceStyles, /\.headerRow \{[\s\S]*?align-items: flex-start/);
   assert.match(experienceStyles, /\.title \{[\s\S]*?margin: 0 0 4px/);
@@ -566,10 +568,11 @@ test("plant detail exposes guide, experience cards, and records as peer tabs", a
   assert.match(enCopy, /guide_tab: "Overview & growing guide"/);
 });
 
-test("activity search filters all, projects, and records while Experience searches inline", async () => {
-  const [page, tabs, form, results, resultCard, resultCardStyles, data, utils, experiencePage, zhCopy, enCopy] = await Promise.all([
+test("activity search keeps desktop filters while mobile splits projects and records", async () => {
+  const [page, tabs, header, form, results, resultCard, resultCardStyles, data, utils, experiencePage, zhCopy, enCopy] = await Promise.all([
     source("app/discover/search/page.tsx"),
     source("components/discover-search/DiscoverSearchTabs.tsx"),
+    source("components/discover-search/DiscoverSearchHeader.tsx"),
     source("components/discover-search/DiscoverSearchForm.tsx"),
     source("components/discover-search/DiscoverSearchResults.tsx"),
     source("components/discover-search/DiscoverSearchResultCard.tsx"),
@@ -594,12 +597,17 @@ test("activity search filters all, projects, and records while Experience search
   assert.match(experiencePage, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen/);
   assert.doesNotMatch(experiencePage, /window\.history\.pushState/);
+  assert.match(header, /<MobilePageHeader/);
+  assert.match(header, /onSearchKindChange\("projects"\)/);
+  assert.match(header, /onSearchKindChange\("records"\)/);
+  assert.doesNotMatch(header, /onSearchKindChange\("all"\)/);
   assert.match(form, /searchKind === "records"/);
   assert.match(
     form,
-    /mobileGridStyle[\s\S]*?minmax\(82px, \.95fr\) minmax\(58px, \.7fr\) minmax\(72px, 1fr\) auto/
+    /mobileGridStyle[\s\S]*?minmax\(82px, \.95fr\) minmax\(64px, \.72fr\) minmax\(94px, 1\.15fr\)/
   );
-  assert.match(form, /renderSearchKindControl\(true\)/);
+  assert.doesNotMatch(form, /renderSearchKindControl\(true\)/);
+  assert.match(form, /renderSearchKindControl\(false\)/);
   assert.match(form, /projects_records/);
   assert.match(form, /t\.discover\.search_ui\.all_categories/);
   assert.match(form, /t\.discover\.search_ui\.region_short_placeholder/);
@@ -625,17 +633,19 @@ test("activity search filters all, projects, and records while Experience search
   assert.match(resultCard, /<CompactActivityTime/);
   assert.match(resultCard, /className=\{styles\.card\}/);
   assert.match(resultCard, /className=\{styles\.mediaCategory\}>\{category\}/);
-  assert.match(resultCard, /sizes="\(max-width: 759px\) 104px, 108px"/);
-  assert.match(resultCard, /\{summary \? <div className=\{styles\.summary\}>\{summary\}<\/div> : null\}/);
+  assert.match(resultCard, /sizes="\(max-width: 759px\) 112px, 108px"/);
+  assert.match(resultCard, /className=\{styles\.mobileUpdateRow\}/);
+  assert.match(resultCard, /className=\{styles\.mobileSummary\}/);
   assert.match(resultCardStyles, /\.grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(resultCardStyles, /\.card\s*\{[\s\S]*grid-template-columns: 108px minmax\(0, 1fr\);[\s\S]*padding: 8px;[\s\S]*border-radius: 14px;/);
   assert.match(resultCardStyles, /\.media\s*\{[\s\S]*width: 108px;[\s\S]*height: 108px;[\s\S]*border-radius: 10px;/);
   assert.match(resultCardStyles, /\.mediaCategory\s*\{[\s\S]*position: absolute;[\s\S]*top: 7px;[\s\S]*left: 7px;/);
   assert.match(resultCardStyles, /\.summary\s*\{[\s\S]*-webkit-line-clamp: 2;/);
   assert.match(resultCardStyles, /@media \(min-width: 760px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 104px minmax\(0, 1fr\);/);
-  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.media \{[\s\S]*width: 104px;[\s\S]*height: 104px;[\s\S]*align-self: start;/);
-  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.footer \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*grid-template-columns: 112px minmax\(0, 1fr\);/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.media \{[\s\S]*width: 112px;[\s\S]*height: 112px;[\s\S]*align-self: start;/);
+  assert.match(resultCardStyles, /@media \(max-width: 759px\)[\s\S]*\.footer \{[\s\S]*flex-direction: column;/);
+  assert.match(resultCardStyles, /\.meta \{[\s\S]*order: -1;/);
   assert.match(data, /\.from\("discovery_project_feed_view"\)/);
   assert.match(data, /hydrateExperienceCardListItems/);
   assert.match(data, /is_experience_card_public/);

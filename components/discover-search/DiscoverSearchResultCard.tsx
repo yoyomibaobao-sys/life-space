@@ -53,7 +53,7 @@ export default function DiscoverSearchResultCard({
             fill
             unoptimized
             loading="lazy"
-            sizes="(max-width: 759px) 104px, 108px"
+            sizes="(max-width: 759px) 112px, 108px"
             className={styles.image}
             onError={() => setImageFailed(true)}
           />
@@ -82,7 +82,17 @@ export default function DiscoverSearchResultCard({
           ) : null}
         </h2>
         {detail ? <div className={styles.detail}>{detail}</div> : null}
-        {summary ? <div className={styles.summary}>{summary}</div> : null}
+        {summary ? (
+          <div className={`${styles.summary} ${styles.desktopSummary}`}>{summary}</div>
+        ) : null}
+
+        {summary || dateValue ? (
+          <div className={styles.mobileUpdateRow}>
+            {summary ? <span className={styles.mobileSummary}>{summary}</span> : null}
+            {summary && dateValue ? <span aria-hidden="true">·</span> : null}
+            {dateValue ? <CompactActivityTime value={dateValue} /> : null}
+          </div>
+        ) : null}
 
         {author || meta ? (
           <div className={styles.footer}>
