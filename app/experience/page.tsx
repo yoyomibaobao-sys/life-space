@@ -1,20 +1,28 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import PublicExperienceGallery from "@/components/experience-card/PublicExperienceGallery";
 import { fetchDiscoverExperienceCardSearchResults } from "@/lib/discover-search-data";
 import { emptySearchFilters } from "@/lib/discover-search-types";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
+import {
+  archiveCategoryOptions,
+  getArchiveCategoryLabel,
+  type ArchiveCategory,
+} from "@/lib/archive-categories";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
+type CategoryFilter = "all" | ArchiveCategory;
+
 export default function PublicExperiencePage() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [items, setItems] = useState<ExperienceCardListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +43,14 @@ export default function PublicExperiencePage() {
     };
   }, [query]);
 
+  const filteredItems = useMemo(
+    () =>
+      categoryFilter === "all"
+        ? items
+        : items.filter((item) => item.archiveCategory === categoryFilter),
+    [categoryFilter, items],
+  );
+
   return (
     <>
       <HomeSectionTabs
@@ -42,6 +58,26 @@ export default function PublicExperiencePage() {
         onSearch={() => setSearchOpen((open) => !open)}
       />
       <main style={pageStyle}>
+        <section style={categoryFilterStyle} aria-label={language === "en" ? "Category" : "分类"}>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("all")}
+            style={categoryButtonStyle(categoryFilter === "all")}
+          >
+            {language === "en" ? "All" : "全部"}
+          </button>
+          {archiveCategoryOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setCategoryFilter(option.value)}
+              style={categoryButtonStyle(categoryFilter === option.value)}
+            >
+              {getArchiveCategoryLabel(option.value, language)}
+            </button>
+          ))}
+        </section>
+
         {searchOpen ? (
           <label style={searchRowStyle}>
             <UiIcon name="search" size={17} />
@@ -67,10 +103,10 @@ export default function PublicExperiencePage() {
         ) : null}
         {loading ? (
           <section style={emptyStyle}>{t.experience.reading}</section>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <section style={emptyStyle}>{t.experience.no_public_experience}</section>
         ) : (
-          <PublicExperienceGallery items={items} />
+          <PublicExperienceGallery items={filteredItems} />
         )}
       </main>
     </>
@@ -82,6 +118,34 @@ const pageStyle: CSSProperties = {
   margin: "0 auto",
   padding: "8px 14px 90px",
 };
+
+const categoryFilterStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: 4,
+  marginBottom: 8,
+};
+
+function categoryButtonStyle(active: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    minHeight: 34,
+    border: active ? "1px solid #8bc58b" : "1px solid #e2e8df",
+    borderRadius: 999,
+    background: active ? "#f0fff4" : "#fff",
+    color: active ? "#2e7d32" : "#314131",
+    padding: "4px 3px",
+    overflow: "hidden",
+    fontSize: 12,
+    fontWeight: active ? 700 : 550,
+    lineHeight: 1.15,
+    textAlign: "center",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  };
+}
+
 const searchRowStyle: CSSProperties = {
   minHeight: 42,
   display: "flex",
