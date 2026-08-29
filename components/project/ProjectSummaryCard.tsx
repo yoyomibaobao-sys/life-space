@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  cloneElement,
   isValidElement,
   type KeyboardEvent,
   type ReactElement,
@@ -29,6 +30,7 @@ type InlineTaxonomyActionProps = {
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
   categoryDepths?: ArchiveCategoryDepths;
+  allowTaxonomyEdit?: boolean;
   onChangeCategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
 };
@@ -63,6 +65,12 @@ type Props = {
 
 export default function ProjectSummaryCard(props: Props) {
   const taxonomyAction = getInlineTaxonomyAction(props.actionSlot);
+  const displayActionSlot = taxonomyAction && isValidElement(props.actionSlot)
+    ? cloneElement(
+        props.actionSlot as ReactElement<InlineTaxonomyActionProps>,
+        { allowTaxonomyEdit: false },
+      )
+    : props.actionSlot;
   const inlineTaxonomy = taxonomyAction ? (
     <>
       <MobileArchiveTaxonomyInline
@@ -136,7 +144,7 @@ export default function ProjectSummaryCard(props: Props) {
           <span className={styles.titleActions}>
             {props.helpLabel ? <span className={styles.help}>{props.helpLabel}</span> : null}
             {props.unread ? <span className={styles.unread} aria-hidden="true" /> : null}
-            {props.actionSlot ? (
+            {displayActionSlot ? (
               <span
                 className={styles.actionSlot}
                 data-no-card-nav="true"
@@ -145,7 +153,7 @@ export default function ProjectSummaryCard(props: Props) {
                   event.stopPropagation();
                 }}
               >
-                {props.actionSlot}
+                {displayActionSlot}
               </span>
             ) : null}
           </span>
