@@ -21,6 +21,7 @@ import {
   type MyMembership,
 } from "@/lib/membership";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { getCompactCardLocation } from "@/lib/card-location";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref } from "@/lib/auth-return";
 
@@ -45,8 +46,7 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
   return rows.map((row, index) => ({
     ...row,
     display_cover_image_url: pairs[index]?.display_url || null,
-    display_cover_thumb_url:
-      pairs[index]?.display_thumb_url || null,
+    display_cover_thumb_url: pairs[index]?.display_thumb_url || null,
   }));
 }
 
@@ -115,9 +115,7 @@ export default function MyMarketPostsPage() {
     setItems(await attachMarketPostDisplayUrls((data || []) as MarketPostRow[]));
   }
 
-  const marketBlocked = Boolean(
-    user && !canCreateMembershipMarketPost(membership)
-  );
+  const marketBlocked = Boolean(user && !canCreateMembershipMarketPost(membership));
 
   return (
     <main style={pageStyle}>
@@ -148,9 +146,7 @@ export default function MyMarketPostsPage() {
         <section style={quotaPanelStyle(marketBlocked)}>
           <div>
             <div style={quotaTitleStyle}>{t.market.quota_title}</div>
-            <div style={quotaTextStyle}>
-              {getMarketPostQuotaLabel(membership, language)}
-            </div>
+            <div style={quotaTextStyle}>{getMarketPostQuotaLabel(membership, language)}</div>
           </div>
 
           {marketBlocked ? (
@@ -188,81 +184,68 @@ export default function MyMarketPostsPage() {
           <section style={emptyStyle}>{t.market.loading}</section>
         ) : items.length === 0 ? (
           <section style={emptyStyle}>
-            {statusFilter === "all"
-              ? t.market.empty_mine
-              : t.market.empty_mine_filtered}
+            {statusFilter === "all" ? t.market.empty_mine : t.market.empty_mine_filtered}
           </section>
         ) : (
           <section style={listStyle}>
-            {items.map((item) => (
-              <article key={item.id} style={cardStyle}>
-                <div style={cardMainStyle}>
+            {items.map((item) => {
+              const location = getCompactCardLocation({ fallback: item.location_text });
+              const timeText = formatMarketTime(item.created_at);
+              const viewText = Number(item.view_count || 0) > 0
+                ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
+                : "";
+
+              return (
+                <article key={item.id} style={cardStyle}>
                   <Link
                     href={`/market/${item.id}`}
-                    style={cardMediaLinkStyle}
+                    style={cardOpenLinkStyle}
                     aria-label={`${t.market.view}：${item.title}`}
                   >
-                    {item.display_cover_thumb_url || item.display_cover_image_url ? (
-                      <img
-                        src={
-                          item.display_cover_thumb_url ||
-                          item.display_cover_image_url ||
-                          ""
-                        }
-                        alt=""
-                        style={cardImageStyle}
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div style={cardImageFallbackStyle}>{t.market.name}</div>
-                    )}
-                  </Link>
-
-                  <div style={cardContentStyle}>
-                    <div style={badgeRowStyle}>
-                      <span style={typeBadgeStyle}>
-                        {getMarketPostTypeLabel(item.post_type, language)}
-                      </span>
-                      <span style={categoryBadgeStyle}>
-                        {getMarketItemCategoryLabel(item.item_category, language)}
-                      </span>
-                      {item.status === "ended" ? (
-                        <span style={endedBadgeStyle}>{t.market.ended}</span>
+                    <span style={cardMediaStyle}>
+                      {item.display_cover_thumb_url || item.display_cover_image_url ? (
+                        <img
+                          src={item.display_cover_thumb_url || item.display_cover_image_url || ""}
+                          alt=""
+                          style={cardImageStyle}
+                          loading="lazy"
+                        />
                       ) : (
-                        <span style={activeBadgeStyle}>{t.market.active}</span>
+                        <span style={cardImageFallbackStyle}>{t.market.name}</span>
                       )}
-                    </div>
+                    </span>
 
-                    <h2 style={cardTitleStyle}>{item.title}</h2>
-
-                    {item.description ? (
-                      <p style={descriptionStyle}>{item.description}</p>
-                    ) : null}
-
-                    <div style={metaStyle}>
-                      <span style={locationMetaStyle}>
-                        {item.location_text ? item.location_text : t.market.area_not_provided}
+                    <span style={cardContentStyle}>
+                      <span style={badgeRowStyle}>
+                        <span style={typeBadgeStyle}>
+                          {getMarketPostTypeLabel(item.post_type, language)}
+                        </span>
+                        <span style={categoryBadgeStyle}>
+                          {getMarketItemCategoryLabel(item.item_category, language)}
+                        </span>
+                        {item.status === "ended" ? (
+                          <span style={endedBadgeStyle}>{t.market.ended}</span>
+                        ) : (
+                          <span style={activeBadgeStyle}>{t.market.active}</span>
+                        )}
                       </span>
-                      <span style={timeStyle}>
-                        {formatMarketTime(item.created_at)}
-                        {Number(item.view_count || 0) > 0
-                          ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
-                          : ""}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
-                <div style={actionRowStyle}>
-                  <Link href={`/market/${item.id}`} style={secondaryLinkStyle}>
-                    {t.market.view}
+                      <strong style={cardTitleStyle}>{item.title}</strong>
+
+                      <span style={descriptionStyle}>
+                        {item.description || ""}
+                        {item.description ? <span aria-hidden="true"> · </span> : null}
+                        <span style={timeStyle}>{timeText}{viewText}</span>
+                      </span>
+
+                      <span style={metaStyle}>
+                        {location || t.market.area_not_provided}
+                      </span>
+                    </span>
                   </Link>
-                  <Link href={`/market/${item.id}/edit`} style={secondaryLinkStyle}>
-                    {t.market.edit}
-                  </Link>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </section>
         )}
       </div>
@@ -317,7 +300,6 @@ const publishButtonStyle: CSSProperties = {
   fontWeight: 700,
   whiteSpace: "nowrap",
 };
-
 
 function quotaPanelStyle(blocked: boolean): CSSProperties {
   return {
@@ -395,25 +377,27 @@ const cardStyle: CSSProperties = {
   boxShadow: "0 7px 18px rgba(32, 56, 24, 0.035)",
 };
 
-const cardMainStyle: CSSProperties = {
+const cardOpenLinkStyle: CSSProperties = {
+  minWidth: 0,
   display: "grid",
-  gridTemplateColumns: "88px minmax(0, 1fr)",
-  gap: 9,
-  alignItems: "start",
+  gridTemplateColumns: "98px minmax(0, 1fr)",
+  gap: 10,
+  color: "inherit",
+  textDecoration: "none",
 };
 
-const cardMediaLinkStyle: CSSProperties = {
-  width: 88,
-  height: 88,
+const cardMediaStyle: CSSProperties = {
+  width: 98,
+  height: 98,
   display: "block",
-  borderRadius: 13,
   overflow: "hidden",
-  textDecoration: "none",
+  borderRadius: 13,
 };
 
 const cardImageStyle: CSSProperties = {
   width: "100%",
   height: "100%",
+  display: "block",
   objectFit: "cover",
   background: "#f0f4ed",
   border: "1px solid #e4ece0",
@@ -436,10 +420,10 @@ const cardImageFallbackStyle: CSSProperties = {
 
 const cardContentStyle: CSSProperties = {
   minWidth: 0,
-  flex: 1,
+  height: 98,
   display: "flex",
   flexDirection: "column",
-  minHeight: 88,
+  gap: 2,
 };
 
 const badgeRowStyle: CSSProperties = {
@@ -448,7 +432,6 @@ const badgeRowStyle: CSSProperties = {
   gap: 4,
   flexWrap: "nowrap",
   minWidth: 0,
-  marginBottom: 4,
 };
 
 const typeBadgeStyle: CSSProperties = {
@@ -489,73 +472,42 @@ const endedBadgeStyle: CSSProperties = {
   fontWeight: 700,
 };
 
-const timeStyle: CSSProperties = {
-  color: "#8a9585",
-  fontSize: 12,
-  whiteSpace: "nowrap",
-};
-
 const cardTitleStyle: CSSProperties = {
-  margin: 0,
-  color: "#1f2a1f",
-  fontSize: 17,
-  lineHeight: 1.25,
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-};
-
-const descriptionStyle: CSSProperties = {
-  margin: "3px 0 0",
-  color: "#5f6a5b",
-  fontSize: 13,
-  lineHeight: 1.3,
-  display: "-webkit-box",
-  WebkitLineClamp: 1,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-};
-
-const metaStyle: CSSProperties = {
-  marginTop: "auto",
-  paddingTop: 3,
-  color: "#7b8676",
-  fontSize: 12,
-  lineHeight: 1.25,
-  display: "grid",
-  gap: 3,
-};
-
-const locationMetaStyle: CSSProperties = {
   minWidth: 0,
   overflow: "hidden",
+  color: "#1f2a1f",
+  fontSize: 17,
+  lineHeight: 1.22,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
-const actionRowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 8,
-  marginTop: 5,
-  paddingTop: 5,
-  borderTop: "1px solid #edf1eb",
+const descriptionStyle: CSSProperties = {
+  minHeight: 31,
+  display: "-webkit-box",
+  overflow: "hidden",
+  color: "#5f6a5b",
+  fontSize: 12.5,
+  lineHeight: 1.28,
+  wordBreak: "break-word",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
 };
 
-const secondaryLinkStyle: CSSProperties = {
-  textDecoration: "none",
-  border: "1px solid #d7e2d2",
-  background: "#fff",
-  color: "#40583a",
-  borderRadius: 999,
-  minHeight: 30,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "4px 10px",
-  fontSize: 13,
-  fontWeight: 700,
+const timeStyle: CSSProperties = {
+  color: "#8a9585",
+  whiteSpace: "nowrap",
+};
+
+const metaStyle: CSSProperties = {
+  minWidth: 0,
+  marginTop: "auto",
+  overflow: "hidden",
+  color: "#7b8676",
+  fontSize: 12,
+  lineHeight: 1.25,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const emptyStyle: CSSProperties = {
@@ -566,6 +518,7 @@ const emptyStyle: CSSProperties = {
   color: "#6f7b69",
   textAlign: "center",
 };
+
 const disabledPublishButtonStyle: CSSProperties = {
   ...publishButtonStyle,
   background: "#9aa398",
