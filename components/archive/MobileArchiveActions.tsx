@@ -14,6 +14,10 @@ import {
 import type { GroupTagItem, SubTagItem } from "@/lib/archive-page-types";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import {
+  DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  type ArchiveCategoryDepths,
+} from "@/lib/archive-category-settings";
 
 type Props = {
   category: ArchiveCategory;
@@ -21,6 +25,7 @@ type Props = {
   groupTagId?: string | null;
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
+  categoryDepths?: ArchiveCategoryDepths;
   ended?: boolean;
   isPublic?: boolean;
   onChangeCategory: (value: string) => void;
@@ -41,6 +46,7 @@ export default function MobileArchiveActions({
   groupTagId,
   subTags,
   groupTags,
+  categoryDepths = DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   ended,
   isPublic,
   onChangeCategory,
@@ -68,6 +74,7 @@ export default function MobileArchiveActions({
         : [],
     [groupTags, selectedSubTagId]
   );
+  const selectedMaxDepth = categoryDepths[selectedCategory] || 3;
 
   function run(action: () => void) {
     setMenuOpen(false);
@@ -105,26 +112,36 @@ export default function MobileArchiveActions({
             <span>{t.archive_workspace.edit_category_group}</span>
             <UiIcon name="arrow-right" size={18} />
           </button>
-          {extraActions.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              style={action.danger ? dangerRowStyle : sheetRowStyle}
-              onClick={() => run(action.onClick)}
-            >
-              {action.label}
-            </button>
-          ))}
-          {onToggleEnded ? (
-            <button type="button" style={sheetRowStyle} onClick={() => run(onToggleEnded)}>
-              {ended ? t.archive_workspace.restore : t.archive_workspace.end}
-            </button>
-          ) : null}
           {onTogglePublic ? (
             <button type="button" style={sheetRowStyle} onClick={() => run(onTogglePublic)}>
               {isPublic ? t.archive_workspace.set_private : t.archive_workspace.set_public}
             </button>
           ) : null}
+          {onToggleEnded ? (
+            <button type="button" style={sheetRowStyle} onClick={() => run(onToggleEnded)}>
+              {ended ? t.archive_workspace.restore : t.archive_workspace.end}
+            </button>
+          ) : null}
+          {extraActions.filter((action) => !action.danger).map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              style={sheetRowStyle}
+              onClick={() => run(action.onClick)}
+            >
+              {action.label}
+            </button>
+          ))}
+          {extraActions.filter((action) => action.danger).map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              style={dangerRowStyle}
+              onClick={() => run(action.onClick)}
+            >
+              {action.label}
+            </button>
+          ))}
           {onMoveToTrash ? (
             <button type="button" style={dangerRowStyle} onClick={() => run(onMoveToTrash)}>
               {t.archive_workspace.move_to_trash}
@@ -156,7 +173,7 @@ export default function MobileArchiveActions({
             </select>
           </label>
 
-          <label style={fieldStyle}>
+          {selectedMaxDepth >= 2 ? <label style={fieldStyle}>
             <span style={fieldLabelStyle}>{t.archive_workspace.subcategory}</span>
             <select
               value={selectedSubTagId}
@@ -173,9 +190,9 @@ export default function MobileArchiveActions({
                 <option key={tag.id} value={tag.id}>{tag.name}</option>
               ))}
             </select>
-          </label>
+          </label> : null}
 
-          <label style={fieldStyle}>
+          {selectedMaxDepth >= 3 ? <label style={fieldStyle}>
             <span style={fieldLabelStyle}>{t.archive_workspace.group}</span>
             <select
               value={selectedGroupTagId}
@@ -192,7 +209,7 @@ export default function MobileArchiveActions({
                 <option key={tag.id} value={tag.id}>{tag.name}</option>
               ))}
             </select>
-          </label>
+          </label> : null}
 
           <button type="button" style={doneButtonStyle} onClick={() => setTaxonomyOpen(false)}>
             {t.archive_workspace.save}

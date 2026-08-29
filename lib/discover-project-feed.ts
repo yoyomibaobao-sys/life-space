@@ -25,6 +25,20 @@ type DiscoveryProjectMediaRow = {
   created_at: string | null;
 };
 
+type DiscoveryArchiveCountRow = {
+  id: string;
+  view_count: number | string | null;
+};
+
+type DiscoveryArchiveFollowRow = { archive_id: string | null };
+
+type DiscoveryProfileLocationRow = {
+  id: string;
+  country_name: string | null;
+  region_name: string | null;
+  city_name: string | null;
+};
+
 export type DiscoveryProjectFeedResult = {
   items: DiscoveryProjectFeedItem[];
   nextCursor: DiscoveryProjectCursor | null;
@@ -56,6 +70,10 @@ export function normalizeDiscoveryProjectFeedRow(
     public_record_count: normalizeCount(row.public_record_count),
     public_comment_count: normalizeCount(row.public_comment_count),
     view_count: normalizeCount(row.view_count ?? null),
+    follower_count: 0,
+    profile_country: null,
+    profile_region_name: null,
+    profile_city: null,
     has_public_help: row.has_public_help === true,
     card_summary: latestNote || archiveSummary,
     display_image_url: null,
@@ -68,25 +86,64 @@ export async function enrichDiscoveryProjectViewCounts(
   const archiveIds = Array.from(new Set(items.map((item) => item.archive_id).filter(Boolean)));
   if (!archiveIds.length) return items;
 
-  const { data, error } = await supabase
-    .from("archives")
-    .select("id, view_count")
-    .in("id", archiveIds)
-    .eq("is_public", true);
+  const ownerIds = Array.from(
+    new Set(items.map((item) => item.owner_user_id).filter(Boolean) as string[]),
+  );
+  const [archiveResult, followResult, profileResult] = await Promise.all([
+    supabase
+      .from("archives")
+      .select("id, view_count")
+      .in("id", archiveIds)
+      .eq("is_public", true),
+    supabase.from("archive_follows").select("archive_id").in("archive_id", archiveIds),
+    ownerIds.length
+      ? supabase
+          .from("public_profiles")
+          .select("id, country_name, region_name, city_name")
+          .in("id", ownerIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  if (error) {
-    console.warn("discovery project view count load failed:", error.message);
-    return items;
+  if (archiveResult.error) {
+    console.warn("discovery project view count load failed:", archiveResult.error.message);
+  }
+  if (followResult.error) {
+    console.warn("discovery project follower count load failed:", followResult.error.message);
+  }
+  if (profileResult.error) {
+    console.warn("discovery project owner location load failed:", profileResult.error.message);
   }
 
   const countMap = new Map(
-    (data || []).map((row) => [String(row.id), normalizeCount(row.view_count)])
+    ((archiveResult.data || []) as DiscoveryArchiveCountRow[]).map((row) => [
+      String(row.id),
+      normalizeCount(row.view_count),
+    ]),
+  );
+  const followerMap = new Map<string, number>();
+  ((followResult.data || []) as DiscoveryArchiveFollowRow[]).forEach((row) => {
+    const archiveId = String(row.archive_id || "");
+    if (!archiveId) return;
+    followerMap.set(archiveId, (followerMap.get(archiveId) || 0) + 1);
+  });
+  const profileMap = new Map(
+    ((profileResult.data || []) as DiscoveryProfileLocationRow[]).map((row) => [
+      String(row.id),
+      row,
+    ]),
   );
 
-  return items.map((item) => ({
-    ...item,
-    view_count: countMap.get(item.archive_id) ?? item.view_count,
-  }));
+  return items.map((item) => {
+    const profile = item.owner_user_id ? profileMap.get(item.owner_user_id) : null;
+    return {
+      ...item,
+      view_count: countMap.get(item.archive_id) ?? item.view_count,
+      follower_count: followerMap.get(item.archive_id) || 0,
+      profile_country: String(profile?.country_name || "").trim() || null,
+      profile_region_name: String(profile?.region_name || "").trim() || null,
+      profile_city: String(profile?.city_name || "").trim() || null,
+    };
+  });
 }
 
 function normalizeLimit(value?: number) {

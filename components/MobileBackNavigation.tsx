@@ -4,28 +4,17 @@ import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { showToast } from "@/components/Toast";
+import {
+  getCurrentMobileRoute,
+  readMobileRouteHistory,
+  rememberMobileRouteSource,
+  restoreMobileRouteScroll,
+  writeMobileRouteHistory,
+} from "@/lib/mobile-navigation";
 
 const MOBILE_BREAKPOINT = 760;
-const SESSION_HISTORY_KEY = "lifespace:mobile-route-history:v2";
-
-function readSessionHistory() {
-  try {
-    const parsed = JSON.parse(sessionStorage.getItem(SESSION_HISTORY_KEY) || "[]");
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeSessionHistory(paths: string[]) {
-  try {
-    sessionStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(paths.slice(-40)));
-  } catch {
-    // Native browser history still works when session storage is unavailable.
-  }
-}
+const EXIT_CONFIRM_WINDOW_MS = 2_000;
 
 function getLogicalParent(pathname: string) {
   if (/^\/local\/archive\/[^/]+/.test(pathname)) return "/local/archive";
@@ -53,7 +42,7 @@ function getLogicalParent(pathname: string) {
 }
 
 function isAppExitRoot(pathname: string) {
-  return ["/", "/archive", "/discover", "/local/archive"].includes(pathname);
+  return pathname === "/discover";
 }
 
 function hasActiveMobileOverlay() {
@@ -65,6 +54,7 @@ export default function MobileBackNavigation() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const navigatingRef = useRef(false);
+  const lastExitRequestRef = useRef(0);
   const historyInitializedRef = useRef(false);
   const search = searchParams.toString();
   const currentRoute = useMemo(
@@ -77,35 +67,82 @@ export default function MobileBackNavigation() {
 
     if (!historyInitializedRef.current) {
       historyInitializedRef.current = true;
-      writeSessionHistory([currentRoute]);
+      writeMobileRouteHistory([currentRoute]);
+      restoreMobileRouteScroll(currentRoute);
       return;
     }
 
-    const history = readSessionHistory();
+    const history = readMobileRouteHistory();
     const lastRoute = history[history.length - 1];
     const previousRoute = history[history.length - 2];
 
     if (lastRoute === currentRoute) return;
 
     if (previousRoute === currentRoute) {
-      writeSessionHistory(history.slice(0, -1));
+      writeMobileRouteHistory(history.slice(0, -1));
+      restoreMobileRouteScroll(currentRoute);
       return;
     }
 
     const isNativeHomeRedirect =
       Capacitor.isNativePlatform() && lastRoute === "/" && pathname === "/archive";
     if (isNativeHomeRedirect) {
-      writeSessionHistory([currentRoute]);
+      writeMobileRouteHistory([currentRoute]);
       return;
     }
 
-    writeSessionHistory([...history, currentRoute]);
+    writeMobileRouteHistory([...history, currentRoute]);
+    restoreMobileRouteScroll(currentRoute);
   }, [currentRoute, pathname]);
+
+  useEffect(() => {
+    if (window.innerWidth >= MOBILE_BREAKPOINT) return;
+
+    function rememberBeforeInternalNavigation(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const link = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+
+      try {
+        const destination = new URL(link.href, window.location.href);
+        if (destination.origin !== window.location.origin) return;
+        rememberMobileRouteSource(getCurrentMobileRoute());
+      } catch {
+        // Ignore malformed third-party hrefs.
+      }
+    }
+
+    document.addEventListener("click", rememberBeforeInternalNavigation, true);
+    return () => document.removeEventListener("click", rememberBeforeInternalNavigation, true);
+  }, []);
 
   const navigateBack = useCallback(() => {
     if (navigatingRef.current) return;
 
-    const history = readSessionHistory();
+    if (pathname === "/experience" || pathname === "/plant") {
+      navigatingRef.current = true;
+      writeMobileRouteHistory(["/discover"]);
+      router.replace("/discover");
+      window.setTimeout(() => {
+        navigatingRef.current = false;
+      }, 450);
+      return;
+    }
+
+    if (isAppExitRoot(pathname)) {
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+        const now = Date.now();
+        if (now - lastExitRequestRef.current <= EXIT_CONFIRM_WINDOW_MS) {
+          void App.exitApp();
+          return;
+        }
+        lastExitRequestRef.current = now;
+        showToast("再返回一次退出应用");
+      }
+      return;
+    }
+
+    const history = readMobileRouteHistory();
     if (history.length > 1) {
       navigatingRef.current = true;
       window.history.back();
@@ -115,15 +152,8 @@ export default function MobileBackNavigation() {
       return;
     }
 
-    if (isAppExitRoot(pathname)) {
-      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-        void App.exitApp();
-      }
-      return;
-    }
-
     const destination = getLogicalParent(pathname);
-    writeSessionHistory([destination]);
+    writeMobileRouteHistory([destination]);
     router.replace(destination);
   }, [pathname, router]);
 

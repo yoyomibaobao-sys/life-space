@@ -6,6 +6,7 @@ import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import { saveQuickCapture, type QuickCaptureTarget } from "@/lib/quick-capture";
+import { MAX_RECORD_PHOTOS_PER_ADD } from "@/lib/record-photo-batches";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function QuickCaptureNavAction({
@@ -69,9 +70,12 @@ export default function QuickCaptureNavAction({
   }
 
   async function handleCapture(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] || null;
+    const selected = Array.from(event.target.files || []).slice(
+      0,
+      MAX_RECORD_PHOTOS_PER_ADD,
+    );
     event.target.value = "";
-    if (!selected || busy) return;
+    if (selected.length === 0 || busy) return;
     setBusy(true);
 
     try {

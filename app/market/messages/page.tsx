@@ -111,7 +111,7 @@ export default function MarketMessagesPage() {
       <div style={shellStyle}>
         <div style={topBarStyle}>
           <div>
-            <Link href="/market" style={backLinkStyle}>
+            <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
               <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
             </Link>
             <h1 style={titleStyle}>{t.market.messages_title}</h1>

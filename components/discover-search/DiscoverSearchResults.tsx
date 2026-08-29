@@ -1,4 +1,7 @@
-import { getArchiveCategoryIcon } from "@/lib/archive-categories";
+import {
+  getArchiveCategoryIcon,
+  getArchiveCategoryLabel,
+} from "@/lib/archive-categories";
 import DiscoverSearchResultCard from "@/components/discover-search/DiscoverSearchResultCard";
 import searchCardStyles from "@/components/discover-search/DiscoverSearchResultCard.module.css";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
@@ -18,6 +21,7 @@ import { getArchiveLifecycleStatus } from "@/lib/discover-utils";
 import { getDurationDays } from "@/lib/follow-utils";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { Language } from "@/lib/i18n";
+import ProjectSummaryCard from "@/components/project/ProjectSummaryCard";
 
 type Props = {
   kind: DiscoverSearchKind;
@@ -52,6 +56,10 @@ function getCompactRegion(region: string | null | undefined, language: Language)
   const value = String(region || "").trim();
   if (language !== "zh") return value;
   return value.replace(/^中国\s*(?:[·•｜|/]\s*|\s+)/, "").trim();
+}
+
+function getProjectLocation(item: DiscoveryProjectFeedItem) {
+  return item.profile_city || item.profile_region_name || item.profile_country || null;
 }
 
 export default function DiscoverSearchResults({
@@ -134,41 +142,28 @@ export default function DiscoverSearchResults({
             const title = item.archive_title?.trim() || t.discover.unnamed_project;
             const systemName = getProjectSystemName(item);
             const ownerName = item.profile_display_name?.trim() || t.discover.default_grower;
-            const region = getCompactRegion(item.profile_region, language);
+            const location = getProjectLocation(item);
 
             return (
-              <DiscoverSearchResultCard
+              <ProjectSummaryCard
                 key={item.archive_id}
                 href={`/archive/${item.archive_id}`}
                 ariaLabel={`${t.discover.search_ui.view_project_prefix}${title}`}
                 title={title}
-                secondaryTitle={getDistinctSystemName(title, systemName)}
-                imageUrl={item.display_image_url}
+                systemName={getDistinctSystemName(title, systemName)}
+                cover={item.display_image_url ? { kind: "url", url: item.display_image_url } : null}
                 imageAlt={title}
                 fallbackIcon={getArchiveCategoryIcon(item.category)}
-                category={<CategoryBadge category={item.category} />}
-                status={
-                  <>
-                    {item.has_public_help ? <HelpBadge /> : null}
-                    {item.archive_ended_at ? <EndedBadge /> : null}
-                  </>
-                }
-                dateValue={item.public_activity_at}
-                summary={item.card_summary?.trim() || undefined}
-                author={`${ownerName}${region ? ` · ${region}` : ""}`}
-                meta={
-                  <ProjectMetaLine
-                    recordCount={item.public_record_count}
-                    durationDays={getDurationDays(
-                      item.archive_created_at,
-                      item.archive_ended_at
-                    )}
-                    ended={Boolean(item.archive_ended_at)}
-                    viewCount={hideHeader ? undefined : item.view_count}
-                    compactProjectStats
-                    style={{ fontSize: 11, gap: "4px 8px" }}
-                  />
-                }
+                categoryLabel={getArchiveCategoryLabel(item.category, language)}
+                helpLabel={item.has_public_help ? t.discover.help_badge : null}
+                ended={Boolean(item.archive_ended_at)}
+                endedLabel={item.archive_ended_at ? t.discover.ended_badge : null}
+                latestText={item.latest_public_record_note}
+                latestTime={item.latest_public_record_time || item.public_activity_at}
+                followerCount={item.follower_count}
+                recordCount={item.public_record_count}
+                durationDays={getDurationDays(item.archive_created_at, item.archive_ended_at)}
+                ownerLine={`${ownerName}${location ? ` · ${location}` : ""}`}
               />
             );
           })}

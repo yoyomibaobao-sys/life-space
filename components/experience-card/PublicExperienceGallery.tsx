@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   useEffect,
   useRef,
@@ -22,28 +21,14 @@ import {
   APP_STATUS_BAR_LIGHT,
   setAppStatusBarTheme,
 } from "@/components/StatusBarTheme";
-
-function getPublishedMeta(
-  value: string | null | undefined,
-  language: "zh" | "en",
-  label: string
-) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return ` · ${label}${new Intl.DateTimeFormat(
-    language === "en" ? "en" : "zh-CN",
-    { year: "numeric", month: "2-digit", day: "2-digit" },
-  ).format(date)}`;
-}
+import ExperienceCardSummary from "@/components/experience-card/ExperienceCardSummary";
 
 export default function PublicExperienceGallery({
   items,
 }: {
   items: ExperienceCardListItem[];
 }) {
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   function openPlayback(index: number) {
@@ -93,32 +78,7 @@ export default function PublicExperienceGallery({
               </span>
             </span>
             <span className={styles.previewBody}>
-              <span className={styles.previewTitle}>{item.title}</span>
-              <span className={styles.previewSource}>
-                {item.authorName}
-                {item.archiveTitle ? ` · ${item.archiveTitle}` : ""}
-              </span>
-              <span className={styles.previewMeta}>
-                {item.source_record_count}{t.experience.record_suffix}
-                {getPublishedMeta(item.published_at, language, t.experience.published_on)}
-              </span>
-              <span className={styles.previewFooter}>
-                <span
-                  className={styles.previewHelpful}
-                  aria-label={`${t.experience.helpful} ${item.helpfulCount}`}
-                >
-                  <UiIcon name="helpful" size={13} />
-                  {item.helpfulCount}
-                </span>
-                <Link
-                  href={`/experience-cards/${item.id}`}
-                  className={styles.previewDetails}
-                  aria-label={`${t.experience.view_details}：${item.title}`}
-                >
-                  {t.experience.view_details}
-                  <UiIcon name="arrow-right" size={13} />
-                </Link>
-              </span>
+              <ExperienceCardSummary item={item} />
             </span>
           </article>
         ))}

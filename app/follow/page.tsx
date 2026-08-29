@@ -35,6 +35,8 @@ import type {
   DiscoveryProjectCursor,
   DiscoveryProjectFeedItem,
 } from "@/lib/discover-project-types";
+import ProjectSummaryCard from "@/components/project/ProjectSummaryCard";
+import { rememberMobileRouteSource } from "@/lib/mobile-navigation";
 
 type TabKey = "projects" | "experience" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -121,7 +123,7 @@ type FollowProjectCard = {
   latestRecordTime: string | null;
   recordCount: number;
   durationDays: number;
-  viewCount: number;
+  followerCount: number;
   statusLabel: string;
   statusKind: "help" | "resolved" | "ended" | "normal";
   coverUrl: string | null;
@@ -170,7 +172,6 @@ export default function FollowPage() {
   const [userSubmitting, setUserSubmitting] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const activeTab = !isMobileViewport && tab === "experience" ? "projects" : tab;
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [userMenuTargetId, setUserMenuTargetId] = useState<string | null>(null);
   const [pinnedUserIds, setPinnedUserIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -289,17 +290,34 @@ export default function FollowPage() {
             .eq("status", "published")
         : Promise.resolve({ data: [] as ExperienceCardRow[], error: null });
 
-      const [archivesResult, followedUsersProjectsResult, recordsResult, savedCardsResult] =
+      const followerCountsPromise = archiveIds.length
+        ? supabase.from("archive_follows").select("archive_id").in("archive_id", archiveIds)
+        : Promise.resolve({ data: [] as { archive_id: string }[], error: null });
+
+      const [
+        archivesResult,
+        followedUsersProjectsResult,
+        recordsResult,
+        savedCardsResult,
+        followerCountsResult,
+      ] =
         await Promise.all([
           archivesPromise,
           followedUsersProjectsPromise,
           recordsPromise,
           savedCardsPromise,
+          followerCountsPromise,
         ]);
 
       const archives = (archivesResult.data || []) as ArchiveRow[];
       const followedUsersProjects = followedUsersProjectsResult.items;
       const records = (recordsResult.data || []) as RecordRow[];
+      const followerCountMap = new Map<string, number>();
+      (followerCountsResult.data || []).forEach((row) => {
+        const archiveId = String(row.archive_id || "");
+        if (!archiveId) return;
+        followerCountMap.set(archiveId, (followerCountMap.get(archiveId) || 0) + 1);
+      });
 
       if (savedCardsResult.error) {
         console.error("load saved experience card details error:", savedCardsResult.error);
@@ -424,11 +442,11 @@ export default function FollowPage() {
             groupTagName: archive.group_tag_id
               ? groupTagMap.get(archive.group_tag_id) || ""
               : "",
-            latestNote: latestRecord?.note?.trim() || followT.new_record,
+            latestNote: latestRecord?.note?.trim() || "",
             latestRecordTime: latestRecord?.record_time || archive.last_record_time || null,
             recordCount: Number(archive.record_count || 0),
             durationDays: getDurationDays(archive.created_at, endBase),
-            viewCount: Number(archive.view_count || 0),
+            followerCount: followerCountMap.get(archive.id) || 0,
             statusLabel: getProjectStatusLabel(archive.help_status, archive.status, followT),
             statusKind: getProjectStatusKind(archive.help_status, archive.status),
             coverUrl:
@@ -458,20 +476,24 @@ export default function FollowPage() {
           displaySystemName: project.system_name || project.species_name_snapshot || followT.not_provided,
           ownerId: project.owner_user_id,
           ownerName: project.profile_display_name || profile?.username || followT.username_not_set,
-          ownerRegion: project.profile_region || formatProfileRegion(profile),
+          ownerRegion:
+            project.profile_city ||
+            project.profile_region_name ||
+            project.profile_country ||
+            formatProfileRegion(profile),
           ownerAvatarUrl: project.profile_avatar_url || profile?.avatar_url || null,
           categoryLabel: getArchiveCategoryLabel(project.category, language),
           categoryIcon: getArchiveCategoryIcon(project.category),
           subTagName: "",
           groupTagName: "",
-          latestNote: project.card_summary?.trim() || followT.new_record,
-          latestRecordTime: project.public_activity_at || null,
+          latestNote: project.latest_public_record_note?.trim() || "",
+          latestRecordTime: project.latest_public_record_time || project.public_activity_at || null,
           recordCount: Number(project.public_record_count || 0),
           durationDays: getDurationDays(
             project.archive_created_at,
             project.archive_ended_at || project.public_activity_at
           ),
-          viewCount: Number(project.view_count || 0),
+          followerCount: Number(project.follower_count || 0),
           statusLabel:
             statusKind === "help"
               ? followT.status_open
@@ -703,37 +725,37 @@ export default function FollowPage() {
     showToast(followT.user_unfollowed);
   }
 
+  function selectTab(nextTab: TabKey) {
+    setTab(nextTab);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", nextTab);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
+  }
+
   return (
     <>
       {isMobileViewport ? (
         <MobileContentTopBar
           ariaLabel={followT.title}
-          searchLabel={
-            activeTab === "projects"
-              ? followT.search_projects
-              : activeTab === "experience"
-                ? followT.search_experience_cards
-                : followT.search_users
-          }
-          onSearch={() => setMobileSearchOpen((open) => !open)}
           items={[
             {
               key: "projects",
               label: followT.records,
               active: activeTab === "projects",
-              onClick: () => setTab("projects"),
+              onClick: () => selectTab("projects"),
             },
             {
               key: "experience",
               label: followT.experience_cards,
               active: activeTab === "experience",
-              onClick: () => setTab("experience"),
+              onClick: () => selectTab("experience"),
             },
             {
               key: "users",
               label: followT.users_mobile,
               active: activeTab === "users",
-              onClick: () => setTab("users"),
+              onClick: () => selectTab("users"),
             },
           ]}
         />
@@ -754,21 +776,21 @@ export default function FollowPage() {
         {!isMobileViewport ? <div style={tabRowStyle}>
           <button
             type="button"
-            onClick={() => setTab("projects")}
+            onClick={() => selectTab("projects")}
             style={tabButtonStyle(activeTab === "projects")}
           >
             {isMobileViewport ? `${followT.projects} (${projectCards.length})` : followT.projects}
           </button>
           <button
             type="button"
-            onClick={() => setTab("users")}
+            onClick={() => selectTab("users")}
             style={tabButtonStyle(activeTab === "users")}
           >
             {isMobileViewport ? `${followT.users} (${userCards.length})` : followT.users}
           </button>
         </div> : null}
 
-        {!isMobileViewport || mobileSearchOpen ? <div style={isMobileViewport ? mobileToolbarStyle : toolbarStyle}>
+        {!isMobileViewport ? <div style={toolbarStyle}>
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
@@ -779,14 +801,14 @@ export default function FollowPage() {
                   ? followT.search_experience_cards
                   : followT.search_users
             }
-            style={isMobileViewport ? mobileSearchInputStyle : searchInputStyle}
+            style={searchInputStyle}
           />
 
           {activeTab === "projects" ? (
             <select
               value={projectStatus}
               onChange={(e) => setProjectStatus(e.target.value as ProjectStatusFilter)}
-              style={isMobileViewport ? mobileSelectStyle : selectStyle}
+              style={selectStyle}
             >
               <option value="all">{followT.status_all}</option>
               <option value="open">{followT.status_open}</option>
@@ -824,7 +846,6 @@ export default function FollowPage() {
                     )}
                     onOpen={() => {
                       markRead(`project:${item.id}`, item.latestRecordTime);
-                      router.push(`/archive/${item.id}`);
                     }}
                   />
                 ))}
@@ -857,7 +878,7 @@ export default function FollowPage() {
                     item={item}
                     dateValue={item.published_at}
                     showAuthor
-                    status={<span style={savedExperienceStatusStyle}>{t.experience.saved}</span>}
+                    summaryLayout
                   />
                 ))}
               </div>
@@ -955,7 +976,6 @@ export default function FollowPage() {
                       )}
                       onOpen={() => {
                         markRead(`user:${item.ownerId}`, item.latestRecordTime);
-                        router.push(`/archive/${item.id}`);
                       }}
                     />
                   ))}
@@ -1240,7 +1260,10 @@ export default function FollowPage() {
             </button>
             <button
               type="button"
-              onClick={() => router.push(`/user/${userMenuTargetId}`)}
+              onClick={() => {
+                rememberMobileRouteSource();
+                router.push(`/user/${userMenuTargetId}`);
+              }}
               style={userActionButtonStyle}
             >
               {followT.enter_space}
@@ -1378,57 +1401,27 @@ function MobileFollowProjectCard({
   onOpen: () => void;
 }) {
   return (
-    <article
-      role="link"
-      tabIndex={0}
-      aria-label={`${item.title} · ${item.displaySystemName}`}
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        onOpen();
-      }}
-      style={mobileProjectCardStyle}
-    >
-      <div style={mobileProjectCoverStyle}>
-        {item.coverUrl ? (
-          <img src={item.coverUrl} alt="" style={coverImageStyle} />
-        ) : (
-          <UiIcon name={item.categoryIcon} size={30} strokeWidth={1.6} />
-        )}
-        <span style={mobileProjectCategoryBadgeStyle}>{item.categoryLabel}</span>
-      </div>
-
-      <div style={mobileProjectBodyStyle}>
-        <div style={mobileProjectTitleLineStyle}>
-          <strong style={mobileProjectTitleStyle}>{item.title}</strong>
-          <span aria-hidden="true">·</span>
-          <span style={mobileProjectSystemNameStyle}>{item.displaySystemName}</span>
-          {unread ? <span style={unreadDotStyle} /> : null}
-        </div>
-
-        <div style={mobileProjectUpdateLineStyle}>
-          <span style={mobileProjectNoteStyle}>{item.latestNote}</span>
-          {item.latestRecordTime ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <CompactActivityTime value={item.latestRecordTime} />
-            </>
-          ) : null}
-        </div>
-
-        <ProjectMetaLine
-          recordCount={item.recordCount}
-          durationDays={item.durationDays}
-          style={mobileProjectStatsStyle}
-        />
-
-        <div style={mobileProjectOwnerStyle}>
-          {item.ownerName}
-          {item.ownerRegion ? ` · ${item.ownerRegion}` : ""}
-        </div>
-      </div>
-    </article>
+    <ProjectSummaryCard
+      href={`/archive/${item.id}`}
+      ariaLabel={`${item.title} · ${item.displaySystemName}`}
+      onOpen={onOpen}
+      cover={item.coverUrl ? { kind: "url", url: item.coverUrl } : null}
+      imageAlt={item.title}
+      fallbackIcon={item.categoryIcon}
+      categoryLabel={item.categoryLabel}
+      title={item.title}
+      systemName={item.displaySystemName}
+      helpLabel={item.statusKind === "help" ? item.statusLabel : null}
+      ended={item.statusKind === "ended"}
+      endedLabel={item.statusKind === "ended" ? item.statusLabel : null}
+      unread={unread}
+      latestText={item.latestNote}
+      latestTime={item.latestRecordTime}
+      followerCount={item.followerCount}
+      recordCount={item.recordCount}
+      durationDays={item.durationDays}
+      ownerLine={`${item.ownerName}${item.ownerRegion ? ` · ${item.ownerRegion}` : ""}`}
+    />
   );
 }
 
@@ -1589,12 +1582,6 @@ const toolbarStyle: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const mobileToolbarStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 6,
-  marginBottom: 8,
-};
-
 const searchInputStyle: React.CSSProperties = {
   flex: 1,
   minWidth: 240,
@@ -1606,15 +1593,6 @@ const searchInputStyle: React.CSSProperties = {
   outline: "none",
 };
 
-const mobileSearchInputStyle: React.CSSProperties = {
-  ...searchInputStyle,
-  minWidth: 0,
-  height: 38,
-  padding: "0 10px",
-  borderRadius: 10,
-  fontSize: 13,
-};
-
 const selectStyle: React.CSSProperties = {
   borderRadius: 14,
   border: "1px solid #dfe7d8",
@@ -1622,15 +1600,6 @@ const selectStyle: React.CSSProperties = {
   padding: "12px 14px",
   fontSize: 14,
   color: "#465245",
-};
-
-const mobileSelectStyle: React.CSSProperties = {
-  ...selectStyle,
-  minWidth: 92,
-  height: 38,
-  padding: "0 8px",
-  borderRadius: 10,
-  fontSize: 12,
 };
 
 const listStyle: React.CSSProperties = {
@@ -1646,133 +1615,6 @@ const mobileProjectListStyle: React.CSSProperties = {
 const mobileExperienceListStyle: React.CSSProperties = {
   display: "grid",
   gap: 9,
-};
-
-const savedExperienceStatusStyle: React.CSSProperties = {
-  color: "#4e754d",
-  fontWeight: 750,
-};
-
-const mobileProjectCardStyle: React.CSSProperties = {
-  minWidth: 0,
-  minHeight: 128,
-  display: "grid",
-  gridTemplateColumns: "112px minmax(0, 1fr)",
-  alignItems: "stretch",
-  gap: 11,
-  padding: 8,
-  overflow: "hidden",
-  border: "1px solid #e1e8de",
-  borderRadius: 16,
-  background: "#fff",
-  cursor: "pointer",
-};
-
-const mobileProjectCoverStyle: React.CSSProperties = {
-  position: "relative",
-  width: 112,
-  height: 112,
-  overflow: "hidden",
-  display: "grid",
-  placeItems: "center",
-  alignSelf: "start",
-  borderRadius: 13,
-  background: "linear-gradient(135deg, #f4f7f1, #eef4ed)",
-  color: "#91a18e",
-};
-
-const mobileProjectCategoryBadgeStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 8,
-  left: 8,
-  maxWidth: 92,
-  overflow: "hidden",
-  padding: "3px 7px",
-  border: "1px solid rgba(191, 218, 187, 0.9)",
-  borderRadius: 999,
-  background: "rgba(247, 252, 245, 0.92)",
-  color: "#477546",
-  fontSize: 11.5,
-  fontWeight: 750,
-  lineHeight: 1.2,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const mobileProjectBodyStyle: React.CSSProperties = {
-  minWidth: 0,
-  minHeight: 112,
-  display: "flex",
-  flexDirection: "column",
-  padding: "2px 1px",
-};
-
-const mobileProjectTitleLineStyle: React.CSSProperties = {
-  minWidth: 0,
-  display: "flex",
-  alignItems: "baseline",
-  gap: 4,
-  overflow: "hidden",
-  color: "#6e796b",
-  whiteSpace: "nowrap",
-};
-
-const mobileProjectTitleStyle: React.CSSProperties = {
-  minWidth: 0,
-  maxWidth: "58%",
-  overflow: "hidden",
-  color: "#263527",
-  fontSize: 16,
-  fontWeight: 850,
-  lineHeight: 1.35,
-  textOverflow: "ellipsis",
-};
-
-const mobileProjectSystemNameStyle: React.CSSProperties = {
-  minWidth: 0,
-  overflow: "hidden",
-  color: "#5e6d5c",
-  fontSize: 13,
-  fontWeight: 650,
-  textOverflow: "ellipsis",
-};
-
-const mobileProjectUpdateLineStyle: React.CSSProperties = {
-  minWidth: 0,
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-  marginTop: 7,
-  overflow: "hidden",
-  color: "#6f7c6d",
-  fontSize: 12,
-  lineHeight: 1.35,
-  whiteSpace: "nowrap",
-};
-
-const mobileProjectNoteStyle: React.CSSProperties = {
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const mobileProjectStatsStyle: React.CSSProperties = {
-  marginTop: "auto",
-  color: "#748071",
-  fontSize: 11.5,
-  gap: "3px 9px",
-};
-
-const mobileProjectOwnerStyle: React.CSSProperties = {
-  minWidth: 0,
-  marginTop: 5,
-  overflow: "hidden",
-  color: "#7a8578",
-  fontSize: 11.5,
-  lineHeight: 1.3,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
 const cardStyle: React.CSSProperties = {

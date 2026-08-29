@@ -24,12 +24,14 @@ import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
 import { getTranslations, type Language } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import type { ArchiveCategoryDepths } from "@/lib/archive-category-settings";
 
 type Props = {
   item: ArchiveItem;
   ended?: boolean;
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
+  categoryDepths: ArchiveCategoryDepths;
   editingPlantArchiveId: string | null;
   editingSpeciesId: string;
   editingPendingSpeciesName: string;
@@ -152,6 +154,7 @@ export default function ArchiveCard({
   ended = false,
   subTags,
   groupTags,
+  categoryDepths,
   editingPlantArchiveId,
   editingSpeciesId,
   editingPendingSpeciesName,
@@ -219,7 +222,7 @@ export default function ArchiveCard({
         systemName={mobileSystemName}
         subTags={subTags}
         groupTags={groupTags}
-        onNavigate={onNavigate}
+        categoryDepths={categoryDepths}
         onTogglePublic={onTogglePublic}
         onUpdateArchiveStatus={onUpdateArchiveStatus}
         onUpdateArchiveCategory={onUpdateArchiveCategory}
@@ -593,7 +596,7 @@ function MobileArchiveCard({
   systemName,
   subTags,
   groupTags,
-  onNavigate,
+  categoryDepths,
   onTogglePublic,
   onUpdateArchiveStatus,
   onUpdateArchiveCategory,
@@ -607,7 +610,7 @@ function MobileArchiveCard({
   systemName: string;
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
-  onNavigate: (id: string) => void;
+  categoryDepths: ArchiveCategoryDepths;
   onTogglePublic: (item: ArchiveItem) => void;
   onUpdateArchiveStatus: (item: ArchiveItem, nextStatus: "active" | "ended") => void;
   onUpdateArchiveCategory: (item: ArchiveItem, value: string) => void;
@@ -620,10 +623,11 @@ function MobileArchiveCard({
   const latestRecordPreview = getLatestRecordPreview(item, language);
   const visibilityText = item.is_public ? t.archive.public_discover : t.archive.private_only;
   const mobileEndedText = ended ? t.archive_workspace.ended : "";
-  const selectedSubcategory = item.sub_tag_id
+  const maxDepth = categoryDepths[item.category] || 3;
+  const selectedSubcategory = maxDepth >= 2 && item.sub_tag_id
     ? subTags.find((tag) => String(tag.id) === String(item.sub_tag_id))
     : null;
-  const selectedGroup = item.group_tag_id
+  const selectedGroup = maxDepth >= 3 && item.group_tag_id
     ? groupTags.find((tag) => String(tag.id) === String(item.group_tag_id))
     : null;
   const projectView: ArchiveProjectView = {
@@ -638,12 +642,12 @@ function MobileArchiveCard({
     subcategoryLabel: selectedSubcategory?.name || null,
     groupLabel: selectedGroup?.name || null,
     cover: imageUrl ? { kind: "url", url: imageUrl, alt: imageAlt } : null,
-    latestText: latestRecordPreview || t.archive_workspace.no_record_content,
+    latestText: item.latest_record_note?.trim() || "",
     latestTime: latestRecordTime,
     recordCount: item.record_count || 0,
     durationDays: ongoingDays,
-    viewCount: item.view_count || 0,
     followerCount: item.follower_count,
+    helpLabel: item.help_status === "open" ? t.archive_workspace.help_open : null,
     visibilityLabel: visibilityText,
     visibilityTone: item.is_public ? "public" : "private",
     activityText: null,
@@ -651,6 +655,8 @@ function MobileArchiveCard({
     mobileSecondaryStatsText: null,
     statusLabel: mobileEndedText,
     ended,
+    showClassificationRow: maxDepth >= 2,
+    href: `/archive/${item.id}`,
   };
   const actionSlot = (
     <MobileArchiveActions
@@ -659,6 +665,7 @@ function MobileArchiveCard({
       groupTagId={item.group_tag_id}
       subTags={subTags}
       groupTags={groupTags}
+      categoryDepths={categoryDepths}
       ended={ended}
       isPublic={Boolean(item.is_public)}
       onChangeCategory={(value) => onUpdateArchiveCategory(item, value)}
@@ -672,7 +679,6 @@ function MobileArchiveCard({
   return (
     <ArchiveProjectCard
       project={projectView}
-      onClick={() => onNavigate(item.id)}
       actionSlot={actionSlot}
       mobileMode
     />

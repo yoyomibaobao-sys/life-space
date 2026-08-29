@@ -160,7 +160,7 @@ async function ensureCloudArchive(params: {
   existingCloudArchiveId?: string | null;
 }) {
   const systemName = getLocalArchiveSystemName(params.archive);
-  if (!systemName) throw new Error("系统名不能为空。");
+  if (!systemName) throw new Error("对应指引不能为空。");
 
   const isPublic = params.visibility === "public";
   const speciesId =
@@ -623,7 +623,7 @@ export async function syncLocalArchiveToCloud(params: {
   if (!getLocalArchiveSystemName(archive)) {
     return {
       success: false,
-      error: "系统名不能为空。",
+      error: "对应指引不能为空。",
     };
   }
   if (archive.migration_status === "migrating") {

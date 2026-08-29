@@ -44,12 +44,14 @@ export type ArchiveProjectView = {
   mobileSecondaryStatsText?: string | null;
   footerItems?: string[];
   badges?: string[];
+  helpLabel?: string | null;
   statusLabel?: string | null;
   visibilityLabel?: string | null;
   visibilityTone?: "public" | "private" | "neutral";
   storageLabel?: string | null;
   storageTone?: "cloud" | "device";
   ended?: boolean;
+  showClassificationRow?: boolean;
   href?: string;
 };
 

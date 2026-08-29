@@ -526,11 +526,12 @@ test("experience card interactions use private collections and restrained helpfu
 
 
 test("experience cards generate and cache a local looping H.264 MP4 with burned record text", async () => {
-  const [detail, editWorkspace, panel, renderer, cache, packageJson] = await Promise.all([
+  const [detail, editWorkspace, panel, renderer, playback, cache, packageJson] = await Promise.all([
     source("app/experience-cards/[id]/page.tsx"),
     source("components/experience-card/ExperienceCardEditWorkspace.tsx"),
     source("components/experience-card/ExperienceCardVideoPanel.tsx"),
     source("lib/experience-card-video.ts"),
+    source("lib/experience-card-playback.ts"),
     source("lib/experience-card-video-cache.ts"),
     source("package.json"),
   ]);
@@ -579,8 +580,10 @@ test("experience cards generate and cache a local looping H.264 MP4 with burned 
   assert.match(renderer, /splitExperienceCardVideoText\(record\.note\)/);
   assert.match(renderer, /detail\.records\.forEach/);
   assert.match(renderer, /发布者 · \$\{authorName\}/);
-  assert.match(renderer, /INTRO_DURATION_SECONDS = 4\.8/);
-  assert.match(renderer, /OUTRO_DURATION_SECONDS = 5\.5/);
+  assert.match(renderer, /EXPERIENCE_CARD_INTRO_SECONDS/);
+  assert.match(renderer, /EXPERIENCE_CARD_OUTRO_SECONDS/);
+  assert.match(playback, /EXPERIENCE_CARD_INTRO_SECONDS = 4\.8/);
+  assert.match(playback, /EXPERIENCE_CARD_OUTRO_SECONDS = 5\.5/);
   assert.match(renderer, /websiteUrl/);
   assert.match(renderer, /context\.fillText\(scene\.date, contentX, cursorY\)/);
   assert.match(renderer, /fitInlineCaptionText/);
@@ -647,13 +650,13 @@ test("public Experience opens compact previews into live full-screen playback wi
   assert.match(gallery, /data-mobile-swipe-ignore="true"/);
   assert.match(gallery, /role="dialog"/);
   assert.match(gallery, /role="button"[\s\S]*?onClick=\{\(event\) => handleCardClick\(event, index\)\}/);
-  assert.match(gallery, /className=\{styles\.previewDetails\}/);
-  assert.match(gallery, /t\.experience\.published_on/);
+  assert.match(gallery, /<ExperienceCardSummary item=\{item\}/);
   assert.doesNotMatch(gallery, /item\.durationDays/);
   assert.match(feedPage, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(feedPage, /PublicExperienceGallery/);
   assert.match(feedStyles, /scroll-snap-type: y mandatory/);
-  assert.match(feedStyles, /grid-template-columns: 88px minmax\(0, 1fr\)/);
+  assert.match(feedStyles, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(feedStyles, /@media \(max-width: 759px\)[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(experienceSearch, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(zhCopy, /private: "私密"/);
   assert.match(zhCopy, /public: "公开"/);

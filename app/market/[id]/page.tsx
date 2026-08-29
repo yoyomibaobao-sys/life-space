@@ -303,7 +303,7 @@ export default function MarketDetailPage() {
     return (
       <main style={pageStyle}>
         <div style={shellStyle}>
-          <Link href="/market" style={backLinkStyle}>
+          <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
           </Link>
           <section style={emptyStyle}>{t.market.not_found}</section>
@@ -327,21 +327,6 @@ export default function MarketDetailPage() {
           <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
           </Link>
-
-          <header className="mobile-app-flex-only" style={mobileDetailHeaderStyle}>
-            <button
-              type="button"
-              onClick={() => {
-                if (window.history.length > 1) router.back();
-                else router.push("/market");
-              }}
-              aria-label={t.market.back_to_market}
-              style={mobileBackButtonStyle}
-            >
-              <UiIcon name="arrow-left" size={18} />
-            </button>
-            <strong style={mobileDetailTitleStyle}>{item.title}</strong>
-          </header>
 
           <section style={panelStyle}>
             {coverImageUrl ? (
@@ -588,36 +573,6 @@ const backLinkStyle: CSSProperties = {
   textDecoration: "none",
   fontSize: 14,
   marginBottom: 10,
-};
-
-const mobileDetailHeaderStyle: CSSProperties = {
-  minHeight: 44,
-  alignItems: "center",
-  gap: 8,
-  marginBottom: 8,
-};
-
-const mobileBackButtonStyle: CSSProperties = {
-  width: 38,
-  height: 38,
-  flex: "0 0 38px",
-  display: "grid",
-  placeItems: "center",
-  border: 0,
-  borderRadius: 999,
-  background: "transparent",
-  color: "#52634e",
-  cursor: "pointer",
-};
-
-const mobileDetailTitleStyle: CSSProperties = {
-  minWidth: 0,
-  overflow: "hidden",
-  color: "#253725",
-  fontSize: 19,
-  fontWeight: 750,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
 const panelStyle: CSSProperties = {

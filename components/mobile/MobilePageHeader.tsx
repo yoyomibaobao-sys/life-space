@@ -3,6 +3,11 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import UiIcon from "@/components/ui/UiIcon";
+import {
+  getCurrentMobileRoute,
+  getMobileSourceRoute,
+  prepareMobileSourceReturn,
+} from "@/lib/mobile-navigation";
 
 export default function MobilePageHeader({
   title,
@@ -22,12 +27,10 @@ export default function MobilePageHeader({
   const router = useRouter();
 
   function goBack() {
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-
-    router.push(fallbackHref);
+    const currentRoute = getCurrentMobileRoute();
+    const destination = getMobileSourceRoute(currentRoute, fallbackHref);
+    prepareMobileSourceReturn(currentRoute, destination);
+    router.push(destination, { scroll: false });
   }
 
   return (

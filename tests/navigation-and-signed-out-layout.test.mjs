@@ -106,14 +106,15 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(footerStyles, /@media \(max-width: 759px\)[\s\S]*?\.footer \{[\s\S]*?display: none/);
 });
 
-test("the center plus captures a photo and carries it into a new record", async () => {
-  const [navbar, action, quickCapture, chooser, cloudRecord, localRecord] = await Promise.all([
+test("the center plus accumulates photos and carries all of them into one new record", async () => {
+  const [navbar, action, quickCapture, chooser, cloudRecord, localRecord, cloudQuickRecord] = await Promise.all([
     source("components/navbar.tsx"),
     source("components/quick-record/QuickCaptureNavAction.tsx"),
     source("lib/quick-capture.ts"),
     source("app/quick-record/page.tsx"),
     source("app/archive/[id]/AddRecord.tsx"),
     source("app/local/archive/[id]/page.tsx"),
+    source("lib/cloud-quick-capture-record.ts"),
   ]);
 
   assert.match(navbar, /<QuickCaptureNavAction/);
@@ -124,19 +125,29 @@ test("the center plus captures a photo and carries it into a new record", async 
   assert.match(action, /saveQuickCapture/);
   assert.match(action, /processing_photo/);
   assert.match(quickCapture, /indexedDB\.open/);
+  assert.match(quickCapture, /appendQuickCaptureFiles/);
+  assert.match(quickCapture, /\.\.\.existing,[\s\S]*?\.\.\.accepted\.map/);
+  assert.doesNotMatch(quickCapture, /MAX_RECORD_PHOTOS_PER_RECORD/);
   assert.match(chooser, /listVisibleLocalArchiveSummaries/);
   assert.match(chooser, /\.from\("archives"\)/);
   assert.match(chooser, /!user && localResult\.archives\.length === 0/);
   assert.match(chooser, /buildLoginHref\(`\/quick-record\?capture=/);
   assert.match(chooser, /quickCapture=\$\{capture\.id\}/);
+  assert.match(chooser, /continue_take_photo/);
+  assert.match(chooser, /add_from_album/);
+  assert.match(chooser, /multiple/);
+  assert.match(chooser, /appendQuickCaptureFiles/);
   assert.ok(
     chooser.indexOf("t.quick_record.create_cloud_project") <
       chooser.indexOf("t.quick_record.create_local_project")
   );
-  assert.match(cloudRecord, /quickCaptureToFile/);
-  assert.match(localRecord, /quickCaptureToFile/);
+  assert.match(cloudRecord, /quickCaptureToFiles/);
+  assert.match(localRecord, /quickCaptureToFiles/);
   assert.match(cloudRecord, /deleteQuickCapture/);
   assert.match(localRecord, /deleteQuickCapture/);
+  assert.match(cloudQuickRecord, /getQuickCapturePhotos/);
+  assert.match(cloudQuickRecord, /for \(let index = 0; index < files\.length; index \+= 1\)/);
+  assert.match(cloudQuickRecord, /mediaIds\.push/);
 });
 
 test("mobile primary pages use contextual top bars and keep notifications in My Space", async () => {
@@ -173,10 +184,12 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
 });
 
 test("mobile archive creation and project controls stay compact without clipping", async () => {
-  const [archivePage, workspace, projectCard, newProjectShell, newProjectStyles, menu, menuStyles, listStyles] = await Promise.all([
+  const [archivePage, workspace, archiveCard, projectCard, projectCardStyles, newProjectShell, newProjectStyles, menu, menuStyles, listStyles] = await Promise.all([
     source("app/archive/page.tsx"),
     source("components/archive-ui/ArchiveWorkspaceTemplate.tsx"),
     source("components/archive-ui/ArchiveProjectCard.tsx"),
+    source("components/project/ProjectSummaryCard.tsx"),
+    source("components/project/ProjectSummaryCard.module.css"),
     source("components/archive-ui/ArchiveNewProjectFormShell.tsx"),
     source("components/archive-ui/ArchiveNewProjectFormShell.module.css"),
     source("components/ui/ResponsiveActionMenu.tsx"),
@@ -186,8 +199,12 @@ test("mobile archive creation and project controls stay compact without clipping
 
   assert.match(workspace, /showCreateToolbar = true/);
   assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport\}/);
-  assert.match(projectCard, /mobileStatusCategoryRowStyle[\s\S]*?flexWrap: "wrap"/);
-  assert.match(projectCard, /mobileSelectRowStyle[\s\S]*?flexWrap: "wrap"/);
+  assert.match(archiveCard, /<ProjectSummaryCard/);
+  assert.match(archiveCard, /actionSlot=/);
+  assert.match(projectCard, /className=\{styles\.titleRow\}/);
+  assert.match(projectCard, /className=\{styles\.classification\}/);
+  assert.match(projectCardStyles, /grid-template-columns: 112px minmax\(0, 1fr\)/);
+  assert.match(projectCardStyles, /-webkit-line-clamp: 2/);
   assert.match(newProjectShell, /styles\.categoryDescription/);
   assert.doesNotMatch(newProjectShell, /selectedCategoryDescription/);
   assert.match(newProjectStyles, /@media \(max-width: 759px\)[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
@@ -616,14 +633,13 @@ test("activity search keeps desktop filters while mobile splits projects and rec
   assert.match(zhCopy, /all_categories: "全部类别"/);
   assert.match(zhCopy, /region_short_placeholder: "地区"/);
   assert.doesNotMatch(form, /按地区匹配公开/);
-  assert.match(results, /kind === "projects"[\s\S]*?projectItems\.map[\s\S]*?<DiscoverSearchResultCard/);
+  assert.match(results, /kind === "projects"[\s\S]*?projectItems\.map[\s\S]*?<ProjectSummaryCard/);
   assert.match(results, /kind === "experience"[\s\S]*?experienceItems\.map[\s\S]*?<DiscoverSearchResultCard/);
   assert.match(results, /recordItems\.map[\s\S]*?<DiscoverSearchResultCard/);
   assert.doesNotMatch(results, /<DiscoverProjectCard|<ExperienceCardListCard|<ProjectCardRows/);
-  assert.match(results, /imageUrl=\{item\.display_image_url\}/);
+  assert.match(results, /cover=\{item\.display_image_url \? \{ kind: "url", url: item\.display_image_url \} : null\}/);
   assert.match(results, /imageUrl=\{item\.coverUrl\}/);
   assert.match(results, /imageUrl=\{displayImageUrl\}/);
-  assert.match(results, /summary=\{item\.card_summary\?\.trim\(\) \|\| undefined\}/);
   assert.match(results, /summary=\{item\.description\?\.trim\(\) \|\| undefined\}/);
   assert.match(results, /summary=\{record\.note\?\.trim\(\) \|\| undefined\}/);
   assert.doesNotMatch(

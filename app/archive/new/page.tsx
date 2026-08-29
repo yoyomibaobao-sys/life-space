@@ -28,6 +28,10 @@ import {
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import {
+  CloudQuickCaptureError,
+  saveQuickCaptureAsFirstCloudRecord,
+} from "@/lib/cloud-quick-capture-record";
 
 const DEFAULT_ARCHIVE_IS_PUBLIC = false;
 const DEFAULT_RECORD_VISIBILITY = "private";
@@ -94,6 +98,7 @@ function NewArchiveContent() {
   const [loading, setLoading] = useState(false);
   const [membership, setMembership] = useState<MyMembership | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(true);
+  const [createdArchiveId, setCreatedArchiveId] = useState("");
   const localCreateHref = useMemo(() => {
     const params = new URLSearchParams({ category });
     const currentSpeciesId = speciesId || preselectedSpeciesId || "";
@@ -101,8 +106,9 @@ function NewArchiveContent() {
       category === "plant" ? speciesSearch : systemName || systemSearch;
     if (currentSpeciesId) params.set("plant_id", currentSpeciesId);
     if (currentSystemName.trim()) params.set("system_name", currentSystemName.trim());
+    if (quickCaptureId) params.set("quickCapture", quickCaptureId);
     return `/local/archive/new?${params.toString()}`;
-  }, [category, preselectedSpeciesId, speciesId, speciesSearch, systemName, systemSearch]);
+  }, [category, preselectedSpeciesId, quickCaptureId, speciesId, speciesSearch, systemName, systemSearch]);
 
   useEffect(() => {
     async function loadCandidates() {
@@ -268,72 +274,87 @@ function NewArchiveContent() {
       return;
     }
 
-    if (category === "plant" && !speciesId && !pendingSpeciesName) {
-      await supabase.from("plant_species_pending").insert([
-        {
-          user_id: user.id,
-          submitted_name: cleanSystemName,
-          language_code: language,
-          status: "pending",
-        },
-      ]);
+    let archiveId = createdArchiveId;
+    if (!archiveId) {
+      const selectedSpecies = systemCandidates.find((s) => s.plantId === speciesId || s.id === speciesId);
+      const speciesNameSnapshot =
+        category === "plant"
+          ? pendingSpeciesName || selectedSpecies?.label || cleanSystemName
+          : null;
+
+      const { data: createdArchive, error } = await supabase
+        .from("archives")
+        .insert([
+          {
+            title: title.trim(),
+            category,
+            species_id: category === "plant" ? speciesId : null,
+            species_name_snapshot: speciesNameSnapshot,
+            system_name: category === "plant" ? null : cleanSystemName,
+            source: cleanObjectName || null,
+            note: note.trim() || null,
+            user_id: user.id,
+            is_public: DEFAULT_ARCHIVE_IS_PUBLIC,
+            default_record_visibility: DEFAULT_RECORD_VISIBILITY,
+          },
+        ])
+        .select("id")
+        .single();
+
+      if (error || !createdArchive?.id) {
+        setLoading(false);
+        showToast(copy.create_failed);
+        return;
+      }
+      archiveId = String(createdArchive.id);
+      setCreatedArchiveId(archiveId);
     }
 
-    const selectedSpecies = systemCandidates.find((s) => s.plantId === speciesId || s.id === speciesId);
-    const speciesNameSnapshot =
-      category === "plant"
-        ? pendingSpeciesName ||
-          selectedSpecies?.label ||
-          cleanSystemName
-        : null;
-
-    const { data: createdArchive, error } = await supabase
-      .from("archives")
-      .insert([
-        {
-          title: title.trim(),
-          category,
-          species_id: category === "plant" ? speciesId : null,
-          species_name_snapshot: speciesNameSnapshot,
-          system_name: category === "plant" ? null : cleanSystemName,
-          source: cleanObjectName || null,
-          note: note.trim() || null,
-          user_id: user.id,
-          is_public: DEFAULT_ARCHIVE_IS_PUBLIC,
-          default_record_visibility: DEFAULT_RECORD_VISIBILITY,
-        },
-      ])
-      .select("id")
-      .single();
-
-    if (error) {
-      setLoading(false);
-      showToast(copy.create_failed);
-      return;
-    }
-
-    if (selectedPlanId && createdArchive?.id) {
+    if (selectedPlanId && archiveId && !createdArchiveId) {
       const { error: planError } = await supabase
         .from("user_plant_plans")
         .update({
           status: "started",
-          created_archive_id: createdArchive.id,
+          created_archive_id: archiveId,
         })
         .eq("id", selectedPlanId)
         .eq("user_id", user.id);
 
       if (planError) {
-        setLoading(false);
         showToast(copy.plan_link_failed);
-        router.push(`/archive/${createdArchive.id}${quickCaptureId ? `?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record` : ""}`);
+      }
+    }
+
+    if (quickCaptureId && archiveId) {
+      try {
+        await saveQuickCaptureAsFirstCloudRecord({
+          archiveId,
+          userId: user.id,
+          quickCaptureId,
+        });
+      } catch (captureError) {
+        setLoading(false);
+        const code = captureError instanceof CloudQuickCaptureError ? captureError.code : "upload_failed";
+        const message = code === "capture_missing"
+          ? (language === "en" ? "The captured photo is missing. Take it again." : "已拍照片不存在，请重新拍照。")
+          : code === "upload_maintenance"
+            ? t.record.maintenance_record_not_saved
+            : code === "membership_inactive"
+              ? getCreateContentBlockedText(membership, language)
+              : code === "storage_limit_exceeded"
+                ? (language === "en" ? "Cloud storage is full. The captured photo is still available for retry." : "云空间容量不足，已拍照片仍保留，可处理容量后重试。")
+                : code === "save_pending"
+                  ? (language === "en" ? "Photo save status is pending. Check the project later; the capture is retained." : "照片保存状态待确认，请稍后检查项目；已拍照片仍保留。")
+                  : (language === "en" ? "Could not save the photo. Tap Create project again to retry; the capture is retained." : "照片保存失败，请再次点击“创建项目”重试；已拍照片仍保留。");
+        showToast(message);
         return;
       }
     }
 
     setLoading(false);
 
-    if (createdArchive?.id) {
-      router.push(`/archive/${createdArchive.id}${quickCaptureId ? `?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record` : ""}`);
+    if (archiveId) {
+      router.push(`/archive/${archiveId}`);
     } else {
       router.push("/archive");
     }

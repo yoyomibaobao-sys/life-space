@@ -8,6 +8,7 @@ import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import ResponsiveActionMenu from "@/components/ui/ResponsiveActionMenu";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import ExperienceCardSummary from "@/components/experience-card/ExperienceCardSummary";
 
 export default function ExperienceCardListCard({
   item,
@@ -16,6 +17,7 @@ export default function ExperienceCardListCard({
   status,
   actions,
   showAuthor = false,
+  summaryLayout = false,
 }: {
   item: ExperienceCardListItem;
   dateText?: string | null;
@@ -23,6 +25,7 @@ export default function ExperienceCardListCard({
   status?: ReactNode;
   actions?: ReactNode;
   showAuthor?: boolean;
+  summaryLayout?: boolean;
 }) {
   const { t } = useLanguage();
 
@@ -41,7 +44,11 @@ export default function ExperienceCardListCard({
         )}
       </Link>
 
-      <div className={styles.content}>
+      {summaryLayout ? (
+        <div className={styles.content}>
+          <ExperienceCardSummary item={item} />
+        </div>
+      ) : <div className={styles.content}>
         <div className={styles.headerRow}>
           <Link href={`/experience-cards/${item.id}`} className={styles.title}>
             {item.title}
@@ -71,7 +78,7 @@ export default function ExperienceCardListCard({
           />
           {actions ? <ResponsiveActionMenu label={t.experience.actions}>{actions}</ResponsiveActionMenu> : null}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

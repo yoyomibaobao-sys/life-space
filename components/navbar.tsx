@@ -638,10 +638,11 @@ function hasPageManagedMobileTopNav(pathname: string) {
     "/market",
     "/archive",
     "/profile",
+    "/profile/project-categories",
+    "/admin/guides",
   ].includes(pathname)) return true;
 
   return (
-    pathname.startsWith("/market/") ||
     pathname.startsWith("/user/") ||
     pathname.startsWith("/plant/") ||
     Boolean(getArchiveDetailPath(pathname)) ||

@@ -143,31 +143,39 @@ test("User Information edits in place and dedicated pages return consistently", 
   assert.match(zhCopy, /back_profile: "返回用户信息"/);
 });
 
-test("mobile Guide combines the category label and Experience uses publication date", async () => {
-  const [plantPage, gallery, galleryStyles, zhCopy] = await Promise.all([
+test("mobile Guide exposes four guide sections and Experience uses the shared summary", async () => {
+  const [plantPage, gallery, summary, galleryStyles] = await Promise.all([
     source("app/plant/page.tsx"),
     source("components/experience-card/PublicExperienceGallery.tsx"),
+    source("components/experience-card/ExperienceCardSummary.tsx"),
     source("components/experience-card/PublicExperienceFeed.module.css"),
-    source("lib/i18n/zh.ts"),
   ]);
 
-  assert.match(plantPage, /option\.value === "all"[\s\S]*?`\$\{t\.plant\.category\}（\$\{option\.label\}）`[\s\S]*?: option\.label/);
-  assert.match(plantPage, /options=\{mobileCategoryFilterOptions\}[\s\S]*?hideLabel/);
-  assert.match(plantPage, /options=\{categoryFilterOptions\}/);
+  assert.match(plantPage, /archiveCategoryOptions\.map/);
+  assert.match(plantPage, /guideSection === "plant"/);
+  assert.match(plantPage, /\.from\("guide_entries"\)/);
+  assert.match(plantPage, /<PublicGuideLibrary/);
+  assert.match(plantPage, /entry\.source === "preset"/);
   assert.match(gallery, /role="button"/);
   assert.match(gallery, /closest\("a"\)/);
-  assert.match(gallery, /className=\{styles\.previewDetails\}/);
-  assert.match(gallery, /className=\{styles\.previewHelpful\}/);
-  assert.match(gallery, /\{item\.helpfulCount\}[\s\S]*?className=\{styles\.previewDetails\}/);
-  assert.match(gallery, /getPublishedMeta\(item\.published_at/);
-  assert.doesNotMatch(gallery, /durationDays/);
+  assert.match(gallery, /<ExperienceCardSummary item=\{item\}/);
+  assert.match(summary, /item\.authorName/);
+  assert.match(summary, /item\.systemName/);
+  assert.match(summary, /formatCompactPlaybackDuration/);
+  assert.match(summary, /item\.published_at/);
+  assert.match(summary, /item\.bookmarkCount/);
+  assert.match(summary, /item\.helpfulCount/);
+  assert.match(summary, /t\.experience\.open_details/);
+  assert.doesNotMatch(summary, /published_on|发布于/);
   assert.match(galleryStyles, /\.previewMedia \{[\s\S]*?display: block;[\s\S]*?position: relative/);
-  assert.match(zhCopy, /published_on: "发布于 "/);
+  assert.match(galleryStyles, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(galleryStyles, /@media \(max-width: 759px\)[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
-test("mobile secondary pages share a left back arrow in the title row", async () => {
+test("mobile secondary and deeper pages share a source-aware left back arrow", async () => {
   const [
     sharedHeader,
+    navbar,
     mySpace,
     userSpace,
     projectDetail,
@@ -175,6 +183,7 @@ test("mobile secondary pages share a left back arrow in the title row", async ()
     experienceDetail,
   ] = await Promise.all([
     source("components/mobile/MobilePageHeader.tsx"),
+    source("components/navbar.tsx"),
     source("app/archive/page.tsx"),
     source("components/user-space/UserSpaceHeader.tsx"),
     source("app/archive/[id]/page.tsx"),
@@ -184,10 +193,17 @@ test("mobile secondary pages share a left back arrow in the title row", async ()
 
   assert.match(sharedHeader, /gridTemplateColumns: "96px minmax\(0, 1fr\) 96px"/);
   assert.match(sharedHeader, /name="arrow-left"/);
-  assert.match(sharedHeader, /router\.back\(\)/);
+  assert.match(sharedHeader, /getMobileSourceRoute/);
+  assert.match(sharedHeader, /prepareMobileSourceReturn/);
+  assert.match(sharedHeader, /router\.push\(destination/);
   for (const page of [mySpace, userSpace, projectDetail, plantDetail, experienceDetail]) {
     assert.match(page, /<MobilePageHeader/);
   }
+  assert.match(mySpace, /showBack=\{false\}/);
+  assert.match(navbar, /function shouldShowMobileBackButton[\s\S]*?return !\[/);
+  assert.doesNotMatch(navbar, /pathname\.startsWith\("\/market\/"\) \|\|/);
+  assert.match(navbar, /"\/profile\/project-categories"/);
+  assert.match(navbar, /"\/admin\/guides"/);
   assert.match(projectDetail, /mobileProjectHeaderProjectStyle[\s\S]*?mobileProjectHeaderSystem/);
   assert.match(projectDetail, /right=\{[\s\S]*?toggleProjectFollow/);
 });

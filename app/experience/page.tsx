@@ -78,7 +78,7 @@ export default function PublicExperiencePage() {
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 720,
+  maxWidth: 1240,
   margin: "0 auto",
   padding: "8px 14px 90px",
 };

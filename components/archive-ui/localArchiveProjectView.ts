@@ -8,15 +8,16 @@ import type {
 } from "@/lib/local-offline-db";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { getTranslations, type Language } from "@/lib/i18n";
+import type { ArchiveCategoryDepth } from "@/lib/archive-category-settings";
 
-function getOngoingDays(createdAt?: string | null) {
+function getOngoingDays(createdAt?: string | null, endedAt?: string | null) {
   if (!createdAt) return null;
 
   const startedAt = new Date(createdAt);
   if (Number.isNaN(startedAt.getTime())) return null;
 
   const startDate = new Date(startedAt.getFullYear(), startedAt.getMonth(), startedAt.getDate()).getTime();
-  const now = new Date();
+  const now = endedAt ? new Date(endedAt) : new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const dayMs = 24 * 60 * 60 * 1000;
 
@@ -26,7 +27,8 @@ function getOngoingDays(createdAt?: string | null) {
 export function getLocalArchiveOwnerLabel(
   archive: LocalArchiveSummary,
   ownerContext?: LocalArchiveOwnerContext | null,
-  language: Language = "zh"
+  language: Language = "zh",
+  maxDepth: ArchiveCategoryDepth = 3,
 ) {
   const copy = getTranslations(language).archive_workspace;
   if (!archive.local_owner_user_id) return copy.not_assigned;
@@ -37,12 +39,14 @@ export function getLocalArchiveOwnerLabel(
 export function localArchiveToProjectView(
   archive: LocalArchiveSummary,
   ownerContext?: LocalArchiveOwnerContext | null,
-  language: Language = "zh"
+  language: Language = "zh",
+  maxDepth: ArchiveCategoryDepth = 3,
 ): ArchiveProjectView {
   const copy = getTranslations(language).archive_workspace;
-  const ongoingDays = getOngoingDays(archive.created_at);
+  const ended = archive.status === "ended";
+  const ongoingDays = getOngoingDays(archive.created_at, archive.ended_at);
   const latestTime = archive.latest_record_time || archive.updated_at;
-  const latestSummary = archive.latest_record_note || archive.note || copy.no_record_summary;
+  const latestSummary = archive.latest_record_note || archive.note || "";
 
   return {
     id: archive.id,
@@ -56,8 +60,8 @@ export function localArchiveToProjectView(
     categoryIcon: getArchiveCategoryIcon(archive.category),
     systemName: archive.system_name || archive.species_name || copy.not_filled,
     // Local labels come from IndexedDB only and are not Supabase sub_tags/group_tags.
-    subcategoryLabel: archive.subcategory,
-    groupLabel: archive.group_name,
+    subcategoryLabel: maxDepth >= 2 ? archive.subcategory : null,
+    groupLabel: maxDepth >= 3 ? archive.group_name : null,
     cover: archive.cover_image
       ? {
           kind: "blob",
@@ -71,6 +75,9 @@ export function localArchiveToProjectView(
     durationDays: ongoingDays,
     visibilityLabel: copy.local,
     visibilityTone: "neutral",
+    statusLabel: ended ? copy.ended : null,
+    ended,
+    showClassificationRow: maxDepth >= 2,
     mobilePrimaryStatsText: null,
     mobileSecondaryStatsText: null,
     activityText: null,

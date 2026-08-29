@@ -13,6 +13,7 @@ import type {
   ExperienceCardSaveInput,
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
+import { estimateExperienceCardPlaybackSeconds } from "@/lib/experience-card-playback";
 
 type ExperienceCardListArchiveRow = {
   id: string;
@@ -43,6 +44,7 @@ type ExperienceCardListRelationRow = {
 type ExperienceCardRecordTimeRow = {
   id: string;
   record_time: string | null;
+  note: string | null;
 };
 
 const CARD_RECORD_SELECT = [
@@ -134,12 +136,13 @@ export async function hydrateExperienceCardListItems(
   const recordIds = Array.from(new Set(relations.map((row) => row.record_id)));
   const mediaByRecord = new Map<string, ExperienceCardMedia[]>();
   const recordTimeById = new Map<string, string>();
+  const recordNoteById = new Map<string, string>();
 
   if (recordIds.length > 0) {
     const [{ data: recordTimeData }, { data: mediaData }] = await Promise.all([
       supabase
         .from("records")
-        .select("id, record_time")
+        .select("id, record_time, note")
         .in("id", recordIds),
       supabase
         .from("media")
@@ -150,6 +153,7 @@ export async function hydrateExperienceCardListItems(
     ]);
     ((recordTimeData || []) as ExperienceCardRecordTimeRow[]).forEach((record) => {
       if (record.record_time) recordTimeById.set(record.id, record.record_time);
+      recordNoteById.set(record.id, record.note || "");
     });
     const mediaRows = await attachMediaDisplayUrls(
       supabase,
@@ -215,6 +219,17 @@ export async function hydrateExperienceCardListItems(
     const periodStart = sortedRecordTimes[0] || null;
     const periodEnd = sortedRecordTimes[sortedRecordTimes.length - 1] || null;
     const interaction = interactionByCard.get(row.id);
+    const selectedPlaybackMediaIds = Array.isArray(row.playback_media_ids)
+      ? new Set(row.playback_media_ids)
+      : null;
+    const playbackDurationSeconds = estimateExperienceCardPlaybackSeconds(
+      relatedRecordIds.map((recordId) => ({
+        note: recordNoteById.get(recordId) || "",
+        imageCount: (mediaByRecord.get(recordId) || []).filter(
+          (media) => !selectedPlaybackMediaIds || selectedPlaybackMediaIds.has(media.id),
+        ).length,
+      })),
+    );
 
     return {
       ...row,
@@ -254,6 +269,7 @@ export async function hydrateExperienceCardListItems(
       helpfulCount: Number(interaction?.helpful_count || 0),
       bookmarkedByMe: Boolean(interaction?.bookmarked_by_me),
       helpfulByMe: Boolean(interaction?.helpful_by_me),
+      playbackDurationSeconds,
     };
   });
 }

@@ -12,6 +12,10 @@ import type { ArchiveStat, UserSpaceArchive, UserSpaceTag } from "@/lib/user-spa
 import { getGroupTagName, getSubTagName } from "@/lib/user-space-utils";
 import { getArchiveDisplayName } from "@/lib/social-space-shared";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import {
+  getArchiveCategoryDepth,
+  type ArchiveCategoryDepths,
+} from "@/lib/archive-category-settings";
 
 type Props = {
   archives: UserSpaceArchive[];
@@ -19,8 +23,8 @@ type Props = {
   groupTags: UserSpaceTag[];
   statsMap: Record<string, ArchiveStat>;
   coverMap: Record<string, string>;
-  followedArchiveIds: string[];
-  onOpenArchive: (archiveId: string) => void;
+  archiveFollowerCounts: Record<string, number>;
+  categoryDepths: ArchiveCategoryDepths;
 };
 
 export default function UserSpaceArchiveList({
@@ -29,8 +33,8 @@ export default function UserSpaceArchiveList({
   groupTags,
   statsMap,
   coverMap,
-  followedArchiveIds,
-  onOpenArchive,
+  archiveFollowerCounts,
+  categoryDepths,
 }: Props) {
   const { language, t } = useLanguage();
 
@@ -46,10 +50,7 @@ export default function UserSpaceArchiveList({
         const cover = coverMap[archive.id];
         const category = normalizeCategory(archive.category);
         const isEnded = archive.status === "ended";
-        const badges = [
-          stat?.hasHelp ? t.profile.space.help : null,
-          followedArchiveIds.includes(archive.id) ? t.profile.space.followed : null,
-        ].filter(Boolean) as string[];
+        const maxDepth = getArchiveCategoryDepth(categoryDepths, category);
 
         const project: ArchiveProjectView = {
           id: archive.id,
@@ -62,8 +63,8 @@ export default function UserSpaceArchiveList({
           category,
           categoryLabel: getArchiveCategoryLabel(category, language),
           categoryIcon: getArchiveCategoryIcon(category),
-          subcategoryLabel: getSubTagName(subTags, archive.sub_tag_id, language),
-          groupLabel: getGroupTagName(groupTags, archive.group_tag_id),
+          subcategoryLabel: maxDepth >= 2 ? getSubTagName(subTags, archive.sub_tag_id, language) : null,
+          groupLabel: maxDepth >= 3 ? getGroupTagName(groupTags, archive.group_tag_id) : null,
           cover: cover
             ? {
                 kind: "url",
@@ -75,10 +76,14 @@ export default function UserSpaceArchiveList({
           latestTime: latest?.record_time || null,
           recordCount: stat?.count || archive.record_count || 0,
           durationDays: getDurationDays(archive.created_at, archive.ended_at),
-          viewCount: archive.view_count || 0,
-          badges,
+          followerCount: archiveFollowerCounts[archive.id] || 0,
+          helpLabel: stat?.hasHelp ? t.profile.space.help : null,
           statusLabel: isEnded ? t.profile.space.ended : null,
           ended: isEnded,
+          // Keep the public-space card on the same five-row structure as the
+          // owner's card even when this category only enables one level.
+          showClassificationRow: true,
+          href: `/archive/${archive.id}`,
         };
 
         return (
@@ -86,7 +91,6 @@ export default function UserSpaceArchiveList({
             key={archive.id}
             project={project}
             mobileMode
-            onClick={() => onOpenArchive(archive.id)}
           />
         );
       })}

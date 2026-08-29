@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type SystemNameCandidateSource =
   | "plant_species"
   | "builtin"
+  | "public_guide"
   | "cloud_archive"
   | "local_archive"
   | "current";
@@ -46,6 +47,11 @@ type PlantSpeciesAliasRow = {
   normalized_name?: string | null;
   alias_type?: string | null;
   relation_type?: string | null;
+};
+
+type PublicGuideCandidateRow = {
+  id?: string | null;
+  name?: string | null;
 };
 
 export type GetSystemNameCandidatesParams = {
@@ -234,6 +240,32 @@ async function loadCloudExistingNames(
   }
 }
 
+async function loadPublicGuideCandidates(
+  supabase: SystemNameCandidateSupabase | null | undefined,
+  category: ArchiveCategory,
+) {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("guide_entries")
+      .select("id, name")
+      .eq("category", category)
+      .order("name", { ascending: true });
+    if (error) {
+      console.warn("load public related guides failed:", error);
+      return [];
+    }
+    return ((data || []) as PublicGuideCandidateRow[]).map((row) => ({
+      id: row.id || null,
+      label: row.name,
+      source: "public_guide" as const,
+    }));
+  } catch (error) {
+    console.warn("load public related guides failed:", error);
+    return [];
+  }
+}
+
 export function dedupeSystemNameCandidates(
   candidates: Array<Omit<SystemNameCandidate, "label"> & { label?: string | null }>,
   currentValue?: string | null
@@ -266,6 +298,7 @@ export async function getSystemNameCandidates(
   const category = normalizeCategory(params.category);
   const limit = params.limit ?? 10;
   const candidates: Array<Omit<SystemNameCandidate, "label"> & { label?: string | null }> = [];
+  candidates.push(...await loadPublicGuideCandidates(params.supabase, category));
 
   if (category === "plant") {
     const plantCandidates = params.plantSpeciesRows
@@ -273,7 +306,7 @@ export async function getSystemNameCandidates(
       : await loadPlantSpeciesCandidates(params.supabase);
 
     candidates.push(...plantCandidates);
-  } else if (category === "system" || category === "insect_fish") {
+  } else if (category === "system" || category === "insect_fish" || category === "other") {
     getDefaultSystemNames(category).forEach((name) => {
       candidates.push({ label: name, source: "builtin" });
     });

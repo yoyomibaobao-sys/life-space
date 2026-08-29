@@ -14,12 +14,15 @@ import {
 } from "@/lib/archive-categories";
 import {
   createLocalArchive,
+  createLocalRecord,
 } from "@/lib/local-offline-db";
 import {
   getSystemNameCandidates,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { deleteQuickCapture, getQuickCapture, quickCaptureToFiles } from "@/lib/quick-capture";
+import { readImageCapturedAt } from "@/lib/photo-metadata";
 
 function normalizeInitialCategory(value: string): ArchiveCategory | null {
   return archiveCategoryOptions.some((option) => option.value === value)
@@ -40,7 +43,7 @@ function getInitialSearchParam(...names: string[]) {
 }
 
 export default function NewLocalArchivePage() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const copy = t.archive;
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -55,6 +58,7 @@ export default function NewLocalArchivePage() {
   const [saving, setSaving] = useState(false);
   const [systemCandidates, setSystemCandidates] = useState<SystemNameCandidate[]>([]);
   const [quickCaptureId, setQuickCaptureId] = useState("");
+  const [createdArchiveId, setCreatedArchiveId] = useState("");
 
   useEffect(() => {
     const initialCategory = normalizeInitialCategory(getInitialSearchParam("category"));
@@ -95,6 +99,7 @@ export default function NewLocalArchivePage() {
   const cloudCreateHref = (() => {
     const params = new URLSearchParams({ category });
     if (category === "plant" && plantId) params.set("species", plantId);
+    if (quickCaptureId) params.set("quickCapture", quickCaptureId);
     return `/archive/new?${params.toString()}`;
   })();
 
@@ -116,21 +121,55 @@ export default function NewLocalArchivePage() {
 
     setSaving(true);
     try {
-      const archive = await createLocalArchive({
-        title: cleanTitle,
-        category,
-        subcategory: null,
-        group_name: null,
-        plant_id: plantId,
-        plant_slug: plantSlug,
-        system_name: cleanSystemName,
-        species_name: category === "plant" ? cleanSystemName : "",
-        source: source.trim() || null,
-        note,
-      });
+      let archiveId = createdArchiveId;
+      if (!archiveId) {
+        const archive = await createLocalArchive({
+          title: cleanTitle,
+          category,
+          subcategory: null,
+          group_name: null,
+          plant_id: plantId,
+          plant_slug: plantSlug,
+          system_name: cleanSystemName,
+          species_name: category === "plant" ? cleanSystemName : "",
+          source: source.trim() || null,
+          note,
+        });
+        archiveId = archive.id;
+        setCreatedArchiveId(archiveId);
+      }
+
+      if (quickCaptureId) {
+        const capture = await getQuickCapture(quickCaptureId);
+        if (!capture) {
+          throw new Error(language === "en" ? "The captured photo is missing. Take it again." : "已拍照片不存在，请重新拍照。");
+        }
+        const files = quickCaptureToFiles(capture);
+        const capturedTimes = await Promise.all(
+          files.map(async (file) =>
+            (await readImageCapturedAt(file)) ||
+            (Number.isFinite(file.lastModified)
+              ? new Date(file.lastModified).toISOString()
+              : capture.createdAt),
+          ),
+        );
+        const recordTime = capturedTimes.reduce(
+          (latest, value) =>
+            new Date(value).getTime() > new Date(latest).getTime() ? value : latest,
+          capture.createdAt,
+        );
+        await createLocalRecord({
+          archive_id: archiveId,
+          note: "",
+          image_files: files,
+          image_captured_at: capturedTimes,
+          record_time: recordTime,
+        });
+        await deleteQuickCapture(quickCaptureId).catch(() => undefined);
+      }
 
       showToast(copy.local_created);
-      router.push(`/local/archive/${archive.id}${quickCaptureId ? `?quickCapture=${encodeURIComponent(quickCaptureId)}#add-record` : ""}`);
+      router.push(`/local/archive/${archiveId}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : copy.local_create_failed);
     } finally {

@@ -39,6 +39,7 @@ export type ExperienceCardListItem = ExperienceCardRow & {
   helpfulCount: number;
   bookmarkedByMe: boolean;
   helpfulByMe: boolean;
+  playbackDurationSeconds: number;
 };
 
 export type ExperienceCardCommentRow = {

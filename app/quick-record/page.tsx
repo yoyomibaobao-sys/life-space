@@ -1,15 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { showToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
 import { buildLoginHref } from "@/lib/auth-return";
 import {
+  appendQuickCaptureFiles,
   getQuickCapture,
-  quickCaptureToFile,
+  quickCaptureToFiles,
   type QuickCapture,
 } from "@/lib/quick-capture";
+import { MAX_RECORD_PHOTOS_PER_ADD } from "@/lib/record-photo-batches";
 import {
   listVisibleLocalArchiveSummaries,
   type LocalArchiveSummary,
@@ -43,19 +54,21 @@ export default function QuickRecordPage() {
 function QuickRecordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const captureId = searchParams.get("capture") || "";
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const [capture, setCapture] = useState<QuickCapture | null>(null);
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [cloudProjects, setCloudProjects] = useState<CloudArchiveOption[]>([]);
   const [localProjects, setLocalProjects] = useState<LocalArchiveSummary[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [captureLoading, setCaptureLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
+  const [addingPhotos, setAddingPhotos] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl = "";
 
     async function load() {
       const pending = captureId ? await getQuickCapture(captureId) : null;
@@ -66,8 +79,6 @@ function QuickRecordContent() {
       }
 
       setCapture(pending);
-      objectUrl = URL.createObjectURL(quickCaptureToFile(pending));
-      setPreviewUrl(objectUrl);
       setCaptureLoading(false);
 
       const {
@@ -104,9 +115,24 @@ function QuickRecordContent() {
     void load();
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [captureId, router]);
+
+  useEffect(() => {
+    if (!capture) {
+      setPreviewUrls([]);
+      return;
+    }
+
+    const urls = quickCaptureToFiles(capture).map((file) =>
+      URL.createObjectURL(file),
+    );
+    setPreviewUrls(urls);
+
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [capture]);
 
   const choices = useMemo<ProjectChoice[]>(() => {
     const cloud = cloudProjects.map((project) => ({
@@ -129,6 +155,30 @@ function QuickRecordContent() {
   }, [cloudProjects, localProjects]);
 
   const effectiveSelectedKey = selectedKey || choices[0]?.key || "";
+  const photoCount = previewUrls.length;
+
+  async function appendPhotos(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!capture || files.length === 0 || addingPhotos) return;
+
+    setAddingPhotos(true);
+    try {
+      const result = await appendQuickCaptureFiles(
+        capture.id,
+        files,
+        MAX_RECORD_PHOTOS_PER_ADD,
+      );
+      setCapture(result.capture);
+      if (result.rejectedCount > 0) {
+        showToast(t.quick_record.photo_limit_trimmed);
+      }
+    } catch {
+      showToast(t.quick_record.capture_failed);
+    } finally {
+      setAddingPhotos(false);
+    }
+  }
 
   function continueToRecord() {
     if (!capture || !effectiveSelectedKey) return;
@@ -164,10 +214,60 @@ function QuickRecordContent() {
             <div style={eyebrowStyle}>{t.quick_record.eyebrow}</div>
             <h1 style={titleStyle}>{t.quick_record.title}</h1>
           </div>
-          {previewUrl ? (
-            <img src={previewUrl} alt={t.quick_record.preview_alt} style={previewStyle} />
-          ) : null}
+          <div style={photoCountStyle}>
+            {language === "en"
+              ? `${photoCount} photos · up to ${MAX_RECORD_PHOTOS_PER_ADD} each time`
+              : `共 ${photoCount} 张 · 每次最多 ${MAX_RECORD_PHOTOS_PER_ADD} 张`}
+          </div>
         </div>
+
+        {previewUrls.length > 0 ? (
+          <div style={previewGridStyle}>
+            {previewUrls.map((url, index) => (
+              <img
+                key={`${url}-${index}`}
+                src={url}
+                alt={`${t.quick_record.preview_alt} ${index + 1}`}
+                style={previewStyle}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        <div style={photoActionsStyle}>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={addingPhotos}
+            style={photoActionButtonStyle}
+          >
+            {t.quick_record.continue_take_photo}
+          </button>
+          <button
+            type="button"
+            onClick={() => galleryInputRef.current?.click()}
+            disabled={addingPhotos}
+            style={photoActionButtonStyle}
+          >
+            {t.quick_record.add_from_album}
+          </button>
+        </div>
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={appendPhotos}
+          style={{ display: "none" }}
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={appendPhotos}
+          style={{ display: "none" }}
+        />
 
         {projectsLoading ? (
           <div role="status" aria-live="polite" style={projectLoadingStyle}>
@@ -249,12 +349,40 @@ const headingStyle: CSSProperties = {
 };
 const eyebrowStyle: CSSProperties = { color: "#758470", fontSize: 12 };
 const titleStyle: CSSProperties = { margin: "3px 0 0", color: "#253725", fontSize: 22 };
+const photoCountStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#63755f",
+  fontSize: 13,
+  fontWeight: 750,
+};
+const previewGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: 7,
+  marginBottom: 10,
+};
 const previewStyle: CSSProperties = {
-  width: 76,
-  height: 76,
+  width: "100%",
+  aspectRatio: "1 / 1",
   borderRadius: 14,
   objectFit: "cover",
   background: "#eef3eb",
+};
+const photoActionsStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+  marginBottom: 18,
+};
+const photoActionButtonStyle: CSSProperties = {
+  minHeight: 40,
+  padding: "8px 10px",
+  border: "1px solid #dbe5d7",
+  borderRadius: 12,
+  background: "#f8fbf6",
+  color: "#4f6d4d",
+  fontSize: 13,
+  fontWeight: 750,
 };
 const labelStyle: CSSProperties = { display: "grid", gap: 7, color: "#586855", fontSize: 13 };
 const selectStyle: CSSProperties = {

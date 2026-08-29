@@ -86,6 +86,7 @@ export type LocalArchive = {
   cycles?: LocalArchiveCycle[];
   trashed_cycles?: LocalArchiveCycleTrash[];
   status: "active" | "ended";
+  ended_at?: string | null;
   created_at: string;
   updated_at: string;
   local_only: true;
@@ -985,6 +986,8 @@ export async function updateLocalArchiveFields(
     archive_summary?: string | null;
     cycle_enabled?: boolean;
     next_cycle_name?: string | null;
+    status?: "active" | "ended";
+    ended_at?: string | null;
   },
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
@@ -1061,6 +1064,14 @@ export async function updateLocalArchiveFields(
         updates.next_cycle_name === undefined
           ? normalizedArchive.next_cycle_name
           : normalizeOptionalText(updates.next_cycle_name)?.slice(0, 80) || null,
+      status:
+        updates.status === undefined
+          ? normalizedArchive.status
+          : updates.status,
+      ended_at:
+        updates.ended_at === undefined
+          ? normalizedArchive.ended_at
+          : normalizeOptionalText(updates.ended_at),
       updated_at: nowIso(),
     };
 

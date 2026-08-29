@@ -442,7 +442,7 @@ export default function EditMarketPostPage() {
     return (
       <main style={pageStyle}>
         <div style={shellStyle}>
-          <Link href="/market" style={backLinkStyle}>
+          <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
           </Link>
           <section style={emptyStyle}>{t.market.not_found}</section>
@@ -455,7 +455,7 @@ export default function EditMarketPostPage() {
     return (
       <main style={pageStyle}>
         <div style={shellStyle}>
-          <Link href={`/market/${item.id}`} style={backLinkStyle}>
+          <Link href={`/market/${item.id}`} className="mobile-app-desktop-only" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={15} /> {t.market.back_to_detail}
           </Link>
           <section style={emptyStyle}>{t.market.owner_only_edit}</section>
@@ -467,7 +467,7 @@ export default function EditMarketPostPage() {
   return (
     <main style={pageStyle}>
       <div style={shellStyle}>
-        <Link href={`/market/${item.id}`} style={backLinkStyle}>
+        <Link href={`/market/${item.id}`} className="mobile-app-desktop-only" style={backLinkStyle}>
           <UiIcon name="arrow-left" size={15} /> {t.market.back_to_detail}
         </Link>
 

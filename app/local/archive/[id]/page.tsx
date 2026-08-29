@@ -75,8 +75,14 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import {
   deleteQuickCapture,
   getQuickCapture,
-  quickCaptureToFile,
+  quickCaptureToFiles,
 } from "@/lib/quick-capture";
+import {
+  DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  getArchiveCategoryDepth,
+  getLocalArchiveCategoryDepths,
+  type ArchiveCategoryDepths,
+} from "@/lib/archive-category-settings";
 
 function formatDate(value?: string | null) {
   return formatPreciseDateTime(value);
@@ -123,6 +129,7 @@ export default function LocalArchiveDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quickCaptureId = searchParams.get("quickCapture") || "";
+  const transferRequested = searchParams.get("transfer") === "1";
 
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,6 +163,9 @@ export default function LocalArchiveDetailPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
+  const [categoryDepths, setCategoryDepths] = useState<ArchiveCategoryDepths>({
+    ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  });
   const localRecordObjectUrlsRef = useRef<string[]>([]);
   const loadedQuickCaptureIdRef = useRef("");
   const cycleTerminology = getArchiveCycleTerminology(detail?.archive.category, language);
@@ -176,6 +186,7 @@ export default function LocalArchiveDetailPage() {
         ? { userId: data.user.id, email: data.user.email || null }
         : null;
       setOwnerContext(ownerContext);
+      setCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId));
       const nextDetail = await getLocalArchiveDetail(archiveId, ownerContext);
       setDetail(nextDetail);
       setLocalRecordItems(nextDetail ? buildLocalRecordItems(nextDetail.records) : []);
@@ -193,6 +204,10 @@ export default function LocalArchiveDetailPage() {
   }, [archiveId]);
 
   useEffect(() => {
+    if (transferRequested && detail) setTransferPromptOpen(true);
+  }, [detail, transferRequested]);
+
+  useEffect(() => {
     if (!quickCaptureId || loadedQuickCaptureIdRef.current === quickCaptureId) {
       return;
     }
@@ -203,7 +218,7 @@ export default function LocalArchiveDetailPage() {
         const capture = await getQuickCapture(quickCaptureId);
         if (!capture || cancelled) return;
         loadedQuickCaptureIdRef.current = quickCaptureId;
-        setSelectedFiles((current) => [quickCaptureToFile(capture), ...current]);
+        setSelectedFiles((current) => [...quickCaptureToFiles(capture), ...current]);
         setAddRecordOpen(true);
       } catch {
         // The local record form remains available if a temporary capture expired.
@@ -837,6 +852,7 @@ export default function LocalArchiveDetailPage() {
     : archive.created_at;
   const latestUpdate = records[0]?.record_time || archive.updated_at || archive.created_at;
   const ongoingDays = getOngoingDays(archive.created_at);
+  const categoryDepth = getArchiveCategoryDepth(categoryDepths, archive.category);
   const localSystemNameLabel =
     archive.category === "plant"
       ? archiveCopy.system_plant_name_required
@@ -862,8 +878,8 @@ export default function LocalArchiveDetailPage() {
     categoryLabel: localCategoryLabel,
     categoryIcon: getArchiveCategoryIcon(archive.category),
     systemName: archive.system_name || archive.species_name || archiveCopy.not_filled,
-    subcategoryLabel: archive.subcategory,
-    groupLabel: archive.group_name,
+    subcategoryLabel: categoryDepth >= 2 ? archive.subcategory : null,
+    groupLabel: categoryDepth >= 3 ? archive.group_name : null,
     visibilityLabel: null,
     visibilityTone: "neutral",
     storageLabel: archiveCopy.device,

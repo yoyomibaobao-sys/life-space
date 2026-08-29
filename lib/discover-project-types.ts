@@ -33,6 +33,10 @@ export type DiscoveryProjectFeedItem = Omit<
   public_comment_count: number;
   has_public_help: boolean;
   view_count: number;
+  follower_count: number;
+  profile_country: string | null;
+  profile_region_name: string | null;
+  profile_city: string | null;
   card_summary: string | null;
   display_image_url: string | null;
 };

@@ -71,6 +71,13 @@ import {
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileNotificationLink from "@/components/mobile/MobileNotificationLink";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import {
+  DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  getArchiveCategoryDepth,
+  getCloudArchiveCategoryDepths,
+  getLocalArchiveCategoryDepths,
+  type ArchiveCategoryDepths,
+} from "@/lib/archive-category-settings";
 
 type LatestArchiveRecord = {
   id: string;
@@ -156,6 +163,12 @@ export default function ArchivePage() {
   const [localHiddenOwnedByOtherCount, setLocalHiddenOwnedByOtherCount] = useState(0);
   const [localOwnershipPromptDismissed, setLocalOwnershipPromptDismissed] = useState(false);
   const [markingLocalOwner, setMarkingLocalOwner] = useState(false);
+  const [cloudCategoryDepths, setCloudCategoryDepths] = useState<ArchiveCategoryDepths>({
+    ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  });
+  const [localCategoryDepths, setLocalCategoryDepths] = useState<ArchiveCategoryDepths>({
+    ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  });
 
   useEffect(() => {
     function updateViewportMode() {
@@ -217,6 +230,7 @@ export default function ArchivePage() {
         ? { userId: user.id, email: user.email || null }
         : null;
       setCurrentOwnerContext(ownerContext);
+      setLocalCategoryDepths(getLocalArchiveCategoryDepths(user?.id));
 
       if (!user) {
         setArchives([]);
@@ -227,6 +241,13 @@ export default function ArchivePage() {
         setExperienceCardCount(0);
         setSpaceProfile(null);
         return;
+      }
+
+      try {
+        setCloudCategoryDepths(await getCloudArchiveCategoryDepths(user.id));
+      } catch (settingsError) {
+        console.error("load archive category settings error:", settingsError);
+        setCloudCategoryDepths({ ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS });
       }
 
       const [
@@ -1119,13 +1140,15 @@ export default function ArchivePage() {
     ? formatStorage(storageLimitBytes)
     : "—";
 
-  const cloudSubcategoryChips: ArchiveTaxonomyChip[] = activeCategory
+  const activeCloudDepth = getArchiveCategoryDepth(cloudCategoryDepths, activeCategory);
+  const activeLocalDepth = getArchiveCategoryDepth(localCategoryDepths, activeCategory);
+  const cloudSubcategoryChips: ArchiveTaxonomyChip[] = activeCategory && activeCloudDepth >= 2
     ? subTags
         .filter((tag) => tag.category === activeCategory)
         .map((tag) => ({ id: tag.id, label: tag.name }))
     : [];
   const currentSubTag = subTags.find((tag) => tag.id === activeSubTag) || null;
-  const visibleGroupTags = activeSubTag && currentSubTag
+  const visibleGroupTags = activeCloudDepth >= 3 && activeSubTag && currentSubTag
     ? groupTags.filter((tag) => tag.sub_tag_id === activeSubTag)
     : [];
   const cloudGroupChips: ArchiveTaxonomyChip[] = visibleGroupTags.map((tag) => ({
@@ -1232,7 +1255,7 @@ export default function ArchivePage() {
   const showCloudArchives = activeSource !== "local";
   const showLocalArchives = activeSource !== "cloud";
   const localSubTags = useMemo<ArchiveTaxonomyChip[]>(() => {
-    if (!activeCategory) return [];
+    if (!activeCategory || activeLocalDepth < 2) return [];
 
     return localTaxonomyItems
       .filter(
@@ -1244,9 +1267,9 @@ export default function ArchivePage() {
       .map((item) => ({ id: item.label, label: item.label }))
       .filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index)
       .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
-  }, [activeCategory, localTaxonomyItems]);
+  }, [activeCategory, activeLocalDepth, localTaxonomyItems]);
   const localGroupTags = useMemo<ArchiveTaxonomyChip[]>(() => {
-    if (!activeCategory || !activeSubTag) return [];
+    if (!activeCategory || !activeSubTag || activeLocalDepth < 3) return [];
 
     return localTaxonomyItems
       .filter(
@@ -1259,7 +1282,7 @@ export default function ArchivePage() {
       .map((item) => ({ id: item.label, label: item.label }))
       .filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index)
       .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
-  }, [activeCategory, activeSubTag, localTaxonomyItems]);
+  }, [activeCategory, activeLocalDepth, activeSubTag, localTaxonomyItems]);
   const localSubTagItems = useMemo<SubTagItem[]>(
     () =>
       localTaxonomyItems
@@ -1615,6 +1638,32 @@ export default function ArchivePage() {
     }
   }
 
+  async function toggleLocalArchiveEnded(archive: LocalArchiveSummary) {
+    const nextEnded = archive.status !== "ended";
+    try {
+      await updateLocalArchiveFields(
+        archive.id,
+        {
+          status: nextEnded ? "ended" : "active",
+          ended_at: nextEnded ? new Date().toISOString() : null,
+        },
+        currentOwnerContext,
+      );
+      await loadLocalArchives(currentOwnerContext);
+      showToast(
+        nextEnded
+          ? t.archive.marked_ended
+          : t.archive.restored_ongoing,
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : t.archive.local_update_failed,
+      );
+    }
+  }
+
   const createDisabled =
     activeSource !== "local" &&
     Boolean(currentOwnerContext?.userId) &&
@@ -1633,6 +1682,8 @@ export default function ArchivePage() {
         subcategories={cloudSubcategoryChips}
         groups={cloudGroupChips}
         mobileMode={isMobileViewport}
+        showSubcategoryRow={activeCloudDepth >= 2}
+        showGroupRow={activeCloudDepth >= 3}
         onReset={() =>
           updateFilterWithoutJump(() => {
             setActiveCategory(null);
@@ -1698,6 +1749,8 @@ export default function ArchivePage() {
         subcategories={localSubTags}
         groups={localGroupTags}
         mobileMode={isMobileViewport}
+        showSubcategoryRow={activeLocalDepth >= 2}
+        showGroupRow={activeLocalDepth >= 3}
         onReset={() =>
           updateFilterWithoutJump(() => {
             setActiveCategory(null);
@@ -1822,6 +1875,7 @@ export default function ArchivePage() {
         mobileMode={isMobileViewport}
         subTags={subTags}
         groupTags={groupTags}
+        categoryDepths={cloudCategoryDepths}
         editingPlantArchiveId={editingPlantArchiveId}
         editingSpeciesId={editingSpeciesId}
         editingPendingSpeciesName={editingPendingSpeciesName}
@@ -1889,6 +1943,7 @@ export default function ArchivePage() {
       title={t.archive_workspace.my_space}
       titleText={t.archive_workspace.my_space}
       fallbackHref="/discover"
+      showBack={false}
       ariaLabel={t.nav.back}
     />
     <main
@@ -2041,7 +2096,8 @@ export default function ArchivePage() {
               const project = localArchiveToProjectView(
                 archive,
                 currentOwnerContext,
-                language
+                language,
+                getArchiveCategoryDepth(localCategoryDepths, archive.category),
               );
               const availableLocalGroups = archive.subcategory
                 ? localGroupTagItems.filter((tag) => tag.sub_tag_id === archive.subcategory)
@@ -2050,7 +2106,7 @@ export default function ArchivePage() {
               return (
                 <ArchiveProjectCard
                   key={archive.id}
-                  project={{ ...project, href: undefined }}
+                  project={isMobileViewport ? project : { ...project, href: undefined }}
                   mobileMode={isMobileViewport}
                   systemNameEditorSlot={
                     editingLocalSystemArchiveId === archive.id ? (
@@ -2123,20 +2179,19 @@ export default function ArchivePage() {
                         groupTagId={archive.group_name}
                         subTags={localSubTagItems}
                         groupTags={localGroupTagItems}
+                        categoryDepths={localCategoryDepths}
                         onChangeCategory={(value) => {
                           void updateLocalArchiveCategoryValue(archive, value);
                         }}
                         onChangeGroup={(value) => {
                           void updateLocalArchiveGroupValue(archive, value);
                         }}
+                        ended={archive.status === "ended"}
+                        onToggleEnded={() => void toggleLocalArchiveEnded(archive)}
                         extraActions={[
                           {
-                            label: t.archive_workspace.edit_name,
-                            onClick: () => renameLocalArchiveTitle(archive),
-                          },
-                          {
-                            label: t.archive_workspace.edit_system_name,
-                            onClick: () => renameLocalArchiveSystemName(archive),
+                            label: t.archive.transfer_to_cloud,
+                            onClick: () => router.push(`/local/archive/${archive.id}?transfer=1`),
                           },
                           ...(!archive.local_owner_user_id && currentOwnerContext?.userId
                             ? [{
@@ -2194,7 +2249,7 @@ export default function ArchivePage() {
                     </>
                     ) : undefined
                   }
-                  onClick={() => router.push(`/local/archive/${archive.id}`)}
+                  onClick={isMobileViewport ? undefined : () => router.push(`/local/archive/${archive.id}`)}
                   onEditTitle={() => renameLocalArchiveTitle(archive)}
                   onEditSystemName={() => renameLocalArchiveSystemName(archive)}
                 />

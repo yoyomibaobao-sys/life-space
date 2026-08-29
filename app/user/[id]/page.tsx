@@ -18,6 +18,12 @@ import {
 import { showToast } from "@/components/Toast";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { UserSpaceTag } from "@/lib/user-space-types";
+import {
+  DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  getArchiveCategoryDepth,
+  getCloudArchiveCategoryDepths,
+  type ArchiveCategoryDepths,
+} from "@/lib/archive-category-settings";
 
 type Category = "all" | ArchiveCategory;
 
@@ -98,7 +104,10 @@ export default function UserSpacePage() {
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
 
-  const [followedArchiveIds, setFollowedArchiveIds] = useState<string[]>([]);
+  const [archiveFollowerCounts, setArchiveFollowerCounts] = useState<Record<string, number>>({});
+  const [categoryDepths, setCategoryDepths] = useState<ArchiveCategoryDepths>({
+    ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  });
 
   const loadingRef = useRef(false);
 
@@ -107,6 +116,11 @@ export default function UserSpacePage() {
     loadingRef.current = true;
 
     try {
+      setCategoryDepths(
+        await getCloudArchiveCategoryDepths(userId).catch(() => ({
+          ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+        })),
+      );
       const { data: profile } = await supabase
         .from("public_profiles")
         .select("username, avatar_url")
@@ -133,7 +147,7 @@ export default function UserSpacePage() {
       } = await supabase.auth.getUser();
       setViewerId(user?.id || null);
 
-      const [subTagResult, groupTagResult, recordsResult, followsResult] =
+      const [subTagResult, groupTagResult, recordsResult, followerCountsResult] =
         await Promise.all([
           supabase
             .from("sub_tags")
@@ -151,11 +165,10 @@ export default function UserSpacePage() {
                 .in("archive_id", archiveIds)
                 .eq("visibility", "public")
                 .order("record_time", { ascending: false }),
-          user?.id && archiveIds.length > 0
+          archiveIds.length > 0
             ? supabase
                 .from("archive_follows")
                 .select("archive_id")
-                .eq("user_id", user.id)
                 .in("archive_id", archiveIds)
             : Promise.resolve({ data: [] as ArchiveFollowIdRow[] }),
         ]);
@@ -167,10 +180,14 @@ export default function UserSpacePage() {
           (recordsResult.data || []) as UserSpaceRecord[]
         )
       );
-      setFollowedArchiveIds(
-        ((followsResult.data || []) as ArchiveFollowIdRow[]).map(
-          (row) => row.archive_id
-        )
+      setArchiveFollowerCounts(
+        ((followerCountsResult.data || []) as ArchiveFollowIdRow[]).reduce<Record<string, number>>(
+          (counts, row) => {
+            counts[row.archive_id] = (counts[row.archive_id] || 0) + 1;
+            return counts;
+          },
+          {},
+        ),
       );
       if (user?.id && user.id !== userId) {
         const { data: userFollow } = await supabase
@@ -230,12 +247,13 @@ export default function UserSpacePage() {
 
   const visibleSubTags = useMemo(() => {
     return subTags.filter((tag) =>
+      getArchiveCategoryDepth(categoryDepths, tag.category) >= 2 &&
       archives.some((archive) => archive.sub_tag_id === tag.id)
     );
-  }, [archives, subTags]);
+  }, [archives, categoryDepths, subTags]);
 
   const visibleGroupTags = useMemo(() => {
-    if (!activeSubTag) return [];
+    if (!activeSubTag || getArchiveCategoryDepth(categoryDepths, activeCategory) < 3) return [];
 
     return groupTags.filter((tag) => {
       if (tag.sub_tag_id !== activeSubTag) return false;
@@ -247,7 +265,7 @@ export default function UserSpacePage() {
           publicArchiveIds.has(archive.id)
       );
     });
-  }, [activeSubTag, archives, groupTags, publicArchiveIds]);
+  }, [activeCategory, activeSubTag, archives, categoryDepths, groupTags, publicArchiveIds]);
 
   const statsMap = useMemo(() => {
     const map: Record<string, UserSpaceArchiveStats> = {};
@@ -418,8 +436,8 @@ export default function UserSpacePage() {
         groupTags={groupTags}
         statsMap={statsMap}
         coverMap={coverMap}
-        followedArchiveIds={followedArchiveIds}
-        onOpenArchive={(archiveId) => router.push(`/archive/${archiveId}`)}
+        archiveFollowerCounts={archiveFollowerCounts}
+        categoryDepths={categoryDepths}
       />
     </main>
   );

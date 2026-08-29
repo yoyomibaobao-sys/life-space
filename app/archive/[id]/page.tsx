@@ -84,6 +84,13 @@ import {
 } from "@/lib/supabase-schema-compat";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import { getDurationDays } from "@/lib/follow-utils";
+import {
+  DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  getCloudArchiveCategoryDepths,
+  type ArchiveCategoryDepths,
+} from "@/lib/archive-category-settings";
 
 export default function ArchiveDetail({
   params,
@@ -129,6 +136,10 @@ function Content({ id }: { id: string }) {
   const [archiveProfileSystemNameCandidateList, setArchiveProfileSystemNameCandidates] =
     useState<SystemNameCandidate[]>([]);
   const [isProjectFollowed, setIsProjectFollowed] = useState(false);
+  const [projectFollowerCount, setProjectFollowerCount] = useState(0);
+  const [categoryDepths, setCategoryDepths] = useState<ArchiveCategoryDepths>({
+    ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  });
   const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxRecord, setLightboxRecord] = useState<RecordItem | null>(null);
@@ -194,6 +205,19 @@ function Content({ id }: { id: string }) {
       setArchive(archiveData as ArchiveDetailArchive);
       setArchiveSubcategoryLabel(null);
       setArchiveGroupLabel(null);
+
+      const [followerResult, categorySettingsResult] = await Promise.all([
+        supabase
+          .from("archive_follows")
+          .select("id", { count: "exact", head: true })
+          .eq("archive_id", archiveData.id),
+        getCloudArchiveCategoryDepths(archiveData.user_id).catch((settingsError) => {
+          console.error("load archive category settings error:", settingsError);
+          return { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS };
+        }),
+      ]);
+      setProjectFollowerCount(Number(followerResult.count || 0));
+      setCategoryDepths(categorySettingsResult);
 
       if (isOwnerView) {
         const [subTagResult, groupTagResult] = await Promise.all([
@@ -696,6 +720,9 @@ saveRecentArchiveBrowse({
       label: `${cycle.display_name || cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
     }));
   const archiveDisplayName = getDisplayName(activeArchive, species);
+  const relatedGuideName = activeArchive.category === "plant"
+    ? activeArchive.species_name_snapshot || species?.common_name || species?.scientific_name || ""
+    : activeArchive.system_name || activeArchive.species_name_snapshot || "";
   const latestUpdate = records[0]?.record_time || activeArchive.last_record_time || activeArchive.created_at;
   const archiveCategoryLabel =
     activeArchive.category === "plant"
@@ -705,7 +732,11 @@ saveRecentArchiveBrowse({
         : activeArchive.category === "insect_fish"
           ? archiveCopy.categories.insect_fish_label
           : archiveCopy.categories.other_label;
-  const encyclopediaHref = activeArchive.category === "plant" && species?.id ? `/plant/${species.id}` : null;
+  const encyclopediaHref = activeArchive.category === "plant" && species?.id
+    ? `/plant/${species.id}`
+    : relatedGuideName.trim()
+      ? `/plant?section=${encodeURIComponent(normalizeArchiveCategory(activeArchive.category))}&q=${encodeURIComponent(relatedGuideName.trim())}`
+      : null;
   const lightboxMetaText = lightboxRecord
     ? `${formatDateTime(lightboxRecord.record_time)} · ${recordCopy.day_prefix} ${getDayNumber(
         startTime || lightboxRecord.record_time,
@@ -1297,6 +1328,7 @@ saveRecentArchiveBrowse({
     }
 
     setIsProjectFollowed(true);
+    setProjectFollowerCount((count) => count + 1);
     showToast(archiveCopy.followed);
   }
 
@@ -1326,6 +1358,7 @@ saveRecentArchiveBrowse({
     }
 
     setIsProjectFollowed(false);
+    setProjectFollowerCount((count) => Math.max(0, count - 1));
     setShowUnfollowProjectConfirm(false);
     showToast(archiveCopy.unfollowed);
   }
@@ -2060,6 +2093,20 @@ saveRecentArchiveBrowse({
           ) : <span aria-hidden="true" />}
         </header>
 
+        <div style={projectDetailStatsStyle}>
+          <ProjectMetaLine
+            followerCount={projectFollowerCount}
+            viewCount={Number(activeArchive.view_count || 0)}
+            recordCount={Number(activeArchive.record_count ?? records.length)}
+            durationDays={getDurationDays(
+              activeArchive.created_at,
+              activeArchive.status === "ended" ? activeArchive.ended_at : null,
+            )}
+            ended={activeArchive.status === "ended"}
+            order={["follow", "view", "record", "duration"]}
+          />
+        </div>
+
         <nav style={archiveDetailTabWrapStyle} aria-label={archiveCopy.detail_navigation}>
           <button
             type="button"
@@ -2093,8 +2140,8 @@ saveRecentArchiveBrowse({
               username={displayUsername}
               archiveDisplayName={archiveDisplayName}
               archiveCategoryLabel={archiveCategoryLabel}
-              archiveSubcategoryLabel={archiveSubcategoryLabel}
-              archiveGroupLabel={archiveGroupLabel}
+              archiveSubcategoryLabel={categoryDepths[normalizeArchiveCategory(activeArchive.category)] >= 2 ? archiveSubcategoryLabel : null}
+              archiveGroupLabel={categoryDepths[normalizeArchiveCategory(activeArchive.category)] >= 3 ? archiveGroupLabel : null}
               latestUpdate={latestUpdate}
               recordCount={activeArchive.record_count || records.length || 0}
               encyclopediaHref={encyclopediaHref}
@@ -2132,13 +2179,13 @@ saveRecentArchiveBrowse({
               profileExtra={isOwner ? (
                 <>
                   <div style={projectManagementRowStyle}>
-                    <strong>{archiveCopy.project_management}</strong>
                     <MobileArchiveActions
                       category={normalizeArchiveCategory(activeArchive.category)}
                       subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
                       groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
                       subTags={ownerSubTags}
                       groupTags={ownerGroupTags}
+                      categoryDepths={categoryDepths}
                       ended={activeArchive.status === "ended"}
                       isPublic={Boolean(activeArchive.is_public)}
                       onChangeCategory={(value) => void updateArchiveTaxonomy(value)}
@@ -2236,6 +2283,7 @@ saveRecentArchiveBrowse({
                 groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
                 subTags={ownerSubTags}
                 groupTags={ownerGroupTags}
+                maxDepth={categoryDepths[normalizeArchiveCategory(activeArchive.category)] || 3}
                 ended={activeArchive.status === "ended"}
                 isPublic={Boolean(activeArchive.is_public)}
                 busy={Boolean(mobileArchiveSavingField)}
@@ -2449,6 +2497,7 @@ function MobileArchiveOwnerFields({
   groupTagId,
   subTags,
   groupTags,
+  maxDepth,
   ended,
   isPublic,
   busy,
@@ -2462,6 +2511,7 @@ function MobileArchiveOwnerFields({
   groupTagId: string | null;
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
+  maxDepth: 1 | 2 | 3;
   ended: boolean;
   isPublic: boolean;
   busy: boolean;
@@ -2479,7 +2529,7 @@ function MobileArchiveOwnerFields({
 
   return (
     <section style={mobileArchiveOwnerFieldsStyle} aria-label={copy.project_settings}>
-      <label style={mobileArchiveOwnerSelectRowStyle}>
+      {maxDepth >= 2 ? <label style={mobileArchiveOwnerSelectRowStyle}>
         <span style={mobileArchiveLabelStyle}>{copy.subcategory}</span>
         <span style={mobileArchiveOwnerSelectWrapStyle}>
           <select
@@ -2497,9 +2547,9 @@ function MobileArchiveOwnerFields({
             <UiIcon name="chevron-down" size={14} />
           </span>
         </span>
-      </label>
+      </label> : null}
 
-      <label style={mobileArchiveOwnerSelectRowStyle}>
+      {maxDepth >= 3 ? <label style={mobileArchiveOwnerSelectRowStyle}>
         <span style={mobileArchiveLabelStyle}>{copy.group}</span>
         <span style={mobileArchiveOwnerSelectWrapStyle}>
           <select
@@ -2517,7 +2567,7 @@ function MobileArchiveOwnerFields({
             <UiIcon name="chevron-down" size={14} />
           </span>
         </span>
-      </label>
+      </label> : null}
 
       <button
         type="button"
@@ -2696,7 +2746,7 @@ function MobileArchiveProfile({
         editing={editingField === "name"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("name")}
-        valueHref={archive.category === "plant" ? encyclopediaHref : null}
+        valueHref={encyclopediaHref}
         editLabel={copy.edit}
       >
         {category === "plant" ? (
@@ -3076,6 +3126,16 @@ const archiveDetailAnchorStyle: CSSProperties = {
   scrollMarginTop: 76,
 };
 
+const projectDetailStatsStyle: CSSProperties = {
+  minHeight: 34,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  margin: "0 0 8px",
+  padding: "5px 8px",
+  borderBottom: "1px solid #edf1e9",
+};
+
 const mobileArchiveProfileStyle: CSSProperties = {
   border: "1px solid #e6ece1",
   borderRadius: 16,
@@ -3276,7 +3336,7 @@ const projectManagementRowStyle: CSSProperties = {
   padding: "4px 2px 4px 10px",
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
+  justifyContent: "flex-end",
   gap: 10,
   border: "1px solid #e4eadf",
   borderRadius: 13,

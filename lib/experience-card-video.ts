@@ -5,15 +5,20 @@ import type {
   ExperienceCardSourceRecord,
 } from "@/lib/experience-card-types";
 import type { Language } from "@/lib/i18n";
+import {
+  EXPERIENCE_CARD_INTRO_SECONDS,
+  EXPERIENCE_CARD_OUTRO_SECONDS,
+  getExperienceCardSceneTextDuration,
+  splitExperienceCardVideoText,
+} from "@/lib/experience-card-playback";
+
+export { splitExperienceCardVideoText } from "@/lib/experience-card-playback";
 
 export const EXPERIENCE_CARD_VIDEO_WIDTH = 720;
 export const EXPERIENCE_CARD_VIDEO_HEIGHT = 1280;
 export const EXPERIENCE_CARD_VIDEO_FPS = 6;
 export const EXPERIENCE_CARD_VIDEO_BITRATE = 2_200_000;
 
-const INTRO_DURATION_SECONDS = 4.8;
-const OUTRO_DURATION_SECONDS = 5.5;
-const TEXT_CHUNK_LENGTH = 60;
 
 type VideoSceneKind = "intro" | "record" | "outro";
 
@@ -56,52 +61,6 @@ export type GeneratedExperienceCardVideo = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function normalizeRecordText(value?: string | null) {
-  return String(value || "")
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function findPreferredBreak(chars: string[], start: number, end: number) {
-  const minimum = Math.max(start + Math.floor((end - start) * 0.58), start + 1);
-  const preferred = new Set(["。", "！", "？", "；", "，", "、", ".", "!", "?", ";", ",", "\n"]);
-
-  for (let index = end - 1; index >= minimum; index -= 1) {
-    if (preferred.has(chars[index])) return index + 1;
-  }
-
-  return end;
-}
-
-export function splitExperienceCardVideoText(value?: string | null) {
-  const normalized = normalizeRecordText(value);
-  if (!normalized) return [];
-
-  const chars = Array.from(normalized);
-  const chunks: string[] = [];
-  let cursor = 0;
-
-  while (cursor < chars.length) {
-    const proposedEnd = Math.min(chars.length, cursor + TEXT_CHUNK_LENGTH);
-    const end =
-      proposedEnd === chars.length
-        ? proposedEnd
-        : findPreferredBreak(chars, cursor, proposedEnd);
-    const chunk = chars.slice(cursor, end).join("").trim();
-    if (chunk) chunks.push(chunk);
-    cursor = end;
-  }
-
-  return chunks;
-}
-
-function getTextDuration(text: string) {
-  const length = Array.from(text).length;
-  return clamp(3.2 + length / 9, 4.8, 12);
 }
 
 function isImageMedia(media: ExperienceCardMedia) {
@@ -177,7 +136,7 @@ export function buildExperienceCardVideoScenes(
     {
       id: "intro",
       kind: "intro",
-      duration: INTRO_DURATION_SECONDS,
+      duration: EXPERIENCE_CARD_INTRO_SECONDS,
       title: detail.card.title,
       authorName,
       subtitle: brand,
@@ -214,7 +173,7 @@ export function buildExperienceCardVideoScenes(
       scenes.push({
         id: `record:${record.id}:${partIndex}`,
         kind: "record",
-        duration: text ? getTextDuration(text) : 3.8,
+        duration: text ? getExperienceCardSceneTextDuration(text) : 3.8,
         title: detail.card.title,
         authorName,
         subtitle: brand,
@@ -238,7 +197,7 @@ export function buildExperienceCardVideoScenes(
   scenes.push({
     id: "outro",
     kind: "outro",
-    duration: OUTRO_DURATION_SECONDS,
+    duration: EXPERIENCE_CARD_OUTRO_SECONDS,
     title: language === "en" ? "Let life leave its trace" : "让生活有迹可循",
     authorName,
     subtitle: websiteUrl,

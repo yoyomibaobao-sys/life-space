@@ -525,7 +525,7 @@ function NewMarketPostPageContent() {
   return (
     <main style={pageStyle}>
       <div style={shellStyle}>
-        <Link href="/market" style={backLinkStyle}>
+        <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
           <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
         </Link>
 

@@ -15,6 +15,8 @@ type MetaItem = {
   dateValue?: string | null;
 };
 
+export type ProjectMetaKey = MetaItem["key"];
+
 export default function ProjectMetaLine({
   recordCount,
   durationDays,
@@ -28,6 +30,7 @@ export default function ProjectMetaLine({
   helpfulCount,
   updatedAt,
   compactProjectStats = false,
+  order,
   className,
   style,
 }: {
@@ -43,6 +46,7 @@ export default function ProjectMetaLine({
   helpfulCount?: number | null;
   updatedAt?: string | null;
   compactProjectStats?: boolean;
+  order?: ProjectMetaKey[];
   className?: string;
   style?: CSSProperties;
 }) {
@@ -107,6 +111,15 @@ export default function ProjectMetaLine({
 
   if (items.length === 0) return null;
 
+  const orderedItems = order?.length
+    ? [...items].sort((left, right) => {
+        const leftIndex = order.indexOf(left.key);
+        const rightIndex = order.indexOf(right.key);
+        return (leftIndex < 0 ? order.length : leftIndex) -
+          (rightIndex < 0 ? order.length : rightIndex);
+      })
+    : items;
+
   return (
     <span
       className={className}
@@ -121,7 +134,7 @@ export default function ProjectMetaLine({
         ...style,
       }}
     >
-      {items.map((item) => (
+      {orderedItems.map((item) => (
         <span
           key={item.key}
           aria-label={item.accessibleLabel}

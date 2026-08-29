@@ -1,8 +1,17 @@
+import { MAX_RECORD_PHOTOS_PER_ADD } from "@/lib/record-photo-batches";
+
 const DB_NAME = "lifespace-quick-capture";
 const DB_VERSION = 1;
 const STORE_NAME = "captures";
 
 export type QuickCaptureTarget = "cloud" | "local" | null;
+
+export type QuickCapturePhoto = {
+  blob: Blob;
+  name: string;
+  mimeType: string;
+  createdAt: string;
+};
 
 export type QuickCapture = {
   id: string;
@@ -13,6 +22,7 @@ export type QuickCapture = {
   sourcePath: string;
   targetType: QuickCaptureTarget;
   archiveId: string | null;
+  photos?: QuickCapturePhoto[];
 };
 
 function openQuickCaptureDb() {
@@ -46,28 +56,80 @@ function transactionDone(transaction: IDBTransaction) {
 }
 
 export async function saveQuickCapture(
-  file: File,
+  input: File | File[],
   context: {
     sourcePath: string;
     targetType?: QuickCaptureTarget;
     archiveId?: string | null;
   }
 ) {
+  const files = (Array.isArray(input) ? input : [input]).slice(
+    0,
+    MAX_RECORD_PHOTOS_PER_ADD,
+  );
+  const file = files[0];
+  if (!file) throw new Error("quick_capture_failed");
+  const createdAt = new Date().toISOString();
   const capture: QuickCapture = {
     id: crypto.randomUUID(),
     blob: file,
     name: file.name || `capture-${Date.now()}.jpg`,
     mimeType: file.type || "image/jpeg",
-    createdAt: new Date().toISOString(),
+    createdAt,
     sourcePath: context.sourcePath,
     targetType: context.targetType || null,
     archiveId: context.archiveId || null,
+    photos: files.map((item, index) => ({
+      blob: item,
+      name: item.name || `capture-${Date.now()}-${index + 1}.jpg`,
+      mimeType: item.type || "image/jpeg",
+      createdAt,
+    })),
   };
   const db = await openQuickCaptureDb();
   const transaction = db.transaction(STORE_NAME, "readwrite");
   transaction.objectStore(STORE_NAME).put(capture);
   await transactionDone(transaction).finally(() => db.close());
   return capture;
+}
+
+export async function appendQuickCaptureFiles(
+  id: string,
+  files: File[],
+  maxPhotosPerAdd = MAX_RECORD_PHOTOS_PER_ADD,
+) {
+  const capture = await getQuickCapture(id);
+  if (!capture) throw new Error("quick_capture_missing");
+  const existing = getQuickCapturePhotos(capture);
+  const accepted = files.slice(0, Math.max(1, maxPhotosPerAdd));
+  const now = new Date().toISOString();
+  const nextPhotos = [
+    ...existing,
+    ...accepted.map((file, index) => ({
+      blob: file,
+      name: file.name || `capture-${Date.now()}-${index + 1}.jpg`,
+      mimeType: file.type || "image/jpeg",
+      createdAt: now,
+    })),
+  ];
+  const first = nextPhotos[0];
+  const nextCapture: QuickCapture = {
+    ...capture,
+    blob: first.blob,
+    name: first.name,
+    mimeType: first.mimeType,
+    createdAt: first.createdAt,
+    photos: nextPhotos,
+  };
+  const db = await openQuickCaptureDb();
+  const transaction = db.transaction(STORE_NAME, "readwrite");
+  transaction.objectStore(STORE_NAME).put(nextCapture);
+  await transactionDone(transaction).finally(() => db.close());
+  return {
+    capture: nextCapture,
+    acceptedCount: accepted.length,
+    rejectedCount: files.length - accepted.length,
+  };
 }
 
 export async function getQuickCapture(id: string) {
@@ -97,4 +159,23 @@ export function quickCaptureToFile(capture: QuickCapture) {
     type: capture.mimeType || capture.blob.type || "image/jpeg",
     lastModified: new Date(capture.createdAt).getTime(),
   });
+}
+
+export function getQuickCapturePhotos(capture: QuickCapture): QuickCapturePhoto[] {
+  if (Array.isArray(capture.photos) && capture.photos.length > 0) return capture.photos;
+  return [{
+    blob: capture.blob,
+    name: capture.name,
+    mimeType: capture.mimeType,
+    createdAt: capture.createdAt,
+  }];
+}
+
+export function quickCaptureToFiles(capture: QuickCapture) {
+  return getQuickCapturePhotos(capture).map((photo) =>
+    new File([photo.blob], photo.name, {
+      type: photo.mimeType || photo.blob.type || "image/jpeg",
+      lastModified: new Date(photo.createdAt).getTime(),
+    })
+  );
 }

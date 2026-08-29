@@ -8,6 +8,7 @@ import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import ProjectSummaryCard from "@/components/project/ProjectSummaryCard";
 
 type Props = {
   project: ArchiveProjectView;
@@ -89,62 +90,42 @@ export default function ArchiveProjectCard({
       ) : null}
     </div>
   );
-  const mobileCategoryText = [
-    project.categoryLabel,
-    project.subcategoryLabel,
-    project.groupLabel,
-  ]
-    .filter(Boolean)
-    .join(" / ");
-  const mobilePrimaryStatsText = project.mobilePrimaryStatsText || project.activityText || "";
-  const mobileSecondaryStatsText = project.mobileSecondaryStatsText || "";
+  if (mobileMode) {
+    const classificationText = [
+      project.subcategoryLabel || project.categoryLabel,
+      project.groupLabel,
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
-  const content = mobileMode ? (
-    <>
-      <ArchiveProjectCover project={project} mobileMode />
+    return (
+      <ProjectSummaryCard
+        href={project.href}
+        onOpen={project.href ? undefined : onClick}
+        ariaLabel={`${project.title} · ${project.systemName}`}
+        cover={project.cover || null}
+        imageAlt={project.cover?.alt || project.title}
+        fallbackIcon={project.categoryIcon}
+        categoryLabel={project.categoryLabel}
+        title={project.title}
+        systemName={project.systemName}
+        helpLabel={project.helpLabel}
+        ended={Boolean(project.ended)}
+        endedLabel={project.statusLabel}
+        latestText={project.latestText}
+        latestTime={project.latestTime}
+        visibilityLabel={project.visibilityLabel}
+        classificationText={classificationText}
+        showClassification={project.showClassificationRow}
+        followerCount={project.followerCount}
+        recordCount={project.recordCount}
+        durationDays={project.durationDays}
+        actionSlot={actionSlot}
+      />
+    );
+  }
 
-      <div style={mobileBodyStyle}>
-        <div style={mobileTitleRowStyle}>
-          {titleContent}
-          {actionSlot}
-        </div>
-
-        <div style={mobileStatusCategoryRowStyle}>
-          {project.visibilityLabel ? (
-            <span style={visibilityBadgeStyle(project.visibilityTone)}>
-              {project.visibilityLabel}
-            </span>
-          ) : null}
-          {selectControls ? (
-            <div
-              data-no-card-nav="true"
-              onClick={(event) => event.stopPropagation()}
-              style={mobileSelectRowStyle}
-            >
-              {selectControls}
-            </div>
-          ) : mobileCategoryText ? (
-            <span style={mobileCategoryTextStyle}>{mobileCategoryText}</span>
-          ) : null}
-        </div>
-
-        {project.recordCount !== undefined || project.durationDays !== undefined ? (
-          <ProjectMetaLine
-            recordCount={project.recordCount}
-            durationDays={project.durationDays}
-            ended={Boolean(project.ended)}
-            viewCount={project.viewCount}
-            compactProjectStats
-          />
-        ) : mobilePrimaryStatsText ? (
-          <div style={mobileStatsLineStyle}>{mobilePrimaryStatsText}</div>
-        ) : null}
-        {mobileSecondaryStatsText ? (
-          <div style={mobileStatsLineStyle}>{mobileSecondaryStatsText}</div>
-        ) : null}
-      </div>
-    </>
-  ) : (
+  const content = (
     <>
       <ArchiveProjectCover project={project} mobileMode={mobileMode} />
 
@@ -232,7 +213,7 @@ export default function ArchiveProjectCard({
     </>
   );
 
-  const cardStyle = projectCardStyle(Boolean(project.ended), mobileMode);
+  const cardStyle = projectCardStyle(Boolean(project.ended), false);
 
   if (project.href) {
     return (
@@ -337,21 +318,6 @@ const bodyStyle: CSSProperties = {
   gap: 5,
 };
 
-const mobileBodyStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  display: "flex",
-  flexDirection: "column",
-  gap: 5,
-};
-
-const mobileTitleRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  minWidth: 0,
-};
-
 const mobileTitleTextStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
@@ -359,46 +325,6 @@ const mobileTitleTextStyle: CSSProperties = {
   fontSize: 16,
   fontWeight: 700,
   lineHeight: 1.3,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const mobileStatusCategoryRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  minWidth: 0,
-  overflow: "visible",
-  flexWrap: "wrap",
-};
-
-const mobileSelectRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  minWidth: 0,
-  overflow: "visible",
-  flexWrap: "wrap",
-};
-
-const mobileCategoryTextStyle: CSSProperties = {
-  minWidth: 0,
-  color: "#667066",
-  fontSize: 13,
-  fontWeight: 700,
-  lineHeight: 1.35,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const mobileStatsLineStyle: CSSProperties = {
-  minWidth: 0,
-  color: "#7f887a",
-  fontSize: 13,
-  fontWeight: 600,
-  lineHeight: 1.35,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",

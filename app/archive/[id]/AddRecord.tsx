@@ -52,7 +52,7 @@ import {
 import {
   deleteQuickCapture,
   getQuickCapture,
-  quickCaptureToFile,
+  quickCaptureToFiles,
 } from "@/lib/quick-capture";
 
 type RecordVisibility = "public" | "private";
@@ -215,7 +215,7 @@ export default function AddRecord({
         const capture = await getQuickCapture(quickCaptureId);
         if (!capture || cancelled) return;
         loadedQuickCaptureIdRef.current = quickCaptureId;
-        appendFiles([quickCaptureToFile(capture)]);
+        appendAcceptedFiles(quickCaptureToFiles(capture));
       } catch {
         // The record form remains usable if a temporary capture expired.
       }
@@ -225,7 +225,7 @@ export default function AddRecord({
     return () => {
       cancelled = true;
     };
-    // appendFiles intentionally uses the current file list once per capture id.
+    // The accumulated quick capture was already limited per add operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickCaptureId]);
 
@@ -276,6 +276,18 @@ export default function AddRecord({
     );
   }
 
+  function appendAcceptedFiles(accepted: File[]) {
+    if (accepted.length === 0) return;
+    const previews = accepted.map((file, index) => ({
+      key: buildFileKey(file, files.length + index),
+      url: URL.createObjectURL(file),
+      name: file.name,
+    }));
+    filePreviewsRef.current = [...filePreviewsRef.current, ...previews];
+    setFiles((prev) => [...prev, ...accepted]);
+    setFilePreviews((prev) => [...prev, ...previews]);
+  }
+
   function appendFiles(nextFiles: File[]) {
     if (nextFiles.length === 0) return;
     const { accepted, rejectedCount } = limitRecordPhotoBatch(nextFiles);
@@ -286,14 +298,7 @@ export default function AddRecord({
       );
     }
 
-    const previews = accepted.map((file, index) => ({
-      key: buildFileKey(file, files.length + index),
-      url: URL.createObjectURL(file),
-      name: file.name,
-    }));
-    filePreviewsRef.current = [...filePreviewsRef.current, ...previews];
-    setFiles((prev) => [...prev, ...accepted]);
-    setFilePreviews((prev) => [...prev, ...previews]);
+    appendAcceptedFiles(accepted);
   }
 
   function removeSelectedFile(index: number) {

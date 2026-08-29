@@ -22,6 +22,12 @@ import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref } from "@/lib/auth-return";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
+import {
+  archiveCategoryOptions,
+  getArchiveCategoryIcon,
+  getArchiveCategoryLabel,
+  type ArchiveCategory,
+} from "@/lib/archive-categories";
 
 const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
 const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
@@ -71,6 +77,13 @@ type AliasItem = {
 };
 
 type BasicOverview = PlantBasicOverviewCompatRow;
+
+type PublicGuideEntry = {
+  id: string;
+  category: ArchiveCategory;
+  name: string;
+  source: "preset" | "approved";
+};
 
 function normalize(value: unknown) {
   return String(value || "").trim().toLowerCase();
@@ -193,6 +206,9 @@ export default function PlantIndexPage() {
   const sceneOptions = t.plant.scene_options;
   const indoorOptions = t.plant.indoor_options;
   const [plants, setPlants] = useState<PlantItem[]>([]);
+  const [guideSection, setGuideSection] = useState<ArchiveCategory>("plant");
+  const [publicGuides, setPublicGuides] = useState<PublicGuideEntry[]>([]);
+  const [publicGuidesLoading, setPublicGuidesLoading] = useState(true);
   const [aliases, setAliases] = useState<AliasItem[]>([]);
   const [basicOverviews, setBasicOverviews] = useState<BasicOverview[]>([]);
   const [parameters, setParameters] = useState<PlantParameterLite[]>([]);
@@ -250,6 +266,22 @@ export default function PlantIndexPage() {
       }
 
       try {
+        const initialParams = new URLSearchParams(window.location.search);
+        const initialSection = initialParams.get("section");
+        const initialQuery = String(initialParams.get("q") || "").trim();
+        if (
+          initialSection === "plant" ||
+          initialSection === "system" ||
+          initialSection === "insect_fish" ||
+          initialSection === "other"
+        ) {
+          setGuideSection(initialSection);
+          setSearchInput(initialQuery);
+          setQuery(initialQuery);
+          setSearchStateRestored(true);
+          return;
+        }
+
         if (isPageReload()) {
           window.sessionStorage.removeItem(PLANT_SEARCH_STATE_KEY);
           setSearchStateRestored(true);
@@ -377,6 +409,34 @@ export default function PlantIndexPage() {
     }
 
     load();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPublicGuides() {
+      const { data, error } = await supabase
+        .from("guide_entries")
+        .select("id, category, name, source")
+        .order("name", { ascending: true });
+
+      if (!cancelled) {
+        if (error) {
+          // Older deployments do not have the public guide table yet. The
+          // existing plant guide remains available until the migration lands.
+          console.warn("load public guide library failed:", error);
+          setPublicGuides([]);
+        } else {
+          setPublicGuides((data || []) as PublicGuideEntry[]);
+        }
+        setPublicGuidesLoading(false);
+      }
+    }
+
+    void loadPublicGuides();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -731,6 +791,14 @@ export default function PlantIndexPage() {
     }
   }
 
+  function changeGuideSection(section: ArchiveCategory) {
+    setGuideSection(section);
+    setSearchInput("");
+    setQuery("");
+    setIsMobileSearchOpen(false);
+    setSearchPanelOpen(false);
+  }
+
   function renderSearchAssist() {
     if (searchInput.trim()) {
       return (
@@ -884,6 +952,27 @@ export default function PlantIndexPage() {
         onSearch={() => setIsMobileSearchOpen((open) => !open)}
       />
       <main style={{ padding: isMobileViewport ? "6px 10px 10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
+      <nav
+        aria-label={language === "en" ? "Guide categories" : "指引分类"}
+        style={guideSectionTabsStyle(isMobileViewport)}
+      >
+        {archiveCategoryOptions.map((option) => {
+          const selected = guideSection === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-current={selected ? "page" : undefined}
+              onClick={() => changeGuideSection(option.value)}
+              style={guideSectionTabStyle(selected, isMobileViewport)}
+            >
+              {getArchiveCategoryLabel(option.value, language)}
+            </button>
+          );
+        })}
+      </nav>
+      {guideSection === "plant" ? (
+      <>
       <section
         style={{
           padding: isMobileViewport ? "6px 10px 8px" : 22,
@@ -1424,8 +1513,110 @@ export default function PlantIndexPage() {
           </div>
         ) : null}
       </section>
+      </>
+      ) : (
+        <PublicGuideLibrary
+          category={guideSection}
+          entries={publicGuides.filter((entry) => entry.category === guideSection)}
+          loading={publicGuidesLoading}
+          searchInput={searchInput}
+          onSearchInputChange={setSearchInput}
+          searchOpen={!isMobileViewport || isMobileSearchOpen}
+          isMobile={isMobileViewport}
+          language={language}
+        />
+      )}
       </main>
     </>
+  );
+}
+
+function PublicGuideLibrary({
+  category,
+  entries,
+  loading,
+  searchInput,
+  onSearchInputChange,
+  searchOpen,
+  isMobile,
+  language,
+}: {
+  category: ArchiveCategory;
+  entries: PublicGuideEntry[];
+  loading: boolean;
+  searchInput: string;
+  onSearchInputChange: (value: string) => void;
+  searchOpen: boolean;
+  isMobile: boolean;
+  language: "zh" | "en";
+}) {
+  const keyword = normalize(searchInput);
+  const visibleEntries = entries.filter((entry) =>
+    keyword ? normalize(entry.name).includes(keyword) : true,
+  );
+  const isEnglish = language === "en";
+
+  return (
+    <section style={publicGuidePanelStyle(isMobile)}>
+      <div style={publicGuideHeadingStyle}>
+        <div>
+          <div style={publicGuideEyebrowStyle}>
+            {isEnglish ? "Public related guides" : "公共对应指引"}
+          </div>
+          <h1 style={publicGuideTitleStyle}>
+            {getArchiveCategoryLabel(category, language)}
+          </h1>
+        </div>
+        <Link
+          href={`/archive/new?category=${encodeURIComponent(category)}`}
+          style={publicGuideCreateStyle}
+        >
+          {isEnglish ? "New project" : "新建项目"}
+        </Link>
+      </div>
+
+      {searchOpen ? (
+        <input
+          value={searchInput}
+          onChange={(event) => onSearchInputChange(event.target.value)}
+          placeholder={isEnglish ? "Search related guides" : "搜索对应指引"}
+          aria-label={isEnglish ? "Search related guides" : "搜索对应指引"}
+          style={publicGuideSearchStyle}
+        />
+      ) : null}
+
+      <p style={publicGuideNoticeStyle}>
+        {isEnglish
+          ? "Platform presets are public. A guide name you add can be used in your own project immediately; commonly used names enter administrator review before becoming public."
+          : "平台预设指引直接公开。你新增的对应指引可立即用于自己的项目；达到使用量后进入管理员审核，通过后加入公共指引库。"}
+      </p>
+
+      {loading ? (
+        <div style={publicGuideEmptyStyle}>{isEnglish ? "Loading…" : "加载中…"}</div>
+      ) : visibleEntries.length === 0 ? (
+        <div style={publicGuideEmptyStyle}>
+          {keyword
+            ? (isEnglish ? "No matching public guides." : "没有匹配的公共指引。")
+            : (isEnglish ? "No public guides yet." : "这个板块暂时还没有公共指引。")}
+        </div>
+      ) : (
+        <div style={publicGuideGridStyle(isMobile)}>
+          {visibleEntries.map((entry) => (
+            <article key={entry.id} style={publicGuideCardStyle}>
+              <span style={publicGuideIconStyle}>
+                <UiIcon name={getArchiveCategoryIcon(entry.category)} size={19} />
+              </span>
+              <strong style={publicGuideNameStyle}>{entry.name}</strong>
+              <span style={publicGuideSourceStyle}>
+                {entry.source === "preset"
+                  ? (isEnglish ? "Platform preset" : "平台预设")
+                  : (isEnglish ? "Approved public guide" : "已审核公开")}
+              </span>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1516,4 +1707,159 @@ const mobilePlantSecondaryNameStyle: CSSProperties = {
   lineHeight: 1.3,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+};
+
+function guideSectionTabsStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: isMobile ? 3 : 8,
+    marginBottom: isMobile ? 8 : 14,
+    padding: isMobile ? 3 : 5,
+    border: "1px solid #e0e8dc",
+    borderRadius: isMobile ? 14 : 16,
+    background: "#fff",
+  };
+}
+
+function guideSectionTabStyle(selected: boolean, isMobile: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    minHeight: isMobile ? 42 : 44,
+    padding: isMobile ? "5px 3px" : "7px 10px",
+    border: 0,
+    borderRadius: isMobile ? 11 : 12,
+    background: selected ? "#eaf5e6" : "transparent",
+    color: selected ? "#315f30" : "#667361",
+    fontSize: isMobile ? 12.5 : 14,
+    fontWeight: selected ? 850 : 700,
+    lineHeight: 1.2,
+    cursor: "pointer",
+  };
+}
+
+function publicGuidePanelStyle(isMobile: boolean): CSSProperties {
+  return {
+    padding: isMobile ? 13 : 22,
+    border: "1px solid #e0e8dc",
+    borderRadius: isMobile ? 16 : 20,
+    background: "#fff",
+    boxShadow: "0 8px 24px rgba(36, 58, 34, 0.04)",
+  };
+}
+
+const publicGuideHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const publicGuideEyebrowStyle: CSSProperties = {
+  color: "#778673",
+  fontSize: 12,
+  fontWeight: 750,
+};
+
+const publicGuideTitleStyle: CSSProperties = {
+  margin: "3px 0 0",
+  color: "#253725",
+  fontSize: 24,
+};
+
+const publicGuideCreateStyle: CSSProperties = {
+  flexShrink: 0,
+  minHeight: 38,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "0 13px",
+  border: "1px solid #cfe0ca",
+  borderRadius: 999,
+  color: "#416d3e",
+  textDecoration: "none",
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const publicGuideSearchStyle: CSSProperties = {
+  width: "100%",
+  height: 42,
+  marginTop: 14,
+  padding: "0 12px",
+  border: "1px solid #dce6d8",
+  borderRadius: 12,
+  outlineColor: "#85aa7f",
+  color: "#2d3e2c",
+  background: "#fff",
+  boxSizing: "border-box",
+};
+
+const publicGuideNoticeStyle: CSSProperties = {
+  margin: "12px 0 15px",
+  padding: "10px 12px",
+  borderRadius: 12,
+  background: "#f6faf4",
+  color: "#667662",
+  fontSize: 12.5,
+  lineHeight: 1.65,
+};
+
+function publicGuideGridStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile
+      ? "repeat(2, minmax(0, 1fr))"
+      : "repeat(4, minmax(0, 1fr))",
+    gap: isMobile ? 8 : 12,
+  };
+}
+
+const publicGuideCardStyle: CSSProperties = {
+  minWidth: 0,
+  minHeight: 118,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  padding: 13,
+  border: "1px solid #e1e9de",
+  borderRadius: 15,
+  background: "#fbfdf9",
+};
+
+const publicGuideIconStyle: CSSProperties = {
+  width: 32,
+  height: 32,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: 10,
+  background: "#eaf5e6",
+  color: "#52794f",
+};
+
+const publicGuideNameStyle: CSSProperties = {
+  width: "100%",
+  marginTop: 10,
+  overflow: "hidden",
+  color: "#2b3e2a",
+  fontSize: 15,
+  lineHeight: 1.35,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const publicGuideSourceStyle: CSSProperties = {
+  marginTop: "auto",
+  paddingTop: 7,
+  color: "#80907c",
+  fontSize: 11.5,
+};
+
+const publicGuideEmptyStyle: CSSProperties = {
+  padding: 28,
+  border: "1px dashed #dce5d8",
+  borderRadius: 14,
+  color: "#7a8776",
+  textAlign: "center",
+  background: "#fafcf9",
 };

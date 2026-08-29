@@ -41,6 +41,7 @@ import {
 } from "@/lib/region-shared";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 
 
 type MembershipPaymentRow = {
@@ -141,6 +142,10 @@ export default function ProfilePage() {
   const adminMembershipProfileModule: MobileProfileNavItem = {
     href: "/admin/memberships",
     label: language === "en" ? "User management" : "用户管理",
+  };
+  const adminGuideProfileModule: MobileProfileNavItem = {
+    href: "/admin/guides",
+    label: language === "en" ? "Related guide review" : "对应指引审核",
   };
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
@@ -365,7 +370,7 @@ export default function ProfilePage() {
     ? t.profile.membership_load_failed
     : getMembershipSummary(membership, language);
   const visibleMobileProfileModules = isAdmin
-    ? [...baseMobileProfileModules, adminMembershipProfileModule]
+    ? [...baseMobileProfileModules, adminMembershipProfileModule, adminGuideProfileModule]
     : baseMobileProfileModules;
   const statsGridColumns = isMobileViewport
     ? "1fr"
@@ -748,6 +753,13 @@ export default function ProfilePage() {
   }
 
   return (
+    <>
+    <MobilePageHeader
+      title={t.profile.title}
+      titleText={t.profile.title}
+      fallbackHref="/archive"
+      ariaLabel={t.nav.back}
+    />
     <main style={pageStyle}>
       <section style={shellStyle} onClickCapture={rememberProfileReturnPosition}>
         {!isMobileViewport ? (
@@ -930,6 +942,18 @@ export default function ProfilePage() {
             <span style={languageSwitchLabelStyle(language === "en")}>{t.profile.language_english}</span>
           </button>
         </section>
+
+        <Link href="/profile/project-categories" style={projectCategorySettingsLinkStyle}>
+          <span style={{ minWidth: 0 }}>
+            <strong style={projectCategorySettingsTitleStyle}>
+              {language === "en" ? "Project categories" : "项目分类"}
+            </strong>
+            <span style={projectCategorySettingsSubtitleStyle}>
+              {language === "en" ? "Configure cloud and local separately" : "云空间与本地分别设置"}
+            </span>
+          </span>
+          <UiIcon name="arrow-right" size={17} />
+        </Link>
 
         <MobileProfileModuleTabs
           active={mobileProfileModule}
@@ -1192,6 +1216,7 @@ export default function ProfilePage() {
         ) : null}
       </ConfirmDialog>
     </main>
+    </>
   );
 }
 
@@ -1380,6 +1405,36 @@ const languageInlineStyle: CSSProperties = {
   borderRadius: 14,
   background: "#f7f9f5",
   boxSizing: "border-box",
+};
+
+const projectCategorySettingsLinkStyle: CSSProperties = {
+  minHeight: 62,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  margin: "0 0 10px",
+  padding: "9px 14px",
+  border: "1px solid #dfe8da",
+  borderRadius: 14,
+  background: "#f7f9f5",
+  color: "#334c32",
+  textDecoration: "none",
+  boxSizing: "border-box",
+};
+
+const projectCategorySettingsTitleStyle: CSSProperties = {
+  display: "block",
+  fontSize: 15,
+  fontWeight: 800,
+};
+
+const projectCategorySettingsSubtitleStyle: CSSProperties = {
+  display: "block",
+  marginTop: 3,
+  color: "#788574",
+  fontSize: 12,
+  lineHeight: 1.35,
 };
 
 const languageSwitchStyle: CSSProperties = {

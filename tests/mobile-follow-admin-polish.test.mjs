@@ -61,15 +61,21 @@ test("mobile Following has records, saved Experience Cards, and people in the co
 });
 
 test("mobile followed-user projects use one tappable project-card format", async () => {
-  const followPage = await source("app/follow/page.tsx");
+  const [followPage, projectCard] = await Promise.all([
+    source("app/follow/page.tsx"),
+    source("components/project/ProjectSummaryCard.tsx"),
+  ]);
 
   assert.match(followPage, /function MobileFollowProjectCard\(/);
-  assert.match(followPage, /role="link"[\s\S]*?onClick=\{onOpen\}/);
-  assert.match(followPage, /mobileProjectCategoryBadgeStyle/);
-  assert.match(followPage, /item\.title[\s\S]*?item\.displaySystemName/);
-  assert.match(followPage, /item\.latestNote[\s\S]*?CompactActivityTime/);
+  assert.match(followPage, /<ProjectSummaryCard/);
+  assert.match(followPage, /href=\{`\/archive\/\$\{item\.id\}`\}/);
+  assert.match(followPage, /categoryLabel=\{item\.categoryLabel\}/);
+  assert.match(followPage, /title=\{item\.title\}[\s\S]*?systemName=\{item\.displaySystemName\}/);
+  assert.match(followPage, /latestText=\{item\.latestNote\}[\s\S]*?latestTime=\{item\.latestRecordTime\}/);
   assert.match(followPage, /recordCount=\{item\.recordCount\}[\s\S]*?durationDays=\{item\.durationDays\}/);
-  assert.match(followPage, /item\.ownerName[\s\S]*?item\.ownerRegion/);
+  assert.match(followPage, /ownerLine=\{`\$\{item\.ownerName\}/);
+  assert.match(projectCard, /<CompactActivityTime/);
+  assert.match(projectCard, /<ProjectMetaLine/);
   assert.doesNotMatch(followPage, /projectMenuOpenId/);
 });
 
