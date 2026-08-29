@@ -6,6 +6,7 @@ import { useState } from "react";
 import { getArchiveCategoryIcon } from "@/lib/archive-categories";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import { getDurationDays } from "@/lib/follow-utils";
+import { getCompactCardLocation } from "@/lib/card-location";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
@@ -40,7 +41,12 @@ export function FollowedProjectCard({
     item.archive_ended_at
   );
   const ownerName = item.profile_display_name?.trim() || t.discover.default_grower;
-  const region = item.profile_region?.trim() || null;
+  const region = getCompactCardLocation({
+    city: item.profile_city,
+    region: item.profile_region_name,
+    country: item.profile_country,
+    fallback: item.profile_region,
+  });
   const showImage = Boolean(item.display_image_url) && !imageFailed;
 
   return (
@@ -75,12 +81,12 @@ export function FollowedProjectCard({
               <span className={styles.systemName}>· {systemName}</span>
             ) : null}
           </div>
-          {item.card_summary ? (
+          {item.card_summary || item.public_activity_at ? (
             <p className={styles.summary}>
-              {item.card_summary}
+              {item.card_summary || ""}
               {item.public_activity_at ? (
                 <span className={styles.summaryTime}>
-                  <span aria-hidden="true"> · </span>
+                  {item.card_summary ? <span aria-hidden="true"> · </span> : null}
                   <CompactActivityTime value={item.public_activity_at} />
                 </span>
               ) : null}
