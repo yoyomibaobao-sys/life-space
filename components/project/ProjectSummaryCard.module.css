@@ -147,10 +147,12 @@
 .updateTime { display: inline; }
 
 .updateTime {
-  margin-left: 5px;
+  margin-left: 0;
   color: #849081;
   white-space: nowrap;
 }
+
+.updateText + .updateTime { margin-left: 5px; }
 
 .classification {
   gap: 5px;
