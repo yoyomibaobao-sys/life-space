@@ -80,7 +80,6 @@ export default function ArchiveTaxonomyPanel({
     kind: TaxonomyKind;
     chip: ArchiveTaxonomyChip;
   } | null>(null);
-  const [renameOpen, setRenameOpen] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -88,15 +87,14 @@ export default function ArchiveTaxonomyPanel({
     if (!compact) return;
     setActionTarget({ kind, chip });
     setRenameDraft(chip.label);
-    setRenameOpen(false);
   }
 
   async function saveRename() {
     if (!actionTarget || actionBusy) return;
     const nextName = renameDraft.trim();
-    if (!nextName || nextName === actionTarget.chip.label) {
+    if (!nextName) return;
+    if (nextName === actionTarget.chip.label) {
       setActionTarget(null);
-      setRenameOpen(false);
       return;
     }
 
@@ -108,7 +106,6 @@ export default function ArchiveTaxonomyPanel({
     try {
       await handler(actionTarget.chip, nextName);
       setActionTarget(null);
-      setRenameOpen(false);
     } finally {
       setActionBusy(false);
     }
@@ -124,7 +121,6 @@ export default function ArchiveTaxonomyPanel({
     try {
       await handler(actionTarget.chip);
       setActionTarget(null);
-      setRenameOpen(false);
     } finally {
       setActionBusy(false);
     }
@@ -252,76 +248,58 @@ export default function ArchiveTaxonomyPanel({
             onClick={(event) => event.stopPropagation()}
           >
             <div style={dialogTitleStyle}>{actionTarget.chip.label}</div>
-            {renameOpen ? (
-              <>
-                <label style={dialogFieldStyle}>
-                  <span>
-                    {actionTarget.kind === "subcategory"
-                      ? t.archive_workspace.rename_category_prompt
-                      : t.archive_workspace.rename_group_prompt}
-                  </span>
-                  <input
-                    value={renameDraft}
-                    onChange={(event) => setRenameDraft(event.target.value)}
-                    autoFocus
-                    maxLength={80}
-                    style={dialogInputStyle}
-                  />
-                </label>
-                <div style={dialogActionRowStyle}>
-                  <button
-                    type="button"
-                    onClick={() => setRenameOpen(false)}
-                    disabled={actionBusy}
-                    style={dialogSecondaryButtonStyle}
-                  >
-                    {t.archive_workspace.cancel}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void saveRename()}
-                    disabled={actionBusy || !renameDraft.trim()}
-                    style={dialogPrimaryButtonStyle}
-                  >
-                    {t.archive_workspace.done}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div style={dialogMenuStyle}>
-                {(actionTarget.kind === "subcategory"
-                  ? onRenameSubcategory
-                  : onRenameGroup) ? (
-                  <button
-                    type="button"
-                    onClick={() => setRenameOpen(true)}
-                    style={dialogMenuButtonStyle}
-                  >
-                    {t.archive_workspace.edit}
-                  </button>
-                ) : null}
-                {(actionTarget.kind === "subcategory"
-                  ? onDeleteSubcategory
-                  : onDeleteGroup) ? (
-                  <button
-                    type="button"
-                    onClick={() => void deleteTarget()}
-                    disabled={actionBusy}
-                    style={dialogDangerButtonStyle}
-                  >
-                    {t.archive_workspace.delete}
-                  </button>
-                ) : null}
+            {(actionTarget.kind === "subcategory"
+              ? onRenameSubcategory
+              : onRenameGroup) ? (
+              <label style={dialogFieldStyle}>
+                <span>
+                  {actionTarget.kind === "subcategory"
+                    ? t.archive_workspace.rename_category_prompt
+                    : t.archive_workspace.rename_group_prompt}
+                </span>
+                <input
+                  value={renameDraft}
+                  onChange={(event) => setRenameDraft(event.target.value)}
+                  autoFocus
+                  maxLength={80}
+                  style={dialogInputStyle}
+                />
+              </label>
+            ) : null}
+            <div style={dialogActionRowStyle}>
+              <button
+                type="button"
+                onClick={() => setActionTarget(null)}
+                disabled={actionBusy}
+                style={dialogSecondaryButtonStyle}
+              >
+                {t.archive_workspace.cancel}
+              </button>
+              {(actionTarget.kind === "subcategory"
+                ? onDeleteSubcategory
+                : onDeleteGroup) ? (
                 <button
                   type="button"
-                  onClick={() => setActionTarget(null)}
+                  onClick={() => void deleteTarget()}
                   disabled={actionBusy}
-                  style={dialogSecondaryButtonStyle}
+                  style={dialogDangerButtonStyle}
                 >
-                  {t.archive_workspace.cancel}
+                  {t.archive_workspace.delete}
                 </button>
-              </div>
-            )}
+              ) : null}
+              {(actionTarget.kind === "subcategory"
+                ? onRenameSubcategory
+                : onRenameGroup) ? (
+                <button
+                  type="button"
+                  onClick={() => void saveRename()}
+                  disabled={actionBusy || !renameDraft.trim()}
+                  style={dialogPrimaryButtonStyle}
+                >
+                  {t.archive_workspace.done}
+                </button>
+              ) : null}
+            </div>
           </section>
         </div>
       ) : null}
@@ -503,6 +481,9 @@ function chipButtonStyle(active: boolean, compact: boolean): CSSProperties {
     whiteSpace: "nowrap",
     boxShadow: active ? "0 6px 14px rgba(63,125,61,0.18)" : "none",
     touchAction: compact ? "pan-x" : undefined,
+    userSelect: compact ? "none" : undefined,
+    WebkitUserSelect: compact ? "none" : undefined,
+    WebkitTouchCallout: compact ? "none" : undefined,
   };
 }
 
@@ -535,7 +516,7 @@ function addButtonStyle(compact: boolean): CSSProperties {
 const dialogBackdropStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  zIndex: 1500,
+  zIndex: 2200,
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "center",
@@ -560,40 +541,37 @@ const dialogTitleStyle: CSSProperties = {
   overflowWrap: "anywhere",
 };
 
-const dialogMenuStyle: CSSProperties = {
-  display: "grid",
-  gap: 8,
-  marginTop: 14,
-};
-
-const dialogMenuButtonStyle: CSSProperties = {
-  minHeight: 48,
-  border: "1px solid #dbe6d7",
-  borderRadius: 13,
-  background: "#f8fbf6",
-  color: "#315c31",
-  fontSize: 16,
-  fontWeight: 750,
-};
-
 const dialogDangerButtonStyle: CSSProperties = {
-  ...dialogMenuButtonStyle,
-  borderColor: "#efd5d2",
+  minHeight: 46,
+  border: "1px solid #efd5d2",
+  borderRadius: 13,
   background: "#fff8f7",
   color: "#ad5049",
+  fontSize: 15,
+  fontWeight: 750,
+  padding: "0 13px",
 };
 
 const dialogSecondaryButtonStyle: CSSProperties = {
-  ...dialogMenuButtonStyle,
+  minHeight: 46,
+  border: "1px solid #dbe6d7",
+  borderRadius: 13,
   background: "#fff",
   color: "#657264",
+  fontSize: 15,
+  fontWeight: 750,
+  padding: "0 13px",
 };
 
 const dialogPrimaryButtonStyle: CSSProperties = {
-  ...dialogMenuButtonStyle,
-  borderColor: "#3f7d3d",
+  minHeight: 46,
+  border: "1px solid #3f7d3d",
+  borderRadius: 13,
   background: "#3f7d3d",
   color: "#fff",
+  fontSize: 15,
+  fontWeight: 750,
+  padding: "0 13px",
 };
 
 const dialogFieldStyle: CSSProperties = {
@@ -618,8 +596,9 @@ const dialogInputStyle: CSSProperties = {
 };
 
 const dialogActionRowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
+  display: "flex",
+  justifyContent: "flex-end",
   gap: 8,
   marginTop: 14,
+  flexWrap: "wrap",
 };
