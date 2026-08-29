@@ -1,0 +1,131 @@
+name: Agent mobile growth cycle
+
+on:
+  push:
+    branches:
+      - agent/mobile-growth-cycle-20260829
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[agent-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/mobile-growth-cycle-20260829
+          fetch-depth: 0
+
+      - name: Apply mobile growth cycle layout
+        shell: python
+        run: |
+          from pathlib import Path
+
+          page = Path('app/plant/[id]/page.tsx')
+          text = page.read_text()
+
+          old_import = 'import type { ReactNode } from "react";'
+          new_import = 'import type { CSSProperties, ReactNode } from "react";'
+          if old_import not in text:
+              raise SystemExit('React type import not found')
+          text = text.replace(old_import, new_import, 1)
+
+          old_scroller = '''      <div
+        style={{
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}
+      >
+        <table
+          style={{'''
+          new_scroller = '''      <div
+        className={styles.growthCycleScroller}
+        style={{
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}
+      >
+        <table
+          className={styles.growthCycleTable}
+          style={{'''
+          if old_scroller not in text:
+              raise SystemExit('Growth cycle scroller block not found')
+          text = text.replace(old_scroller, new_scroller, 1)
+
+          old_col = '''              <col
+                key={`${stage.label}-block-col`}
+                style={{
+                  width: columnWidths[index],
+                }}
+              />'''
+          new_col = '''              <col
+                key={`${stage.label}-block-col`}
+                className={styles.growthCycleCol}
+                style={{
+                  width: columnWidths[index],
+                  "--growth-cycle-mobile-width": `max(78px, ${Math.round(
+                    (stage.duration / totalDays) * 900
+                  ) / 10}vw)`,
+                } as CSSProperties}
+              />'''
+          if old_col not in text:
+              raise SystemExit('Growth cycle col block not found')
+          text = text.replace(old_col, new_col, 1)
+          page.write_text(text)
+
+          css = Path('app/plant/[id]/page.module.css')
+          css_text = css.read_text()
+          marker = '''  .guideList {
+    gap: 7px;
+    font-size: 14px;
+    line-height: 1.62;
+  }
+}'''
+          replacement = '''  .guideList {
+    gap: 7px;
+    font-size: 14px;
+    line-height: 1.62;
+  }
+
+  .growthCycleScroller {
+    margin-inline: -2px;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .growthCycleTable {
+    width: max-content !important;
+    min-width: 100% !important;
+  }
+
+  .growthCycleCol {
+    width: var(--growth-cycle-mobile-width) !important;
+  }
+
+  .growthCycleTable td {
+    scroll-snap-align: start;
+  }
+}'''
+          if marker not in css_text:
+              raise SystemExit('Mobile CSS marker not found')
+          css.write_text(css_text.replace(marker, replacement, 1))
+
+      - name: Verify
+        run: |
+          git diff --check
+          grep -n "growthCycleScroller\|growth-cycle-mobile-width" 'app/plant/[id]/page.tsx'
+          grep -n "growthCycleTable\|growthCycleCol" 'app/plant/[id]/page.module.css'
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/plant/[id]/page.tsx' 'app/plant/[id]/page.module.css'
+          git diff --cached --quiet && exit 0
+          git commit -m "ui: adapt growth cycle timeline on mobile [agent-applied]"
+          git push origin HEAD:agent/mobile-growth-cycle-20260829
