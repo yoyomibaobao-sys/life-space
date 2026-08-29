@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ !contains(github.event.pull_request.head.sha, '[agent-applied]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +24,9 @@ jobs:
 
           page = Path('app/plant/[id]/page.tsx')
           text = page.read_text()
+
+          if 'className={styles.growthCycleScroller}' in text:
+              raise SystemExit(0)
 
           old_import = 'import type { ReactNode } from "react";'
           new_import = 'import type { CSSProperties, ReactNode } from "react";'
