@@ -21,6 +21,7 @@ type Props = {
   imageAlt: string;
   fallbackIcon: UiIconName;
   categoryLabel: string;
+  showCategoryBadge?: boolean;
   title: string;
   systemName?: string | null;
   helpLabel?: string | null;
@@ -31,6 +32,7 @@ type Props = {
   latestTime?: string | null;
   visibilityLabel?: string | null;
   classificationText?: string | null;
+  classificationSlot?: ReactNode;
   showClassification?: boolean;
   followerCount?: number | null;
   recordCount?: number | null;
@@ -42,7 +44,7 @@ type Props = {
 export default function ProjectSummaryCard(props: Props) {
   const hasClassification = Boolean(
     props.showClassification ||
-    props.visibilityLabel || props.classificationText,
+    props.visibilityLabel || props.classificationText || props.classificationSlot,
   );
   const stats = (
     <span className={styles.stats}>
@@ -76,7 +78,9 @@ export default function ProjectSummaryCard(props: Props) {
         ) : (
           <UiIcon name={props.fallbackIcon} size={29} strokeWidth={1.6} />
         )}
-        <span className={styles.category}>{props.categoryLabel}</span>
+        {props.showCategoryBadge !== false ? (
+          <span className={styles.category}>{props.categoryLabel}</span>
+        ) : null}
       </span>
 
       <span className={styles.body}>
@@ -119,15 +123,30 @@ export default function ProjectSummaryCard(props: Props) {
 
         {hasClassification ? (
           <span className={styles.classification}>
-            {props.visibilityLabel ? (
-              <span className={styles.visibility}>{props.visibilityLabel}</span>
-            ) : null}
-            {props.visibilityLabel && props.classificationText ? (
-              <span aria-hidden="true">·</span>
-            ) : null}
-            {props.classificationText ? (
-              <span className={styles.classificationText}>{props.classificationText}</span>
-            ) : null}
+            {props.classificationSlot ? (
+              <span
+                className={styles.classificationSlot}
+                data-no-card-nav="true"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                {props.classificationSlot}
+              </span>
+            ) : (
+              <>
+                {props.visibilityLabel ? (
+                  <span className={styles.visibility}>{props.visibilityLabel}</span>
+                ) : null}
+                {props.visibilityLabel && props.classificationText ? (
+                  <span aria-hidden="true">·</span>
+                ) : null}
+                {props.classificationText ? (
+                  <span className={styles.classificationText}>{props.classificationText}</span>
+                ) : null}
+              </>
+            )}
           </span>
         ) : (
           stats
