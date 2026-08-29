@@ -1,13 +1,19 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   getCurrentMobileRoute,
   getMobileSourceRoute,
   prepareMobileSourceReturn,
 } from "@/lib/mobile-navigation";
+
+const HIDDEN_MOBILE_HEADER_ROUTES = new Set([
+  "/archive",
+  "/market/new",
+  "/market/mine",
+]);
 
 export default function MobilePageHeader({
   title,
@@ -24,7 +30,10 @@ export default function MobilePageHeader({
   showBack?: boolean;
   ariaLabel?: string;
 }) {
+  const pathname = usePathname();
   const router = useRouter();
+
+  if (HIDDEN_MOBILE_HEADER_ROUTES.has(pathname)) return null;
 
   function goBack() {
     const currentRoute = getCurrentMobileRoute();

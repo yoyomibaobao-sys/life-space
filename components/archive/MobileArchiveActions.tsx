@@ -28,6 +28,7 @@ type Props = {
   categoryDepths?: ArchiveCategoryDepths;
   ended?: boolean;
   isPublic?: boolean;
+  allowTaxonomyEdit?: boolean;
   onChangeCategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
   onToggleEnded?: () => void;
@@ -49,6 +50,7 @@ export default function MobileArchiveActions({
   categoryDepths = DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   ended,
   isPublic,
+  allowTaxonomyEdit = true,
   onChangeCategory,
   onChangeGroup,
   onToggleEnded,
@@ -62,6 +64,7 @@ export default function MobileArchiveActions({
   const [selectedCategory, setSelectedCategory] = useState<ArchiveCategory>(category);
   const [selectedSubTagId, setSelectedSubTagId] = useState(subTagId || "");
   const [selectedGroupTagId, setSelectedGroupTagId] = useState(groupTagId || "");
+  const moreTitle = language === "en" ? "More" : "更多";
 
   const availableSubTags = useMemo(
     () => subTags.filter((tag) => tag.category === selectedCategory),
@@ -93,25 +96,27 @@ export default function MobileArchiveActions({
           setSelectedGroupTagId(groupTagId || "");
           setMenuOpen(true);
         }}
-        aria-label={t.archive_workspace.more_project_actions}
+        aria-label={moreTitle}
         style={moreButtonStyle}
       >
         <UiIcon name="more" size={20} />
       </button>
 
       {menuOpen ? (
-        <Sheet onClose={() => setMenuOpen(false)} title={t.archive_workspace.more_project_actions}>
-          <button
-            type="button"
-            style={sheetRowStyle}
-            onClick={() => {
-              setMenuOpen(false);
-              setTaxonomyOpen(true);
-            }}
-          >
-            <span>{t.archive_workspace.edit_category_group}</span>
-            <UiIcon name="arrow-right" size={18} />
-          </button>
+        <Sheet onClose={() => setMenuOpen(false)} title={moreTitle}>
+          {allowTaxonomyEdit ? (
+            <button
+              type="button"
+              style={sheetRowStyle}
+              onClick={() => {
+                setMenuOpen(false);
+                setTaxonomyOpen(true);
+              }}
+            >
+              <span>{t.archive_workspace.edit_category_group}</span>
+              <UiIcon name="arrow-right" size={18} />
+            </button>
+          ) : null}
           {onTogglePublic ? (
             <button type="button" style={sheetRowStyle} onClick={() => run(onTogglePublic)}>
               {isPublic ? t.archive_workspace.set_private : t.archive_workspace.set_public}
@@ -150,7 +155,7 @@ export default function MobileArchiveActions({
         </Sheet>
       ) : null}
 
-      {taxonomyOpen ? (
+      {allowTaxonomyEdit && taxonomyOpen ? (
         <Sheet onClose={() => setTaxonomyOpen(false)} title={t.archive_workspace.edit_category_group}>
           <label style={fieldStyle}>
             <span style={fieldLabelStyle}>{t.archive_workspace.main_category}</span>
@@ -262,25 +267,31 @@ const moreButtonStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   cursor: "pointer",
+  touchAction: "manipulation",
 };
 
 const backdropStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  zIndex: 600,
+  zIndex: 2200,
   display: "flex",
   alignItems: "flex-end",
   background: "rgba(25, 35, 24, 0.32)",
+  pointerEvents: "auto",
+  touchAction: "none",
 };
 
 const sheetStyle: CSSProperties = {
   width: "100%",
   maxHeight: "82dvh",
   overflowY: "auto",
+  overscrollBehavior: "contain",
   padding: "10px 14px calc(18px + var(--app-safe-area-bottom))",
   borderRadius: "20px 20px 0 0",
   background: "#fff",
   boxShadow: "0 -18px 44px rgba(31, 45, 31, 0.18)",
+  touchAction: "pan-y",
+  pointerEvents: "auto",
 };
 
 const sheetHeaderStyle: CSSProperties = {
@@ -295,14 +306,16 @@ const sheetHeaderStyle: CSSProperties = {
 };
 
 const closeButtonStyle: CSSProperties = {
-  width: 40,
-  height: 40,
+  width: 44,
+  height: 44,
   border: "none",
   borderRadius: 999,
   background: "#f5f7f2",
   color: "#5f6d5c",
   display: "grid",
   placeItems: "center",
+  cursor: "pointer",
+  touchAction: "manipulation",
 };
 
 const sheetRowStyle: CSSProperties = {

@@ -15,7 +15,7 @@ export function DiscoverFilterBar({
     <div
       style={{
         display: "flex",
-        gap: compactMobile ? 6 : 8,
+        gap: compactMobile ? 5 : 8,
         marginBottom: compactMobile ? 8 : 14,
         overflowX: "auto",
         paddingBottom: 2,
@@ -23,9 +23,10 @@ export function DiscoverFilterBar({
         WebkitOverflowScrolling: "touch",
       }}
     >
-      {options.map((option) => {
+      {options.map((option, index) => {
         const active = activeMode === option.value;
         const isHelpFilter = option.value === "help";
+        const fixedAll = compactMobile && index === 0;
 
         return (
           <button
@@ -33,11 +34,14 @@ export function DiscoverFilterBar({
             type="button"
             onClick={() => onChange(option.value)}
             style={{
+              position: fixedAll ? "sticky" : undefined,
+              left: fixedAll ? 0 : undefined,
+              zIndex: fixedAll ? 2 : undefined,
               flex: "0 0 auto",
               minWidth: compactMobile ? "max-content" : 0,
               minHeight: compactMobile ? 32 : undefined,
               padding: compactMobile
-                ? "5px 10px"
+                ? "5px 9px"
                 : isHelpFilter
                 ? "8px 14px"
                 : "8px 13px",
@@ -63,6 +67,7 @@ export function DiscoverFilterBar({
               lineHeight: compactMobile ? 1.2 : undefined,
               fontSize: 13,
               fontWeight: isHelpFilter || active ? 600 : 400,
+              boxShadow: fixedAll ? "4px 0 8px rgba(246,248,243,0.95)" : undefined,
             }}
           >
             {option.label}

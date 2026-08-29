@@ -17,9 +17,7 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.rail::-webkit-scrollbar {
-  display: none;
-}
+.rail::-webkit-scrollbar { display: none; }
 
 .userButton {
   flex: 0 0 64px;
@@ -36,9 +34,7 @@
   outline: none;
 }
 
-.userButton:focus-visible {
-  box-shadow: 0 0 0 2px #f8faf6, 0 0 0 4px #6f9b68;
-}
+.userButton:focus-visible { box-shadow: 0 0 0 2px #f8faf6, 0 0 0 4px #6f9b68; }
 
 .avatarFrame {
   width: 42px;
@@ -52,9 +48,7 @@
   box-sizing: border-box;
 }
 
-.selected .avatarFrame {
-  border-color: #7eaa75;
-}
+.selected .avatarFrame { border-color: #7eaa75; }
 
 .allAvatar {
   width: 34px;
@@ -78,10 +72,7 @@
   line-height: 1.25;
 }
 
-.selected .userName {
-  color: #365e34;
-  font-weight: 750;
-}
+.selected .userName { color: #365e34; font-weight: 750; }
 
 .usersError {
   display: flex;
@@ -97,14 +88,8 @@
   font-size: 12px;
 }
 
-.listAnchor {
-  scroll-margin-top: 112px;
-}
-
-.list {
-  display: grid;
-  gap: 10px;
-}
+.listAnchor { scroll-margin-top: 112px; }
+.list { display: grid; gap: 10px; }
 
 .card {
   min-width: 0;
@@ -115,9 +100,7 @@
   transition: border-color 160ms ease;
 }
 
-.card:hover {
-  border-color: #cbdac5;
-}
+.card:hover { border-color: #cbdac5; }
 
 .cardLink {
   min-width: 0;
@@ -130,9 +113,7 @@
   outline: none;
 }
 
-.cardLink:focus-visible {
-  box-shadow: 0 0 0 2px #f6f8f3, 0 0 0 4px #6f9b68;
-}
+.cardLink:focus-visible { box-shadow: 0 0 0 2px #f6f8f3, 0 0 0 4px #6f9b68; }
 
 .imageRegion {
   position: relative;
@@ -144,9 +125,7 @@
   background: #edf2e8;
 }
 
-.image {
-  object-fit: cover;
-}
+.image { object-fit: cover; }
 
 .imagePlaceholder {
   width: 100%;
@@ -163,8 +142,8 @@
   height: 104px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 1px 0;
+  gap: 2px;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -182,7 +161,7 @@
   margin: 0;
   color: #263326;
   font-size: 16px;
-  line-height: 1.35;
+  line-height: 1.3;
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -209,18 +188,24 @@
   overflow: hidden;
   margin: 0;
   color: #6c776a;
-  font-size: 13px;
-  line-height: 1.4;
-  white-space: pre-line;
+  font-size: 12.5px;
+  line-height: 1.32;
+  white-space: normal;
+  word-break: break-word;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
+}
+
+.summaryTime {
+  color: #8a9585;
+  white-space: nowrap;
 }
 
 .metaLine,
 .owner {
   color: #929b90;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
 .metaLine {
@@ -231,7 +216,7 @@
 
 .owner {
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 2px;
   border-top: 1px solid #eef2eb;
 }
 
@@ -246,9 +231,7 @@
   font-size: 12px;
 }
 
-.followActionDivider {
-  color: #c7d0c3;
-}
+.followActionDivider { color: #c7d0c3; }
 
 .unfollowButton {
   border: 0;
@@ -259,16 +242,8 @@
   cursor: pointer;
 }
 
-.unfollowButton:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.unfollowButton:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid #6f9b68;
-  outline-offset: 2px;
-}
+.unfollowButton:disabled { cursor: default; opacity: 0.55; }
+.unfollowButton:focus-visible { border-radius: 4px; outline: 2px solid #6f9b68; outline-offset: 2px; }
 
 .skeletonCard {
   display: grid;
@@ -294,15 +269,8 @@
   gap: 8px;
 }
 
-.skeletonLine {
-  height: 10px;
-  border-radius: 4px;
-  background: #f0f3ee;
-}
-
-.skeletonPulse {
-  animation: followedSkeletonPulse 1.5s ease-in-out infinite;
-}
+.skeletonLine { height: 10px; border-radius: 4px; background: #f0f3ee; }
+.skeletonPulse { animation: followedSkeletonPulse 1.5s ease-in-out infinite; }
 
 .statePanel {
   padding: 34px 16px;
@@ -314,9 +282,7 @@
   font-size: 14px;
 }
 
-.stateText {
-  margin: 0;
-}
+.stateText { margin: 0; }
 
 .retryButton,
 .actionButton,
@@ -331,21 +297,12 @@
 }
 
 .retryButton,
-.actionButton {
-  margin-top: 12px;
-  padding: 8px 16px;
-  font-size: 13px;
-}
-
+.actionButton { margin-top: 12px; padding: 8px 16px; font-size: 13px; }
 .retryButton:focus-visible,
 .actionButton:focus-visible,
-.moreRetryButton:focus-visible {
-  box-shadow: 0 0 0 2px #f6f8f3, 0 0 0 4px #6f9b68;
-}
+.moreRetryButton:focus-visible { box-shadow: 0 0 0 2px #f6f8f3, 0 0 0 4px #6f9b68; }
 
-.loadingMore {
-  margin-top: 10px;
-}
+.loadingMore { margin-top: 10px; }
 
 .moreError {
   margin-top: 14px;
@@ -357,23 +314,9 @@
   font-size: 12px;
 }
 
-.moreRetryButton {
-  padding: 6px 12px;
-  background: #fff;
-  font-size: 12px;
-}
-
-.loader {
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.endText {
-  color: #a1aaa0;
-  font-size: 11px;
-}
+.moreRetryButton { padding: 6px 12px; background: #fff; font-size: 12px; }
+.loader { height: 44px; display: flex; align-items: center; justify-content: center; }
+.endText { color: #a1aaa0; font-size: 11px; }
 
 @keyframes followedSkeletonPulse {
   0%, 100% { opacity: 1; }
@@ -381,31 +324,16 @@
 }
 
 @media (max-width: 760px) {
-  .railSection {
-    position: sticky;
-    top: 50px;
-    z-index: 20;
-  }
-
-  .title {
-    font-size: 16px;
-  }
+  .railSection { position: sticky; top: 50px; z-index: 20; }
+  .title { font-size: 16px; }
 }
 
 @media (min-width: 420px) {
   .cardLink,
-  .skeletonCard {
-    grid-template-columns: 104px minmax(0, 1fr);
-  }
-
+  .skeletonCard { grid-template-columns: 104px minmax(0, 1fr); }
   .imageRegion,
-  .skeletonImage {
-    width: 104px;
-  }
-
-  .body {
-    height: 104px;
-  }
+  .skeletonImage { width: 104px; }
+  .body { height: 104px; }
 }
 
 @media (min-width: 768px) {
@@ -417,48 +345,23 @@
   }
 
   .imageRegion,
-  .skeletonImage {
-    width: 104px;
-  }
-
-  .body {
-    height: 104px;
-    gap: 6px;
-  }
-
-  .title {
-    font-size: 17px;
-  }
-
+  .skeletonImage { width: 104px; }
+  .body { height: 104px; gap: 6px; padding: 1px 0; }
+  .title { font-size: 17px; }
   .systemName,
-  .summary {
-    font-size: 13px;
-  }
-
-  .summary {
-    -webkit-line-clamp: 2;
-  }
+  .summary { font-size: 13px; }
+  .summary { -webkit-line-clamp: 2; }
+  .owner { padding-top: 4px; }
 }
 
 @media (min-width: 1100px) {
   .cardLink,
-  .skeletonCard {
-    grid-template-columns: 112px minmax(0, 1fr);
-    padding: 12px;
-  }
-
+  .skeletonCard { grid-template-columns: 112px minmax(0, 1fr); padding: 12px; }
   .imageRegion,
-  .skeletonImage {
-    width: 112px;
-  }
-
-  .body {
-    height: 112px;
-  }
+  .skeletonImage { width: 112px; }
+  .body { height: 112px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeletonPulse {
-    animation: none;
-  }
+  .skeletonPulse { animation: none; }
 }

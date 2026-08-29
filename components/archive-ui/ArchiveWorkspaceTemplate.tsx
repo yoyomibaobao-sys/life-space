@@ -1,6 +1,12 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import ArchiveToolbar from "@/components/archive/ArchiveToolbar";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 
@@ -41,6 +47,22 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   sourceTrailingSlot,
   children,
 }: Props<T>) {
+  const trailingSlot = isValidElement(sourceTrailingSlot)
+    ? cloneElement(
+        sourceTrailingSlot as ReactElement<{ style?: CSSProperties }>,
+        {
+          style: {
+            ...(sourceTrailingSlot.props as { style?: CSSProperties }).style,
+            border: "1px solid #4f844b",
+            background: "#4f844b",
+            color: "#fff",
+            fontWeight: 850,
+            boxShadow: "0 3px 9px rgba(79,132,75,0.16)",
+          },
+        },
+      )
+    : sourceTrailingSlot;
+
   return (
     <>
       {statsText ? <div style={statsStyle}>{statsText}</div> : null}
@@ -56,7 +78,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
             {item.label} {item.count}
           </button>
         ))}
-        {sourceTrailingSlot}
+        {trailingSlot}
       </section>
 
       {showCreateToolbar ? (

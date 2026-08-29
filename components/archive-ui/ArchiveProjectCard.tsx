@@ -17,6 +17,8 @@ type Props = {
   actionSlot?: ReactNode;
   actionRailSlot?: ReactNode;
   mobileMode?: boolean;
+  mobileClassificationSlot?: ReactNode;
+  mobileShowCategoryBadge?: boolean;
   onEditTitle?: (project: ArchiveProjectView) => void;
   onEditSystemName?: (project: ArchiveProjectView) => void;
   titleEditorSlot?: ReactNode;
@@ -30,6 +32,8 @@ export default function ArchiveProjectCard({
   actionSlot,
   actionRailSlot,
   mobileMode = true,
+  mobileClassificationSlot,
+  mobileShowCategoryBadge = true,
   onEditTitle,
   onEditSystemName,
   titleEditorSlot,
@@ -90,6 +94,7 @@ export default function ArchiveProjectCard({
       ) : null}
     </div>
   );
+
   if (mobileMode) {
     const classificationText = [
       project.subcategoryLabel || project.categoryLabel,
@@ -107,6 +112,7 @@ export default function ArchiveProjectCard({
         imageAlt={project.cover?.alt || project.title}
         fallbackIcon={project.categoryIcon}
         categoryLabel={project.categoryLabel}
+        showCategoryBadge={mobileShowCategoryBadge}
         title={project.title}
         systemName={project.systemName}
         helpLabel={project.helpLabel}
@@ -114,9 +120,10 @@ export default function ArchiveProjectCard({
         endedLabel={project.statusLabel}
         latestText={project.latestText}
         latestTime={project.latestTime}
-        visibilityLabel={project.visibilityLabel}
-        classificationText={classificationText}
-        showClassification={project.showClassificationRow}
+        visibilityLabel={mobileClassificationSlot ? undefined : project.visibilityLabel}
+        classificationText={mobileClassificationSlot ? undefined : classificationText}
+        classificationSlot={mobileClassificationSlot}
+        showClassification={Boolean(mobileClassificationSlot) || project.showClassificationRow}
         followerCount={project.followerCount}
         recordCount={project.recordCount}
         durationDays={project.durationDays}
