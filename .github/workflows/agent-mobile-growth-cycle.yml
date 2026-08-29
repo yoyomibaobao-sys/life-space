@@ -1,16 +1,16 @@
 name: Agent mobile growth cycle
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/mobile-growth-cycle-20260829
+      - main
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: ${{ !contains(github.event.head_commit.message, '[agent-applied]') }}
+    if: ${{ !contains(github.event.pull_request.head.sha, '[agent-applied]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
