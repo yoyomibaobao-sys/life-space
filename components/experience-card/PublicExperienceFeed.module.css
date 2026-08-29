@@ -2,16 +2,18 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+  align-items: stretch;
 }
 
 .previewCard {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
   padding: 0;
   overflow: hidden;
   border: 1px solid #e1e8de;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fff;
   color: #273827;
   text-align: left;
@@ -25,11 +27,10 @@
 
 .previewMediaButton {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1;
   display: block;
   padding: 0;
   border: 0;
-  border-radius: 11px;
   background: transparent;
   cursor: pointer;
 }
@@ -86,7 +87,8 @@
   min-width: 0;
   display: block;
   width: 100%;
-  padding: 8px 9px 9px;
+  flex: 1;
+  padding: 7px 9px 8px;
   box-sizing: border-box;
   color: inherit;
   text-decoration: none;
@@ -148,7 +150,7 @@
 @media (max-width: 759px) {
   .gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
   }
 
   .previewCard {
@@ -157,5 +159,6 @@
 
   .previewMediaButton {
     width: 100%;
+    aspect-ratio: 1 / 1.08;
   }
 }
