@@ -424,4 +424,33 @@
     font-size: 14px;
     line-height: 1.62;
   }
+
+  .subsection:has(table) > div > div:has(> table) {
+    margin-inline: -2px;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    touch-action: pan-x pan-y;
+  }
+
+  .subsection:has(table) table {
+    zoom: 0.82;
+  }
+
+  .subsection:has(table) table td {
+    scroll-snap-align: start;
+  }
+
+  .subsection:has(table) table tr:first-child td > div:first-child {
+    font-size: 18px !important;
+  }
+
+  .subsection:has(table) table tr:first-child td > div:nth-child(2) {
+    font-size: 16px !important;
+  }
+
+  .subsection:has(table) table tr:nth-child(2) td {
+    font-size: 15px !important;
+  }
 }
