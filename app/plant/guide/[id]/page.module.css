@@ -1,0 +1,353 @@
+.page {
+  width: min(100%, 960px);
+  margin: 0 auto;
+  padding: 18px 16px 42px;
+  box-sizing: border-box;
+}
+
+.desktopTopRow {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.desktopBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #587052;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.desktopNewProject,
+.mobileNewProject,
+.bottomAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfd6b9;
+  border-radius: 999px;
+  background: #f2f8ef;
+  color: #396a37;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.desktopNewProject {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+.mobileNewProject {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.hero,
+.sectionCard,
+.stateCard {
+  border: 1px solid #dfe8dc;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(40, 66, 37, 0.04);
+}
+
+.hero {
+  padding: 24px;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #748270;
+  font-size: 13px;
+}
+
+.categoryBadge {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #edf6e9;
+  color: #477143;
+  font-weight: 800;
+}
+
+.heroTitleRow {
+  margin-top: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.heroTitleRow h1 {
+  margin: 0;
+  color: #223521;
+  font-size: clamp(28px, 4.4vw, 42px);
+  line-height: 1.15;
+}
+
+.sourceLabel {
+  margin-top: 7px;
+  color: #80907c;
+  font-size: 12px;
+}
+
+.summary {
+  margin: 18px 0 0;
+  color: #465b43;
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.frameworkNote {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f6faf4;
+  color: #70806b;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.sectionCard {
+  margin-top: 16px;
+  padding: 20px;
+}
+
+.sectionCard h2 {
+  margin: 0;
+  color: #2b4229;
+  font-size: 19px;
+}
+
+.parameterGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.parameterCard {
+  min-width: 0;
+  min-height: 94px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid #e2eade;
+  border-radius: 14px;
+  background: #fbfdf9;
+}
+
+.parameterCard span {
+  color: #7b8877;
+  font-size: 12px;
+}
+
+.parameterCard strong {
+  color: #334b31;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.sectionTitleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionTitleRow > strong {
+  color: #4d7548;
+  font-size: 14px;
+  text-align: right;
+}
+
+.cycleTrack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.cycleStage {
+  position: relative;
+  min-height: 112px;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 14px 12px 12px 46px;
+  border: 1px solid #dce8d8;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f7fbf4, #fff);
+}
+
+.cycleStage > strong {
+  color: #2f492c;
+  font-size: 14px;
+}
+
+.cycleStage > span:not(.cycleIndex),
+.cycleStage > small {
+  color: #70806c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cycleIndex {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #dfeeda;
+  color: #436d40;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.cycleNote,
+.sectionIntro {
+  margin: 11px 0 0;
+  color: #748070;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.contentSections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.guideList,
+.cautionList {
+  margin: 14px 0 0;
+  padding-left: 22px;
+  color: #4d5c49;
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.guideList li + li,
+.cautionList li + li {
+  margin-top: 7px;
+}
+
+.cautionCard {
+  border-color: #e7dfc8;
+  background: #fffdf8;
+}
+
+.cautionCard h2 {
+  color: #675c39;
+}
+
+.bottomAction {
+  width: 100%;
+  min-height: 50px;
+  gap: 8px;
+  margin-top: 18px;
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
+.stateCard {
+  margin-top: 20px;
+  padding: 30px;
+  color: #748070;
+  line-height: 1.7;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 10px 10px calc(96px + var(--app-safe-area-bottom));
+  }
+
+  .hero,
+  .sectionCard,
+  .stateCard {
+    border-radius: 16px;
+  }
+
+  .hero {
+    padding: 16px;
+  }
+
+  .heroTitleRow {
+    margin-top: 13px;
+  }
+
+  .heroTitleRow h1 {
+    font-size: 26px;
+  }
+
+  .summary {
+    margin-top: 13px;
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  .sectionCard {
+    margin-top: 10px;
+    padding: 14px;
+  }
+
+  .sectionCard h2 {
+    font-size: 17px;
+  }
+
+  .parameterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 11px;
+  }
+
+  .parameterCard {
+    min-height: 86px;
+    padding: 11px;
+  }
+
+  .cycleTrack {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(150px, 72%);
+    grid-template-columns: none;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-inline: contain;
+    padding-bottom: 4px;
+  }
+
+  .cycleStage {
+    min-height: 104px;
+    scroll-snap-align: start;
+  }
+
+  .contentSections {
+    display: block;
+  }
+
+  .guideList,
+  .cautionList {
+    margin-top: 11px;
+    font-size: 13.5px;
+    line-height: 1.78;
+  }
+}

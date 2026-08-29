@@ -795,6 +795,8 @@ const zh = {
       total_cycle: "总周期：",
       approx_prefix: "约 ",
       day_unit: " 天",
+      year_unit: " 年",
+      year_range_separator: "–",
       duration_prefix: "（",
       duration_suffix: "天）",
       day_range_prefix: "第",

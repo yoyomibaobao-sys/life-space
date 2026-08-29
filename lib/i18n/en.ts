@@ -795,6 +795,8 @@ const en = {
       total_cycle: "Total cycle:",
       approx_prefix: "About ",
       day_unit: " days",
+      year_unit: " years",
+      year_range_separator: "–",
       duration_prefix: "(",
       duration_suffix: " days)",
       day_range_prefix: "Days ",

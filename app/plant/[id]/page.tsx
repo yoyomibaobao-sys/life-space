@@ -44,6 +44,10 @@ type PlantGrowthCycleRow = {
   vegetative_days?: number | null;
   flowering_days?: number | null;
   harvest_days?: number | null;
+  cycle_unit?: "day" | "year" | "hidden" | null;
+  cycle_min?: number | null;
+  cycle_max?: number | null;
+  cycle_note?: string | null;
 };
 
 type PlantBasicOverviewRow = PlantBasicOverviewCompatRow;
@@ -596,13 +600,91 @@ function toPositiveDay(value: unknown) {
   return Math.round(numberValue);
 }
 
+function toPositiveNumber(value: unknown) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return null;
+  return numberValue;
+}
+
+function hasMeaningfulGrowthCycle(
+  cycle: PlantGrowthCycleRow | null,
+  growthType?: string | null,
+) {
+  if (!cycle || cycle.cycle_unit === "hidden") return false;
+
+  const longLived = [
+    "perennial",
+    "tree",
+    "shrub",
+    "cactus",
+    "succulent",
+    "fern",
+    "epiphytic_fern",
+    "groundcover",
+  ].includes(
+    String(growthType || "").trim().toLowerCase(),
+  );
+  if (longLived && cycle.cycle_unit !== "year") return false;
+
+  if (cycle.cycle_unit === "year") {
+    return Boolean(toPositiveNumber(cycle.cycle_min) || toPositiveNumber(cycle.cycle_max));
+  }
+
+  return [
+    cycle.germination_days,
+    cycle.seedling_days,
+    cycle.vegetative_days,
+    cycle.flowering_days,
+    cycle.harvest_days,
+  ].some((value) => toPositiveDay(value) !== null);
+}
+
 function GrowthCycleBlock({
   cycle,
+  growthType,
   copy,
 }: {
   cycle: PlantGrowthCycleRow | null;
+  growthType?: string | null;
   copy: PlantDetailCopy;
 }) {
+  if (!hasMeaningfulGrowthCycle(cycle, growthType)) return null;
+
+  if (cycle?.cycle_unit === "year") {
+    const minimum = toPositiveNumber(cycle.cycle_min);
+    const maximum = toPositiveNumber(cycle.cycle_max);
+    const range = minimum && maximum
+      ? minimum === maximum
+        ? `${minimum}`
+        : `${minimum}${copy.year_range_separator}${maximum}`
+      : `${minimum || maximum}`;
+
+    return (
+      <div
+        style={{
+          display: "grid",
+          gap: 9,
+          padding: 15,
+          border: "1px solid #dce8d5",
+          borderRadius: 14,
+          background: "#fbfdf9",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, color: "#555" }}>
+          <span>{copy.total_cycle}</span>
+          <strong style={{ color: "#315a2f", fontSize: 18 }}>
+            {copy.approx_prefix}{range}{copy.year_unit}
+          </strong>
+        </div>
+        {hasText(cycle.cycle_note) ? (
+          <div style={{ color: "#70806c", fontSize: 13, lineHeight: 1.7 }}>
+            {cycle.cycle_note}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   const rawStages = [
     {
       label: copy.growth_stages.germination,
@@ -626,11 +708,7 @@ function GrowthCycleBlock({
     },
   ].filter((stage) => stage.days !== null);
 
-  if (rawStages.length === 0) {
-    return (
-      <div style={{ color: "#888", fontSize: 15 }}>{copy.no_growth_cycle}</div>
-    );
-  }
+  if (rawStages.length === 0) return null;
 
   let cursor = 0;
 
@@ -648,11 +726,7 @@ function GrowthCycleBlock({
   });
 
   const totalDays = stages[stages.length - 1]?.end || 0;
-  if (totalDays <= 0) {
-    return (
-      <div style={{ color: "#888", fontSize: 15 }}>{copy.no_growth_cycle}</div>
-    );
-  }
+  if (totalDays <= 0) return null;
 
   const columnWidths = stages.map((stage) => Math.max(96, stage.duration * 4));
   const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
@@ -1543,6 +1617,7 @@ export default function PlantDetailPage() {
 
   const hasPhotoperiodSection =
     photoperiodCards.length > 0 || hasText(parameters?.photoperiod_note);
+  const showGrowthCycle = hasMeaningfulGrowthCycle(growthCycle, plant?.growth_type);
 
   async function handleAddInterest() {
     if (!plant || actionLoading) return;
@@ -1934,11 +2009,17 @@ export default function PlantDetailPage() {
         </Section>
       )}
 
-      {hasCloudAccess && (growthCycle || parameterCards.length > 0 || hasPhotoperiodSection) && (
+      {hasCloudAccess && (showGrowthCycle || parameterCards.length > 0 || hasPhotoperiodSection) && (
         <Section title={copy.growth_parameters}>
-          <Subsection title={copy.growth_cycle}>
-            <GrowthCycleBlock cycle={growthCycle} copy={copy} />
-          </Subsection>
+          {showGrowthCycle ? (
+            <Subsection title={copy.growth_cycle}>
+              <GrowthCycleBlock
+                cycle={growthCycle}
+                growthType={plant?.growth_type}
+                copy={copy}
+              />
+            </Subsection>
+          ) : null}
 
           {parameterCards.length > 0 && (
             <Subsection title={copy.parameter_details}>

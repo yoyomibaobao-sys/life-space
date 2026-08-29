@@ -13,7 +13,7 @@ export const archiveCategoryOptions: {
   {
     value: "plant",
     label: "种植",
-    description: "花草、蔬果、树木、菌菇、苔藓、水草等植物的种植栽培记录",
+    description: "花草、蔬果、树木、菌菇、苔藓等植物的种植栽培记录",
   },
   {
     value: "system",
@@ -23,12 +23,12 @@ export const archiveCategoryOptions: {
   {
     value: "insect_fish",
     label: "虫鱼生态",
-    description: "蚯蚓、黑水虻等昆虫饲养及鱼缸、虾缸等小生态、微景观的养成",
+    description: "水草、水族、庭院动物与昆虫鸟类等生态观察和照护记录",
   },
   {
     value: "other",
     label: "其他",
-    description: "其他自然生活相关项目",
+    description: "美食制作及其他自然生活相关项目",
   },
 ];
 
@@ -37,6 +37,32 @@ export const defaultSystemNamesByCategory: Record<
   string[]
 > = {
   system: [
+    "土壤改良",
+    "堆肥",
+    "种植箱",
+    "高床",
+    "育苗架",
+    "爬藤架",
+    "保温棚",
+    "遮阳棚",
+    "防虫网棚",
+    "雨水收集",
+    "蓄水设施",
+    "排水系统",
+    "鱼缸鱼池",
+    "水循环过滤",
+    "鸡舍",
+    "鸭舍",
+    "兔舍",
+    "围栏",
+    "堆肥箱",
+    "嫁接",
+    "高压繁殖",
+    "扦插",
+    "免耕",
+    "覆盖",
+    "轮作与混种",
+    "自然农法",
     "土培",
     "水培",
     "半水培",
@@ -49,6 +75,15 @@ export const defaultSystemNamesByCategory: Record<
     "滴灌",
   ],
   insect_fish: [
+    "水草",
+    "鱼虾蟹",
+    "螺贝",
+    "蛙类",
+    "龟蛇",
+    "虫蝶",
+    "蜘蛛",
+    "鸟类",
+    "庭院动物",
     "孔雀鱼",
     "斗鱼",
     "红绿灯鱼",
@@ -58,7 +93,22 @@ export const defaultSystemNamesByCategory: Record<
     "蜗牛",
     "米虾",
   ],
-  other: [],
+  other: [
+    "果酱",
+    "梅子蜜",
+    "果汁",
+    "腌渍",
+    "干制",
+    "臭卤菜",
+    "腐乳",
+    "豆豉",
+    "豆瓣酱",
+    "酱油",
+    "醋",
+    "果酒",
+    "米酒",
+    "其他",
+  ],
 };
 
 export function getArchiveCategoryLabel(
@@ -122,9 +172,9 @@ export function getArchiveCategoryDescription(
       return "Methods and facilities such as composting, irrigation, greenhouses, hydroponics, and no-till practice";
     }
     if (value === "insect_fish") {
-      return "Insects, fish, shrimp, small aquatic ecosystems, and miniature habitats";
+      return "Aquatic plants, fish, shrimp, crabs, amphibians, reptiles, insects, birds, and backyard habitats";
     }
-    if (value === "other") return "Other projects related to natural living";
+    if (value === "other") return "Food making and other projects related to natural living";
     return "Create an archive for something you care for over time";
   }
   const match = archiveCategoryOptions.find((item) => item.value === value);

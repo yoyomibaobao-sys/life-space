@@ -64,6 +64,7 @@ function NewArchiveContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedSpeciesId = searchParams.get("species");
+  const preselectedSystemName = searchParams.get("system_name")?.trim() || "";
   const selectedPlanId = searchParams.get("plan");
   const quickCaptureId = searchParams.get("quickCapture") || "";
   const preselectedCategory = searchParams.get("category");
@@ -87,8 +88,12 @@ function NewArchiveContent() {
   );
   const [speciesSearch, setSpeciesSearch] = useState("");
 
-  const [systemSearch, setSystemSearch] = useState("");
-  const [systemName, setSystemName] = useState("");
+  const initialSystemName =
+    validPreselectedCategory && validPreselectedCategory !== "plant"
+      ? preselectedSystemName
+      : "";
+  const [systemSearch, setSystemSearch] = useState(initialSystemName);
+  const [systemName, setSystemName] = useState(initialSystemName);
   const [plantSuggestionsOpen, setPlantSuggestionsOpen] = useState(false);
   const [systemSuggestionsOpen, setSystemSuggestionsOpen] = useState(false);
 

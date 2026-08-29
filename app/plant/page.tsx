@@ -28,6 +28,16 @@ import {
   getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
+import {
+  getPublicGuideName,
+  getPublicGuideSectionName,
+  getPublicGuideSectionSummary,
+  getPublicGuideSummary,
+  publicGuideCopy,
+  sortPublicGuides,
+  type PublicGuideEntry,
+  type PublicGuideSection,
+} from "@/lib/public-guide-library";
 
 const PLANT_SEARCH_HISTORY_KEY = "lifespace:plant-guide:recent-searches:v1";
 const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
@@ -77,13 +87,6 @@ type AliasItem = {
 };
 
 type BasicOverview = PlantBasicOverviewCompatRow;
-
-type PublicGuideEntry = {
-  id: string;
-  category: ArchiveCategory;
-  name: string;
-  source: "preset" | "approved";
-};
 
 function normalize(value: unknown) {
   return String(value || "").trim().toLowerCase();
@@ -208,6 +211,7 @@ export default function PlantIndexPage() {
   const [plants, setPlants] = useState<PlantItem[]>([]);
   const [guideSection, setGuideSection] = useState<ArchiveCategory>("plant");
   const [publicGuides, setPublicGuides] = useState<PublicGuideEntry[]>([]);
+  const [publicGuideSections, setPublicGuideSections] = useState<PublicGuideSection[]>([]);
   const [publicGuidesLoading, setPublicGuidesLoading] = useState(true);
   const [aliases, setAliases] = useState<AliasItem[]>([]);
   const [basicOverviews, setBasicOverviews] = useState<BasicOverview[]>([]);
@@ -415,19 +419,51 @@ export default function PlantIndexPage() {
     let cancelled = false;
 
     async function loadPublicGuides() {
-      const { data, error } = await supabase
+      const [entryResult, sectionResult] = await Promise.all([
+        supabase
         .from("guide_entries")
-        .select("id, category, name, source")
-        .order("name", { ascending: true });
+          .select(
+            "id, category, name, name_en, source, section_id, summary, summary_en, content_template, sort_order, is_active",
+          )
+          .eq("is_active", true)
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+        supabase
+          .from("guide_sections")
+          .select("id, category, slug, name, name_en, summary, summary_en, sort_order")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+      ]);
+
+      let entryData = (entryResult.data || []) as PublicGuideEntry[];
+      let entryError = entryResult.error;
+
+      if (entryError) {
+        // Compatibility while the guide-library expansion migration is being
+        // rolled out: keep the earlier flat list readable.
+        const fallback = await supabase
+          .from("guide_entries")
+          .select("id, category, name, source")
+          .order("name", { ascending: true });
+        entryData = (fallback.data || []) as PublicGuideEntry[];
+        entryError = fallback.error;
+      }
 
       if (!cancelled) {
-        if (error) {
+        if (entryError) {
           // Older deployments do not have the public guide table yet. The
           // existing plant guide remains available until the migration lands.
-          console.warn("load public guide library failed:", error);
+          console.warn("load public guide library failed:", entryError);
           setPublicGuides([]);
         } else {
-          setPublicGuides((data || []) as PublicGuideEntry[]);
+          setPublicGuides(entryData);
+        }
+
+        if (sectionResult.error) {
+          console.warn("load public guide sections failed:", sectionResult.error);
+          setPublicGuideSections([]);
+        } else {
+          setPublicGuideSections((sectionResult.data || []) as PublicGuideSection[]);
         }
         setPublicGuidesLoading(false);
       }
@@ -1518,6 +1554,7 @@ export default function PlantIndexPage() {
         <PublicGuideLibrary
           category={guideSection}
           entries={publicGuides.filter((entry) => entry.category === guideSection)}
+          sections={publicGuideSections.filter((section) => section.category === guideSection)}
           loading={publicGuidesLoading}
           searchInput={searchInput}
           onSearchInputChange={setSearchInput}
@@ -1534,6 +1571,7 @@ export default function PlantIndexPage() {
 function PublicGuideLibrary({
   category,
   entries,
+  sections,
   loading,
   searchInput,
   onSearchInputChange,
@@ -1543,6 +1581,7 @@ function PublicGuideLibrary({
 }: {
   category: ArchiveCategory;
   entries: PublicGuideEntry[];
+  sections: PublicGuideSection[];
   loading: boolean;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
@@ -1551,17 +1590,46 @@ function PublicGuideLibrary({
   language: "zh" | "en";
 }) {
   const keyword = normalize(searchInput);
-  const visibleEntries = entries.filter((entry) =>
-    keyword ? normalize(entry.name).includes(keyword) : true,
-  );
-  const isEnglish = language === "en";
+  const copy = publicGuideCopy[language];
+  const orderedEntries = sortPublicGuides(entries);
+  const orderedSections = sortPublicGuides(sections);
+  const visibleEntries = orderedEntries.filter((entry) => {
+    if (!keyword) return true;
+    return [entry.name, entry.name_en, entry.summary, entry.summary_en].some((value) =>
+      normalize(value).includes(keyword),
+    );
+  });
+  const directEntries = visibleEntries.filter((entry) => !entry.section_id);
+
+  function renderGuideCard(entry: PublicGuideEntry) {
+    const name = getPublicGuideName(entry, language);
+    const summary = getPublicGuideSummary(entry, language) || copy.contentPending;
+
+    return (
+      <Link key={entry.id} href={`/plant/guide/${entry.id}`} style={publicGuideCardStyle}>
+        <span style={publicGuideIconStyle}>
+          <UiIcon name={getArchiveCategoryIcon(entry.category)} size={19} />
+        </span>
+        <strong style={publicGuideNameStyle}>{name}</strong>
+        <span style={publicGuideSummaryStyle}>{summary}</span>
+        <span style={publicGuideCardFooterStyle}>
+          <span style={publicGuideSourceStyle}>
+            {entry.source === "preset" ? copy.preset : copy.approved}
+          </span>
+          <span style={publicGuideOpenStyle}>
+            {copy.open} <UiIcon name="arrow-right" size={12} />
+          </span>
+        </span>
+      </Link>
+    );
+  }
 
   return (
     <section style={publicGuidePanelStyle(isMobile)}>
       <div style={publicGuideHeadingStyle}>
         <div>
           <div style={publicGuideEyebrowStyle}>
-            {isEnglish ? "Public related guides" : "公共对应指引"}
+            {copy.publicLibrary}
           </div>
           <h1 style={publicGuideTitleStyle}>
             {getArchiveCategoryLabel(category, language)}
@@ -1571,7 +1639,7 @@ function PublicGuideLibrary({
           href={`/archive/new?category=${encodeURIComponent(category)}`}
           style={publicGuideCreateStyle}
         >
-          {isEnglish ? "New project" : "新建项目"}
+          {copy.newProject}
         </Link>
       </div>
 
@@ -1579,41 +1647,65 @@ function PublicGuideLibrary({
         <input
           value={searchInput}
           onChange={(event) => onSearchInputChange(event.target.value)}
-          placeholder={isEnglish ? "Search related guides" : "搜索对应指引"}
-          aria-label={isEnglish ? "Search related guides" : "搜索对应指引"}
+          placeholder={copy.searchPlaceholder}
+          aria-label={copy.searchPlaceholder}
           style={publicGuideSearchStyle}
         />
       ) : null}
 
       <p style={publicGuideNoticeStyle}>
-        {isEnglish
-          ? "Platform presets are public. A guide name you add can be used in your own project immediately; commonly used names enter administrator review before becoming public."
-          : "平台预设指引直接公开。你新增的对应指引可立即用于自己的项目；达到使用量后进入管理员审核，通过后加入公共指引库。"}
+        {copy.notice}
       </p>
 
       {loading ? (
-        <div style={publicGuideEmptyStyle}>{isEnglish ? "Loading…" : "加载中…"}</div>
+        <div style={publicGuideEmptyStyle}>{copy.loading}</div>
       ) : visibleEntries.length === 0 ? (
         <div style={publicGuideEmptyStyle}>
-          {keyword
-            ? (isEnglish ? "No matching public guides." : "没有匹配的公共指引。")
-            : (isEnglish ? "No public guides yet." : "这个板块暂时还没有公共指引。")}
+          {keyword ? copy.noMatch : copy.empty}
+        </div>
+      ) : keyword ? (
+        <div style={publicGuideGridStyle(isMobile)}>
+          {visibleEntries.map(renderGuideCard)}
         </div>
       ) : (
-        <div style={publicGuideGridStyle(isMobile)}>
-          {visibleEntries.map((entry) => (
-            <article key={entry.id} style={publicGuideCardStyle}>
-              <span style={publicGuideIconStyle}>
-                <UiIcon name={getArchiveCategoryIcon(entry.category)} size={19} />
-              </span>
-              <strong style={publicGuideNameStyle}>{entry.name}</strong>
-              <span style={publicGuideSourceStyle}>
-                {entry.source === "preset"
-                  ? (isEnglish ? "Platform preset" : "平台预设")
-                  : (isEnglish ? "Approved public guide" : "已审核公开")}
-              </span>
-            </article>
-          ))}
+        <div style={publicGuideLibraryBodyStyle}>
+          {orderedSections.map((section) => {
+            const sectionEntries = orderedEntries.filter(
+              (entry) => entry.section_id === section.id,
+            );
+            if (sectionEntries.length === 0) return null;
+
+            return (
+              <section key={section.id} style={publicGuideSectionStyle}>
+                <div style={publicGuideSectionHeadingStyle}>
+                  <h2 style={publicGuideSectionTitleStyle}>
+                    {getPublicGuideSectionName(section, language)}
+                  </h2>
+                  {getPublicGuideSectionSummary(section, language) ? (
+                    <p style={publicGuideSectionSummaryStyle}>
+                      {getPublicGuideSectionSummary(section, language)}
+                    </p>
+                  ) : null}
+                </div>
+                <div style={publicGuideGridStyle(isMobile)}>
+                  {sectionEntries.map(renderGuideCard)}
+                </div>
+              </section>
+            );
+          })}
+
+          {directEntries.length > 0 ? (
+            <section style={publicGuideSectionStyle}>
+              {orderedSections.length > 0 ? (
+                <div style={publicGuideSectionHeadingStyle}>
+                  <h2 style={publicGuideSectionTitleStyle}>{copy.otherGuides}</h2>
+                </div>
+              ) : null}
+              <div style={publicGuideGridStyle(isMobile)}>
+                {directEntries.map(renderGuideCard)}
+              </div>
+            </section>
+          ) : null}
         </div>
       )}
     </section>
@@ -1817,7 +1909,7 @@ function publicGuideGridStyle(isMobile: boolean): CSSProperties {
 
 const publicGuideCardStyle: CSSProperties = {
   minWidth: 0,
-  minHeight: 118,
+  minHeight: 164,
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-start",
@@ -1825,6 +1917,8 @@ const publicGuideCardStyle: CSSProperties = {
   border: "1px solid #e1e9de",
   borderRadius: 15,
   background: "#fbfdf9",
+  color: "inherit",
+  textDecoration: "none",
 };
 
 const publicGuideIconStyle: CSSProperties = {
@@ -1848,11 +1942,68 @@ const publicGuideNameStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const publicGuideSourceStyle: CSSProperties = {
+const publicGuideSummaryStyle: CSSProperties = {
+  marginTop: 7,
+  overflow: "hidden",
+  color: "#657260",
+  fontSize: 12.5,
+  lineHeight: 1.55,
+  display: "-webkit-box",
+  WebkitLineClamp: 3,
+  WebkitBoxOrient: "vertical",
+};
+
+const publicGuideCardFooterStyle: CSSProperties = {
+  width: "100%",
   marginTop: "auto",
-  paddingTop: 7,
+  paddingTop: 9,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 7,
+};
+
+const publicGuideSourceStyle: CSSProperties = {
   color: "#80907c",
   fontSize: 11.5,
+};
+
+const publicGuideOpenStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 3,
+  flexShrink: 0,
+  color: "#477044",
+  fontSize: 11.5,
+  fontWeight: 800,
+};
+
+const publicGuideLibraryBodyStyle: CSSProperties = {
+  display: "grid",
+  gap: 22,
+};
+
+const publicGuideSectionStyle: CSSProperties = {
+  display: "grid",
+  gap: 11,
+};
+
+const publicGuideSectionHeadingStyle: CSSProperties = {
+  display: "grid",
+  gap: 3,
+};
+
+const publicGuideSectionTitleStyle: CSSProperties = {
+  margin: 0,
+  color: "#31462f",
+  fontSize: 18,
+};
+
+const publicGuideSectionSummaryStyle: CSSProperties = {
+  margin: 0,
+  color: "#748070",
+  fontSize: 12.5,
+  lineHeight: 1.55,
 };
 
 const publicGuideEmptyStyle: CSSProperties = {

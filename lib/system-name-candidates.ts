@@ -246,11 +246,25 @@ async function loadPublicGuideCandidates(
 ) {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("guide_entries")
       .select("id, name")
       .eq("category", category)
+      .eq("is_active", true)
       .order("name", { ascending: true });
+
+    if (error) {
+      // Keep project creation usable while the guide-library migration is
+      // being rolled out to an older deployment.
+      const fallback = await supabase
+        .from("guide_entries")
+        .select("id, name")
+        .eq("category", category)
+        .order("name", { ascending: true });
+      data = fallback.data;
+      error = fallback.error;
+    }
+
     if (error) {
       console.warn("load public related guides failed:", error);
       return [];

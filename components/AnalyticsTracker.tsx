@@ -62,6 +62,7 @@ const DYNAMIC_ROUTE_PATTERNS: Array<[RegExp, string]> = [
   [/^\/market\/[^/]+$/, "/market/[id]"],
   [/^\/user\/[^/]+\/profile$/, "/user/[id]/profile"],
   [/^\/user\/[^/]+$/, "/user/[id]"],
+  [/^\/plant\/guide\/[^/]+$/, "/plant/guide/[id]"],
   [/^\/plant\/[^/]+$/, "/plant/[id]"],
 ];
 
