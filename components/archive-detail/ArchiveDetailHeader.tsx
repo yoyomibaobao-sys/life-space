@@ -111,15 +111,7 @@ export default function ArchiveDetailHeader({
     { label: copy.category, value: localizedCategoryLabel, field: "category" as const },
     {
       label: systemNameLabel,
-      value: encyclopediaHref ? (
-        <a
-          href={encyclopediaHref}
-          onClick={(event) => event.stopPropagation()}
-          style={guideProfileLinkStyle}
-        >
-          {systemNameText}
-        </a>
-      ) : systemNameText,
+      value: systemNameText,
       field: "systemName" as const,
     },
     { label: copy.source, value: archive.source || copy.not_filled, field: "source" as const },
@@ -289,11 +281,4 @@ const profileDangerButtonStyle = {
   ...profileActionButtonStyle,
   color: "#c85f5a",
   border: "1px solid #efd8d5",
-} as const;
-
-const guideProfileLinkStyle = {
-  color: "#356f39",
-  fontWeight: 750,
-  textDecoration: "underline",
-  textUnderlineOffset: 3,
 } as const;
