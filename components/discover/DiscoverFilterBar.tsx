@@ -1,5 +1,5 @@
 import type { FilterMode, FilterOption } from "@/lib/discover-types";
-import UiIcon from "@/components/ui/UiIcon";
+import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 
 export function DiscoverFilterBar({
   options,
@@ -19,14 +19,7 @@ export function DiscoverFilterBar({
 
   if (compactMobile) {
     return (
-      <div style={{ marginBottom: 7 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-            gap: 4,
-          }}
-        >
+      <div className={`${filterStyles.row} ${filterStyles.withHelp}`}>
           {categoryOptions.map((option) => {
             const active = activeMode === option.value;
             return (
@@ -34,55 +27,24 @@ export function DiscoverFilterBar({
                 key={option.value}
                 type="button"
                 onClick={() => onChange(option.value)}
-                style={{
-                  minWidth: 0,
-                  minHeight: 38,
-                  padding: "4px 2px",
-                  overflow: "hidden",
-                  borderRadius: 999,
-                  border: active ? "1px solid #8bc58b" : "1px solid #e2e8df",
-                  background: active ? "#f0fff4" : "#fff",
-                  color: active ? "#2e7d32" : "#314131",
-                  cursor: "pointer",
-                  whiteSpace: "normal",
-                  wordBreak: "keep-all",
-                  lineHeight: 1.12,
-                  fontSize: 13,
-                  fontWeight: active ? 700 : 500,
-                }}
+                aria-pressed={active}
+                className={filterStyles.button}
               >
-                {option.label}
+                {/^[\u4e00-\u9fff]{4}$/.test(option.label) ? (
+                  <>{option.label.slice(0, 2)}<br />{option.label.slice(2)}</>
+                ) : option.label}
               </button>
             );
           })}
-        </div>
-
         {helpOption ? (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 5 }}>
             <button
               type="button"
               aria-pressed={helpOnly}
               onClick={() => onChange("help")}
-              style={{
-                minHeight: 28,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 9px",
-                borderRadius: 999,
-                border: helpOnly ? "1px solid #d18a68" : "1px solid #efd8cc",
-                background: helpOnly ? "#fde8dc" : "#fffaf6",
-                color: "#a65f45",
-                cursor: "pointer",
-                fontSize: 12.5,
-                fontWeight: helpOnly ? 750 : 600,
-                lineHeight: 1.2,
-              }}
+              className={`${filterStyles.button} ${filterStyles.help}`}
             >
-              <UiIcon name={helpOnly ? "check" : "warning"} size={13} strokeWidth={2} />
               {helpOption.label}
             </button>
-          </div>
         ) : null}
       </div>
     );

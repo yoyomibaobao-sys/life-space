@@ -530,8 +530,8 @@ function NewMarketPostPageContent() {
         </Link>
 
         <section style={panelStyle}>
-          <h1 style={titleStyle}>{t.market.new_title}</h1>
-          <p style={subtitleStyle}>
+          <h1 className="mobile-app-desktop-only" style={titleStyle}>{t.market.new_title}</h1>
+          <p className="mobile-app-desktop-only" style={subtitleStyle}>
             {t.market.new_description}
           </p>
 
@@ -539,7 +539,7 @@ function NewMarketPostPageContent() {
 
           <div style={quotaInfoStyle(marketBlocked)}>
             <strong>{getMarketPostQuotaLabel(membership, language)}</strong>
-            <span>{getMarketPostQuotaHint(membership, language)}</span>
+            <span className="mobile-app-desktop-only">{getMarketPostQuotaHint(membership, language)}</span>
             {marketBlocked ? (
               <Link href="/membership" style={quotaLinkStyle}>
                 {t.market.learn_membership}

@@ -29,7 +29,6 @@
   width: 100%;
   min-height: 0;
   flex: 0 0 auto;
-  aspect-ratio: 1;
   display: block;
   padding: 0;
   border: 0;
@@ -88,10 +87,8 @@
 
 .previewBody {
   min-width: 0;
-  height: 110px;
   display: flex;
   width: 100%;
-  flex: 0 0 110px;
   padding: 7px 9px 8px;
   box-sizing: border-box;
   color: inherit;
@@ -166,13 +163,4 @@
     min-height: 0;
   }
 
-  .previewMediaButton {
-    width: 100%;
-    aspect-ratio: 1 / 1.08;
-  }
-
-  .previewBody {
-    height: 100px;
-    flex-basis: 100px;
-  }
 }

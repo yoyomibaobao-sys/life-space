@@ -2012,14 +2012,14 @@ export async function restoreLocalArchiveCycle(
     if (!trashEntry) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个已删除茬不存在。");
+      throw new Error("这个已删除轮不存在。");
     }
 
     const cycles = normalizedArchive.cycles || [];
     if (cycles.some((cycle) => cycle.id === trashEntry.cycle.id)) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个茬已经恢复。");
+      throw new Error("这个轮已经恢复。");
     }
 
     const timestamp = nowIso();

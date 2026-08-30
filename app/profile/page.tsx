@@ -755,8 +755,8 @@ export default function ProfilePage() {
   return (
     <>
     <MobilePageHeader
-      title={t.profile.title}
-      titleText={t.profile.title}
+      title=""
+      compact
       fallbackHref="/archive"
       ariaLabel={t.nav.back}
     />
@@ -925,7 +925,8 @@ export default function ProfilePage() {
           )}
         </section>
 
-        <section id="language-settings" style={languageInlineStyle}>
+        <section aria-label={language === "en" ? "Preferences" : "常用设置"} style={isMobileViewport ? mobileProfileGroupStyle : { display: "contents" }}>
+        <section id="language-settings" style={{ ...languageInlineStyle, ...(isMobileViewport ? mobileGroupedRowStyle : {}) }}>
           <span style={{ color: "#334c32", fontSize: 15, fontWeight: 800 }}>
             {t.profile.language_setting}
           </span>
@@ -943,17 +944,15 @@ export default function ProfilePage() {
           </button>
         </section>
 
-        <Link href="/profile/project-categories" style={projectCategorySettingsLinkStyle}>
+        <Link href="/profile/project-categories" style={{ ...projectCategorySettingsLinkStyle, ...(isMobileViewport ? mobileGroupedRowStyle : {}) }}>
           <span style={{ minWidth: 0 }}>
             <strong style={projectCategorySettingsTitleStyle}>
               {language === "en" ? "Project categories" : "项目分类"}
             </strong>
-            <span style={projectCategorySettingsSubtitleStyle}>
-              {language === "en" ? "Configure cloud and local separately" : "云空间与本地分别设置"}
-            </span>
           </span>
           <UiIcon name="arrow-right" size={17} />
         </Link>
+        </section>
 
         <MobileProfileModuleTabs
           active={mobileProfileModule}
@@ -1233,8 +1232,8 @@ function MobileProfileModuleTabs({
   compact: boolean;
   children: ReactNode;
 }) {
-  const { t } = useLanguage();
-  const navigation = (
+  const { language, t } = useLanguage();
+  const renderNavigation = (entries: MobileProfileNavItem[]) => (
     <nav
       style={{
         ...mobileProfileTabsStyle,
@@ -1242,7 +1241,7 @@ function MobileProfileModuleTabs({
       }}
       aria-label={t.profile.module_aria}
     >
-      {modules.map((item) => {
+      {entries.map((item) => {
         const key = `${item.href || item.value}-${item.label}`;
         const isActive = Boolean(item.value && active === item.value);
         return (
@@ -1288,11 +1287,29 @@ function MobileProfileModuleTabs({
     </nav>
   );
 
-  if (compact) return navigation;
+  if (compact) {
+    const membershipItems = modules.filter((item) => item.href?.startsWith("/membership") || item.value === "payment" || item.value === "membership");
+    const adminItems = modules.filter((item) => item.href?.startsWith("/admin"));
+    const accountItems = modules.filter((item) => !membershipItems.includes(item) && !adminItems.includes(item));
+    return (
+      <div style={{ display: "grid", gap: 12 }}>
+        {[
+          { title: language === "en" ? "Membership" : "会员服务", items: membershipItems },
+          { title: language === "en" ? "Data & account" : "数据与账号", items: accountItems },
+          { title: language === "en" ? "Administration" : "管理", items: adminItems },
+        ].filter((group) => group.items.length).map((group) => (
+          <section key={group.title} style={mobileProfileGroupStyle} aria-label={group.title}>
+            <h2 style={{ margin: "2px 12px 4px", fontSize: 12, fontWeight: 600, color: "#73816e" }}>{group.title}</h2>
+            {renderNavigation(group.items)}
+          </section>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div style={desktopProfileModulesStyle}>
-      {navigation}
+      {renderNavigation(modules)}
       <div style={desktopProfileModuleContentStyle}>{children}</div>
     </div>
   );
@@ -1429,14 +1446,6 @@ const projectCategorySettingsTitleStyle: CSSProperties = {
   fontWeight: 800,
 };
 
-const projectCategorySettingsSubtitleStyle: CSSProperties = {
-  display: "block",
-  marginTop: 3,
-  color: "#788574",
-  fontSize: 12,
-  lineHeight: 1.35,
-};
-
 const languageSwitchStyle: CSSProperties = {
   position: "relative",
   width: 154,
@@ -1497,13 +1506,28 @@ const profileShellStyle: CSSProperties = {
 };
 
 const mobileProfileShellStyle: CSSProperties = {
-  ...profileShellStyle,
   width: "100%",
   maxWidth: "100%",
-  borderRadius: 14,
-  padding: 10,
+  display: "grid",
+  gap: 12,
   boxSizing: "border-box",
-  boxShadow: "0 6px 16px rgba(32,56,24,0.04)",
+};
+
+const mobileProfileGroupStyle: CSSProperties = {
+  minWidth: 0,
+  padding: "8px 4px",
+  border: "1px solid #e2e9dd",
+  borderRadius: 14,
+  background: "#fff",
+};
+
+const mobileGroupedRowStyle: CSSProperties = {
+  minHeight: 48,
+  margin: 0,
+  border: 0,
+  borderBottom: "1px solid #edf1e9",
+  borderRadius: 0,
+  background: "transparent",
 };
 
 const mobileProfileTabsStyle: CSSProperties = {
@@ -1515,9 +1539,10 @@ const mobileProfileTabsStyle: CSSProperties = {
 };
 
 const mobileProfileCompactTabStyle: CSSProperties = {
+  ...mobileGroupedRowStyle,
   width: "100%",
   minWidth: 0,
-  minHeight: 50,
+  minHeight: 46,
   padding: "0 15px",
   justifyContent: "space-between",
   textAlign: "left",

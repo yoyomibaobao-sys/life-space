@@ -36,8 +36,8 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
     guide.indexOf("</div>\n              ) : null}", guide.indexOf("{hasCloudAccess && mobileFiltersOpen ? ("))
   );
   assert.doesNotMatch(mobileAdvancedBlock, /clear_environment_filters/);
-  assert.match(favorites, /t\.plant_lists\.saved_on/);
-  assert.match(favorites, /formatCardDate\(item\.created_at\)/);
+  assert.doesNotMatch(favorites, /t\.plant_lists\.saved_on/);
+  assert.match(favorites, /formatCardDate\(item\.createdAt\)/);
   assert.match(zhCopy, /my_saved: "我的收藏"/);
 });
 

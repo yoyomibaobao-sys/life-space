@@ -22,6 +22,7 @@ import {
   setAppStatusBarTheme,
 } from "@/components/StatusBarTheme";
 import ExperienceCardSummary from "@/components/experience-card/ExperienceCardSummary";
+import verticalCard from "@/components/ui/VerticalFeedCard.module.css";
 
 export default function PublicExperienceGallery({
   items,
@@ -53,14 +54,14 @@ export default function PublicExperienceGallery({
         {items.map((item, index) => (
           <article
             key={item.id}
-            className={styles.previewCard}
+            className={`${styles.previewCard} ${verticalCard.card}`}
             role="button"
             tabIndex={0}
             aria-label={`${t.experience.open_fullscreen}${item.title}`}
             onClick={(event) => handleCardClick(event, index)}
             onKeyDown={(event) => handleCardKeyDown(event, index)}
           >
-            <span className={styles.previewMediaButton} aria-hidden="true">
+            <span className={`${styles.previewMediaButton} ${verticalCard.media}`} aria-hidden="true">
               <span className={styles.previewMedia}>
               {item.coverUrl ? (
                 <img
@@ -77,7 +78,7 @@ export default function PublicExperienceGallery({
               <span className={styles.previewPlay} aria-hidden="true" />
               </span>
             </span>
-            <span className={styles.previewBody}>
+            <span className={`${styles.previewBody} ${verticalCard.copy}`}>
               <ExperienceCardSummary item={item} />
             </span>
           </article>

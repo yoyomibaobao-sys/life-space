@@ -20,14 +20,17 @@ import {
 } from "@/lib/plant-guide-compat";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import GuideCategoryTabs from "@/components/plant/GuideCategoryTabs";
+import MobileSearchField from "@/components/search/MobileSearchField";
+import { getGuideInterestCount } from "@/lib/guide-interests";
 import { buildLoginHref } from "@/lib/auth-return";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import {
-  archiveCategoryOptions,
   getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import {
+  buildPublicGuideContent,
   getPublicGuideFilterLabel,
   getPublicGuideFilterTraits,
   getPublicGuideName,
@@ -416,19 +419,14 @@ export default function PlantIndexPage() {
             ? loadPlantCoreParametersCompat(null).then((data) => ({ data }))
             : Promise.resolve({ data: [] as PlantParameterLite[] }),
 
-        user
-          ? supabase
-              .from("user_plant_interests")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", user.id)
-          : Promise.resolve({ count: null }),
+        user ? getGuideInterestCount(user.id) : Promise.resolve(null),
       ]);
 
       setPlants(plantData || []);
       setAliases(aliasData || []);
       setBasicOverviews((overviewData || []) as BasicOverview[]);
       setParameters(parameterData || []);
-      setInterestCount(user ? interestCountResult.count ?? 0 : null);
+      setInterestCount(interestCountResult);
       setLoading(false);
     }
 
@@ -1006,25 +1004,7 @@ export default function PlantIndexPage() {
         onSearch={() => setIsMobileSearchOpen((open) => !open)}
       />
       <main style={{ padding: isMobileViewport ? "6px 10px 10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
-      <nav
-        aria-label={language === "en" ? "Guide categories" : "指引分类"}
-        style={guideSectionTabsStyle(isMobileViewport)}
-      >
-        {archiveCategoryOptions.map((option) => {
-          const selected = guideSection === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-current={selected ? "page" : undefined}
-              onClick={() => changeGuideSection(option.value)}
-              style={guideSectionTabStyle(selected, isMobileViewport)}
-            >
-              {getArchiveCategoryLabel(option.value, language)}
-            </button>
-          );
-        })}
-      </nav>
+      <GuideCategoryTabs value={guideSection} onChange={changeGuideSection} />
       {guideSection === "plant" ? (
       <>
       <section
@@ -1586,6 +1566,7 @@ export default function PlantIndexPage() {
           language={language}
           isSignedIn={isSignedIn}
           hasCloudAccess={hasCloudAccess}
+          interestCount={interestCount}
         />
       )}
       </main>
@@ -1605,6 +1586,7 @@ function PublicGuideLibrary({
   language,
   isSignedIn,
   hasCloudAccess,
+  interestCount,
 }: {
   category: ArchiveCategory;
   entries: PublicGuideEntry[];
@@ -1617,7 +1599,9 @@ function PublicGuideLibrary({
   language: "zh" | "en";
   isSignedIn: boolean;
   hasCloudAccess: boolean;
+  interestCount: number | null;
 }) {
+  const { t } = useLanguage();
   const keyword = normalize(searchInput);
   const copy = publicGuideCopy[language];
   const orderedEntries = sortPublicGuides(entries);
@@ -1693,7 +1677,7 @@ function PublicGuideLibrary({
     const sourceLabel =
       entry.source === "preset" ? copy.preset : copy.approved;
     const summary = isSignedIn
-      ? getPublicGuideSummary(entry, language) || copy.contentPending
+      ? buildPublicGuideContent(entry, language).overview || getPublicGuideSummary(entry, language) || copy.contentPending
       : copy.registerForOverview;
     const section = orderedSections.find(
       (candidate) => candidate.id === entry.section_id,
@@ -1737,58 +1721,43 @@ function PublicGuideLibrary({
   }
 
   return (
-    <section style={publicGuidePanelStyle(isMobile)}>
-      <div style={publicGuideHeadingStyle}>
-        <div>
-          <div style={publicGuideEyebrowStyle}>
-            {copy.publicLibrary}
-          </div>
-          <h1 style={publicGuideTitleStyle}>
-            {getArchiveCategoryLabel(category, language)}
-          </h1>
-        </div>
-        <Link
-          href={`/archive/new?category=${encodeURIComponent(category)}`}
-          style={publicGuideCreateStyle}
-        >
-          {copy.newProject}
-        </Link>
-      </div>
-
+    <section>
+      <div style={publicGuidePanelStyle(isMobile)}>
       {searchOpen ? (
-        <input
+        <div style={{ marginBottom: 6 }}>
+        <MobileSearchField
           value={searchInput}
-          onChange={(event) => onSearchInputChange(event.target.value)}
-          placeholder={copy.searchPlaceholder}
-          aria-label={copy.searchPlaceholder}
-          style={publicGuideSearchStyle}
+          onChange={onSearchInputChange}
+          onClear={() => onSearchInputChange("")}
+          placeholder={`${getArchiveCategoryLabel(category, language)} · ${copy.searchPlaceholder}`}
+          ariaLabel={copy.searchPlaceholder}
+          clearAriaLabel={t.plant.clear_search}
         />
+        </div>
       ) : null}
 
-      <div
-        aria-label={copy.categoryFilter}
-        style={publicGuideCategoryFiltersStyle(isMobile)}
-      >
-        <button
-          type="button"
-          onClick={() => changeSection("all")}
-          style={publicGuideCategoryFilterStyle(activeSectionId === "all")}
-        >
-          {copy.allCategories}
-        </button>
-        {orderedSections.map((section) => (
-          <button
-            key={section.id}
-            type="button"
-            onClick={() => changeSection(section.id)}
-            style={publicGuideCategoryFilterStyle(activeSectionId === section.id)}
-          >
-            {getPublicGuideSectionName(section, language)}
+      <div style={{ display: "grid", gridTemplateColumns: showWaterFilters ? "minmax(0, 1fr) auto" : "minmax(0, 1fr)", alignItems: "end", gap: 6 }}>
+        <FilterSelect
+          label={t.plant.category}
+          value={activeSectionId}
+          onChange={changeSection}
+          options={[
+            { value: "all", label: isMobile ? `${t.plant.category}（${language === "en" ? "All" : "全部"}）` : copy.allCategories },
+            ...orderedSections.map((section) => ({ value: section.id, label: getPublicGuideSectionName(section, language) })),
+          ]}
+          compact={isMobile}
+          hideLabel={isMobile}
+          fill
+        />
+        {showWaterFilters ? (
+          <button type="button" onClick={() => setWaterFiltersOpen((open) => !open)} aria-expanded={waterFiltersOpen} style={mobileFilterToggleStyle}>
+            {waterFiltersOpen ? t.plant.hide_filters : t.plant.show_filters}
+            {activeWaterFilterCount > 0 ? ` (${activeWaterFilterCount})` : ""}
           </button>
-        ))}
+        ) : null}
       </div>
 
-      {showWaterFilters ? (
+      {showWaterFilters && waterFiltersOpen ? (
         <div style={publicGuideWaterFilterPanelStyle}>
           <div style={publicGuideWaterFilterHeadingStyle}>
             <strong>{copy.waterPlantFilters}</strong>
@@ -1800,19 +1769,6 @@ function PublicGuideLibrary({
                   style={publicGuideFilterTextButtonStyle}
                 >
                   {copy.clearFilters}
-                </button>
-              ) : null}
-              {isMobile ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (waterFiltersOpen) resetWaterFilters();
-                    setWaterFiltersOpen((open) => !open);
-                  }}
-                  style={publicGuideFilterTextButtonStyle}
-                >
-                  {waterFiltersOpen ? copy.hideFilters : copy.showFilters}
-                  {activeWaterFilterCount > 0 ? ` (${activeWaterFilterCount})` : ""}
                 </button>
               ) : null}
             </div>
@@ -1838,9 +1794,12 @@ function PublicGuideLibrary({
         </div>
       ) : null}
 
-      <p style={publicGuideNoticeStyle}>
-        {copy.notice}
-      </p>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 9, margin: "10px 0" }}>
+        <span style={{ fontSize: 13, color: "#888" }}>{loading ? copy.loading : `${visibleEntries.length}${t.plant.result_suffix}`}</span>
+        <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact={isMobile} />
+      </div>
 
       {loading ? (
         <div style={publicGuideEmptyStyle}>{copy.loading}</div>
@@ -1946,101 +1905,15 @@ const mobilePlantSecondaryNameStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-function guideSectionTabsStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: isMobile ? 3 : 8,
-    marginBottom: isMobile ? 8 : 14,
-    padding: isMobile ? 3 : 5,
-    border: "1px solid #e0e8dc",
-    borderRadius: isMobile ? 14 : 16,
-    background: "#fff",
-  };
-}
-
-function guideSectionTabStyle(selected: boolean, isMobile: boolean): CSSProperties {
-  return {
-    minWidth: 0,
-    minHeight: isMobile ? 42 : 44,
-    padding: isMobile ? "5px 3px" : "7px 10px",
-    border: 0,
-    borderRadius: isMobile ? 11 : 12,
-    background: selected ? "#eaf5e6" : "transparent",
-    color: selected ? "#315f30" : "#667361",
-    fontSize: isMobile ? 12.5 : 14,
-    fontWeight: selected ? 850 : 700,
-    lineHeight: 1.2,
-    cursor: "pointer",
-  };
-}
-
 function publicGuidePanelStyle(isMobile: boolean): CSSProperties {
   return {
-    padding: isMobile ? 13 : 22,
+    padding: isMobile ? "6px 10px 8px" : 22,
     border: "1px solid #e0e8dc",
     borderRadius: isMobile ? 16 : 20,
     background: "#fff",
     boxShadow: "0 8px 24px rgba(36, 58, 34, 0.04)",
   };
 }
-
-const publicGuideHeadingStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-};
-
-const publicGuideEyebrowStyle: CSSProperties = {
-  color: "#778673",
-  fontSize: 12,
-  fontWeight: 750,
-};
-
-const publicGuideTitleStyle: CSSProperties = {
-  margin: "3px 0 0",
-  color: "#253725",
-  fontSize: 24,
-};
-
-const publicGuideCreateStyle: CSSProperties = {
-  flexShrink: 0,
-  minHeight: 38,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "0 13px",
-  border: "1px solid #cfe0ca",
-  borderRadius: 999,
-  color: "#416d3e",
-  textDecoration: "none",
-  fontSize: 13,
-  fontWeight: 800,
-};
-
-const publicGuideSearchStyle: CSSProperties = {
-  width: "100%",
-  height: 42,
-  marginTop: 14,
-  padding: "0 12px",
-  border: "1px solid #dce6d8",
-  borderRadius: 12,
-  outlineColor: "#85aa7f",
-  color: "#2d3e2c",
-  background: "#fff",
-  boxSizing: "border-box",
-};
-
-const publicGuideNoticeStyle: CSSProperties = {
-  margin: "12px 0 15px",
-  padding: "10px 12px",
-  borderRadius: 12,
-  background: "#f6faf4",
-  color: "#667662",
-  fontSize: 12.5,
-  lineHeight: 1.65,
-};
 
 function publicGuideGridStyle(isMobile: boolean): CSSProperties {
   return {
@@ -2141,33 +2014,6 @@ function publicGuideSummaryStyle(
     lineHeight: isMobile ? 1.4 : 1.65,
     WebkitBoxOrient: "vertical",
     WebkitLineClamp: isMobile ? 2 : 4,
-  };
-}
-
-function publicGuideCategoryFiltersStyle(isMobile: boolean): CSSProperties {
-  return {
-    display: "flex",
-    gap: 7,
-    marginTop: 11,
-    overflowX: isMobile ? "auto" : "visible",
-    flexWrap: isMobile ? "nowrap" : "wrap",
-    paddingBottom: isMobile ? 3 : 0,
-  };
-}
-
-function publicGuideCategoryFilterStyle(selected: boolean): CSSProperties {
-  return {
-    flexShrink: 0,
-    minHeight: 34,
-    padding: "0 11px",
-    border: selected ? "1px solid #6c9865" : "1px solid #dce6d8",
-    borderRadius: 999,
-    background: selected ? "#edf7e9" : "#fff",
-    color: selected ? "#315f30" : "#61705d",
-    fontSize: 12.5,
-    fontWeight: selected ? 800 : 650,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
   };
 }
 

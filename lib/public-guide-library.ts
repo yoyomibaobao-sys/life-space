@@ -1,4 +1,5 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import { getPracticalGuideContent } from "./practical-guide-content";
 
 export type PublicGuideLanguage = "zh" | "en";
 
@@ -54,10 +55,12 @@ export type PublicGuideContentSection = {
 };
 
 export type PublicGuideContent = {
+  overview?: string;
   parameters: PublicGuideParameter[];
   cycle?: PublicGuideCycle | null;
   sections: PublicGuideContentSection[];
   cautions: string[];
+  sources?: Array<{ title: string; url: string }>;
 };
 
 export type PublicGuideFilterTraits = {
@@ -364,10 +367,19 @@ function parseGuideContent(value: unknown): RawGuideContent {
     ? value.cautions.map(text).filter(Boolean)
     : [];
   return {
+    overview: text(value.overview) || undefined,
     parameters: parseParameters(value.parameters),
     cycle: parseCycle(value.cycle),
     sections: parseSections(value.sections),
     cautions,
+    sources: Array.isArray(value.sources)
+      ? value.sources.flatMap((item) => {
+          if (!isRecord(item)) return [];
+          const title = text(item.title);
+          const url = text(item.url);
+          return title && /^https?:\/\//i.test(url) ? [{ title, url }] : [];
+        })
+      : [],
   };
 }
 
@@ -1208,7 +1220,7 @@ export function buildPublicGuideContent(
   language: PublicGuideLanguage,
 ): PublicGuideContent {
   const name = getPublicGuideName(entry, language);
-  const template = getTemplate(entry.content_template, name, language);
+  const template = getPracticalGuideContent(entry, language) || getTemplate(entry.content_template, name, language);
   const raw = parseGuideContent(language === "en" ? entry.content_en : entry.content);
   const traits = getPublicGuideFilterTraits(entry);
   const copy = publicGuideCopy[language];
@@ -1231,10 +1243,14 @@ export function buildPublicGuideContent(
     : template.parameters;
 
   return {
+    overview: raw.overview || (raw.sections?.length ? getPublicGuideSummary(entry, language) : template.overview),
     parameters: raw.parameters?.length ? raw.parameters : templateParameters,
     cycle: raw.cycle || template.cycle || null,
     sections: raw.sections?.length ? raw.sections : template.sections,
     cautions: raw.cautions?.length ? raw.cautions : template.cautions,
+    // Do not attribute administrator-written replacement content to the
+    // editorial fallback's references.
+    sources: raw.sources?.length ? raw.sources : raw.sections?.length ? [] : template.sources,
   };
 }
 

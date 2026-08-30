@@ -14,6 +14,7 @@ import {
 } from "@/lib/archive-categories";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import styles from "./page.module.css";
+import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 
 type CategoryFilter = "all" | ArchiveCategory;
 
@@ -59,11 +60,12 @@ export default function PublicExperiencePage() {
         onSearch={() => setSearchOpen((open) => !open)}
       />
       <main className={styles.page} style={pageStyle}>
-        <section style={categoryFilterStyle} aria-label={language === "en" ? "Category" : "分类"}>
+        <section className={`${filterStyles.row} ${filterStyles.experience}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
           <button
             type="button"
             onClick={() => setCategoryFilter("all")}
-            style={categoryButtonStyle(categoryFilter === "all")}
+            className={filterStyles.button}
+            aria-pressed={categoryFilter === "all"}
           >
             {language === "en" ? "All" : "全部"}
           </button>
@@ -72,7 +74,8 @@ export default function PublicExperiencePage() {
               key={option.value}
               type="button"
               onClick={() => setCategoryFilter(option.value)}
-              style={categoryButtonStyle(categoryFilter === option.value)}
+              className={filterStyles.button}
+              aria-pressed={categoryFilter === option.value}
             >
               {getArchiveCategoryLabel(option.value, language)}
             </button>
@@ -108,33 +111,6 @@ const pageStyle: CSSProperties = {
   maxWidth: 860,
   margin: "0 auto",
 };
-
-const categoryFilterStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-  gap: 4,
-  marginBottom: 6,
-};
-
-function categoryButtonStyle(active: boolean): CSSProperties {
-  return {
-    minWidth: 0,
-    minHeight: 38,
-    border: active ? "1px solid #8bc58b" : "1px solid #e2e8df",
-    borderRadius: 999,
-    background: active ? "#f0fff4" : "#fff",
-    color: active ? "#2e7d32" : "#314131",
-    padding: "4px 3px",
-    overflow: "hidden",
-    fontSize: 13,
-    fontWeight: active ? 700 : 550,
-    lineHeight: 1.15,
-    textAlign: "center",
-    whiteSpace: "normal",
-    wordBreak: "keep-all",
-    cursor: "pointer",
-  };
-}
 
 const searchRowStyle: CSSProperties = {
   marginBottom: 7,

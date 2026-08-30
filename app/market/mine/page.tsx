@@ -13,6 +13,7 @@ import {
 } from "@/lib/market-types";
 import type { SupabaseUser } from "@/lib/domain-types";
 import UiIcon from "@/components/ui/UiIcon";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import {
   canCreateMembershipMarketPost,
   getCreateMarketPostBlockedText,
@@ -118,9 +119,24 @@ export default function MyMarketPostsPage() {
   const marketBlocked = Boolean(user && !canCreateMembershipMarketPost(membership));
 
   return (
+    <>
+    <MobilePageHeader
+      title={t.market.mine_title}
+      fallbackHref="/market"
+      ariaLabel={t.nav.back}
+      right={
+        <Link
+          href={marketBlocked ? "/membership" : "/market/new"}
+          style={{ ...(marketBlocked ? disabledPublishButtonStyle : publishButtonStyle), padding: "8px", fontSize: 13 }}
+          title={marketBlocked ? getCreateMarketPostBlockedText(membership, language) : undefined}
+        >
+          {marketBlocked ? t.market.post_restricted : t.market.post_information}
+        </Link>
+      }
+    />
     <main style={pageStyle}>
       <div style={shellStyle}>
-        <header style={headerStyle}>
+        <header className="mobile-app-desktop-only" style={headerStyle}>
           <div>
             <Link href="/market" className="mobile-app-desktop-only" style={backLinkStyle}>
               <UiIcon name="arrow-left" size={15} /> {t.market.back_to_market}
@@ -191,9 +207,6 @@ export default function MyMarketPostsPage() {
             {items.map((item) => {
               const location = getCompactCardLocation({ fallback: item.location_text });
               const timeText = formatMarketTime(item.created_at);
-              const viewText = Number(item.view_count || 0) > 0
-                ? ` · ${t.market.views_prefix} ${Number(item.view_count || 0)}`
-                : "";
 
               return (
                 <article key={item.id} style={cardStyle}>
@@ -235,7 +248,7 @@ export default function MyMarketPostsPage() {
                       <span style={descriptionStyle}>
                         {item.description || ""}
                         {item.description ? <span aria-hidden="true"> · </span> : null}
-                        <span style={timeStyle}>{timeText}{viewText}</span>
+                        <span style={timeStyle}>{timeText}</span>
                       </span>
 
                       <span style={metaStyle}>
@@ -250,6 +263,7 @@ export default function MyMarketPostsPage() {
         )}
       </div>
     </main>
+    </>
   );
 }
 

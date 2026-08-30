@@ -215,7 +215,7 @@ export default function Navbar() {
       setMobileArchiveTitleInfo(null);
 
       if (!archiveDetailPath) {
-        setMobileTitle(getMobilePageTitle(pathname, t.nav));
+        setMobileTitle(getMobilePageTitle(pathname, t.nav, t.market));
         return;
       }
 
@@ -227,7 +227,7 @@ export default function Navbar() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [pathname, t.nav, user?.id]);
+  }, [pathname, t.nav, t.market, user?.id]);
 
   async function handleLogout() {
     await supabase.auth.signOut({ scope: "local" });
@@ -330,7 +330,7 @@ export default function Navbar() {
             fallbackHref={getMobileBackFallback(pathname)}
             showBack={shouldShowMobileBackButton(pathname)}
             ariaLabel={t.nav.back}
-            right={mobileHeaderActions}
+            right={isMobileDiscoverIndexPath(pathname) || canShowMobileCreateAction || (!user && shouldShowMobileLoginAction(pathname)) ? mobileHeaderActions : undefined}
           />
         ) : null}
 
@@ -636,6 +636,7 @@ function hasPageManagedMobileTopNav(pathname: string) {
     "/plant",
     "/follow",
     "/market",
+    "/market/mine",
     "/archive",
     "/profile",
     "/profile/project-categories",
@@ -712,7 +713,7 @@ function getMobileCreateLabel(pathname: string, labels: TranslationDictionary["n
   return getArchiveDetailPath(pathname) ? labels.add_record : labels.new_project;
 }
 
-function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav"]) {
+function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav"], marketLabels: TranslationDictionary["market"]) {
   if (pathname === "/archive") return labels.my_space;
   if (pathname === "/") return labels.brand;
   if (pathname.startsWith("/quick-record")) return labels.add_record;
@@ -725,6 +726,11 @@ function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav
   if (pathname.startsWith("/notifications")) return labels.notification;
   if (pathname.startsWith("/membership")) return labels.cloud_membership;
   if (pathname.startsWith("/archive/new")) return labels.new_project;
+  if (pathname === "/market/new") return marketLabels.new_title;
+  if (pathname === "/market/mine") return marketLabels.mine_title;
+  if (pathname === "/market/messages") return marketLabels.messages_title;
+  if (/^\/market\/[^/]+\/edit$/.test(pathname)) return marketLabels.edit_title;
+  if (/^\/market\/[^/]+$/.test(pathname)) return marketLabels.detail_title;
   if (pathname.startsWith("/market")) return labels.market;
   if (pathname.startsWith("/login")) return labels.login;
   if (pathname.startsWith("/register")) return labels.register;

@@ -15,6 +15,7 @@ export default function MobilePageHeader({
   fallbackHref,
   right,
   showBack = true,
+  compact = false,
   ariaLabel,
 }: {
   title: ReactNode;
@@ -22,10 +23,11 @@ export default function MobilePageHeader({
   fallbackHref: string;
   right?: ReactNode;
   showBack?: boolean;
+  compact?: boolean;
   ariaLabel?: string;
 }) {
   const router = useRouter();
-  const sideWidth = right ? 96 : 44;
+  const sideWidth = right ? 80 : 44;
 
   function goBack() {
     const currentRoute = getCurrentMobileRoute();
@@ -41,6 +43,7 @@ export default function MobilePageHeader({
       aria-label={ariaLabel}
       style={{
         ...headerStyle,
+        ...(compact ? { minHeight: "calc(44px + var(--app-safe-area-top))", padding: "calc(2px + var(--app-safe-area-top)) 8px 2px" } : {}),
         gridTemplateColumns: `${sideWidth}px minmax(0, 1fr) ${sideWidth}px`,
       }}
     >

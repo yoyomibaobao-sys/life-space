@@ -70,7 +70,6 @@ import {
 } from "@/lib/local-offline-db";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileNotificationLink from "@/components/mobile/MobileNotificationLink";
-import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   getArchiveCategoryDepth,
@@ -836,6 +835,7 @@ export default function ArchivePage() {
 
   async function toggleArchivePublic(item: ArchiveItem) {
     const newValue = !item.is_public;
+    if (newValue && !window.confirm(t.archive_workspace.confirm_public_project)) return;
     const nextRecordVisibility = newValue ? "public" : "private";
 
     const { error } = await supabase.from("archives").update({ is_public: newValue }).eq("id", item.id);
@@ -1939,13 +1939,6 @@ export default function ArchivePage() {
 
   return (
     <>
-    <MobilePageHeader
-      title={t.archive_workspace.my_space}
-      titleText={t.archive_workspace.my_space}
-      fallbackHref="/discover"
-      showBack={false}
-      ariaLabel={t.nav.back}
-    />
     <main
       style={{
         padding: isMobileViewport ? "8px 8px 24px" : "22px 18px 42px",
@@ -2108,6 +2101,7 @@ export default function ArchivePage() {
                   key={archive.id}
                   project={isMobileViewport ? project : { ...project, href: undefined }}
                   mobileMode={isMobileViewport}
+                  mobileShowCategoryBadge={false}
                   systemNameEditorSlot={
                     editingLocalSystemArchiveId === archive.id ? (
                       <span

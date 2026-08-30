@@ -151,7 +151,8 @@ test("mobile Guide exposes four guide sections and Experience uses the shared su
     source("components/experience-card/PublicExperienceFeed.module.css"),
   ]);
 
-  assert.match(plantPage, /archiveCategoryOptions\.map/);
+  assert.match(plantPage, /<GuideCategoryTabs/);
+  assert.match(await source("components/plant/GuideCategoryTabs.tsx"), /archiveCategoryOptions\.map/);
   assert.match(plantPage, /guideSection === "plant"/);
   assert.match(plantPage, /\.from\("guide_entries"\)/);
   assert.match(plantPage, /<PublicGuideLibrary/);
@@ -192,16 +193,17 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
     source("app/experience-cards/[id]/page.tsx"),
   ]);
 
-  assert.match(sharedHeader, /const sideWidth = right \? 96 : 44/);
+  assert.match(sharedHeader, /const sideWidth = right \? 80 : 44/);
   assert.match(sharedHeader, /gridTemplateColumns: `\$\{sideWidth\}px minmax\(0, 1fr\) \$\{sideWidth\}px`/);
   assert.match(sharedHeader, /name="arrow-left"/);
   assert.match(sharedHeader, /getMobileSourceRoute/);
   assert.match(sharedHeader, /prepareMobileSourceReturn/);
   assert.match(sharedHeader, /router\.push\(destination/);
-  for (const page of [mySpace, userSpace, projectDetail, plantDetail, experienceDetail]) {
+  for (const page of [userSpace, projectDetail, plantDetail, experienceDetail]) {
     assert.match(page, /<MobilePageHeader/);
   }
-  assert.match(mySpace, /showBack=\{false\}/);
+  assert.doesNotMatch(mySpace, /<MobilePageHeader/);
+  assert.match(mySpace, /personalSpaceMobileNameRowStyle/);
   assert.match(navbar, /function shouldShowMobileBackButton[\s\S]*?return !\[/);
   assert.doesNotMatch(navbar, /pathname\.startsWith\("\/market\/"\) \|\|/);
   assert.match(navbar, /"\/profile\/project-categories"/);
@@ -234,7 +236,8 @@ test("mobile discovery filters, search fields, cards, and project menus follow t
     source("components/archive/MobileArchiveTaxonomyInline.tsx"),
   ]);
 
-  assert.match(filters, /repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(filters, /filterStyles\.withHelp/);
+  assert.match(await source("components/ui/CategoryFilterRow.module.css"), /repeat\(5, minmax\(0, 1fr\)\) max-content/);
   assert.match(filters, /aria-pressed=\{helpOnly\}/);
   assert.doesNotMatch(filters, /fixedAll|position: fixedAll/);
   assert.match(discoverPage, /const \[helpOnly, setHelpOnly\] = useState\(false\)/);
@@ -243,13 +246,17 @@ test("mobile discovery filters, search fields, cards, and project menus follow t
   assert.match(experiencePage, /<MobileSearchField/);
   assert.match(searchField, /clearAriaLabel/);
   assert.doesNotMatch(galleryStyles, /\.previewCard \{[^}]*height: 100%/);
-  assert.match(galleryStyles, /\.previewBody \{[^}]*height: 110px/);
-  assert.match(galleryStyles, /\.previewBody \{[^}]*flex: 0 0 110px/);
-  assert.match(galleryStyles, /@media \(max-width: 759px\)[\s\S]*?\.previewBody \{[^}]*flex-basis: 100px/);
+  const verticalStyles = await source("components/ui/VerticalFeedCard.module.css");
+  assert.match(verticalStyles, /--feed-copy-height: 100px/);
+  assert.match(verticalStyles, /@media \(min-width: 760px\)[\s\S]*?--feed-copy-height: 110px/);
+  assert.match(verticalStyles, /flex: 0 0 var\(--feed-copy-height\)/);
+  assert.doesNotMatch(galleryStyles, /\.previewBody \{[^}]*(height|flex-basis): \d+px/);
   const experiencePageStyles = await source("app/experience/page.module.css");
   assert.match(experiencePage, /className=\{styles\.page\}/);
   assert.match(experiencePageStyles, /@media \(max-width: 759px\)[\s\S]*padding: 8px 8px 90px/);
-  assert.match(projectStyles, /\.media \{[^}]*align-self: stretch/);
+  assert.match(projectStyles, /\.media \{[^}]*height: 112px/);
+  assert.match(projectStyles, /\.media \{[^}]*align-self: start/);
+  assert.doesNotMatch(projectStyles, /align-self: stretch/);
   assert.match(projectActions, /createPortal/);
   assert.match(projectActions, /background: "transparent"/);
   assert.match(projectActions, /onClose\(\)/);

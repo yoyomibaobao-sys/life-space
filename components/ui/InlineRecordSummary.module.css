@@ -1,0 +1,35 @@
+.summary {
+  position: relative;
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.flow {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.time {
+  display: inline-block;
+  margin-inline-start: 5px;
+  color: #849081;
+  white-space: nowrap;
+}
+
+.flow > span:empty + .time,
+.probe > span:empty + .time { margin-inline-start: 0; }
+
+.probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: block;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: normal;
+}

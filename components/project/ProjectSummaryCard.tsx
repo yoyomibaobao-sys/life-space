@@ -10,12 +10,13 @@ import {
 } from "react";
 import LocalBlobImage from "@/components/local/LocalBlobImage";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
-import CompactActivityTime from "@/components/ui/CompactActivityTime";
+import InlineRecordSummary from "@/components/ui/InlineRecordSummary";
 import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
 import MobileArchiveTaxonomyInline from "@/components/archive/MobileArchiveTaxonomyInline";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import type { GroupTagItem, SubTagItem } from "@/lib/archive-page-types";
 import type { ArchiveCategoryDepths } from "@/lib/archive-category-settings";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import styles from "@/components/project/ProjectSummaryCard.module.css";
 
 type ProjectCover =
@@ -31,6 +32,8 @@ type InlineTaxonomyActionProps = {
   groupTags: GroupTagItem[];
   categoryDepths?: ArchiveCategoryDepths;
   allowTaxonomyEdit?: boolean;
+  isPublic?: boolean;
+  onTogglePublic?: () => void;
   onChangeCategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
 };
@@ -64,6 +67,7 @@ type Props = {
 };
 
 export default function ProjectSummaryCard(props: Props) {
+  const { t } = useLanguage();
   const taxonomyAction = getInlineTaxonomyAction(props.actionSlot);
   const displayActionSlot = taxonomyAction && isValidElement(props.actionSlot)
     ? cloneElement(
@@ -73,10 +77,6 @@ export default function ProjectSummaryCard(props: Props) {
     : props.actionSlot;
   const inlineTaxonomy = taxonomyAction ? (
     <>
-      {props.visibilityLabel ? (
-        <span className={styles.visibility}>{props.visibilityLabel}</span>
-      ) : null}
-      {props.visibilityLabel ? <span aria-hidden="true">·</span> : null}
       <MobileArchiveTaxonomyInline
         category={taxonomyAction.category}
         subTagId={taxonomyAction.subTagId}
@@ -92,7 +92,7 @@ export default function ProjectSummaryCard(props: Props) {
   const effectiveClassificationSlot = props.classificationSlot || inlineTaxonomy;
   const hasClassification = Boolean(
     props.showClassification ||
-    props.visibilityLabel || props.classificationText || effectiveClassificationSlot,
+    props.classificationText || effectiveClassificationSlot,
   );
   const stats = (
     <span className={styles.stats}>
@@ -135,11 +135,22 @@ export default function ProjectSummaryCard(props: Props) {
         <span className={styles.titleRow}>
           <span className={styles.identity}>
             <strong className={styles.title}>{props.title}</strong>
-            {props.systemName ? (
-              <>
-                <span className={styles.dot} aria-hidden="true">·</span>
-                <span className={styles.systemName}>{props.systemName}</span>
-              </>
+            {props.visibilityLabel ? (
+              taxonomyAction?.onTogglePublic ? (
+                <button
+                  type="button"
+                  className={styles.visibility}
+                  data-no-card-nav="true"
+                  aria-label={taxonomyAction.isPublic ? t.archive_workspace.set_private : t.archive_workspace.set_public}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    taxonomyAction.onTogglePublic?.();
+                  }}
+                >
+                  {props.visibilityLabel}
+                </button>
+              ) : <span className={styles.visibility}>{props.visibilityLabel}</span>
             ) : null}
           </span>
           <span className={styles.titleActions}>
@@ -160,17 +171,7 @@ export default function ProjectSummaryCard(props: Props) {
           </span>
         </span>
 
-        <span className={styles.update}>
-          {props.latestText ? (
-            <span className={styles.updateText}>{props.latestText}</span>
-          ) : null}
-          {props.latestTime ? (
-            <CompactActivityTime
-              value={props.latestTime}
-              className={`${styles.updateTime}${props.latestText ? "" : ` ${styles.updateTimeOnly}`}`}
-            />
-          ) : null}
-        </span>
+        <InlineRecordSummary text={props.latestText} time={props.latestTime} className={styles.update} />
 
         {hasClassification ? (
           <span className={styles.classification}>
@@ -187,12 +188,6 @@ export default function ProjectSummaryCard(props: Props) {
               </span>
             ) : (
               <>
-                {props.visibilityLabel ? (
-                  <span className={styles.visibility}>{props.visibilityLabel}</span>
-                ) : null}
-                {props.visibilityLabel && props.classificationText ? (
-                  <span aria-hidden="true">·</span>
-                ) : null}
                 {props.classificationText ? (
                   <span className={styles.classificationText}>{props.classificationText}</span>
                 ) : null}
@@ -228,6 +223,7 @@ export default function ProjectSummaryCard(props: Props) {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.target !== event.currentTarget) return;
     if (!props.onOpen || (event.key !== "Enter" && event.key !== " ")) return;
     event.preventDefault();
     props.onOpen();

@@ -7,6 +7,8 @@ import ExperienceCardListCard from "@/components/experience-card/ExperienceCardL
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import PlantRelatedArchives from "@/components/plant-detail/PlantRelatedArchives";
 import UiIcon from "@/components/ui/UiIcon";
+import { showToast } from "@/components/Toast";
+import { setGuideInterest } from "@/lib/guide-interests";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -295,6 +297,9 @@ export default function PublicGuideDetailPage() {
   const [section, setSection] = useState<PublicGuideSection | null>(null);
   const [activeTab, setActiveTab] = useState<GuideTab>("guide");
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [savingInterest, setSavingInterest] = useState(false);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [relatedArchives, setRelatedArchives] = useState<
     PlantRelatedArchiveItem[]
@@ -360,6 +365,9 @@ export default function PublicGuideDetailPage() {
         relatedArchives: [],
         experienceCards: [],
       };
+      const interestResult = user && row
+        ? await supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle()
+        : { data: null };
       if (!error && row && canReadFullGuide) {
         related = await loadRelatedGuideContent(row, user?.id || null, language);
       }
@@ -369,6 +377,8 @@ export default function PublicGuideDetailPage() {
         setEntry(error ? null : row);
         setSection(sectionRow);
         setIsSignedIn(Boolean(user));
+        setUserId(user?.id || null);
+        setSaved(Boolean(interestResult.data));
         setHasCloudAccess(canReadFullGuide);
         setRelatedArchives(related.relatedArchives);
         setExperienceCards(related.experienceCards);
@@ -397,6 +407,23 @@ export default function PublicGuideDetailPage() {
   const newProjectHref = isSignedIn
     ? rawNewProjectHref
     : buildLoginHref(rawNewProjectHref);
+
+  async function toggleSaved() {
+    if (!userId || !entry || savingInterest) return;
+    if (!saved && !hasCloudAccess) {
+      showToast(copy.membershipForFull);
+      return;
+    }
+    setSavingInterest(true);
+    try {
+      await setGuideInterest(userId, entry.id, !saved);
+      setSaved((value) => !value);
+    } catch {
+      showToast(language === "en" ? "Could not update saved guides. Please try again." : "收藏更新失败，请稍后重试。");
+    } finally {
+      setSavingInterest(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -493,10 +520,17 @@ export default function PublicGuideDetailPage() {
                 {entry.source === "preset" ? copy.preset : copy.approved}
               </div>
             </div>
+            {isSignedIn && (hasCloudAccess || saved) ? (
+              <button type="button" className={styles.saveButton} aria-pressed={saved} disabled={savingInterest} onClick={() => void toggleSaved()}>
+                {savingInterest ? t.loading : saved ? (language === "en" ? "Saved" : "已收藏") : (language === "en" ? "Save guide" : "加入收藏")}
+              </button>
+            ) : (
+              <Link href={isSignedIn ? "/membership" : buildLoginHref(returnHref)} className={styles.saveButton}>{language === "en" ? "Save guide" : "加入收藏"}</Link>
+            )}
           </div>
 
           {isSignedIn ? (
-            <p className={styles.summary}>{summary || copy.contentPending}</p>
+            <p className={styles.summary}>{content.overview || summary || copy.contentPending}</p>
           ) : (
             <p className={styles.summary}>
               <Link href={buildLoginHref(returnHref)}>
@@ -504,9 +538,6 @@ export default function PublicGuideDetailPage() {
               </Link>
             </p>
           )}
-          {hasCloudAccess ? (
-            <p className={styles.frameworkNote}>{copy.frameworkNote}</p>
-          ) : null}
         </article>
 
         <nav className={styles.detailTabs} aria-label={copy.publicLibrary}>
@@ -606,6 +637,16 @@ export default function PublicGuideDetailPage() {
                       ))}
                     </ul>
                   </section>
+                ) : null}
+                {content.sources?.length ? (
+                  <details className={styles.references}>
+                    <summary>{language === "en" ? "References and further reading" : "参考资料与延伸阅读"}</summary>
+                    <ul>
+                      {content.sources.map((source) => (
+                        <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a></li>
+                      ))}
+                    </ul>
+                  </details>
                 ) : null}
               </>
             )}

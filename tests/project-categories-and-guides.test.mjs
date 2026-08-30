@@ -62,7 +62,8 @@ test("public related guides are explicit-grant, RLS-protected, and admin reviewe
   assert.match(optimization, /guide_entries_approved_by_idx/);
   assert.match(optimization, /select public\.is_app_admin\(\(select auth\.uid\(\)\)\)/);
   assert.match(guidePage, /\.from\("guide_entries"\)/);
-  assert.match(guidePage, /archiveCategoryOptions\.map/);
+  assert.match(guidePage, /<GuideCategoryTabs/);
+  assert.match(await source("components/plant/GuideCategoryTabs.tsx"), /archiveCategoryOptions\.map/);
   assert.match(adminPage, /list_pending_guide_candidates/);
   assert.match(adminPage, /review_guide_candidate/);
   assert.match(candidates, /\.from\("guide_entries"\)/);
@@ -154,7 +155,7 @@ test("non-plant guides use the confirmed hierarchy, independent search, and plan
   assert.match(indexPage, /activeSection\?\.slug === "aquatic_plants"/);
   assert.match(indexPage, /matchesPublicGuideFilters/);
   assert.match(indexPage, /repeat\(auto-fit, minmax\(240px, 1fr\)\)/);
-  assert.match(indexPage, /copy\.categoryFilter/);
+  assert.match(indexPage, /<FilterSelect[\s\S]*?label=\{t\.plant\.category\}/);
   assert.match(indexPage, /copy\.waterPlantFilters/);
 
   for (const template of [

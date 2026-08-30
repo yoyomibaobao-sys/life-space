@@ -2094,6 +2094,7 @@ saveRecentArchiveBrowse({
           <ProjectMetaLine
             followerCount={projectFollowerCount}
             viewCount={Number(activeArchive.view_count || 0)}
+            textViewCount
             recordCount={Number(activeArchive.record_count ?? records.length)}
             durationDays={getDurationDays(
               activeArchive.created_at,
@@ -2101,7 +2102,7 @@ saveRecentArchiveBrowse({
             )}
             ended={activeArchive.status === "ended"}
             order={["view", "follow", "record", "duration"]}
-            style={{ minWidth: 0, flex: "1 1 auto", gap: "4px 8px", fontSize: 11.5 }}
+            style={{ minWidth: 0, flex: "1 1 auto", gap: "5px 10px", fontSize: 13 }}
           />
         </div>
 
@@ -3116,7 +3117,8 @@ const projectDetailStatsStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "flex-start",
-  gap: 8,
+  gap: 16,
+  flexWrap: "wrap",
   minWidth: 0,
   margin: "0 0 8px",
   padding: "5px 8px",
@@ -3129,7 +3131,7 @@ const projectDetailGuideTextStyle: CSSProperties = {
   flex: "0 1 auto",
   overflow: "hidden",
   color: "#52694f",
-  fontSize: 12,
+  fontSize: 14,
   fontWeight: 750,
   lineHeight: 1.35,
   textOverflow: "ellipsis",

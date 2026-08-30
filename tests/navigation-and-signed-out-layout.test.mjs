@@ -69,7 +69,7 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   );
   assert.doesNotMatch(mobileNav, /labels\.personal_space|labels\.guide/);
   assert.match(mobileNav, /href: user \? "\/archive" : buildLoginHref\("\/archive"\)/);
-  assert.match(navbar, /getMobilePageTitle\(pathname, t\.nav\)/);
+  assert.match(navbar, /getMobilePageTitle\(pathname, t\.nav, t\.market\)/);
   assert.match(navbar, /flexDirection: "column"/);
   assert.match(navbar, /transform: "translateZ\(0\)"/);
   assert.doesNotMatch(navbar, /LanguageSwitcher/);
@@ -177,7 +177,8 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
   assert.doesNotMatch(marketPage, /showNotification/);
   assert.match(marketPage, /const \[mobileFiltersOpen, setMobileFiltersOpen\] = useState\(false\)/);
   assert.match(marketPage, /isMobileViewport \? \([\s\S]*?mobileFiltersOpen \? \([\s\S]*?<MobileMarketFilters/);
-  assert.match(discoverFilters, /gridTemplateColumns: "repeat\(5, minmax\(0, 1fr\)\)"/);
+  assert.match(discoverFilters, /filterStyles\.withHelp/);
+  assert.match(await source("components/ui/CategoryFilterRow.module.css"), /repeat\(5, minmax\(0, 1fr\)\) max-content/);
   assert.match(discoverFilters, /aria-pressed=\{helpOnly\}/);
   assert.match(projectCard, /width: mobileMode \? 96 : 104/);
   assert.match(navbar, /function shouldShowMobileCreateAction\(pathname: string\)[\s\S]*?return false/);
@@ -205,7 +206,9 @@ test("mobile archive creation and project controls stay compact without clipping
   assert.match(projectCard, /className=\{styles\.titleRow\}/);
   assert.match(projectCard, /className=\{styles\.classification\}/);
   assert.match(projectCardStyles, /grid-template-columns: 112px minmax\(0, 1fr\)/);
-  assert.match(projectCardStyles, /-webkit-line-clamp: 2/);
+  assert.match(projectCard, /<InlineRecordSummary/);
+  assert.match(projectCardStyles, /\.title \{[^}]*white-space: normal/);
+  assert.match(await source("components/ui/InlineRecordSummary.module.css"), /-webkit-line-clamp: 2/);
   assert.match(newProjectShell, /styles\.categoryDescription/);
   assert.doesNotMatch(newProjectShell, /selectedCategoryDescription/);
   assert.match(newProjectStyles, /@media \(max-width: 759px\)[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
@@ -269,7 +272,7 @@ test("account navigation exposes the confirmed independent menu entries", async 
   assert.match(profile, /gridTemplateColumns: "1fr"/);
   assert.match(profile, /compact && isActive/);
   assert.match(profile, /desktopProfileModulesStyle/);
-  assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 50/);
+  assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 46/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
   assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
   assert.match(profile, /admin_get_membership_payment_queue_count/);
@@ -434,7 +437,9 @@ test("mobile market keeps actions out of the global bar and uses readable manage
   assert.doesNotMatch(mine, /getMarketPostQuotaHint/);
   assert.match(mine, /cardOpenLinkStyle[\s\S]*?gridTemplateColumns: "98px minmax\(0, 1fr\)"/);
   assert.match(mine, /descriptionStyle[\s\S]*?WebkitLineClamp: 2/);
-  assert.match(mine, /formatMarketTime\(item\.created_at\)[\s\S]*?views_prefix/);
+  assert.match(mine, /formatMarketTime\(item\.created_at\)/);
+  assert.doesNotMatch(mine, /views_prefix/);
+  assert.match(mine, /<MobilePageHeader[\s\S]*?title=\{t\.market\.mine_title\}[\s\S]*?right=/);
   assert.match(mine, /cardContentStyle[\s\S]*?height: 98/);
 });
 
@@ -517,20 +522,18 @@ test("project archive label, following cards, and discover cards use the refined
   assert.match(followedCss, /\.body \{[\s\S]*?height: 104px/);
 
   assert.match(discoverCard, /className=\{styles\.imageTitleArea\}/);
-  assert.ok(
-    discoverCard.indexOf("{item.card_summary}") <
-      discoverCard.indexOf("className={styles.summaryTime}")
-  );
+  assert.match(discoverCard, /<InlineRecordSummary text=\{item\.card_summary\} time=\{item\.public_activity_at\}/);
   assert.match(discoverCard, /className=\{styles\.projectMeta\}/);
   assert.match(discoverCard, /<ProjectMetaLine[\s\S]*?recordCount=\{item\.public_record_count\}[\s\S]*?durationDays=\{durationDays\}[\s\S]*?ended=\{Boolean\(item\.archive_ended_at\)\}/);
   assert.doesNotMatch(discoverCard, /item\.public_comment_count/);
-  assert.match(discoverCard, /viewCount=\{item\.view_count\}/);
+  assert.match(discoverCard, /followerCount=\{item\.follower_count\}/);
+  assert.doesNotMatch(discoverCard, /viewCount=/);
   assert.doesNotMatch(discoverCard, /getProjectSystemName|species_name_snapshot/);
   assert.match(discoverCss, /\.grid \{[\s\S]*?align-items: stretch/);
   assert.match(discoverCss, /^\.body \{[^}]*min-height: 49px/m);
-  assert.match(discoverCard, /\{item\.card_summary \|\| "\\u00a0"\}/);
   assert.match(discoverCss, /\.imageTitleArea \{[\s\S]*?linear-gradient/);
-  assert.match(discoverCss, /\.imageRegion \{[\s\S]*?aspect-ratio: 1 \/ 1\.08/);
+  assert.match(discoverCard, /styles\.imageRegion\} \$\{verticalCard\.media/);
+  assert.match(await source("components/ui/VerticalFeedCard.module.css"), /--feed-image-ratio: 1 \/ 1\.08/);
   assert.match(discoverCss, /\.summary \{[\s\S]*?line-height: 1\.35/);
   assert.doesNotMatch(discoverCss, /\.owner \{[^}]*margin-top: auto/);
   assert.match(discoverFormat, /formatCompactActivityTime as formatDiscoveryActivityTime/);
