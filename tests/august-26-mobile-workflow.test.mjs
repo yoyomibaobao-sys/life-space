@@ -81,6 +81,8 @@ test("cycle trash preserves records, allows duplicate display names, and ignores
   const restoreFunction = cloudMigration.match(
     /create or replace function public\.restore_archive_cycle_from_trash[\s\S]*?\n\$\$;/i
   )?.[0] || "";
+  assert.match(restoreFunction, /te\.owner_user_id\s*=\s*v_user_id/i);
+  assert.match(restoreFunction, /v_archive\.user_id is distinct from v_user_id/i);
   assert.doesNotMatch(restoreFunction, /display_name\s*=/i);
   assert.doesNotMatch(restoreFunction, /cycle_enabled\s*=/i);
   assert.match(localDb, /record_ids: recordsToTrash\.map\(\(record\) => record\.id\)/);
