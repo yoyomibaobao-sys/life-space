@@ -1,4 +1,5 @@
 import type { PublicGuideContent, PublicGuideEntry, PublicGuideLanguage } from "./public-guide-library";
+import { getPracticalFoodExample } from "./practical-food-examples";
 
 // Editorial fallbacks for platform presets only. Never rewrite a user's guide,
 // taxonomy, project name, or stored content. Quantities that depend on species,
@@ -318,6 +319,10 @@ const foodProfiles: Record<string, Profile> = {
 
 export function getPracticalGuideContent(entry: PublicGuideEntry, language: PublicGuideLanguage): PublicGuideContent | null {
   if (entry.source !== "preset") return null;
+  if (entry.category === "other") {
+    const example = getPracticalFoodExample(entry.name, language);
+    if (example) return example;
+  }
   const profiles = entry.category === "system" ? facilityProfiles : entry.category === "insect_fish" ? ecologyProfiles : entry.category === "other" ? foodProfiles : null;
   const selected = profiles?.[entry.name];
   if (!selected) return null;

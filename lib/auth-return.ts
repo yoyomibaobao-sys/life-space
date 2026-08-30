@@ -17,13 +17,17 @@ export function getSafeReturnTo(
   if (!isSafeInternalPath(candidate)) return fallback;
 
   const pathOnly = candidate.split(/[?#]/, 1)[0];
-  if (pathOnly === "/login" || pathOnly === "/register") return fallback;
+  if (["/login", "/register", "/check-email", "/reset-password"].includes(pathOnly) || pathOnly.startsWith("/auth/")) return fallback;
 
   return candidate;
 }
 
 export function buildLoginHref(returnTo: string) {
   return `/login?returnTo=${encodeURIComponent(getSafeReturnTo(returnTo))}`;
+}
+
+export function buildRegisterHref(returnTo: string) {
+  return `/register?returnTo=${encodeURIComponent(getSafeReturnTo(returnTo))}`;
 }
 
 export function getCurrentInternalPath() {

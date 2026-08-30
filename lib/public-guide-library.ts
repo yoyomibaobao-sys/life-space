@@ -1,5 +1,6 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { getPracticalGuideContent } from "./practical-guide-content";
+import { getAquaticTemperatureReference, matchesAquaticTemperature } from "./aquatic-guide-temperature";
 
 export type PublicGuideLanguage = "zh" | "en";
 
@@ -71,6 +72,7 @@ export type PublicGuideFilterTraits = {
 };
 
 export type PublicGuideFilterKey = keyof PublicGuideFilterTraits;
+export type PublicGuideFilters = Record<PublicGuideFilterKey, string | readonly string[]>;
 
 type RawGuideContent = Partial<PublicGuideContent>;
 
@@ -78,7 +80,7 @@ export const publicGuideCopy = {
   zh: {
     publicLibrary: "公共对应指引",
     newProject: "新建项目",
-    searchPlaceholder: "搜索对应指引",
+    searchPlaceholder: "搜索指引",
     notice:
       "平台预设指引直接公开。你新增的对应指引可立即用于自己的项目；达到使用量后进入管理员审核，通过后加入公共指引库。",
     loading: "加载中…",
@@ -92,7 +94,9 @@ export const publicGuideCopy = {
     hideFilters: "收起筛选",
     clearFilters: "清除筛选",
     light: "光照",
-    temperature: "水温",
+    temperature: "水温（℃）",
+    multiSelect: "可多选",
+    waterFilterHint: "同一条件选中任一项即可，不同条件同时满足。水温按参考范围重叠匹配，请在详情核对具体品种及范围；未确认数值的指引单独列出。",
     growthForm: "生长方式",
     difficulty: "难度",
     overviewPractice: "概要与实操",
@@ -100,7 +104,7 @@ export const publicGuideCopy = {
     relatedProjects: "关联项目",
     noExperienceCards: "暂时没有与这条指引关联的公开经验卡。",
     noRelatedProjects: "暂时没有与这条指引关联的项目。",
-    registerForOverview: "注册后查看基础概要",
+    registerForOverview: "登录／注册后查看基础概要",
     membershipForFull: "开通云会员后可查看完整实操、经验卡和关联项目。",
     learnMembership: "了解云会员",
     otherGuides: "其他公开指引",
@@ -119,7 +123,7 @@ export const publicGuideCopy = {
   en: {
     publicLibrary: "Public related guides",
     newProject: "New project",
-    searchPlaceholder: "Search related guides",
+    searchPlaceholder: "Search guides",
     notice:
       "Platform presets are public. A guide name you add can be used in your own project immediately; commonly used names enter administrator review before becoming public.",
     loading: "Loading…",
@@ -133,7 +137,9 @@ export const publicGuideCopy = {
     hideFilters: "Hide filters",
     clearFilters: "Clear filters",
     light: "Light",
-    temperature: "Water temperature",
+    temperature: "Water temperature (°C)",
+    multiSelect: "Select multiple",
+    waterFilterHint: "Match any choice within a condition and every selected condition. Water-temperature ranges must overlap; check the named species and its range in the guide. Unverified ranges are listed separately.",
     growthForm: "Growth form",
     difficulty: "Difficulty",
     overviewPractice: "Overview & practice",
@@ -141,7 +147,7 @@ export const publicGuideCopy = {
     relatedProjects: "Related projects",
     noExperienceCards: "There are no public experience cards linked to this guide yet.",
     noRelatedProjects: "There are no projects linked to this guide yet.",
-    registerForOverview: "Register to view the basic overview",
+    registerForOverview: "Log in / register to view the basic overview",
     membershipForFull: "Cloud membership unlocks full practice guidance, experience cards, and related projects.",
     learnMembership: "About cloud membership",
     otherGuides: "Other public guides",
@@ -164,17 +170,15 @@ export const publicGuideWaterFilterOptions = {
     light: [
       { value: "all", label: "全部光照" },
       { value: "low", label: "弱光" },
-      { value: "low_medium", label: "弱至中光" },
       { value: "medium", label: "中光" },
-      { value: "medium_high", label: "中至强光" },
       { value: "high", label: "强光" },
     ],
     temperature: [
       { value: "all", label: "全部水温" },
-      { value: "temperate", label: "偏凉" },
-      { value: "warm", label: "偏暖" },
-      { value: "temperate_warm", label: "凉至暖" },
-      { value: "cool_warm", label: "宽温" },
+      { value: "c18_22", label: "18–22℃" },
+      { value: "c22_26", label: "22–26℃" },
+      { value: "c26_30", label: "26–30℃" },
+      { value: "unknown", label: "水温待确认" },
     ],
     growthForm: [
       { value: "all", label: "全部生长方式" },
@@ -196,17 +200,15 @@ export const publicGuideWaterFilterOptions = {
     light: [
       { value: "all", label: "All light levels" },
       { value: "low", label: "Low light" },
-      { value: "low_medium", label: "Low to medium" },
       { value: "medium", label: "Medium light" },
-      { value: "medium_high", label: "Medium to high" },
       { value: "high", label: "High light" },
     ],
     temperature: [
       { value: "all", label: "All temperatures" },
-      { value: "temperate", label: "Temperate" },
-      { value: "warm", label: "Warm" },
-      { value: "temperate_warm", label: "Temperate to warm" },
-      { value: "cool_warm", label: "Broad range" },
+      { value: "c18_22", label: "18–22°C" },
+      { value: "c22_26", label: "22–26°C" },
+      { value: "c26_30", label: "26–30°C" },
+      { value: "unknown", label: "Range unverified" },
     ],
     growthForm: [
       { value: "all", label: "All growth forms" },
@@ -295,17 +297,43 @@ export function getPublicGuideFilterLabel(
   const option = publicGuideWaterFilterOptions[language][key].find(
     (item) => item.value === value,
   );
-  return option?.label || value;
+  const legacyLabels: Record<string, readonly [string, string]> = {
+    low_medium: ["弱至中光", "Low to medium"],
+    medium_high: ["中至强光", "Medium to high"],
+    temperate: ["偏凉，数值待确认", "Cooler; range unverified"],
+    warm: ["偏暖，数值待确认", "Warmer; range unverified"],
+    temperate_warm: ["凉至暖，数值待确认", "Cool to warm; range unverified"],
+    cool_warm: ["宽温，数值待确认", "Broad range; unverified"],
+  };
+  return option?.label || legacyLabels[value]?.[language === "en" ? 1 : 0] || value;
 }
 
 export function matchesPublicGuideFilters(
-  entry: Pick<PublicGuideEntry, "content">,
-  filters: Record<PublicGuideFilterKey, string>,
+  entry: Pick<PublicGuideEntry, "content"> & Partial<PublicGuideEntry>,
+  filters: PublicGuideFilters,
 ) {
   const traits = getPublicGuideFilterTraits(entry);
-  return (Object.keys(filters) as PublicGuideFilterKey[]).every(
-    (key) => filters[key] === "all" || traits[key] === filters[key],
-  );
+  const compatibility: Record<string, readonly string[]> = {
+    low_medium: ["low", "medium"],
+    medium_high: ["medium", "high"],
+    stem_floating: ["stem", "floating"],
+  };
+  return (Object.keys(filters) as PublicGuideFilterKey[]).every((key) => {
+    const selected = typeof filters[key] === "string" ? [filters[key]] : filters[key];
+    if (!selected.length || selected.includes("all")) return true;
+    return selected.some((value) => {
+      if (key === "temperature" && (value.startsWith("c") && value !== "cool_warm" || value === "unknown")) {
+        return matchesAquaticTemperature(entry, value);
+      }
+      if (traits[key] === value) return true;
+      return key !== "temperature" && Boolean(compatibility[traits[key] || ""]?.includes(value));
+    });
+  });
+}
+
+export function getPublicGuideTemperatureLabel(entry: PublicGuideEntry, language: PublicGuideLanguage) {
+  const range = getAquaticTemperatureReference(entry);
+  return range ? `${range.min}–${range.max}℃` : language === "en" ? "Range unverified" : "水温待确认";
 }
 
 function text(value: unknown) {
@@ -1224,12 +1252,13 @@ export function buildPublicGuideContent(
   const raw = parseGuideContent(language === "en" ? entry.content_en : entry.content);
   const traits = getPublicGuideFilterTraits(entry);
   const copy = publicGuideCopy[language];
+  const temperatureReference = getAquaticTemperatureReference(entry);
   const aquaticPlantParameters: PublicGuideParameter[] =
     entry.content_template === "aquatic_plant"
       ? (Object.keys(traits) as PublicGuideFilterKey[])
           .map((key) => ({
             label: copy[key],
-            value: getPublicGuideFilterLabel(key, traits[key], language),
+            value: key === "temperature" ? getPublicGuideTemperatureLabel(entry, language) : getPublicGuideFilterLabel(key, traits[key], language),
           }))
           .filter((item) => item.value)
       : [];
@@ -1247,10 +1276,18 @@ export function buildPublicGuideContent(
     parameters: raw.parameters?.length ? raw.parameters : templateParameters,
     cycle: raw.cycle || template.cycle || null,
     sections: raw.sections?.length ? raw.sections : template.sections,
-    cautions: raw.cautions?.length ? raw.cautions : template.cautions,
+    cautions: raw.cautions?.length ? raw.cautions : [
+      ...template.cautions,
+      ...(temperatureReference && !raw.sections?.length ? [language === "en"
+        ? `Temperature reference: ${temperatureReference.species}, ${temperatureReference.min}–${temperatureReference.max}°C. This is a published range, not an ideal setpoint or permission for sudden temperature changes; other species sold under this common name may differ.`
+        : `水温参考品种：${temperatureReference.species}，${temperatureReference.min}–${temperatureReference.max}℃。这是资料所列范围，并非整段都是最适温度；同名水草可能不是同一品种，不要据此骤升骤降水温。`] : []),
+    ],
     // Do not attribute administrator-written replacement content to the
     // editorial fallback's references.
-    sources: raw.sources?.length ? raw.sources : raw.sections?.length ? [] : template.sources,
+    sources: raw.sources?.length ? raw.sources : raw.sections?.length ? [] : [
+      ...(template.sources || []),
+      ...(temperatureReference?.source ? [temperatureReference.source] : []),
+    ],
   };
 }
 

@@ -156,7 +156,8 @@ test("mobile Guide exposes four guide sections and Experience uses the shared su
   assert.match(plantPage, /guideSection === "plant"/);
   assert.match(plantPage, /\.from\("guide_entries"\)/);
   assert.match(plantPage, /<PublicGuideLibrary/);
-  assert.match(plantPage, /entry\.source === "preset"/);
+  assert.doesNotMatch(plantPage, /\{copy\.preset\}|\{copy\.notice\}/);
+  assert.match(plantPage, /getPublicGuideName\(entry, language\)/);
   assert.match(gallery, /role="button"/);
   assert.match(gallery, /closest\("a"\)/);
   assert.match(gallery, /<ExperienceCardSummary item=\{item\}/);
@@ -261,7 +262,8 @@ test("mobile discovery filters, search fields, cards, and project menus follow t
   assert.match(projectActions, /background: "transparent"/);
   assert.match(projectActions, /onClose\(\)/);
   assert.doesNotMatch(projectActions, />\{moreLabel\}<\/strong>/);
-  assert.match(taxonomyInline, /aria-haspopup="listbox"/);
+  assert.match(taxonomyInline, /aria-haspopup="dialog"/);
+  assert.match(taxonomyInline, /role="listbox"/);
   assert.match(taxonomyInline, /const openBelow = below >= 132 \|\| below >= above/);
 });
 

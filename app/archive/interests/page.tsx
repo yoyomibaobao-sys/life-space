@@ -9,7 +9,7 @@ import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import type { PlantInterestRow } from "@/lib/domain-types";
-import { buildLoginHref } from "@/lib/auth-return";
+import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import ArchivePlantEmptyState from "@/components/archive-plant/ArchivePlantEmptyState";
 import { categoryLabel, plantDisplayName } from "@/lib/archive-plant-shared";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -56,6 +56,7 @@ function PlantInterestsContent() {
   const [guideInterests, setGuideInterests] = useState<GuideInterestRow[]>([]);
   const requestedCategory = searchParams.get("section");
   const activeCategory = archiveCategoryOptions.find((option) => option.value === requestedCategory)?.value || "plant";
+  const guideDirectoryHref = `/plant?section=${activeCategory}`;
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [removeTarget, setRemoveTarget] = useState<SavedGuide | null>(null);
@@ -63,38 +64,43 @@ function PlantInterestsContent() {
 
   const loadInterests = useCallback(async () => {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push(buildLoginHref("/archive/interests"));
-      return;
-    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace(buildLoginHref(getCurrentInternalPath()));
+        return;
+      }
 
-    setUserId(user.id);
-    const [plantResult, guideResult] = await Promise.all([supabase
-      .from("user_plant_interests")
-      .select(`
+      setUserId(user.id);
+      const [plantResult, guideResult] = await Promise.all([supabase
+        .from("user_plant_interests")
+        .select(`
           *,
           plant_species:species_id (
             id, common_name, scientific_name, slug, category, sub_category
           )
         `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false }),
-      supabase.from("user_guide_interests")
-        .select("guide_id, created_at, guide_entries:guide_id(id, category, name, name_en, guide_sections:section_id(name, name_en))")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false }),
-    ]);
-    const { data, error } = plantResult;
-    setLoadError(Boolean(error || guideResult.error));
-    setGuideInterests((guideResult.data || []) as unknown as GuideInterestRow[]);
-    if (error) {
-      showToast(t.plant_lists.read_interests_failed + error.message);
-      setInterests([]);
-    } else {
-      setInterests(data || []);
+        supabase.from("user_guide_interests")
+          .select("guide_id, created_at, guide_entries:guide_id(id, category, name, name_en, guide_sections:section_id(name, name_en))")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+      ]);
+      const { data, error } = plantResult;
+      setLoadError(Boolean(error || guideResult.error));
+      setGuideInterests((guideResult.data || []) as unknown as GuideInterestRow[]);
+      if (error) {
+        showToast(t.plant_lists.read_interests_failed + error.message);
+        setInterests([]);
+      } else {
+        setInterests(data || []);
+      }
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [router, t]);
 
   useEffect(() => {
@@ -127,18 +133,22 @@ function PlantInterestsContent() {
     if (!userId || !removeTarget || removingId) return;
     setRemovingId(removeTarget.id);
     let error: { message?: string } | null = null;
-    if (removeTarget.kind === "guide") {
-      try { await setGuideInterest(userId, removeTarget.targetId, false); }
-      catch (err) { error = err as { message?: string }; }
-    } else {
-      const result = await supabase
-        .from("user_plant_interests")
-        .delete()
-        .eq("id", removeTarget.id)
-        .eq("user_id", userId);
-      error = result.error;
+    try {
+      if (removeTarget.kind === "guide") {
+        await setGuideInterest(userId, removeTarget.targetId, false);
+      } else {
+        const result = await supabase
+          .from("user_plant_interests")
+          .delete()
+          .eq("id", removeTarget.id)
+          .eq("user_id", userId);
+        error = result.error;
+      }
+    } catch (err) {
+      error = err as { message?: string };
+    } finally {
+      setRemovingId(null);
     }
-    setRemovingId(null);
 
     if (error) {
       showToast(t.plant_lists.remove_failed_prefix + error.message);
@@ -155,17 +165,17 @@ function PlantInterestsContent() {
     <>
       <MobilePageHeader
         title={t.plant.my_saved}
-        fallbackHref="/plant"
+        fallbackHref={guideDirectoryHref}
         ariaLabel={t.nav.back}
-        right={<Link href="/plant" style={mobileGuideLinkStyle}>{t.plant_lists.guide_browse}</Link>}
+        right={<Link href={guideDirectoryHref} style={mobileGuideLinkStyle}>{t.plant_lists.guide_browse}</Link>}
       />
       <main style={pageStyle}>
       <header className="mobile-app-desktop-only" style={headerStyle}>
-        <Link href="/plant" style={backLinkStyle} aria-label={t.plant.back_to_guide}>
+        <Link href={guideDirectoryHref} style={backLinkStyle} aria-label={t.plant.back_to_guide}>
           <UiIcon name="arrow-left" size={18} />
         </Link>
         <h1 style={titleStyle}>{t.plant.my_saved}</h1>
-        <Link href="/plant" style={guideLinkStyle}>{t.plant_lists.guide_browse}</Link>
+        <Link href={guideDirectoryHref} style={guideLinkStyle}>{t.plant_lists.guide_browse}</Link>
       </header>
 
       <GuideCategoryTabs value={activeCategory} onChange={changeCategory} />

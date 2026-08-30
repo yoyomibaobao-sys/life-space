@@ -122,12 +122,11 @@
 }
 
 .classification {
-  gap: 5px;
-  overflow: hidden;
+  gap: 2px;
   color: #667463;
   font-size: 11.5px;
   line-height: 1.3;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .visibility {
@@ -149,8 +148,7 @@ button.visibility:focus-visible { outline: 2px solid #6f9b68; outline-offset: 2p
 
 .classificationText {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .classificationSlot {
@@ -158,14 +156,8 @@ button.visibility:focus-visible { outline: 2px solid #6f9b68; outline-offset: 2p
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
+  gap: 2px;
 }
-
-.classificationSlot::-webkit-scrollbar { display: none; }
 
 .stats { min-width: 0; overflow: hidden; white-space: nowrap; }
 

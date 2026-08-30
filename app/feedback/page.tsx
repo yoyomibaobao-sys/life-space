@@ -63,7 +63,7 @@ export default function FeedbackPage() {
 
   return (
     <main className={styles.page}>
-      <Link href="/profile" className={styles.backLink}>
+      <Link href="/profile" className={`${styles.backLink} mobile-app-desktop-only`}>
         <UiIcon name="arrow-left" size={16} />
         {t.feedback_back_user_info}
       </Link>

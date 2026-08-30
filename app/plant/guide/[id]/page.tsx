@@ -6,9 +6,11 @@ import { useParams, useSearchParams } from "next/navigation";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import PlantRelatedArchives from "@/components/plant-detail/PlantRelatedArchives";
+import SavedGuideStatus from "@/components/plant-detail/SavedGuideStatus";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import { setGuideInterest } from "@/lib/guide-interests";
+import { useGuideInterestRefresh } from "@/lib/use-guide-interest-refresh";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -308,6 +310,7 @@ export default function PublicGuideDetailPage() {
     ExperienceCardListItem[]
   >([]);
   const [loading, setLoading] = useState(true);
+  useGuideInterestRefresh(userId, entry?.id, false, setSaved);
 
   useEffect(() => {
     let cancelled = false;
@@ -400,7 +403,7 @@ export default function PublicGuideDetailPage() {
   );
   const fallbackCategory = entry?.category || searchParams.get("from") || "plant";
   const fallbackHref = `/plant?section=${encodeURIComponent(fallbackCategory)}`;
-  const returnHref = `/plant/guide/${encodeURIComponent(params.id)}`;
+  const returnHref = `/plant/guide/${encodeURIComponent(params.id)}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
   const rawNewProjectHref = entry
     ? `/archive/new?category=${encodeURIComponent(entry.category)}&system_name=${encodeURIComponent(entry.name)}`
     : "/archive/new";
@@ -408,16 +411,16 @@ export default function PublicGuideDetailPage() {
     ? rawNewProjectHref
     : buildLoginHref(rawNewProjectHref);
 
-  async function toggleSaved() {
-    if (!userId || !entry || savingInterest) return;
-    if (!saved && !hasCloudAccess) {
+  async function saveGuide() {
+    if (!userId || !entry || savingInterest || saved) return;
+    if (!hasCloudAccess) {
       showToast(copy.membershipForFull);
       return;
     }
     setSavingInterest(true);
     try {
-      await setGuideInterest(userId, entry.id, !saved);
-      setSaved((value) => !value);
+      await setGuideInterest(userId, entry.id, true);
+      setSaved(true);
     } catch {
       showToast(language === "en" ? "Could not update saved guides. Please try again." : "收藏更新失败，请稍后重试。");
     } finally {
@@ -501,14 +504,14 @@ export default function PublicGuideDetailPage() {
 
         <article className={styles.hero}>
           <div className={styles.breadcrumbs}>
-            <span className={styles.categoryBadge}>
+            <Link href={fallbackHref} className={styles.categoryBadge}>
               <UiIcon name={getArchiveCategoryIcon(entry.category)} size={15} />
               {getArchiveCategoryLabel(entry.category, language)}
-            </span>
+            </Link>
             {section ? (
               <>
                 <UiIcon name="arrow-right" size={13} />
-                <span>{getPublicGuideSectionName(section, language)}</span>
+                <Link href={`${fallbackHref}&category=${encodeURIComponent(section.id)}`}>{getPublicGuideSectionName(section, language)}</Link>
               </>
             ) : null}
           </div>
@@ -516,13 +519,10 @@ export default function PublicGuideDetailPage() {
           <div className={styles.heroTitleRow}>
             <div>
               <h1>{name}</h1>
-              <div className={styles.sourceLabel}>
-                {entry.source === "preset" ? copy.preset : copy.approved}
-              </div>
             </div>
-            {isSignedIn && (hasCloudAccess || saved) ? (
-              <button type="button" className={styles.saveButton} aria-pressed={saved} disabled={savingInterest} onClick={() => void toggleSaved()}>
-                {savingInterest ? t.loading : saved ? (language === "en" ? "Saved" : "已收藏") : (language === "en" ? "Save guide" : "加入收藏")}
+            {saved ? <SavedGuideStatus category={entry.category} /> : isSignedIn && hasCloudAccess ? (
+              <button type="button" className={styles.saveButton} disabled={savingInterest} onClick={() => void saveGuide()}>
+                {savingInterest ? t.loading : (language === "en" ? "Save guide" : "加入收藏")}
               </button>
             ) : (
               <Link href={isSignedIn ? "/membership" : buildLoginHref(returnHref)} className={styles.saveButton}>{language === "en" ? "Save guide" : "加入收藏"}</Link>
@@ -531,13 +531,7 @@ export default function PublicGuideDetailPage() {
 
           {isSignedIn ? (
             <p className={styles.summary}>{content.overview || summary || copy.contentPending}</p>
-          ) : (
-            <p className={styles.summary}>
-              <Link href={buildLoginHref(returnHref)}>
-                {copy.registerForOverview}
-              </Link>
-            </p>
-          )}
+          ) : null}
         </article>
 
         <nav className={styles.detailTabs} aria-label={copy.publicLibrary}>
@@ -680,10 +674,6 @@ export default function PublicGuideDetailPage() {
           <AccessNotice signedIn={isSignedIn} returnHref={returnHref} />
         )}
 
-        <Link href={newProjectHref} className={styles.bottomAction}>
-          {copy.newProject}
-          <UiIcon name="arrow-right" size={16} />
-        </Link>
       </main>
     </>
   );
@@ -702,7 +692,7 @@ function AccessNotice({
 
   return (
     <section className={styles.accessNotice}>
-      <span>{signedIn ? copy.membershipForFull : copy.registerForOverview}</span>
+      {signedIn ? <span>{copy.membershipForFull}</span> : null}
       <Link href={href}>
         {signedIn ? copy.learnMembership : copy.registerForOverview}
       </Link>

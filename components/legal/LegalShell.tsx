@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import UiIcon from "@/components/ui/UiIcon";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getLegalContent, type LegalPageKey } from "@/lib/legal-content";
 import styles from "./LegalShell.module.css";
@@ -9,20 +10,22 @@ import styles from "./LegalShell.module.css";
 const PAGE_KEYS: LegalPageKey[] = ["privacy", "terms", "refunds", "contact"];
 
 export function LegalIndex() {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const content = getLegalContent(language);
 
   return (
+    <>
+    <MobilePageHeader title={content.index.title} fallbackHref="/profile" ariaLabel={t.nav.back} />
     <main className={styles.page}>
-      <div className={styles.backRow}>
+      <div className={`${styles.backRow} mobile-app-desktop-only`}>
         <Link href="/profile">
           <UiIcon name="arrow-left" size={16} />
           {content.backToProfile}
         </Link>
       </div>
       <header className={styles.hero}>
-        <div className={styles.eyebrow}>{content.index.eyebrow}</div>
-        <h1>{content.index.title}</h1>
+        <div className={`${styles.eyebrow} mobile-app-desktop-only`}>{content.index.eyebrow}</div>
+        <h1 className="mobile-app-desktop-only">{content.index.title}</h1>
         <p>{content.index.intro}</p>
         <small>{content.index.version}</small>
       </header>
@@ -37,17 +40,20 @@ export function LegalIndex() {
         ))}
       </nav>
     </main>
+    </>
   );
 }
 
 export function LegalPage({ pageKey }: { pageKey: LegalPageKey }) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const content = getLegalContent(language);
   const page = content.pages[pageKey];
 
   return (
+    <>
+    <MobilePageHeader title={page.title} fallbackHref="/legal" ariaLabel={t.nav.back} />
     <main className={styles.page}>
-      <div className={styles.backRow}>
+      <div className={`${styles.backRow} mobile-app-desktop-only`}>
         <Link href="/legal">
           <UiIcon name="arrow-left" size={16} />
           {content.backToLegal}
@@ -55,8 +61,8 @@ export function LegalPage({ pageKey }: { pageKey: LegalPageKey }) {
       </div>
 
       <header className={styles.hero}>
-        <div className={styles.eyebrow}>{page.eyebrow}</div>
-        <h1>{page.title}</h1>
+        <div className={`${styles.eyebrow} mobile-app-desktop-only`}>{page.eyebrow}</div>
+        <h1 className="mobile-app-desktop-only">{page.title}</h1>
         <p>{page.intro}</p>
         <small>{page.version}</small>
       </header>
@@ -81,5 +87,6 @@ export function LegalPage({ pageKey }: { pageKey: LegalPageKey }) {
         ))}
       </nav>
     </main>
+    </>
   );
 }

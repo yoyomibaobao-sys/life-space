@@ -178,11 +178,11 @@ export default function FollowersPage() {
   return (
     <main style={pageStyle}>
       <div style={shellStyle}>
-        <Link href="/profile" style={backLinkStyle}>
+        <Link href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
           <UiIcon name="arrow-left" size={15} /> {t.profile.followers_page.back}
         </Link>
 
-        <h1 style={titleStyle}>{t.profile.followers_page.title}</h1>
+        <h1 className="mobile-app-desktop-only" style={titleStyle}>{t.profile.followers_page.title}</h1>
 
         {loading ? (
           <section style={emptyStyle}>{t.profile.loading}</section>

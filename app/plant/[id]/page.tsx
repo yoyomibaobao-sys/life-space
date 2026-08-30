@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import SavedGuideStatus from "@/components/plant-detail/SavedGuideStatus";
 import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -26,6 +27,8 @@ import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidate
 import type { TranslationDictionary } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
+import { GUIDE_INTERESTS_CHANGED } from "@/lib/guide-interests";
+import { useGuideInterestRefresh } from "@/lib/use-guide-interest-refresh";
 import type {
   ActionMessage,
   PlantAliasRow,
@@ -1222,6 +1225,7 @@ export default function PlantDetailPage() {
   const [actionLoading, setActionLoading] = useState<"interest" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
+  useGuideInterestRefresh(currentUserId, typeof id === "string" ? id : undefined, true, setInterestAdded);
 
   useEffect(() => {
     async function load() {
@@ -1620,7 +1624,7 @@ export default function PlantDetailPage() {
   const showGrowthCycle = hasMeaningfulGrowthCycle(growthCycle, plant?.growth_type);
 
   async function handleAddInterest() {
-    if (!plant || actionLoading) return;
+    if (!plant || actionLoading || interestAdded) return;
 
     if (!isSignedIn) {
       setActionMessage({
@@ -1632,21 +1636,7 @@ export default function PlantDetailPage() {
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setActionMessage({
-        type: "error",
-        text: copy.login_before_interest,
-        href: buildLoginHref(getCurrentInternalPath()),
-        hrefText: copy.go_login,
-      });
-      return;
-    }
-
-    if (!interestAdded && !hasCloudAccess) {
+    if (!hasCloudAccess) {
       setActionMessage({
         type: "error",
         text: copy.save_cloud_only,
@@ -1659,38 +1649,29 @@ export default function PlantDetailPage() {
     setActionLoading("interest");
     setActionMessage(null);
 
-    const { error } = interestAdded
-      ? await supabase
-          .from("user_plant_interests")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("species_id", plant.id)
-      : await supabase.from("user_plant_interests").upsert(
-          {
-            user_id: user.id,
-            species_id: plant.id,
-          },
-          { onConflict: "user_id,species_id" }
-        );
-
-    setActionLoading(null);
-
-    if (error) {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) {
+        setActionMessage({ type: "error", text: copy.login_before_interest, href: buildLoginHref(getCurrentInternalPath()), hrefText: copy.go_login });
+        return;
+      }
+      const { error } = await supabase.from("user_plant_interests").upsert(
+        { user_id: user.id, species_id: plant.id },
+        { onConflict: "user_id,species_id", ignoreDuplicates: true },
+      );
+      if (error) throw error;
+      setInterestAdded(true);
+      setActionMessage(null);
+      window.dispatchEvent(new Event(GUIDE_INTERESTS_CHANGED));
+    } catch (error) {
       setActionMessage({
         type: "error",
-        text: `${interestAdded ? copy.cancel_action : copy.add_action}${copy.action_failed_separator}${error.message}`,
+        text: `${copy.add_action}${copy.action_failed_separator}${error instanceof Error ? error.message : String((error as { message?: string })?.message || "")}`,
       });
-      return;
+    } finally {
+      setActionLoading(null);
     }
-
-    const nextInterestAdded = !interestAdded;
-    setInterestAdded(nextInterestAdded);
-    setActionMessage({
-      type: "success",
-      text: nextInterestAdded ? copy.saved_added : copy.saved_removed,
-      href: nextInterestAdded ? "/archive/interests" : undefined,
-      hrefText: nextInterestAdded ? copy.view_saved : undefined,
-    });
   }
 
   const experienceCardTabCount = relatedExperienceCards.length;
@@ -1738,6 +1719,7 @@ export default function PlantDetailPage() {
         fallbackHref={returnRecordHref || "/plant"}
         ariaLabel={t.nav.back}
         right={
+          interestAdded ? <span className={styles.mobileSavedAction} role="status">{copy.saved}</span> :
           <button
             type="button"
             onClick={handleAddInterest}
@@ -1772,6 +1754,7 @@ export default function PlantDetailPage() {
           {copy.new_project}
         </Link>
       </div>
+      {interestAdded ? <div className="mobile-app-block-only" style={{ margin: "0 0 12px" }}><SavedGuideStatus category="plant" showStatus={false} /></div> : null}
 
       <section className={styles.hero}>
         <div className={`${styles.heroHeadingRow} mobile-app-desktop-only`}>
@@ -1783,7 +1766,7 @@ export default function PlantDetailPage() {
             {copy.new_project}
           </Link>
 
-          {hasCloudAccess || interestAdded ? (
+          {interestAdded ? <SavedGuideStatus category="plant" /> : hasCloudAccess ? (
             <button
               type="button"
               onClick={handleAddInterest}
@@ -1836,8 +1819,8 @@ export default function PlantDetailPage() {
             }}
           >
             {copy.visitor_detail_notice}
-            <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              {copy.register_basic_summary}
+            <Link href={buildLoginHref(`/plant/${encodeURIComponent(String(id))}${searchParams.size ? `?${searchParams.toString()}` : ""}`)} style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
+              {language === "en" ? "Log in / register to view the basic overview" : "登录／注册后查看基础概要"}
             </Link>
           </div>
         ) : !hasCloudAccess ? (

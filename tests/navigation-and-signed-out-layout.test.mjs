@@ -69,7 +69,7 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   );
   assert.doesNotMatch(mobileNav, /labels\.personal_space|labels\.guide/);
   assert.match(mobileNav, /href: user \? "\/archive" : buildLoginHref\("\/archive"\)/);
-  assert.match(navbar, /getMobilePageTitle\(pathname, t\.nav, t\.market\)/);
+  assert.match(navbar, /getMobilePageTitle\(pathname, t\)/);
   assert.match(navbar, /flexDirection: "column"/);
   assert.match(navbar, /transform: "translateZ\(0\)"/);
   assert.doesNotMatch(navbar, /LanguageSwitcher/);
@@ -92,7 +92,7 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(backNavigation, /router\.replace\(destination\)/);
   assert.match(backNavigation, /isAppExitRoot\(pathname\)/);
   assert.match(authReturn, /!value\.startsWith\("\/\/"\)/);
-  assert.match(authReturn, /pathOnly === "\/login" \|\| pathOnly === "\/register"/);
+  assert.match(authReturn, /\["\/login", "\/register", "\/check-email", "\/reset-password"\]\.includes\(pathOnly\)/);
   assert.match(authReturn, /encodeURIComponent\(getSafeReturnTo\(returnTo\)\)/);
   assert.match(layout, /<MobileBackNavigation \/>/);
   assert.match(layout, /viewportFit: "cover"/);
@@ -170,7 +170,8 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
   assert.match(homeTabs, /label: t\.nav\.guide, href: "\/plant"/);
   assert.match(homeTabs, /active === "activity"[\s\S]*?"\/discover\/search"/);
   assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen\(\(open\) => !open\)\}/);
-  assert.match(plantPage, /onSearch=\{\(\) => setIsMobileSearchOpen\(\(open\) => !open\)\}/);
+  assert.match(plantPage, /<HomeSectionTabs\s+active="guide"[\s\S]*?searchEnabled=\{false\}/);
+  assert.match(plantPage, /<MobileSearchField/);
   assert.match(archivePage, /<Link href="\/profile" style=\{personalSpaceAvatarLinkStyle\}>/);
   assert.match(archivePage, /<MobileNotificationLink \/>/);
   assert.doesNotMatch(followPage, /showNotification/);

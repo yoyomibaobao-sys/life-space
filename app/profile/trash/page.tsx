@@ -289,12 +289,12 @@ export default function CloudTrashPage() {
 
   return (
     <main style={pageStyle}>
-      <Link href="/profile" style={backLinkStyle}>
+      <Link href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
         <UiIcon name="arrow-left" size={15} />
         {trashT.back}
       </Link>
       <div style={topRowStyle}>
-        <h1 style={titleStyle}>{trashT.title}</h1>
+        <h1 className="mobile-app-desktop-only" style={titleStyle}>{trashT.title}</h1>
         <div style={topActionsStyle}>
           {activeCount > 0 ? (
             <button

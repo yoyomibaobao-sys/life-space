@@ -167,11 +167,11 @@ export default function MembershipRefundPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.backRow}>
+      <div className={`${styles.backRow} mobile-app-desktop-only`}>
         <Link href="/profile" className={styles.backLink}>{copy.back_to_profile}</Link>
       </div>
 
-      <header className={styles.hero}>
+      <header className={`${styles.hero} mobile-app-desktop-only`}>
         <h1>{copy.title}</h1>
       </header>
 

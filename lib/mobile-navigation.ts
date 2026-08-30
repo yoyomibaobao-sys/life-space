@@ -85,10 +85,21 @@ export function getMobileSourceRoute(
 ) {
   const history = readMobileRouteHistory();
   const currentIndex = history.lastIndexOf(currentRoute);
-  const source = currentIndex > 0 ? history[currentIndex - 1] : null;
-  return isSafeInternalRoute(source) && source !== currentRoute
-    ? source
-    : fallbackHref;
+  const currentPath = currentRoute.split(/[?#]/, 1)[0];
+  // Authentication is an interstitial, not a logical parent. Leave native
+  // browser/Android history alone; only the page-header return skips it.
+  for (let index = currentIndex - 1; index >= 0; index--) {
+    const source = history[index];
+    const sourcePath = source.split(/[?#]/, 1)[0];
+    if (sourcePath === currentPath || isAuthenticationPath(sourcePath)) continue;
+    if (isSafeInternalRoute(source)) return source;
+  }
+  return fallbackHref;
+}
+
+function isAuthenticationPath(path: string) {
+  return ["/login", "/register", "/check-email", "/reset-password"].includes(path)
+    || path.startsWith("/auth/");
 }
 
 export function prepareMobileSourceReturn(
@@ -100,8 +111,9 @@ export function prepareMobileSourceReturn(
   rememberMobileRouteSource(currentRoute);
   const history = readMobileRouteHistory();
   const currentIndex = history.lastIndexOf(currentRoute);
-  if (currentIndex > 0 && history[currentIndex - 1] === destination) {
-    writeMobileRouteHistory(history.slice(0, currentIndex));
+  const destinationIndex = currentIndex > 0 ? history.lastIndexOf(destination, currentIndex - 1) : -1;
+  if (destinationIndex >= 0) {
+    writeMobileRouteHistory(history.slice(0, destinationIndex + 1));
   } else {
     writeMobileRouteHistory([destination]);
   }

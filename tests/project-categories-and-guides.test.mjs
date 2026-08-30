@@ -151,7 +151,7 @@ test("non-plant guides use the confirmed hierarchy, independent search, and plan
   assert.doesNotMatch(migration, /where entry\.category = 'plant'/);
 
   assert.match(indexPage, /publicGuideSearchInputs/);
-  assert.match(indexPage, /activeSectionByCategory/);
+  assert.match(indexPage, /publicGuideCategories/);
   assert.match(indexPage, /activeSection\?\.slug === "aquatic_plants"/);
   assert.match(indexPage, /matchesPublicGuideFilters/);
   assert.match(indexPage, /repeat\(auto-fit, minmax\(240px, 1fr\)\)/);

@@ -755,8 +755,8 @@ export default function ProfilePage() {
   return (
     <>
     <MobilePageHeader
-      title=""
-      compact
+      title={t.profile.settings_title}
+      titleText={t.profile.settings_title}
       fallbackHref="/archive"
       ariaLabel={t.nav.back}
     />
@@ -947,7 +947,7 @@ export default function ProfilePage() {
         <Link href="/profile/project-categories" style={{ ...projectCategorySettingsLinkStyle, ...(isMobileViewport ? mobileGroupedRowStyle : {}) }}>
           <span style={{ minWidth: 0 }}>
             <strong style={projectCategorySettingsTitleStyle}>
-              {language === "en" ? "Project categories" : "项目分类"}
+              {t.archive_workspace.group_settings_title}
             </strong>
           </span>
           <UiIcon name="arrow-right" size={17} />

@@ -39,6 +39,9 @@ export default function MobileArchiveTaxonomyInline({
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === selectedSubTag.id)
     : [];
   const selectedGroup = availableGroups.find((tag) => tag.id === groupTagId) || null;
+  const groupLabel = [selectedSubTag?.name, maxDepth >= 3 ? selectedGroup?.name : null]
+    .filter(Boolean)
+    .join(" · ") || t.archive_workspace.ungrouped;
 
   return (
     <span style={rowStyle} data-no-card-nav="true">
@@ -55,27 +58,24 @@ export default function MobileArchiveTaxonomyInline({
 
       {maxDepth >= 2 ? (
         <InlineSelect
-          label={selectedSubTag?.name || t.archive_workspace.ungrouped}
-          ariaLabel={t.archive_workspace.subcategory}
+          label={groupLabel}
+          ariaLabel={t.archive_workspace.group_settings_title}
+          sectionLabel={t.archive_workspace.subcategory}
           value={selectedSubTag?.id || ""}
           onChange={(value) => onChangeCategory(value || category)}
           options={[
             { value: "", label: t.archive_workspace.ungrouped },
             ...availableSubTags.map((tag) => ({ value: tag.id, label: tag.name })),
           ]}
-        />
-      ) : null}
-
-      {maxDepth >= 3 && selectedSubTag ? (
-        <InlineSelect
-          label={selectedGroup?.name || t.archive_workspace.ungrouped}
-          ariaLabel={t.archive_workspace.group}
-          value={selectedGroup?.id || ""}
-          onChange={onChangeGroup}
-          options={[
-            { value: "", label: t.archive_workspace.ungrouped },
-            ...availableGroups.map((tag) => ({ value: tag.id, label: tag.name })),
-          ]}
+          secondary={maxDepth >= 3 && selectedSubTag ? {
+            label: t.archive_workspace.group,
+            value: selectedGroup?.id || "",
+            onChange: onChangeGroup,
+            options: [
+              { value: "", label: t.archive_workspace.ungrouped },
+              ...availableGroups.map((tag) => ({ value: tag.id, label: tag.name })),
+            ],
+          } : undefined}
         />
       ) : null}
     </span>
@@ -88,12 +88,21 @@ function InlineSelect({
   value,
   options,
   onChange,
+  sectionLabel,
+  secondary,
 }: {
   label: string;
   ariaLabel: string;
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
+  sectionLabel?: string;
+  secondary?: {
+    label: string;
+    value: string;
+    options: Array<{ value: string; label: string }>;
+    onChange: (value: string) => void;
+  };
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -160,7 +169,7 @@ function InlineSelect({
         ref={buttonRef}
         type="button"
         aria-label={ariaLabel}
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         onClick={(event) => {
           stopCardNavigation(event);
@@ -183,7 +192,7 @@ function InlineSelect({
               }}
             >
               <div
-                role="listbox"
+                role="dialog"
                 aria-label={ariaLabel}
                 style={{
                   ...popoverStyle,
@@ -194,26 +203,32 @@ function InlineSelect({
                 }}
                 onClick={stopCardNavigation}
               >
-                {options.map((option) => {
-                  const selected = option.value === value;
-                  return (
-                    <button
-                      key={`${option.value}:${option.label}`}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      style={popoverOptionStyle(selected)}
-                      onClick={(event) => {
-                        stopCardNavigation(event);
-                        setOpen(false);
-                        if (!selected) onChange(option.value);
-                      }}
-                    >
-                      <span>{option.label}</span>
-                      {selected ? <UiIcon name="check" size={15} strokeWidth={2} /> : null}
-                    </button>
-                  );
-                })}
+                {[{ label: sectionLabel || ariaLabel, value, options, onChange }, ...(secondary ? [secondary] : [])].map((section) => (
+                  <div key={section.label} role="listbox" aria-label={section.label}>
+                    {sectionLabel ? <div style={sectionHeadingStyle}>{section.label}</div> : null}
+                    {section.options.map((option) => {
+                      const selected = option.value === section.value;
+                      return (
+                        <button
+                          key={`${option.value}:${option.label}`}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          style={popoverOptionStyle(selected)}
+                          onClick={(event) => {
+                            stopCardNavigation(event);
+                            setOpen(false);
+                            buttonRef.current?.focus({ preventScroll: true });
+                            if (!selected) section.onChange(option.value);
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {selected ? <UiIcon name="check" size={15} strokeWidth={2} /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </div>,
             document.body,
@@ -229,33 +244,41 @@ const rowStyle: CSSProperties = {
   flex: "1 1 auto",
   display: "inline-flex",
   alignItems: "center",
-  gap: 12,
-  overflowX: "auto",
-  overflowY: "hidden",
-  scrollbarWidth: "none",
-  WebkitOverflowScrolling: "touch",
+  gap: 2,
+  maxWidth: "100%",
 };
 
 const selectWrapStyle: CSSProperties = {
-  flex: "0 0 auto",
+  flex: "0 1 auto",
+  minWidth: 0,
   minHeight: 32,
   display: "inline-flex",
   alignItems: "center",
   gap: 2,
-  padding: "0 4px",
+  padding: "2px",
   border: 0,
   borderRadius: 8,
   background: "transparent",
   color: "#536a50",
   fontSize: 12,
   fontWeight: 750,
-  lineHeight: 1.2,
+  lineHeight: 1.3,
   cursor: "pointer",
   touchAction: "manipulation",
 };
 
 const selectLabelStyle: CSSProperties = {
-  whiteSpace: "nowrap",
+  minWidth: 0,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  textAlign: "left",
+};
+
+const sectionHeadingStyle: CSSProperties = {
+  padding: "6px 9px 3px",
+  color: "#71806d",
+  fontSize: 12,
+  fontWeight: 650,
 };
 
 const popoverBackdropStyle: CSSProperties = {

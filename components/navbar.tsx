@@ -215,7 +215,7 @@ export default function Navbar() {
       setMobileArchiveTitleInfo(null);
 
       if (!archiveDetailPath) {
-        setMobileTitle(getMobilePageTitle(pathname, t.nav, t.market));
+        setMobileTitle(getMobilePageTitle(pathname, t));
         return;
       }
 
@@ -227,7 +227,7 @@ export default function Navbar() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [pathname, t.nav, t.market, user?.id]);
+  }, [pathname, t, user?.id]);
 
   async function handleLogout() {
     await supabase.auth.signOut({ scope: "local" });
@@ -639,12 +639,14 @@ function hasPageManagedMobileTopNav(pathname: string) {
     "/market/mine",
     "/archive",
     "/profile",
+    "/profile/recent",
     "/profile/project-categories",
     "/admin/guides",
   ].includes(pathname)) return true;
 
   return (
     pathname.startsWith("/user/") ||
+    pathname.startsWith("/legal") ||
     pathname.startsWith("/plant/") ||
     Boolean(getArchiveDetailPath(pathname)) ||
     pathname === "/archive/interests" ||
@@ -713,7 +715,24 @@ function getMobileCreateLabel(pathname: string, labels: TranslationDictionary["n
   return getArchiveDetailPath(pathname) ? labels.add_record : labels.new_project;
 }
 
-function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav"], marketLabels: TranslationDictionary["market"]) {
+function getMobilePageTitle(pathname: string, copy: TranslationDictionary) {
+  const labels = copy.nav;
+  const marketLabels = copy.market;
+  const settingsTitles: Record<string, string> = {
+    "/profile": copy.profile.settings_title,
+    "/profile/project-categories": copy.archive_workspace.group_settings_title,
+    "/profile/recent": copy.profile.recent.title,
+    "/profile/flowers": copy.profile.helpful_page.title,
+    "/profile/helpful": copy.profile.helpful_page.title,
+    "/profile/followers": copy.profile.followers_page.title,
+    "/profile/trash": copy.profile.trash_page.title,
+    "/membership": copy.membership_page.title,
+    "/membership/payment": copy.membership_page.payment_page_title,
+    "/membership/benefits": copy.membership_page.benefits_rules_title,
+    "/membership/refund": copy.refund_request_page.title,
+    "/feedback": copy.feedback_and_contact,
+  };
+  if (settingsTitles[pathname]) return settingsTitles[pathname];
   if (pathname === "/archive") return labels.my_space;
   if (pathname === "/") return labels.brand;
   if (pathname.startsWith("/quick-record")) return labels.add_record;

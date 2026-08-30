@@ -23,7 +23,7 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
 
   assert.match(
     guide,
-    /gridTemplateColumns: hasCloudAccess[\s\S]*?"minmax\(0, 1fr\) auto"/
+    /gridTemplateColumns: hasCloudAccess[\s\S]*?"minmax\(0, 1fr\) minmax\(90px, \.8fr\) auto"/
   );
   assert.match(
     guide,

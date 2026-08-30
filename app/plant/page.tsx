@@ -24,11 +24,9 @@ import GuideCategoryTabs from "@/components/plant/GuideCategoryTabs";
 import MobileSearchField from "@/components/search/MobileSearchField";
 import { getGuideInterestCount } from "@/lib/guide-interests";
 import { buildLoginHref } from "@/lib/auth-return";
+import { buildGuideDirectoryHref } from "@/lib/guide-directory-navigation";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
-import {
-  getArchiveCategoryLabel,
-  type ArchiveCategory,
-} from "@/lib/archive-categories";
+import { type ArchiveCategory } from "@/lib/archive-categories";
 import {
   buildPublicGuideContent,
   getPublicGuideFilterLabel,
@@ -36,12 +34,14 @@ import {
   getPublicGuideName,
   getPublicGuideSectionName,
   getPublicGuideSummary,
+  getPublicGuideTemperatureLabel,
   matchesPublicGuideFilters,
   publicGuideCopy,
   publicGuideWaterFilterOptions,
   sortPublicGuides,
   type PublicGuideEntry,
   type PublicGuideFilterKey,
+  type PublicGuideFilters,
   type PublicGuideSection,
 } from "@/lib/public-guide-library";
 
@@ -57,6 +57,10 @@ const EMPTY_PUBLIC_GUIDE_SEARCHES: Record<ArchiveCategory, string> = {
   insect_fish: "",
   other: "",
 };
+
+function replaceGuideDirectoryUrl(section: ArchiveCategory, query = "", category = "all") {
+  window.history.replaceState(window.history.state, "", buildGuideDirectoryHref(section, query, category));
+}
 
 let hasCheckedInitialPlantNavigation = false;
 
@@ -165,6 +169,7 @@ function FilterSelect({
   compact = false,
   hideLabel = false,
   fill = false,
+  toolbar = false,
 }: {
   label: string;
   value: string;
@@ -173,6 +178,7 @@ function FilterSelect({
   compact?: boolean;
   hideLabel?: boolean;
   fill?: boolean;
+  toolbar?: boolean;
 }) {
   return (
     <label
@@ -193,7 +199,9 @@ function FilterSelect({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={{
-          height: compact ? 36 : 38,
+          height: compact ? 36 : toolbar ? 42 : 38,
+          minWidth: 0,
+          width: fill ? "100%" : undefined,
           borderRadius: compact ? 10 : 12,
           border: "1px solid #e5e7eb",
           padding: compact ? "0 10px" : "0 12px",
@@ -239,7 +247,7 @@ export default function PlantIndexPage() {
   const [query, setQuery] = useState("");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [publicGuideCategories, setPublicGuideCategories] = useState<Partial<Record<ArchiveCategory, string>>>({});
   const [searchStateRestored, setSearchStateRestored] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [visiblePlantCount, setVisiblePlantCount] = useState(
@@ -249,7 +257,6 @@ export default function PlantIndexPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const desktopSearchWrapRef = useRef<HTMLDivElement>(null);
-  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const resultsSectionRef = useRef<HTMLElement>(null);
   const loadMorePlantsRef = useRef<HTMLDivElement>(null);
   const pendingScrollYRef = useRef<number | null>(null);
@@ -296,17 +303,20 @@ export default function PlantIndexPage() {
           initialSection === "other"
         ) {
           setGuideSection(initialSection);
-          if (initialSection === "plant") {
+          if (initialSection === "plant" && initialParams.has("q")) {
             setSearchInput(initialQuery);
             setQuery(initialQuery);
-          } else {
+            setSearchStateRestored(true);
+            return;
+          } else if (initialSection !== "plant") {
             setPublicGuideSearchInputs((current) => ({
               ...current,
               [initialSection]: initialQuery,
             }));
+            setPublicGuideCategories((current) => ({ ...current, [initialSection]: initialParams.get("category") || "all" }));
+            setSearchStateRestored(true);
+            return;
           }
-          setSearchStateRestored(true);
-          return;
         }
 
         if (isPageReload()) {
@@ -517,20 +527,7 @@ export default function PlantIndexPage() {
   }, [searchPanelOpen, isMobileViewport]);
 
   useEffect(() => {
-    if (!isMobileSearchOpen) return;
-
-    window.requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setIsMobileSearchOpen(false);
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isMobileSearchOpen]);
-
-  useEffect(() => {
-    if (!isMobileViewport || !isMobileSearchOpen) return;
+    if (!isMobileViewport || !searchStateRestored || guideSection !== "plant") return;
 
     const timer = window.setTimeout(() => {
       const keyword = searchInput.trim();
@@ -542,7 +539,7 @@ export default function PlantIndexPage() {
     return () => window.clearTimeout(timer);
     // persistSearchState deliberately reads the current filters and category.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMobileSearchOpen, isMobileViewport, searchInput]);
+  }, [guideSection, searchStateRestored, isMobileViewport, searchInput]);
 
   const aliasMap = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -807,7 +804,6 @@ export default function PlantIndexPage() {
     setQuery(keyword);
     setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
     setSearchPanelOpen(false);
-    setIsMobileSearchOpen(false);
     rememberSearch(keyword);
     persistSearchState(keyword, keyword, INITIAL_VISIBLE_PLANT_COUNT);
 
@@ -818,7 +814,6 @@ export default function PlantIndexPage() {
 
   function openSearch() {
     setSearchPanelOpen(true);
-    if (isMobileViewport) setIsMobileSearchOpen(true);
   }
 
   function removeRecentSearch(value: string) {
@@ -846,9 +841,10 @@ export default function PlantIndexPage() {
   }
 
   function changeGuideSection(section: ArchiveCategory) {
+    if (guideSection === "plant") persistSearchState();
     setGuideSection(section);
-    setIsMobileSearchOpen(false);
     setSearchPanelOpen(false);
+    replaceGuideDirectoryUrl(section, section === "plant" ? "" : publicGuideSearchInputs[section], publicGuideCategories[section]);
   }
 
   function renderSearchAssist() {
@@ -1001,7 +997,7 @@ export default function PlantIndexPage() {
     <>
       <HomeSectionTabs
         active="guide"
-        onSearch={() => setIsMobileSearchOpen((open) => !open)}
+        searchEnabled={false}
       />
       <main style={{ padding: isMobileViewport ? "6px 10px 10px" : "16px", maxWidth: 1080, margin: "0 auto" }}>
       <GuideCategoryTabs value={guideSection} onChange={changeGuideSection} />
@@ -1038,7 +1034,7 @@ export default function PlantIndexPage() {
           <PlantMenu signedIn={isSignedIn} interestCount={interestCount} />
         </div> : null}
 
-        {!isMobileViewport || isMobileSearchOpen ? <div
+        {!isMobileViewport ? <div
           ref={desktopSearchWrapRef}
           style={{
             position: "relative",
@@ -1056,7 +1052,6 @@ export default function PlantIndexPage() {
             style={{ display: "flex", gap: isMobileViewport ? 7 : 8, minWidth: 0, flex: 1 }}
           >
             <input
-              ref={isMobileViewport ? mobileSearchInputRef : undefined}
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               onFocus={() => {
@@ -1214,13 +1209,21 @@ export default function PlantIndexPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: hasCloudAccess
-                    ? "minmax(0, 1fr) auto"
-                    : "minmax(0, 1fr)",
+                    ? "minmax(0, 1fr) minmax(90px, .8fr) auto"
+                    : "minmax(0, 1fr) minmax(90px, .8fr)",
                   alignItems: "center",
                   gap: 6,
                   width: "100%",
                 }}
               >
+                <MobileSearchField
+                  value={searchInput}
+                  onChange={setSearchInput}
+                  onClear={() => setSearchInput("")}
+                  placeholder={publicGuideCopy[language].searchPlaceholder}
+                  ariaLabel={publicGuideCopy[language].searchPlaceholder}
+                  clearAriaLabel={t.plant.clear_search}
+                />
                 <FilterSelect
                   label={t.plant.category}
                   value={activeCategory}
@@ -1229,6 +1232,7 @@ export default function PlantIndexPage() {
                   compact
                   hideLabel
                   fill
+                  toolbar
                 />
                 {hasCloudAccess ? (
                   <button
@@ -1555,13 +1559,18 @@ export default function PlantIndexPage() {
           sections={publicGuideSections.filter((section) => section.category === guideSection)}
           loading={publicGuidesLoading}
           searchInput={publicGuideSearchInputs[guideSection]}
-          onSearchInputChange={(value) =>
+          onSearchInputChange={(value) => {
             setPublicGuideSearchInputs((current) => ({
               ...current,
               [guideSection]: value,
-            }))
-          }
-          searchOpen={!isMobileViewport || isMobileSearchOpen}
+            }));
+            replaceGuideDirectoryUrl(guideSection, value, publicGuideCategories[guideSection]);
+          }}
+          selectedSection={publicGuideCategories[guideSection] || "all"}
+          onSectionChange={(category) => {
+            setPublicGuideCategories((current) => ({ ...current, [guideSection]: category }));
+            replaceGuideDirectoryUrl(guideSection, publicGuideSearchInputs[guideSection], category);
+          }}
           isMobile={isMobileViewport}
           language={language}
           isSignedIn={isSignedIn}
@@ -1581,7 +1590,8 @@ function PublicGuideLibrary({
   loading,
   searchInput,
   onSearchInputChange,
-  searchOpen,
+  selectedSection,
+  onSectionChange,
   isMobile,
   language,
   isSignedIn,
@@ -1594,7 +1604,8 @@ function PublicGuideLibrary({
   loading: boolean;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
-  searchOpen: boolean;
+  selectedSection: string;
+  onSectionChange: (value: string) => void;
   isMobile: boolean;
   language: "zh" | "en";
   isSignedIn: boolean;
@@ -1608,19 +1619,14 @@ function PublicGuideLibrary({
   const orderedSections = sortPublicGuides(sections).filter((section) =>
     orderedEntries.some((entry) => entry.section_id === section.id),
   );
-  const [activeSectionByCategory, setActiveSectionByCategory] = useState<
-    Partial<Record<ArchiveCategory, string>>
-  >({});
-  const [waterFilters, setWaterFilters] = useState<
-    Record<PublicGuideFilterKey, string>
-  >({
-    light: "all",
-    temperature: "all",
+  const [waterFilters, setWaterFilters] = useState<PublicGuideFilters>({
+    light: [],
+    temperature: [],
     growthForm: "all",
     difficulty: "all",
   });
   const [waterFiltersOpen, setWaterFiltersOpen] = useState(false);
-  const requestedSectionId = activeSectionByCategory[category] || "all";
+  const requestedSectionId = selectedSection;
   const activeSectionId =
     requestedSectionId === "all" ||
     orderedSections.some((section) => section.id === requestedSectionId)
@@ -1634,7 +1640,7 @@ function PublicGuideLibrary({
     activeSection?.slug === "aquatic_plants" &&
     hasCloudAccess;
   const activeWaterFilterCount = Object.values(waterFilters).filter(
-    (value) => value !== "all",
+    (value) => typeof value === "string" ? value !== "all" : value.length > 0,
   ).length;
   const visibleEntries = orderedEntries.filter((entry) => {
     if (activeSectionId !== "all" && entry.section_id !== activeSectionId) {
@@ -1655,18 +1661,15 @@ function PublicGuideLibrary({
 
   function resetWaterFilters() {
     setWaterFilters({
-      light: "all",
-      temperature: "all",
+      light: [],
+      temperature: [],
       growthForm: "all",
       difficulty: "all",
     });
   }
 
   function changeSection(sectionId: string) {
-    setActiveSectionByCategory((current) => ({
-      ...current,
-      [category]: sectionId,
-    }));
+    onSectionChange(sectionId);
     if (sectionId !== activeSection?.id) {
       setWaterFiltersOpen(false);
     }
@@ -1674,8 +1677,6 @@ function PublicGuideLibrary({
 
   function renderGuideCard(entry: PublicGuideEntry) {
     const name = getPublicGuideName(entry, language);
-    const sourceLabel =
-      entry.source === "preset" ? copy.preset : copy.approved;
     const summary = isSignedIn
       ? buildPublicGuideContent(entry, language).overview || getPublicGuideSummary(entry, language) || copy.contentPending
       : copy.registerForOverview;
@@ -1684,7 +1685,7 @@ function PublicGuideLibrary({
     );
     const traits = getPublicGuideFilterTraits(entry);
     const traitLabels = (Object.keys(traits) as PublicGuideFilterKey[])
-      .map((key) => getPublicGuideFilterLabel(key, traits[key], language))
+      .map((key) => key === "temperature" ? getPublicGuideTemperatureLabel(entry, language) : getPublicGuideFilterLabel(key, traits[key], language))
       .filter(Boolean)
       .slice(0, isMobile ? 2 : 4);
 
@@ -1692,7 +1693,7 @@ function PublicGuideLibrary({
       <Link
         key={entry.id}
         href={`/plant/guide/${entry.id}?from=${encodeURIComponent(category)}`}
-        aria-label={`${name} · ${sourceLabel}`}
+        aria-label={name}
         style={publicGuideCardStyle(isMobile)}
       >
         <span style={publicGuideCardTitleRowStyle}>
@@ -1723,20 +1724,15 @@ function PublicGuideLibrary({
   return (
     <section>
       <div style={publicGuidePanelStyle(isMobile)}>
-      {searchOpen ? (
-        <div style={{ marginBottom: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: showWaterFilters ? "minmax(0, 1fr) minmax(90px, .8fr) auto" : "minmax(0, 1fr) minmax(90px, .8fr)", alignItems: "center", gap: 6 }}>
         <MobileSearchField
           value={searchInput}
           onChange={onSearchInputChange}
           onClear={() => onSearchInputChange("")}
-          placeholder={`${getArchiveCategoryLabel(category, language)} · ${copy.searchPlaceholder}`}
+          placeholder={copy.searchPlaceholder}
           ariaLabel={copy.searchPlaceholder}
           clearAriaLabel={t.plant.clear_search}
         />
-        </div>
-      ) : null}
-
-      <div style={{ display: "grid", gridTemplateColumns: showWaterFilters ? "minmax(0, 1fr) auto" : "minmax(0, 1fr)", alignItems: "end", gap: 6 }}>
         <FilterSelect
           label={t.plant.category}
           value={activeSectionId}
@@ -1746,8 +1742,9 @@ function PublicGuideLibrary({
             ...orderedSections.map((section) => ({ value: section.id, label: getPublicGuideSectionName(section, language) })),
           ]}
           compact={isMobile}
-          hideLabel={isMobile}
+          hideLabel
           fill
+          toolbar
         />
         {showWaterFilters ? (
           <button type="button" onClick={() => setWaterFiltersOpen((open) => !open)} aria-expanded={waterFiltersOpen} style={mobileFilterToggleStyle}>
@@ -1773,24 +1770,46 @@ function PublicGuideLibrary({
               ) : null}
             </div>
           </div>
-          {!isMobile || waterFiltersOpen ? (
-            <div style={publicGuideWaterFilterGridStyle(isMobile)}>
-              {(Object.keys(waterFilters) as PublicGuideFilterKey[]).map((key) => (
+          <p style={{ margin: "8px 0", fontSize: 12, color: "#647360", lineHeight: 1.55 }}>{copy.waterFilterHint}</p>
+          <div style={publicGuideWaterFilterGridStyle(isMobile)}>
+            {(["light", "temperature"] as const).map((key) => {
+              const value = waterFilters[key];
+              const selected = typeof value === "string" ? value === "all" ? [] : [value] : value;
+              return (
+                <fieldset key={key} style={{ margin: 0, padding: 0, border: 0, minWidth: 0, gridColumn: "1 / -1" }}>
+                  <legend style={{ padding: 0, marginBottom: 6, fontSize: 13, fontWeight: 700 }}>{copy[key]} · {copy.multiSelect}</legend>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {publicGuideWaterFilterOptions[language][key].map((option) => {
+                      const checked = option.value === "all" ? selected.length === 0 : selected.includes(option.value);
+                      return (
+                        <label key={option.value} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 9px", border: `1px solid ${checked ? "#96b78b" : "#dce5d8"}`, borderRadius: 10, background: checked ? "#eef6e9" : "#fff", fontSize: 13, cursor: "pointer" }}>
+                          <input type="checkbox" checked={checked} onChange={() => setWaterFilters((current) => {
+                            const currentValue = current[key];
+                            const choices = typeof currentValue === "string" ? currentValue === "all" ? [] : [currentValue] : currentValue;
+                            return { ...current, [key]: option.value === "all" ? [] : choices.includes(option.value) ? choices.filter((choice) => choice !== option.value) : [...choices, option.value] };
+                          })} />
+                          {option.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              );
+            })}
+            {(["growthForm", "difficulty"] as const).map((key) => (
                 <FilterSelect
                   key={key}
                   label={copy[key]}
-                  value={waterFilters[key]}
+                  value={typeof waterFilters[key] === "string" ? waterFilters[key] : "all"}
                   onChange={(value) =>
                     setWaterFilters((current) => ({ ...current, [key]: value }))
                   }
                   options={[...publicGuideWaterFilterOptions[language][key]]}
                   compact={isMobile}
-                  hideLabel={isMobile}
                   fill
                 />
               ))}
-            </div>
-          ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -1798,7 +1817,7 @@ function PublicGuideLibrary({
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 9, margin: "10px 0" }}>
         <span style={{ fontSize: 13, color: "#888" }}>{loading ? copy.loading : `${visibleEntries.length}${t.plant.result_suffix}`}</span>
-        <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact={isMobile} />
+        <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact={isMobile} category={category} />
       </div>
 
       {loading ? (
@@ -1820,16 +1839,18 @@ function PlantMenu({
   signedIn,
   interestCount,
   compact = false,
+  category = "plant",
 }: {
   signedIn: boolean;
   interestCount: number | null;
   compact?: boolean;
+  category?: ArchiveCategory;
 }) {
   const { t } = useLanguage();
 
   return (
     <Link
-      href={signedIn ? "/archive/interests" : buildLoginHref("/archive/interests")}
+      href={signedIn ? `/archive/interests?section=${category}` : buildLoginHref(`/archive/interests?section=${category}`)}
       style={plantMenuSummaryStyle(compact)}
     >
       {compact ? null : <UiIcon name="bookmark" size={14} style={{ marginRight: 4 }} />}

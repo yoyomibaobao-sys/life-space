@@ -86,7 +86,11 @@
   gap: 8px;
   color: #748270;
   font-size: 13px;
+  flex-wrap: wrap;
 }
+
+.breadcrumbs a { color: inherit; text-decoration: none; }
+.breadcrumbs a:focus-visible { outline: 2px solid #477143; outline-offset: 3px; }
 
 .categoryBadge {
   min-height: 30px;
@@ -106,6 +110,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
+  flex-wrap: wrap;
 }
 
 .heroTitleRow h1 {
