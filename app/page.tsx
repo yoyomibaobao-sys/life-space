@@ -108,15 +108,15 @@ export default function Home() {
             data-has-download={isNativeApp === false ? "true" : "false"}
             style={actionsStyle}
           >
-            <Link href={currentUserId ? "/archive" : "/register"} style={primaryActionStyle}>
+            <Link href={currentUserId ? "/archive" : "/register"} style={actionBaseStyle}>
               {currentUserId ? t.home.enter_my_space : t.register}
             </Link>
             {isNativeApp === false ? (
-              <Link href="/api/download/android" style={downloadActionStyle}>
+              <Link href="/api/download/android" style={actionBaseStyle}>
                 {t.home.download_android}
               </Link>
             ) : null}
-            <Link href="/discover" style={softActionStyle}>{t.home.browse_discover}</Link>
+            <Link href="/discover" style={actionBaseStyle}>{t.home.browse_discover}</Link>
           </div>
           <Link className="home-membership-link" href="/membership" style={membershipLinkStyle}>
             <span style={membershipLinkCopyStyle}>
@@ -273,27 +273,9 @@ const actionBaseStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 750,
   whiteSpace: "nowrap",
-};
-
-const primaryActionStyle: CSSProperties = {
-  ...actionBaseStyle,
-  background: "#4f7046",
-  color: "#ffffff",
-  border: "1px solid #4f7046",
-};
-
-const softActionStyle: CSSProperties = {
-  ...actionBaseStyle,
-  background: "#eef5e8",
-  color: "#496b3f",
-  border: "1px solid #d9e6d0",
-};
-
-const downloadActionStyle: CSSProperties = {
-  ...actionBaseStyle,
-  background: "#f7faf3",
-  color: "#355f31",
-  border: "1px solid #bcd3b3",
+  background: "#fff",
+  color: "#4f6550",
+  border: "1px solid #dce5d9",
 };
 
 const membershipLinkStyle: CSSProperties = {

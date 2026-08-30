@@ -217,10 +217,10 @@ function PlantInterestsContent() {
                   </details>
                 </div>
                 <div style={actionsStyle}>
-                  <Link href={item.detailHref} style={secondaryActionStyle}>
+                  <Link href={item.detailHref} style={cardActionStyle}>
                     {t.plant_lists.view_guide}
                   </Link>
-                  {item.projectHref ? <Link href={item.projectHref} style={primaryActionStyle}>
+                  {item.projectHref ? <Link href={item.projectHref} style={cardActionStyle}>
                     {t.plant.detail.new_project}
                   </Link> : null}
                 </div>
@@ -261,5 +261,4 @@ const moreStyle: CSSProperties = { position: "relative" };
 const moreSummaryStyle: CSSProperties = { width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid #e0e7dd", borderRadius: 999, color: "#667462", cursor: "pointer", listStyle: "none" };
 const removeButtonStyle: CSSProperties = { position: "absolute", top: 41, right: 0, zIndex: 5, minWidth: 100, minHeight: 42, border: "1px solid #edd7d4", borderRadius: 11, background: "#fff", color: "#b34f45", fontSize: 14, cursor: "pointer" };
 const actionsStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 };
-const secondaryActionStyle: CSSProperties = { minHeight: 40, display: "grid", placeItems: "center", border: "1px solid #dce5d9", borderRadius: 11, color: "#4f6550", fontSize: 14, fontWeight: 700, textDecoration: "none" };
-const primaryActionStyle: CSSProperties = { ...secondaryActionStyle, borderColor: "#5d8558", background: "#5d8558", color: "#fff" };
+const cardActionStyle: CSSProperties = { minHeight: 40, display: "grid", placeItems: "center", border: "1px solid #dce5d9", borderRadius: 11, background: "#fff", color: "#4f6550", fontSize: 14, fontWeight: 700, textDecoration: "none" };
