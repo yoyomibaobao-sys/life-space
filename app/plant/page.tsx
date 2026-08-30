@@ -35,6 +35,7 @@ import {
   getPublicGuideSectionName,
   getPublicGuideSummary,
   getPublicGuideTemperatureLabel,
+  getPublicGuideTemperatureMatchLabel,
   matchesPublicGuideFilters,
   publicGuideCopy,
   publicGuideWaterFilterOptions,
@@ -1688,6 +1689,9 @@ function PublicGuideLibrary({
       .map((key) => key === "temperature" ? getPublicGuideTemperatureLabel(entry, language) : getPublicGuideFilterLabel(key, traits[key], language))
       .filter(Boolean)
       .slice(0, isMobile ? 2 : 4);
+    const temperatureMatch = showWaterFilters
+      ? getPublicGuideTemperatureMatchLabel(entry, waterFilters.temperature, language)
+      : "";
 
     return (
       <Link
@@ -1714,6 +1718,11 @@ function PublicGuideLibrary({
                 {label}
               </span>
             ))}
+          </span>
+        ) : null}
+        {temperatureMatch ? (
+          <span style={{ display: "block", marginTop: 6, color: "#4f6550", fontSize: 12, lineHeight: 1.5, overflowWrap: "anywhere" }}>
+            {temperatureMatch}
           </span>
         ) : null}
         <span style={publicGuideSummaryStyle(isMobile, isSignedIn)}>{summary}</span>

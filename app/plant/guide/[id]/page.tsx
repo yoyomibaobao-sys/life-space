@@ -564,6 +564,7 @@ export default function PublicGuideDetailPage() {
                       >
                         <span>{item.label}</span>
                         <strong>{item.value}</strong>
+                        {item.note ? <small className={styles.parameterNote}>{item.note}</small> : null}
                       </div>
                     ))}
                 </div>

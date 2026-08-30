@@ -1,6 +1,6 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { getPracticalGuideContent } from "./practical-guide-content";
-import { getAquaticTemperatureReference, matchesAquaticTemperature } from "./aquatic-guide-temperature";
+import { getAquaticTemperatureMatches, getAquaticTemperatureReference, matchesAquaticTemperature } from "./aquatic-guide-temperature";
 
 export type PublicGuideLanguage = "zh" | "en";
 
@@ -34,6 +34,7 @@ export type PublicGuideEntry = {
 export type PublicGuideParameter = {
   label: string;
   value: string;
+  note?: string;
 };
 
 export type PublicGuideStage = {
@@ -78,11 +79,11 @@ type RawGuideContent = Partial<PublicGuideContent>;
 
 export const publicGuideCopy = {
   zh: {
-    publicLibrary: "公共对应指引",
+    publicLibrary: "公共指引库",
     newProject: "新建项目",
     searchPlaceholder: "搜索指引",
     notice:
-      "平台预设指引直接公开。你新增的对应指引可立即用于自己的项目；达到使用量后进入管理员审核，通过后加入公共指引库。",
+      "平台预设指引直接公开。你新增的关联指引可立即用于自己的项目；达到使用量后进入管理员审核，通过后加入公共指引库。",
     loading: "加载中…",
     noMatch: "没有匹配的公共指引。",
     empty: "这个板块暂时还没有公共指引。",
@@ -95,8 +96,10 @@ export const publicGuideCopy = {
     clearFilters: "清除筛选",
     light: "光照",
     temperature: "水温（℃）",
+    referenceTemperature: "参考水温范围",
+    temperatureReferenceNote: "资料所列范围，并非全程最适温度。",
     multiSelect: "可多选",
-    waterFilterHint: "同一条件选中任一项即可，不同条件同时满足。水温按参考范围重叠匹配，请在详情核对具体品种及范围；未确认数值的指引单独列出。",
+    waterFilterHint: "同一条件选中任一项即可，不同条件同时满足。水温按资料范围初筛，结果标出实际匹配部分，不代表整个区间都适合。",
     growthForm: "生长方式",
     difficulty: "难度",
     overviewPractice: "概要与实操",
@@ -121,7 +124,7 @@ export const publicGuideCopy = {
     frameworkNote: "以下为通用起步框架，具体参数应结合物种、材料、环境和当地规范调整。",
   },
   en: {
-    publicLibrary: "Public related guides",
+    publicLibrary: "Public guide library",
     newProject: "New project",
     searchPlaceholder: "Search guides",
     notice:
@@ -138,8 +141,10 @@ export const publicGuideCopy = {
     clearFilters: "Clear filters",
     light: "Light",
     temperature: "Water temperature (°C)",
+    referenceTemperature: "Reference water-temperature range",
+    temperatureReferenceNote: "Published range, not an optimum throughout.",
     multiSelect: "Select multiple",
-    waterFilterHint: "Match any choice within a condition and every selected condition. Water-temperature ranges must overlap; check the named species and its range in the guide. Unverified ranges are listed separately.",
+    waterFilterHint: "Match any choice within a condition and every selected condition. Temperature results show the actual overlap with the published range, not suitability throughout the selected band.",
     growthForm: "Growth form",
     difficulty: "Difficulty",
     overviewPractice: "Overview & practice",
@@ -175,9 +180,12 @@ export const publicGuideWaterFilterOptions = {
     ],
     temperature: [
       { value: "all", label: "全部水温" },
+      { value: "c0_10", label: "0–10℃" },
+      { value: "c10_18", label: "10–18℃" },
       { value: "c18_22", label: "18–22℃" },
       { value: "c22_26", label: "22–26℃" },
       { value: "c26_30", label: "26–30℃" },
+      { value: "c30_plus", label: "30℃以上" },
       { value: "unknown", label: "水温待确认" },
     ],
     growthForm: [
@@ -205,9 +213,12 @@ export const publicGuideWaterFilterOptions = {
     ],
     temperature: [
       { value: "all", label: "All temperatures" },
+      { value: "c0_10", label: "0–10°C" },
+      { value: "c10_18", label: "10–18°C" },
       { value: "c18_22", label: "18–22°C" },
       { value: "c22_26", label: "22–26°C" },
       { value: "c26_30", label: "26–30°C" },
+      { value: "c30_plus", label: "Above 30°C" },
       { value: "unknown", label: "Range unverified" },
     ],
     growthForm: [
@@ -333,7 +344,18 @@ export function matchesPublicGuideFilters(
 
 export function getPublicGuideTemperatureLabel(entry: PublicGuideEntry, language: PublicGuideLanguage) {
   const range = getAquaticTemperatureReference(entry);
-  return range ? `${range.min}–${range.max}℃` : language === "en" ? "Range unverified" : "水温待确认";
+  return range ? `${range.min}–${range.max}${language === "en" ? "°C" : "℃"}` : language === "en" ? "Range unverified" : "水温待确认";
+}
+
+export function getPublicGuideTemperatureMatchLabel(
+  entry: PublicGuideEntry,
+  selected: PublicGuideFilters["temperature"],
+  language: PublicGuideLanguage,
+) {
+  const matches = getAquaticTemperatureMatches(entry, selected);
+  if (!matches.length) return "";
+  const ranges = matches.map((range) => `${range.min}–${range.max}${language === "en" ? "°C" : "℃"}`);
+  return language === "en" ? `Matched range: ${ranges.join(", ")}` : `本次匹配：${ranges.join("、")}`;
 }
 
 function text(value: unknown) {
@@ -347,7 +369,8 @@ function parseParameters(value: unknown): PublicGuideParameter[] {
       if (!isRecord(item)) return null;
       const label = text(item.label);
       const itemValue = text(item.value);
-      return label && itemValue ? { label, value: itemValue } : null;
+      const note = text(item.note);
+      return label && itemValue ? { label, value: itemValue, ...(note ? { note } : {}) } : null;
     })
     .filter((item): item is PublicGuideParameter => item !== null);
 }
@@ -1257,8 +1280,9 @@ export function buildPublicGuideContent(
     entry.content_template === "aquatic_plant"
       ? (Object.keys(traits) as PublicGuideFilterKey[])
           .map((key) => ({
-            label: copy[key],
+            label: key === "temperature" ? copy.referenceTemperature : copy[key],
             value: key === "temperature" ? getPublicGuideTemperatureLabel(entry, language) : getPublicGuideFilterLabel(key, traits[key], language),
+            ...(key === "temperature" && temperatureReference ? { note: copy.temperatureReferenceNote } : {}),
           }))
           .filter((item) => item.value)
       : [];

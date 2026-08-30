@@ -1049,7 +1049,7 @@ export default function ArchivePage() {
               .filter((archive) => archive.category === category)
               .map((archive) => archive.system_name || archive.species_name),
             plantSpeciesRows: category === "plant" ? speciesList : undefined,
-            limit: 300,
+            limit: null,
           });
 
           return [category, candidates] as const;

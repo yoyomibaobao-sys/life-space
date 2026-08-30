@@ -6,7 +6,7 @@ import { showToast } from "@/components/Toast";
 import ArchiveNewProjectFormShell, {
   archiveNewProjectInputStyle,
 } from "@/components/archive-ui/ArchiveNewProjectFormShell";
-import SystemNameSelector from "@/components/archive/SystemNameSelector";
+import SystemNameSelector, { type SystemNameSelectorCandidate } from "@/components/archive/SystemNameSelector";
 import { supabase } from "@/lib/supabase";
 import {
   archiveCategoryOptions,
@@ -18,6 +18,8 @@ import {
 } from "@/lib/local-offline-db";
 import {
   getSystemNameCandidates,
+  filterSystemNameCandidates,
+  resolveExactSystemNameCandidate,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -47,7 +49,7 @@ export default function NewLocalArchivePage() {
   const copy = t.archive;
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<ArchiveCategory>("plant");
+  const [category, setCategory] = useState<ArchiveCategory | null>(null);
   const [plantId, setPlantId] = useState("");
   const [plantSlug, setPlantSlug] = useState("");
   const [systemName, setSystemName] = useState("");
@@ -57,6 +59,7 @@ export default function NewLocalArchivePage() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [systemCandidates, setSystemCandidates] = useState<SystemNameCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(true);
   const [quickCaptureId, setQuickCaptureId] = useState("");
   const [createdArchiveId, setCreatedArchiveId] = useState("");
 
@@ -72,32 +75,26 @@ export default function NewLocalArchivePage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadCandidates() {
       const candidates = await getSystemNameCandidates({
-        category,
-        currentValue: systemName || systemSearch,
         mode: "local",
         supabase,
-        limit: 200,
+        includeOtherCategories: true,
+        limit: null,
       });
+      if (cancelled) return;
       setSystemCandidates(candidates);
+      setCandidatesLoading(false);
     }
 
     void loadCandidates();
-  }, [category]);
+    return () => { cancelled = true; };
+  }, []);
 
-  const usesCandidateSystemName =
-    category === "plant" || category === "system" || category === "insect_fish";
-  const systemOptions =
-    systemCandidates
-      .filter((item) =>
-        systemSearch.trim()
-          ? String(item.searchText || item.label).toLowerCase().includes(systemSearch.trim().toLowerCase())
-          : true
-      )
-      .slice(0, 8);
+  const systemOptions = filterSystemNameCandidates(systemCandidates, systemSearch, category);
   const cloudCreateHref = (() => {
-    const params = new URLSearchParams({ category });
+    const params = new URLSearchParams(category ? { category } : {});
     if (category === "plant" && plantId) params.set("species", plantId);
     if (quickCaptureId) params.set("quickCapture", quickCaptureId);
     return `/archive/new?${params.toString()}`;
@@ -113,7 +110,12 @@ export default function NewLocalArchivePage() {
       return;
     }
 
-    const cleanSystemName = (usesCandidateSystemName ? systemName || systemSearch : systemName).trim();
+    if (!category) {
+      showToast(copy.category_required_error);
+      return;
+    }
+
+    const cleanSystemName = (systemName || systemSearch).trim();
     if (!cleanSystemName) {
       showToast(copy.system_name_required_error);
       return;
@@ -180,10 +182,17 @@ export default function NewLocalArchivePage() {
   function handleCategoryChange(nextCategory: ArchiveCategory) {
     setCategory(nextCategory);
     setSystemSuggestionsOpen(false);
-    if (nextCategory !== "plant") {
-      setPlantId("");
-      setPlantSlug("");
-    }
+    const exact = resolveExactSystemNameCandidate(systemCandidates, systemSearch);
+    setPlantId(nextCategory === "plant" && exact?.category === "plant" ? exact.plantId || "" : "");
+    setPlantSlug(nextCategory === "plant" && exact?.category === "plant" ? exact.plantSlug || "" : "");
+  }
+
+  function associateGuide(candidate: SystemNameSelectorCandidate) {
+    if (!candidate.category) return;
+    setCategory(candidate.category);
+    setSystemName(candidate.label);
+    setPlantId(candidate.category === "plant" ? candidate.plantId || "" : "");
+    setPlantSlug(candidate.category === "plant" ? candidate.plantSlug || "" : "");
   }
 
   return (
@@ -199,60 +208,49 @@ export default function NewLocalArchivePage() {
       projectTitle={title}
       onProjectTitleChange={setTitle}
       systemControl={
-        usesCandidateSystemName ? (
-          <div style={localSystemControlWrapStyle}>
-            <SystemNameSelector
-              value={systemSearch}
-              onChange={(value) => {
-                setSystemSearch(value);
-                setSystemName("");
-                setSystemSuggestionsOpen(true);
-              }}
-              candidates={systemOptions}
-              selectedValue={systemName}
-              suggestionsOpen={systemSuggestionsOpen}
-              onSuggestionsOpenChange={setSystemSuggestionsOpen}
-              onSelect={(option) => {
-                setSystemName(option.label);
-                setSystemSearch(option.label);
-                setPlantId(option.plantId || option.id || "");
-                setPlantSlug(option.plantSlug || "");
-                setSystemSuggestionsOpen(false);
-              }}
-              onUseCustom={(name) => {
-                setSystemName(name);
-                setSystemSearch(name);
-                if (category !== "plant") {
-                  setPlantId("");
-                  setPlantSlug("");
-                }
-                setSystemSuggestionsOpen(false);
-              }}
-              placeholder={
-                category === "plant"
-                  ? copy.local_candidate_placeholder
-                  : `${copy.select_system_example}${systemOptions[0]?.label || copy.grow_light_example}`
-              }
-              inputStyle={archiveNewProjectInputStyle}
-              panelStyle={localSuggestionPanelStyle}
-              optionStyle={(option, selected) =>
-                localSuggestionButtonStyle(selected || systemName === option.label)
-              }
-              customOptionStyle={localSuggestionNewButtonStyle}
-              emptyStyle={localSuggestionEmptyStyle}
-              idleText={copy.candidate_idle}
-              emptyText={copy.candidate_empty}
-              customActionLabel={(inputValue) => `${copy.use_as_system_name}: ${inputValue}`}
-            />
-          </div>
-        ) : (
-          <input
-            value={systemName}
-            onChange={(event) => setSystemName(event.target.value)}
-            placeholder={copy.other_system_placeholder}
-            style={archiveNewProjectInputStyle}
+        <div style={localSystemControlWrapStyle}>
+          <SystemNameSelector
+            value={systemSearch}
+            onChange={(value) => {
+              setSystemSearch(value);
+              setSystemName("");
+              setPlantId("");
+              setPlantSlug("");
+              setSystemSuggestionsOpen(true);
+            }}
+            candidates={systemOptions}
+            resolutionCandidates={systemCandidates}
+            selectedValue={systemName}
+            suggestionsOpen={systemSuggestionsOpen}
+            onSuggestionsOpenChange={setSystemSuggestionsOpen}
+            onResolveCandidate={associateGuide}
+            onSelect={(candidate) => {
+              associateGuide(candidate);
+              setSystemName(candidate.label);
+              setSystemSearch(candidate.label);
+              setSystemSuggestionsOpen(false);
+            }}
+            onUseCustom={(name) => {
+              setSystemName(name);
+              setSystemSearch(name);
+              setPlantId("");
+              setPlantSlug("");
+              setSystemSuggestionsOpen(false);
+            }}
+            loading={candidatesLoading}
+            required
+            showCategory
+            placeholder={copy.guide_selector_placeholder}
+            inputStyle={archiveNewProjectInputStyle}
+            panelStyle={localSuggestionPanelStyle}
+            optionStyle={(candidate, selected) => localSuggestionButtonStyle(selected)}
+            customOptionStyle={localSuggestionNewButtonStyle}
+            emptyStyle={localSuggestionEmptyStyle}
+            idleText={copy.candidate_idle}
+            emptyText={copy.candidate_empty}
+            customActionLabel={(inputValue) => `${copy.use_as_system_name}: ${inputValue}`}
           />
-        )
+        </div>
       }
       sourceControl={
         <input

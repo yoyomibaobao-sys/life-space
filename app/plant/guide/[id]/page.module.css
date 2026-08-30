@@ -238,6 +238,13 @@
   line-height: 1.6;
 }
 
+.parameterNote {
+  color: #65725f;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .sectionTitleRow {
   display: flex;
   align-items: baseline;

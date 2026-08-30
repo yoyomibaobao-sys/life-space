@@ -18,7 +18,7 @@ type Props = {
   storageMode?: "cloud" | "local";
   cloudHref?: string;
   localHref?: string;
-  category: ArchiveCategory;
+  category: ArchiveCategory | null;
   onCategoryChange: (category: ArchiveCategory) => void;
   projectTitle: string;
   onProjectTitleChange: (value: string) => void;
@@ -84,14 +84,8 @@ export default function ArchiveNewProjectFormShell({
 
     return { ...option, ...categoryCopy };
   });
-  const systemNameLabel =
-    category === "plant" ? copy.system_plant_name_required : copy.system_name_required;
-  const systemNameHelper =
-    category === "plant"
-      ? copy.system_plant_helper
-      : category === "other"
-        ? copy.other_system_helper
-        : copy.system_name_helper;
+  const systemNameLabel = copy.system_name_required;
+  const systemNameHelper = copy.system_name_helper;
 
   return (
     <main className={styles.page}>
@@ -124,27 +118,12 @@ export default function ArchiveNewProjectFormShell({
         {disabledNotice ? <div style={disabledNoticeStyle}>{disabledNotice}</div> : null}
 
         <form onSubmit={onSubmit} className={styles.form}>
-          <ArchiveNewProjectField label={copy.category_required}>
-            <div className={styles.categoryGrid}>
-              {translatedCategoryOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => onCategoryChange(option.value)}
-                  className={`${styles.categoryButton} ${
-                    category === option.value ? styles.categoryButtonActive : ""
-                  }`}
-                >
-                  <strong className={styles.categoryLabel}>{option.label}</strong>
-                  <span className={styles.categoryDescription}>{option.description}</span>
-                </button>
-              ))}
-            </div>
-          </ArchiveNewProjectField>
 
           <ArchiveNewProjectField label={copy.project_name_required}>
             <input
               value={projectTitle}
+              required
+              aria-label={copy.project_name_required}
               onChange={(event) => onProjectTitleChange(event.target.value)}
               placeholder={copy.project_name_placeholder}
               style={archiveNewProjectInputStyle}
@@ -156,6 +135,26 @@ export default function ArchiveNewProjectFormShell({
             helper={systemNameHelper}
           >
             {systemControl}
+          </ArchiveNewProjectField>
+
+          <ArchiveNewProjectField label={copy.category_required}>
+            <div className={styles.categoryGrid} role="radiogroup" aria-label={copy.category_required} aria-required="true">
+              {translatedCategoryOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={category === option.value}
+                  onClick={() => onCategoryChange(option.value)}
+                  className={`${styles.categoryButton} ${
+                    category === option.value ? styles.categoryButtonActive : ""
+                  }`}
+                >
+                  <strong className={styles.categoryLabel}>{option.label}</strong>
+                  <span className={styles.categoryDescription}>{option.description}</span>
+                </button>
+              ))}
+            </div>
           </ArchiveNewProjectField>
 
           <ArchiveNewProjectField label={copy.source}>

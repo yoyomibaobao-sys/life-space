@@ -37,6 +37,8 @@ import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { formatPreciseDateTime } from "@/lib/date-time";
 import {
   getSystemNameCandidates,
+  resolveExactSystemNameCandidate,
+  resolveSystemNameSelection,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import type {
@@ -163,6 +165,7 @@ export default function LocalArchiveDetailPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(true);
   const [categoryDepths, setCategoryDepths] = useState<ArchiveCategoryDepths>({
     ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   });
@@ -249,23 +252,30 @@ export default function LocalArchiveDetailPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadCandidates() {
       if (!detail?.archive.category) {
         setSystemNameCandidates([]);
+        setCandidatesLoading(false);
         return;
       }
 
+      setCandidatesLoading(true);
       const candidates = await getSystemNameCandidates({
         category: detail.archive.category,
         currentValue: detail.archive.system_name || detail.archive.species_name,
         mode: "local",
         supabase,
-        limit: 200,
+        includeOtherCategories: true,
+        limit: null,
       });
+      if (cancelled) return;
       setSystemNameCandidates(candidates);
+      setCandidatesLoading(false);
     }
 
     void loadCandidates();
+    return () => { cancelled = true; };
   }, [detail?.archive.category, detail?.archive.system_name, detail?.archive.species_name]);
 
   function revokeLocalRecordUrls() {
@@ -712,6 +722,7 @@ export default function LocalArchiveDetailPage() {
       showToast(successMessage);
     } catch (err) {
       showToast(err instanceof Error ? err.message : archiveCopy.local_update_failed);
+      throw err;
     }
   }
 
@@ -753,15 +764,30 @@ export default function LocalArchiveDetailPage() {
 
     if (change.field === "category") {
       if (change.value !== detail.archive.category) {
+        const currentName = detail.archive.system_name || detail.archive.species_name || "";
+        const exact = resolveExactSystemNameCandidate(systemNameCandidates, currentName);
         updates.category = change.value;
+        updates.subcategory = null;
+        updates.group_name = null;
+        updates.system_name = currentName;
+        updates.species_name = change.value === "plant" ? currentName : null;
+        updates.plant_id = change.value === "plant" && exact?.category === "plant" ? exact.plantId || null : null;
+        updates.plant_slug = change.value === "plant" && exact?.category === "plant" ? exact.plantSlug || null : null;
       }
     }
 
     if (change.field === "systemName") {
       const cleanName = change.value.name.trim();
       if (!cleanName) throw new Error(archiveCopy.system_name_empty);
-      if (cleanName !== (detail.archive.system_name || detail.archive.species_name || "")) {
-        updates.system_name = cleanName;
+      const binding = resolveSystemNameSelection(systemNameCandidates, change.value, detail.archive.category);
+      updates.system_name = binding.name;
+      updates.category = binding.category;
+      updates.species_name = binding.category === "plant" ? binding.name : null;
+      updates.plant_id = binding.plantId;
+      updates.plant_slug = binding.plantSlug;
+      if (binding.category !== detail.archive.category) {
+        updates.subcategory = null;
+        updates.group_name = null;
       }
     }
 
@@ -892,14 +918,14 @@ export default function LocalArchiveDetailPage() {
       field: "title" as const,
     },
     {
-      label: archiveCopy.category,
-      value: localCategoryLabel,
-      field: "category" as const,
-    },
-    {
       label: localSystemNameLabel,
       value: archive.system_name || archive.species_name || archiveCopy.not_filled,
       field: "systemName" as const,
+    },
+    {
+      label: archiveCopy.category_required,
+      value: localCategoryLabel,
+      field: "category" as const,
     },
     {
       label: archiveCopy.source,
@@ -949,12 +975,6 @@ export default function LocalArchiveDetailPage() {
         localLightboxRecord.record_time
       )}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""} · ${formatDate(localLightboxRecord.record_time)}`
     : "";
-  const localSystemNameUsesCandidates =
-    archive.category === "plant" ||
-    archive.category === "system" ||
-    archive.category === "insect_fish";
-  const localSystemNameCandidates =
-    localSystemNameUsesCandidates ? systemNameCandidates : [];
 
   return (
     <main style={pageStyle}>
@@ -1013,11 +1033,10 @@ export default function LocalArchiveDetailPage() {
               archiveSummary: archive.archive_summary || "",
             },
             onSaveField: saveLocalArchiveProfileField,
-            systemNameMode: localSystemNameUsesCandidates ? "candidate" : "text",
-            systemNameCandidates: localSystemNameCandidates,
-            systemNameHint: localSystemNameUsesCandidates
-              ? archiveCopy.local_system_candidate_hint
-              : archiveCopy.other_system_hint,
+            systemNameMode: "candidate",
+            systemNameCandidates,
+            systemNameCandidatesLoading: candidatesLoading,
+            systemNameHint: archiveCopy.system_name_helper,
           }}
           profileActions={
             <div style={localProfileActionsStyle}>

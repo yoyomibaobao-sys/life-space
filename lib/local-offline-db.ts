@@ -981,6 +981,8 @@ export async function updateLocalArchiveFields(
     group_name?: string | null;
     system_name?: string | null;
     species_name?: string | null;
+    plant_id?: string | null;
+    plant_slug?: string | null;
     source?: string | null;
     note?: string | null;
     archive_summary?: string | null;
@@ -1044,6 +1046,14 @@ export async function updateLocalArchiveFields(
         updates.species_name === undefined
           ? normalizedArchive.species_name
           : normalizeOptionalText(updates.species_name),
+      plant_id:
+        updates.plant_id === undefined
+          ? normalizedArchive.plant_id
+          : normalizeOptionalText(updates.plant_id),
+      plant_slug:
+        updates.plant_slug === undefined
+          ? normalizedArchive.plant_slug
+          : normalizeOptionalText(updates.plant_slug),
       source:
         updates.source === undefined
           ? normalizedArchive.source

@@ -48,6 +48,203 @@ const guideLibrary = load("lib/public-guide-library.ts");
 const { getPracticalGuideContent } = load("lib/practical-guide-content.ts");
 const entry = (category, name, extra = {}) => ({ id: `fixture-${category}-${name}`, category, name, source: "preset", ...extra });
 
+function loadFunction(path, name, scope) {
+  const tree = ts.createSourceFile(path, source(path), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let declaration;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) declaration = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.ok(declaration, `Function not found: ${name}`);
+  const compiled = ts.transpileModule(declaration.getText(tree), { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  return new Function(...Object.keys(scope), `${compiled}; return ${name};`)(...Object.values(scope));
+}
+
+test("cloud guide selection saves category and name together without changing other project fields", async () => {
+  const names = load("lib/system-name-candidates.ts");
+  const activeArchive = { id: "project", category: "plant", title: "我的观察", source: "朋友赠送", note: "保留备注", archive_summary: "保留摘要", is_public: false, species_id: "old-plant", species_name_snapshot: "紫苏", sub_tag_id: "old-sub", group_tag_id: "old-group" };
+  const writes = [];
+  const states = [];
+  const candidates = [{ id: "aquatic-guide", label: "金鱼藻", category: "insect_fish", source: "public_guide" }];
+  const scope = {
+    isOwner: true, archiveCopy: { save_retry: "重试", system_name_empty: "不能为空", system_name_updated: "已更新" },
+    archiveProfileSystemNameCandidateList: candidates, activeArchive,
+    normalizeArchiveCategory: loadFunction("app/archive/[id]/page.tsx", "normalizeArchiveCategory", {}),
+    resolveSystemNameSelection: names.resolveSystemNameSelection,
+    saveMobileArchivePatch: async (field, patch) => { writes.push({ field, patch }); return true; },
+    setMobileArchiveError() {},
+    setMobileArchiveName: (value) => states.push(["name", value]),
+    setMobileArchiveCategory: (value) => states.push(["category", value]),
+    setSpecies: (value) => states.push(["species", value]),
+    setArchiveSubcategoryLabel() {}, setArchiveGroupLabel() {},
+    me: "owner", language: "zh",
+    supabase: { from() { throw new Error("Known guides must not create a pending plant"); } },
+  };
+  const save = loadFunction("app/archive/[id]/page.tsx", "saveArchiveSystemNameSelection", scope);
+  await save({ name: "金鱼藻", candidateId: "aquatic-guide" });
+  assert.equal(writes.length, 1);
+  const next = { ...activeArchive, ...writes[0].patch };
+  assert.deepEqual([next.category, next.system_name, next.species_id, next.species_name_snapshot], ["insect_fish", "金鱼藻", null, null]);
+  assert.deepEqual([next.title, next.source, next.note, next.archive_summary, next.is_public], ["我的观察", "朋友赠送", "保留备注", "保留摘要", false]);
+  assert.deepEqual([next.sub_tag_id, next.group_tag_id], [null, null]);
+  assert.ok(states.some(([field, value]) => field === "category" && value === "insect_fish"));
+
+  const failedSave = loadFunction("app/archive/[id]/page.tsx", "saveArchiveSystemNameSelection", {
+    ...scope, saveMobileArchivePatch: async () => false,
+    setSpecies() { throw new Error("A failed save must not change the displayed plant"); },
+  });
+  await assert.rejects(failedSave({ name: "金鱼藻" }), /重试/);
+});
+
+test("local guide selection clears stale plant links and saves its classification in one update", async () => {
+  const names = load("lib/system-name-candidates.ts");
+  const archive = { id: "local-project", title: "青梅蜜", category: "plant", system_name: "梅", species_name: "梅", plant_id: "old-plant", plant_slug: "old-plum", source: "自家", note: "已有记录不变" };
+  const updates = [];
+  const save = loadFunction("app/local/archive/[id]/page.tsx", "saveLocalArchiveProfileField", {
+    detail: { archive },
+    archiveCopy: { system_name_empty: "不能为空", local_profile_updated: "已更新" },
+    systemNameCandidates: [{ id: "food-guide", label: "梅子蜜", category: "other", source: "public_guide" }],
+    resolveSystemNameSelection: names.resolveSystemNameSelection,
+    resolveExactSystemNameCandidate: names.resolveExactSystemNameCandidate,
+    updateLocalArchiveProfile: async (patch) => updates.push(patch),
+  });
+  await save({ field: "systemName", value: { name: "梅子蜜", candidateId: "food-guide", category: "other" } });
+  assert.equal(updates.length, 1);
+  const next = { ...archive, ...updates[0] };
+  assert.deepEqual([next.category, next.system_name, next.species_name, next.plant_id, next.plant_slug], ["other", "梅子蜜", null, null, null]);
+  assert.deepEqual([next.title, next.source, next.note], ["青梅蜜", "自家", "已有记录不变"]);
+});
+
+
+function candidateClient(tables) {
+  const requests = [];
+  return {
+    requests,
+    from(table) {
+      const filters = [];
+      requests.push({ table, filters });
+      const query = {
+        select() { return this; },
+        eq(key, value) { filters.push([key, value]); return this; },
+        order() { return this; },
+        then(resolve) {
+          const data = (tables[table] || []).filter((row) => filters.every(([key, value]) =>
+            key.includes(".") || row[key] === value));
+          return Promise.resolve({ data, error: null }).then(resolve);
+        },
+      };
+      return query;
+    },
+  };
+}
+
+test("guide autocomplete searches food and water plants even when planting is selected", async () => {
+  const names = load("lib/system-name-candidates.ts");
+  const client = candidateClient({
+    guide_entries: [
+      { id: "guide-food", name: "梅子蜜", name_en: "Plum honey", category: "other", is_active: true, guide_sections: { name: "美食", name_en: "Food" } },
+      { id: "guide-water", name: "金鱼藻", name_en: "Hornwort", category: "insect_fish", is_active: true, guide_sections: { name: "水草" } },
+      { id: "inactive", name: "不应出现的草", category: "plant", is_active: false },
+    ],
+  });
+  const candidates = await names.getSystemNameCandidates({ category: "plant", includeOtherCategories: true, limit: null, supabase: client });
+  const food = names.filterSystemNameCandidates(candidates, "梅子蜜", "plant");
+  assert.equal(food[0].id, "guide-food");
+  assert.equal(food[0].category, "other");
+  assert.equal(food[0].sectionName, "美食");
+  assert.equal(names.filterSystemNameCandidates(candidates, "Hornwort", "plant")[0].category, "insect_fish");
+  assert.equal(names.resolveExactSystemNameCandidate(candidates, "金鱼藻").category, "insect_fish");
+  assert.ok(!candidates.some((candidate) => candidate.id === "inactive"));
+  assert.ok(!client.requests.some((request) => request.table === "archives"), "public suggestions do not read private project names");
+});
+
+test("guide lookup filters the full catalog before limiting visible suggestions", async () => {
+  const names = load("lib/system-name-candidates.ts");
+  const species = Array.from({ length: 360 }, (_, i) => ({ id: `plant-${i}`, common_name: `植物候选${String(i).padStart(3, "0")}` }));
+  const candidates = await names.getSystemNameCandidates({ category: "plant", plantSpeciesRows: species, limit: null });
+  assert.equal(candidates.length, 360);
+  const matches = names.filterSystemNameCandidates(candidates, "植物候选359", "plant");
+  assert.deepEqual(matches.map((candidate) => candidate.plantId), ["plant-359"]);
+  assert.equal(names.filterSystemNameCandidates(candidates, "", "plant").length, 10);
+});
+
+test("exact guide inference rejects ambiguous names, partial names, and private custom names", () => {
+  const names = load("lib/system-name-candidates.ts");
+  const candidates = [
+    { id: "one", label: "浮萍", category: "plant", source: "plant_species", plantId: "one" },
+    { id: "two", label: "浮萍", category: "insect_fish", source: "public_guide" },
+    { label: "私人试验草", category: "plant", source: "cloud_archive" },
+    { label: "当前名字", category: "other", source: "current" },
+  ];
+  assert.equal(names.resolveExactSystemNameCandidate(candidates, "浮萍"), null);
+  assert.equal(names.resolveExactSystemNameCandidate(candidates, "浮"), null);
+  assert.equal(names.resolveExactSystemNameCandidate(candidates, "私人试验草"), null);
+  assert.equal(names.resolveExactSystemNameCandidate(candidates, "当前名字"), null);
+  assert.equal(names.filterSystemNameCandidates(candidates, "浮萍", "plant").length, 2);
+  const chosen = names.resolveSystemNameSelection(candidates, { name: "浮萍", candidateId: "two", category: "insect_fish" }, "plant");
+  assert.equal(chosen.category, "insect_fish");
+  assert.equal(chosen.plantId, null);
+});
+
+test("plant mirror guides enrich aliases while preserving the real plant foreign key", async () => {
+  const names = load("lib/system-name-candidates.ts");
+  const candidates = await names.getSystemNameCandidates({
+    category: "plant", limit: null,
+    plantSpeciesRows: [{ id: "real-species", common_name: "紫苏", scientific_name: "Perilla frutescens", slug: "perilla" }],
+    supabase: candidateClient({ guide_entries: [{ id: "mirror-guide", name: "紫苏", name_en: "Perilla", category: "plant", is_active: true, guide_sections: { name: "香草" } }] }),
+  });
+  const perilla = names.resolveExactSystemNameCandidate(candidates, "Perilla");
+  assert.equal(perilla.id, "real-species");
+  assert.equal(perilla.plantId, "real-species");
+  assert.equal(perilla.sectionName, "香草");
+  assert.equal(names.filterSystemNameCandidates(candidates, "Perilla", "plant").length, 1);
+  const publicOnly = names.resolveSystemNameSelection(
+    [{ id: "guide-not-species", label: "新植物", category: "plant", source: "public_guide" }],
+    { name: "新植物", candidateId: "guide-not-species" }, "other",
+  );
+  assert.equal(publicOnly.category, "plant");
+  assert.equal(publicOnly.plantId, null);
+});
+
+test("guide changes bind the selected category and discard incompatible plant links", () => {
+  const names = load("lib/system-name-candidates.ts");
+  const candidates = [
+    { id: "water", label: "金鱼藻", category: "insect_fish", source: "public_guide" },
+    { id: "food", label: "梅子蜜", category: "other", source: "public_guide" },
+    { id: "plant", label: "紫苏", category: "plant", source: "plant_species", plantId: "plant", plantSlug: "perilla", aliases: ["Perilla"] },
+  ];
+  const aquatic = names.resolveSystemNameSelection(candidates, { name: "金鱼藻" }, "plant");
+  assert.deepEqual([aquatic.name, aquatic.category, aquatic.plantId, aquatic.plantSlug], ["金鱼藻", "insect_fish", null, null]);
+  const food = names.resolveSystemNameSelection(candidates, { name: "梅子蜜" }, "system");
+  assert.equal(food.category, "other");
+  const plant = names.resolveSystemNameSelection(candidates, { name: "perilla" }, "other");
+  assert.deepEqual([plant.name, plant.category, plant.plantId, plant.plantSlug], ["紫苏", "plant", "plant", "perilla"]);
+  const custom = names.resolveSystemNameSelection(candidates, { name: "我的新试验", isNewCandidate: true }, "system");
+  assert.deepEqual([custom.name, custom.category, custom.candidate, custom.plantId], ["我的新试验", "system", null, null]);
+});
+
+test("the new project form puts the required linked guide before the required category without a default category", () => {
+  const copy = load("lib/i18n/zh.ts").default;
+  const Form = createLoader({
+    "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: copy }) },
+    "next/link": ({ children, ...props }) => React.createElement("a", props, children),
+  })("components/archive-ui/ArchiveNewProjectFormShell.tsx").default;
+  const html = renderToStaticMarkup(React.createElement(Form, {
+    backHref: "/archive", backLabel: "返回", eyebrow: "本地", title: "新建项目",
+    category: null, onCategoryChange() {}, projectTitle: "", onProjectTitleChange() {},
+    systemControl: React.createElement("input", { required: true, "aria-label": "关联指引" }),
+    sourceControl: React.createElement("input"), note: "", onNoteChange() {}, notice: "",
+    submitText: "创建项目", loadingText: "保存中", onSubmit() {},
+  }));
+  assert.ok(html.indexOf("项目名称 *") < html.indexOf("关联指引 *"));
+  assert.ok(html.indexOf("关联指引 *") < html.indexOf("种类 *"));
+  assert.match(html, /role="radiogroup"[^>]*aria-required="true"/);
+  assert.equal((html.match(/aria-checked="false"/g) || []).length, 4);
+  assert.doesNotMatch(html, /aria-checked="true"/);
+});
+
+
 test("inline record summaries normalize whitespace and preserve short content", () => {
   assert.equal(fitInlineSummary(" 越来越香，\n\n甜甜的。 ", () => true), "越来越香， 甜甜的。");
   assert.equal(fitInlineSummary("\n\t ", () => false), "");
@@ -353,6 +550,31 @@ test("explicit water-temperature values take priority and invalid ranges do not 
   const content = guideLibrary.buildPublicGuideContent(waterEntry("水榕"), "zh");
   assert.ok(content.cautions.some((text) => text.includes("Anubias barteri var. nana")));
   assert.ok(content.sources.some((reference) => reference.url.includes("dennerleplants.com")));
+});
+
+test("cold and hot water filters use verified numeric ranges without inventing unknown values", () => {
+  const hornwort = waterEntry("金鱼藻");
+  for (const band of ["c0_10", "c10_18"]) {
+    assert.equal(guideLibrary.matchesPublicGuideFilters(hornwort, { ...emptyWaterFilters, temperature: [band] }), true);
+    assert.equal(guideLibrary.matchesPublicGuideFilters(waterEntry("水榕"), { ...emptyWaterFilters, temperature: [band] }), false);
+  }
+  assert.equal(guideLibrary.matchesPublicGuideFilters(hornwort, { ...emptyWaterFilters, temperature: ["c30_plus"] }), false);
+  const stored = waterEntry("独立测试指引", { temperature_min_c: 29, temperature_max_c: 33 });
+  assert.equal(guideLibrary.matchesPublicGuideFilters(stored, { ...emptyWaterFilters, temperature: ["c30_plus"] }), true);
+  assert.equal(guideLibrary.getPublicGuideTemperatureMatchLabel(stored, ["c30_plus"], "zh"), "本次匹配：30–33℃");
+  const unknown = waterEntry("未核实水草");
+  assert.equal(guideLibrary.matchesPublicGuideFilters(unknown, { ...emptyWaterFilters, temperature: ["c0_10", "c30_plus"] }), false);
+  assert.equal(guideLibrary.getPublicGuideTemperatureMatchLabel(unknown, ["unknown"], "zh"), "");
+});
+
+test("temperature result labels show only the actual overlap and preserve gaps between choices", () => {
+  const hornwort = waterEntry("金鱼藻");
+  assert.equal(guideLibrary.getPublicGuideTemperatureMatchLabel(hornwort, ["c26_30"], "zh"), "本次匹配：26–28℃");
+  assert.equal(guideLibrary.getPublicGuideTemperatureMatchLabel(hornwort, ["c26_30", "c0_10"], "zh"), "本次匹配：1–10℃、26–28℃");
+  assert.equal(guideLibrary.getPublicGuideTemperatureMatchLabel(hornwort, ["c22_26", "c18_22", "c22_26"], "en"), "Matched range: 18–26°C");
+  assert.equal(guideLibrary.getPublicGuideTemperatureMatchLabel(hornwort, "all", "zh"), "");
+  assert.equal(guideLibrary.getPublicGuideTemperatureMatchLabel(hornwort, [], "zh"), "");
+  assert.equal(guideLibrary.getPublicGuideTemperatureLabel(hornwort, "en"), "1–28°C");
 });
 
 test("plant filters remain unchanged while only water plants expose multi-select conditions", () => {

@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   CSSProperties,
   KeyboardEvent,
   ReactNode,
 } from "react";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { getArchiveCategoryLabel, type ArchiveCategory } from "@/lib/archive-categories";
+import { resolveExactSystemNameCandidate } from "@/lib/system-name-candidates";
 
 export type SystemNameSelectorCandidate = {
   id?: string | null;
@@ -15,6 +18,10 @@ export type SystemNameSelectorCandidate = {
   plantId?: string | null;
   plantSlug?: string | null;
   searchText?: string;
+  aliases?: string[];
+  category?: ArchiveCategory;
+  sectionName?: string;
+  sectionNameEn?: string;
 };
 
 type CandidateStyle =
@@ -25,15 +32,20 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   candidates: SystemNameSelectorCandidate[];
+  resolutionCandidates?: SystemNameSelectorCandidate[];
   placeholder?: string;
   selectedValue?: string;
   suggestionsOpen?: boolean;
   onSuggestionsOpenChange?: (open: boolean) => void;
   onSelect?: (candidate: SystemNameSelectorCandidate) => void;
+  onResolveCandidate?: (candidate: SystemNameSelectorCandidate) => void;
   onUseCustom?: (value: string) => void;
   allowCustom?: boolean;
   hasExactMatch?: boolean;
   showSource?: boolean;
+  showCategory?: boolean;
+  loading?: boolean;
+  required?: boolean;
   autoFocus?: boolean;
   maxCandidates?: number;
   idleText?: ReactNode;
@@ -78,9 +90,10 @@ const defaultInputStyle: CSSProperties = {
 
 const defaultPanelStyle: CSSProperties = {
   position: "absolute",
-  top: 30,
+  top: "calc(100% + 4px)",
   left: 0,
-  width: 220,
+  width: "100%",
+  boxSizing: "border-box",
   maxHeight: 190,
   overflow: "auto",
   background: "#fff",
@@ -127,15 +140,20 @@ export default function SystemNameSelector({
   value,
   onChange,
   candidates,
+  resolutionCandidates = candidates,
   placeholder,
   selectedValue = "",
   suggestionsOpen = false,
   onSuggestionsOpenChange,
   onSelect,
+  onResolveCandidate,
   onUseCustom,
   allowCustom = true,
   hasExactMatch,
   showSource = false,
+  showCategory = false,
+  loading = false,
+  required = false,
   autoFocus,
   maxCandidates,
   idleText,
@@ -152,7 +170,10 @@ export default function SystemNameSelector({
   onBlur,
   onKeyDown,
 }: Props) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
+  const listId = useId();
+  const resolvedKeyRef = useRef("");
+  const [isComposing, setIsComposing] = useState(false);
   const resolvedPlaceholder = placeholder || t.archive_workspace.input_then_select;
   const resolvedIdleText = idleText ?? t.archive.candidate_idle;
   const resolvedEmptyText = emptyText ?? t.archive.candidate_empty;
@@ -160,15 +181,23 @@ export default function SystemNameSelector({
     customActionLabel ||
     ((inputValue: string) => `${t.archive.use_as_system_name}: ${inputValue}`);
   const trimmedValue = normalize(value);
+  useEffect(() => {
+    if (!onResolveCandidate || loading || isComposing) return;
+    const resolved = resolveExactSystemNameCandidate(resolutionCandidates, value);
+    const key = resolved ? `${value}:${resolved.category}:${resolved.id || resolved.label}` : "";
+    if (key === resolvedKeyRef.current) return;
+    resolvedKeyRef.current = key;
+    if (resolved) onResolveCandidate(resolved);
+  }, [resolutionCandidates, value, onResolveCandidate, loading, isComposing]);
   const visibleCandidates =
     typeof maxCandidates === "number"
       ? candidates.slice(0, maxCandidates)
       : candidates;
-  const exactMatch =
+  const exactMatch = Boolean(resolveExactSystemNameCandidate(resolutionCandidates, value)) || (
     hasExactMatch ??
     visibleCandidates.some(
       (candidate) => normalize(candidate.label).toLowerCase() === trimmedValue.toLowerCase()
-    );
+    ));
 
   function handleSelect(candidate: SystemNameSelectorCandidate) {
     onSelect?.(candidate);
@@ -195,15 +224,30 @@ export default function SystemNameSelector({
           onSuggestionsOpenChange?.(true);
         }}
         onFocus={() => onSuggestionsOpenChange?.(true)}
-        onBlur={onBlur}
-        onKeyDown={onKeyDown}
+        onBlur={(event) => {
+          if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) onBlur?.();
+        }}
+        onKeyDown={(event) => {
+          if (!isComposing && !event.nativeEvent.isComposing) onKeyDown?.(event);
+        }}
+        onCompositionStart={() => setIsComposing(true)}
+        onCompositionEnd={() => setIsComposing(false)}
         autoFocus={autoFocus}
+        required={required}
+        role="combobox"
+        aria-required={required || undefined}
+        aria-expanded={suggestionsOpen}
+        aria-controls={suggestionsOpen ? listId : undefined}
+        aria-autocomplete="list"
+        aria-label={resolvedPlaceholder}
         placeholder={resolvedPlaceholder}
         style={{ ...defaultInputStyle, ...inputStyle }}
       />
 
       {suggestionsOpen ? (
         <div
+          id={listId}
+          role="listbox"
           onMouseDown={(event) => event.preventDefault()}
           style={{ ...defaultPanelStyle, ...panelStyle }}
         >
@@ -213,6 +257,8 @@ export default function SystemNameSelector({
               <button
                 key={getCandidateKey(candidate, index)}
                 type="button"
+                role="option"
+                aria-selected={selected}
                 onClick={() => handleSelect(candidate)}
                 style={{
                   ...defaultOptionStyle,
@@ -221,6 +267,12 @@ export default function SystemNameSelector({
                 }}
               >
                 <strong>{candidate.label}</strong>
+                {showCategory && candidate.category ? (
+                  <span style={{ display: "block", color: "#63745d", fontSize: 12, lineHeight: 1.5, marginTop: 3 }}>
+                    {getArchiveCategoryLabel(candidate.category, language)}
+                    {(language === "en" ? candidate.sectionNameEn || candidate.sectionName : candidate.sectionName) ? ` · ${language === "en" ? candidate.sectionNameEn || candidate.sectionName : candidate.sectionName}` : ""}
+                  </span>
+                ) : null}
                 {candidate.description ? (
                   <span style={{ color: "#7b8578", marginLeft: 6 }}>
                     {candidate.description}
@@ -235,11 +287,13 @@ export default function SystemNameSelector({
             );
           })}
 
-          {!visibleCandidates.length && trimmedValue ? (
+          {loading ? <div role="status" style={{ ...defaultEmptyStyle, ...emptyStyle }}>{t.archive.loading}</div> : null}
+
+          {!loading && !visibleCandidates.length && trimmedValue ? (
               <div style={{ ...defaultEmptyStyle, ...emptyStyle }}>{resolvedEmptyText}</div>
           ) : null}
 
-          {allowCustom && trimmedValue && !exactMatch ? (
+          {allowCustom && !loading && trimmedValue && !exactMatch ? (
             <button
               type="button"
               onClick={handleUseCustom}

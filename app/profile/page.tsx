@@ -145,7 +145,7 @@ export default function ProfilePage() {
   };
   const adminGuideProfileModule: MobileProfileNavItem = {
     href: "/admin/guides",
-    label: language === "en" ? "Related guide review" : "对应指引审核",
+    label: language === "en" ? "Linked guide review" : "关联指引审核",
   };
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
