@@ -1,19 +1,13 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   getCurrentMobileRoute,
   getMobileSourceRoute,
   prepareMobileSourceReturn,
 } from "@/lib/mobile-navigation";
-
-const HIDDEN_MOBILE_HEADER_ROUTES = new Set([
-  "/archive",
-  "/market/new",
-  "/market/mine",
-]);
 
 export default function MobilePageHeader({
   title,
@@ -30,10 +24,8 @@ export default function MobilePageHeader({
   showBack?: boolean;
   ariaLabel?: string;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
-
-  if (HIDDEN_MOBILE_HEADER_ROUTES.has(pathname)) return null;
+  const sideWidth = right ? 96 : 44;
 
   function goBack() {
     const currentRoute = getCurrentMobileRoute();
@@ -47,7 +39,10 @@ export default function MobilePageHeader({
       className="mobile-app-grid-only"
       data-mobile-page-header="true"
       aria-label={ariaLabel}
-      style={headerStyle}
+      style={{
+        ...headerStyle,
+        gridTemplateColumns: `${sideWidth}px minmax(0, 1fr) ${sideWidth}px`,
+      }}
     >
       <div style={leftSlotStyle}>
         {showBack ? (
@@ -77,7 +72,6 @@ const headerStyle: CSSProperties = {
   top: 0,
   zIndex: 100,
   minHeight: "calc(50px + var(--app-safe-area-top))",
-  gridTemplateColumns: "96px minmax(0, 1fr) 96px",
   alignItems: "end",
   gap: 4,
   padding: "calc(5px + var(--app-safe-area-top)) 8px 5px",

@@ -191,7 +191,8 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
     source("app/experience-cards/[id]/page.tsx"),
   ]);
 
-  assert.match(sharedHeader, /gridTemplateColumns: "96px minmax\(0, 1fr\) 96px"/);
+  assert.match(sharedHeader, /const sideWidth = right \? 96 : 44/);
+  assert.match(sharedHeader, /gridTemplateColumns: `\$\{sideWidth\}px minmax\(0, 1fr\) \$\{sideWidth\}px`/);
   assert.match(sharedHeader, /name="arrow-left"/);
   assert.match(sharedHeader, /getMobileSourceRoute/);
   assert.match(sharedHeader, /prepareMobileSourceReturn/);
@@ -204,8 +205,51 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
   assert.doesNotMatch(navbar, /pathname\.startsWith\("\/market\/"\) \|\|/);
   assert.match(navbar, /"\/profile\/project-categories"/);
   assert.match(navbar, /"\/admin\/guides"/);
-  assert.match(projectDetail, /mobileProjectHeaderProjectStyle[\s\S]*?mobileProjectHeaderSystem/);
+  assert.match(projectDetail, /titleText=\{activeArchive\.title\}/);
+  assert.doesNotMatch(projectDetail, /mobileProjectHeaderSystem/);
+  assert.match(projectDetail, /projectDetailStatsStyle[\s\S]*?projectDetailGuideLinkStyle/);
+  assert.match(projectDetail, /order=\{\["view", "follow", "record", "duration"\]\}/);
   assert.match(projectDetail, /right=\{[\s\S]*?toggleProjectFollow/);
+});
+
+test("mobile discovery filters, search fields, cards, and project menus follow the compact layout", async () => {
+  const [
+    discoverPage,
+    filters,
+    experiencePage,
+    searchField,
+    galleryStyles,
+    projectStyles,
+    projectActions,
+    taxonomyInline,
+  ] = await Promise.all([
+    source("app/discover/page.tsx"),
+    source("components/discover/DiscoverFilterBar.tsx"),
+    source("app/experience/page.tsx"),
+    source("components/search/MobileSearchField.tsx"),
+    source("components/experience-card/PublicExperienceFeed.module.css"),
+    source("components/project/ProjectSummaryCard.module.css"),
+    source("components/archive/MobileArchiveActions.tsx"),
+    source("components/archive/MobileArchiveTaxonomyInline.tsx"),
+  ]);
+
+  assert.match(filters, /repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(filters, /aria-pressed=\{helpOnly\}/);
+  assert.doesNotMatch(filters, /fixedAll|position: fixedAll/);
+  assert.match(discoverPage, /const \[helpOnly, setHelpOnly\] = useState\(false\)/);
+  assert.match(discoverPage, /mode === "help" \? !helpOnly : helpOnly/);
+  assert.match(experiencePage, /maxWidth: 860/);
+  assert.match(experiencePage, /<MobileSearchField/);
+  assert.match(searchField, /clearAriaLabel/);
+  assert.doesNotMatch(galleryStyles, /\.previewCard \{[^}]*height: 100%/);
+  assert.match(galleryStyles, /\.previewBody \{[^}]*height: 110px/);
+  assert.match(projectStyles, /\.media \{[^}]*align-self: stretch/);
+  assert.match(projectActions, /createPortal/);
+  assert.match(projectActions, /background: "transparent"/);
+  assert.match(projectActions, /onClose\(\)/);
+  assert.doesNotMatch(projectActions, />\{moreLabel\}<\/strong>/);
+  assert.match(taxonomyInline, /aria-haspopup="listbox"/);
+  assert.match(taxonomyInline, /const openBelow = below >= 132 \|\| below >= above/);
 });
 
 test("mobile owner attributes expose direct project actions without a management menu", async () => {

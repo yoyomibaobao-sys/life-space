@@ -14,6 +14,7 @@ import {
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getBehaviorTagLabel } from "@/lib/record-tags";
 import type { ActivitySearchScope } from "@/components/discover-search/DiscoverSearchTabs";
+import MobileSearchField from "@/components/search/MobileSearchField";
 
 type Props = {
   searchKind: DiscoverSearchKind | "all";
@@ -168,21 +169,23 @@ export default function DiscoverSearchForm({
             />
           </label>
 
-          <label style={mobileFieldLabelStyle} aria-label={keywordLabel}>
-            <input
+          <div style={mobileFieldLabelStyle}>
+            <MobileSearchField
               value={filters.textQuery || ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 patch({
-                  textQuery: event.target.value,
+                  textQuery: value,
                   name: "",
                   content: "",
                   speciesId: null,
                 })
               }
               placeholder={mobileKeywordPlaceholder}
-              style={mobileInputStyle}
+              ariaLabel={keywordLabel}
+              clearAriaLabel={t.plant.clear_search}
+              onClear={() => patch({ textQuery: "", name: "", content: "", speciesId: null })}
             />
-          </label>
+          </div>
         </div>
 
         {isRecordSearch ? (

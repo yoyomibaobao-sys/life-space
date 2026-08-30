@@ -73,6 +73,10 @@ export default function ProjectSummaryCard(props: Props) {
     : props.actionSlot;
   const inlineTaxonomy = taxonomyAction ? (
     <>
+      {props.visibilityLabel ? (
+        <span className={styles.visibility}>{props.visibilityLabel}</span>
+      ) : null}
+      {props.visibilityLabel ? <span aria-hidden="true">·</span> : null}
       <MobileArchiveTaxonomyInline
         category={taxonomyAction.category}
         subTagId={taxonomyAction.subTagId}
@@ -83,9 +87,6 @@ export default function ProjectSummaryCard(props: Props) {
         onChangeCategory={taxonomyAction.onChangeCategory}
         onChangeGroup={taxonomyAction.onChangeGroup}
       />
-      {props.visibilityLabel ? (
-        <span className={styles.visibility}>{props.visibilityLabel}</span>
-      ) : null}
     </>
   ) : null;
   const effectiveClassificationSlot = props.classificationSlot || inlineTaxonomy;
@@ -125,7 +126,7 @@ export default function ProjectSummaryCard(props: Props) {
         ) : (
           <UiIcon name={props.fallbackIcon} size={29} strokeWidth={1.6} />
         )}
-        {props.showCategoryBadge !== false && !taxonomyAction ? (
+        {props.showCategoryBadge !== false ? (
           <span className={styles.category}>{props.categoryLabel}</span>
         ) : null}
       </span>
@@ -164,7 +165,10 @@ export default function ProjectSummaryCard(props: Props) {
             <span className={styles.updateText}>{props.latestText}</span>
           ) : null}
           {props.latestTime ? (
-            <CompactActivityTime value={props.latestTime} className={styles.updateTime} />
+            <CompactActivityTime
+              value={props.latestTime}
+              className={`${styles.updateTime}${props.latestText ? "" : ` ${styles.updateTimeOnly}`}`}
+            />
           ) : null}
         </span>
 

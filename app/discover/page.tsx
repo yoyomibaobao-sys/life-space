@@ -56,6 +56,7 @@ export default function DiscoverPage() {
   const { language, t } = useLanguage();
   const [items, setItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [helpOnly, setHelpOnly] = useState(false);
   const [diversityState, setDiversityState] =
     useState<DiscoveryDiverseProjectFeedState>(
       createInitialDiscoveryDiversityState
@@ -276,10 +277,12 @@ export default function DiscoverPage() {
   const loadProjectPage = useCallback(
     async ({
       mode,
+      helpOnly: nextHelpOnly,
       nextDiversityState,
       replace,
     }: {
       mode: FilterMode;
+      helpOnly: boolean;
       nextDiversityState: DiscoveryDiverseProjectFeedState;
       replace: boolean;
     }) => {
@@ -303,7 +306,7 @@ export default function DiscoverPage() {
         const result = await fetchDiverseDiscoveryProjectBatch({
           category:
             mode === "all" || mode === "help" ? null : mode,
-          helpOnly: mode === "help",
+          helpOnly: nextHelpOnly,
           state: nextDiversityState,
           limit: DISCOVERY_PROJECT_PAGE_SIZE,
         });
@@ -351,15 +354,19 @@ export default function DiscoverPage() {
   );
 
   function changeFilter(mode: FilterMode) {
-    if (mode === filterMode) return;
+    const nextMode = mode === "help" ? filterMode : mode;
+    const nextHelpOnly = mode === "help" ? !helpOnly : helpOnly;
+    if (nextMode === filterMode && nextHelpOnly === helpOnly) return;
 
-    setFilterMode(mode);
+    setFilterMode(nextMode);
+    setHelpOnly(nextHelpOnly);
     setItems([]);
     const initialDiversityState = createInitialDiscoveryDiversityState();
     setDiversityState(initialDiversityState);
     setHasMore(true);
     void loadProjectPage({
-      mode,
+      mode: nextMode,
+      helpOnly: nextHelpOnly,
       nextDiversityState: initialDiversityState,
       replace: true,
     });
@@ -491,6 +498,7 @@ export default function DiscoverPage() {
     publicFeedInitializedRef.current = true;
     void loadProjectPage({
       mode: "all",
+      helpOnly: false,
       nextDiversityState: createInitialDiscoveryDiversityState(),
       replace: true,
     });
@@ -509,6 +517,7 @@ export default function DiscoverPage() {
         ) {
           void loadProjectPage({
             mode: filterMode,
+            helpOnly,
             nextDiversityState: diversityState,
             replace: false,
           });
@@ -522,6 +531,7 @@ export default function DiscoverPage() {
   }, [
     diversityState,
     filterMode,
+    helpOnly,
     hasMore,
     items.length,
     loadProjectPage,
@@ -742,13 +752,14 @@ export default function DiscoverPage() {
           <DiscoverFilterBar
             options={getDiscoverFilterOptions(language)}
             activeMode={filterMode}
+            helpOnly={helpOnly}
             onChange={changeFilter}
             compactMobile={isMobileViewport}
           />
 
           <DiscoverProjectGrid
             items={items}
-            helpOnly={filterMode === "help"}
+            helpOnly={helpOnly}
             initialLoading={initialLoading}
             loadingMore={loadingMore}
             initialError={initialError}
@@ -758,6 +769,7 @@ export default function DiscoverPage() {
             onRetryInitial={() => {
               void loadProjectPage({
                 mode: filterMode,
+                helpOnly,
                 nextDiversityState: createInitialDiscoveryDiversityState(),
                 replace: true,
               });
@@ -765,6 +777,7 @@ export default function DiscoverPage() {
             onRetryMore={() => {
               void loadProjectPage({
                 mode: filterMode,
+                helpOnly,
                 nextDiversityState: diversityState,
                 replace: false,
               });
