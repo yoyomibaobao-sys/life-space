@@ -105,6 +105,85 @@ test("public guide library has sections, reusable content, and openable details"
   assert.match(newProject, /searchParams\.get\("system_name"\)/);
 });
 
+test("non-plant guides use the confirmed hierarchy, independent search, and plant-style related content", async () => {
+  const [migration, indexPage, detailPage, guideLibrary] = await Promise.all([
+    source("supabase/migrations/20260829120000_expand_domain_guide_hierarchy.sql"),
+    source("app/plant/page.tsx"),
+    source("app/plant/guide/[id]/page.tsx"),
+    source("lib/public-guide-library.ts"),
+  ]);
+
+  for (const section of [
+    "水草",
+    "鱼虾蟹",
+    "螺贝",
+    "蛙类",
+    "龟蛇",
+    "虫蝶",
+    "蜘蛛",
+    "鸟类",
+    "庭院动物",
+  ]) {
+    assert.match(migration, new RegExp(`'${section}'`));
+  }
+  for (const entry of [
+    "莫斯",
+    "浮萍",
+    "金鱼",
+    "水晶虾",
+    "河蚌",
+    "蝾螈",
+    "蜥蜴",
+    "黑水虻",
+    "螨",
+    "白头鹎",
+    "鹌鹑",
+    "牛",
+    "马",
+  ]) {
+    assert.match(migration, new RegExp(`'${entry}'`));
+  }
+  assert.match(migration, /\('system', '鱼缸鱼池'\)/);
+  assert.doesNotMatch(migration, /\('system', '鱼池'\)/);
+  assert.match(migration, /'filters'[\s\S]*?'light'[\s\S]*?'temperature'[\s\S]*?'growth_form'[\s\S]*?'difficulty'/);
+  assert.match(migration, /where entry\.source = 'preset'/);
+  assert.doesNotMatch(migration, /where entry\.category = 'plant'/);
+
+  assert.match(indexPage, /publicGuideSearchInputs/);
+  assert.match(indexPage, /activeSectionByCategory/);
+  assert.match(indexPage, /activeSection\?\.slug === "aquatic_plants"/);
+  assert.match(indexPage, /matchesPublicGuideFilters/);
+  assert.match(indexPage, /repeat\(auto-fit, minmax\(240px, 1fr\)\)/);
+  assert.match(indexPage, /copy\.categoryFilter/);
+  assert.match(indexPage, /copy\.waterPlantFilters/);
+
+  for (const template of [
+    "aquarium_animal",
+    "crustacean",
+    "mollusk_aquatic",
+    "mollusk_land",
+    "amphibian",
+    "reptile",
+    "insect",
+    "arachnid",
+    "bird",
+    "backyard_animal",
+  ]) {
+    assert.match(guideLibrary, new RegExp(`${template}:`));
+  }
+  assert.match(guideLibrary, /publicGuideWaterFilterOptions/);
+  assert.match(guideLibrary, /getPublicGuideFilterTraits/);
+  assert.match(guideLibrary, /matchesPublicGuideFilters/);
+
+  assert.match(detailPage, /canAccessMembershipGuidance/);
+  assert.match(detailPage, /GuideTab = "guide" \| "experience" \| "projects"/);
+  assert.match(detailPage, /hydrateExperienceCardListItems/);
+  assert.match(detailPage, /is_experience_card_public/);
+  assert.match(detailPage, /<PlantRelatedArchives archives=\{relatedArchives\}/);
+  assert.match(detailPage, /\.eq\("category", entry\.category\)/);
+  assert.match(detailPage, /\.eq\("system_name", entry\.name\)/);
+});
+
 test("plant cycles support days, years, and omitting misleading fixed cycles", async () => {
   const [migration, detailPage, zh, en] = await Promise.all([
     source("supabase/migrations/20260829054054_add_plant_cycle_display_rules.sql"),

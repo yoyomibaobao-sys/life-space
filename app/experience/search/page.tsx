@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import DiscoverSearchResults from "@/components/discover-search/DiscoverSearchResults";
 import UiIcon from "@/components/ui/UiIcon";
+import MobileSearchField from "@/components/search/MobileSearchField";
 import { fetchDiscoverExperienceCardSearchResults } from "@/lib/discover-search-data";
 import { emptySearchFilters } from "@/lib/discover-search-types";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
@@ -65,13 +66,16 @@ function ExperienceSearchContent() {
           </Link>
         </header>
         <form onSubmit={handleSubmit} style={searchFormStyle}>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t.experience.search_placeholder}
-            aria-label={t.experience.search_title}
-            style={searchInputStyle}
-          />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <MobileSearchField
+              value={query}
+              onChange={setQuery}
+              placeholder={t.experience.search_placeholder}
+              ariaLabel={t.experience.search_title}
+              clearAriaLabel={t.plant.clear_search}
+              onClear={() => setQuery("")}
+            />
+          </div>
           <button type="submit" style={searchButtonStyle}>
             <UiIcon name="search" size={16} /> {t.nav.search}
           </button>
@@ -106,15 +110,6 @@ const backLinkStyle: CSSProperties = {
   fontSize: 13,
 };
 const searchFormStyle: CSSProperties = { display: "flex", gap: 8, marginBottom: 14 };
-const searchInputStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  height: 42,
-  padding: "0 12px",
-  border: "1px solid #dce5d9",
-  borderRadius: 12,
-  fontSize: 14,
-};
 const searchButtonStyle: CSSProperties = {
   minWidth: 86,
   display: "inline-flex",

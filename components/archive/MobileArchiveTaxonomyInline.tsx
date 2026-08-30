@@ -1,6 +1,7 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   archiveCategoryOptions,
   getArchiveCategoryLabel,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/archive-categories";
 import type { GroupTagItem, SubTagItem } from "@/lib/archive-page-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import UiIcon from "@/components/ui/UiIcon";
 
 type Props = {
   category: ArchiveCategory;
@@ -93,29 +95,138 @@ function InlineSelect({
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
 }) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [panelPosition, setPanelPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function updatePosition() {
+      const button = buttonRef.current;
+      if (!button) return;
+      const rect = button.getBoundingClientRect();
+      const margin = 8;
+      const gap = 6;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(228, Math.max(150, rect.width + 28));
+      const left = Math.max(
+        margin,
+        Math.min(rect.left, viewportWidth - width - margin),
+      );
+      const below = viewportHeight - rect.bottom - margin - gap;
+      const above = rect.top - margin - gap;
+      const openBelow = below >= 132 || below >= above;
+      const maxHeight = Math.max(96, Math.min(240, openBelow ? below : above));
+      const top = openBelow
+        ? rect.bottom + gap
+        : Math.max(margin, rect.top - gap - maxHeight);
+
+      setPanelPosition({ top, left, width, maxHeight });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
+  function stopCardNavigation(event: MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   return (
-    <label style={selectWrapStyle}>
-      <span style={selectLabelStyle}>{label}</span>
-      <select
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
         aria-label={ariaLabel}
-        value={value}
-        onClick={(event) => event.stopPropagation()}
-        onChange={(event) => onChange(event.target.value)}
-        style={selectOverlayStyle}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={(event) => {
+          stopCardNavigation(event);
+          setOpen((current) => !current);
+        }}
+        style={selectWrapStyle}
       >
-        {options.map((option) => (
-          <option key={`${option.value}:${option.label}`} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        <span style={selectLabelStyle}>{label}</span>
+        <UiIcon name="chevron-down" size={12} strokeWidth={1.9} />
+      </button>
+
+      {open && panelPosition && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="presentation"
+              style={popoverBackdropStyle}
+              onClick={(event) => {
+                stopCardNavigation(event);
+                setOpen(false);
+              }}
+            >
+              <div
+                role="listbox"
+                aria-label={ariaLabel}
+                style={{
+                  ...popoverStyle,
+                  top: panelPosition.top,
+                  left: panelPosition.left,
+                  width: panelPosition.width,
+                  maxHeight: panelPosition.maxHeight,
+                }}
+                onClick={stopCardNavigation}
+              >
+                {options.map((option) => {
+                  const selected = option.value === value;
+                  return (
+                    <button
+                      key={`${option.value}:${option.label}`}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      style={popoverOptionStyle(selected)}
+                      onClick={(event) => {
+                        stopCardNavigation(event);
+                        setOpen(false);
+                        if (!selected) onChange(option.value);
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {selected ? <UiIcon name="check" size={15} strokeWidth={2} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
 const rowStyle: CSSProperties = {
   minWidth: 0,
-  width: "100%",
+  width: "auto",
+  flex: "1 1 auto",
   display: "inline-flex",
   alignItems: "center",
   gap: 12,
@@ -126,13 +237,15 @@ const rowStyle: CSSProperties = {
 };
 
 const selectWrapStyle: CSSProperties = {
-  position: "relative",
   flex: "0 0 auto",
-  minHeight: 36,
+  minHeight: 32,
   display: "inline-flex",
   alignItems: "center",
-  padding: "0 5px",
+  gap: 2,
+  padding: "0 4px",
+  border: 0,
   borderRadius: 8,
+  background: "transparent",
   color: "#536a50",
   fontSize: 12,
   fontWeight: 750,
@@ -142,15 +255,46 @@ const selectWrapStyle: CSSProperties = {
 };
 
 const selectLabelStyle: CSSProperties = {
-  pointerEvents: "none",
   whiteSpace: "nowrap",
 };
 
-const selectOverlayStyle: CSSProperties = {
-  position: "absolute",
+const popoverBackdropStyle: CSSProperties = {
+  position: "fixed",
   inset: 0,
-  width: "100%",
-  height: "100%",
-  opacity: 0,
-  cursor: "pointer",
+  zIndex: 2300,
+  background: "transparent",
+};
+
+const popoverStyle: CSSProperties = {
+  position: "fixed",
+  display: "grid",
+  gap: 3,
+  overflowY: "auto",
+  overscrollBehavior: "contain",
+  boxSizing: "border-box",
+  padding: 5,
+  border: "1px solid #dfe7da",
+  borderRadius: 12,
+  background: "#fff",
+  boxShadow: "0 12px 30px rgba(30, 48, 29, 0.16)",
+};
+
+function popoverOptionStyle(selected: boolean): CSSProperties {
+  return {
+    width: "100%",
+    minHeight: 38,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    padding: "7px 9px",
+    border: selected ? "1px solid #b9d4b3" : "1px solid transparent",
+    borderRadius: 9,
+    background: selected ? "#f1f8ee" : "transparent",
+    color: selected ? "#315f34" : "#344534",
+    textAlign: "left",
+    fontSize: 13.5,
+    fontWeight: selected ? 750 : 600,
+    cursor: "pointer",
+  };
 };

@@ -89,6 +89,22 @@ union all
 select other_user, 'membership-other'
 from membership_access_test_context;
 
+-- Guide candidate authors/usages reference auth.users. Seed matching identities
+-- after the public fixtures so any signup trigger takes its idempotent path;
+-- keep the real guide-usage trigger and foreign keys enabled for this test.
+insert into auth.users (id, aud, role, email, created_at, updated_at)
+select
+  fixture.user_id,
+  'authenticated',
+  'authenticated',
+  fixture.user_id::text || '@membership-fixture.example.test',
+  now(),
+  now()
+from membership_access_test_context c
+cross join lateral unnest(array[
+  c.local_user, c.cloud_user, c.trial_user, c.expired_user, c.other_user
+]) as fixture(user_id);
+
 do $$
 declare
   v_local_user uuid := (
@@ -330,6 +346,25 @@ select
   '会员权限测试植物',
   '会员权限测试植物'
 from membership_access_test_context;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from membership_access_test_context c
+    join public.guide_candidate_usages usage
+      on usage.archive_id = c.archive_id
+     and usage.user_id = c.other_user
+    join public.guide_candidates candidate
+      on candidate.id = usage.candidate_id
+     and candidate.created_by = c.other_user
+     and candidate.category = 'plant'
+     and candidate.normalized_name = public.normalize_guide_name('会员权限测试植物')
+  ) then
+    raise exception 'membership archive guide usage was not linked to its author';
+  end if;
+end;
+$$;
 
 insert into public.records (
   id,

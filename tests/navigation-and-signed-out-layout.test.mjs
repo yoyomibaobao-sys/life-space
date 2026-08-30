@@ -166,7 +166,7 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
 
   assert.match(topBar, /showNotification = false/);
   assert.match(homeTabs, /label: t\.nav\.activity, href: "\/discover"/);
-  assert.match(homeTabs, /label: t\.nav\.experience, href: "\/experience"/);
+  assert.match(homeTabs, /label: t\.nav\.experience,[\s\S]*?href: "\/experience"/);
   assert.match(homeTabs, /label: t\.nav\.guide, href: "\/plant"/);
   assert.match(homeTabs, /active === "activity"[\s\S]*?"\/discover\/search"/);
   assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen\(\(open\) => !open\)\}/);
@@ -177,7 +177,8 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
   assert.doesNotMatch(marketPage, /showNotification/);
   assert.match(marketPage, /const \[mobileFiltersOpen, setMobileFiltersOpen\] = useState\(false\)/);
   assert.match(marketPage, /isMobileViewport \? \([\s\S]*?mobileFiltersOpen \? \([\s\S]*?<MobileMarketFilters/);
-  assert.match(discoverFilters, /overflowX: "auto"/);
+  assert.match(discoverFilters, /gridTemplateColumns: "repeat\(5, minmax\(0, 1fr\)\)"/);
+  assert.match(discoverFilters, /aria-pressed=\{helpOnly\}/);
   assert.match(projectCard, /width: mobileMode \? 96 : 104/);
   assert.match(navbar, /function shouldShowMobileCreateAction\(pathname: string\)[\s\S]*?return false/);
   assert.match(navbar, /pathname\.startsWith\("\/quick-record"\)\) return labels\.add_record/);
@@ -431,11 +432,10 @@ test("mobile market keeps actions out of the global bar and uses readable manage
 
   assert.match(mine, /href="\/market\/new"[\s\S]*?t\.market\.post_information/);
   assert.doesNotMatch(mine, /getMarketPostQuotaHint/);
-  assert.match(mine, /cardMainStyle[\s\S]*?gridTemplateColumns: "88px minmax\(0, 1fr\)"/);
-  assert.match(mine, /descriptionStyle[\s\S]*?WebkitLineClamp: 1/);
+  assert.match(mine, /cardOpenLinkStyle[\s\S]*?gridTemplateColumns: "98px minmax\(0, 1fr\)"/);
+  assert.match(mine, /descriptionStyle[\s\S]*?WebkitLineClamp: 2/);
   assert.match(mine, /formatMarketTime\(item\.created_at\)[\s\S]*?views_prefix/);
-  assert.match(mine, /actionRowStyle[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(mine, /secondaryLinkStyle[\s\S]*?minHeight: 30/);
+  assert.match(mine, /cardContentStyle[\s\S]*?height: 98/);
 });
 
 test("mobile archive detail only offers Add record to the project owner", async () => {

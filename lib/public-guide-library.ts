@@ -60,6 +60,15 @@ export type PublicGuideContent = {
   cautions: string[];
 };
 
+export type PublicGuideFilterTraits = {
+  light?: string;
+  temperature?: string;
+  growthForm?: string;
+  difficulty?: string;
+};
+
+export type PublicGuideFilterKey = keyof PublicGuideFilterTraits;
+
 type RawGuideContent = Partial<PublicGuideContent>;
 
 export const publicGuideCopy = {
@@ -72,6 +81,25 @@ export const publicGuideCopy = {
     loading: "加载中…",
     noMatch: "没有匹配的公共指引。",
     empty: "这个板块暂时还没有公共指引。",
+    allCategories: "全部类别",
+    category: "类别",
+    categoryFilter: "类别筛选",
+    waterPlantFilters: "水草筛选",
+    showFilters: "筛选",
+    hideFilters: "收起筛选",
+    clearFilters: "清除筛选",
+    light: "光照",
+    temperature: "水温",
+    growthForm: "生长方式",
+    difficulty: "难度",
+    overviewPractice: "概要与实操",
+    experienceCards: "经验卡",
+    relatedProjects: "关联项目",
+    noExperienceCards: "暂时没有与这条指引关联的公开经验卡。",
+    noRelatedProjects: "暂时没有与这条指引关联的项目。",
+    registerForOverview: "注册后查看基础概要",
+    membershipForFull: "开通云会员后可查看完整实操、经验卡和关联项目。",
+    learnMembership: "了解云会员",
     otherGuides: "其他公开指引",
     preset: "平台预设",
     approved: "已审核公开",
@@ -94,6 +122,25 @@ export const publicGuideCopy = {
     loading: "Loading…",
     noMatch: "No matching public guides.",
     empty: "There are no public guides in this section yet.",
+    allCategories: "All categories",
+    category: "Category",
+    categoryFilter: "Category filter",
+    waterPlantFilters: "Aquatic-plant filters",
+    showFilters: "Filters",
+    hideFilters: "Hide filters",
+    clearFilters: "Clear filters",
+    light: "Light",
+    temperature: "Water temperature",
+    growthForm: "Growth form",
+    difficulty: "Difficulty",
+    overviewPractice: "Overview & practice",
+    experienceCards: "Experience cards",
+    relatedProjects: "Related projects",
+    noExperienceCards: "There are no public experience cards linked to this guide yet.",
+    noRelatedProjects: "There are no projects linked to this guide yet.",
+    registerForOverview: "Register to view the basic overview",
+    membershipForFull: "Cloud membership unlocks full practice guidance, experience cards, and related projects.",
+    learnMembership: "About cloud membership",
     otherGuides: "Other public guides",
     preset: "Platform preset",
     approved: "Approved public guide",
@@ -106,6 +153,73 @@ export const publicGuideCopy = {
     notFound: "This guide could not be found or is not currently public.",
     contentPending: "This public guide exists, and detailed content is still being developed.",
     frameworkNote: "This is a general starting framework. Adjust it for the species, materials, environment, and local requirements.",
+  },
+} as const;
+
+export const publicGuideWaterFilterOptions = {
+  zh: {
+    light: [
+      { value: "all", label: "全部光照" },
+      { value: "low", label: "弱光" },
+      { value: "low_medium", label: "弱至中光" },
+      { value: "medium", label: "中光" },
+      { value: "medium_high", label: "中至强光" },
+      { value: "high", label: "强光" },
+    ],
+    temperature: [
+      { value: "all", label: "全部水温" },
+      { value: "temperate", label: "偏凉" },
+      { value: "warm", label: "偏暖" },
+      { value: "temperate_warm", label: "凉至暖" },
+      { value: "cool_warm", label: "宽温" },
+    ],
+    growthForm: [
+      { value: "all", label: "全部生长方式" },
+      { value: "epiphyte", label: "附生" },
+      { value: "rooted", label: "扎根" },
+      { value: "carpet", label: "前景铺地" },
+      { value: "stem", label: "茎草" },
+      { value: "floating", label: "漂浮" },
+      { value: "stem_floating", label: "茎生／漂浮" },
+    ],
+    difficulty: [
+      { value: "all", label: "全部难度" },
+      { value: "easy", label: "容易" },
+      { value: "medium", label: "中等" },
+      { value: "hard", label: "较难" },
+    ],
+  },
+  en: {
+    light: [
+      { value: "all", label: "All light levels" },
+      { value: "low", label: "Low light" },
+      { value: "low_medium", label: "Low to medium" },
+      { value: "medium", label: "Medium light" },
+      { value: "medium_high", label: "Medium to high" },
+      { value: "high", label: "High light" },
+    ],
+    temperature: [
+      { value: "all", label: "All temperatures" },
+      { value: "temperate", label: "Temperate" },
+      { value: "warm", label: "Warm" },
+      { value: "temperate_warm", label: "Temperate to warm" },
+      { value: "cool_warm", label: "Broad range" },
+    ],
+    growthForm: [
+      { value: "all", label: "All growth forms" },
+      { value: "epiphyte", label: "Epiphyte" },
+      { value: "rooted", label: "Rooted" },
+      { value: "carpet", label: "Carpet" },
+      { value: "stem", label: "Stem plant" },
+      { value: "floating", label: "Floating" },
+      { value: "stem_floating", label: "Stem / floating" },
+    ],
+    difficulty: [
+      { value: "all", label: "All difficulties" },
+      { value: "easy", label: "Easy" },
+      { value: "medium", label: "Moderate" },
+      { value: "hard", label: "Advanced" },
+    ],
   },
 } as const;
 
@@ -148,6 +262,47 @@ export function getPublicGuideSectionSummary(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+export function getPublicGuideFilterTraits(
+  entry: Pick<PublicGuideEntry, "content">,
+): PublicGuideFilterTraits {
+  if (!isRecord(entry.content) || !isRecord(entry.content.filters)) return {};
+
+  const filters = entry.content.filters;
+  const light = text(filters.light);
+  const temperature = text(filters.temperature);
+  const growthForm = text(filters.growth_form);
+  const difficulty = text(filters.difficulty);
+
+  return {
+    light: light || undefined,
+    temperature: temperature || undefined,
+    growthForm: growthForm || undefined,
+    difficulty: difficulty || undefined,
+  };
+}
+
+export function getPublicGuideFilterLabel(
+  key: PublicGuideFilterKey,
+  value: string | undefined,
+  language: PublicGuideLanguage,
+) {
+  if (!value) return "";
+  const option = publicGuideWaterFilterOptions[language][key].find(
+    (item) => item.value === value,
+  );
+  return option?.label || value;
+}
+
+export function matchesPublicGuideFilters(
+  entry: Pick<PublicGuideEntry, "content">,
+  filters: Record<PublicGuideFilterKey, string>,
+) {
+  const traits = getPublicGuideFilterTraits(entry);
+  return (Object.keys(filters) as PublicGuideFilterKey[]).every(
+    (key) => filters[key] === "all" || traits[key] === filters[key],
+  );
 }
 
 function text(value: unknown) {
@@ -223,6 +378,197 @@ function zhTemplates(name: string): Record<string, PublicGuideContent> {
     stages,
     note: "周期受材料、温度、物种和管理方式影响，以实际观察记录为准。",
   });
+  const aquariumFocus: Record<string, string> = {
+    金鱼: "金鱼排泄负荷较高，应优先保障有效水量、溶氧和过滤维护，并避免与会啄咬长鳍的鱼混养。",
+    锦鲤: "锦鲤成体大、寿命长且排泄量高，应按长期鱼池空间、深度、过滤和越冬条件规划。",
+    孔雀鱼: "孔雀鱼繁殖快，需提前安排公母比例、幼鱼去向和数量控制，并避免水温水质骤变。",
+    斗鱼: "斗鱼需稳定暖水和接近水面的换气空间；不同个体攻击性差异大，不默认可混养。",
+    红绿灯鱼: "红绿灯鱼适合稳定成熟的水体和同类群游，入缸与换水时应减少温度和水质突变。",
+    原生鱼: "原生鱼必须先准确识别并确认合法来源、温度季节性和流速需求，不能以“本地鱼”概括饲养。",
+    海水鱼: "海水鱼应先建立稳定盐度、温度和成熟生物过滤，并为停电、补水与检疫预留方案。",
+  };
+  const crustaceanFocus: Record<string, string> = {
+    米虾: "米虾适合成熟、稳定且有生物膜的水体；进出水口要防吸入，避免含铜药物。",
+    水晶虾: "水晶虾对水质波动更敏感，应稳定硬度、酸碱度和温度，少量慢速调整。",
+    螯虾: "螯虾会攀爬、掘动并可能夹伤同伴，需牢固上盖、独立躲避和更谨慎的混养方案。",
+    螃蟹: "螃蟹的淡水、汽水、海水及水陆需求差异很大，必须先确认准确种类并重点防逃。",
+  };
+  const backyardFocus: Record<string, string> = {
+    鸡: "鸡要有干燥通风的夜宿区、栖架和产蛋区，并重点防天敌、潮湿垫料和群体啄伤。",
+    鸭: "鸭的饮水会迅速弄湿环境，应把饮水区、排水和干燥休息区分开管理。",
+    鹅: "鹅需要充足活动与清洁饮水，并要管理领地性、噪声、围栏和繁殖季行为。",
+    兔: "兔对高温和闷湿敏感，需要干燥通风、遮暑、足部保护、磨牙材料和持续粗纤维来源。",
+    鹌鹑: "鹌鹑易受惊向上冲撞，应设置合适高度或缓冲顶面，并保持干燥垫料和防逃缝隙。",
+    羊: "羊需要稳定粗饲料、清洁饮水、干燥落脚处和蹄部检查，并防止误食有毒植物。",
+    猪: "猪需要结实围栏、遮阴降温、干燥休息区和可探索活动，饮水、粪污及夏季热应激要重点管理。",
+    牛: "牛的长期空间、草料、饮水、围栏和粪污需求大，应持续看反刍、采食、步态和体况。",
+    马: "马需要持续粗饲料、清洁饮水、足够活动、蹄部护理和安全围栏，饲料变化必须逐步进行。",
+  };
+
+  const aquariumAnimal: PublicGuideContent = {
+    parameters: [
+      { label: "先确认", value: "准确物种、成体体型、群居性与食性" },
+      { label: "水体", value: "有效水量、温度、溶氧、氨氮与酸碱度" },
+      { label: "设备", value: "成熟过滤、循环、增氧与停电预案" },
+    ],
+    cycle: recurringCycle("入缸与稳定参考", "先稳定系统，再逐步增加生物量", [
+      { label: "空系统试运行", duration: "至少数日" },
+      { label: "隔离与适应", duration: "按来源和物种决定" },
+      { label: "逐步合缸", duration: "分批进行" },
+    ]),
+    sections: [
+      { title: "入手前", items: [`查清${name}的成体大小、温度、水质、食性、群居和混养要求。`, aquariumFocus[name] || "按成体与系统承载规划，不以幼体大小或缸体标称容积估算密度。"] },
+      { title: "建立与入缸", items: ["先让过滤、循环和增氧稳定运行，再分批加入生物。", "新个体先隔离观察，入缸时逐步适应温度和水质，减少一次性变化。"] },
+      { title: "日常与异常", items: ["每天看呼吸、游姿、进食、体表、排泄和同伴互动；定期记录水质与设备状态。", "出现异常先复查水质、过滤、供氧和近期变动，不盲目叠加药物。"] },
+    ],
+    cautions: ["不要把个体、卵、幼体或缸水排入自然水体。", "药物、盐度、温度与混养处理必须核对准确物种的耐受性。"],
+  };
+
+  const crustacean: PublicGuideContent = {
+    parameters: [
+      { label: "关键环境", value: "稳定水质、溶氧、硬度与躲避空间" },
+      { label: "重点阶段", value: "入缸、蜕壳、抱卵与幼体" },
+      { label: "防护", value: "防夹伤、防捕食、防逃逸" },
+    ],
+    cycle: recurringCycle("适应与蜕壳观察", "连续记录多个蜕壳周期", [
+      { label: "隔离适应", duration: "按来源决定" },
+      { label: "稳定摄食", duration: "约数日至数周" },
+      { label: "蜕壳复查", duration: "持续" },
+    ]),
+    sections: [
+      { title: "环境准备", items: [`为${name}准备成熟过滤、充足溶氧和不易夹伤的躲避处。`, crustaceanFocus[name] || "先核对淡水、汽水或海水环境，以及硬度、底床和同伴兼容要求。"] },
+      { title: "喂养与蜕壳", items: ["少量投喂并移走残饵，记录摄食、体色、活动和排泄。", "蜕壳前后减少打扰，保留安全躲避空间；不要随意移走刚蜕壳个体。"] },
+      { title: "繁殖与数量", items: ["记录抱卵、幼体出现和存活，提前评估后续容量。", "检查缝隙、进出水口和上盖，防止逃逸或被设备吸入。"] },
+    ],
+    cautions: ["含铜药物和部分水处理剂可能伤害甲壳类，使用前必须核对。", "螯虾和部分螃蟹可能捕食、夹伤或破坏造景，不能默认适合混养。"],
+  };
+
+  const molluskAquatic: PublicGuideContent = {
+    parameters: [
+      { label: "水环境", value: "物种对应的淡水、汽水或海水" },
+      { label: "壳体", value: "关注硬度、钙源、溶壳与破损" },
+      { label: "数量", value: "记录繁殖、食物与系统承载" },
+    ],
+    sections: [
+      { title: "确认需求", items: [`确认${name}的水域类型、成体大小、食性、温度和繁殖方式。`, "滤食性贝类不能仅靠缸壁藻类维持，先确认系统是否能稳定提供合适食物。"] },
+      { title: "日常观察", items: ["记录活动、附着、摄食、壳口、壳面、死亡个体和水质变化。", "控制残饵和有机物累积，及时移走死亡个体并查找原因。"] },
+      { title: "繁殖与防逃", items: ["记录卵块或幼体，数量上升时同步调整投喂和过滤。", "检查上盖、水线和进出水口；部分种类会离水活动。"] },
+    ],
+    cautions: ["不能把观赏螺贝、卵或缸水释放到自然环境。", "部分螺贝受保护或可能携带寄生风险，采集、食用和转移前应核对当地规定。"],
+  };
+
+  const molluskLand: PublicGuideContent = {
+    parameters: [
+      { label: "环境", value: "通风、湿度、温度、躲避与防逃" },
+      { label: "食物", value: "先确认物种食性与安全钙源" },
+      { label: "观察", value: "活动、取食、黏液、壳体或体表" },
+    ],
+    sections: [
+      { title: "识别与边界", items: [`先判断${name}是观察对象、饲养对象还是作物危害，再决定是否干预。`, "记录出现位置、时间、湿度、食物来源和数量，不只凭单张照片识别。"] },
+      { title: "环境与喂养", items: ["保持湿润但不闷湿，提供通风、躲避和可清洁的基质。", "少量提供符合物种食性的食物，及时清理腐败残饵和排泄物。"] },
+      { title: "数量管理", items: ["记录产卵与幼体，提前准备容量或采用物理隔离。", "作物区优先用环境整理、诱集和屏障降低危害，避免无差别用药。"] },
+    ],
+    cautions: ["接触后洗手，避免接触黏液后触摸口眼或直接食用。", "外来或来源不明种类不要放生、转移到公共绿地或与本地种群混放。"],
+  };
+
+  const amphibian: PublicGuideContent = {
+    parameters: [
+      { label: "先确认", value: "准确物种、生活史与保护状态" },
+      { label: "环境", value: "水陆比例、温湿度、水质与躲避" },
+      { label: "观察", value: "皮肤、姿态、进食、排泄与变态阶段" },
+    ],
+    cycle: recurringCycle("生活史记录", "按物种与季节持续观察", [
+      { label: "卵或幼体", duration: "按物种" },
+      { label: "变态", duration: "按水温与物种" },
+      { label: "成体活动", duration: "长期" },
+    ]),
+    sections: [
+      { title: "环境建立", items: [`按${name}的生活史配置水域、陆地、攀附或躲避空间。`, "使用无刺激、易清洁的材料，稳定水质、温湿度与昼夜节律。"] },
+      { title: "喂养与清洁", items: ["按物种和阶段提供合适大小、来源清楚的食物，记录拒食与体况。", "小范围分次清洁，避免消毒剂、肥皂、农药和护肤品接触敏感皮肤。"] },
+      { title: "观察与干预", items: ["记录鸣叫、产卵、变态、蜕皮、活动和天气变化。", "野生个体优先原地观察，不随意捕捉、搬运或跨水体放生。"] },
+    ],
+    cautions: ["两栖动物对水质和化学残留敏感，处理前应确认材料安全。", "受保护物种、野生采集和跨区域转移应遵守当地规定。"],
+  };
+
+  const reptile: PublicGuideContent = {
+    parameters: [
+      { label: "必须确认", value: "准确物种、成体尺寸、食性与合法来源" },
+      { label: "环境", value: "温度梯度、光照、湿度、水域与躲避" },
+      { label: "记录", value: "进食、排泄、体重、蜕皮和行为" },
+    ],
+    sections: [
+      { title: "设置环境", items: [`按${name}的准确物种建立冷热区、躲避处、活动空间与安全上盖。`, "需要时配置适合的紫外线光源，并按说明记录安装距离和更换时间。"] },
+      { title: "日常照护", items: ["每天核对温湿度、饮水、精神、排泄和设备，定期记录体重或体况。", "按物种食性与体型喂养，避免用单一食物长期替代完整营养。"] },
+      { title: "蜕皮与安全", items: ["记录蜕皮完整度、眼部和趾端残皮，先调整环境再考虑处理。", "减少不必要抓取，接触前后洗手；儿童和其他动物不得无监督接触。"] },
+    ],
+    cautions: ["蛇、龟、蜥蜴之间差异极大，不能共用一套温度、光照或饲料参数。", "来源、饲养、运输与放生可能受法规限制，出现健康异常应联系有经验的异宠兽医。"],
+  };
+
+  const insect: PublicGuideContent = {
+    parameters: [
+      { label: "识别", value: "物种或至少到可靠类群与生命周期阶段" },
+      { label: "资源", value: "寄主、花蜜、腐殖质或专用饲料" },
+      { label: "环境", value: "温湿度、通风、光周期与防逃" },
+    ],
+    cycle: recurringCycle("生命周期记录", "按物种记录完整一代", [
+      { label: "卵／幼体", duration: "按物种" },
+      { label: "蛹或蜕变", duration: "按物种" },
+      { label: "成体", duration: "按物种" },
+    ]),
+    sections: [
+      { title: "建立记录", items: [`记录${name}的来源、阶段、寄主或食物、温湿度和出现时间。`, "保留环境照片和连续变化，不只记录成虫或最终结果。"] },
+      { title: "饲养或观察", items: ["每天清理霉变食物和过湿区域，同时保留合适湿度与通风。", "为化蛹、羽化、蜕皮或繁殖预留空间，防止跌落、粘翅和逃逸。"] },
+      { title: "生态边界", items: ["庭院观察时把寄主植物、天敌、天气和用药一起记录。", "扩繁前先确认后续用途、容量和当地规则，不随意释放非本地个体。"] },
+    ],
+    cautions: ["蜜蜂、毛虫和部分甲虫可能蜇刺、致敏或分泌刺激物，应避免徒手接触。", "农药处理会同时影响目标与非目标昆虫，使用前应评估替代方法。"],
+  };
+
+  const arachnid: PublicGuideContent = {
+    parameters: [
+      { label: "先识别", value: "蜘蛛或螨的类群、来源与风险" },
+      { label: "环境", value: "栖息结构、通风、湿度与防逃" },
+      { label: "观察", value: "结网、猎食、蜕皮、数量与危害" },
+    ],
+    sections: [
+      { title: "观察与识别", items: [`记录${name}出现的位置、时间、网型、猎物或寄主和环境条件。`, "不能可靠识别时保持距离，不用徒手捕捉或挤压。"] },
+      { title: "栖息管理", items: ["饲养对象按类群提供攀附、穴居或地表空间，并保持通风与适度湿度。", "庭院蜘蛛优先保留原位栖息；作物螨先确认是否为害螨、捕食螨或分解者。"] },
+      { title: "异常处理", items: ["记录蜕皮、拒食、腹部状态、扩散速度和近期温湿度变化。", "发现快速危害时先隔离受影响对象、清洁工具，再选择针对性措施。"] },
+    ],
+    cautions: ["不确定是否有毒或致敏时不要触摸；被咬伤并出现明显症状应及时求助。", "广谱杀螨剂可能影响捕食性天敌和其他节肢动物。"],
+  };
+
+  const bird: PublicGuideContent = {
+    parameters: [
+      { label: "场景", value: "区分野外观察、救助与人工饲养" },
+      { label: "环境", value: "空间、栖木、光照、通风、饮水与卫生" },
+      { label: "观察", value: "进食、羽毛、鸣叫、飞行、排泄与繁殖" },
+    ],
+    sections: [
+      { title: "先定边界", items: [`确认${name}是野生访客还是合法来源的饲养个体。`, "野外观察记录时间、数量、食物、水源和筑巢，不随意抓取幼鸟或搬动巢。"] },
+      { title: "日常环境", items: ["饲养空间要能伸展、转身和完成正常行为，保持空气流通并避免厨房油烟。", "每天更换清洁饮水，记录采食、排泄、羽毛和活动变化。"] },
+      { title: "食物与健康", items: ["按准确物种提供多样且合适的食物，不长期只喂单一种子或人类加工食品。", "新增个体先隔离；持续蓬羽、呼吸异常、拒食或受伤应尽快联系专业救助或兽医。"] },
+    ],
+    cautions: ["野生鸟类、巢、蛋和迁徙物种常受法规保护。", "投喂可能造成聚集、污染和营养失衡；应先改善原生植物、水源和安全栖息环境。"],
+  };
+
+  const backyardAnimal: PublicGuideContent = {
+    parameters: [
+      { label: "基础", value: "物种、数量、年龄、来源与长期空间" },
+      { label: "每天检查", value: "饮水、采食、精神、步态、排泄与体况" },
+      { label: "环境", value: "通风、遮蔽、垫料、粪污、防逃和防天敌" },
+    ],
+    cycle: recurringCycle("日常管理参考", "按日检查、按周复盘、按季节调整", [
+      { label: "每日", duration: "饮水、采食与个体观察" },
+      { label: "每周", duration: "清洁、体况与设施检查" },
+      { label: "季节", duration: "防暑、防寒与防疫复盘" },
+    ]),
+    sections: [
+      { title: "开始前", items: [`按${name}的成体体型、群居行为和寿命准备长期空间、预算与照护人。`, backyardFocus[name] || "确认当地饲养、登记、防疫、噪声和粪污处理要求，并预留隔离区。"] },
+      { title: "日常管理", items: ["持续提供清洁饮水和适合物种、年龄与阶段的饲料，避免突然换料。", "每天逐只看精神、采食、步态、皮毛或羽毛、排泄和伤口，异常个体及时隔离。"] },
+      { title: "环境与记录", items: ["保持通风、干燥、遮阳避雨和可清洁地面，及时处理湿垫料与粪污。", "记录体重或体况、饲料、清洁、防疫、繁殖、维修和异常，按季节调整。"] },
+    ],
+    cautions: ["鸡、兔、牛、猪等需求差异很大，具体饲料、空间和防疫方案应按物种并咨询当地专业人员。", "不要自行使用处方药或随意改变停药期；动物福利和公共卫生要求优先。"],
+  };
 
   return {
     generic: {
@@ -370,6 +716,16 @@ function zhTemplates(name: string): Record<string, PublicGuideContent> {
       ],
       cautions: ["不要把饲养个体、卵、幼体或水体排入自然环境。", "用药、盐度和温度处理必须核对具体物种耐受性。"],
     },
+    aquarium_animal: aquariumAnimal,
+    crustacean,
+    mollusk_aquatic: molluskAquatic,
+    mollusk_land: molluskLand,
+    amphibian,
+    reptile,
+    insect,
+    arachnid,
+    bird,
+    backyard_animal: backyardAnimal,
     habitat_animal: {
       parameters: [
         { label: "对象", value: "先做物种识别，再决定观察或照护" },
@@ -448,6 +804,168 @@ function enTemplates(name: string): Record<string, PublicGuideContent> {
     stages,
     note: "Timing varies with materials, temperature, species, and management. Use your observations as the final reference.",
   });
+  const aquariumFocus: Record<string, string> = {
+    Goldfish: "Goldfish produce a high waste load; prioritize effective volume, oxygen, and filter maintenance, and avoid incompatible fin-nipping tankmates.",
+    Koi: "Koi grow large and live for years; plan long-term pond space, depth, filtration, and seasonal conditions.",
+    Guppy: "Guppies reproduce quickly; plan sex ratio, juvenile capacity, and population control while avoiding abrupt water changes.",
+    Betta: "Bettas need stable warm water and surface access; individual aggression varies, so mixed housing is never automatic.",
+    "Neon tetra": "Neon tetras do best in a stable mature system and a suitable group; reduce temperature and chemistry swings during introduction and water changes.",
+    "Native fish": "Identify native fish accurately and confirm legal source, seasonal temperature, and flow needs rather than treating all local fish alike.",
+    "Marine fish": "Establish stable salinity, temperature, and mature filtration before stocking, with plans for quarantine, top-off, and outages.",
+  };
+  const crustaceanFocus: Record<string, string> = {
+    "Neocaridina shrimp": "Neocaridina shrimp benefit from mature biofilm and stable water; guard intakes and avoid copper treatments.",
+    "Crystal shrimp": "Crystal shrimp are more sensitive to change; stabilize hardness, pH, and temperature and adjust slowly.",
+    Crayfish: "Crayfish climb, dig, and may injure tankmates; use a secure lid, separate hides, and cautious compatibility planning.",
+    Crab: "Crabs differ widely in fresh, brackish, marine, and land-water needs; identify the exact species and prevent escape.",
+  };
+  const backyardFocus: Record<string, string> = {
+    Chicken: "Chickens need a dry ventilated night shelter, perches, nesting areas, predator protection, and monitoring for wet litter and pecking injuries.",
+    Duck: "Duck water access quickly wets the habitat, so separate drinking and drainage from a dry resting area.",
+    Goose: "Geese need usable space and clean water plus management of territorial behavior, noise, fencing, and breeding season.",
+    Rabbit: "Rabbits are sensitive to heat and damp conditions and need ventilation, dry footing, chew materials, and a continuous appropriate fibre source.",
+    Quail: "Quail may flush upward when startled; provide a safe ceiling, dry bedding, and escape-proof gaps.",
+    Sheep: "Sheep need consistent forage, clean water, dry footing, hoof checks, and protection from toxic plants.",
+    Pig: "Pigs need strong fencing, shade and cooling, a dry resting area, enrichment, and deliberate water and manure management.",
+    Cattle: "Cattle require substantial space, forage, water, fencing, and manure management; track rumination, appetite, gait, and condition.",
+    Horse: "Horses need continuous appropriate forage, clean water, movement, hoof care, and safe fencing; diet changes must be gradual.",
+  };
+
+  const practicalAnimalTemplate = (
+    parameters: PublicGuideParameter[],
+    setup: string[],
+    routine: string[],
+    records: string[],
+    cautions: string[],
+  ): PublicGuideContent => ({
+    parameters,
+    sections: [
+      { title: "Set up", items: setup },
+      { title: "Routine care", items: routine },
+      { title: "Record and adjust", items: records },
+    ],
+    cautions,
+  });
+
+  const aquariumAnimal = practicalAnimalTemplate(
+    [
+      { label: "Confirm", value: "Exact species, adult size, social behavior, diet" },
+      { label: "Water", value: "Effective volume, temperature, oxygen, ammonia/nitrite, pH" },
+      { label: "Equipment", value: "Mature filtration, circulation, aeration, outage plan" },
+    ],
+    [`Confirm adult size, chemistry, temperature, diet, and compatibility for ${name}.`, aquariumFocus[name] || "Plan around adult needs and system capacity, not juvenile size or nominal tank volume."],
+    ["Stabilize filtration and oxygen before adding animals in stages; quarantine and acclimate new arrivals.", "Check breathing, movement, feeding, skin or scales, waste, and interactions every day."],
+    ["Track water tests, equipment, feeding, behavior, and every recent change.", "When a problem appears, check water, filtration, and oxygen before stacking treatments."],
+    ["Never release animals, eggs, larvae, or aquarium water into nature.", "Medication, salt, temperature, and mixed-species care must be verified for the exact species."],
+  );
+
+  const crustacean = practicalAnimalTemplate(
+    [
+      { label: "Environment", value: "Stable water, oxygen, hardness, shelters" },
+      { label: "Key stages", value: "Introduction, molting, eggs, juveniles" },
+      { label: "Protection", value: "Prevent predation, injury, intake suction, escape" },
+    ],
+    [`Prepare mature filtration and safe shelters for ${name}.`, crustaceanFocus[name] || "Confirm fresh, brackish, or marine water, hardness, substrate, and compatibility."],
+    ["Feed modest portions and remove waste; watch color, activity, feeding, and molts.", "Reduce disturbance around molts and maintain several secure hides."],
+    ["Track eggs, juveniles, survival, and system capacity.", "Inspect lids, gaps, overflows, and intakes for escape or suction risk."],
+    ["Copper and some treatments can harm crustaceans; verify every product.", "Crayfish and some crabs may injure tankmates or damage the setup."],
+  );
+
+  const molluskAquatic = practicalAnimalTemplate(
+    [
+      { label: "Water type", value: "Species-specific fresh, brackish, or marine water" },
+      { label: "Shell", value: "Hardness, calcium, erosion, damage" },
+      { label: "Population", value: "Food, breeding, and system capacity" },
+    ],
+    [`Confirm habitat, adult size, diet, temperature, and breeding for ${name}.`, "For filter feeders, confirm the system can provide suitable food rather than relying on visible algae."],
+    ["Track movement, attachment, feeding, shell condition, deaths, and water quality.", "Control leftover food and organics; remove dead animals promptly."],
+    ["Record eggs or juveniles and adjust feeding and filtration as numbers change.", "Check lids, waterline, and plumbing because some species leave the water."],
+    ["Do not release aquarium mollusks, eggs, or water into nature.", "Collection, food use, and transport may be regulated or carry parasite risk."],
+  );
+
+  const molluskLand = practicalAnimalTemplate(
+    [
+      { label: "Habitat", value: "Ventilation, moisture, temperature, shelter, escape control" },
+      { label: "Food", value: "Species-appropriate diet and safe calcium" },
+      { label: "Observe", value: "Activity, feeding, mucus, shell or body" },
+    ],
+    [`Decide whether ${name} is a study subject, a kept animal, or a crop pest before intervening.`, "Record location, timing, moisture, food source, and abundance."],
+    ["Keep the habitat humid but ventilated, with shelters and a cleanable substrate.", "Offer small suitable portions and remove spoiled food and waste."],
+    ["Track eggs and juveniles before the enclosure exceeds capacity.", "In crops, start with habitat cleanup, traps, and barriers rather than broad treatment."],
+    ["Wash hands after contact and avoid touching the face.", "Never release or relocate unknown or non-native species."],
+  );
+
+  const amphibian = practicalAnimalTemplate(
+    [
+      { label: "Confirm", value: "Exact species, life stage, conservation status" },
+      { label: "Habitat", value: "Land-water balance, temperature, humidity, water quality" },
+      { label: "Observe", value: "Skin, posture, feeding, waste, metamorphosis" },
+    ],
+    [`Match water, land, climbing, and hiding zones to the life history of ${name}.`, "Use non-irritating, cleanable materials and stabilize water, humidity, and day-night rhythm."],
+    ["Feed appropriate, traceable prey for the species and stage; track refusal and body condition.", "Clean in sections and keep soap, disinfectant residue, pesticides, and skin products away."],
+    ["Track calls, eggs, metamorphosis, shedding, activity, and weather.", "Prefer in-place observation for wildlife; do not move animals between watersheds."],
+    ["Amphibian skin is sensitive to water quality and residues.", "Follow local rules for protected species, collection, and relocation."],
+  );
+
+  const reptile = practicalAnimalTemplate(
+    [
+      { label: "Required", value: "Exact species, adult size, diet, legal source" },
+      { label: "Habitat", value: "Thermal gradient, light, humidity, water, hides" },
+      { label: "Track", value: "Feeding, waste, weight, shedding, behavior" },
+    ],
+    [`Build heat and cool zones, hides, usable space, and a secure lid for the exact ${name} species.`, "Where required, install suitable ultraviolet lighting and record distance and replacement date."],
+    ["Check temperature, humidity, water, behavior, waste, and equipment every day.", "Use a species-appropriate varied diet rather than one food as a complete substitute."],
+    ["Track shedding, retained skin, weight, feeding, and behavior.", "Adjust husbandry first and contact an experienced exotic-animal veterinarian for persistent problems."],
+    ["Turtles, snakes, and lizards cannot share one temperature, light, or diet formula.", "Source, transport, keeping, and release may be regulated."],
+  );
+
+  const insect = practicalAnimalTemplate(
+    [
+      { label: "Identify", value: "Reliable group or species and life stage" },
+      { label: "Resource", value: "Host plant, nectar, detritus, or defined feed" },
+      { label: "Habitat", value: "Temperature, humidity, ventilation, photoperiod, escape control" },
+    ],
+    [`Record the source, stage, host or feed, temperature, humidity, and date for ${name}.`, "Leave room for pupation, emergence, molts, or breeding."],
+    ["Remove moldy feed and overly wet material while retaining the required humidity.", "Track eggs, larvae, pupae or molts, adults, deaths, and escape points."],
+    ["For garden observation, record host plants, predators, weather, and pesticide use together.", "Confirm capacity and local rules before breeding; do not release non-native stock."],
+    ["Some bees, caterpillars, and beetles sting, irritate, or trigger allergy.", "Broad pesticides affect target and beneficial insects alike."],
+  );
+
+  const arachnid = practicalAnimalTemplate(
+    [
+      { label: "Identify", value: "Spider or mite group, source, and risk" },
+      { label: "Habitat", value: "Structure, ventilation, moisture, escape control" },
+      { label: "Observe", value: "Webs, prey or host, molts, spread, damage" },
+    ],
+    [`Record where and when ${name} appears, plus web, prey or host, and conditions.`, "Keep distance and avoid bare-hand capture when identification is uncertain."],
+    ["Match kept spiders to arboreal, burrowing, or terrestrial needs.", "For mites, identify pest, predator, or decomposer before choosing control."],
+    ["Track molts, feeding, body condition, spread, damage, and recent humidity changes.", "Isolate affected plants and clean tools before targeted treatment."],
+    ["Do not touch unknown or potentially venomous or allergenic animals.", "Broad miticides can also remove predatory mites and other beneficial arthropods."],
+  );
+
+  const bird = practicalAnimalTemplate(
+    [
+      { label: "Context", value: "Separate field observation, rescue, and captive care" },
+      { label: "Habitat", value: "Space, perches, light, air, water, hygiene" },
+      { label: "Observe", value: "Feeding, plumage, voice, flight, waste, breeding" },
+    ],
+    [`Confirm whether ${name} is a wild visitor or a legally sourced kept bird.`, "For wildlife, record time, number, food, water, and nesting without moving nests or young."],
+    ["Provide enough usable space, clean water, ventilation, and protection from kitchen fumes.", "Use a varied species-appropriate diet rather than seed or processed human food alone."],
+    ["Track appetite, waste, feathers, movement, and behavior every day.", "Quarantine newcomers; seek professional rescue or veterinary help for persistent distress or injury."],
+    ["Wild birds, nests, eggs, and migratory species may be protected.", "Feeding can cause crowding, contamination, and nutritional imbalance."],
+  );
+
+  const backyardAnimal = practicalAnimalTemplate(
+    [
+      { label: "Basics", value: "Species, number, age, source, long-term space" },
+      { label: "Daily", value: "Water, feed, behavior, gait, waste, condition" },
+      { label: "Habitat", value: "Air, shelter, bedding, manure, escape, predators" },
+    ],
+    [`Prepare lifetime space, budget, carers, isolation, and normal-behavior areas for ${name}.`, backyardFocus[name] || "Confirm local rules for keeping, registration, disease control, noise, and manure."],
+    ["Provide clean water and feed matched to species and life stage; change diets gradually.", "Observe every individual daily and isolate animals showing illness or injury."],
+    ["Track body condition, feed, cleaning, preventive care, breeding, repairs, and exceptions.", "Adjust shade, ventilation, bedding, drainage, and predator protection by season."],
+    ["Chickens, rabbits, cattle, and pigs have very different space, feed, and preventive-care needs.", "Do not improvise prescription medicines or withdrawal periods; welfare and public health come first."],
+  );
 
   return {
     generic: {
@@ -595,6 +1113,16 @@ function enTemplates(name: string): Record<string, PublicGuideContent> {
       ],
       cautions: ["Never release animals, eggs, larvae, or aquarium water into nature.", "Medication, salinity, and temperature treatments must be checked for the exact species."],
     },
+    aquarium_animal: aquariumAnimal,
+    crustacean,
+    mollusk_aquatic: molluskAquatic,
+    mollusk_land: molluskLand,
+    amphibian,
+    reptile,
+    insect,
+    arachnid,
+    bird,
+    backyard_animal: backyardAnimal,
     habitat_animal: {
       parameters: [
         { label: "Subject", value: "Identify before deciding whether to observe or care" },
@@ -682,9 +1210,28 @@ export function buildPublicGuideContent(
   const name = getPublicGuideName(entry, language);
   const template = getTemplate(entry.content_template, name, language);
   const raw = parseGuideContent(language === "en" ? entry.content_en : entry.content);
+  const traits = getPublicGuideFilterTraits(entry);
+  const copy = publicGuideCopy[language];
+  const aquaticPlantParameters: PublicGuideParameter[] =
+    entry.content_template === "aquatic_plant"
+      ? (Object.keys(traits) as PublicGuideFilterKey[])
+          .map((key) => ({
+            label: copy[key],
+            value: getPublicGuideFilterLabel(key, traits[key], language),
+          }))
+          .filter((item) => item.value)
+      : [];
+  const templateParameters = aquaticPlantParameters.length
+    ? [
+        ...aquaticPlantParameters,
+        ...template.parameters.filter(
+          (item) => item.label !== copy.light && item.label !== copy.temperature,
+        ),
+      ]
+    : template.parameters;
 
   return {
-    parameters: raw.parameters?.length ? raw.parameters : template.parameters,
+    parameters: raw.parameters?.length ? raw.parameters : templateParameters,
     cycle: raw.cycle || template.cycle || null,
     sections: raw.sections?.length ? raw.sections : template.sections,
     cautions: raw.cautions?.length ? raw.cautions : template.cautions,

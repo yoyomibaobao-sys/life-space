@@ -16,12 +16,12 @@ export default function HomeSectionTabs({
   showNotification?: boolean;
   onSearch?: () => void;
 }) {
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const items = [
     { key: "activity" as const, label: t.nav.activity, href: "/discover" },
     {
       key: "experience" as const,
-      label: language === "en" ? "Experience cards" : "经验卡",
+      label: t.nav.experience,
       href: "/experience",
     },
     { key: "guide" as const, label: t.nav.guide, href: "/plant" },

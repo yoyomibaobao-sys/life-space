@@ -24,18 +24,21 @@ import { buildLoginHref } from "@/lib/auth-return";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import {
   archiveCategoryOptions,
-  getArchiveCategoryIcon,
   getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import {
+  getPublicGuideFilterLabel,
+  getPublicGuideFilterTraits,
   getPublicGuideName,
   getPublicGuideSectionName,
-  getPublicGuideSectionSummary,
   getPublicGuideSummary,
+  matchesPublicGuideFilters,
   publicGuideCopy,
+  publicGuideWaterFilterOptions,
   sortPublicGuides,
   type PublicGuideEntry,
+  type PublicGuideFilterKey,
   type PublicGuideSection,
 } from "@/lib/public-guide-library";
 
@@ -44,6 +47,13 @@ const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
 const MAX_RECENT_SEARCHES = 8;
 const INITIAL_VISIBLE_PLANT_COUNT = 24;
 const PLANT_BATCH_SIZE = 24;
+
+const EMPTY_PUBLIC_GUIDE_SEARCHES: Record<ArchiveCategory, string> = {
+  plant: "",
+  system: "",
+  insect_fish: "",
+  other: "",
+};
 
 let hasCheckedInitialPlantNavigation = false;
 
@@ -220,6 +230,9 @@ export default function PlantIndexPage() {
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [interestCount, setInterestCount] = useState<number | null>(null);
   const [searchInput, setSearchInput] = useState("");
+  const [publicGuideSearchInputs, setPublicGuideSearchInputs] = useState<
+    Record<ArchiveCategory, string>
+  >(EMPTY_PUBLIC_GUIDE_SEARCHES);
   const [query, setQuery] = useState("");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
@@ -280,8 +293,15 @@ export default function PlantIndexPage() {
           initialSection === "other"
         ) {
           setGuideSection(initialSection);
-          setSearchInput(initialQuery);
-          setQuery(initialQuery);
+          if (initialSection === "plant") {
+            setSearchInput(initialQuery);
+            setQuery(initialQuery);
+          } else {
+            setPublicGuideSearchInputs((current) => ({
+              ...current,
+              [initialSection]: initialQuery,
+            }));
+          }
           setSearchStateRestored(true);
           return;
         }
@@ -423,7 +443,7 @@ export default function PlantIndexPage() {
         supabase
         .from("guide_entries")
           .select(
-            "id, category, name, name_en, source, section_id, summary, summary_en, content_template, sort_order, is_active",
+            "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, sort_order, is_active",
           )
           .eq("is_active", true)
           .order("sort_order", { ascending: true })
@@ -829,8 +849,6 @@ export default function PlantIndexPage() {
 
   function changeGuideSection(section: ArchiveCategory) {
     setGuideSection(section);
-    setSearchInput("");
-    setQuery("");
     setIsMobileSearchOpen(false);
     setSearchPanelOpen(false);
   }
@@ -1556,11 +1574,18 @@ export default function PlantIndexPage() {
           entries={publicGuides.filter((entry) => entry.category === guideSection)}
           sections={publicGuideSections.filter((section) => section.category === guideSection)}
           loading={publicGuidesLoading}
-          searchInput={searchInput}
-          onSearchInputChange={setSearchInput}
+          searchInput={publicGuideSearchInputs[guideSection]}
+          onSearchInputChange={(value) =>
+            setPublicGuideSearchInputs((current) => ({
+              ...current,
+              [guideSection]: value,
+            }))
+          }
           searchOpen={!isMobileViewport || isMobileSearchOpen}
           isMobile={isMobileViewport}
           language={language}
+          isSignedIn={isSignedIn}
+          hasCloudAccess={hasCloudAccess}
         />
       )}
       </main>
@@ -1578,6 +1603,8 @@ function PublicGuideLibrary({
   searchOpen,
   isMobile,
   language,
+  isSignedIn,
+  hasCloudAccess,
 }: {
   category: ArchiveCategory;
   entries: PublicGuideEntry[];
@@ -1588,38 +1615,123 @@ function PublicGuideLibrary({
   searchOpen: boolean;
   isMobile: boolean;
   language: "zh" | "en";
+  isSignedIn: boolean;
+  hasCloudAccess: boolean;
 }) {
   const keyword = normalize(searchInput);
   const copy = publicGuideCopy[language];
   const orderedEntries = sortPublicGuides(entries);
-  const orderedSections = sortPublicGuides(sections);
+  const orderedSections = sortPublicGuides(sections).filter((section) =>
+    orderedEntries.some((entry) => entry.section_id === section.id),
+  );
+  const [activeSectionByCategory, setActiveSectionByCategory] = useState<
+    Partial<Record<ArchiveCategory, string>>
+  >({});
+  const [waterFilters, setWaterFilters] = useState<
+    Record<PublicGuideFilterKey, string>
+  >({
+    light: "all",
+    temperature: "all",
+    growthForm: "all",
+    difficulty: "all",
+  });
+  const [waterFiltersOpen, setWaterFiltersOpen] = useState(false);
+  const requestedSectionId = activeSectionByCategory[category] || "all";
+  const activeSectionId =
+    requestedSectionId === "all" ||
+    orderedSections.some((section) => section.id === requestedSectionId)
+      ? requestedSectionId
+      : "all";
+  const activeSection = orderedSections.find(
+    (section) => section.id === activeSectionId,
+  );
+  const showWaterFilters =
+    category === "insect_fish" &&
+    activeSection?.slug === "aquatic_plants" &&
+    hasCloudAccess;
+  const activeWaterFilterCount = Object.values(waterFilters).filter(
+    (value) => value !== "all",
+  ).length;
   const visibleEntries = orderedEntries.filter((entry) => {
+    if (activeSectionId !== "all" && entry.section_id !== activeSectionId) {
+      return false;
+    }
+    if (
+      showWaterFilters &&
+      entry.section_id === activeSectionId &&
+      !matchesPublicGuideFilters(entry, waterFilters)
+    ) {
+      return false;
+    }
     if (!keyword) return true;
-    return [entry.name, entry.name_en, entry.summary, entry.summary_en].some((value) =>
-      normalize(value).includes(keyword),
+    return [entry.name, entry.name_en, entry.summary, entry.summary_en].some(
+      (value) => normalize(value).includes(keyword),
     );
   });
-  const directEntries = visibleEntries.filter((entry) => !entry.section_id);
+
+  function resetWaterFilters() {
+    setWaterFilters({
+      light: "all",
+      temperature: "all",
+      growthForm: "all",
+      difficulty: "all",
+    });
+  }
+
+  function changeSection(sectionId: string) {
+    setActiveSectionByCategory((current) => ({
+      ...current,
+      [category]: sectionId,
+    }));
+    if (sectionId !== activeSection?.id) {
+      setWaterFiltersOpen(false);
+    }
+  }
 
   function renderGuideCard(entry: PublicGuideEntry) {
     const name = getPublicGuideName(entry, language);
-    const summary = getPublicGuideSummary(entry, language) || copy.contentPending;
+    const sourceLabel =
+      entry.source === "preset" ? copy.preset : copy.approved;
+    const summary = isSignedIn
+      ? getPublicGuideSummary(entry, language) || copy.contentPending
+      : copy.registerForOverview;
+    const section = orderedSections.find(
+      (candidate) => candidate.id === entry.section_id,
+    );
+    const traits = getPublicGuideFilterTraits(entry);
+    const traitLabels = (Object.keys(traits) as PublicGuideFilterKey[])
+      .map((key) => getPublicGuideFilterLabel(key, traits[key], language))
+      .filter(Boolean)
+      .slice(0, isMobile ? 2 : 4);
 
     return (
-      <Link key={entry.id} href={`/plant/guide/${entry.id}`} style={publicGuideCardStyle}>
-        <span style={publicGuideIconStyle}>
-          <UiIcon name={getArchiveCategoryIcon(entry.category)} size={19} />
+      <Link
+        key={entry.id}
+        href={`/plant/guide/${entry.id}?from=${encodeURIComponent(category)}`}
+        aria-label={`${name} · ${sourceLabel}`}
+        style={publicGuideCardStyle(isMobile)}
+      >
+        <span style={publicGuideCardTitleRowStyle}>
+          <strong style={publicGuideNameStyle(isMobile)}>{name}</strong>
+          {section ? (
+            <span style={publicGuideCategoryBadgeStyle}>
+              {getPublicGuideSectionName(section, language)}
+            </span>
+          ) : null}
         </span>
-        <strong style={publicGuideNameStyle}>{name}</strong>
-        <span style={publicGuideSummaryStyle}>{summary}</span>
-        <span style={publicGuideCardFooterStyle}>
-          <span style={publicGuideSourceStyle}>
-            {entry.source === "preset" ? copy.preset : copy.approved}
+        {entry.name_en && entry.name_en !== name ? (
+          <span style={publicGuideSecondaryNameStyle}>{entry.name_en}</span>
+        ) : null}
+        {hasCloudAccess && traitLabels.length > 0 ? (
+          <span style={publicGuideTraitRowStyle}>
+            {traitLabels.map((label) => (
+              <span key={`${entry.id}-${label}`} style={publicGuideTraitStyle}>
+                {label}
+              </span>
+            ))}
           </span>
-          <span style={publicGuideOpenStyle}>
-            {copy.open} <UiIcon name="arrow-right" size={12} />
-          </span>
-        </span>
+        ) : null}
+        <span style={publicGuideSummaryStyle(isMobile, isSignedIn)}>{summary}</span>
       </Link>
     );
   }
@@ -1653,6 +1765,79 @@ function PublicGuideLibrary({
         />
       ) : null}
 
+      <div
+        aria-label={copy.categoryFilter}
+        style={publicGuideCategoryFiltersStyle(isMobile)}
+      >
+        <button
+          type="button"
+          onClick={() => changeSection("all")}
+          style={publicGuideCategoryFilterStyle(activeSectionId === "all")}
+        >
+          {copy.allCategories}
+        </button>
+        {orderedSections.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            onClick={() => changeSection(section.id)}
+            style={publicGuideCategoryFilterStyle(activeSectionId === section.id)}
+          >
+            {getPublicGuideSectionName(section, language)}
+          </button>
+        ))}
+      </div>
+
+      {showWaterFilters ? (
+        <div style={publicGuideWaterFilterPanelStyle}>
+          <div style={publicGuideWaterFilterHeadingStyle}>
+            <strong>{copy.waterPlantFilters}</strong>
+            <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              {activeWaterFilterCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={resetWaterFilters}
+                  style={publicGuideFilterTextButtonStyle}
+                >
+                  {copy.clearFilters}
+                </button>
+              ) : null}
+              {isMobile ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (waterFiltersOpen) resetWaterFilters();
+                    setWaterFiltersOpen((open) => !open);
+                  }}
+                  style={publicGuideFilterTextButtonStyle}
+                >
+                  {waterFiltersOpen ? copy.hideFilters : copy.showFilters}
+                  {activeWaterFilterCount > 0 ? ` (${activeWaterFilterCount})` : ""}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {!isMobile || waterFiltersOpen ? (
+            <div style={publicGuideWaterFilterGridStyle(isMobile)}>
+              {(Object.keys(waterFilters) as PublicGuideFilterKey[]).map((key) => (
+                <FilterSelect
+                  key={key}
+                  label={copy[key]}
+                  value={waterFilters[key]}
+                  onChange={(value) =>
+                    setWaterFilters((current) => ({ ...current, [key]: value }))
+                  }
+                  options={[...publicGuideWaterFilterOptions[language][key]]}
+                  compact={isMobile}
+                  hideLabel={isMobile}
+                  fill
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <p style={publicGuideNoticeStyle}>
         {copy.notice}
       </p>
@@ -1661,51 +1846,11 @@ function PublicGuideLibrary({
         <div style={publicGuideEmptyStyle}>{copy.loading}</div>
       ) : visibleEntries.length === 0 ? (
         <div style={publicGuideEmptyStyle}>
-          {keyword ? copy.noMatch : copy.empty}
-        </div>
-      ) : keyword ? (
-        <div style={publicGuideGridStyle(isMobile)}>
-          {visibleEntries.map(renderGuideCard)}
+          {keyword || activeWaterFilterCount > 0 ? copy.noMatch : copy.empty}
         </div>
       ) : (
-        <div style={publicGuideLibraryBodyStyle}>
-          {orderedSections.map((section) => {
-            const sectionEntries = orderedEntries.filter(
-              (entry) => entry.section_id === section.id,
-            );
-            if (sectionEntries.length === 0) return null;
-
-            return (
-              <section key={section.id} style={publicGuideSectionStyle}>
-                <div style={publicGuideSectionHeadingStyle}>
-                  <h2 style={publicGuideSectionTitleStyle}>
-                    {getPublicGuideSectionName(section, language)}
-                  </h2>
-                  {getPublicGuideSectionSummary(section, language) ? (
-                    <p style={publicGuideSectionSummaryStyle}>
-                      {getPublicGuideSectionSummary(section, language)}
-                    </p>
-                  ) : null}
-                </div>
-                <div style={publicGuideGridStyle(isMobile)}>
-                  {sectionEntries.map(renderGuideCard)}
-                </div>
-              </section>
-            );
-          })}
-
-          {directEntries.length > 0 ? (
-            <section style={publicGuideSectionStyle}>
-              {orderedSections.length > 0 ? (
-                <div style={publicGuideSectionHeadingStyle}>
-                  <h2 style={publicGuideSectionTitleStyle}>{copy.otherGuides}</h2>
-                </div>
-              ) : null}
-              <div style={publicGuideGridStyle(isMobile)}>
-                {directEntries.map(renderGuideCard)}
-              </div>
-            </section>
-          ) : null}
+        <div style={publicGuideGridStyle(isMobile)}>
+          {visibleEntries.map(renderGuideCard)}
         </div>
       )}
     </section>
@@ -1900,111 +2045,169 @@ const publicGuideNoticeStyle: CSSProperties = {
 function publicGuideGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile
-      ? "repeat(2, minmax(0, 1fr))"
-      : "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
     gap: isMobile ? 8 : 12,
   };
 }
 
-const publicGuideCardStyle: CSSProperties = {
-  minWidth: 0,
-  minHeight: 164,
+function publicGuideCardStyle(isMobile: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    minHeight: isMobile ? 112 : 196,
+    display: "block",
+    padding: isMobile ? 10 : 16,
+    border: "1px solid #e1e9de",
+    borderRadius: isMobile ? 14 : 18,
+    background: "#fff",
+    boxShadow: "0 4px 14px rgba(0,0,0,0.03)",
+    color: "inherit",
+    textDecoration: "none",
+  };
+}
+
+const publicGuideCardTitleRowStyle: CSSProperties = {
   display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-start",
-  padding: 13,
-  border: "1px solid #e1e9de",
-  borderRadius: 15,
-  background: "#fbfdf9",
-  color: "inherit",
-  textDecoration: "none",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
 };
 
-const publicGuideIconStyle: CSSProperties = {
-  width: 32,
-  height: 32,
-  display: "grid",
-  placeItems: "center",
-  borderRadius: 10,
-  background: "#eaf5e6",
-  color: "#52794f",
-};
+function publicGuideNameStyle(isMobile: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    overflow: "hidden",
+    color: "#2b3e2a",
+    fontSize: isMobile ? 16 : 18,
+    lineHeight: 1.3,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  };
+}
 
-const publicGuideNameStyle: CSSProperties = {
-  width: "100%",
-  marginTop: 10,
+const publicGuideCategoryBadgeStyle: CSSProperties = {
+  flexShrink: 0,
+  maxWidth: "42%",
   overflow: "hidden",
-  color: "#2b3e2a",
-  fontSize: 15,
-  lineHeight: 1.35,
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "#f0fff4",
+  color: "#2e7d32",
+  fontSize: 12,
+  lineHeight: 1.2,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
-const publicGuideSummaryStyle: CSSProperties = {
-  marginTop: 7,
+const publicGuideSecondaryNameStyle: CSSProperties = {
+  display: "block",
+  marginTop: 4,
   overflow: "hidden",
-  color: "#657260",
-  fontSize: 12.5,
-  lineHeight: 1.55,
-  display: "-webkit-box",
-  WebkitLineClamp: 3,
-  WebkitBoxOrient: "vertical",
+  color: "#747d71",
+  fontSize: 12,
+  fontStyle: "italic",
+  lineHeight: 1.3,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
-const publicGuideCardFooterStyle: CSSProperties = {
-  width: "100%",
-  marginTop: "auto",
-  paddingTop: 9,
+const publicGuideTraitRowStyle: CSSProperties = {
+  display: "flex",
+  gap: 6,
+  marginTop: 7,
+  overflow: "hidden",
+};
+
+const publicGuideTraitStyle: CSSProperties = {
+  flexShrink: 0,
+  padding: "2px 7px",
+  border: "1px solid #dfeedd",
+  borderRadius: 999,
+  background: "#f6fbf6",
+  color: "#2e7d32",
+  fontSize: 12,
+  whiteSpace: "nowrap",
+};
+
+function publicGuideSummaryStyle(
+  isMobile: boolean,
+  hasSummaryAccess: boolean,
+): CSSProperties {
+  return {
+    display: "-webkit-box",
+    marginTop: isMobile ? 7 : 12,
+    overflow: "hidden",
+    color: hasSummaryAccess ? "#444" : "#999",
+    fontSize: isMobile ? 13 : 14,
+    lineHeight: isMobile ? 1.4 : 1.65,
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: isMobile ? 2 : 4,
+  };
+}
+
+function publicGuideCategoryFiltersStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "flex",
+    gap: 7,
+    marginTop: 11,
+    overflowX: isMobile ? "auto" : "visible",
+    flexWrap: isMobile ? "nowrap" : "wrap",
+    paddingBottom: isMobile ? 3 : 0,
+  };
+}
+
+function publicGuideCategoryFilterStyle(selected: boolean): CSSProperties {
+  return {
+    flexShrink: 0,
+    minHeight: 34,
+    padding: "0 11px",
+    border: selected ? "1px solid #6c9865" : "1px solid #dce6d8",
+    borderRadius: 999,
+    background: selected ? "#edf7e9" : "#fff",
+    color: selected ? "#315f30" : "#61705d",
+    fontSize: 12.5,
+    fontWeight: selected ? 800 : 650,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  };
+}
+
+const publicGuideWaterFilterPanelStyle: CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  border: "1px solid #e0eadb",
+  borderRadius: 12,
+  background: "#f8fbf6",
+};
+
+const publicGuideWaterFilterHeadingStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 7,
-};
-
-const publicGuideSourceStyle: CSSProperties = {
-  color: "#80907c",
-  fontSize: 11.5,
-};
-
-const publicGuideOpenStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 3,
-  flexShrink: 0,
-  color: "#477044",
-  fontSize: 11.5,
-  fontWeight: 800,
-};
-
-const publicGuideLibraryBodyStyle: CSSProperties = {
-  display: "grid",
-  gap: 22,
-};
-
-const publicGuideSectionStyle: CSSProperties = {
-  display: "grid",
-  gap: 11,
-};
-
-const publicGuideSectionHeadingStyle: CSSProperties = {
-  display: "grid",
-  gap: 3,
-};
-
-const publicGuideSectionTitleStyle: CSSProperties = {
-  margin: 0,
-  color: "#31462f",
-  fontSize: 18,
-};
-
-const publicGuideSectionSummaryStyle: CSSProperties = {
-  margin: 0,
-  color: "#748070",
+  gap: 12,
+  color: "#496345",
   fontSize: 12.5,
-  lineHeight: 1.55,
 };
+
+const publicGuideFilterTextButtonStyle: CSSProperties = {
+  border: 0,
+  padding: 0,
+  background: "transparent",
+  color: "#477044",
+  fontSize: 12,
+  fontWeight: 750,
+  cursor: "pointer",
+};
+
+function publicGuideWaterFilterGridStyle(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile
+      ? "repeat(2, minmax(0, 1fr))"
+      : "repeat(4, minmax(0, 1fr))",
+    gap: isMobile ? 6 : 10,
+    marginTop: 9,
+  };
+}
 
 const publicGuideEmptyStyle: CSSProperties = {
   padding: 28,

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import UiIcon from "@/components/ui/UiIcon";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import PublicExperienceGallery from "@/components/experience-card/PublicExperienceGallery";
+import MobileSearchField from "@/components/search/MobileSearchField";
 import { fetchDiscoverExperienceCardSearchResults } from "@/lib/discover-search-data";
 import { emptySearchFilters } from "@/lib/discover-search-types";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
@@ -79,27 +79,17 @@ export default function PublicExperiencePage() {
         </section>
 
         {searchOpen ? (
-          <label style={searchRowStyle}>
-            <UiIcon name="search" size={17} />
-            <input
+          <div style={searchRowStyle}>
+            <MobileSearchField
               autoFocus
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={setQuery}
               placeholder={t.experience.search_placeholder}
-              aria-label={t.experience.search_title}
-              style={searchInputStyle}
+              ariaLabel={t.experience.search_title}
+              clearAriaLabel={t.plant.clear_search}
+              onClear={() => setQuery("")}
             />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label={t.plant.clear_search}
-                style={clearButtonStyle}
-              >
-                <UiIcon name="close" size={16} />
-              </button>
-            ) : null}
-          </label>
+          </div>
         ) : null}
         {loading ? (
           <section style={emptyStyle}>{t.experience.reading}</section>
@@ -114,7 +104,7 @@ export default function PublicExperiencePage() {
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 1240,
+  maxWidth: 860,
   margin: "0 auto",
   padding: "8px 14px 90px",
 };
@@ -123,61 +113,31 @@ const categoryFilterStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
   gap: 4,
-  marginBottom: 8,
+  marginBottom: 6,
 };
 
 function categoryButtonStyle(active: boolean): CSSProperties {
   return {
     minWidth: 0,
-    minHeight: 34,
+    minHeight: 38,
     border: active ? "1px solid #8bc58b" : "1px solid #e2e8df",
     borderRadius: 999,
     background: active ? "#f0fff4" : "#fff",
     color: active ? "#2e7d32" : "#314131",
     padding: "4px 3px",
     overflow: "hidden",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: active ? 700 : 550,
     lineHeight: 1.15,
     textAlign: "center",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    whiteSpace: "normal",
+    wordBreak: "keep-all",
     cursor: "pointer",
   };
 }
 
 const searchRowStyle: CSSProperties = {
-  minHeight: 42,
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  marginBottom: 8,
-  padding: "0 11px",
-  border: "1px solid #dce5d9",
-  borderRadius: 13,
-  background: "#fff",
-  color: "#687965",
-};
-const searchInputStyle: CSSProperties = {
-  minWidth: 0,
-  flex: 1,
-  height: 40,
-  border: 0,
-  outline: 0,
-  background: "transparent",
-  color: "#263826",
-  fontSize: 15,
-};
-const clearButtonStyle: CSSProperties = {
-  width: 32,
-  height: 32,
-  display: "grid",
-  placeItems: "center",
-  border: 0,
-  borderRadius: 999,
-  background: "transparent",
-  color: "#748171",
-  cursor: "pointer",
+  marginBottom: 7,
 };
 const emptyStyle: CSSProperties = {
   padding: "36px 14px",

@@ -2038,21 +2038,9 @@ saveRecentArchiveBrowse({
         title={
           <span style={mobileProjectHeaderTitleStyle}>
             <span style={mobileProjectHeaderProjectStyle}>{activeArchive.title}</span>
-            {archiveDisplayName ? (
-              <>
-                <span style={mobileProjectHeaderDotStyle}> · </span>
-                {encyclopediaHref ? (
-                  <Link href={encyclopediaHref} style={mobileProjectHeaderSystemLinkStyle}>
-                    {archiveDisplayName}
-                  </Link>
-                ) : (
-                  <span style={mobileProjectHeaderSystemStyle}>{archiveDisplayName}</span>
-                )}
-              </>
-            ) : null}
           </span>
         }
-        titleText={archiveDisplayName ? `${activeArchive.title} · ${archiveDisplayName}` : activeArchive.title}
+        titleText={activeArchive.title}
         fallbackHref={isOwner ? "/archive" : `/user/${activeArchive.user_id}`}
         ariaLabel={t.nav.back}
         right={
@@ -2094,6 +2082,15 @@ saveRecentArchiveBrowse({
         </header>
 
         <div style={projectDetailStatsStyle}>
+          {archiveDisplayName ? (
+            encyclopediaHref ? (
+              <Link href={encyclopediaHref} style={projectDetailGuideLinkStyle}>
+                {archiveDisplayName}
+              </Link>
+            ) : (
+              <span style={projectDetailGuideTextStyle}>{archiveDisplayName}</span>
+            )
+          ) : null}
           <ProjectMetaLine
             followerCount={projectFollowerCount}
             viewCount={Number(activeArchive.view_count || 0)}
@@ -2103,7 +2100,8 @@ saveRecentArchiveBrowse({
               activeArchive.status === "ended" ? activeArchive.ended_at : null,
             )}
             ended={activeArchive.status === "ended"}
-            order={["follow", "view", "record", "duration"]}
+            order={["view", "follow", "record", "duration"]}
+            style={{ minWidth: 0, flex: "1 1 auto", gap: "4px 8px", fontSize: 11.5 }}
           />
         </div>
 
@@ -2703,6 +2701,8 @@ function MobileArchiveProfile({
         value={archive.title || copy.unnamed_project}
         editing={editingField === "title"}
         canEdit={canEdit}
+        multiline
+        wideEditor
         onBeginEdit={() => onBeginEdit("title")}
       >
         <input
@@ -2885,6 +2885,7 @@ function MobileArchiveEditableField({
   editing,
   canEdit,
   multiline = false,
+  wideEditor = false,
   children,
   onBeginEdit,
 }: {
@@ -2895,12 +2896,15 @@ function MobileArchiveEditableField({
   editing: boolean;
   canEdit: boolean;
   multiline?: boolean;
+  wideEditor?: boolean;
   children: ReactNode;
   onBeginEdit: () => void;
 }) {
   if (editing) {
     return (
-      <label style={mobileArchiveEditFieldStyle}>
+      <label
+        style={wideEditor ? mobileArchiveWideEditFieldStyle : mobileArchiveEditFieldStyle}
+      >
         <span style={mobileArchiveLabelStyle}>{label}</span>
         {children}
       </label>
@@ -2980,41 +2984,22 @@ function normalizeArchiveCategory(value?: string | null): ArchiveCategory {
 
 const mobileProjectHeaderTitleStyle: CSSProperties = {
   minWidth: 0,
-  display: "flex",
-  alignItems: "baseline",
-  justifyContent: "center",
-  gap: 4,
+  width: "100%",
+  display: "block",
   overflow: "hidden",
   whiteSpace: "nowrap",
 };
 
 const mobileProjectHeaderProjectStyle: CSSProperties = {
   minWidth: 0,
+  width: "100%",
+  display: "block",
   overflow: "hidden",
   color: "#243424",
   fontSize: 16,
   fontWeight: 850,
   textOverflow: "ellipsis",
-};
-
-const mobileProjectHeaderDotStyle: CSSProperties = {
-  flexShrink: 0,
-  color: "#879284",
-};
-
-const mobileProjectHeaderSystemStyle: CSSProperties = {
-  minWidth: 0,
-  overflow: "hidden",
-  color: "#5f705c",
-  fontSize: 14,
-  fontWeight: 700,
-  textOverflow: "ellipsis",
-};
-
-const mobileProjectHeaderSystemLinkStyle: CSSProperties = {
-  ...mobileProjectHeaderSystemStyle,
-  textDecoration: "underline",
-  textUnderlineOffset: 3,
+  whiteSpace: "nowrap",
 };
 
 function mobileProjectFollowStyle(followed: boolean): CSSProperties {
@@ -3130,10 +3115,32 @@ const projectDetailStatsStyle: CSSProperties = {
   minHeight: 34,
   display: "flex",
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent: "flex-start",
+  gap: 8,
+  minWidth: 0,
   margin: "0 0 8px",
   padding: "5px 8px",
   borderBottom: "1px solid #edf1e9",
+};
+
+const projectDetailGuideTextStyle: CSSProperties = {
+  minWidth: 0,
+  maxWidth: "38%",
+  flex: "0 1 auto",
+  overflow: "hidden",
+  color: "#52694f",
+  fontSize: 12,
+  fontWeight: 750,
+  lineHeight: 1.35,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const projectDetailGuideLinkStyle: CSSProperties = {
+  ...projectDetailGuideTextStyle,
+  color: "#356f39",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
 };
 
 const mobileArchiveProfileStyle: CSSProperties = {
@@ -3192,6 +3199,12 @@ const mobileArchiveEditFieldStyle: CSSProperties = {
   padding: "9px 0",
   borderTop: "1px solid #f1f3ef",
   alignItems: "start",
+};
+
+const mobileArchiveWideEditFieldStyle: CSSProperties = {
+  ...mobileArchiveEditFieldStyle,
+  gridTemplateColumns: "1fr",
+  gap: 5,
 };
 
 const mobileArchiveLabelStyle: CSSProperties = {

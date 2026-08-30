@@ -74,7 +74,9 @@ begin
     'public.restore_archive_cycle_from_trash(uuid)'::regprocedure
   )) into v_definition;
 
-  if v_definition not like '%v_entry.owner_user_id = v_user_id%'
+  -- Ownership is checked on the trash_entries row before it is read into v_entry.
+  if v_definition not like '%te.owner_user_id = v_user_id%'
+     or v_definition not like '%v_archive.user_id is distinct from v_user_id%'
      or v_definition not like '%set trashed_at = null, trash_entry_id = null%'
      or v_definition like '%display_name =%'
      or v_definition like '%cycle_enabled =%' then
