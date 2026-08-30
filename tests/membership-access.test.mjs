@@ -479,3 +479,15 @@ test("isolated database CI runs membership behavior and all concurrency suites",
     /run_concurrency_sql_file "\$\{test_file\}"/
   );
 });
+
+test("membership fixtures keep guide usage linked to real auth identities", async () => {
+  const fixture = await source("supabase/tests/membership_access_dynamic.sql");
+  const authInsert = fixture.indexOf("insert into auth.users");
+
+  assert.ok(authInsert > fixture.indexOf("insert into public.users"));
+  assert.ok(authInsert < fixture.indexOf("insert into public.archives"));
+  assert.match(fixture, /c\.local_user, c\.cloud_user, c\.trial_user, c\.expired_user, c\.other_user/);
+  assert.match(fixture, /candidate\.created_by = c\.other_user/);
+  assert.match(fixture, /usage\.archive_id = c\.archive_id/);
+  assert.doesNotMatch(fixture, /disable trigger|session_replication_role/i);
+});
