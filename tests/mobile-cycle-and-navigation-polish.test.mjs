@@ -167,7 +167,8 @@ test("mobile Guide exposes four guide sections and Experience uses the shared su
   assert.match(summary, /item\.helpfulCount/);
   assert.match(summary, /t\.experience\.open_details/);
   assert.doesNotMatch(summary, /published_on|发布于/);
-  assert.match(galleryStyles, /\.previewMedia \{[\s\S]*?display: block;[\s\S]*?position: relative/);
+  assert.match(galleryStyles, /\.previewMediaButton \{[^}]*position: relative/);
+  assert.match(galleryStyles, /\.previewMedia \{[^}]*position: absolute;[^}]*inset: 0/);
   assert.match(galleryStyles, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(galleryStyles, /@media \(max-width: 759px\)[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
 });
@@ -243,6 +244,11 @@ test("mobile discovery filters, search fields, cards, and project menus follow t
   assert.match(searchField, /clearAriaLabel/);
   assert.doesNotMatch(galleryStyles, /\.previewCard \{[^}]*height: 100%/);
   assert.match(galleryStyles, /\.previewBody \{[^}]*height: 110px/);
+  assert.match(galleryStyles, /\.previewBody \{[^}]*flex: 0 0 110px/);
+  assert.match(galleryStyles, /@media \(max-width: 759px\)[\s\S]*?\.previewBody \{[^}]*flex-basis: 100px/);
+  const experiencePageStyles = await source("app/experience/page.module.css");
+  assert.match(experiencePage, /className=\{styles\.page\}/);
+  assert.match(experiencePageStyles, /@media \(max-width: 759px\)[\s\S]*padding: 8px 8px 90px/);
   assert.match(projectStyles, /\.media \{[^}]*align-self: stretch/);
   assert.match(projectActions, /createPortal/);
   assert.match(projectActions, /background: "transparent"/);

@@ -1,7 +1,7 @@
 .gallery {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   align-items: stretch;
 }
 
@@ -25,7 +25,10 @@
 }
 
 .previewMediaButton {
+  position: relative;
   width: 100%;
+  min-height: 0;
+  flex: 0 0 auto;
   aspect-ratio: 1;
   display: block;
   padding: 0;
@@ -36,7 +39,8 @@
 
 .previewMedia {
   display: block;
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -87,7 +91,7 @@
   height: 110px;
   display: flex;
   width: 100%;
-  flex: 1;
+  flex: 0 0 110px;
   padding: 7px 9px 8px;
   box-sizing: border-box;
   color: inherit;
@@ -168,6 +172,7 @@
   }
 
   .previewBody {
-    height: 110px;
+    height: 100px;
+    flex-basis: 100px;
   }
 }

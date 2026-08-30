@@ -13,6 +13,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import styles from "./page.module.css";
 
 type CategoryFilter = "all" | ArchiveCategory;
 
@@ -57,7 +58,7 @@ export default function PublicExperiencePage() {
         active="experience"
         onSearch={() => setSearchOpen((open) => !open)}
       />
-      <main style={pageStyle}>
+      <main className={styles.page} style={pageStyle}>
         <section style={categoryFilterStyle} aria-label={language === "en" ? "Category" : "分类"}>
           <button
             type="button"
@@ -106,7 +107,6 @@ export default function PublicExperiencePage() {
 const pageStyle: CSSProperties = {
   maxWidth: 860,
   margin: "0 auto",
-  padding: "8px 14px 90px",
 };
 
 const categoryFilterStyle: CSSProperties = {
