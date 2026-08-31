@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import PublicExperienceGallery from "@/components/experience-card/PublicExperienceGallery";
 import MobileSearchField from "@/components/search/MobileSearchField";
+import UiIcon from "@/components/ui/UiIcon";
 import { fetchDiscoverExperienceCardSearchResults } from "@/lib/discover-search-data";
 import { emptySearchFilters } from "@/lib/discover-search-types";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
@@ -60,6 +62,12 @@ export default function PublicExperiencePage() {
         onSearch={() => setSearchOpen((open) => !open)}
       />
       <main className={styles.page} style={pageStyle}>
+        <header className={`${styles.header} mobile-app-desktop-only`}>
+          <h1 className={styles.title}>{t.nav.experience}</h1>
+          <Link href="/experience/search" className={styles.searchLink} aria-label={t.experience.search_title}>
+            <UiIcon name="search" size={15} /> {t.nav.search}
+          </Link>
+        </header>
         <section className={`${filterStyles.row} ${filterStyles.experience}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
           <button
             type="button"

@@ -111,6 +111,15 @@ export function getPlantSubCategoryLabel(value?: string | null) {
   return plantSubCategoryLabels[value] || value;
 }
 
+export function getPlantGrowthTypeLabel(
+  value: string | null | undefined,
+  labels: Record<string, string>,
+) {
+  const text = String(value || "").trim();
+  const key = text.toLowerCase();
+  return Object.hasOwn(labels, key) ? labels[key] : text;
+}
+
 export function uniqueTextList(items: unknown[]) {
   const seen = new Set<string>();
 

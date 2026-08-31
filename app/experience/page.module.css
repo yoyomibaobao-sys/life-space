@@ -2,6 +2,37 @@
   padding: 8px 14px 90px;
 }
 
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  color: #1f2d1f;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.searchLink {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  padding: 6px 11px;
+  border: 1px solid #dce6d8;
+  border-radius: 999px;
+  background: #fff;
+  color: #5d7059;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
 @media (max-width: 759px) {
   .page {
     padding: 8px 8px 90px;

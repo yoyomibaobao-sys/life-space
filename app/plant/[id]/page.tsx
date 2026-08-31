@@ -13,6 +13,7 @@ import { formatCardDate } from "@/lib/date-time";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import type { ExperienceCardListItem, ExperienceCardRow } from "@/lib/experience-card-types";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
+import { getPlantGrowthTypeLabel } from "@/lib/plant-shared";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   canAccessMembershipGuidance,
@@ -1450,6 +1451,7 @@ export default function PlantDetailPage() {
     plant?.scientific_name ||
     copy.default_title;
   const displayFamily = localizedPlant?.family || plant?.family;
+  const displayGrowthType = getPlantGrowthTypeLabel(plant?.growth_type, copy.growth_types);
   const fromArchive = searchParams.get("fromArchive");
   const fromRecord = searchParams.get("fromRecord");
   const returnRecordHref = fromArchive
@@ -1809,7 +1811,7 @@ export default function PlantDetailPage() {
               ? ` · ${subCategoryLabel(plant.sub_category, t.plant.subcategories)}`
               : ""}
           </div>
-          {plant.growth_type && <div>{copy.growth_type}{plant.growth_type}</div>}
+          {displayGrowthType && <div>{copy.growth_type}{displayGrowthType}</div>}
           {en?.common_name && <div>{copy.english_name}{en.common_name}</div>}
         </div>
 

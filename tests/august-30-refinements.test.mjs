@@ -380,6 +380,110 @@ test("only vertical Home discovery and experience cards share the fixed height m
   assert.doesNotMatch(css, /align-self: stretch/);
 });
 
+test("discovery and experience vertical cards keep matching media, copy heights, and grid gaps", () => {
+  const shared = source("components/ui/VerticalFeedCard.module.css");
+  assert.match(shared, /\.card \{[^}]*--feed-copy-height: 100px;[^}]*--feed-image-ratio: 1 \/ 1\.08;/);
+  assert.match(shared, /\.media \{[^}]*flex: 0 0 auto;[^}]*aspect-ratio: var\(--feed-image-ratio\);/);
+  assert.match(shared, /\.copy \{[^}]*height: var\(--feed-copy-height\);[^}]*flex: 0 0 var\(--feed-copy-height\);/);
+  assert.match(shared, /@media \(min-width: 760px\)[\s\S]*--feed-copy-height: 110px;[\s\S]*--feed-image-ratio: 1;/);
+  const discover = source("components/discover/DiscoverProjectFeed.module.css");
+  const experience = source("components/experience-card/PublicExperienceFeed.module.css");
+  assert.match(discover, /\.grid \{[^}]*repeat\(2, minmax\(0, 1fr\)\);[^}]*gap: 10px;/);
+  assert.match(discover, /@media \(min-width: 760px\)[\s\S]*\.grid \{[^}]*repeat\(4, minmax\(0, 1fr\)\);[^}]*gap: 12px;/);
+  assert.match(experience, /\.gallery \{[^}]*repeat\(4, minmax\(0, 1fr\)\);[^}]*gap: 12px;/);
+  assert.match(experience, /@media \(max-width: 759px\)[\s\S]*\.gallery \{[^}]*repeat\(2, minmax\(0, 1fr\)\);[^}]*gap: 10px;/);
+});
+
+test("public experience exposes a localized desktop search link and keeps mobile inline search", () => {
+  for (const language of ["zh", "en"]) {
+    const t = load(`lib/i18n/${language}.ts`).default;
+    const Page = createLoader({
+      "@/lib/i18n/useLanguage": { useLanguage: () => ({ language, t }) },
+      "@/lib/discover-search-data": { fetchDiscoverExperienceCardSearchResults() { throw new Error("Rendering must not query production"); } },
+      "@/components/home/HomeSectionTabs": () => null,
+      "@/components/experience-card/PublicExperienceGallery": () => null,
+      "next/link": ({ children, ...props }) => React.createElement("a", props, children),
+    })("app/experience/page.tsx").default;
+    const html = renderToStaticMarkup(React.createElement(Page));
+    assert.match(html, /<header class="header mobile-app-desktop-only">/);
+    assert.ok(html.includes(`<h1 class="title">${t.nav.experience}</h1>`));
+    assert.ok(html.includes(`href="/experience/search" class="searchLink" aria-label="${t.experience.search_title}"`));
+    assert.equal((html.match(/href="\/experience\/search"/g) || []).length, 1);
+    assert.doesNotMatch(html, /href="\/login/);
+  }
+  const page = source("app/experience/page.tsx");
+  assert.match(page, /onSearch=\{\(\) => setSearchOpen\(\(open\) => !open\)\}/);
+  assert.match(page, /\{searchOpen \? \([\s\S]*<MobileSearchField/);
+});
+
+test("desktop discovery uses the shared full-width search field before its wrapping filters", () => {
+  const { emptySearchFilters } = load("lib/discover-search-types.ts");
+  for (const language of ["zh", "en"]) {
+    const t = load(`lib/i18n/${language}.ts`).default;
+    const Form = createLoader({
+      "@/lib/i18n/useLanguage": { useLanguage: () => ({ language, t }) },
+    })("components/discover-search/DiscoverSearchForm.tsx").default;
+    for (const searchKind of ["all", "projects", "records"]) {
+      const html = renderToStaticMarkup(React.createElement(Form, {
+        searchKind, filters: { ...emptySearchFilters, name: "玉米" }, onFiltersChange() {}, onSearchKindChange() {},
+      }));
+      assert.match(html, /<form[^>]*><div style="margin-bottom:12px"><label class="field">/);
+      assert.match(html, /grid-template-columns:repeat\(auto-fit, minmax\(140px, 1fr\)\)/);
+      assert.ok(html.indexOf('value="玉米"') < html.indexOf("grid-template-columns"));
+      assert.ok(html.includes(`aria-label="${t.plant.clear_search}"`));
+      assert.doesNotMatch(html, /overflow-x:auto/);
+      if (searchKind === "records") {
+        assert.ok(html.includes(t.discover.search_ui.record_content));
+        assert.ok(html.includes(t.discover.search_ui.help_only));
+      }
+    }
+  }
+  assert.match(source("app/experience/search/page.tsx"), /<MobileSearchField/);
+});
+
+test("desktop discovery keyword and clear controls preserve independent category and record filters", () => {
+  const t = load("lib/i18n/zh.ts").default;
+  const { emptySearchFilters } = load("lib/discover-search-types.ts");
+  const filters = { ...emptySearchFilters, category: "plant", name: "玉米", speciesId: "fixture-plant", content: "开花", region: "浙江", helpOnly: true };
+  const changes = [];
+  const SearchField = () => null;
+  const Form = createLoader({
+    react: { ...React, useState: (value) => [value, () => {}], useEffect() {} },
+    "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t }) },
+    "@/components/search/MobileSearchField": SearchField,
+  })("components/discover-search/DiscoverSearchForm.tsx").default;
+  const form = Form({ searchKind: "records", filters, onFiltersChange: (next) => changes.push(next), onSearchKindChange() {} });
+  const keyword = React.Children.toArray(React.Children.toArray(form.props.children)[0].props.children)[0];
+  assert.equal(keyword.type, SearchField);
+  assert.equal(keyword.props.value, "玉米");
+  keyword.props.onChange("番茄");
+  keyword.props.onClear();
+  assert.deepEqual(changes, [
+    { ...filters, name: "番茄", speciesId: null },
+    { ...filters, name: "", speciesId: null },
+  ]);
+});
+
+test("plant growth types are localized without losing custom or empty values", () => {
+  const { getPlantGrowthTypeLabel } = load("lib/plant-shared.ts");
+  const zh = load("lib/i18n/zh.ts").default.plant.detail.growth_types;
+  const en = load("lib/i18n/en.ts").default.plant.detail.growth_types;
+  assert.deepEqual(Object.keys(zh), Object.keys(en));
+  assert.equal(getPlantGrowthTypeLabel("annual", zh), "一年生");
+  assert.equal(getPlantGrowthTypeLabel("biennial", zh), "二年生");
+  assert.equal(getPlantGrowthTypeLabel(" PERENNIAL ", zh), "多年生");
+  assert.equal(getPlantGrowthTypeLabel("annual", en), "Annual");
+  assert.equal(getPlantGrowthTypeLabel("epiphytic_fern", zh), "附生蕨类");
+  for (const empty of [null, undefined, "", "  "]) assert.equal(getPlantGrowthTypeLabel(empty, zh), "");
+  for (const custom of ["多年生草本", "unknown_code", "constructor", "__proto__"]) {
+    assert.equal(getPlantGrowthTypeLabel(` ${custom} `, zh), custom);
+  }
+  const detail = source("app/plant/[id]/page.tsx");
+  assert.match(detail, /getPlantGrowthTypeLabel\(plant\?\.growth_type, copy\.growth_types\)/);
+  assert.match(detail, /\{copy\.growth_type\}\{displayGrowthType\}/);
+  assert.doesNotMatch(detail, /\{copy\.growth_type\}\{plant\.growth_type\}/);
+});
+
 test("mobile filters use compact independent help and one-line experience categories", () => {
   const discover = source("components/discover/DiscoverFilterBar.tsx");
   const css = source("components/ui/CategoryFilterRow.module.css");
@@ -596,6 +700,38 @@ test("guide directory URLs scope searches and category filters to one major cate
     assert.equal(url.searchParams.get("category"), major === "plant" ? null : "section-2");
   }
   assert.equal(buildGuideDirectoryHref("other", " "), "/plant?section=other");
+});
+
+test("changing a guide section synchronizes its URL while preserving router history and section-specific filters", () => {
+  const { buildGuideDirectoryHref } = load("lib/guide-directory-navigation.ts");
+  const state = { __NA: true, tree: "router-state" };
+  const locations = [];
+  const window = { history: { state, replaceState: (...args) => locations.push(args) } };
+  const replaceGuideDirectoryUrl = loadFunction("app/plant/page.tsx", "replaceGuideDirectoryUrl", { window, buildGuideDirectoryHref });
+  const publicGuideSearchInputs = { plant: "玉米", system: "土壤 & 堆肥", insect_fish: "莫斯", other: "梅子蜜" };
+  const publicGuideCategories = { system: "soil", insect_fish: "aquatic", other: "food" };
+  for (const section of ["other", "system", "plant", "insect_fish"]) {
+    const selected = [];
+    const panels = [];
+    let persisted = 0;
+    const guideSection = section === "insect_fish" ? "plant" : "insect_fish";
+    const changeSection = loadFunction("app/plant/page.tsx", "changeGuideSection", {
+      guideSection, persistSearchState: () => persisted++,
+      setGuideSection: (next) => selected.push(next), setSearchPanelOpen: (open) => panels.push(open),
+      replaceGuideDirectoryUrl, publicGuideSearchInputs, publicGuideCategories,
+    });
+    changeSection(section);
+    const [savedState, title, href] = locations.at(-1);
+    assert.equal(savedState, state);
+    assert.equal(title, "");
+    const url = new URL(href, "https://example.test");
+    assert.equal(url.searchParams.get("section"), section);
+    assert.equal(url.searchParams.get("q"), section === "plant" ? null : publicGuideSearchInputs[section]);
+    assert.equal(url.searchParams.get("category"), publicGuideCategories[section] || null);
+    assert.deepEqual(selected, [section]);
+    assert.deepEqual(panels, [false]);
+    assert.equal(persisted, guideSection === "plant" ? 1 : 0);
+  }
 });
 
 test("login and registration preserve a guide return path but reject auth loops and external URLs", () => {
