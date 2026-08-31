@@ -1716,23 +1716,13 @@ export default function PlantDetailPage() {
     <>
       <MobilePageHeader
         title={displayName}
+        titleText={displayName}
         fallbackHref={returnRecordHref || "/plant"}
         ariaLabel={t.nav.back}
         right={
-          interestAdded ? <span className={styles.mobileSavedAction} role="status">{copy.saved}</span> :
-          <button
-            type="button"
-            onClick={handleAddInterest}
-            disabled={actionLoading !== null}
-            className={styles.mobileSavedAction}
-            data-active={interestAdded ? "true" : "false"}
-          >
-            {interestAdded
-              ? copy.saved
-              : actionLoading === "interest"
-                ? copy.adding
-                : copy.add_to_saved}
-          </button>
+          <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+            {copy.new_project}
+          </Link>
         }
       />
 
@@ -1746,17 +1736,35 @@ export default function PlantDetailPage() {
         </Link>
       </div>
 
-      <div className={`${styles.mobileActions} mobile-app-grid-only`}>
-        <Link href="/plant" className={styles.mobileGuideLink}>
-          {copy.plant_guide}
-        </Link>
-        <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
-          {copy.new_project}
-        </Link>
-      </div>
-      {interestAdded ? <div className="mobile-app-block-only" style={{ margin: "0 0 12px" }}><SavedGuideStatus category="plant" showStatus={false} /></div> : null}
-
       <section className={styles.hero}>
+        <div className="mobile-app-block-only">
+          <div className={styles.mobileBreadcrumbs}>
+            <Link href="/plant?section=plant" className={styles.mobileCategoryBadge}>
+              <UiIcon name="sprout" size={15} />
+              {t.archive.categories.plant_label}
+            </Link>
+            <UiIcon name="arrow-right" size={13} />
+            <span>
+              {categoryLabel(plant.category, t.plant.categories, t.plant.uncategorized)}
+              {plant.sub_category
+                ? ` · ${subCategoryLabel(plant.sub_category, t.plant.subcategories)}`
+                : ""}
+            </span>
+          </div>
+          <div className={styles.mobileHeroTitleRow}>
+            <h1 className={styles.mobileHeroTitle}>{displayName}</h1>
+            {interestAdded ? <SavedGuideStatus category="plant" /> : (
+              <button
+                type="button"
+                onClick={handleAddInterest}
+                disabled={actionLoading !== null}
+                className={styles.mobileSaveButton}
+              >
+                {actionLoading === "interest" ? copy.adding : copy.add_to_saved}
+              </button>
+            )}
+          </div>
+        </div>
         <div className={`${styles.heroHeadingRow} mobile-app-desktop-only`}>
           <h1 className={styles.heroTitle}>{displayName}</h1>
           <Link
@@ -1791,7 +1799,7 @@ export default function PlantDetailPage() {
           {plant.scientific_name && <div>{t.plant.scientific_name}{plant.scientific_name}</div>}
           {aliasNames.length > 0 && <div>{t.plant.aliases}{aliasNames.join(t.plant.alias_separator)}</div>}
           {displayFamily && <div>{copy.family}{displayFamily}</div>}
-          <div>
+          <div className="mobile-app-desktop-only">
             {copy.classification}{categoryLabel(
               plant.category,
               t.plant.categories,

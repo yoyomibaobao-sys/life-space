@@ -235,7 +235,7 @@ test("mobile plant guides use compact parameters, actions, cards, and sticky tab
   assert.match(detail, /className=\{styles\.section\}/);
   assert.match(styles, /@media \(max-width: 759px\)[\s\S]*?\.parameterGrid \{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.contentTabs \{[\s\S]*?position: sticky;[\s\S]*?top: calc\(50px \+ var\(--app-safe-area-top\)\);/);
-  assert.match(detail, /<MobilePageHeader[\s\S]*?className=\{styles\.mobileSavedAction\}/);
+  assert.match(detail, /<MobilePageHeader[\s\S]*?className=\{styles\.mobileNewProjectLink\}/);
   assert.match(detail, /className=\{`\$\{styles\.heroHeadingRow\} mobile-app-desktop-only`\}/);
   assert.match(styles, /\.heroHeadingRow \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/);
   assert.match(styles, /\.heroAction \{[\s\S]*?white-space: normal;[\s\S]*?overflow-wrap: anywhere;/);

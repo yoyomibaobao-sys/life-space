@@ -627,10 +627,10 @@ export default function PlantIndexPage() {
         ...option,
         label:
           option.value === "all"
-            ? `${t.plant.category}（${option.label}）`
-            : option.label,
+            ? publicGuideCopy[language].allCategories
+            : language === "zh" ? option.label.replace(/\s*\/\s*/g, "/") : option.label,
       })),
-    [categoryFilterOptions, t.plant.category]
+    [categoryFilterOptions, language]
   );
 
   const filteredPlants = useMemo(() => {
@@ -1210,8 +1210,8 @@ export default function PlantIndexPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: hasCloudAccess
-                    ? "minmax(0, 1fr) minmax(90px, .8fr) auto"
-                    : "minmax(0, 1fr) minmax(90px, .8fr)",
+                    ? "minmax(0, 1fr) minmax(120px, 1.2fr) auto"
+                    : "minmax(0, 1fr) minmax(120px, 1.2fr)",
                   alignItems: "center",
                   gap: 6,
                   width: "100%",
@@ -1221,7 +1221,7 @@ export default function PlantIndexPage() {
                   value={searchInput}
                   onChange={setSearchInput}
                   onClear={() => setSearchInput("")}
-                  placeholder={publicGuideCopy[language].searchPlaceholder}
+                  placeholder={t.plant.search}
                   ariaLabel={publicGuideCopy[language].searchPlaceholder}
                   clearAriaLabel={t.plant.clear_search}
                 />
@@ -1240,9 +1240,10 @@ export default function PlantIndexPage() {
                     type="button"
                     onClick={toggleMobileFilters}
                     aria-expanded={mobileFiltersOpen}
+                    aria-label={mobileFiltersOpen ? t.plant.hide_filters : t.plant.show_filters}
                     style={mobileFilterToggleStyle}
                   >
-                    {mobileFiltersOpen ? t.plant.hide_filters : t.plant.show_filters}
+                    {mobileFiltersOpen ? t.plant.hide_filters_short : t.plant.show_filters}
                     {activeEnvironmentFilterCount > 0 ? ` (${activeEnvironmentFilterCount})` : ""}
                   </button>
                 ) : null}

@@ -13,7 +13,7 @@ export const plantCategoryLabels: Record<string, string> = {
   medicinal: "香草 / 药草",
   flower: "花卉",
   houseplant: "观叶植物",
-  succulent: "多肉 / 仙人掌",
+  succulent: "多肉",
   grain: "谷物 / 作物",
   field_crop: "谷物 / 作物",
   tree: "乔木 / 灌木",
