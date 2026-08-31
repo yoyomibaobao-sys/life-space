@@ -27,6 +27,7 @@ export default function ArchiveDetailHeader({
   recordCount,
   encyclopediaHref,
   systemNameCandidates,
+  systemNameCandidatesLoading,
   systemNameMode,
   onToggleArchiveVisibility,
   onToggleArchiveStatus,
@@ -50,6 +51,7 @@ export default function ArchiveDetailHeader({
   recordCount: number;
   encyclopediaHref?: string | null;
   systemNameCandidates?: ArchiveSystemNameCandidate[];
+  systemNameCandidatesLoading?: boolean;
   systemNameMode?: "candidate" | "text";
   onToggleArchiveVisibility: () => void;
   onToggleArchiveStatus?: () => void;
@@ -108,12 +110,12 @@ export default function ArchiveDetailHeader({
 
   const profileRows = [
     { label: copy.project_name_required, value: archive.title || copy.unnamed_project, field: "title" as const },
-    { label: copy.category, value: localizedCategoryLabel, field: "category" as const },
     {
       label: systemNameLabel,
       value: systemNameText,
       field: "systemName" as const,
     },
+    { label: copy.category_required, value: localizedCategoryLabel, field: "category" as const },
     { label: copy.source, value: archive.source || copy.not_filled, field: "source" as const },
     { label: copy.note, value: archive.note || copy.not_filled, field: "note" as const },
     {
@@ -143,7 +145,7 @@ export default function ArchiveDetailHeader({
     if (change.field === "systemName") {
       const cleanValue = change.value.name.trim();
       if (!cleanValue) throw new Error(copy.system_name_empty);
-      if (cleanValue !== systemNameText || change.value.candidateId) {
+      if (cleanValue !== systemNameText || change.value.candidateId || (change.value.category && change.value.category !== archiveCategory)) {
         await onSaveSystemName?.({ ...change.value, name: cleanValue });
       }
       return;
@@ -201,6 +203,7 @@ export default function ArchiveDetailHeader({
               onSaveField: saveProfileField,
               systemNameMode,
               systemNameCandidates,
+              systemNameCandidatesLoading,
               systemNameHint:
                 systemNameMode === "text"
                   ? copy.other_system_hint

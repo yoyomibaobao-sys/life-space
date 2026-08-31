@@ -27,7 +27,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function ProjectCategorySettingsPage() {
   const router = useRouter();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const isEnglish = language === "en";
   const [userId, setUserId] = useState("");
   const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>("cloud");
@@ -62,7 +62,7 @@ export default function ProjectCategorySettingsPage() {
       } catch (loadError) {
         console.error("load archive category settings error:", loadError);
         if (!cancelled) {
-          setError(isEnglish ? "Could not load cloud settings." : "云空间分类设置加载失败。");
+          setError(isEnglish ? "Could not load cloud group settings." : "云空间分组设置加载失败。");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -93,16 +93,16 @@ export default function ProjectCategorySettingsPage() {
       } else {
         saveLocalArchiveCategoryDepths(localDepths, userId);
       }
-      showToast(isEnglish ? "Category settings saved" : "项目分类设置已保存");
+      showToast(isEnglish ? "Group settings saved" : "项目分组设置已保存");
     } catch (saveError) {
       console.error("save archive category settings error:", saveError);
-      setError(isEnglish ? "Could not save category settings." : "项目分类设置保存失败。");
+      setError(isEnglish ? "Could not save group settings." : "项目分组设置保存失败。");
     } finally {
       setSaving(false);
     }
   }
 
-  const pageTitle = isEnglish ? "Project categories" : "项目分类";
+  const pageTitle = t.archive_workspace.group_settings_title;
 
   return (
     <main style={pageStyle}>
@@ -115,15 +115,15 @@ export default function ProjectCategorySettingsPage() {
 
       <div style={shellStyle}>
         <header style={desktopHeaderStyle}>
-          <Link href="/profile" style={backLinkStyle}>
+          <Link href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={17} />
             {isEnglish ? "Back to profile" : "返回个人资料"}
           </Link>
-          <h1 style={desktopTitleStyle}>{pageTitle}</h1>
+          <h1 className="mobile-app-desktop-only" style={desktopTitleStyle}>{pageTitle}</h1>
           <p style={introStyle}>
             {isEnglish
-              ? "Cloud and local projects are configured independently. Existing classification data is preserved when a level is hidden."
-              : "云空间与本地分别设置。关闭层级只隐藏对应选择，不删除已有分类数据。"}
+              ? "Cloud and local groups are configured independently. Hiding a level does not delete existing groups."
+              : "云空间与本地分别设置。关闭层级只隐藏对应选择，不删除已有分组数据。"}
           </p>
         </header>
 
@@ -159,21 +159,23 @@ export default function ProjectCategorySettingsPage() {
                 <article key={category} style={categoryCardStyle}>
                   <div style={categoryHeadingStyle}>
                     <strong>{getArchiveCategoryLabel(category, language)}</strong>
-                    <span>{isEnglish ? `Level ${depth}` : `${depth === 1 ? "一级" : depth === 2 ? "二级" : "三级"}`}</span>
+                    <span>{depth === 1
+                      ? (isEnglish ? "No groups" : "未开启分组")
+                      : (isEnglish ? `${depth - 1} group ${depth === 2 ? "level" : "levels"}` : `${depth === 2 ? "一级" : "二级"}分组`)}</span>
                   </div>
 
                   <SettingRow
-                    label={isEnglish ? "Primary category" : "一级分类"}
+                    label={t.archive_workspace.main_category}
                     value={isEnglish ? "Enabled" : "已启用"}
                   />
                   <SettingRow
-                    label={isEnglish ? "Enable secondary categories" : "开启二级分类"}
+                    label={isEnglish ? "Enable level 1 groups" : "开启一级分组"}
                     checked={secondEnabled}
                     onToggle={() => updateDepth(category, secondEnabled ? 1 : 2)}
                   />
                   {secondEnabled ? (
                     <SettingRow
-                      label={isEnglish ? "Enable tertiary categories" : "开启三级分类"}
+                      label={isEnglish ? "Enable level 2 groups" : "开启二级分组"}
                       checked={thirdEnabled}
                       onToggle={() => updateDepth(category, thirdEnabled ? 2 : 3)}
                     />

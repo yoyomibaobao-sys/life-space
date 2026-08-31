@@ -715,9 +715,13 @@ test("guidance favorites and discovery cards use the simplified hierarchy withou
       source("components/discover/DiscoverProjectFeed.module.css"),
     ]);
 
-  assert.match(guide, /buildLoginHref\("\/archive\/interests"\)/);
+  assert.match(guide, /buildLoginHref\(`\/archive\/interests\?section=\$\{category\}`\)/);
   assert.match(guide, /\{t\.plant\.my_saved\}\{signedIn && interestCount !== null/);
-  assert.match(guide, /from\("user_plant_interests"\)[\s\S]*?count: "exact", head: true/);
+  assert.match(guide, /getGuideInterestCount\(user\.id\)/);
+  const guideInterests = await source("lib/guide-interests.ts");
+  for (const table of ["user_plant_interests", "user_guide_interests"]) {
+    assert.match(guideInterests, new RegExp(`from\\("${table}"\\)[\\s\\S]*?count: "exact", head: true[\\s\\S]*?eq\\("user_id", userId\\)`));
+  }
   assert.match(guide, /placeholder=\{t\.plant\.search_placeholder\}/);
   assert.match(guide, /type="submit"[\s\S]*?\{t\.plant\.search\}[\s\S]*?<\/button>/);
   assert.match(guide, /MAX_RECENT_SEARCHES = 8/);
@@ -737,9 +741,12 @@ test("guidance favorites and discovery cards use the simplified hierarchy withou
   );
   assert.match(guide, /pendingScrollYRef/);
   assert.doesNotMatch(guide, /role="dialog"/);
-  assert.match(guide, /isMobileSearchOpen/);
+  assert.match(guide, /<HomeSectionTabs\s+active="guide"[\s\S]*?searchEnabled=\{false\}/);
+  assert.doesNotMatch(guide, /isMobileSearchOpen/);
   assert.doesNotMatch(guide, /aria-label=\{t\.plant\.back_to_guide\}/);
-  assert.match(plantDetail, /from\("user_plant_interests"\)[\s\S]*?\.delete\(\)/);
+  assert.doesNotMatch(plantDetail, /from\("user_plant_interests"\)[\s\S]*?\.delete\(\)/);
+  assert.match(plantDetail, /<SavedGuideStatus/);
+  assert.match(await source("app/archive/interests/page.tsx"), /from\("user_plant_interests"\)[\s\S]*?\.delete\(\)/);
   assert.doesNotMatch(plantDetail, /from\("user_plant_plans"\)/);
   assert.doesNotMatch(plantDetail, /copy\.plan_already_added/);
   assert.match(plantDetail, /copy\.saved/);

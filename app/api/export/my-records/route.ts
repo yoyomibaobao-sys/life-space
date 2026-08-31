@@ -289,7 +289,7 @@ async function downloadUrlAsBytes({
 }
 
 function buildReadme() {
-  return `有时·耕作导出说明\n\n1. 双击 index.html，可以查看所有项目目录。\n2. 每个项目文件夹里也有一个 index.html，可以查看该项目的记录时间线。\n3. images 文件夹里保存该项目相关图片或视频。\n4. data.json 和各项目 records.json 保存档案、茬和记录的结构化备份。\n5. 导出仅包含你本人创建的项目、档案、茬、记录及记录中的图片或视频。集市发布、经验卡成品和互动数据不在导出范围内；经验卡引用的本人原始记录和原始图片仍会包含在记录备份中。\n`;
+  return `有时·耕作导出说明\n\n1. 双击 index.html，可以查看所有项目目录。\n2. 每个项目文件夹里也有一个 index.html，可以查看该项目的记录时间线。\n3. images 文件夹里保存该项目相关图片或视频。\n4. data.json 和各项目 records.json 保存档案、轮和记录的结构化备份。\n5. 导出仅包含你本人创建的项目、档案、轮、记录及记录中的图片或视频。集市发布、经验卡成品和互动数据不在导出范围内；经验卡引用的本人原始记录和原始图片仍会包含在记录备份中。\n`;
 }
 
 function buildRootHtml({
@@ -358,7 +358,7 @@ function buildArchiveHtml({
   const cycleNames = new Map(
     cycles.map((cycle) => [
       cycle.id,
-      cycle.display_name?.trim() || `第${cycle.cycle_no}茬`,
+      cycle.display_name?.trim() || `第${cycle.cycle_no}轮`,
     ])
   );
   const recordItems = records.map((record) => {
@@ -378,7 +378,7 @@ function buildArchiveHtml({
 
     const cycleName = record.cycle_id ? cycleNames.get(record.cycle_id) : null;
     return `<article class="record">
-  <div class="time">${escapeHtml(formatDate(record.photo_time || record.record_time || record.created_at))}${cycleName ? ` · ${escapeHtml(cycleName)}` : " · 未分茬"}</div>
+  <div class="time">${escapeHtml(formatDate(record.photo_time || record.record_time || record.created_at))}${cycleName ? ` · ${escapeHtml(cycleName)}` : " · 未分轮"}</div>
   <div class="note">${escapeHtml(record.note || "（无文字记录）").replace(/\n/g, "<br />")}</div>
   ${images ? `<div class="images">${images}</div>` : ""}
 </article>`;
@@ -478,7 +478,7 @@ export async function GET(request: Request) {
       .order("started_at", { ascending: true });
 
     if (cyclesResult.error) {
-      return new Response(`读取茬记录失败：${cyclesResult.error.message}`, { status: 500 });
+      return new Response(`读取轮记录失败：${cyclesResult.error.message}`, { status: 500 });
     }
 
     cycles = (cyclesResult.data || []) as ArchiveCycleRow[];
@@ -694,7 +694,7 @@ export async function GET(request: Request) {
   const exportData = {
     exported_at: new Date().toISOString(),
     product: "有时·耕作",
-    scope: "仅包含用户本人创建的项目、档案、茬、记录及记录媒体；不包含集市发布、经验卡成品或互动数据。",
+    scope: "仅包含用户本人创建的项目、档案、轮、记录及记录媒体；不包含集市发布、经验卡成品或互动数据。",
     profile,
     archives: archives.map((archive) => ({
       ...archive,

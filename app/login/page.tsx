@@ -5,7 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
-import { getSafeReturnTo } from "@/lib/auth-return";
+import { buildRegisterHref, getSafeReturnTo } from "@/lib/auth-return";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -219,7 +219,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={() => router.push("/register")}
+            onClick={() => router.push(buildRegisterHref(getSafeReturnTo(new URLSearchParams(window.location.search).get("returnTo"))))}
             disabled={loading}
             style={{
               width: "100%",

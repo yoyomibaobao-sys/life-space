@@ -215,7 +215,7 @@ export default function Navbar() {
       setMobileArchiveTitleInfo(null);
 
       if (!archiveDetailPath) {
-        setMobileTitle(getMobilePageTitle(pathname, t.nav));
+        setMobileTitle(getMobilePageTitle(pathname, t));
         return;
       }
 
@@ -227,7 +227,7 @@ export default function Navbar() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [pathname, t.nav, user?.id]);
+  }, [pathname, t, user?.id]);
 
   async function handleLogout() {
     await supabase.auth.signOut({ scope: "local" });
@@ -330,7 +330,7 @@ export default function Navbar() {
             fallbackHref={getMobileBackFallback(pathname)}
             showBack={shouldShowMobileBackButton(pathname)}
             ariaLabel={t.nav.back}
-            right={mobileHeaderActions}
+            right={isMobileDiscoverIndexPath(pathname) || canShowMobileCreateAction || (!user && shouldShowMobileLoginAction(pathname)) ? mobileHeaderActions : undefined}
           />
         ) : null}
 
@@ -636,14 +636,17 @@ function hasPageManagedMobileTopNav(pathname: string) {
     "/plant",
     "/follow",
     "/market",
+    "/market/mine",
     "/archive",
     "/profile",
+    "/profile/recent",
     "/profile/project-categories",
     "/admin/guides",
   ].includes(pathname)) return true;
 
   return (
     pathname.startsWith("/user/") ||
+    pathname.startsWith("/legal") ||
     pathname.startsWith("/plant/") ||
     Boolean(getArchiveDetailPath(pathname)) ||
     pathname === "/archive/interests" ||
@@ -712,7 +715,24 @@ function getMobileCreateLabel(pathname: string, labels: TranslationDictionary["n
   return getArchiveDetailPath(pathname) ? labels.add_record : labels.new_project;
 }
 
-function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav"]) {
+function getMobilePageTitle(pathname: string, copy: TranslationDictionary) {
+  const labels = copy.nav;
+  const marketLabels = copy.market;
+  const settingsTitles: Record<string, string> = {
+    "/profile": copy.profile.settings_title,
+    "/profile/project-categories": copy.archive_workspace.group_settings_title,
+    "/profile/recent": copy.profile.recent.title,
+    "/profile/flowers": copy.profile.helpful_page.title,
+    "/profile/helpful": copy.profile.helpful_page.title,
+    "/profile/followers": copy.profile.followers_page.title,
+    "/profile/trash": copy.profile.trash_page.title,
+    "/membership": copy.membership_page.title,
+    "/membership/payment": copy.membership_page.payment_page_title,
+    "/membership/benefits": copy.membership_page.benefits_rules_title,
+    "/membership/refund": copy.refund_request_page.title,
+    "/feedback": copy.feedback_and_contact,
+  };
+  if (settingsTitles[pathname]) return settingsTitles[pathname];
   if (pathname === "/archive") return labels.my_space;
   if (pathname === "/") return labels.brand;
   if (pathname.startsWith("/quick-record")) return labels.add_record;
@@ -725,6 +745,11 @@ function getMobilePageTitle(pathname: string, labels: TranslationDictionary["nav
   if (pathname.startsWith("/notifications")) return labels.notification;
   if (pathname.startsWith("/membership")) return labels.cloud_membership;
   if (pathname.startsWith("/archive/new")) return labels.new_project;
+  if (pathname === "/market/new") return marketLabels.new_title;
+  if (pathname === "/market/mine") return marketLabels.mine_title;
+  if (pathname === "/market/messages") return marketLabels.messages_title;
+  if (/^\/market\/[^/]+\/edit$/.test(pathname)) return marketLabels.edit_title;
+  if (/^\/market\/[^/]+$/.test(pathname)) return marketLabels.detail_title;
   if (pathname.startsWith("/market")) return labels.market;
   if (pathname.startsWith("/login")) return labels.login;
   if (pathname.startsWith("/register")) return labels.register;

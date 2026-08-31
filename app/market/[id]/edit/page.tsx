@@ -472,7 +472,7 @@ export default function EditMarketPostPage() {
         </Link>
 
         <section style={panelStyle}>
-          <h1 style={titleStyle}>{t.market.edit_title}</h1>
+          <h1 className="mobile-app-desktop-only" style={titleStyle}>{t.market.edit_title}</h1>
 
           {errorMsg ? <div style={errorStyle}>{errorMsg}</div> : null}
 

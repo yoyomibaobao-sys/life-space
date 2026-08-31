@@ -35,8 +35,8 @@ export default function AdminGuideReviewPage() {
     setError("");
     const { data, error: loadError } = await supabase.rpc("list_pending_guide_candidates");
     if (loadError) {
-      console.error("load pending related guides error:", loadError);
-      setError(isEnglish ? "Could not load the review queue." : "对应指引审核队列加载失败。");
+      console.error("load pending linked guides error:", loadError);
+      setError(isEnglish ? "Could not load the review queue." : "关联指引审核队列加载失败。");
       setRows([]);
     } else {
       setRows((data || []) as GuideCandidateRow[]);
@@ -75,7 +75,7 @@ export default function AdminGuideReviewPage() {
     });
     setActionId("");
     if (reviewError || !data) {
-      console.error("review related guide error:", reviewError);
+      console.error("review linked guide error:", reviewError);
       showToast(isEnglish ? "Review failed" : "审核失败");
       return;
     }
@@ -87,7 +87,7 @@ export default function AdminGuideReviewPage() {
     await loadRows();
   }
 
-  const title = isEnglish ? "Related guide review" : "对应指引审核";
+  const title = isEnglish ? "Linked guide review" : "关联指引审核";
   return (
     <main style={pageStyle}>
       <MobilePageHeader title={title} titleText={title} fallbackHref="/profile" ariaLabel={isEnglish ? "Back" : "返回"} />
@@ -114,7 +114,7 @@ export default function AdminGuideReviewPage() {
         ) : error ? (
           <div style={errorStyle}>{error}</div>
         ) : rows.length === 0 ? (
-          <div style={emptyStyle}>{isEnglish ? "No candidates are awaiting review." : "当前没有待审核的对应指引。"}</div>
+          <div style={emptyStyle}>{isEnglish ? "No candidates are awaiting review." : "当前没有待审核的关联指引。"}</div>
         ) : (
           <section style={listStyle}>
             {rows.map((row) => (

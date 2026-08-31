@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 import { trackAnalyticsEvent } from "@/lib/analytics-events";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref, getSafeReturnTo } from "@/lib/auth-return";
 
 function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -78,11 +79,12 @@ export default function RegisterPage() {
     setMessage("");
 
     try {
+      const returnTo = getSafeReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/archive`,
+          emailRedirectTo: `${window.location.origin}${returnTo}`,
         },
       });
 
@@ -106,11 +108,11 @@ export default function RegisterPage() {
       void trackAnalyticsEvent("register");
 
       if (data.session) {
-        router.replace("/archive");
+        router.replace(returnTo);
         return;
       }
 
-      router.push(`/check-email?email=${encodeURIComponent(cleanEmail)}&type=signup`);
+      router.push(`/check-email?email=${encodeURIComponent(cleanEmail)}&type=signup&returnTo=${encodeURIComponent(returnTo)}`);
     } catch {
       setMessage(t.auth.network_local_fallback);
       setShowLocalFallback(true);
@@ -179,7 +181,7 @@ export default function RegisterPage() {
 
         <button
           type="button"
-          onClick={() => router.push("/login")}
+          onClick={() => router.push(buildLoginHref(getSafeReturnTo(new URLSearchParams(window.location.search).get("returnTo"))))}
           style={{
             marginTop: 12,
             padding: 0,

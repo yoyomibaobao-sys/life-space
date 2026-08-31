@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { showToast } from "@/components/Toast";
@@ -11,7 +11,7 @@ import ArchiveNewProjectFormShell, {
   archiveNewProjectSuggestionButtonStyle,
   archiveNewProjectSuggestionPanelStyle,
 } from "@/components/archive-ui/ArchiveNewProjectFormShell";
-import SystemNameSelector from "@/components/archive/SystemNameSelector";
+import SystemNameSelector, { type SystemNameSelectorCandidate } from "@/components/archive/SystemNameSelector";
 import {
   canCreateMembershipContent,
   getCreateContentBlockedText,
@@ -24,7 +24,9 @@ import {
 } from "@/lib/archive-categories";
 import {
   getSystemNameCandidates,
+  filterSystemNameCandidates,
   hasExactSystemNameCandidate,
+  resolveExactSystemNameCandidate,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -75,18 +77,20 @@ function NewArchiveContent() {
     : null;
 
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<ArchiveCategory>(
+  const [category, setCategory] = useState<ArchiveCategory | null>(
     validPreselectedCategory && !preselectedSpeciesId
       ? validPreselectedCategory
-      : "plant"
+      : preselectedSpeciesId ? "plant" : null
   );
 
   const [systemCandidates, setSystemCandidates] = useState<SystemNameCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(true);
+  const guideEditedRef = useRef(false);
   const [speciesId, setSpeciesId] = useState<string | null>(null);
   const [pendingSpeciesName, setPendingSpeciesName] = useState<string | null>(
     null
   );
-  const [speciesSearch, setSpeciesSearch] = useState("");
+  const [speciesSearch, setSpeciesSearch] = useState(preselectedSystemName);
 
   const initialSystemName =
     validPreselectedCategory && validPreselectedCategory !== "plant"
@@ -105,7 +109,7 @@ function NewArchiveContent() {
   const [membershipLoading, setMembershipLoading] = useState(true);
   const [createdArchiveId, setCreatedArchiveId] = useState("");
   const localCreateHref = useMemo(() => {
-    const params = new URLSearchParams({ category });
+    const params = new URLSearchParams(category ? { category } : {});
     const currentSpeciesId = speciesId || preselectedSpeciesId || "";
     const currentSystemName =
       category === "plant" ? speciesSearch : systemName || systemSearch;
@@ -116,22 +120,29 @@ function NewArchiveContent() {
   }, [category, preselectedSpeciesId, quickCaptureId, speciesId, speciesSearch, systemName, systemSearch]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadCandidates() {
+      setCandidatesLoading(true);
       const candidates = await getSystemNameCandidates({
-        category,
+        category: validPreselectedCategory,
         supabase,
-        currentValue: category === "plant" ? speciesSearch : systemName || systemSearch,
-        limit: 200,
+        includeOtherCategories: true,
+        limit: null,
       });
+      if (cancelled) return;
       setSystemCandidates(candidates);
+      setCandidatesLoading(false);
 
-      if (category === "plant" && preselectedSpeciesId) {
-        const selected = candidates.find((item) => item.plantId === preselectedSpeciesId || item.id === preselectedSpeciesId);
+      if (preselectedSpeciesId && !guideEditedRef.current) {
+        const selected = candidates.find((item) => item.plantId === preselectedSpeciesId);
 
         if (selected) {
-          setSpeciesId(selected.plantId || selected.id || null);
+          setCategory("plant");
+          setSpeciesId(selected.plantId || null);
           setPendingSpeciesName(null);
           setSpeciesSearch(selected.label);
+          setSystemSearch(selected.label);
+          setSystemName(selected.label);
           setTitle((current) =>
             current || (selected.label ? `${copy.my_project_prefix}${selected.label}` : "")
           );
@@ -140,7 +151,8 @@ function NewArchiveContent() {
     }
 
     void loadCandidates();
-  }, [category, copy.my_project_prefix, preselectedSpeciesId]);
+    return () => { cancelled = true; };
+  }, [copy.my_project_prefix, preselectedSpeciesId, validPreselectedCategory]);
 
   useEffect(() => {
     async function loadMembership() {
@@ -171,75 +183,29 @@ function NewArchiveContent() {
   const contentBlocked =
     !membershipLoading && !canCreateMembershipContent(membership);
 
-  const systemOptions = useMemo(() => {
-    const keyword = systemSearch.trim().toLowerCase();
-    return systemCandidates
-      .filter((candidate) =>
-        keyword
-          ? String(candidate.searchText || candidate.label).toLowerCase().includes(keyword)
-          : true
-      )
-      .slice(0, 10);
-  }, [systemCandidates, systemSearch]);
+  const guideSearch = category === "plant" ? speciesSearch : systemSearch;
+  const systemOptions = filterSystemNameCandidates(systemCandidates, guideSearch, category);
 
-  function resetPlantSelection() {
-    setSpeciesId(null);
-    setPendingSpeciesName(null);
-    setSpeciesSearch("");
+  function switchCategory(nextCategory: ArchiveCategory) {
+    guideEditedRef.current = true;
+    setSpeciesSearch(guideSearch);
+    setSystemSearch(guideSearch);
+    setCategory(nextCategory);
+    const exact = resolveExactSystemNameCandidate(systemCandidates, guideSearch);
+    const nextPlantId = nextCategory === "plant" && exact?.category === "plant" ? exact.plantId || null : null;
+    setSpeciesId(nextPlantId);
+    setPendingSpeciesName(nextCategory === "plant" && !nextPlantId ? guideSearch.trim() : null);
     setPlantSuggestionsOpen(false);
-  }
-
-  function resetSystemSelection() {
-    setSystemSearch("");
-    setSystemName("");
     setSystemSuggestionsOpen(false);
   }
 
-  function switchCategory(nextCategory: ArchiveCategory) {
-    setCategory(nextCategory);
-
-    if (nextCategory === "plant") {
-      resetSystemSelection();
-      return;
-    }
-
-    resetPlantSelection();
-  }
-
-  function getPlantSearchResults() {
-    const keyword = speciesSearch.trim().toLowerCase();
-
-    if (!keyword) {
-      return systemCandidates.slice(0, 10);
-    }
-
-    return systemCandidates
-      .filter((candidate) =>
-        String(candidate.searchText || candidate.label).toLowerCase().includes(keyword)
-      )
-      .slice(0, 10);
-  }
-
-  function hasExactPlantMatch() {
-    return hasExactSystemNameCandidate(systemCandidates, speciesSearch);
-  }
-
-  function submitPendingSpeciesName() {
-    const name = speciesSearch.trim();
-
-    if (!name) {
-      showToast(copy.plant_candidate_required);
-      return;
-    }
-
-    setSpeciesId(null);
-    setPendingSpeciesName(name);
-    setSpeciesSearch(name);
-    setPlantSuggestionsOpen(false);
-  }
-
-  function hasExactSystemNameMatch() {
-    return hasExactSystemNameCandidate(systemCandidates, systemSearch);
+  function associateGuide(candidate: SystemNameSelectorCandidate) {
+    if (!candidate.category) return;
+    setCategory(candidate.category);
+    const nextPlantId = candidate.category === "plant" ? candidate.plantId || null : null;
+    setSpeciesId(nextPlantId);
+    setPendingSpeciesName(candidate.category === "plant" && !nextPlantId ? candidate.label : null);
+    setSystemName(candidate.label);
   }
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -254,6 +220,11 @@ function NewArchiveContent() {
 
     if (!title.trim()) {
       showToast(copy.project_name_required_error);
+      return;
+    }
+
+    if (!category) {
+      showToast(copy.category_required_error);
       return;
     }
 
@@ -281,7 +252,7 @@ function NewArchiveContent() {
 
     let archiveId = createdArchiveId;
     if (!archiveId) {
-      const selectedSpecies = systemCandidates.find((s) => s.plantId === speciesId || s.id === speciesId);
+      const selectedSpecies = speciesId ? systemCandidates.find((s) => s.plantId === speciesId) : null;
       const speciesNameSnapshot =
         category === "plant"
           ? pendingSpeciesName || selectedSpecies?.label || cleanSystemName
@@ -380,100 +351,67 @@ function NewArchiveContent() {
       projectTitle={title}
       onProjectTitleChange={setTitle}
       systemControl={
-        category === "plant" ? (
-          <>
-            <SystemNameSelector
-              value={speciesSearch}
-              onChange={(value) => {
-                setSpeciesSearch(value);
-                setSpeciesId(null);
-                setPendingSpeciesName(null);
-                setPlantSuggestionsOpen(true);
-              }}
-              candidates={getPlantSearchResults()}
-              selectedValue={speciesId || pendingSpeciesName || ""}
-              suggestionsOpen={plantSuggestionsOpen}
-              onSuggestionsOpenChange={setPlantSuggestionsOpen}
-              hasExactMatch={hasExactPlantMatch()}
-              onSelect={(species) => {
-                const name = species.label || copy.unnamed_plant;
-                setSpeciesId(species.plantId || species.id || null);
-                setPendingSpeciesName(null);
-                setSpeciesSearch(name);
-                setPlantSuggestionsOpen(false);
-              }}
-              onUseCustom={() => submitPendingSpeciesName()}
-              placeholder={copy.plant_selector_placeholder}
-              inputStyle={archiveNewProjectInputStyle}
-              panelStyle={archiveNewProjectSuggestionPanelStyle}
-              optionStyle={(candidate, selected) =>
-                archiveNewProjectSuggestionButtonStyle(
-                  selected || speciesId === (candidate.plantId || candidate.id)
-                )
-              }
-              customOptionStyle={{
-                ...archiveNewProjectSuggestionButtonStyle(false),
-                border: "1px dashed #4CAF50",
-                background: "#fff",
-                color: "#4CAF50",
-              }}
-              emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
-              emptyText={copy.no_matching_plant}
-              customActionLabel={(inputValue) => `${copy.add_plant_candidate}${inputValue}`}
-            />
-            {pendingSpeciesName ? (
-              <span style={archiveNewProjectHelperTextStyle}>
-                {copy.current_plant_candidate}<strong>{pendingSpeciesName}</strong>
-              </span>
-            ) : null}
-          </>
-        ) : category === "other" ? (
-          <input
-            placeholder={copy.other_system_placeholder}
-            value={systemName}
-            onChange={(event) => {
-              setSystemName(event.target.value);
-              setSystemSearch(event.target.value);
+        <>
+          <SystemNameSelector
+            value={guideSearch}
+            onChange={(value) => {
+              guideEditedRef.current = true;
+              setSpeciesSearch(value);
+              setSystemSearch(value);
+              setSystemName("");
+              setSpeciesId(null);
+              setPendingSpeciesName(null);
+              setPlantSuggestionsOpen(true);
+              setSystemSuggestionsOpen(true);
             }}
-            style={archiveNewProjectInputStyle}
+            candidates={systemOptions}
+            resolutionCandidates={systemCandidates}
+            selectedValue={systemName}
+            suggestionsOpen={plantSuggestionsOpen || systemSuggestionsOpen}
+            onSuggestionsOpenChange={(open) => {
+              setPlantSuggestionsOpen(open);
+              setSystemSuggestionsOpen(open);
+            }}
+            hasExactMatch={hasExactSystemNameCandidate(systemCandidates, guideSearch)}
+            onResolveCandidate={associateGuide}
+            onSelect={(candidate) => {
+              guideEditedRef.current = true;
+              associateGuide(candidate);
+              setSpeciesSearch(candidate.label);
+              setSystemSearch(candidate.label);
+              setSystemName(candidate.label);
+              setPlantSuggestionsOpen(false);
+              setSystemSuggestionsOpen(false);
+            }}
+            onUseCustom={(name) => {
+              guideEditedRef.current = true;
+              setSpeciesSearch(name);
+              setSystemSearch(name);
+              setSystemName(name);
+              setSpeciesId(null);
+              setPendingSpeciesName(category === "plant" ? name : null);
+              setPlantSuggestionsOpen(false);
+              setSystemSuggestionsOpen(false);
+            }}
+            loading={candidatesLoading}
+            required
+            showCategory
+            placeholder={copy.guide_selector_placeholder}
+            inputStyle={archiveNewProjectInputStyle}
+            panelStyle={archiveNewProjectSuggestionPanelStyle}
+            optionStyle={(candidate, selected) => archiveNewProjectSuggestionButtonStyle(selected)}
+            customOptionStyle={{
+              ...archiveNewProjectSuggestionButtonStyle(false),
+              border: "1px dashed #4CAF50",
+              background: "#fff",
+              color: "#4CAF50",
+            }}
+            emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
+            emptyText={copy.no_matching_name}
+            customActionLabel={(inputValue) => `${copy.add_system_name}${inputValue}`}
           />
-        ) : (
-          <>
-            <SystemNameSelector
-              value={systemSearch}
-              onChange={(value) => {
-                setSystemSearch(value);
-                setSystemName("");
-                setSystemSuggestionsOpen(true);
-              }}
-              candidates={systemOptions}
-              selectedValue={systemName}
-              suggestionsOpen={systemSuggestionsOpen}
-              onSuggestionsOpenChange={setSystemSuggestionsOpen}
-              hasExactMatch={hasExactSystemNameMatch()}
-              onSelect={(candidate) => {
-                setSystemName(candidate.label);
-                setSystemSearch(candidate.label);
-                setSystemSuggestionsOpen(false);
-              }}
-              placeholder={`${copy.select_system_example}${systemOptions[0]?.label || copy.grow_light_example}`}
-              inputStyle={archiveNewProjectInputStyle}
-              panelStyle={archiveNewProjectSuggestionPanelStyle}
-              optionStyle={(candidate, selected) =>
-                archiveNewProjectSuggestionButtonStyle(selected || systemName === candidate.label)
-              }
-              customOptionStyle={{
-                ...archiveNewProjectSuggestionButtonStyle(false),
-                border: "1px dashed #4CAF50",
-                background: "#fff",
-                color: "#4CAF50",
-              }}
-              emptyStyle={{ color: "#999", fontSize: 13, padding: 8 }}
-              emptyText={copy.no_matching_name}
-              customActionLabel={(inputValue) => `${copy.add_system_name}${inputValue}`}
-            />
-          </>
-        )
+          {!category ? <span style={archiveNewProjectHelperTextStyle}>{copy.guide_category_manual_hint}</span> : null}
+        </>
       }
       sourceControl={
         <input

@@ -23,11 +23,11 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
 
   assert.match(
     guide,
-    /gridTemplateColumns: hasCloudAccess[\s\S]*?"minmax\(0, 1fr\) auto"/
+    /gridTemplateColumns: hasCloudAccess[\s\S]*?"minmax\(0, 1fr\) minmax\(120px, 1\.2fr\) auto"/
   );
   assert.match(
     guide,
-    /option\.value === "all"[\s\S]*?`\$\{t\.plant\.category\}（\$\{option\.label\}）`[\s\S]*?: option\.label/
+    /option\.value === "all"[\s\S]*?publicGuideCopy\[language\]\.allCategories/
   );
   assert.match(guide, /if \(mobileFiltersOpen\) resetFilters\(\)/);
   assert.match(guide, /gridTemplateColumns: "repeat\(2, minmax\(0, 1fr\)\)"/);
@@ -36,8 +36,8 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
     guide.indexOf("</div>\n              ) : null}", guide.indexOf("{hasCloudAccess && mobileFiltersOpen ? ("))
   );
   assert.doesNotMatch(mobileAdvancedBlock, /clear_environment_filters/);
-  assert.match(favorites, /t\.plant_lists\.saved_on/);
-  assert.match(favorites, /formatCardDate\(item\.created_at\)/);
+  assert.doesNotMatch(favorites, /t\.plant_lists\.saved_on/);
+  assert.match(favorites, /formatCardDate\(item\.createdAt\)/);
   assert.match(zhCopy, /my_saved: "我的收藏"/);
 });
 
@@ -50,9 +50,8 @@ test("plant detail uses the unified mobile header and opens the cloud-first proj
   ]);
 
   assert.match(detail, /<MobilePageHeader[\s\S]*?title=\{displayName\}/);
-  assert.match(detail, /className=\{styles\.mobileSavedAction\}/);
-  assert.match(detail, /className=\{`\$\{styles\.mobileActions\} mobile-app-grid-only`\}/);
-  assert.match(detail, /\{copy\.plant_guide\}/);
+  assert.match(detail, /<MobilePageHeader[\s\S]*?href=\{createProjectHref\} className=\{styles\.mobileNewProjectLink\}/);
+  assert.match(detail, /<section className=\{styles\.hero\}>[\s\S]*?styles\.mobileBreadcrumbs[\s\S]*?styles\.mobileHeroTitleRow[\s\S]*?<SavedGuideStatus category="plant"/);
   assert.doesNotMatch(detail, /copy\.plant_archive|copy\.back_to_record/);
   assert.match(detail, /className=\{`\$\{styles\.heroHeadingRow\} mobile-app-desktop-only`\}/);
   assert.match(detail, /href=\{createProjectHref\}/);
@@ -60,7 +59,7 @@ test("plant detail uses the unified mobile header and opens the cloud-first proj
   assert.match(projectForm, /storageMode === "cloud"/);
   assert.match(projectForm, /localHref/);
   assert.match(styles, /\.backLink \{[\s\S]*?text-decoration: underline/);
-  assert.match(styles, /\.mobileActions \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.doesNotMatch(detail, /styles\.mobileActions|styles\.mobileSavedAction/);
   assert.match(styles, /\.heroHeadingRow \{[\s\S]*?minmax\(0, 1fr\) auto auto/);
   assert.match(zhCopy, /plant_guide: "植物指引"/);
   assert.match(zhCopy, /new_project: "新建项目"/);

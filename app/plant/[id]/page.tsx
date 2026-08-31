@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import SavedGuideStatus from "@/components/plant-detail/SavedGuideStatus";
 import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -12,6 +13,7 @@ import { formatCardDate } from "@/lib/date-time";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import type { ExperienceCardListItem, ExperienceCardRow } from "@/lib/experience-card-types";
 import { getEnvironmentDetailItems, getEnvironmentTags } from "@/lib/plant-env";
+import { getPlantGrowthTypeLabel } from "@/lib/plant-shared";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   canAccessMembershipGuidance,
@@ -26,6 +28,8 @@ import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidate
 import type { TranslationDictionary } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
+import { GUIDE_INTERESTS_CHANGED } from "@/lib/guide-interests";
+import { useGuideInterestRefresh } from "@/lib/use-guide-interest-refresh";
 import type {
   ActionMessage,
   PlantAliasRow,
@@ -1222,6 +1226,7 @@ export default function PlantDetailPage() {
   const [actionLoading, setActionLoading] = useState<"interest" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
+  useGuideInterestRefresh(currentUserId, typeof id === "string" ? id : undefined, true, setInterestAdded);
 
   useEffect(() => {
     async function load() {
@@ -1446,6 +1451,7 @@ export default function PlantDetailPage() {
     plant?.scientific_name ||
     copy.default_title;
   const displayFamily = localizedPlant?.family || plant?.family;
+  const displayGrowthType = getPlantGrowthTypeLabel(plant?.growth_type, copy.growth_types);
   const fromArchive = searchParams.get("fromArchive");
   const fromRecord = searchParams.get("fromRecord");
   const returnRecordHref = fromArchive
@@ -1620,7 +1626,7 @@ export default function PlantDetailPage() {
   const showGrowthCycle = hasMeaningfulGrowthCycle(growthCycle, plant?.growth_type);
 
   async function handleAddInterest() {
-    if (!plant || actionLoading) return;
+    if (!plant || actionLoading || interestAdded) return;
 
     if (!isSignedIn) {
       setActionMessage({
@@ -1632,21 +1638,7 @@ export default function PlantDetailPage() {
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setActionMessage({
-        type: "error",
-        text: copy.login_before_interest,
-        href: buildLoginHref(getCurrentInternalPath()),
-        hrefText: copy.go_login,
-      });
-      return;
-    }
-
-    if (!interestAdded && !hasCloudAccess) {
+    if (!hasCloudAccess) {
       setActionMessage({
         type: "error",
         text: copy.save_cloud_only,
@@ -1659,38 +1651,29 @@ export default function PlantDetailPage() {
     setActionLoading("interest");
     setActionMessage(null);
 
-    const { error } = interestAdded
-      ? await supabase
-          .from("user_plant_interests")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("species_id", plant.id)
-      : await supabase.from("user_plant_interests").upsert(
-          {
-            user_id: user.id,
-            species_id: plant.id,
-          },
-          { onConflict: "user_id,species_id" }
-        );
-
-    setActionLoading(null);
-
-    if (error) {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) {
+        setActionMessage({ type: "error", text: copy.login_before_interest, href: buildLoginHref(getCurrentInternalPath()), hrefText: copy.go_login });
+        return;
+      }
+      const { error } = await supabase.from("user_plant_interests").upsert(
+        { user_id: user.id, species_id: plant.id },
+        { onConflict: "user_id,species_id", ignoreDuplicates: true },
+      );
+      if (error) throw error;
+      setInterestAdded(true);
+      setActionMessage(null);
+      window.dispatchEvent(new Event(GUIDE_INTERESTS_CHANGED));
+    } catch (error) {
       setActionMessage({
         type: "error",
-        text: `${interestAdded ? copy.cancel_action : copy.add_action}${copy.action_failed_separator}${error.message}`,
+        text: `${copy.add_action}${copy.action_failed_separator}${error instanceof Error ? error.message : String((error as { message?: string })?.message || "")}`,
       });
-      return;
+    } finally {
+      setActionLoading(null);
     }
-
-    const nextInterestAdded = !interestAdded;
-    setInterestAdded(nextInterestAdded);
-    setActionMessage({
-      type: "success",
-      text: nextInterestAdded ? copy.saved_added : copy.saved_removed,
-      href: nextInterestAdded ? "/archive/interests" : undefined,
-      hrefText: nextInterestAdded ? copy.view_saved : undefined,
-    });
   }
 
   const experienceCardTabCount = relatedExperienceCards.length;
@@ -1735,22 +1718,13 @@ export default function PlantDetailPage() {
     <>
       <MobilePageHeader
         title={displayName}
+        titleText={displayName}
         fallbackHref={returnRecordHref || "/plant"}
         ariaLabel={t.nav.back}
         right={
-          <button
-            type="button"
-            onClick={handleAddInterest}
-            disabled={actionLoading !== null}
-            className={styles.mobileSavedAction}
-            data-active={interestAdded ? "true" : "false"}
-          >
-            {interestAdded
-              ? copy.saved
-              : actionLoading === "interest"
-                ? copy.adding
-                : copy.add_to_saved}
-          </button>
+          <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+            {copy.new_project}
+          </Link>
         }
       />
 
@@ -1764,16 +1738,35 @@ export default function PlantDetailPage() {
         </Link>
       </div>
 
-      <div className={`${styles.mobileActions} mobile-app-grid-only`}>
-        <Link href="/plant" className={styles.mobileGuideLink}>
-          {copy.plant_guide}
-        </Link>
-        <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
-          {copy.new_project}
-        </Link>
-      </div>
-
       <section className={styles.hero}>
+        <div className="mobile-app-block-only">
+          <div className={styles.mobileBreadcrumbs}>
+            <Link href="/plant?section=plant" className={styles.mobileCategoryBadge}>
+              <UiIcon name="sprout" size={15} />
+              {t.archive.categories.plant_label}
+            </Link>
+            <UiIcon name="arrow-right" size={13} />
+            <span>
+              {categoryLabel(plant.category, t.plant.categories, t.plant.uncategorized)}
+              {plant.sub_category
+                ? ` · ${subCategoryLabel(plant.sub_category, t.plant.subcategories)}`
+                : ""}
+            </span>
+          </div>
+          <div className={styles.mobileHeroTitleRow}>
+            <h1 className={styles.mobileHeroTitle}>{displayName}</h1>
+            {interestAdded ? <SavedGuideStatus category="plant" /> : (
+              <button
+                type="button"
+                onClick={handleAddInterest}
+                disabled={actionLoading !== null}
+                className={styles.mobileSaveButton}
+              >
+                {actionLoading === "interest" ? copy.adding : copy.add_to_saved}
+              </button>
+            )}
+          </div>
+        </div>
         <div className={`${styles.heroHeadingRow} mobile-app-desktop-only`}>
           <h1 className={styles.heroTitle}>{displayName}</h1>
           <Link
@@ -1783,7 +1776,7 @@ export default function PlantDetailPage() {
             {copy.new_project}
           </Link>
 
-          {hasCloudAccess || interestAdded ? (
+          {interestAdded ? <SavedGuideStatus category="plant" /> : hasCloudAccess ? (
             <button
               type="button"
               onClick={handleAddInterest}
@@ -1808,7 +1801,7 @@ export default function PlantDetailPage() {
           {plant.scientific_name && <div>{t.plant.scientific_name}{plant.scientific_name}</div>}
           {aliasNames.length > 0 && <div>{t.plant.aliases}{aliasNames.join(t.plant.alias_separator)}</div>}
           {displayFamily && <div>{copy.family}{displayFamily}</div>}
-          <div>
+          <div className="mobile-app-desktop-only">
             {copy.classification}{categoryLabel(
               plant.category,
               t.plant.categories,
@@ -1818,7 +1811,7 @@ export default function PlantDetailPage() {
               ? ` · ${subCategoryLabel(plant.sub_category, t.plant.subcategories)}`
               : ""}
           </div>
-          {plant.growth_type && <div>{copy.growth_type}{plant.growth_type}</div>}
+          {displayGrowthType && <div>{copy.growth_type}{displayGrowthType}</div>}
           {en?.common_name && <div>{copy.english_name}{en.common_name}</div>}
         </div>
 
@@ -1836,8 +1829,8 @@ export default function PlantDetailPage() {
             }}
           >
             {copy.visitor_detail_notice}
-            <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              {copy.register_basic_summary}
+            <Link href={buildLoginHref(`/plant/${encodeURIComponent(String(id))}${searchParams.size ? `?${searchParams.toString()}` : ""}`)} style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
+              {language === "en" ? "Log in / register to view the basic overview" : "登录／注册后查看基础概要"}
             </Link>
           </div>
         ) : !hasCloudAccess ? (

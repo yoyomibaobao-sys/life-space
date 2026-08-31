@@ -25,13 +25,15 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   archiveCategoryOptions,
-  getDefaultSystemNames,
   isNonPlantArchiveCategory,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 import {
   getSystemNameCandidates,
-  isStrongSystemNameAliasRelationType,
+  filterSystemNameCandidates,
+  resolveExactSystemNameCandidate,
+  resolveSystemNameSelection,
+  type SystemNameSelection,
   type SystemNameCandidate,
 } from "@/lib/system-name-candidates";
 import type {
@@ -45,8 +47,8 @@ import type {
   RecordTagRow,
   RelatedTagCountRow,
 } from "@/lib/archive-detail-types";
-import type { GroupTagItem, PlantSpeciesOption, SubTagItem } from "@/lib/archive-page-types";
-import type { MediaItem, PlantSpeciesAliasSearchRow } from "@/lib/domain-types";
+import type { GroupTagItem, SubTagItem } from "@/lib/archive-page-types";
+import type { MediaItem } from "@/lib/domain-types";
 import { formatLocalCycleDate } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import {
@@ -135,6 +137,7 @@ function Content({ id }: { id: string }) {
   const [ownerGroupTags, setOwnerGroupTags] = useState<GroupTagItem[]>([]);
   const [archiveProfileSystemNameCandidateList, setArchiveProfileSystemNameCandidates] =
     useState<SystemNameCandidate[]>([]);
+  const [archiveCandidatesLoading, setArchiveCandidatesLoading] = useState(true);
   const [isProjectFollowed, setIsProjectFollowed] = useState(false);
   const [projectFollowerCount, setProjectFollowerCount] = useState(0);
   const [categoryDepths, setCategoryDepths] = useState<ArchiveCategoryDepths>({
@@ -167,10 +170,8 @@ function Content({ id }: { id: string }) {
   const [mobileArchiveSavingField, setMobileArchiveSavingField] =
     useState<MobileArchiveEditableField | null>(null);
   const [mobileArchiveError, setMobileArchiveError] = useState("");
-  const [mobileSpeciesList, setMobileSpeciesList] = useState<PlantSpeciesOption[]>([]);
-  const [mobileSelectedSpeciesId, setMobileSelectedSpeciesId] = useState("");
-  const [mobilePlantSuggestionsOpen, setMobilePlantSuggestionsOpen] = useState(false);
-  const [mobileSystemSuggestionsOpen, setMobileSystemSuggestionsOpen] = useState(false);
+  const [mobileGuideSuggestionsOpen, setMobileGuideSuggestionsOpen] = useState(false);
+  const archiveProfileSavingRef = useRef(false);
   const [deleteArchiveDialogOpen, setDeleteArchiveDialogOpen] = useState(false);
   const [archiveStatusConfirmOpen, setArchiveStatusConfirmOpen] = useState(false);
   const [isDeletingArchive, setIsDeletingArchive] = useState(false);
@@ -432,86 +433,38 @@ saveRecentArchiveBrowse({
     load();
   }, [id, reloadKey]);
 
+
+  const candidateCategory = archive?.category;
+  const candidateOwnerId = archive?.user_id;
+  const currentGuideName = archive ? getDisplayName(archive, species) : "";
   useEffect(() => {
-    async function loadMobileSpeciesList() {
-      const [{ data: speciesData }, { data: aliasData }] = await Promise.all([
-        supabase
-          .from("plant_species")
-          .select("id, common_name, scientific_name, slug, category, is_active")
-          .eq("is_active", true)
-          .order("common_name", { ascending: true }),
-        supabase
-          .from("plant_species_aliases")
-          .select("species_id, alias_name, normalized_name, alias_type, relation_type, plant_species!inner(is_active)")
-          .eq("plant_species.is_active", true),
-      ]);
-
-      const aliasesBySpecies = new Map<string, string[]>();
-      ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
-        if (!isStrongSystemNameAliasRelationType(alias.relation_type)) return;
-        const list = aliasesBySpecies.get(alias.species_id) || [];
-        if (alias.alias_name) list.push(alias.alias_name);
-        if (alias.normalized_name && alias.normalized_name !== alias.alias_name) {
-          list.push(alias.normalized_name);
-        }
-        aliasesBySpecies.set(alias.species_id, list);
-      });
-
-      const list: PlantSpeciesOption[] = ((speciesData || []) as PlantSpeciesOption[]).map((item) => {
-        const aliases = Array.from(new Set(aliasesBySpecies.get(item.id) || []));
-        const displayName = item.common_name || item.scientific_name || archiveCopy.unnamed_plant;
-
-        return {
-          ...item,
-          aliases,
-          display_name: displayName,
-          search_text: [
-            displayName,
-            item.common_name,
-            item.scientific_name,
-            item.slug,
-            ...aliases,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase(),
-        };
-      });
-
-      setMobileSpeciesList(list);
-    }
-
-    void loadMobileSpeciesList();
-  }, []);
-
-  useEffect(() => {
+    let cancelled = false;
     async function loadArchiveSystemNameCandidates() {
-      if (!archive?.category) {
+      if (!candidateCategory || !me || candidateOwnerId !== me) {
         setArchiveProfileSystemNameCandidates([]);
+        setArchiveCandidatesLoading(false);
         return;
       }
 
+      setArchiveCandidatesLoading(true);
       const candidates = await getSystemNameCandidates({
-        category: archive.category,
-        currentValue: getDisplayName(archive, species),
+        category: candidateCategory,
+        currentValue: currentGuideName,
         mode: "cloud",
         supabase,
-        userId: archive.user_id,
+        userId: me,
         includeUserArchives: true,
-        limit: 200,
+        includeOtherCategories: true,
+        limit: null,
       });
+      if (cancelled) return;
       setArchiveProfileSystemNameCandidates(candidates);
+      setArchiveCandidatesLoading(false);
     }
 
     void loadArchiveSystemNameCandidates();
-  }, [
-    archive?.category,
-    archive?.system_name,
-    archive?.species_id,
-    archive?.species_name_snapshot,
-    archive?.user_id,
-    species,
-  ]);
+    return () => { cancelled = true; };
+  }, [candidateCategory, currentGuideName, candidateOwnerId, me]);
 
   useEffect(() => {
     async function loadSameTagCounts() {
@@ -680,7 +633,6 @@ saveRecentArchiveBrowse({
     setMobileArchiveSource(archive.source || "");
     setMobileArchiveNote(archive.note || "");
     setMobileArchiveSummary(archive.archive_summary || "");
-    setMobileSelectedSpeciesId(archive.species_id || "");
     setMobileArchiveError("");
   }, [archive, species, mobileArchiveEditingField]);
 
@@ -743,26 +695,9 @@ saveRecentArchiveBrowse({
         lightboxRecord.record_time,
       )}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""}`
     : "";
-  const mobilePlantSearchKeyword = mobileArchiveName.trim().toLowerCase();
-  const mobilePlantSearchResults = (
-    mobilePlantSearchKeyword
-      ? mobileSpeciesList.filter((item) => item.search_text?.includes(mobilePlantSearchKeyword))
-      : mobileSpeciesList
-  ).slice(0, 8);
-  const mobileSystemNameOptions =
-    mobileArchiveCategory === "system" || mobileArchiveCategory === "insect_fish"
-    ? getDefaultSystemNames(mobileArchiveCategory)
-        .filter((name) =>
-          mobileArchiveName.trim()
-            ? name.toLowerCase().includes(mobileArchiveName.trim().toLowerCase())
-            : true
-        )
-        .slice(0, 8)
-    : [];
-  const archiveSystemNameUsesCandidates =
-    activeArchive.category === "plant" ||
-    activeArchive.category === "system" ||
-    activeArchive.category === "insect_fish";
+  const mobileGuideCandidates = filterSystemNameCandidates(
+    archiveProfileSystemNameCandidateList, mobileArchiveName, mobileArchiveCategory,
+  );
 
   if (!isOwner && !activeArchive.is_public) {
     return <ArchivePrivateState />;
@@ -999,12 +934,9 @@ saveRecentArchiveBrowse({
     setMobileArchiveError("");
 
     if (field === "name") {
-      setMobileSelectedSpeciesId(activeArchive.species_id || "");
-      setMobilePlantSuggestionsOpen(activeArchive.category === "plant");
-      setMobileSystemSuggestionsOpen(activeArchive.category !== "plant");
+      setMobileGuideSuggestionsOpen(true);
     } else {
-      setMobilePlantSuggestionsOpen(false);
-      setMobileSystemSuggestionsOpen(false);
+      setMobileGuideSuggestionsOpen(false);
     }
   }
 
@@ -1013,20 +945,30 @@ saveRecentArchiveBrowse({
     patch: Partial<ArchiveDetailArchive>,
     successMessage = archiveCopy.saved
   ) {
-    if (!isOwner || mobileArchiveSavingField) return false;
+    if (!isOwner || archiveProfileSavingRef.current) return false;
 
+    archiveProfileSavingRef.current = true;
     setMobileArchiveSavingField(field);
     setMobileArchiveError("");
 
-    const { error } = await supabase
-      .from("archives")
-      .update(patch)
-      .eq("id", activeArchive.id)
-      .eq("user_id", activeArchive.user_id);
+    let saveFailed = false;
+    try {
+      const { error } = await supabase
+        .from("archives")
+        .update(patch)
+        .eq("id", activeArchive.id)
+        .eq("user_id", activeArchive.user_id)
+        .select("id")
+        .single();
+      saveFailed = Boolean(error);
+    } catch {
+      saveFailed = true;
+    } finally {
+      setMobileArchiveSavingField(null);
+      archiveProfileSavingRef.current = false;
+    }
 
-    setMobileArchiveSavingField(null);
-
-    if (error) {
+    if (saveFailed) {
       setMobileArchiveError(archiveCopy.save_retry);
       showToast(archiveCopy.save_retry);
       return false;
@@ -1034,8 +976,7 @@ saveRecentArchiveBrowse({
 
     setArchive((prev) => (prev ? { ...prev, ...patch } : prev));
     setMobileArchiveEditingField(null);
-    setMobilePlantSuggestionsOpen(false);
-    setMobileSystemSuggestionsOpen(false);
+    setMobileGuideSuggestionsOpen(false);
     showToast(successMessage);
     return true;
   }
@@ -1063,21 +1004,26 @@ saveRecentArchiveBrowse({
       return;
     }
 
+    const currentName = activeArchive.species_name_snapshot || activeArchive.system_name || species?.common_name || "";
+    const exact = resolveExactSystemNameCandidate(archiveProfileSystemNameCandidateList, currentName);
+    const nextPlantId = nextCategory === "plant" && exact?.category === "plant" ? exact.plantId || null : null;
     const patch: Partial<ArchiveDetailArchive> = {
       category: nextCategory,
       sub_tag_id: null,
       group_tag_id: null,
-      species_id: null,
-      species_name_snapshot: null,
-      system_name: null,
+      species_id: nextPlantId,
+      species_name_snapshot: nextCategory === "plant" ? currentName || null : null,
+      system_name: nextCategory === "plant" ? null : currentName || null,
     };
 
     const saved = await saveMobileArchivePatch("category", patch, archiveCopy.category_updated);
     if (!saved) return;
 
-    setSpecies(null);
-    setMobileArchiveName("");
-    setMobileSelectedSpeciesId("");
+    setSpecies(nextPlantId ? { id: nextPlantId, common_name: currentName, scientific_name: null } : null);
+    setMobileArchiveName(currentName);
+    setMobileArchiveCategory(nextCategory);
+    setArchiveSubcategoryLabel(null);
+    setArchiveGroupLabel(null);
   }
 
   async function updateArchiveTaxonomy(value: string) {
@@ -1121,111 +1067,62 @@ saveRecentArchiveBrowse({
     setArchiveGroupLabel(nextGroup?.name || null);
   }
 
-  async function saveMobileArchiveSystemName(name = mobileArchiveName) {
-    const nextName = name.trim();
-
-    if (!nextName) {
+  async function saveArchiveSystemNameSelection(selection: SystemNameSelection) {
+    if (!isOwner) throw new Error(archiveCopy.save_retry);
+    const binding = resolveSystemNameSelection(
+      archiveProfileSystemNameCandidateList, selection, normalizeArchiveCategory(activeArchive.category),
+    );
+    if (!binding.name) {
       setMobileArchiveError(archiveCopy.system_name_empty);
-      showToast(archiveCopy.system_name_empty);
-      return;
+      throw new Error(archiveCopy.system_name_empty);
     }
 
-    if (nextName === (activeArchive.system_name || "")) {
-      setMobileArchiveEditingField(null);
-      setMobileSystemSuggestionsOpen(false);
-      return;
-    }
-
-    await saveMobileArchivePatch("name", { system_name: nextName }, archiveCopy.system_name_updated);
-  }
-
-  async function saveMobileArchiveSpecies(selectedSpecies: PlantSpeciesOption) {
-    const speciesName =
-      selectedSpecies.display_name ||
-      selectedSpecies.common_name ||
-      selectedSpecies.scientific_name ||
-      archiveCopy.unnamed_plant;
-
-    setMobileArchiveName(speciesName);
-    setMobileSelectedSpeciesId(selectedSpecies.id);
-
+    const categoryChanged = binding.category !== activeArchive.category;
     const saved = await saveMobileArchivePatch(
       "name",
       {
-        species_id: selectedSpecies.id,
-        species_name_snapshot: speciesName,
-        system_name: null,
+        category: binding.category,
+        ...(categoryChanged ? { sub_tag_id: null, group_tag_id: null } : {}),
+        species_id: binding.plantId,
+        species_name_snapshot: binding.category === "plant" ? binding.name : null,
+        system_name: binding.category === "plant" ? null : binding.name,
       },
-      archiveCopy.system_plant_name_updated
+      archiveCopy.system_name_updated,
     );
+    if (!saved) throw new Error(archiveCopy.save_retry);
 
-    if (!saved) return;
+    setMobileArchiveName(binding.name);
+    setMobileArchiveCategory(binding.category);
+    setSpecies(binding.plantId ? {
+      id: binding.plantId,
+      common_name: binding.name,
+      scientific_name: null,
+    } : null);
+    if (categoryChanged) {
+      setArchiveSubcategoryLabel(null);
+      setArchiveGroupLabel(null);
+    }
 
-    setSpecies({
-      id: selectedSpecies.id,
-      common_name: selectedSpecies.common_name || selectedSpecies.display_name || speciesName,
-      scientific_name: selectedSpecies.scientific_name || null,
-    });
+    if (binding.category === "plant" && !binding.candidate && selection.isNewCandidate && me) {
+      // Keep the existing review queue for new plant names; failure does not undo a saved project.
+      try {
+        await supabase.from("plant_species_pending").insert([{
+          user_id: me,
+          submitted_name: binding.name,
+          language_code: language,
+          status: "pending",
+        }]);
+      } catch {
+        // The project remains saved even when the review queue is unavailable.
+      }
+    }
   }
 
-  async function saveArchiveSystemNameSelection(selection: {
-    name: string;
-    candidateId?: string | null;
-    isNewCandidate?: boolean;
-  }) {
-    const nextName = selection.name.trim();
-
-    if (!nextName) {
-      const emptyText =
-        activeArchive.category === "plant"
-          ? archiveCopy.system_plant_name_empty
-          : archiveCopy.system_name_empty;
-      showToast(emptyText);
-      throw new Error(emptyText);
-    }
-
-    setMobileArchiveName(nextName);
-
-    if (activeArchive.category === "plant") {
-      const selectedSpecies = selection.candidateId
-        ? mobileSpeciesList.find((item) => item.id === selection.candidateId)
-        : null;
-
-      if (selectedSpecies) {
-        await saveMobileArchiveSpecies(selectedSpecies);
-        return;
-      }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        await supabase.from("plant_species_pending").insert([
-          {
-            user_id: user.id,
-            submitted_name: nextName,
-            language_code: language,
-            status: "pending",
-          },
-        ]);
-      }
-
-      const saved = await saveMobileArchivePatch(
-        "name",
-        {
-          species_id: null,
-          species_name_snapshot: nextName,
-          system_name: null,
-        },
-        archiveCopy.system_plant_name_updated
-      );
-
-      if (saved) setSpecies(null);
-      return;
-    }
-
-    await saveMobileArchivePatch("name", { system_name: nextName }, archiveCopy.system_name_updated);
+  function saveMobileGuideSelection(selection: SystemNameSelection) {
+    void saveArchiveSystemNameSelection(selection).catch((error) => {
+      const message = error instanceof Error ? error.message : archiveCopy.save_retry;
+      setMobileArchiveError(message);
+    });
   }
 
   async function saveMobileArchiveSource() {
@@ -1268,18 +1165,13 @@ saveRecentArchiveBrowse({
   }
 
   function handleMobileArchiveNameBlur() {
-    if (activeArchive.category !== "plant") {
-      void saveMobileArchiveSystemName();
-      return;
-    }
-
     if (mobileArchiveName.trim() === archiveDisplayName.trim()) {
       setMobileArchiveEditingField(null);
-      setMobilePlantSuggestionsOpen(false);
+      setMobileGuideSuggestionsOpen(false);
       return;
     }
 
-    void saveArchiveSystemNameSelection({
+    saveMobileGuideSelection({
       name: mobileArchiveName,
       isNewCandidate: true,
     });
@@ -2094,6 +1986,7 @@ saveRecentArchiveBrowse({
           <ProjectMetaLine
             followerCount={projectFollowerCount}
             viewCount={Number(activeArchive.view_count || 0)}
+            textViewCount
             recordCount={Number(activeArchive.record_count ?? records.length)}
             durationDays={getDurationDays(
               activeArchive.created_at,
@@ -2101,7 +1994,7 @@ saveRecentArchiveBrowse({
             )}
             ended={activeArchive.status === "ended"}
             order={["view", "follow", "record", "duration"]}
-            style={{ minWidth: 0, flex: "1 1 auto", gap: "4px 8px", fontSize: 11.5 }}
+            style={{ minWidth: 0, flex: "1 1 auto", gap: "5px 10px", fontSize: 13 }}
           />
         </div>
 
@@ -2144,7 +2037,8 @@ saveRecentArchiveBrowse({
               recordCount={activeArchive.record_count || records.length || 0}
               encyclopediaHref={encyclopediaHref}
               systemNameCandidates={archiveProfileSystemNameCandidateList}
-              systemNameMode={archiveSystemNameUsesCandidates ? "candidate" : "text"}
+              systemNameCandidatesLoading={archiveCandidatesLoading}
+              systemNameMode="candidate"
               onToggleArchiveVisibility={toggleArchiveVisibility}
               onToggleArchiveStatus={() =>
                 void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
@@ -2234,11 +2128,9 @@ saveRecentArchiveBrowse({
             savingField={mobileArchiveSavingField}
             error={mobileArchiveError}
             isOwner={isOwner}
-            plantSearchResults={mobilePlantSearchResults}
-            selectedSpeciesId={mobileSelectedSpeciesId}
-            plantSuggestionsOpen={mobilePlantSuggestionsOpen}
-            systemNameOptions={mobileSystemNameOptions}
-            systemSuggestionsOpen={mobileSystemSuggestionsOpen}
+            guideCandidates={mobileGuideCandidates}
+            guideCandidatesLoading={archiveCandidatesLoading}
+            guideSuggestionsOpen={mobileGuideSuggestionsOpen}
             onTitleChange={setMobileArchiveTitle}
             onCategoryChange={setMobileArchiveCategory}
             onArchiveNameChange={setMobileArchiveName}
@@ -2249,23 +2141,11 @@ saveRecentArchiveBrowse({
             onSaveTitle={saveMobileArchiveTitle}
             onSaveCategory={saveMobileArchiveCategory}
             onSaveNameBlur={handleMobileArchiveNameBlur}
-            onSelectSpecies={saveMobileArchiveSpecies}
-            onSaveSystemName={(value) => {
-              if (activeArchive.category === "other") {
-                void saveMobileArchiveSystemName(value);
-                return;
-              }
-
-              void saveArchiveSystemNameSelection({
-                name: value || mobileArchiveName,
-                isNewCandidate: true,
-              });
-            }}
+            onSaveGuide={saveMobileGuideSelection}
             onSaveSource={saveMobileArchiveSource}
             onSaveNote={saveMobileArchiveNote}
             onSaveArchiveSummary={saveMobileArchiveSummary}
-            onPlantSuggestionsOpenChange={setMobilePlantSuggestionsOpen}
-            onSystemSuggestionsOpenChange={setMobileSystemSuggestionsOpen}
+            onGuideSuggestionsOpenChange={setMobileGuideSuggestionsOpen}
             headerAction={!isOwner ? (
               <Link href={`/user/${activeArchive.user_id}`} style={mobileAttributeSpaceLinkStyle}>
                 <span>{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
@@ -2611,11 +2491,9 @@ function MobileArchiveProfile({
   savingField,
   error,
   isOwner,
-  plantSearchResults,
-  selectedSpeciesId,
-  plantSuggestionsOpen,
-  systemNameOptions,
-  systemSuggestionsOpen,
+  guideCandidates,
+  guideCandidatesLoading,
+  guideSuggestionsOpen,
   onTitleChange,
   onCategoryChange,
   onArchiveNameChange,
@@ -2626,13 +2504,11 @@ function MobileArchiveProfile({
   onSaveTitle,
   onSaveCategory,
   onSaveNameBlur,
-  onSelectSpecies,
-  onSaveSystemName,
+  onSaveGuide,
   onSaveSource,
   onSaveNote,
   onSaveArchiveSummary,
-  onPlantSuggestionsOpenChange,
-  onSystemSuggestionsOpenChange,
+  onGuideSuggestionsOpenChange,
   headerAction,
 }: {
   archive: ArchiveDetailArchive;
@@ -2649,11 +2525,9 @@ function MobileArchiveProfile({
   savingField: MobileArchiveEditableField | null;
   error: string;
   isOwner: boolean;
-  plantSearchResults: PlantSpeciesOption[];
-  selectedSpeciesId: string;
-  plantSuggestionsOpen: boolean;
-  systemNameOptions: string[];
-  systemSuggestionsOpen: boolean;
+  guideCandidates: SystemNameCandidate[];
+  guideCandidatesLoading: boolean;
+  guideSuggestionsOpen: boolean;
   onTitleChange: (value: string) => void;
   onCategoryChange: (value: ArchiveCategory) => void;
   onArchiveNameChange: (value: string) => void;
@@ -2664,20 +2538,16 @@ function MobileArchiveProfile({
   onSaveTitle: () => void;
   onSaveCategory: (value?: ArchiveCategory) => void;
   onSaveNameBlur: () => void;
-  onSelectSpecies: (species: PlantSpeciesOption) => void;
-  onSaveSystemName: (value?: string) => void;
+  onSaveGuide: (value: SystemNameSelection) => void;
   onSaveSource: () => void;
   onSaveNote: () => void;
   onSaveArchiveSummary: () => void;
-  onPlantSuggestionsOpenChange: (open: boolean) => void;
-  onSystemSuggestionsOpenChange: (open: boolean) => void;
+  onGuideSuggestionsOpenChange: (open: boolean) => void;
   headerAction?: ReactNode;
 }) {
   const { t } = useLanguage();
   const copy = t.archive;
   const createdAtText = formatDate(archive.created_at) || copy.not_filled;
-  const nameLabel =
-    category === "plant" ? copy.system_plant_name_required : copy.system_name_required;
   const canEdit = isOwner && !savingField;
   const categoryLabels: Record<ArchiveCategory, string> = {
     plant: copy.categories.plant_label,
@@ -2716,7 +2586,55 @@ function MobileArchiveProfile({
       </MobileArchiveEditableField>
 
       <MobileArchiveEditableField
-        label={copy.category}
+        label={copy.system_name_required}
+        value={archiveDisplayName || copy.not_filled}
+        editing={editingField === "name"}
+        canEdit={canEdit}
+        onBeginEdit={() => onBeginEdit("name")}
+        valueHref={encyclopediaHref}
+        editLabel={copy.edit}
+        wideEditor
+      >
+        <SystemNameSelector
+          value={archiveName}
+          onChange={(value) => {
+            onArchiveNameChange(value);
+            onGuideSuggestionsOpenChange(true);
+          }}
+          candidates={guideCandidates}
+          selectedValue={archiveDisplayName}
+          suggestionsOpen={guideSuggestionsOpen}
+          onSuggestionsOpenChange={onGuideSuggestionsOpenChange}
+          onSelect={(candidate) => onSaveGuide({
+            name: candidate.label,
+            candidateId: candidate.id,
+            category: candidate.category,
+          })}
+          onUseCustom={(value) => onSaveGuide({ name: value, isNewCandidate: true })}
+          onBlur={onSaveNameBlur}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onSaveNameBlur();
+            }
+          }}
+          autoFocus
+          required
+          showCategory
+          loading={guideCandidatesLoading}
+          placeholder={copy.guide_selector_placeholder}
+          containerStyle={mobileArchiveSuggestionWrapStyle}
+          inputStyle={mobileArchiveInputStyle}
+          panelStyle={mobileArchiveSuggestionListStyle}
+          optionStyle={(_, selected) => mobileArchiveSuggestionButtonStyle(selected)}
+          customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
+          emptyStyle={mobileArchiveSuggestionEmptyStyle}
+          customActionLabel={(inputValue) => `${copy.use_as_system_name}: ${inputValue}`}
+        />
+      </MobileArchiveEditableField>
+
+      <MobileArchiveEditableField
+        label={copy.category_required}
         value={archiveCategoryLabel || copy.other}
         editing={editingField === "category"}
         canEdit={canEdit}
@@ -2730,6 +2648,8 @@ function MobileArchiveProfile({
             onSaveCategory(nextCategory);
           }}
           autoFocus
+          required
+          aria-label={copy.category_required}
           style={mobileArchiveInputStyle}
         >
           {archiveCategoryOptions.map((option) => (
@@ -2738,81 +2658,6 @@ function MobileArchiveProfile({
             </option>
           ))}
         </select>
-      </MobileArchiveEditableField>
-
-      <MobileArchiveEditableField
-        label={nameLabel}
-        value={archiveDisplayName || copy.not_filled}
-        editing={editingField === "name"}
-        canEdit={canEdit}
-        onBeginEdit={() => onBeginEdit("name")}
-        valueHref={encyclopediaHref}
-        editLabel={copy.edit}
-      >
-        {category === "plant" ? (
-          <SystemNameSelector
-            value={archiveName}
-            onChange={(value) => {
-              onArchiveNameChange(value);
-              onPlantSuggestionsOpenChange(true);
-            }}
-            candidates={plantSearchResults.map((item) => ({
-              id: item.id,
-              label: item.display_name || item.common_name || item.scientific_name || copy.unnamed_plant,
-              description: item.scientific_name || "",
-            }))}
-            selectedValue={selectedSpeciesId}
-            suggestionsOpen={plantSuggestionsOpen}
-            onSuggestionsOpenChange={onPlantSuggestionsOpenChange}
-            onSelect={(candidate) => {
-              const selected = plantSearchResults.find((item) => item.id === candidate.id);
-              if (selected) onSelectSpecies(selected);
-            }}
-            onUseCustom={(value) => onSaveSystemName(value)}
-            onBlur={onSaveNameBlur}
-            autoFocus
-            placeholder={copy.select_system_plant}
-            containerStyle={mobileArchiveSuggestionWrapStyle}
-            inputStyle={mobileArchiveInputStyle}
-            panelStyle={mobileArchiveSuggestionListStyle}
-            optionStyle={(candidate) =>
-              mobileArchiveSuggestionButtonStyle(selectedSpeciesId === candidate.id)
-            }
-            customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
-            emptyStyle={mobileArchiveSuggestionEmptyStyle}
-            emptyText={copy.no_matching_plant}
-            customActionLabel={(inputValue) => `${copy.use_as_system_name}: ${inputValue}`}
-          />
-        ) : (
-          <SystemNameSelector
-            value={archiveName}
-            onChange={(value) => {
-              onArchiveNameChange(value);
-              onSystemSuggestionsOpenChange(true);
-            }}
-            candidates={systemNameOptions.map((label) => ({ label }))}
-            selectedValue={archiveName}
-            suggestionsOpen={systemSuggestionsOpen}
-            onSuggestionsOpenChange={onSystemSuggestionsOpenChange}
-            onSelect={(candidate) => {
-              onArchiveNameChange(candidate.label);
-              onSaveSystemName(candidate.label);
-            }}
-            onUseCustom={(value) => onSaveSystemName(value)}
-            onBlur={() => onSaveSystemName()}
-            autoFocus
-            placeholder={copy.input_specific_name}
-            containerStyle={mobileArchiveSuggestionWrapStyle}
-            inputStyle={mobileArchiveInputStyle}
-            panelStyle={mobileArchiveSuggestionListStyle}
-            optionStyle={(candidate) =>
-              mobileArchiveSuggestionButtonStyle(candidate.label === archiveName)
-            }
-            customOptionStyle={mobileArchiveSuggestionNewButtonStyle}
-            emptyStyle={mobileArchiveSuggestionEmptyStyle}
-            customActionLabel={(inputValue) => `${copy.add_specific_name}${inputValue}`}
-          />
-        )}
       </MobileArchiveEditableField>
 
       <MobileArchiveEditableField
@@ -3116,7 +2961,8 @@ const projectDetailStatsStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "flex-start",
-  gap: 8,
+  gap: 16,
+  flexWrap: "wrap",
   minWidth: 0,
   margin: "0 0 8px",
   padding: "5px 8px",
@@ -3129,7 +2975,7 @@ const projectDetailGuideTextStyle: CSSProperties = {
   flex: "0 1 auto",
   overflow: "hidden",
   color: "#52694f",
-  fontSize: 12,
+  fontSize: 14,
   fontWeight: 750,
   lineHeight: 1.35,
   textOverflow: "ellipsis",
@@ -3421,7 +3267,7 @@ const mobileArchiveSuggestionWrapStyle: CSSProperties = {
 
 const mobileArchiveSuggestionListStyle: CSSProperties = {
   position: "absolute",
-  top: 42,
+  top: "calc(100% + 4px)",
   left: 0,
   right: 0,
   maxHeight: 220,

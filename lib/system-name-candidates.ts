@@ -1,4 +1,5 @@
 import {
+  archiveCategoryOptions,
   getDefaultSystemNames,
   isNonPlantArchiveCategory,
   type ArchiveCategory,
@@ -24,6 +25,9 @@ export type SystemNameCandidate = {
   relationType?: string | null;
   aliases?: string[];
   searchText?: string;
+  category?: ArchiveCategory;
+  sectionName?: string;
+  sectionNameEn?: string;
 };
 
 export type SystemNameCandidateMode = "cloud" | "local";
@@ -52,6 +56,9 @@ type PlantSpeciesAliasRow = {
 type PublicGuideCandidateRow = {
   id?: string | null;
   name?: string | null;
+  name_en?: string | null;
+  category?: ArchiveCategory;
+  guide_sections?: { name?: string | null; name_en?: string | null } | null;
 };
 
 export type GetSystemNameCandidatesParams = {
@@ -60,13 +67,14 @@ export type GetSystemNameCandidatesParams = {
   currentValue?: string | null;
   mode?: SystemNameCandidateMode;
   includeUserArchives?: boolean;
+  includeOtherCategories?: boolean;
   supabase?: SystemNameCandidateSupabase | null;
   userId?: string | null;
   cloudExistingNames?: Array<string | null | undefined>;
   localExistingNames?: Array<string | null | undefined>;
   plantSpeciesRows?: PlantSpeciesCandidateRow[];
   plantAliasRows?: PlantSpeciesAliasRow[];
-  limit?: number;
+  limit?: number | null;
 };
 
 export function normalizeSystemName(value?: string | null) {
@@ -84,8 +92,19 @@ function addCandidate(
   const label = normalizeSystemName(candidate.label);
   if (!label) return;
 
-  const key = getCandidateKey(label);
-  if (map.has(key)) return;
+  const key = `${candidate.category || ""}:${getCandidateKey(label)}`;
+  const existing = map.get(key);
+  if (existing) {
+    const aliases = Array.from(new Set([...(existing.aliases || []), ...(candidate.aliases || [])]));
+    map.set(key, {
+      ...existing,
+      aliases,
+      sectionName: existing.sectionName || candidate.sectionName,
+      sectionNameEn: existing.sectionNameEn || candidate.sectionNameEn,
+      searchText: buildSearchText(existing.searchText, candidate.searchText, aliases),
+    });
+    return;
+  }
 
   map.set(key, {
     ...candidate,
@@ -102,14 +121,24 @@ function buildSearchText(...parts: Array<string | string[] | null | undefined>) 
     .toLowerCase();
 }
 
-function matchesQuery(candidate: SystemNameCandidate, query?: string | null) {
+type SearchableSystemNameCandidate = {
+  label: string;
+  description?: unknown;
+  searchText?: string;
+  aliases?: string[];
+  category?: ArchiveCategory;
+  source?: string;
+};
+
+function matchesQuery(candidate: SearchableSystemNameCandidate, query?: string | null) {
   const keyword = normalizeSystemName(query).toLowerCase();
   if (!keyword) return true;
 
   return (
     candidate.label.toLowerCase().includes(keyword) ||
-    String(candidate.description || "").toLowerCase().includes(keyword) ||
-    String(candidate.searchText || "").toLowerCase().includes(keyword)
+    (typeof candidate.description === "string" && candidate.description.toLowerCase().includes(keyword)) ||
+    String(candidate.searchText || "").toLowerCase().includes(keyword) ||
+    Boolean(candidate.aliases?.some((alias) => alias.toLowerCase().includes(keyword)))
   );
 }
 
@@ -159,6 +188,7 @@ function buildPlantCandidatesFromRows(
       plantSlug: species.slug || null,
       label: displayName,
       source: "plant_species" as const,
+      category: "plant" as const,
       aliases,
       description: [
         normalizeSystemName(species.scientific_name),
@@ -242,28 +272,17 @@ async function loadCloudExistingNames(
 
 async function loadPublicGuideCandidates(
   supabase: SystemNameCandidateSupabase | null | undefined,
-  category: ArchiveCategory,
+  category?: ArchiveCategory,
 ) {
   if (!supabase) return [];
   try {
-    let { data, error } = await supabase
+    let query = supabase
       .from("guide_entries")
-      .select("id, name")
-      .eq("category", category)
+      .select("id, name, name_en, category, guide_sections(name, name_en)")
       .eq("is_active", true)
       .order("name", { ascending: true });
-
-    if (error) {
-      // Keep project creation usable while the guide-library migration is
-      // being rolled out to an older deployment.
-      const fallback = await supabase
-        .from("guide_entries")
-        .select("id, name")
-        .eq("category", category)
-        .order("name", { ascending: true });
-      data = fallback.data;
-      error = fallback.error;
-    }
+    if (category) query = query.eq("category", category);
+    const { data, error } = await query;
 
     if (error) {
       console.warn("load public related guides failed:", error);
@@ -273,6 +292,11 @@ async function loadPublicGuideCandidates(
       id: row.id || null,
       label: row.name,
       source: "public_guide" as const,
+      category: row.category || category,
+      sectionName: row.guide_sections?.name || undefined,
+      sectionNameEn: row.guide_sections?.name_en || undefined,
+      aliases: row.name_en ? [row.name_en] : [],
+      searchText: buildSearchText(row.name, row.name_en),
     }));
   } catch (error) {
     console.warn("load public related guides failed:", error);
@@ -287,9 +311,80 @@ export function dedupeSystemNameCandidates(
   const map = new Map<string, SystemNameCandidate>();
 
   candidates.forEach((candidate) => addCandidate(map, candidate));
-  addCandidate(map, { label: currentValue, source: "current" });
+  if (!Array.from(map.values()).some((candidate) => getCandidateKey(candidate.label) === getCandidateKey(currentValue || ""))) {
+    addCandidate(map, { label: currentValue, source: "current" });
+  }
 
   return Array.from(map.values());
+}
+
+type GuideCandidateIdentity = {
+  label: string;
+  category?: ArchiveCategory;
+  source?: string;
+  aliases?: string[];
+};
+
+export function resolveExactSystemNameCandidate<T extends GuideCandidateIdentity>(
+  candidates: readonly T[],
+  value: string,
+): T | null {
+  const key = getCandidateKey(value);
+  if (!key) return null;
+  const known = candidates.filter((candidate) => candidate.category &&
+    ["plant_species", "public_guide", "builtin"].includes(candidate.source || ""));
+  const canonical = known.filter((candidate) => getCandidateKey(candidate.label) === key);
+  const matches = canonical.length ? canonical : known.filter((candidate) =>
+    candidate.aliases?.some((alias) => getCandidateKey(alias) === key));
+  const unique = new Map(matches.map((candidate) => [`${candidate.category}:${getCandidateKey(candidate.label)}`, candidate]));
+  return unique.size === 1 ? Array.from(unique.values())[0] : null;
+}
+
+export function filterSystemNameCandidates<T extends SearchableSystemNameCandidate>(
+  candidates: readonly T[],
+  query: string,
+  category?: ArchiveCategory | null,
+  limit = 10,
+): T[] {
+  const key = getCandidateKey(query);
+  const rank = (candidate: T) => getCandidateKey(candidate.label) === key ? 0
+    : candidate.aliases?.some((alias) => getCandidateKey(alias) === key) ? 1 : 2;
+  return candidates
+    .filter((candidate) => matchesQuery(candidate, query) &&
+      (key || !category || !candidate.category || candidate.category === category))
+    .sort((left, right) => rank(left) - rank(right) ||
+      Number(right.category === category) - Number(left.category === category) ||
+      Number(left.source === "current") - Number(right.source === "current"))
+    .slice(0, limit);
+}
+
+export type SystemNameSelection = {
+  name: string;
+  candidateId?: string | null;
+  category?: ArchiveCategory;
+  isNewCandidate?: boolean;
+};
+
+export function resolveSystemNameSelection(
+  candidates: readonly SystemNameCandidate[],
+  selection: SystemNameSelection,
+  currentCategory: ArchiveCategory,
+) {
+  const name = normalizeSystemName(selection.name);
+  const selected = candidates.find((candidate) =>
+    getCandidateKey(candidate.label) === getCandidateKey(name) &&
+    (selection.candidateId ? candidate.id === selection.candidateId
+      : Boolean(selection.category && candidate.category === selection.category)));
+  const candidate = selected || resolveExactSystemNameCandidate(candidates, name);
+  const category = candidate?.category || currentCategory;
+  return {
+    name: candidate?.label || name,
+    category,
+    // A public guide ID is not a plant_species foreign key.
+    plantId: category === "plant" ? candidate?.plantId || null : null,
+    plantSlug: category === "plant" ? candidate?.plantSlug || null : null,
+    candidate,
+  };
 }
 
 export function hasExactSystemNameCandidate(
@@ -310,31 +405,36 @@ export async function getSystemNameCandidates(
   params: GetSystemNameCandidatesParams
 ): Promise<SystemNameCandidate[]> {
   const category = normalizeCategory(params.category);
-  const limit = params.limit ?? 10;
+  const limit = params.limit === null ? undefined : params.limit ?? 10;
   const candidates: Array<Omit<SystemNameCandidate, "label"> & { label?: string | null }> = [];
-  candidates.push(...await loadPublicGuideCandidates(params.supabase, category));
+  const categories = params.includeOtherCategories ? archiveCategoryOptions.map((item) => item.value) : [category];
+  const publicGuidePromise = loadPublicGuideCandidates(params.supabase, params.includeOtherCategories ? undefined : category);
 
-  if (category === "plant") {
+  if (categories.includes("plant")) {
     const plantCandidates = params.plantSpeciesRows
       ? buildPlantCandidatesFromRows(params.plantSpeciesRows, params.plantAliasRows || [])
       : await loadPlantSpeciesCandidates(params.supabase);
 
     candidates.push(...plantCandidates);
-  } else if (category === "system" || category === "insect_fish" || category === "other") {
-    getDefaultSystemNames(category).forEach((name) => {
-      candidates.push({ label: name, source: "builtin" });
+  }
+  candidates.push(...await publicGuidePromise);
+  for (const candidateCategory of categories) {
+    getDefaultSystemNames(candidateCategory).forEach((name) => {
+      candidates.push({ label: name, source: "builtin", category: candidateCategory });
     });
+  }
 
+  if (isNonPlantArchiveCategory(category)) {
     (params.cloudExistingNames || []).forEach((name) => {
-      candidates.push({ label: name, source: "cloud_archive" });
+      candidates.push({ label: name, source: "cloud_archive", category });
     });
     (params.localExistingNames || []).forEach((name) => {
-      candidates.push({ label: name, source: "local_archive" });
+      candidates.push({ label: name, source: "local_archive", category });
     });
 
     const remoteNames = await loadCloudExistingNames(params, category);
     remoteNames.forEach((name) => {
-      candidates.push({ label: name, source: "cloud_archive" });
+      candidates.push({ label: name, source: "cloud_archive", category });
     });
   }
 

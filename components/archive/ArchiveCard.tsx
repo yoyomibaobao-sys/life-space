@@ -621,7 +621,7 @@ function MobileArchiveCard({
   const ongoingDays = getOngoingDays(item.created_at);
   const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
   const latestRecordPreview = getLatestRecordPreview(item, language);
-  const visibilityText = item.is_public ? t.archive.public_discover : t.archive.private_only;
+  const visibilityText = item.is_public ? t.experience.public : t.experience.private;
   const mobileEndedText = ended ? t.archive_workspace.ended : "";
   const maxDepth = categoryDepths[item.category] || 3;
   const selectedSubcategory = maxDepth >= 2 && item.sub_tag_id
@@ -681,6 +681,7 @@ function MobileArchiveCard({
       project={projectView}
       actionSlot={actionSlot}
       mobileMode
+      mobileShowCategoryBadge={false}
     />
   );
 }

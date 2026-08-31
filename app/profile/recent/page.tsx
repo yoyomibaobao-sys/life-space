@@ -13,6 +13,7 @@ import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import type { SupabaseUser } from "@/lib/domain-types";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import UiIcon from "@/components/ui/UiIcon";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref } from "@/lib/auth-return";
@@ -122,9 +123,20 @@ export default function RecentBrowsePage() {
   }
 
   return (
+    <>
+    <MobilePageHeader
+      title={t.profile.recent.title}
+      fallbackHref="/profile"
+      ariaLabel={t.nav.back}
+      right={items.length > 0 ? (
+        <button type="button" onClick={handleClear} style={clearButtonStyle}>
+          {t.profile.recent.clear}
+        </button>
+      ) : undefined}
+    />
     <main style={pageStyle}>
       <div style={shellStyle}>
-        <div style={topBarStyle}>
+        <div className="mobile-app-desktop-only" style={topBarStyle}>
           <div>
             <Link href="/profile" style={backLinkStyle}>
               <UiIcon name="arrow-left" size={15} /> {t.profile.recent.back}
@@ -198,6 +210,7 @@ export default function RecentBrowsePage() {
         )}
       </div>
     </main>
+    </>
   );
 }
 

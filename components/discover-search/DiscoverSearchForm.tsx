@@ -232,15 +232,22 @@ export default function DiscoverSearchForm({
         boxShadow: "0 1px 8px rgba(0,0,0,0.025)",
       }}
     >
+      <div style={{ marginBottom: 12 }}>
+        <MobileSearchField
+          value={filters.name}
+          onChange={(value) => patch({ name: value, speciesId: null })}
+          placeholder={keywordPlaceholder}
+          ariaLabel={keywordLabel}
+          clearAriaLabel={t.plant.clear_search}
+          onClear={() => patch({ name: "", speciesId: null })}
+        />
+      </div>
       <div
         style={{
           display: "grid",
-          gridTemplateColumns:
-            isRecordSearch
-              ? "minmax(124px, 0.9fr) minmax(130px, 1fr) minmax(124px, 0.9fr) minmax(96px, 0.8fr) minmax(130px, 1.1fr) minmax(108px, 0.9fr) minmax(150px, 1.25fr)"
-              : "minmax(124px, 1fr) minmax(140px, 1.1fr) minmax(124px, 1fr) minmax(110px, 0.8fr) minmax(240px, 1.8fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          alignItems: "end",
           gap: 8,
-          overflowX: "auto",
         }}
       >
         <label style={fieldLabelStyle}>
@@ -326,16 +333,6 @@ export default function DiscoverSearchForm({
           </select>
         </label>
 
-        <label style={fieldLabelStyle}>
-          {keywordLabel}
-          <input
-            value={filters.name}
-            onChange={(e) => patch({ name: e.target.value, speciesId: filters.speciesId ? null : filters.speciesId })}
-            placeholder={keywordPlaceholder}
-            style={inputStyle}
-          />
-        </label>
-
         {isRecordSearch ? (
           <>
             <label style={fieldLabelStyle}>
@@ -366,16 +363,14 @@ export default function DiscoverSearchForm({
         ) : null}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-        {isRecordSearch ? (
+      {isRecordSearch ? (
+        <div style={{ marginTop: 10 }}>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374737", cursor: "pointer" }}>
             <input type="checkbox" checked={filters.helpOnly} onChange={(e) => patch({ helpOnly: e.target.checked })} />
             {t.discover.search_ui.help_only}
           </label>
-        ) : <span />}
-
-        <span />
-      </div>
+        </div>
+      ) : null}
     </form>
   );
 }

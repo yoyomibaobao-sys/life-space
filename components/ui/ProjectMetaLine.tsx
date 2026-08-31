@@ -30,6 +30,7 @@ export default function ProjectMetaLine({
   helpfulCount,
   updatedAt,
   compactProjectStats = false,
+  textViewCount = false,
   order,
   className,
   style,
@@ -46,6 +47,7 @@ export default function ProjectMetaLine({
   helpfulCount?: number | null;
   updatedAt?: string | null;
   compactProjectStats?: boolean;
+  textViewCount?: boolean;
   order?: ProjectMetaKey[];
   className?: string;
   style?: CSSProperties;
@@ -93,6 +95,13 @@ export default function ProjectMetaLine({
     });
   }
   addCount("view", "view", t.meta.views, viewCount);
+  if (textViewCount) {
+    const viewItem = items.find((item) => item.key === "view");
+    if (viewItem) {
+      viewItem.hideIcon = true;
+      viewItem.value = `${t.meta.views} ${viewItem.value}`;
+    }
+  }
   addCount("follow", "follow", t.meta.follows, followerCount);
   addCount("comment", "comment", t.meta.comments, commentCount);
   addCount("photo", "image", t.meta.photos, photoCount);
@@ -137,6 +146,7 @@ export default function ProjectMetaLine({
       {orderedItems.map((item) => (
         <span
           key={item.key}
+          className={item.key === "view" && !textViewCount ? "mobile-app-desktop-only" : undefined}
           aria-label={item.accessibleLabel}
           style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
         >

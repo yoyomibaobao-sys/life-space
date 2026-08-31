@@ -51,6 +51,22 @@
   white-space: nowrap;
 }
 
+.saveButton {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid #cbdcc5;
+  border-radius: 999px;
+  background: #f5faf2;
+  color: #406b3c;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.saveButton:disabled { opacity: .6; cursor: wait; }
+
 .hero,
 .sectionCard,
 .stateCard {
@@ -70,7 +86,11 @@
   gap: 8px;
   color: #748270;
   font-size: 13px;
+  flex-wrap: wrap;
 }
+
+.breadcrumbs a { color: inherit; text-decoration: none; }
+.breadcrumbs a:focus-visible { outline: 2px solid #477143; outline-offset: 3px; }
 
 .categoryBadge {
   min-height: 30px;
@@ -90,6 +110,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
+  flex-wrap: wrap;
 }
 
 .heroTitleRow h1 {
@@ -112,15 +133,10 @@
   line-height: 1.85;
 }
 
-.frameworkNote {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #f6faf4;
-  color: #70806b;
-  font-size: 12.5px;
-  line-height: 1.65;
-}
+.references { margin: 16px 4px 0; color: #60725c; font-size: 12px; line-height: 1.6; }
+.references summary { cursor: pointer; min-height: 32px; }
+.references ul { margin: 4px 0 0; padding-left: 20px; }
+.references a { color: #406b3c; overflow-wrap: anywhere; }
 
 .detailTabs {
   display: grid;
@@ -220,6 +236,13 @@
   color: #334b31;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.parameterNote {
+  color: #65725f;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .sectionTitleRow {

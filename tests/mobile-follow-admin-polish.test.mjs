@@ -74,7 +74,7 @@ test("mobile followed-user projects use one tappable project-card format", async
   assert.match(followPage, /latestText=\{item\.latestNote\}[\s\S]*?latestTime=\{item\.latestRecordTime\}/);
   assert.match(followPage, /recordCount=\{item\.recordCount\}[\s\S]*?durationDays=\{item\.durationDays\}/);
   assert.match(followPage, /ownerLine=\{`\$\{item\.ownerName\}/);
-  assert.match(projectCard, /<CompactActivityTime/);
+  assert.match(projectCard, /<InlineRecordSummary/);
   assert.match(projectCard, /<ProjectMetaLine/);
   assert.doesNotMatch(followPage, /projectMenuOpenId/);
 });

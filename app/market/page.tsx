@@ -18,6 +18,7 @@ import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
 import MarketMessageLink from "@/components/market/MarketMessageLink";
+import { getCompactCardLocation } from "@/lib/card-location";
 
 type ProfileBrief = {
   id: string;
@@ -450,7 +451,7 @@ export default function MarketPage() {
 
                     {isMobileViewport ? (
                       <div style={mobileCardMetaStyle}>
-                        <span>{locationText || t.market.not_provided}</span>
+                        <span>{getCompactCardLocation({ fallback: locationText }) || t.market.not_provided}</span>
                         <span style={mobileCardMetaDividerStyle}>·</span>
                         <span style={mobileCardSourceStyle}>
                           {publisherName}{archiveTitle ? ` · ${archiveTitle}` : ""}

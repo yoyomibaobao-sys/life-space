@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { buildLoginHref, buildRegisterHref, getSafeReturnTo } from "@/lib/auth-return";
 
 function CheckEmailContent() {
   const router = useRouter();
@@ -12,6 +13,7 @@ function CheckEmailContent() {
 
   const email = useMemo(() => searchParams.get("email")?.trim() || "", [searchParams]);
   const type = searchParams.get("type") || "signup";
+  const returnTo = getSafeReturnTo(searchParams.get("returnTo"));
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -37,7 +39,7 @@ function CheckEmailContent() {
         type: type === "signup" ? "signup" : "signup",
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/archive`,
+          emailRedirectTo: `${window.location.origin}${returnTo}`,
         },
       });
 
@@ -104,7 +106,7 @@ function CheckEmailContent() {
           </button>
 
           <button
-            onClick={() => router.push("/login")}
+            onClick={() => router.push(buildLoginHref(returnTo))}
             style={{
               padding: "12px 20px",
               background: "#fff",
@@ -118,7 +120,7 @@ function CheckEmailContent() {
           </button>
 
           <button
-            onClick={() => router.push("/register")}
+            onClick={() => router.push(buildRegisterHref(returnTo))}
             style={{
               padding: "12px 20px",
               background: "#fff",

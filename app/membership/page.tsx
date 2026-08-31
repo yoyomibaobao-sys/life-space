@@ -102,8 +102,8 @@ export default function MembershipPage() {
   return (
     <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
       <section style={isMobileViewport ? mobileHeroStyle : heroStyle}>
-        <div style={eyebrowStyle}>{t.membership_page.eyebrow}</div>
-        <h1 style={isMobileViewport ? mobileTitleStyle : titleStyle}>{t.membership_page.title}</h1>
+        <div className="mobile-app-desktop-only" style={eyebrowStyle}>{t.membership_page.eyebrow}</div>
+        <h1 className="mobile-app-desktop-only" style={isMobileViewport ? mobileTitleStyle : titleStyle}>{t.membership_page.title}</h1>
         <p style={isMobileViewport ? mobileSubtitleStyle : subtitleStyle}>
           {isMobileViewport
             ? t.membership_page.mobile_subtitle

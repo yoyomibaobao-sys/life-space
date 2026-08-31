@@ -12,14 +12,14 @@ export default function MembershipBenefitsPage() {
 
   return (
     <main style={pageStyle}>
-      <Link href="/profile" style={backLinkStyle}>
+      <Link href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
         <UiIcon name="arrow-left" size={16} />
         {t.membership_page.back_to_profile}
       </Link>
 
       <header style={heroStyle}>
-        <div style={eyebrowStyle}>{t.membership_page.eyebrow}</div>
-        <h1 style={titleStyle}>{t.membership_page.benefits_rules_title}</h1>
+        <div className="mobile-app-desktop-only" style={eyebrowStyle}>{t.membership_page.eyebrow}</div>
+        <h1 className="mobile-app-desktop-only" style={titleStyle}>{t.membership_page.benefits_rules_title}</h1>
         <p style={subtitleStyle}>{t.membership_page.benefits_rules_subtitle}</p>
       </header>
 

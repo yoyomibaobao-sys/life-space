@@ -76,6 +76,7 @@ export default function ArchiveTaxonomyPanel({
 }: Props) {
   const { language, t } = useLanguage();
   const compact = mobileMode;
+  const compactEnglish = compact && language === "en";
   const [actionTarget, setActionTarget] = useState<{
     kind: TaxonomyKind;
     chip: ArchiveTaxonomyChip;
@@ -130,8 +131,8 @@ export default function ArchiveTaxonomyPanel({
     <>
       <section style={panelStyle(compact)}>
         {showCategoryRow ? (
-          <div style={categoryRowStyle(compact)}>
-            <button type="button" onClick={onReset} style={pillStyle(!activeCategory, compact)}>
+          <div style={categoryRowStyle(compact, compactEnglish)}>
+            <button type="button" onClick={onReset} style={pillStyle(!activeCategory, compact, compactEnglish)}>
               {t.archive_workspace.all}
             </button>
             {archiveCategoryOptions.map((option) => (
@@ -139,7 +140,7 @@ export default function ArchiveTaxonomyPanel({
                 key={option.value}
                 type="button"
                 onClick={() => onSelectCategory(option.value)}
-                style={pillStyle(activeCategory === option.value && !activeSubcategoryId, compact)}
+                style={pillStyle(activeCategory === option.value && !activeSubcategoryId, compact, compactEnglish)}
                 title={getArchiveCategoryDescription(option.value, language)}
               >
                 {getArchiveCategoryLabel(option.value, language)}
@@ -411,11 +412,11 @@ function rowStyle(compact: boolean): CSSProperties {
   };
 }
 
-function categoryRowStyle(compact: boolean): CSSProperties {
+function categoryRowStyle(compact: boolean, compactEnglish = false): CSSProperties {
   if (!compact) return rowStyle(false);
   return {
     display: "grid",
-    gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+    gridTemplateColumns: compactEnglish ? ".6fr 1fr 1.2fr 1.1fr .9fr" : "repeat(5, minmax(0, 1fr))",
     gap: 5,
   };
 }
@@ -428,19 +429,19 @@ function separatorStyle(compact: boolean): CSSProperties {
   };
 }
 
-function pillStyle(active: boolean, compact: boolean): CSSProperties {
+function pillStyle(active: boolean, compact: boolean, compactEnglish = false): CSSProperties {
   return {
     border: active ? "1px solid #3f7d3d" : "1px solid #cfe3c8",
     background: active ? "#3f7d3d" : "#f8fbf5",
     color: active ? "#fff" : "#335033",
     borderRadius: 999,
-    padding: compact ? "5px 7px" : "7px 14px",
+    padding: compactEnglish ? "5px 3px" : compact ? "5px 7px" : "7px 14px",
     fontSize: compact ? 13 : 15,
     fontWeight: 700,
     cursor: "pointer",
     lineHeight: compact ? 1.15 : 1.3,
     minHeight: compact ? 40 : undefined,
-    whiteSpace: compact ? "normal" : "nowrap",
+    whiteSpace: compactEnglish ? "nowrap" : compact ? "normal" : "nowrap",
     textAlign: "center",
   };
 }

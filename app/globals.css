@@ -66,6 +66,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body:lang(en) {
+  /* The font variable is defined on body, so resolve it here rather than on :root. */
+  font-family: var(--font-geist-sans, Arial), Arial, Helvetica, sans-serif;
+}
+
 a {
   color: inherit;
 }

@@ -1,0 +1,26 @@
+/* Only the two vertical Home feeds share these dimensions. Horizontal project,
+   Following, personal-space, and Market cards must not import this module. */
+.card {
+  --feed-copy-height: 100px;
+  --feed-image-ratio: 1 / 1.08;
+}
+
+.media {
+  width: 100%;
+  flex: 0 0 auto;
+  aspect-ratio: var(--feed-image-ratio);
+}
+
+.copy {
+  height: var(--feed-copy-height);
+  flex: 0 0 var(--feed-copy-height);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (min-width: 760px) {
+  .card {
+    --feed-copy-height: 110px;
+    --feed-image-ratio: 1;
+  }
+}

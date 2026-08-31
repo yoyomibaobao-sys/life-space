@@ -319,7 +319,7 @@ export default function MembershipPaymentPage() {
 
   return (
     <main style={pageStyle}>
-      <div style={backRowStyle}>
+      <div className="mobile-app-desktop-only" style={backRowStyle}>
         <Link href="/profile" style={backLinkStyle}>
           <UiIcon name="arrow-left" size={16} />
           {t.membership_page.back_to_profile}
@@ -327,8 +327,9 @@ export default function MembershipPaymentPage() {
       </div>
 
       <header style={heroStyle}>
-        <div style={eyebrowStyle}>{t.membership_page.payment_label}</div>
-        <h1 style={titleStyle}>{t.membership_page.payment_page_title}</h1>
+        <div className="mobile-app-desktop-only" style={eyebrowStyle}>{t.membership_page.payment_label}</div>
+        <h1 className="mobile-app-desktop-only" style={titleStyle}>{t.membership_page.payment_page_title}</h1>
+        <h2 className="mobile-app-block-only" style={{ ...cardTitleStyle, fontSize: 20 }}>{t.membership_page.payment_label}</h2>
         <p style={subtitleStyle}>{t.membership_page.payment_order_intro}</p>
       </header>
 

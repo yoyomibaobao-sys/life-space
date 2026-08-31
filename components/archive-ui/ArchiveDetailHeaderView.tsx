@@ -4,9 +4,11 @@ import { useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import {
   archiveCategoryOptions,
+  getArchiveCategoryLabel,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
-import SystemNameSelector from "@/components/archive/SystemNameSelector";
+import SystemNameSelector, { type SystemNameSelectorCandidate } from "@/components/archive/SystemNameSelector";
+import { filterSystemNameCandidates, resolveExactSystemNameCandidate, type SystemNameSelection } from "@/lib/system-name-candidates";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
@@ -26,11 +28,7 @@ export type ArchiveProfileRow = {
   field?: ArchiveProfileEditableField;
 };
 
-export type ArchiveSystemNameCandidate = {
-  id?: string | null;
-  label: string;
-  description?: ReactNode;
-};
+export type ArchiveSystemNameCandidate = SystemNameSelectorCandidate;
 
 export type ArchiveProfileFormValues = {
   title: string;
@@ -41,11 +39,7 @@ export type ArchiveProfileFormValues = {
   archiveSummary: string;
 };
 
-export type ArchiveProfileSystemNameValue = {
-  name: string;
-  candidateId?: string | null;
-  isNewCandidate?: boolean;
-};
+export type ArchiveProfileSystemNameValue = SystemNameSelection;
 
 export type ArchiveProfileFieldSave =
   | { field: "title"; value: string }
@@ -60,6 +54,7 @@ export type ArchiveProfileEditorConfig = {
   onSaveField: (change: ArchiveProfileFieldSave) => Promise<void> | void;
   systemNameMode?: "candidate" | "text";
   systemNameCandidates?: ArchiveSystemNameCandidate[];
+  systemNameCandidatesLoading?: boolean;
   systemNameHint?: ReactNode;
 };
 
@@ -96,7 +91,7 @@ export default function ArchiveDetailHeaderView({
   profileAlwaysOpen = false,
   showSystemNameInTitle = true,
 }: Props) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const copy = t.archive;
   const [profileOpen, setProfileOpen] = useState(profileAlwaysOpen);
   const [editingField, setEditingField] = useState<ArchiveProfileEditableField | null>(null);
@@ -120,22 +115,10 @@ export default function ArchiveDetailHeaderView({
     Boolean(project.latestTime);
 
   const systemNameMode = profileEditor?.systemNameMode || "candidate";
-  const systemCandidates = profileEditor?.systemNameCandidates || [];
-  const filteredSystemCandidates = useMemo(() => {
-    const keyword = textDraft.trim().toLowerCase();
-    if (!keyword) return systemCandidates.slice(0, 8);
-
-    return systemCandidates
-      .filter((candidate) => {
-        const label = candidate.label.toLowerCase();
-        const description =
-          typeof candidate.description === "string"
-            ? candidate.description.toLowerCase()
-            : "";
-        return label.includes(keyword) || description.includes(keyword);
-      })
-      .slice(0, 8);
-  }, [systemCandidates, textDraft]);
+  const systemCandidates = useMemo(() => profileEditor?.systemNameCandidates || [], [profileEditor?.systemNameCandidates]);
+  const filteredSystemCandidates = useMemo(() =>
+    filterSystemNameCandidates(systemCandidates, textDraft, project.category, 10),
+  [systemCandidates, textDraft, project.category]);
   const hasExactSystemCandidate = systemCandidates.some(
     (candidate) => candidate.label.trim().toLowerCase() === textDraft.trim().toLowerCase()
   );
@@ -198,7 +181,8 @@ export default function ArchiveDetailHeaderView({
         const overrideCandidate = override?.field === "systemName" ? override.candidate : undefined;
         const overrideValue = override?.field === "systemName" ? override.value : undefined;
         const nextCandidate =
-          overrideCandidate !== undefined ? overrideCandidate : selectedSystemCandidate;
+          (overrideCandidate !== undefined ? overrideCandidate : selectedSystemCandidate) ||
+          resolveExactSystemNameCandidate(systemCandidates, overrideValue ?? textDraft);
         const value = (nextCandidate?.label || overrideValue || textDraft).trim();
         if (!value) {
           setFieldError(copy.system_name_empty);
@@ -209,6 +193,7 @@ export default function ArchiveDetailHeaderView({
           value: {
             name: value,
             candidateId: nextCandidate?.id || null,
+            category: nextCandidate?.category,
             isNewCandidate: systemNameMode === "candidate" && !nextCandidate,
           },
         });
@@ -260,6 +245,8 @@ export default function ArchiveDetailHeaderView({
         <div style={cellEditorStyle}>
           <select
             value={categoryDraft}
+            required
+            aria-label={copy.category_required}
             onChange={(event) => {
               const nextCategory = event.target.value as ArchiveCategory;
               setCategoryDraft(nextCategory);
@@ -279,7 +266,7 @@ export default function ArchiveDetailHeaderView({
                 key={option.value}
                 value={option.value}
               >
-                {option.label}
+                {getArchiveCategoryLabel(option.value, language)}
               </option>
             ))}
           </select>
@@ -301,11 +288,7 @@ export default function ArchiveDetailHeaderView({
             selectedValue={selectedSystemCandidate?.label || ""}
             hasExactMatch={hasExactSystemCandidate}
             onSelect={(candidate) => {
-              const nextCandidate = {
-                id: candidate.id,
-                label: candidate.label,
-                description: candidate.description,
-              };
+              const nextCandidate = { ...candidate };
               setSelectedSystemCandidate(nextCandidate);
               setTextDraft(candidate.label);
               void saveField({ field: "systemName", candidate: nextCandidate });
@@ -320,11 +303,10 @@ export default function ArchiveDetailHeaderView({
             }}
             onKeyDown={handleTextKeyDown}
             autoFocus
-            placeholder={
-                systemNameMode === "text"
-                  ? copy.input_system_name
-                  : copy.search_system_candidates
-            }
+            required
+            showCategory
+            loading={profileEditor?.systemNameCandidatesLoading}
+            placeholder={copy.guide_selector_placeholder}
             inputStyle={profileInputStyle}
             panelStyle={candidatePanelStyle}
             optionStyle={(candidate, selected) => candidateButtonStyle(selected)}
@@ -847,7 +829,7 @@ const profileFloatingHintStyle: CSSProperties = {
 
 const candidatePanelStyle: CSSProperties = {
   position: "absolute",
-  top: 29,
+  top: "calc(100% + 4px)",
   left: 0,
   right: 0,
   zIndex: 30,

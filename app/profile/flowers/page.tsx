@@ -142,12 +142,12 @@ function ProfileFlowersContent() {
 
   return (
     <main style={{ maxWidth: 760, margin: "0 auto", padding: "14px 12px 48px" }}>
-      <Link href="/profile" style={backLinkStyle}>
+      <Link href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
         <UiIcon name="arrow-left" size={15} />
         {helpfulT.back}
       </Link>
       <section style={{ background: "#fff", border: "1px solid #e7efe3", borderRadius: 18, padding: 16, boxShadow: "0 8px 22px rgba(32,56,24,0.05)" }}>
-        <h1 style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>{helpfulT.title}</h1>
+        <h1 className="mobile-app-desktop-only" style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>{helpfulT.title}</h1>
 
         <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           <TabButton active={tab === "received"} onClick={() => setTab("received")}>{helpfulT.received_tab} ({receivedItems.length})</TabButton>

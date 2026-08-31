@@ -8,11 +8,12 @@ import {
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
-import { formatDiscoveryActivityTime } from "@/lib/discover-card-format";
 import { getDurationDays } from "@/lib/follow-utils";
 import { getCompactCardLocation } from "@/lib/card-location";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import UiIcon from "@/components/ui/UiIcon";
+import InlineRecordSummary from "@/components/ui/InlineRecordSummary";
+import verticalCard from "@/components/ui/VerticalFeedCard.module.css";
 import styles from "@/components/discover/DiscoverProjectFeed.module.css";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -28,11 +29,6 @@ export function DiscoverProjectCard({
   const title = item.archive_title?.trim() || t.discover.unnamed_project;
   const categoryLabel = getArchiveCategoryLabel(item.category, language);
   const categoryIcon = getArchiveCategoryIcon(item.category);
-  const activityTime = formatDiscoveryActivityTime(
-    item.public_activity_at,
-    undefined,
-    language
-  );
   const durationDays = getDurationDays(
     item.archive_created_at,
     item.archive_ended_at
@@ -50,9 +46,9 @@ export function DiscoverProjectCard({
     <Link
       href={`/archive/${item.archive_id}`}
       aria-label={`${t.discover.view_project_prefix}${title}`}
-      className={styles.card}
+      className={`${styles.card} ${verticalCard.card}`}
     >
-      <div className={styles.imageRegion}>
+      <div className={`${styles.imageRegion} ${verticalCard.media}`}>
         {showImage ? (
           <Image
             src={item.display_image_url as string}
@@ -91,27 +87,19 @@ export function DiscoverProjectCard({
         </div>
       </div>
 
-      <div className={styles.body}>
-        <p className={styles.summary} aria-hidden={!item.card_summary}>
-          {item.card_summary || "\u00a0"}
-        </p>
-        {activityTime ? (
-          <time
-            className={styles.summaryTime}
-            dateTime={item.public_activity_at || undefined}
-            suppressHydrationWarning
-          >
-            {activityTime}
-          </time>
-        ) : null}
-      </div>
+      <div className={`${styles.textRegion} ${verticalCard.copy}`}>
+        <div className={styles.body}>
+          <InlineRecordSummary text={item.card_summary} time={item.public_activity_at} className={styles.summary} />
+        </div>
 
       <ProjectMetaLine
         recordCount={item.public_record_count}
         durationDays={durationDays}
         ended={Boolean(item.archive_ended_at)}
-        viewCount={item.view_count}
+        followerCount={item.follower_count}
+        order={["follow", "record", "duration"]}
         compactProjectStats
+        style={{ flexWrap: "nowrap", gap: 8 }}
         className={styles.projectMeta}
       />
 
@@ -120,6 +108,7 @@ export function DiscoverProjectCard({
           {ownerName}
           {region ? ` · ${region}` : ""}
         </span>
+      </div>
       </div>
     </Link>
   );

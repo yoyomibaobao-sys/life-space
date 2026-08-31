@@ -981,6 +981,8 @@ export async function updateLocalArchiveFields(
     group_name?: string | null;
     system_name?: string | null;
     species_name?: string | null;
+    plant_id?: string | null;
+    plant_slug?: string | null;
     source?: string | null;
     note?: string | null;
     archive_summary?: string | null;
@@ -1044,6 +1046,14 @@ export async function updateLocalArchiveFields(
         updates.species_name === undefined
           ? normalizedArchive.species_name
           : normalizeOptionalText(updates.species_name),
+      plant_id:
+        updates.plant_id === undefined
+          ? normalizedArchive.plant_id
+          : normalizeOptionalText(updates.plant_id),
+      plant_slug:
+        updates.plant_slug === undefined
+          ? normalizedArchive.plant_slug
+          : normalizeOptionalText(updates.plant_slug),
       source:
         updates.source === undefined
           ? normalizedArchive.source
@@ -2012,14 +2022,14 @@ export async function restoreLocalArchiveCycle(
     if (!trashEntry) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个已删除茬不存在。");
+      throw new Error("这个已删除轮不存在。");
     }
 
     const cycles = normalizedArchive.cycles || [];
     if (cycles.some((cycle) => cycle.id === trashEntry.cycle.id)) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个茬已经恢复。");
+      throw new Error("这个轮已经恢复。");
     }
 
     const timestamp = nowIso();
