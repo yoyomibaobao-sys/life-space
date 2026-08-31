@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   type EnvironmentFilters,
@@ -22,6 +22,9 @@ import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import GuideCategoryTabs from "@/components/plant/GuideCategoryTabs";
 import MobileSearchField from "@/components/search/MobileSearchField";
+import GuideSearchResults from "@/components/plant/GuideSearchResults";
+import GuideResultsBar from "@/components/plant/GuideResultsBar";
+import { loadGuideDirectoryRows, searchGuideDirectory } from "@/lib/guide-directory-search";
 import { getGuideInterestCount } from "@/lib/guide-interests";
 import { buildLoginHref } from "@/lib/auth-return";
 import { buildGuideDirectoryHref } from "@/lib/guide-directory-navigation";
@@ -51,13 +54,6 @@ const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
 const MAX_RECENT_SEARCHES = 8;
 const INITIAL_VISIBLE_PLANT_COUNT = 24;
 const PLANT_BATCH_SIZE = 24;
-
-const EMPTY_PUBLIC_GUIDE_SEARCHES: Record<ArchiveCategory, string> = {
-  plant: "",
-  system: "",
-  insect_fish: "",
-  other: "",
-};
 
 function replaceGuideDirectoryUrl(section: ArchiveCategory, query = "", category = "all") {
   window.history.replaceState(window.history.state, "", buildGuideDirectoryHref(section, query, category));
@@ -171,6 +167,8 @@ function FilterSelect({
   hideLabel = false,
   fill = false,
   toolbar = false,
+  disabled = false,
+  title,
 }: {
   label: string;
   value: string;
@@ -180,6 +178,8 @@ function FilterSelect({
   hideLabel?: boolean;
   fill?: boolean;
   toolbar?: boolean;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <label
@@ -197,6 +197,8 @@ function FilterSelect({
       )}
       <select
         aria-label={label}
+        disabled={disabled}
+        title={title}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={{
@@ -205,7 +207,7 @@ function FilterSelect({
           width: fill ? "100%" : undefined,
           borderRadius: compact ? 10 : 12,
           border: "1px solid #e5e7eb",
-          padding: compact ? "0 10px" : "0 12px",
+          padding: compact ? toolbar ? "0 6px" : "0 10px" : "0 12px",
           background: "#fff",
           color: "#333",
           fontSize: compact ? 12.5 : 14,
@@ -235,6 +237,8 @@ export default function PlantIndexPage() {
   const [publicGuides, setPublicGuides] = useState<PublicGuideEntry[]>([]);
   const [publicGuideSections, setPublicGuideSections] = useState<PublicGuideSection[]>([]);
   const [publicGuidesLoading, setPublicGuidesLoading] = useState(true);
+  const [publicGuidesError, setPublicGuidesError] = useState(false);
+  const [plantCatalogError, setPlantCatalogError] = useState(false);
   const [aliases, setAliases] = useState<AliasItem[]>([]);
   const [basicOverviews, setBasicOverviews] = useState<BasicOverview[]>([]);
   const [parameters, setParameters] = useState<PlantParameterLite[]>([]);
@@ -242,9 +246,6 @@ export default function PlantIndexPage() {
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
   const [interestCount, setInterestCount] = useState<number | null>(null);
   const [searchInput, setSearchInput] = useState("");
-  const [publicGuideSearchInputs, setPublicGuideSearchInputs] = useState<
-    Record<ArchiveCategory, string>
-  >(EMPTY_PUBLIC_GUIDE_SEARCHES);
   const [query, setQuery] = useState("");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
@@ -304,16 +305,35 @@ export default function PlantIndexPage() {
           initialSection === "other"
         ) {
           setGuideSection(initialSection);
-          if (initialSection === "plant" && initialParams.has("q")) {
+          if (initialSection === "plant" && initialParams.has("category")) {
+            setActiveCategory(initialParams.get("category") || "all");
+          }
+          if (initialParams.has("q")) {
             setSearchInput(initialQuery);
             setQuery(initialQuery);
+            const storedSearch = JSON.parse(window.sessionStorage.getItem(PLANT_SEARCH_STATE_KEY) || "null");
+            if (initialSection === "plant") {
+              setActiveCategory(initialParams.get("category") || storedSearch?.activeCategory || "all");
+              if (storedSearch?.query === initialQuery && storedSearch?.filters) {
+                const savedFilters = storedSearch.filters;
+                setFilters({
+                  light: String(savedFilters.light || "all"),
+                  water: String(savedFilters.water || "all"),
+                  temperature: String(savedFilters.temperature || "all"),
+                  scene: String(savedFilters.scene || "all"),
+                  indoor: String(savedFilters.indoor || "all"),
+                });
+              }
+            } else {
+              setPublicGuideCategories((current) => ({ ...current, [initialSection]: initialParams.get("category") || "all" }));
+            }
+            if (storedSearch?.query === initialQuery) {
+              setVisiblePlantCount(Math.max(INITIAL_VISIBLE_PLANT_COUNT, Number(storedSearch.visiblePlantCount) || INITIAL_VISIBLE_PLANT_COUNT));
+              if (Number.isFinite(Number(storedSearch.scrollY))) pendingScrollYRef.current = Math.max(0, Number(storedSearch.scrollY));
+            }
             setSearchStateRestored(true);
             return;
           } else if (initialSection !== "plant") {
-            setPublicGuideSearchInputs((current) => ({
-              ...current,
-              [initialSection]: initialQuery,
-            }));
             setPublicGuideCategories((current) => ({ ...current, [initialSection]: initialParams.get("category") || "all" }));
             setSearchStateRestored(true);
             return;
@@ -344,7 +364,9 @@ export default function PlantIndexPage() {
 
         const restoredQuery = String(storedState.query ?? "").trim();
         const restoredInput = String(storedState.searchInput ?? restoredQuery).trim();
-        const restoredCategory = String(storedState.activeCategory ?? "all");
+        const restoredCategory = initialSection === "plant" && initialParams.has("category")
+          ? initialParams.get("category") || "all"
+          : String(storedState.activeCategory ?? "all");
         const restoredFilters = storedState.filters || {};
 
         setQuery(restoredQuery);
@@ -398,25 +420,29 @@ export default function PlantIndexPage() {
       setHasCloudAccess(canReadFullGuide);
 
       const [
-        { data: plantData },
-        { data: aliasData },
+        { data: plantData, error: plantError },
+        { data: aliasData, error: aliasError },
         { data: overviewData },
         { data: parameterData },
         interestCountResult,
       ] = await Promise.all([
-        supabase
+        loadGuideDirectoryRows<PlantItem>((from, to) => supabase
           .from("plant_species")
           .select(
             "id, slug, common_name, scientific_name, family, category, sub_category, sort_order, is_active"
           )
           .eq("is_active", true)
           .order("sort_order", { ascending: true, nullsFirst: false })
-          .order("common_name", { ascending: true }),
+          .order("common_name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)),
 
-        supabase
+        loadGuideDirectoryRows<AliasItem>((from, to) => supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name")
-          .order("alias_name", { ascending: true }),
+          .order("species_id", { ascending: true })
+          .order("alias_name", { ascending: true })
+          .range(from, to)),
 
         user
           ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))
@@ -435,13 +461,17 @@ export default function PlantIndexPage() {
 
       setPlants(plantData || []);
       setAliases(aliasData || []);
+      setPlantCatalogError(Boolean(plantError || aliasError));
       setBasicOverviews((overviewData || []) as BasicOverview[]);
       setParameters(parameterData || []);
       setInterestCount(interestCountResult);
       setLoading(false);
     }
 
-    load();
+    void load().catch(() => {
+      setPlantCatalogError(true);
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -449,14 +479,16 @@ export default function PlantIndexPage() {
 
     async function loadPublicGuides() {
       const [entryResult, sectionResult] = await Promise.all([
-        supabase
-        .from("guide_entries")
+        loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
+          .from("guide_entries")
           .select(
             "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, sort_order, is_active",
           )
           .eq("is_active", true)
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)),
         supabase
           .from("guide_sections")
           .select("id, category, slug, name, name_en, summary, summary_en, sort_order")
@@ -470,15 +502,19 @@ export default function PlantIndexPage() {
       if (entryError) {
         // Compatibility while the guide-library expansion migration is being
         // rolled out: keep the earlier flat list readable.
-        const fallback = await supabase
+        const fallback = await loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
           .from("guide_entries")
-          .select("id, category, name, source")
-          .order("name", { ascending: true });
+          .select("id, category, name, source, is_active")
+          .eq("is_active", true)
+          .order("name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to));
         entryData = (fallback.data || []) as PublicGuideEntry[];
         entryError = fallback.error;
       }
 
       if (!cancelled) {
+        setPublicGuidesError(Boolean(entryError || sectionResult.error));
         if (entryError) {
           // Older deployments do not have the public guide table yet. The
           // existing plant guide remains available until the migration lands.
@@ -498,21 +534,26 @@ export default function PlantIndexPage() {
       }
     }
 
-    void loadPublicGuides();
+    void loadPublicGuides().catch(() => {
+      if (!cancelled) {
+        setPublicGuidesError(true);
+        setPublicGuidesLoading(false);
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
   useEffect(() => {
-    if (loading || !searchStateRestored || pendingScrollYRef.current === null) return;
+    if (loading || (query && publicGuidesLoading) || !searchStateRestored || pendingScrollYRef.current === null) return;
 
     const scrollY = pendingScrollYRef.current;
     pendingScrollYRef.current = null;
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
     });
-  }, [loading, searchStateRestored, visiblePlantCount]);
+  }, [loading, publicGuidesLoading, query, searchStateRestored, visiblePlantCount]);
 
   useEffect(() => {
     if (!searchPanelOpen || isMobileViewport) return;
@@ -528,19 +569,20 @@ export default function PlantIndexPage() {
   }, [searchPanelOpen, isMobileViewport]);
 
   useEffect(() => {
-    if (!isMobileViewport || !searchStateRestored || guideSection !== "plant") return;
+    if (!searchStateRestored || searchInput.trim() === query) return;
 
     const timer = window.setTimeout(() => {
       const keyword = searchInput.trim();
       setQuery(keyword);
       setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
       persistSearchState(keyword, searchInput, INITIAL_VISIBLE_PLANT_COUNT);
+      replaceGuideDirectoryUrl(guideSection, keyword, guideSection === "plant" ? activeCategory : publicGuideCategories[guideSection]);
     }, 260);
 
     return () => window.clearTimeout(timer);
     // persistSearchState deliberately reads the current filters and category.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guideSection, searchStateRestored, isMobileViewport, searchInput]);
+  }, [guideSection, searchStateRestored, searchInput]);
 
   const aliasMap = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -573,6 +615,11 @@ export default function PlantIndexPage() {
 
     return map;
   }, [basicOverviews]);
+
+  const globalSearchMatches = useMemo(
+    () => searchGuideDirectory({ query, plants, aliases: aliasMap, entries: publicGuides, sections: publicGuideSections }),
+    [query, plants, aliasMap, publicGuides, publicGuideSections],
+  );
 
   const parameterMap = useMemo(() => {
     const map: Record<string, PlantParameterLite> = {};
@@ -705,22 +752,8 @@ export default function PlantIndexPage() {
   }, [filteredPlants.length, hasMoreVisiblePlants]);
 
   const searchSuggestions = useMemo(() => {
-    const keyword = normalize(searchInput);
-    if (!keyword) return [];
-
-    return plants
-      .filter((plant) => {
-        const searchable = [
-          plant.common_name,
-          plant.scientific_name,
-          plant.slug,
-          ...(aliasMap[plant.id] || []),
-        ];
-
-        return searchable.some((item) => normalize(item).includes(keyword));
-      })
-      .slice(0, 6);
-  }, [plants, aliasMap, searchInput]);
+    return searchGuideDirectory({ query: searchInput, plants, aliases: aliasMap, entries: publicGuides, sections: publicGuideSections }).slice(0, 6);
+  }, [plants, aliasMap, publicGuides, publicGuideSections, searchInput]);
 
   const hasActiveEnvironmentFilters =
     hasCloudAccess &&
@@ -741,6 +774,7 @@ export default function PlantIndexPage() {
   function changeCategory(value: string) {
     setActiveCategory(value);
     setVisiblePlantCount(INITIAL_VISIBLE_PLANT_COUNT);
+    replaceGuideDirectoryUrl(guideSection, query, value);
   }
 
   function resetFilters() {
@@ -807,6 +841,7 @@ export default function PlantIndexPage() {
     setSearchPanelOpen(false);
     rememberSearch(keyword);
     persistSearchState(keyword, keyword, INITIAL_VISIBLE_PLANT_COUNT);
+    replaceGuideDirectoryUrl(guideSection, keyword, guideSection === "plant" ? activeCategory : publicGuideCategories[guideSection]);
 
     window.requestAnimationFrame(() => {
       resultsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -842,10 +877,12 @@ export default function PlantIndexPage() {
   }
 
   function changeGuideSection(section: ArchiveCategory) {
-    if (guideSection === "plant") persistSearchState();
+    persistSearchState("", "", INITIAL_VISIBLE_PLANT_COUNT);
     setGuideSection(section);
+    setSearchInput("");
+    setQuery("");
     setSearchPanelOpen(false);
-    replaceGuideDirectoryUrl(section, section === "plant" ? "" : publicGuideSearchInputs[section], publicGuideCategories[section]);
+    replaceGuideDirectoryUrl(section, "", section === "plant" ? activeCategory : publicGuideCategories[section]);
   }
 
   function renderSearchAssist() {
@@ -856,16 +893,17 @@ export default function PlantIndexPage() {
             {t.plant.name_suggestions}
           </div>
           {searchSuggestions.length > 0 ? (
-            searchSuggestions.map((plant) => {
-              const displayName = plant.common_name || plant.scientific_name || t.plant.unnamed;
+            searchSuggestions.map((match) => {
+              const displayName = match.kind === "plant" ? match.plant.common_name || match.plant.scientific_name || t.plant.unnamed : getPublicGuideName(match.entry, language);
 
               return (
                 <Link
-                  key={plant.id}
-                  href={`/plant/${plant.id}`}
+                  key={match.key}
+                  href={match.kind === "plant" ? `/plant/${match.plant.id}` : `/plant/guide/${match.entry.id}?from=${match.category}`}
                   onClick={() => {
                     rememberSearch(searchInput);
                     persistSearchState(searchInput.trim(), searchInput.trim());
+                    replaceGuideDirectoryUrl(guideSection, searchInput.trim(), guideSection === "plant" ? activeCategory : publicGuideCategories[guideSection]);
                   }}
                   style={{
                     display: "flex",
@@ -881,7 +919,7 @@ export default function PlantIndexPage() {
                 >
                   <span style={{ minWidth: 0 }}>
                     <strong style={{ display: "block", fontSize: 14 }}>{displayName}</strong>
-                    {plant.scientific_name && plant.scientific_name !== displayName ? (
+                    {match.kind === "plant" && match.plant.scientific_name && match.plant.scientific_name !== displayName ? (
                       <span
                         style={{
                           display: "block",
@@ -894,7 +932,7 @@ export default function PlantIndexPage() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {plant.scientific_name}
+                        {match.plant.scientific_name}
                       </span>
                     ) : null}
                   </span>
@@ -994,6 +1032,22 @@ export default function PlantIndexPage() {
     );
   }
 
+  const globalResults = query ? (
+    <GuideSearchResults
+      matches={globalSearchMatches}
+      loading={loading || publicGuidesLoading}
+      loadError={plantCatalogError || publicGuidesError}
+      visibleCount={visiblePlantCount}
+      signedIn={isSignedIn}
+      plantSummaries={guideMap}
+      onOpen={() => { rememberSearch(query); persistSearchState(); }}
+      onClear={() => executeSearch("")}
+      onLoadMore={() => setVisiblePlantCount((current) => current + PLANT_BATCH_SIZE)}
+      savedLink={<PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact={isMobileViewport} category={guideSection} />}
+      sectionRef={resultsSectionRef}
+    />
+  ) : null;
+
   return (
     <>
       <HomeSectionTabs
@@ -1061,8 +1115,8 @@ export default function PlantIndexPage() {
               onKeyDown={(event) => {
                 if (event.key === "Escape") setSearchPanelOpen(false);
               }}
-              placeholder={t.plant.search_placeholder}
-              aria-label={t.plant.search_placeholder}
+              placeholder={t.plant.global_search}
+              aria-label={t.plant.global_search}
               style={{
                 width: "100%",
                 minWidth: 0,
@@ -1116,7 +1170,7 @@ export default function PlantIndexPage() {
           ) : null}
         </div> : null}
 
-        {!isMobileViewport ? (
+        {!isMobileViewport && !query ? (
           <div
             style={{
               display: "flex",
@@ -1210,8 +1264,8 @@ export default function PlantIndexPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: hasCloudAccess
-                    ? "minmax(0, 1fr) minmax(120px, 1.2fr) auto"
-                    : "minmax(0, 1fr) minmax(120px, 1.2fr)",
+                    ? "minmax(0, 1fr) 100px auto"
+                    : "minmax(0, 1fr) 100px",
                   alignItems: "center",
                   gap: 6,
                   width: "100%",
@@ -1221,15 +1275,17 @@ export default function PlantIndexPage() {
                   value={searchInput}
                   onChange={setSearchInput}
                   onClear={() => setSearchInput("")}
-                  placeholder={t.plant.search}
-                  ariaLabel={publicGuideCopy[language].searchPlaceholder}
+                  placeholder={publicGuideCopy[language].searchPlaceholder}
+                  ariaLabel={t.plant.global_search}
                   clearAriaLabel={t.plant.clear_search}
                 />
                 <FilterSelect
                   label={t.plant.category}
-                  value={activeCategory}
+                  value={query ? "__global" : activeCategory}
                   onChange={changeCategory}
-                  options={mobileCategoryFilterOptions}
+                  options={query ? [{ value: "__global", label: t.plant.global_scope }] : mobileCategoryFilterOptions}
+                  disabled={Boolean(query)}
+                  title={query ? t.plant.global_search_filter_hint : undefined}
                   compact
                   hideLabel
                   fill
@@ -1239,17 +1295,19 @@ export default function PlantIndexPage() {
                   <button
                     type="button"
                     onClick={toggleMobileFilters}
-                    aria-expanded={mobileFiltersOpen}
-                    aria-label={mobileFiltersOpen ? t.plant.hide_filters : t.plant.show_filters}
-                    style={mobileFilterToggleStyle}
+                    disabled={Boolean(query)}
+                    title={query ? t.plant.global_search_filter_hint : undefined}
+                    aria-expanded={!query && mobileFiltersOpen}
+                    aria-label={!query && mobileFiltersOpen ? t.plant.hide_filters : t.plant.show_filters}
+                    style={query ? { ...mobileFilterToggleStyle, opacity: 0.5, cursor: "default" } : mobileFilterToggleStyle}
                   >
-                    {mobileFiltersOpen ? t.plant.hide_filters_short : t.plant.show_filters}
-                    {activeEnvironmentFilterCount > 0 ? ` (${activeEnvironmentFilterCount})` : ""}
+                    {!query && mobileFiltersOpen ? t.plant.hide_filters_short : t.plant.show_filters}
+                    {!query && activeEnvironmentFilterCount > 0 ? ` (${activeEnvironmentFilterCount})` : ""}
                   </button>
                 ) : null}
               </div>
 
-              {hasCloudAccess && mobileFiltersOpen ? (
+              {!query && hasCloudAccess && mobileFiltersOpen ? (
                 <div style={mobileAdvancedFiltersStyle}>
                   <FilterSelect label={t.plant.light} value={filters.light} onChange={(value) => updateFilter("light", value)} options={lightOptions} compact hideLabel fill />
                   <FilterSelect label={t.plant.water} value={filters.water} onChange={(value) => updateFilter("water", value)} options={waterOptions} compact hideLabel fill />
@@ -1259,7 +1317,7 @@ export default function PlantIndexPage() {
                 </div>
               ) : null}
             </>
-          ) : (
+          ) : !query ? (
             <>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>
@@ -1284,65 +1342,17 @@ export default function PlantIndexPage() {
                 ) : null}
               </div>
             </>
-          )}
+          ) : null}
         </div>
       </section>
 
-      <section
+      {globalResults || <section
         ref={resultsSectionRef}
         style={{ marginTop: isMobileViewport ? 10 : 18, scrollMarginTop: 12 }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 10,
-            gap: 12,
-            flexWrap: isMobileViewport ? "nowrap" : "wrap",
-          }}
-        >
-          {!isMobileViewport || query ? (
-            <h2 style={{ margin: 0, fontSize: isMobileViewport ? 16 : 18 }}>
-              {query
-                ? `${t.plant.results_prefix}${query}${t.plant.results_suffix}`
-                : t.plant.all_plants}
-            </h2>
-          ) : null}
-
-          <div
-            style={{
-              width: isMobileViewport && !query ? "100%" : undefined,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: isMobileViewport && !query ? "space-between" : undefined,
-              gap: 9,
-            }}
-          >
-            <span style={{ fontSize: 13, color: "#888" }}>
-              {loading ? t.plant.loading : `${filteredPlants.length}${t.plant.result_suffix}`}
-            </span>
-            {query ? (
-              <button
-                type="button"
-                onClick={() => executeSearch("")}
-                style={{
-                  border: 0,
-                  padding: 0,
-                  background: "transparent",
-                  color: "#587552",
-                  cursor: "pointer",
-                  fontSize: 13,
-                }}
-              >
-                {t.plant.clear_search}
-              </button>
-            ) : null}
-            {isMobileViewport ? (
-              <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact />
-            ) : null}
-          </div>
-        </div>
+        {!isMobileViewport ? <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>{t.plant.all_plants}</h2> : null}
+        <GuideResultsBar count={filteredPlants.length} loading={loading} savedLink={isMobileViewport ? <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact /> : null} />
+        {plantCatalogError ? <p role="alert" style={{ color: "#71806d", fontSize: 13 }}>{t.plant.search_load_error}</p> : null}
 
         {loading ? (
           <div
@@ -1367,7 +1377,7 @@ export default function PlantIndexPage() {
               lineHeight: 1.75,
             }}
           >
-            {t.plant.no_results}
+            {plantCatalogError ? t.plant.search_retry : t.plant.no_results}
           </div>
         ) : (
           <div
@@ -1553,7 +1563,7 @@ export default function PlantIndexPage() {
             </button>
           </div>
         ) : null}
-      </section>
+      </section>}
       </>
       ) : (
         <PublicGuideLibrary
@@ -1561,18 +1571,13 @@ export default function PlantIndexPage() {
           entries={publicGuides.filter((entry) => entry.category === guideSection)}
           sections={publicGuideSections.filter((section) => section.category === guideSection)}
           loading={publicGuidesLoading}
-          searchInput={publicGuideSearchInputs[guideSection]}
-          onSearchInputChange={(value) => {
-            setPublicGuideSearchInputs((current) => ({
-              ...current,
-              [guideSection]: value,
-            }));
-            replaceGuideDirectoryUrl(guideSection, value, publicGuideCategories[guideSection]);
-          }}
+          searchInput={searchInput}
+          onSearchInputChange={setSearchInput}
+          globalResults={globalResults}
           selectedSection={publicGuideCategories[guideSection] || "all"}
           onSectionChange={(category) => {
             setPublicGuideCategories((current) => ({ ...current, [guideSection]: category }));
-            replaceGuideDirectoryUrl(guideSection, publicGuideSearchInputs[guideSection], category);
+            replaceGuideDirectoryUrl(guideSection, query, category);
           }}
           isMobile={isMobileViewport}
           language={language}
@@ -1600,6 +1605,7 @@ function PublicGuideLibrary({
   isSignedIn,
   hasCloudAccess,
   interestCount,
+  globalResults,
 }: {
   category: ArchiveCategory;
   entries: PublicGuideEntry[];
@@ -1614,9 +1620,10 @@ function PublicGuideLibrary({
   isSignedIn: boolean;
   hasCloudAccess: boolean;
   interestCount: number | null;
+  globalResults: ReactNode;
 }) {
   const { t } = useLanguage();
-  const keyword = normalize(searchInput);
+  const globalSearchActive = Boolean(globalResults);
   const copy = publicGuideCopy[language];
   const orderedEntries = sortPublicGuides(entries);
   const orderedSections = sortPublicGuides(sections).filter((section) =>
@@ -1656,10 +1663,7 @@ function PublicGuideLibrary({
     ) {
       return false;
     }
-    if (!keyword) return true;
-    return [entry.name, entry.name_en, entry.summary, entry.summary_en].some(
-      (value) => normalize(value).includes(keyword),
-    );
+    return true;
   });
 
   function resetWaterFilters() {
@@ -1735,21 +1739,23 @@ function PublicGuideLibrary({
   return (
     <section>
       <div style={publicGuidePanelStyle(isMobile)}>
-      <div style={{ display: "grid", gridTemplateColumns: showWaterFilters ? "minmax(0, 1fr) minmax(90px, .8fr) auto" : "minmax(0, 1fr) minmax(90px, .8fr)", alignItems: "center", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? showWaterFilters ? "minmax(0, 1fr) 100px auto" : "minmax(0, 1fr) 100px" : showWaterFilters ? "minmax(0, 1fr) minmax(90px, .8fr) auto" : "minmax(0, 1fr) minmax(90px, .8fr)", alignItems: "center", gap: 6 }}>
         <MobileSearchField
           value={searchInput}
           onChange={onSearchInputChange}
           onClear={() => onSearchInputChange("")}
           placeholder={copy.searchPlaceholder}
-          ariaLabel={copy.searchPlaceholder}
+          ariaLabel={t.plant.global_search}
           clearAriaLabel={t.plant.clear_search}
         />
         <FilterSelect
           label={t.plant.category}
-          value={activeSectionId}
+          value={globalSearchActive ? "__global" : activeSectionId}
           onChange={changeSection}
-          options={[
-            { value: "all", label: isMobile && language !== "en" ? `${t.plant.category}（全部）` : copy.allCategories },
+          disabled={globalSearchActive}
+          title={globalSearchActive ? t.plant.global_search_filter_hint : undefined}
+          options={globalSearchActive ? [{ value: "__global", label: t.plant.global_scope }] : [
+            { value: "all", label: copy.allCategories },
             ...orderedSections.map((section) => ({ value: section.id, label: getPublicGuideSectionName(section, language) })),
           ]}
           compact={isMobile}
@@ -1758,14 +1764,14 @@ function PublicGuideLibrary({
           toolbar
         />
         {showWaterFilters ? (
-          <button type="button" onClick={() => setWaterFiltersOpen((open) => !open)} aria-expanded={waterFiltersOpen} style={mobileFilterToggleStyle}>
-            {waterFiltersOpen ? t.plant.hide_filters : t.plant.show_filters}
-            {activeWaterFilterCount > 0 ? ` (${activeWaterFilterCount})` : ""}
+          <button type="button" onClick={() => setWaterFiltersOpen((open) => !open)} disabled={globalSearchActive} title={globalSearchActive ? t.plant.global_search_filter_hint : undefined} aria-expanded={!globalSearchActive && waterFiltersOpen} style={globalSearchActive ? { ...mobileFilterToggleStyle, opacity: 0.5, cursor: "default" } : mobileFilterToggleStyle}>
+            {!globalSearchActive && waterFiltersOpen ? t.plant.hide_filters_short : t.plant.show_filters}
+            {!globalSearchActive && activeWaterFilterCount > 0 ? ` (${activeWaterFilterCount})` : ""}
           </button>
         ) : null}
       </div>
 
-      {showWaterFilters && waterFiltersOpen ? (
+      {!globalSearchActive && showWaterFilters && waterFiltersOpen ? (
         <div style={publicGuideWaterFilterPanelStyle}>
           <div style={publicGuideWaterFilterHeadingStyle}>
             <strong>{copy.waterPlantFilters}</strong>
@@ -1826,22 +1832,21 @@ function PublicGuideLibrary({
 
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 9, margin: "10px 0" }}>
-        <span style={{ fontSize: 13, color: "#888" }}>{loading ? copy.loading : `${visibleEntries.length}${t.plant.result_suffix}`}</span>
-        <PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact={isMobile} category={category} />
-      </div>
+      {globalResults || <>
+      <GuideResultsBar count={visibleEntries.length} loading={loading} savedLink={<PlantMenu signedIn={isSignedIn} interestCount={interestCount} compact={isMobile} category={category} />} />
 
       {loading ? (
         <div style={publicGuideEmptyStyle}>{copy.loading}</div>
       ) : visibleEntries.length === 0 ? (
         <div style={publicGuideEmptyStyle}>
-          {keyword || activeWaterFilterCount > 0 ? copy.noMatch : copy.empty}
+          {activeSectionId !== "all" || activeWaterFilterCount > 0 ? copy.noMatch : copy.empty}
         </div>
       ) : (
         <div style={publicGuideGridStyle(isMobile)}>
           {visibleEntries.map(renderGuideCard)}
         </div>
       )}
+      </>}
     </section>
   );
 }
@@ -1863,9 +1868,10 @@ function PlantMenu({
     <Link
       href={signedIn ? `/archive/interests?section=${category}` : buildLoginHref(`/archive/interests?section=${category}`)}
       style={plantMenuSummaryStyle(compact)}
+      aria-label={`${t.plant.my_saved}${signedIn && interestCount !== null ? ` (${interestCount})` : ""}`}
     >
       {compact ? null : <UiIcon name="bookmark" size={14} style={{ marginRight: 4 }} />}
-      {t.plant.my_saved}{signedIn && interestCount !== null ? `（${interestCount}）` : ""}
+      {compact ? t.plant.saved_short : t.plant.my_saved}{signedIn && interestCount !== null ? ` (${interestCount})` : ""}
     </Link>
   );
 }

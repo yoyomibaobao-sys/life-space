@@ -108,7 +108,7 @@ export default function PublicExperiencePage() {
         ) : filteredItems.length === 0 ? (
           <section style={emptyStyle}>{t.experience.no_public_experience}</section>
         ) : (
-          <PublicExperienceGallery items={filteredItems} />
+          <PublicExperienceGallery items={filteredItems} showCategoryBadge={categoryFilter === "all"} />
         )}
       </main>
     </>

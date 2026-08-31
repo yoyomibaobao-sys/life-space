@@ -23,7 +23,7 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
 
   assert.match(
     guide,
-    /gridTemplateColumns: hasCloudAccess[\s\S]*?"minmax\(0, 1fr\) minmax\(120px, 1\.2fr\) auto"/
+    /gridTemplateColumns: hasCloudAccess[\s\S]*?"minmax\(0, 1fr\) 100px auto"/
   );
   assert.match(
     guide,
@@ -32,8 +32,8 @@ test("mobile Guide keeps one compact row and clears advanced filters when collap
   assert.match(guide, /if \(mobileFiltersOpen\) resetFilters\(\)/);
   assert.match(guide, /gridTemplateColumns: "repeat\(2, minmax\(0, 1fr\)\)"/);
   const mobileAdvancedBlock = guide.slice(
-    guide.indexOf("{hasCloudAccess && mobileFiltersOpen ? ("),
-    guide.indexOf("</div>\n              ) : null}", guide.indexOf("{hasCloudAccess && mobileFiltersOpen ? ("))
+    guide.indexOf("{!query && hasCloudAccess && mobileFiltersOpen ? ("),
+    guide.indexOf("</div>\n              ) : null}", guide.indexOf("{!query && hasCloudAccess && mobileFiltersOpen ? ("))
   );
   assert.doesNotMatch(mobileAdvancedBlock, /clear_environment_filters/);
   assert.doesNotMatch(favorites, /t\.plant_lists\.saved_on/);

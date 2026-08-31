@@ -106,7 +106,7 @@ test("public guide library has sections, reusable content, and openable details"
   assert.match(newProject, /searchParams\.get\("system_name"\)/);
 });
 
-test("non-plant guides use the confirmed hierarchy, independent search, and plant-style related content", async () => {
+test("non-plant guides keep their browsing hierarchy with shared global search and plant-style related content", async () => {
   const [migration, indexPage, detailPage, guideLibrary] = await Promise.all([
     source("supabase/migrations/20260829120000_expand_domain_guide_hierarchy.sql"),
     source("app/plant/page.tsx"),
@@ -150,7 +150,8 @@ test("non-plant guides use the confirmed hierarchy, independent search, and plan
   assert.match(migration, /where entry\.source = 'preset'/);
   assert.doesNotMatch(migration, /where entry\.category = 'plant'/);
 
-  assert.match(indexPage, /publicGuideSearchInputs/);
+  assert.match(indexPage, /searchInput=\{searchInput\}/);
+  assert.match(indexPage, /globalResults=\{globalResults\}/);
   assert.match(indexPage, /publicGuideCategories/);
   assert.match(indexPage, /activeSection\?\.slug === "aquatic_plants"/);
   assert.match(indexPage, /matchesPublicGuideFilters/);

@@ -7,6 +7,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 type Props = {
   items: DiscoveryProjectFeedItem[];
   helpOnly: boolean;
+  showCategoryBadge?: boolean;
   initialLoading: boolean;
   loadingMore: boolean;
   initialError: boolean;
@@ -44,6 +45,7 @@ function SkeletonGrid({ count }: { count: number }) {
 export function DiscoverProjectGrid({
   items,
   helpOnly,
+  showCategoryBadge = true,
   initialLoading,
   loadingMore,
   initialError,
@@ -94,6 +96,7 @@ export function DiscoverProjectGrid({
             key={item.archive_id}
             item={item}
             eager={index < 4}
+            showCategoryBadge={showCategoryBadge}
           />
         ))}
       </div>

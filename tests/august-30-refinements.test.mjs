@@ -298,7 +298,7 @@ test("every confirmed non-plant preset has distinct bilingual practical content"
       const content = getPracticalGuideContent(entry(category, name), language);
       assert.ok(content, `${category}/${name}/${language} missing`);
       assert.ok(content.overview.length > 12, name);
-      assert.equal(content.sections.length, 4, name);
+      assert.ok(content.sections.length >= 2, `${name} needs both preparation and follow-through`);
       assert.ok(content.sections.every((section) => section.items.length > 0 && section.items.every((item) => item.trim().length > (language === "zh" ? 8 : 20))), name);
       assert.equal(content.cycle, null, "do not invent a universal cycle");
       assert.ok(content.cautions.length > 0);
@@ -592,7 +592,7 @@ test("guide favorites SQL has owner RLS, cloud-member insert gating, and no anon
   assert.match(insertPolicy, /guide\.id = user_guide_interests\.guide_id and guide\.is_active = true/);
 });
 
-test("favorites and guide libraries share four tabs, retain per-domain searches, and only water plants add filters", () => {
+test("favorites and guide libraries share four tabs, preserve browsing filters, and use one search", () => {
   const favorites = source("app/archive/interests/page.tsx");
   const guides = source("app/plant/page.tsx");
   assert.match(favorites, /<GuideCategoryTabs value=\{activeCategory\}/);
@@ -601,7 +601,8 @@ test("favorites and guide libraries share four tabs, retain per-domain searches,
   assert.match(favorites, /router\.replace\([\s\S]*?scroll: false/);
   assert.match(guides, /activeSection\?\.slug === "aquatic_plants"/);
   assert.match(guides, /selectedSection=\{publicGuideCategories\[guideSection\]/);
-  assert.match(guides, /searchInput=\{publicGuideSearchInputs\[guideSection\]/);
+  assert.match(guides, /searchInput=\{searchInput\}/);
+  assert.match(guides, /searchGuideDirectory\(\{ query, plants, aliases: aliasMap, entries: publicGuides/);
   assert.doesNotMatch(guides, /\{copy\.notice\}|\{copy\.publicLibrary\}/);
 });
 
@@ -690,14 +691,14 @@ test("plant filters remain unchanged while only water plants expose multi-select
   assert.match(page, /activeSection\?\.slug === "aquatic_plants" &&\s*hasCloudAccess/);
 });
 
-test("guide directory URLs scope searches and category filters to one major category", () => {
+test("guide directory URLs preserve the global query and original browsing category", () => {
   const { buildGuideDirectoryHref } = load("lib/guide-directory-navigation.ts");
   for (const major of ["plant", "system", "insect_fish", "other"]) {
     const url = new URL(buildGuideDirectoryHref(major, "  梅 & 莫斯  ", "section-2"), "https://example.test");
     assert.equal(url.pathname, "/plant");
     assert.equal(url.searchParams.get("section"), major);
     assert.equal(url.searchParams.get("q"), "梅 & 莫斯");
-    assert.equal(url.searchParams.get("category"), major === "plant" ? null : "section-2");
+    assert.equal(url.searchParams.get("category"), "section-2");
   }
   assert.equal(buildGuideDirectoryHref("other", " "), "/plant?section=other");
 });
@@ -708,17 +709,19 @@ test("changing a guide section synchronizes its URL while preserving router hist
   const locations = [];
   const window = { history: { state, replaceState: (...args) => locations.push(args) } };
   const replaceGuideDirectoryUrl = loadFunction("app/plant/page.tsx", "replaceGuideDirectoryUrl", { window, buildGuideDirectoryHref });
-  const publicGuideSearchInputs = { plant: "玉米", system: "土壤 & 堆肥", insect_fish: "莫斯", other: "梅子蜜" };
   const publicGuideCategories = { system: "soil", insect_fish: "aquatic", other: "food" };
   for (const section of ["other", "system", "plant", "insect_fish"]) {
     const selected = [];
     const panels = [];
-    let persisted = 0;
+    const persisted = [];
+    const inputs = [];
+    const queries = [];
     const guideSection = section === "insect_fish" ? "plant" : "insect_fish";
     const changeSection = loadFunction("app/plant/page.tsx", "changeGuideSection", {
-      guideSection, persistSearchState: () => persisted++,
+      guideSection, persistSearchState: (...args) => persisted.push(args), INITIAL_VISIBLE_PLANT_COUNT: 24,
       setGuideSection: (next) => selected.push(next), setSearchPanelOpen: (open) => panels.push(open),
-      replaceGuideDirectoryUrl, publicGuideSearchInputs, publicGuideCategories,
+      setSearchInput: (value) => inputs.push(value), setQuery: (value) => queries.push(value),
+      replaceGuideDirectoryUrl, publicGuideCategories, activeCategory: "fruit",
     });
     changeSection(section);
     const [savedState, title, href] = locations.at(-1);
@@ -726,11 +729,13 @@ test("changing a guide section synchronizes its URL while preserving router hist
     assert.equal(title, "");
     const url = new URL(href, "https://example.test");
     assert.equal(url.searchParams.get("section"), section);
-    assert.equal(url.searchParams.get("q"), section === "plant" ? null : publicGuideSearchInputs[section]);
-    assert.equal(url.searchParams.get("category"), publicGuideCategories[section] || null);
+    assert.equal(url.searchParams.get("q"), null);
+    assert.equal(url.searchParams.get("category"), section === "plant" ? "fruit" : publicGuideCategories[section] || null);
     assert.deepEqual(selected, [section]);
     assert.deepEqual(panels, [false]);
-    assert.equal(persisted, guideSection === "plant" ? 1 : 0);
+    assert.deepEqual(inputs, [""]);
+    assert.deepEqual(queries, [""]);
+    assert.deepEqual(persisted, [["", "", 24]]);
   }
 });
 
@@ -799,17 +804,24 @@ test("saved-guide status links into the matching collection without an unsave to
   }
 });
 
-test("space group selectors show a single concise path, never repeated empty levels", () => {
+test("space group selectors are independent siblings and hide levels without options", () => {
   const zh = load("lib/i18n/zh.ts").default;
   const Taxonomy = createLoader({ "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: zh }) } })("components/archive/MobileArchiveTaxonomyInline.tsx").default;
   const props = { category: "plant", subTags: [{ id: "first", name: "屋顶菜园", category: "plant" }], groupTags: [{ id: "second", name: "东边种植箱", sub_tag_id: "first" }], maxDepth: 3, onChangeCategory: () => {}, onChangeGroup: () => {} };
   const render = (extra) => renderToStaticMarkup(React.createElement(Taxonomy, { ...props, ...extra }));
   const empty = render({});
-  assert.equal((empty.match(/>未分组</g) || []).length, 1);
-  assert.doesNotMatch(empty, />一级分组<|>二级分组</);
+  assert.equal((empty.match(/<button /g) || []).length, 2);
+  assert.match(empty, />一级分组</);
+  assert.doesNotMatch(empty, />二级分组</);
   assert.match(render({ subTagId: "first" }), /屋顶菜园/);
   assert.doesNotMatch(render({ subTagId: "first" }), /未分组/);
-  assert.match(render({ subTagId: "first", groupTagId: "second" }), /屋顶菜园 · 东边种植箱/);
+  const selected = render({ subTagId: "first", groupTagId: "second" });
+  assert.equal((selected.match(/<button /g) || []).length, 3);
+  assert.match(selected, /屋顶菜园<\/span>[\s\S]*?<\/button><button[^>]*aria-label="二级分组"[\s\S]*?东边种植箱/);
+  assert.doesNotMatch(render({ subTags: [] }), /aria-label="一级分组"|aria-label="二级分组"/);
+  assert.doesNotMatch(render({ category: "system" }), /aria-label="一级分组"|aria-label="二级分组"/);
+  assert.doesNotMatch(render({ subTagId: "first", groupTags: [] }), /aria-label="二级分组"/);
+  assert.doesNotMatch(render({ subTagId: "first", groupTags: [{ id: "other", name: "别处的分组", sub_tag_id: "unrelated" }] }), /aria-label="二级分组"/);
   assert.doesNotMatch(render({ subTagId: "first", groupTagId: "second", maxDepth: 2 }), /东边种植箱/);
   assert.doesNotMatch(render({ maxDepth: 1 }), /未分组/);
   assert.match(empty, /white-space:normal/);
@@ -954,4 +966,168 @@ test("saved-status refresh is owner-scoped, ignores stale/errors and cleans up o
     assert.equal(listeners.size, 0);
     assert.deepEqual(values, [false]);
   }
+});
+
+test("global guide search finds names across all four categories and keeps exact matches first", () => {
+  const { searchGuideDirectory } = load("lib/guide-directory-search.ts");
+  const plants = [{ id: "corn", common_name: "玉米", scientific_name: "Zea mays", category: "grain", is_active: true }];
+  const aliases = { corn: ["苞谷"] };
+  const entries = [
+    entry("system", "堆肥", { summary: "先区分普通堆肥与黑水虻处理", sort_order: 1 }),
+    entry("insect_fish", "黑水虻", { name_en: "Black soldier fly", section_id: "insects", sort_order: 90 }),
+    entry("other", "梅子蜜", { name_en: "Ume honey" }),
+  ];
+  const sections = [{ id: "insects", category: "insect_fish", name: "虫蝶", name_en: "Insects", slug: "insects" }];
+  const search = (query) => searchGuideDirectory({ query, plants, aliases, entries, sections });
+  assert.deepEqual(search(" 黑水虻 ").map((match) => match.category), ["insect_fish", "system"]);
+  assert.equal(search("BLACK SOLDIER FLY")[0].entry.name, "黑水虻");
+  assert.equal(search("苞谷")[0].plant.id, "corn");
+  assert.equal(search("Ｚｅａ　ｍａｙｓ")[0].plant.id, "corn");
+  assert.equal(search("堆肥")[0].category, "system");
+  assert.equal(search("梅子蜜")[0].category, "other");
+  assert.equal(search("虫蝶")[0].entry.name, "黑水虻");
+  assert.deepEqual(search("  "), []);
+  assert.deepEqual(search("%_' OR true --"), []);
+});
+
+test("global search deduplicates plant mirrors, keeps their English aliases, and excludes hidden entries", () => {
+  const { searchGuideDirectory } = load("lib/guide-directory-search.ts");
+  const visible = entry("plant", "紫苏", { id: "mirror", name_en: "Perilla" });
+  const standalone = entry("plant", "新审核植物", { source: "approved" });
+  const props = {
+    plants: [{ id: "plant-id", common_name: "紫苏", is_active: true }, { id: "hidden-plant", common_name: "隐藏植物", is_active: false }],
+    aliases: {},
+    entries: [visible, visible, standalone, entry("system", "隐藏方法", { is_active: false })], sections: [],
+  };
+  const matches = searchGuideDirectory({ ...props, query: "Perilla" });
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].kind, "plant");
+  assert.equal(matches[0].plant.id, "plant-id");
+  assert.equal(searchGuideDirectory({ ...props, query: "新审核植物" })[0].entry.id, standalone.id);
+  assert.deepEqual(searchGuideDirectory({ ...props, query: "隐藏" }), []);
+});
+
+test("guide catalogue loading goes beyond a server page and reports a partial-load failure", async () => {
+  const { loadGuideDirectoryRows, searchGuideDirectory } = load("lib/guide-directory-search.ts");
+  const rows = Array.from({ length: 1005 }, (_, i) => ({ id: `plant-${i}`, common_name: `植物${i}`, is_active: true }));
+  const requests = [];
+  const result = await loadGuideDirectoryRows(async (from, to) => {
+    requests.push([from, to]);
+    return { data: rows.slice(from, to + 1), error: null };
+  });
+  assert.equal(result.error, null);
+  assert.equal(result.data.length, rows.length);
+  assert.deepEqual(requests, [[0, 499], [500, 999], [1000, 1499]]);
+  const matches = searchGuideDirectory({ query: "植物1004", plants: result.data, aliases: {}, entries: [], sections: [] });
+  assert.equal(matches[0].plant.id, "plant-1004");
+  const error = { message: "temporary network failure" };
+  const partial = await loadGuideDirectoryRows(async (from, to) => from === 0
+    ? { data: rows.slice(from, to + 1), error: null } : { data: null, error });
+  assert.equal(partial.data.length, 500);
+  assert.equal(partial.error, error);
+});
+
+test("clearing a global search restores the existing category without resetting environment filters", () => {
+  const { buildGuideDirectoryHref } = load("lib/guide-directory-navigation.ts");
+  const states = [];
+  const locations = [];
+  const filters = { light: "shade", water: "all", temperature: "cool", scene: "all", indoor: "all" };
+  const window = { history: { state: { router: "preserved" }, replaceState: (...args) => locations.push(args) }, requestAnimationFrame: (fn) => fn() };
+  const replaceGuideDirectoryUrl = loadFunction("app/plant/page.tsx", "replaceGuideDirectoryUrl", { window, buildGuideDirectoryHref });
+  const executeSearch = loadFunction("app/plant/page.tsx", "executeSearch", {
+    searchInput: "黑水虻", guideSection: "plant", activeCategory: "fruit", filters, publicGuideCategories: {}, INITIAL_VISIBLE_PLANT_COUNT: 24,
+    setSearchInput: (value) => states.push(["input", value]), setQuery: (value) => states.push(["query", value]),
+    setVisiblePlantCount: (value) => states.push(["limit", value]), setSearchPanelOpen: (value) => states.push(["panel", value]),
+    rememberSearch() {}, persistSearchState() {}, replaceGuideDirectoryUrl, window, resultsSectionRef: { current: null },
+  });
+  executeSearch("");
+  assert.deepEqual(states, [["input", ""], ["query", ""], ["limit", 24], ["panel", false]]);
+  assert.equal(locations[0][2], "/plant?section=plant&category=fruit");
+  assert.deepEqual(filters, { light: "shade", water: "all", temperature: "cool", scene: "all", indoor: "all" });
+});
+
+test("global result cards preserve category routes, hide visitor summaries, and distinguish failed loading from no matches", () => {
+  const zh = load("lib/i18n/zh.ts").default;
+  const Results = createLoader({
+    "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: zh }) },
+    "next/link": ({ children, ...props }) => React.createElement("a", props, children),
+  })("components/plant/GuideSearchResults.tsx").default;
+  const props = {
+    matches: [
+      { kind: "plant", key: "plant:one", category: "plant", plant: { id: "one", common_name: "玉米" } },
+      { kind: "guide", key: "guide:two", category: "insect_fish", entry: entry("insect_fish", "黑水虻", { id: "two", summary: "需要登录的摘要" }) },
+    ],
+    loading: false, loadError: false, visibleCount: 24, signedIn: false,
+    plantSummaries: { one: { summary: "需要登录的植物摘要" } }, onOpen() {}, onClear() {}, onLoadMore() {},
+    savedLink: React.createElement("a", { href: "/archive/interests" }, "收藏 (4)"),
+  };
+  const render = (extra = {}) => renderToStaticMarkup(React.createElement(Results, { ...props, ...extra }));
+  const html = render();
+  assert.match(html, /全部指引 · 2项/);
+  assert.match(html, /href="\/plant\/one"/);
+  assert.match(html, /href="\/plant\/guide\/two\?from=insect_fish"/);
+  assert.match(html, />虫鱼生态</);
+  assert.doesNotMatch(html, /需要登录的摘要|需要登录的植物摘要/);
+  assert.match(render({ signedIn: true }), /需要登录的植物摘要/);
+  const failed = render({ matches: [], loadError: true });
+  assert.match(failed, /结果可能不完整/);
+  assert.doesNotMatch(failed, /没有匹配的指引/);
+  assert.match(render({ matches: [] }), /没有匹配的指引/);
+});
+
+test("discovery category badges can hide independently of the help badge", () => {
+  const zh = load("lib/i18n/zh.ts").default;
+  const { DiscoverProjectCard } = createLoader({
+    "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: zh }) },
+    "next/link": ({ children, ...props }) => React.createElement("a", props, children),
+  })("components/discover/DiscoverProjectCard.tsx");
+  const item = { archive_id: "fixture", archive_title: "测试项目", category: "plant", archive_created_at: "2026-01-01", has_public_help: true, public_record_count: 1, follower_count: 0 };
+  const render = (showCategoryBadge) => renderToStaticMarkup(React.createElement(DiscoverProjectCard, { item, showCategoryBadge }));
+  assert.match(render(true), /class="categoryChip">种植/);
+  assert.doesNotMatch(render(false), /class="categoryChip"/);
+  assert.match(render(false), /class="helpChip">求助/);
+  assert.match(source("app/discover/page.tsx"), /showCategoryBadge=\{filterMode === "all"\}/);
+});
+
+test("experience cards use category badges in All and omit them for a selected category", () => {
+  const zh = load("lib/i18n/zh.ts").default;
+  const Gallery = createLoader({
+    "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: zh }) },
+    "@/lib/experience-cards": { loadExperienceCard: () => { throw new Error("No playback request during card rendering"); } },
+    "@/components/experience-card/PublicExperiencePlayer": () => null,
+    "@/components/experience-card/ExperienceCardSummary": ({ item }) => React.createElement("span", null, item.title),
+    "@/components/StatusBarTheme": {},
+  })("components/experience-card/PublicExperienceGallery.tsx").default;
+  const render = (showCategoryBadge) => renderToStaticMarkup(React.createElement(Gallery, { items: [{ id: "card", title: "测试经验", archiveCategory: "plant" }], showCategoryBadge }));
+  assert.match(render(true), /class="previewCategoryBadge">种植/);
+  assert.doesNotMatch(render(false), /class="previewCategoryBadge"/);
+  assert.match(source("app/experience/page.tsx"), /showCategoryBadge=\{categoryFilter === "all"\}/);
+});
+
+test("new soil presets have bilingual practical content without replacing approved guides", () => {
+  const sql = source("supabase/migrations/20260831084807_expand_soil_practice_guides.sql");
+  const names = [...sql.matchAll(/^    \('([^']+)', '[^']+',/gm)].map((match) => match[1]);
+  assert.equal(names.length, 9);
+  const descriptions = new Set();
+  for (const name of names) {
+    for (const language of ["zh", "en"]) {
+      const content = getPracticalGuideContent(entry("system", name), language);
+      assert.ok(content, `${name}/${language} must have content before its preset is published`);
+      assert.ok(content.sections.length >= 2);
+      assert.ok(content.sections.every((section) => section.items.length >= 2));
+      assert.ok(content.cautions.length > 0);
+      assert.ok(content.sources.length >= 2);
+      assert.equal(content.cycle, null);
+      descriptions.add(content.overview);
+      assert.equal(getPracticalGuideContent(entry("system", name, { source: "approved" }), language), null);
+    }
+  }
+  assert.equal(descriptions.size, 18);
+  const greenManure = JSON.stringify(getPracticalGuideContent(entry("system", "绿肥种植与还田"), "zh"));
+  assert.match(greenManure, /翻入表土/);
+  assert.match(greenManure, /地表/);
+  assert.match(greenManure, /不要立即播种/);
+  const burntEarth = JSON.stringify(getPracticalGuideContent(entry("system", "焖烧土堆"), "zh"));
+  assert.match(burntEarth, /不属于微生物堆肥/);
+  assert.match(burntEarth, /不提供点火/);
 });

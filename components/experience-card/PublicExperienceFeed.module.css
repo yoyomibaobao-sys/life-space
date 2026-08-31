@@ -75,6 +75,23 @@
   transform: translate(-50%, -50%);
 }
 
+.previewCategoryBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(250, 253, 248, 0.94);
+  color: #435641;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .previewPlay::after {
   content: "";
   position: absolute;

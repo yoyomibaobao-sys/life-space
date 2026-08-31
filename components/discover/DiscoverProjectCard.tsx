@@ -20,9 +20,11 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 export function DiscoverProjectCard({
   item,
   eager = false,
+  showCategoryBadge = true,
 }: {
   item: DiscoveryProjectFeedItem;
   eager?: boolean;
+  showCategoryBadge?: boolean;
 }) {
   const { language, t } = useLanguage();
   const [imageFailed, setImageFailed] = useState(false);
@@ -69,16 +71,20 @@ export function DiscoverProjectCard({
           </div>
         )}
 
-        <div className={styles.imageMeta}>
-          <span className={styles.categoryChip}>
-            {categoryLabel}
-          </span>
-          {item.has_public_help ? (
-            <span className={styles.helpChip}>
-              {t.discover.help_badge}
-            </span>
-          ) : null}
-        </div>
+        {showCategoryBadge || item.has_public_help ? (
+          <div className={styles.imageMeta}>
+            {showCategoryBadge ? (
+              <span className={styles.categoryChip}>
+                {categoryLabel}
+              </span>
+            ) : null}
+            {item.has_public_help ? (
+              <span className={styles.helpChip}>
+                {t.discover.help_badge}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className={styles.imageTitleArea}>
           <h2 className={styles.title}>
