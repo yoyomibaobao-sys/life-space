@@ -116,9 +116,9 @@ export function getArchiveCategoryLabel(
   language: Language = "zh"
 ) {
   if (language === "en") {
-    if (value === "plant") return "Cultivation";
-    if (value === "system") return "Methods & facilities";
-    if (value === "insect_fish") return "Insects & aquatic life";
+    if (value === "plant") return "Plants";
+    if (value === "system") return "Methods";
+    if (value === "insect_fish") return "Ecology";
     if (value === "other") return "Other";
     return "Project";
   }

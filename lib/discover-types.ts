@@ -1,4 +1,4 @@
-import type { ArchiveCategory } from "@/lib/archive-categories";
+import { getArchiveCategoryLabel, type ArchiveCategory } from "@/lib/archive-categories";
 import type { Language } from "@/lib/i18n";
 
 export type FeedItem = {
@@ -67,10 +67,10 @@ export function getDiscoverFilterOptions(language: Language): FilterOption[] {
 
   return [
     { value: "all", label: "All" },
-    { value: "plant", label: "Cultivation" },
-    { value: "system", label: "Methods & facilities" },
-    { value: "insect_fish", label: "Insects & aquatic life" },
+    { value: "plant", label: getArchiveCategoryLabel("plant", language) },
+    { value: "system", label: getArchiveCategoryLabel("system", language) },
+    { value: "insect_fish", label: getArchiveCategoryLabel("insect_fish", language) },
     { value: "other", label: "Other" },
-    { value: "help", label: "Help requests" },
+    { value: "help", label: "Help" },
   ];
 }

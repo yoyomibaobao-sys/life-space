@@ -1964,11 +1964,11 @@ export default function ArchivePage() {
               )}
               </Link>
               <span style={personalSpaceMobileIdentityTextStyle}>
-                <span style={personalSpaceMobileNameRowStyle}>
+                <span style={language === "en" ? { ...personalSpaceMobileNameRowStyle, flexDirection: "column", alignItems: "stretch", gap: 2 } : personalSpaceMobileNameRowStyle}>
                   <Link href="/profile" style={personalSpaceMobileUsernameStyle}>
                     {spaceProfile?.username || t.nav.username_unset}
                   </Link>
-                  <span style={personalSpaceMobileMembershipStyle}>{membershipLabel}</span>
+                  <span style={language === "en" ? { ...personalSpaceMobileMembershipStyle, whiteSpace: "normal", overflowWrap: "break-word", lineHeight: 1.2 } : personalSpaceMobileMembershipStyle}>{membershipLabel}</span>
                 </span>
                 <span
                   style={personalSpaceStorageRowStyle}
@@ -1987,7 +1987,7 @@ export default function ArchivePage() {
               </span>
             </div>
             <div style={personalSpaceMobileActionsStyle}>
-              <Link href="/experience-cards" style={personalSpaceInlineEntryStyle}>
+              <Link href="/experience-cards" style={personalSpaceInlineEntryStyle} aria-label={`${t.archive_workspace.my_experience_cards} (${experienceCardCount})`}>
                 {t.archive_workspace.experience_cards} {experienceCardCount}
               </Link>
               <MobileNotificationLink />

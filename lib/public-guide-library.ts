@@ -126,13 +126,13 @@ export const publicGuideCopy = {
   en: {
     publicLibrary: "Public guide library",
     newProject: "New project",
-    searchPlaceholder: "Search guides",
+    searchPlaceholder: "Search",
     notice:
       "Platform presets are public. A guide name you add can be used in your own project immediately; commonly used names enter administrator review before becoming public.",
     loading: "Loading…",
     noMatch: "No matching public guides.",
     empty: "There are no public guides in this section yet.",
-    allCategories: "All categories",
+    allCategories: "All types",
     category: "Category",
     categoryFilter: "Category filter",
     waterPlantFilters: "Aquatic-plant filters",

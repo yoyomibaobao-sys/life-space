@@ -44,8 +44,9 @@ export default function MobileArchiveTaxonomyInline({
     .join(" · ") || t.archive_workspace.ungrouped;
 
   return (
-    <span style={rowStyle} data-no-card-nav="true">
+    <span style={language === "en" ? { ...rowStyle, flexWrap: "wrap", gap: "2px 6px" } : rowStyle} data-no-card-nav="true">
       <InlineSelect
+        naturalWordWrap={language === "en"}
         label={getArchiveCategoryLabel(category, language)}
         ariaLabel={t.archive_workspace.main_category}
         value={category}
@@ -58,6 +59,7 @@ export default function MobileArchiveTaxonomyInline({
 
       {maxDepth >= 2 ? (
         <InlineSelect
+          naturalWordWrap={language === "en"}
           label={groupLabel}
           ariaLabel={t.archive_workspace.group_settings_title}
           sectionLabel={t.archive_workspace.subcategory}
@@ -90,12 +92,14 @@ function InlineSelect({
   onChange,
   sectionLabel,
   secondary,
+  naturalWordWrap = false,
 }: {
   label: string;
   ariaLabel: string;
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
+  naturalWordWrap?: boolean;
   sectionLabel?: string;
   secondary?: {
     label: string;
@@ -175,9 +179,9 @@ function InlineSelect({
           stopCardNavigation(event);
           setOpen((current) => !current);
         }}
-        style={selectWrapStyle}
+        style={naturalWordWrap ? { ...selectWrapStyle, maxWidth: "100%" } : selectWrapStyle}
       >
-        <span style={selectLabelStyle}>{label}</span>
+        <span style={naturalWordWrap ? { ...selectLabelStyle, overflowWrap: "break-word" } : selectLabelStyle}>{label}</span>
         <UiIcon name="chevron-down" size={12} strokeWidth={1.9} />
       </button>
 

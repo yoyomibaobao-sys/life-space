@@ -1409,11 +1409,12 @@ export default function PlantIndexPage() {
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      gap: 12,
+                      gap: language === "en" ? 6 : 12,
                       alignItems: "flex-start",
+                      flexWrap: language === "en" ? "wrap" : undefined,
                     }}
                   >
-                    <h3 style={{ margin: 0, fontSize: isMobileViewport ? 16 : 18, lineHeight: 1.3 }}>
+                    <h3 style={{ margin: 0, fontSize: isMobileViewport ? 16 : 18, lineHeight: 1.3, maxWidth: language === "en" ? "100%" : undefined, overflowWrap: language === "en" ? "break-word" : undefined }}>
                       {plant.common_name ||
                         plant.scientific_name ||
                         t.plant.unnamed}
@@ -1748,7 +1749,7 @@ function PublicGuideLibrary({
           value={activeSectionId}
           onChange={changeSection}
           options={[
-            { value: "all", label: isMobile ? `${t.plant.category}（${language === "en" ? "All" : "全部"}）` : copy.allCategories },
+            { value: "all", label: isMobile && language !== "en" ? `${t.plant.category}（全部）` : copy.allCategories },
             ...orderedSections.map((section) => ({ value: section.id, label: getPublicGuideSectionName(section, language) })),
           ]}
           compact={isMobile}
