@@ -1,5 +1,6 @@
 import type { PublicGuideContent, PublicGuideEntry, PublicGuideLanguage } from "./public-guide-library";
 import { getPracticalFoodExample } from "./practical-food-examples";
+import { getSoilGuideContent } from "./soil-guide-content";
 
 // Editorial fallbacks for platform presets only. Never rewrite a user's guide,
 // taxonomy, project name, or stored content. Quantities that depend on species,
@@ -319,6 +320,10 @@ const foodProfiles: Record<string, Profile> = {
 
 export function getPracticalGuideContent(entry: PublicGuideEntry, language: PublicGuideLanguage): PublicGuideContent | null {
   if (entry.source !== "preset") return null;
+  if (entry.category === "system") {
+    const soilContent = getSoilGuideContent(entry.name, language);
+    if (soilContent) return soilContent;
+  }
   if (entry.category === "other") {
     const example = getPracticalFoodExample(entry.name, language);
     if (example) return example;

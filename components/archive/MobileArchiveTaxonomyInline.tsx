@@ -39,9 +39,6 @@ export default function MobileArchiveTaxonomyInline({
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === selectedSubTag.id)
     : [];
   const selectedGroup = availableGroups.find((tag) => tag.id === groupTagId) || null;
-  const groupLabel = [selectedSubTag?.name, maxDepth >= 3 ? selectedGroup?.name : null]
-    .filter(Boolean)
-    .join(" · ") || t.archive_workspace.ungrouped;
 
   return (
     <span style={language === "en" ? { ...rowStyle, flexWrap: "wrap", gap: "2px 6px" } : rowStyle} data-no-card-nav="true">
@@ -57,11 +54,11 @@ export default function MobileArchiveTaxonomyInline({
         }))}
       />
 
-      {maxDepth >= 2 ? (
+      {maxDepth >= 2 && availableSubTags.length > 0 ? (
         <InlineSelect
           naturalWordWrap={language === "en"}
-          label={groupLabel}
-          ariaLabel={t.archive_workspace.group_settings_title}
+          label={selectedSubTag?.name || t.archive_workspace.subcategory}
+          ariaLabel={t.archive_workspace.subcategory}
           sectionLabel={t.archive_workspace.subcategory}
           value={selectedSubTag?.id || ""}
           onChange={(value) => onChangeCategory(value || category)}
@@ -69,15 +66,20 @@ export default function MobileArchiveTaxonomyInline({
             { value: "", label: t.archive_workspace.ungrouped },
             ...availableSubTags.map((tag) => ({ value: tag.id, label: tag.name })),
           ]}
-          secondary={maxDepth >= 3 && selectedSubTag ? {
-            label: t.archive_workspace.group,
-            value: selectedGroup?.id || "",
-            onChange: onChangeGroup,
-            options: [
-              { value: "", label: t.archive_workspace.ungrouped },
-              ...availableGroups.map((tag) => ({ value: tag.id, label: tag.name })),
-            ],
-          } : undefined}
+        />
+      ) : null}
+      {maxDepth >= 3 && selectedSubTag && availableGroups.length > 0 ? (
+        <InlineSelect
+          naturalWordWrap={language === "en"}
+          label={selectedGroup?.name || t.archive_workspace.group}
+          ariaLabel={t.archive_workspace.group}
+          sectionLabel={t.archive_workspace.group}
+          value={selectedGroup?.id || ""}
+          onChange={onChangeGroup}
+          options={[
+            { value: "", label: t.archive_workspace.ungrouped },
+            ...availableGroups.map((tag) => ({ value: tag.id, label: tag.name })),
+          ]}
         />
       ) : null}
     </span>
@@ -91,7 +93,6 @@ function InlineSelect({
   options,
   onChange,
   sectionLabel,
-  secondary,
   naturalWordWrap = false,
 }: {
   label: string;
@@ -101,12 +102,6 @@ function InlineSelect({
   onChange: (value: string) => void;
   naturalWordWrap?: boolean;
   sectionLabel?: string;
-  secondary?: {
-    label: string;
-    value: string;
-    options: Array<{ value: string; label: string }>;
-    onChange: (value: string) => void;
-  };
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -207,11 +202,10 @@ function InlineSelect({
                 }}
                 onClick={stopCardNavigation}
               >
-                {[{ label: sectionLabel || ariaLabel, value, options, onChange }, ...(secondary ? [secondary] : [])].map((section) => (
-                  <div key={section.label} role="listbox" aria-label={section.label}>
-                    {sectionLabel ? <div style={sectionHeadingStyle}>{section.label}</div> : null}
-                    {section.options.map((option) => {
-                      const selected = option.value === section.value;
+                  <div role="listbox" aria-label={sectionLabel || ariaLabel}>
+                    {sectionLabel ? <div style={sectionHeadingStyle}>{sectionLabel}</div> : null}
+                    {options.map((option) => {
+                      const selected = option.value === value;
                       return (
                         <button
                           key={`${option.value}:${option.label}`}
@@ -223,7 +217,7 @@ function InlineSelect({
                             stopCardNavigation(event);
                             setOpen(false);
                             buttonRef.current?.focus({ preventScroll: true });
-                            if (!selected) section.onChange(option.value);
+                            if (!selected) onChange(option.value);
                           }}
                         >
                           <span>{option.label}</span>
@@ -232,7 +226,6 @@ function InlineSelect({
                       );
                     })}
                   </div>
-                ))}
               </div>
             </div>,
             document.body,

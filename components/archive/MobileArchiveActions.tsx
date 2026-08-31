@@ -215,7 +215,7 @@ export default function MobileArchiveActions({
                 </select>
               </label>
 
-              {selectedMaxDepth >= 2 ? (
+              {selectedMaxDepth >= 2 && availableSubTags.length > 0 ? (
                 <label style={fieldStyle}>
                   <span style={fieldLabelStyle}>{t.archive_workspace.subcategory}</span>
                   <select
@@ -236,12 +236,11 @@ export default function MobileArchiveActions({
                 </label>
               ) : null}
 
-              {selectedMaxDepth >= 3 ? (
+              {selectedMaxDepth >= 3 && selectedSubTagId && availableGroups.length > 0 ? (
                 <label style={fieldStyle}>
                   <span style={fieldLabelStyle}>{t.archive_workspace.group}</span>
                   <select
                     value={selectedGroupTagId}
-                    disabled={!selectedSubTagId || availableGroups.length === 0}
                     onChange={(event) => {
                       const nextGroupTagId = event.target.value;
                       setSelectedGroupTagId(nextGroupTagId);

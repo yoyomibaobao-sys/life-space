@@ -145,6 +145,11 @@ export default function ProjectCategorySettingsPage() {
           ))}
         </nav>
 
+        <div style={{ ...introStyle, marginBottom: 14 }}>
+          <p style={{ margin: "0 0 6px" }}>{t.archive_workspace.group_setup_hint}</p>
+          <p style={{ margin: 0 }}>{t.archive_workspace.group_options_hint}</p>
+        </div>
+
         {loading ? (
           <section style={messageStyle}>{isEnglish ? "Loading..." : "加载中…"}</section>
         ) : (

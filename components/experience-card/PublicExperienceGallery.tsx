@@ -23,13 +23,16 @@ import {
 } from "@/components/StatusBarTheme";
 import ExperienceCardSummary from "@/components/experience-card/ExperienceCardSummary";
 import verticalCard from "@/components/ui/VerticalFeedCard.module.css";
+import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 
 export default function PublicExperienceGallery({
   items,
+  showCategoryBadge = false,
 }: {
   items: ExperienceCardListItem[];
+  showCategoryBadge?: boolean;
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   function openPlayback(index: number) {
@@ -57,7 +60,7 @@ export default function PublicExperienceGallery({
             className={`${styles.previewCard} ${verticalCard.card}`}
             role="button"
             tabIndex={0}
-            aria-label={`${t.experience.open_fullscreen}${item.title}`}
+            aria-label={`${t.experience.open_fullscreen}${item.title}${showCategoryBadge && item.archiveCategory ? ` · ${getArchiveCategoryLabel(item.archiveCategory, language)}` : ""}`}
             onClick={(event) => handleCardClick(event, index)}
             onKeyDown={(event) => handleCardKeyDown(event, index)}
           >
@@ -75,6 +78,11 @@ export default function PublicExperienceGallery({
                   <UiIcon name="image" size={23} />
                 </span>
               )}
+              {showCategoryBadge && item.archiveCategory ? (
+                <span className={styles.previewCategoryBadge}>
+                  {getArchiveCategoryLabel(item.archiveCategory, language)}
+                </span>
+              ) : null}
               <span className={styles.previewPlay} aria-hidden="true" />
               </span>
             </span>

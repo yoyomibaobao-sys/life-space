@@ -760,6 +760,7 @@ export default function DiscoverPage() {
           <DiscoverProjectGrid
             items={items}
             helpOnly={helpOnly}
+            showCategoryBadge={filterMode === "all"}
             initialLoading={initialLoading}
             loadingMore={loadingMore}
             initialError={initialError}
