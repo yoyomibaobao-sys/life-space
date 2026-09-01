@@ -119,7 +119,11 @@ test("account closure is distinct from membership suspension and requires an aud
   );
   assert.match(deleteRoute, /status: "completed"/);
   assert.match(deleteRoute, /status: "failed"/);
-  assert.match(deleteRoute, /supabase\.auth\.admin\.deleteUser\(userId, true\)/);
+  assert.match(deleteRoute, /supabase\.auth\.admin\.deleteUser\(userId\)/);
+  assert.doesNotMatch(deleteRoute, /deleteUser\(userId, true\)/);
+  assert.match(deleteRoute, /list_storage_objects_owned_by_user/);
+  assert.match(deleteRoute, /row\.bucket_id === "media"/);
+  assert.match(deleteRoute, /user_id: null/);
   assert.match(deleteRoute, /hasResidualAccountData\(supabase, userId\)/);
   assert.match(deleteRoute, /deleteAccountData\(supabase, userId, authUserExists\)/);
   assert.match(deleteRoute, /if \(authUserExists\)/);
@@ -139,10 +143,49 @@ test("account closure is distinct from membership suspension and requires an aud
   assert.match(zhCopy, /永久注销不可恢复/);
 });
 
-test("administrator search includes residual owners whose Auth identity is gone", async () => {
-  const migration = await source(
-    "supabase/migrations/20260901100000_include_orphaned_accounts_in_admin_search.sql"
+test("hard account deletion detaches retained audits and keeps Storage cleanup API-driven", async () => {
+  const [migration, deleteRoute] = await Promise.all([
+    source(
+      "supabase/migrations/20260901220606_finalize_hard_account_deletion.sql"
+    ),
+    source("app/api/account/delete/route.ts"),
+  ]);
+
+  assert.match(
+    migration,
+    /alter table public\.membership_payments[\s\S]*?alter column user_id drop not null/i
   );
+  assert.match(
+    migration,
+    /foreign key \(user_id\) references auth\.users\(id\) on delete set null/i
+  );
+  assert.match(
+    migration,
+    /alter table public\.membership_refund_requests[\s\S]*?alter column user_id drop not null/i
+  );
+  assert.match(migration, /create or replace function public\.list_storage_objects_owned_by_user/i);
+  assert.match(
+    migration,
+    /revoke all on function public\.list_storage_objects_owned_by_user\(uuid\)[\s\S]*?from public, anon, authenticated, service_role/i
+  );
+  assert.match(
+    migration,
+    /grant execute on function public\.list_storage_objects_owned_by_user\(uuid\)[\s\S]*?to service_role/i
+  );
+  assert.match(migration, /delete from auth\.users as auth_user/i);
+  assert.doesNotMatch(migration, /delete from storage\.objects/i);
+  assert.match(deleteRoute, /removeStoragePaths\(supabase, "media", storagePaths\.media\)/);
+});
+
+test("administrator search includes residual owners whose Auth identity is gone", async () => {
+  const [migration, hardDeleteMigration] = await Promise.all([
+    source(
+      "supabase/migrations/20260901100000_include_orphaned_accounts_in_admin_search.sql"
+    ),
+    source(
+      "supabase/migrations/20260901220606_finalize_hard_account_deletion.sql"
+    ),
+  ]);
 
   assert.match(migration, /with candidate_users as/i);
   assert.match(migration, /select a\.user_id[\s\S]*?from public\.archives as a/i);
@@ -158,4 +201,9 @@ test("administrator search includes residual owners whose Auth identity is gone"
     migration,
     /grant execute on function public\.admin_search_memberships\(text\)[\s\S]*?to authenticated, service_role/i
   );
+  assert.match(
+    hardDeleteMigration,
+    /select objects\.owner_id::uuid[\s\S]*?from storage\.objects as objects/i
+  );
+  assert.match(hardDeleteMigration, /objects\.owner_id ~\*/i);
 });
