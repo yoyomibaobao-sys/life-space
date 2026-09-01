@@ -1259,9 +1259,24 @@ export default function AdminMembershipsPage() {
     setErrorMsg("");
 
     try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        const message = t.admin_memberships.account_delete_relogin;
+        setErrorMsg(message);
+        showToast(message);
+        return;
+      }
+
       const response = await fetch("/api/account/delete", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           confirm: true,
           targetUserId: accountDeleteTarget.user_id,
