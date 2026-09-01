@@ -64,6 +64,11 @@ type AuthLookupError = {
   message?: unknown;
 };
 
+type OwnedStorageObjectRow = {
+  bucket_id?: string | null;
+  object_name?: string | null;
+};
+
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const anonKey =
@@ -218,6 +223,23 @@ function isMissingAuthUserError(error: unknown) {
   );
 }
 
+async function listStorageObjectsOwnedByUser(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  userId: string
+) {
+  const { data, error } = await supabase.rpc(
+    "list_storage_objects_owned_by_user",
+    { p_user_id: userId }
+  );
+
+  if (error) {
+    console.error("list storage objects by owner error:", error);
+    throw new Error("读取账号文件列表失败");
+  }
+
+  return (data || []) as OwnedStorageObjectRow[];
+}
+
 async function hasResidualAccountData(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   userId: string
@@ -253,7 +275,10 @@ async function hasResidualAccountData(
     })
   );
 
-  return results.some(Boolean);
+  if (results.some(Boolean)) return true;
+
+  const ownedStorageObjects = await listStorageObjectsOwnedByUser(supabase, userId);
+  return ownedStorageObjects.length > 0;
 }
 
 function normalizeIdRows(rows?: IdRow[] | null) {
@@ -415,6 +440,7 @@ async function collectStoragePaths(
     marketMediaRowsByPost,
     marketPostRows,
     profileRow,
+    ownedStorageObjects,
   ] =
     await Promise.all([
       assertNoError(
@@ -458,6 +484,7 @@ async function collectStoragePaths(
         "读取头像失败",
         supabase.from("profiles").select("avatar_url").eq("id", userId).maybeSingle()
       ),
+      listStorageObjectsOwnedByUser(supabase, userId),
     ]);
 
   const mediaRows = [
@@ -492,6 +519,15 @@ async function collectStoragePaths(
 
   const profile = profileRow as { avatar_url?: string | null } | null;
   addOwnedPublicUrl(sets, userId, profile?.avatar_url);
+
+  for (const row of ownedStorageObjects) {
+    const path = cleanStoragePath(row.object_name);
+    if (!path) continue;
+
+    if (row.bucket_id === "media") sets.media.add(path);
+    if (row.bucket_id === "avatars") sets.avatars.add(path);
+    if (row.bucket_id === "payment-proofs") sets.paymentProofs.add(path);
+  }
 
   const [avatarPrefixPaths, mediaPrefixPaths, paymentProofPrefixPaths] = await Promise.all([
     listStoragePrefix(supabase, "avatars", userId),
@@ -674,9 +710,6 @@ async function deleteAccountData(
 
   const accountDeletedAt = new Date().toISOString();
   await deleteRows(supabase, "user_memberships", "user_id", userId);
-  await updateRows(supabase, "membership_payments", "user_id", userId, {
-    proof_path: null,
-  });
   const { error: cancelPaymentOrderError } = await supabase
     .from("membership_payments")
     .update({
@@ -692,15 +725,25 @@ async function deleteAccountData(
     throw new Error("取消未完成付款订单失败");
   }
 
-  // membership_payments.user_id is NOT NULL and references auth.users.
-  // Without a migration, it cannot be anonymized safely. We soft-delete the
-  // Auth user below so payment audit rows remain attached to an unusable
-  // deleted Auth identity instead of being cascaded away.
+  await updateRows(supabase, "membership_refund_requests", "user_id", userId, {
+    user_id: null,
+    request_reason: null,
+    review_note: null,
+    updated_at: accountDeletedAt,
+  });
+  await updateRows(supabase, "membership_payments", "user_id", userId, {
+    user_id: null,
+    proof_path: null,
+    note: null,
+    review_note: "account_deleted",
+    updated_at: accountDeletedAt,
+  });
+
   await deleteRows(supabase, "profiles", "id", userId);
   await deleteRows(supabase, "users", "id", userId);
 
   if (authUserExists) {
-    const { error } = await supabase.auth.admin.deleteUser(userId, true);
+    const { error } = await supabase.auth.admin.deleteUser(userId);
     if (error) {
       console.error("delete auth user error:", error);
       throw new Error("删除登录账号失败");
