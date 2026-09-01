@@ -2172,6 +2172,7 @@ const en = {
     delete_success: "Membership benefits suspended",
     delete_retry: "Could not suspend membership. Try again later.",
     account_delete_confirmation_mismatch: "Enter the exact account number and acknowledge permanent deletion.",
+    account_delete_relogin: "Please sign in again before permanently deleting an account.",
     account_delete_failed: "Permanent account deletion failed. Some data may remain; review the deletion log manually.",
     account_delete_success: "The account was permanently deleted and the operation was logged.",
     amount_positive: "Payment amount must be greater than 0",
