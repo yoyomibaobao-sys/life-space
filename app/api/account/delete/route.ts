@@ -58,6 +58,12 @@ type MarketPostStorageRow = {
   cover_thumb_path?: string | null;
 };
 
+type AuthLookupError = {
+  status?: unknown;
+  code?: unknown;
+  message?: unknown;
+};
+
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const anonKey =
@@ -195,6 +201,59 @@ function uniqueIds(...idLists: string[][]) {
     }
   }
   return Array.from(ids);
+}
+
+function isMissingAuthUserError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+
+  const candidate = error as AuthLookupError;
+  const status = Number(candidate.status);
+  const code = String(candidate.code || "").toLowerCase();
+  const message = String(candidate.message || "").toLowerCase();
+
+  return (
+    status === 404 ||
+    code === "user_not_found" ||
+    message.includes("user not found")
+  );
+}
+
+async function hasResidualAccountData(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  userId: string
+) {
+  const probes = [
+    ["profiles", "id"],
+    ["users", "id"],
+    ["archives", "user_id"],
+    ["records", "user_id"],
+    ["media", "user_id"],
+    ["user_memberships", "user_id"],
+    ["market_posts", "user_id"],
+    ["comments", "user_id"],
+    ["locations", "user_id"],
+    ["group_tags", "user_id"],
+    ["sub_tags", "user_id"],
+  ] as const;
+
+  const results = await Promise.all(
+    probes.map(async ([table, column]) => {
+      const { data, error } = await supabase
+        .from(table)
+        .select(column)
+        .eq(column, userId)
+        .limit(1);
+
+      if (error) {
+        console.error(`check residual ${table}.${column} error:`, error);
+        throw new Error("核对残留账号数据失败");
+      }
+
+      return Array.isArray(data) && data.length > 0;
+    })
+  );
+
+  return results.some(Boolean);
 }
 
 function normalizeIdRows(rows?: IdRow[] | null) {
@@ -531,7 +590,8 @@ async function updateRowsIn(
 
 async function deleteAccountData(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  userId: string
+  userId: string,
+  authUserExists = true
 ) {
   const ownedIds = await collectOwnedAccountIds(supabase, userId);
   const storagePaths = await collectStoragePaths(supabase, userId, ownedIds);
@@ -639,10 +699,12 @@ async function deleteAccountData(
   await deleteRows(supabase, "profiles", "id", userId);
   await deleteRows(supabase, "users", "id", userId);
 
-  const { error } = await supabase.auth.admin.deleteUser(userId, true);
-  if (error) {
-    console.error("delete auth user error:", error);
-    throw new Error("删除登录账号失败");
+  if (authUserExists) {
+    const { error } = await supabase.auth.admin.deleteUser(userId, true);
+    if (error) {
+      console.error("delete auth user error:", error);
+      throw new Error("删除登录账号失败");
+    }
   }
 
   return {
@@ -689,6 +751,7 @@ export async function POST(request: Request) {
     const [
       { data: accountRow, error: accountError },
       { data: authUserData, error: authUserError },
+      { data: requesterAdmin, error: requesterAdminError },
     ] =
       await Promise.all([
         supabase
@@ -697,6 +760,13 @@ export async function POST(request: Request) {
           .eq("id", userId)
           .maybeSingle(),
         supabase.auth.admin.getUserById(userId),
+        isAdminInitiated
+          ? supabase
+              .from("app_admins")
+              .select("user_id")
+              .eq("user_id", requestedBy)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ]);
 
     if (accountError) {
@@ -704,8 +774,37 @@ export async function POST(request: Request) {
       return Response.json({ error: "读取账号信息失败" }, { status: 500 });
     }
 
-    if (authUserError || !authUserData.user) {
+    if (isAdminInitiated && requesterAdminError) {
+      console.error("verify admin account deletion requester error:", requesterAdminError);
+      return Response.json({ error: "无法核对管理员权限" }, { status: 500 });
+    }
+
+    if (isAdminInitiated && !requesterAdmin) {
+      return Response.json({ error: "没有管理员权限" }, { status: 403 });
+    }
+
+    if (isAdminInitiated && userId === requestedBy) {
+      return Response.json({ error: "不能通过管理员页面注销自己" }, { status: 400 });
+    }
+
+    const authUserExists = Boolean(authUserData?.user);
+    const authUserMissing =
+      !authUserExists && (!authUserError || isMissingAuthUserError(authUserError));
+
+    if (authUserError && !authUserMissing) {
+      console.error("load account deletion auth identity error:", authUserError);
+      return Response.json({ error: "读取登录账号信息失败" }, { status: 500 });
+    }
+
+    if (!authUserExists && !isAdminInitiated) {
       return Response.json({ error: "账号不存在或已经注销" }, { status: 404 });
+    }
+
+    if (!authUserExists) {
+      const residualDataExists = await hasResidualAccountData(supabase, userId);
+      if (!residualDataExists) {
+        return Response.json({ error: "账号不存在或已经注销" }, { status: 404 });
+      }
     }
 
     if (!isAdminInitiated) {
@@ -730,16 +829,10 @@ export async function POST(request: Request) {
 
     if (isAdminInitiated) {
       const [
-        { data: requesterAdmin, error: requesterAdminError },
         { data: targetAdmin, error: targetAdminError },
         { data: targetMembership, error: targetMembershipError },
       ] =
         await Promise.all([
-          supabase
-            .from("app_admins")
-            .select("user_id")
-            .eq("user_id", requestedBy)
-            .maybeSingle(),
           supabase
             .from("app_admins")
             .select("user_id")
@@ -752,21 +845,12 @@ export async function POST(request: Request) {
             .maybeSingle(),
         ]);
 
-      if (requesterAdminError || targetAdminError || targetMembershipError) {
+      if (targetAdminError || targetMembershipError) {
         console.error("verify admin account deletion target error:", {
-          requesterAdminError,
           targetAdminError,
           targetMembershipError,
         });
         return Response.json({ error: "无法核对管理员与目标账号" }, { status: 500 });
-      }
-
-      if (!requesterAdmin) {
-        return Response.json({ error: "没有管理员权限" }, { status: 403 });
-      }
-
-      if (userId === requestedBy) {
-        return Response.json({ error: "不能通过管理员页面注销自己" }, { status: 400 });
       }
 
       if (targetAdmin || targetMembership?.plan === "admin") {
@@ -829,7 +913,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const result = await deleteAccountData(supabase, userId);
+      const result = await deleteAccountData(supabase, userId, authUserExists);
       const deletedStorageObjectCount =
         result.avatarFileCount +
         result.mediaFileCount +
