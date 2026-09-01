@@ -115,6 +115,7 @@ test("database hardening denies anonymous mutations by default", () => {
   assert.match(migration, /grant execute on function public\.can_access_record\(uuid\)/i);
   assert.doesNotMatch(migration, /grant execute on function public\.increment_archive_view_count\(uuid\)[\s\S]*?to anon/i);
   assert.match(migration, /p\.prorettype = 'pg_catalog\.trigger'::regtype/i);
+  assert.match(migration, /alter function public\.handle_media_change\(\)\s+security definer/i);
   assert.match(migration, /set search_path = pg_catalog, public/i);
 });
 

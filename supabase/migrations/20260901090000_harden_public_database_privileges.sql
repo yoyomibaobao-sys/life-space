@@ -181,6 +181,11 @@ $$;
 -- application relations referenced inside these functions.
 alter function public.handle_comment_change()
   set search_path = pg_catalog, public;
+-- This trigger invokes the separately locked-down SECURITY DEFINER media
+-- statistics helper. Run the trigger as its owner so a legitimate media write
+-- does not require exposing that helper for direct browser execution.
+alter function public.handle_media_change()
+  security definer;
 alter function public.handle_media_change()
   set search_path = pg_catalog, public;
 alter function public.handle_record_insert()

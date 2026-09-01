@@ -96,6 +96,19 @@ begin
       v_direct_trigger_functions;
   end if;
 
+  if not exists (
+    select 1
+    from pg_catalog.pg_proc as p
+    join pg_catalog.pg_namespace as n
+      on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'handle_media_change'
+      and p.prorettype = 'pg_catalog.trigger'::regtype
+      and p.prosecdef
+  ) then
+    raise exception 'media statistics trigger is not SECURITY DEFINER';
+  end if;
+
   if not has_table_privilege('anon', 'public.analytics_events', 'INSERT') then
     raise exception 'anonymous analytics insert was removed';
   end if;
@@ -110,6 +123,14 @@ begin
 
   if has_function_privilege('anon', 'public.get_my_membership()', 'EXECUTE') then
     raise exception 'anonymous membership execution remains';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.sync_record_media_stats(uuid)',
+    'EXECUTE'
+  ) then
+    raise exception 'media statistics helper remains directly executable';
   end if;
 
   if not has_function_privilege(
