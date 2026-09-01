@@ -2172,6 +2172,7 @@ const zh = {
     delete_success: "会员权益已停用",
     delete_retry: "停用会员失败，请稍后再试",
     account_delete_confirmation_mismatch: "请准确输入账号编号，并勾选永久注销确认。",
+    account_delete_relogin: "请重新登录后再永久注销账号。",
     account_delete_failed: "永久注销账号失败，账号可能仍保留部分数据，请查看销号记录并人工复核。",
     account_delete_success: "账号已永久注销，操作记录已保存。",
     amount_positive: "付款金额必须大于0",
