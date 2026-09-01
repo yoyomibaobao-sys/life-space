@@ -97,7 +97,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (nextPassword.length < 6) {
+    if (nextPassword.length < 8) {
       setUpdateSucceeded(false);
       setMessage(t.auth.password_length_error);
       return;
@@ -143,14 +143,28 @@ export default function ResetPasswordPage() {
         <label style={{ fontSize: 13, color: "#536553" }}>
           {t.auth.new_password}
           <div style={{ marginTop: 6 }}>
-            <PasswordInput value={password} onChange={setPassword} placeholder={t.auth.new_password_placeholder} />
+            <PasswordInput
+              value={password}
+              onChange={setPassword}
+              placeholder={t.auth.new_password_placeholder}
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
           </div>
         </label>
 
         <label style={{ fontSize: 13, color: "#536553" }}>
           {t.auth.confirm_new_password}
           <div style={{ marginTop: 6 }}>
-            <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder={t.auth.confirm_new_password_placeholder} />
+            <PasswordInput
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              placeholder={t.auth.confirm_new_password_placeholder}
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
           </div>
         </label>
 

@@ -4,7 +4,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const DEFAULT_SERVER_URL =
-  "https://life-space-mobile-ui-polish.vercel.app";
+  "https://life-space-gules.vercel.app";
 
 function resolveServerUrl() {
   const raw = process.env.CAPACITOR_SERVER_URL || DEFAULT_SERVER_URL;

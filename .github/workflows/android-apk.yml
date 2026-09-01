@@ -6,7 +6,7 @@ on:
       server_url:
         description: HTTPS website URL loaded by the Android shell
         required: false
-        default: https://life-space-mobile-ui-polish.vercel.app
+        default: https://life-space-gules.vercel.app
       version_code:
         description: Monotonically increasing Android version code
         required: false
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CAPACITOR_SERVER_URL: ${{ inputs.server_url || 'https://life-space-mobile-ui-polish.vercel.app' }}
+      CAPACITOR_SERVER_URL: ${{ inputs.server_url || 'https://life-space-gules.vercel.app' }}
       ANDROID_VERSION_CODE: ${{ inputs.version_code || '4' }}
       ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.3' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

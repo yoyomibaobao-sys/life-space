@@ -92,12 +92,28 @@ from membership_access_test_context;
 -- Guide candidate authors/usages reference auth.users. Seed matching identities
 -- after the public fixtures so any signup trigger takes its idempotent path;
 -- keep the real guide-usage trigger and foreign keys enabled for this test.
-insert into auth.users (id, aud, role, email, created_at, updated_at)
+insert into auth.users (
+  id,
+  aud,
+  role,
+  email,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
 select
   fixture.user_id,
   'authenticated',
   'authenticated',
   fixture.user_id::text || '@membership-fixture.example.test',
+  jsonb_build_object(
+    'legal_terms_accepted', true,
+    'legal_terms_version', '2026-09-01',
+    'privacy_notice_accepted', true,
+    'privacy_notice_version', '2026-09-01',
+    'cross_border_consent', true,
+    'cross_border_consent_version', '2026-09-01'
+  ),
   now(),
   now()
 from membership_access_test_context c

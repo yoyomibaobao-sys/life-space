@@ -20,10 +20,41 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = new URL(
+  process.env.NEXT_PUBLIC_SITE_URL || "https://life-space-gules.vercel.app",
+);
+const searchIndexingEnabled = process.env.SEARCH_INDEXING_ENABLED === "true";
+const siteDescription =
+  "有时·耕作：围绕种植、养护、农法设施与生态观察的长期记录空间。 LifeSpace for long-term cultivation records.";
+
 export const metadata: Metadata = {
-  title: "有时·耕作 | LifeSpace for Cultivation",
-  description:
-    "有时·耕作：围绕种植、养护、农法设施与生态观察的长期记录空间。 LifeSpace for long-term cultivation records.",
+  metadataBase: siteUrl,
+  title: {
+    default: "有时·耕作 | LifeSpace for Cultivation",
+    template: "%s | 有时·耕作",
+  },
+  description: siteDescription,
+  robots: {
+    index: searchIndexingEnabled,
+    follow: searchIndexingEnabled,
+    googleBot: {
+      index: searchIndexingEnabled,
+      follow: searchIndexingEnabled,
+    },
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "有时·耕作",
+    title: "有时·耕作 | LifeSpace for Cultivation",
+    description: siteDescription,
+    locale: "zh_CN",
+  },
+  twitter: {
+    card: "summary",
+    title: "有时·耕作 | LifeSpace for Cultivation",
+    description: siteDescription,
+  },
   icons: {
     icon: "/brand/youshi-space-mark.svg",
     apple: "/brand/youshi-space-icon-192.png",

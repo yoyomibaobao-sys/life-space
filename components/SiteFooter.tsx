@@ -5,6 +5,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getLegalContent } from "@/lib/legal-content";
 import styles from "./SiteFooter.module.css";
 import BrandMark from "@/components/BrandMark";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export default function SiteFooter() {
   const { language, t } = useLanguage();
@@ -18,6 +19,7 @@ export default function SiteFooter() {
           <span>{legal.serviceName}</span>
         </div>
         <div className={styles.actions}>
+          <LanguageSwitcher compact />
           <Link href="/legal/privacy" className={styles.link}>
             {legal.nav.privacy.title}
           </Link>

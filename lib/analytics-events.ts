@@ -29,6 +29,8 @@ const ANONYMOUS_ID_KEY = "lifespace_anonymous_id";
 const PENDING_EVENTS_KEY = "lifespace_pending_analytics_events";
 const FIRST_OPEN_RECORDED_KEY = "lifespace_app_first_open_recorded";
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || null;
+const MAX_USER_AGENT_LENGTH = 1024;
+const MAX_REFERRER_LENGTH = 2048;
 
 function canUseBrowserStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -63,7 +65,7 @@ function sanitizeReferrer(value?: string | null) {
 
   try {
     const parsed = new URL(value);
-    return `${parsed.origin}${parsed.pathname}`;
+    return `${parsed.origin}${parsed.pathname}`.slice(0, MAX_REFERRER_LENGTH);
   } catch {
     return null;
   }
@@ -147,7 +149,9 @@ export async function trackAnalyticsEvent(
     anonymous_id: getAnalyticsAnonymousId(),
     platform: getPlatform(),
     app_version: APP_VERSION,
-    user_agent: navigator.userAgent || null,
+    user_agent: navigator.userAgent
+      ? navigator.userAgent.slice(0, MAX_USER_AGENT_LENGTH)
+      : null,
     referrer: eventName === "page_view" ? null : sanitizeReferrer(document.referrer),
     metadata,
     dedupe_key: options.dedupeKey,

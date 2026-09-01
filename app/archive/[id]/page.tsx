@@ -288,7 +288,7 @@ saveRecentArchiveBrowse({
   userId: archiveData.user_id,
 });
 
-      if (archiveData.is_public && !isOwnerView) {
+      if (currentUserId && archiveData.is_public && !isOwnerView) {
         const viewSessionKey = `archive_viewed_${archiveData.id}`;
         if (!window.sessionStorage.getItem(viewSessionKey)) {
           const { data: nextViewCount, error: viewError } = await supabase.rpc(

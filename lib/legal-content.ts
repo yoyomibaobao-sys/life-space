@@ -35,7 +35,7 @@ const zh: LegalContent = {
     eyebrow: "公开规则",
     title: "隐私、服务与退款说明",
     intro: "这里集中说明有时·耕作如何处理数据、提供服务、受理退款以及与运营者联系。",
-    version: "版本日期：2026/08/25；自页面正式上线时生效。",
+    version: "更新日期：2026/09/01；生效日期：2026/09/01。",
   },
   nav: {
     privacy: {
@@ -63,7 +63,7 @@ const zh: LegalContent = {
       eyebrow: "隐私与个人信息",
       title: "隐私说明",
       intro: "本说明适用于有时·耕作网页端、手机网页端及加载同一服务的 App。我们坚持数据最少化、本地优先和由用户决定是否公开。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "更新日期：2026/09/01；生效日期：2026/09/01。",
       sections: [
         {
           title: "1. 谁处理你的信息",
@@ -108,7 +108,8 @@ const zh: LegalContent = {
           title: "6. 共享、受托处理与跨境",
           paragraphs: [
             "我们不出售个人信息。为运行服务，数据可能由托管、数据库、对象存储、邮件和付款渠道等服务商按指示处理；仅提供完成相应功能所必需的信息。付款由支付宝、PayPal等渠道独立处理，其账户和支付数据也适用相应渠道的规则。",
-            "部分服务商或基础设施可能位于你所在国家或地区之外。依法需要单独告知、同意或采取其他保护措施时，我们会在启用相关处理前完成。",
+            "当前网页托管和网络交付使用 Vercel, Inc.；账号认证、数据库和对象存储使用 Supabase, Inc.，本项目主要数据库区域位于日本东京。相应服务商可能在其全球基础设施中处理账号、请求日志、用户主动上传的耕作内容、互动内容和云端文件，以完成注册、登录、存储、同步、公开展示、安全防护和故障排查。服务商隐私说明分别见 vercel.com/legal/privacy-policy 和 supabase.com/privacy。",
+            "注册页会把跨境处理同意与服务条款同意分开提供。不同意跨境处理时，仍可使用不注册、不上传的本地记录。已经同意的用户可以通过 yoyomibaobao@gmail.com 撤回同意或申请访问、更正、删除及了解境外处理情况；撤回不影响撤回前处理的合法性，但可能导致账号和云端功能无法继续提供。",
           ],
         },
         {
@@ -145,7 +146,7 @@ const zh: LegalContent = {
       eyebrow: "使用规则",
       title: "服务条款",
       intro: "使用有时·耕作即表示你同意遵守本条款。强制性法律赋予消费者的权利不因本条款而被排除。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "更新日期：2026/09/01；生效日期：2026/09/01。",
       sections: [
         {
           title: "1. 服务内容",
@@ -209,7 +210,7 @@ const zh: LegalContent = {
       eyebrow: "云会员",
       title: "退款规则",
       intro: "本规则适用于通过有时·耕作购买并已确认的云会员订单。退款申请时间以系统成功接收申请的时间为准。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "更新日期：2026/09/01；生效日期：2026/09/01。",
       sections: [
         {
           title: "1. 标准退款金额",
@@ -261,7 +262,7 @@ const zh: LegalContent = {
       eyebrow: "公开联系信息",
       title: "运营者联系信息",
       intro: "服务、账号、付款、退款、隐私与安全问题均可通过同一公开邮箱联系。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "更新日期：2026/09/01；生效日期：2026/09/01。",
       sections: [
         {
           title: "服务信息",
@@ -295,7 +296,7 @@ const en: LegalContent = {
     eyebrow: "PUBLIC POLICIES",
     title: "Privacy, Terms and Refunds",
     intro: "This hub explains how LifeSpace for Cultivation handles data, provides the service, reviews refunds and can be contacted.",
-    version: "Version date: 2026/08/25. Effective when published on the service.",
+    version: "Updated: 2026/09/01. Effective: 2026/09/01.",
   },
   nav: {
     privacy: {
@@ -323,7 +324,7 @@ const en: LegalContent = {
       eyebrow: "PRIVACY AND PERSONAL DATA",
       title: "Privacy Notice",
       intro: "This notice applies to the desktop web service, mobile web service and the App that loads the same LifeSpace for Cultivation service. We follow data minimization, local-first use and user-controlled sharing.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Updated: 2026/09/01. Effective: 2026/09/01.",
       sections: [
         {
           title: "1. Who handles your information",
@@ -364,7 +365,8 @@ const en: LegalContent = {
           title: "6. Sharing, processors and international handling",
           paragraphs: [
             "We do not sell personal data. Hosting, database, object storage, email and payment providers may process only the information needed for their role. Alipay, PayPal and other payment channels independently apply their own rules to payment-account data.",
-            "Some providers or infrastructure may be outside your country or region. Where separate notice, consent or safeguards are legally required, they will be completed before that processing is enabled.",
+            "The service currently uses Vercel, Inc. for web hosting and network delivery and Supabase, Inc. for authentication, database and object storage. This project's primary database region is Tokyo, Japan. These providers may process account information, request logs, cultivation content, interactions and cloud files through their global infrastructure to provide registration, login, storage, synchronization, public sharing, security and fault diagnosis. Their notices are available at vercel.com/legal/privacy-policy and supabase.com/privacy.",
+            "Registration presents cross-border-processing consent separately from agreement to the service terms. You may continue using unregistered, non-uploaded local records without consenting. Email yoyomibaobao@gmail.com to withdraw consent or request access, correction, deletion or more information about overseas processing. Withdrawal does not affect earlier lawful processing but may make account and cloud features unavailable.",
           ],
         },
         {
@@ -397,7 +399,7 @@ const en: LegalContent = {
       eyebrow: "SERVICE RULES",
       title: "Terms of Service",
       intro: "By using LifeSpace for Cultivation, you agree to follow these terms. Mandatory consumer rights are not excluded.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Updated: 2026/09/01. Effective: 2026/09/01.",
       sections: [
         {
           title: "1. The service",
@@ -457,7 +459,7 @@ const en: LegalContent = {
       eyebrow: "CLOUD MEMBERSHIP",
       title: "Refund Policy",
       intro: "This policy applies to confirmed cloud-membership orders purchased through LifeSpace for Cultivation. Eligibility is determined by the time the service successfully receives the request.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Updated: 2026/09/01. Effective: 2026/09/01.",
       sections: [
         {
           title: "1. Standard refund amount",
@@ -503,7 +505,7 @@ const en: LegalContent = {
       eyebrow: "PUBLIC CONTACT",
       title: "Operator Contact",
       intro: "Use the same public email for service, account, payment, refund, privacy and security matters.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Updated: 2026/09/01. Effective: 2026/09/01.",
       sections: [
         {
           title: "Service information",

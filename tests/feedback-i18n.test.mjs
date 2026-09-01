@@ -27,7 +27,7 @@ test("feedback stays in navigation and the profile list without a duplicate bann
   assert.match(navbar, /<DesktopUtilityActions feedbackLabel=\{t\.feedback\} \/>/);
   assert.match(navbar, /href="\/feedback"/);
   assert.doesNotMatch(navbar, /LanguageSwitcher/);
-  assert.doesNotMatch(footer, /LanguageSwitcher/);
+  assert.match(footer, /<LanguageSwitcher compact \/>/);
   assert.match(profile, /role="switch"/);
   assert.match(profile, /setLanguage\(language === "zh" \? "en" : "zh"\)/);
   assert.match(navbar, /desktopUtilityDividerStyle/);

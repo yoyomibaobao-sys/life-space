@@ -33,6 +33,7 @@
 supabase db reset
 psql "$LOCAL_SUPABASE_DB_URL" -f supabase/tests/membership_payment_orders_catalog.sql
 psql "$LOCAL_SUPABASE_DB_URL" -f supabase/tests/experience_playback_manifest_catalog.sql
+psql "$LOCAL_SUPABASE_DB_URL" -f supabase/tests/public_readiness_hardening_dynamic.sql
 ```
 
 如果当前执行环境无法启动本地 Supabase，必须至少完成 TypeScript、应用测试和 SQL 静态审查，并在交付说明中明确数据库目录测试尚未实际执行；部署前仍需在可用的本地 Supabase 环境运行上述检查。

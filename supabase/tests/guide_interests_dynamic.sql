@@ -23,9 +23,26 @@ select fixture.user_id, 'guide-' || fixture.user_id::text
 from guide_interests_test_context c
 cross join lateral unnest(array[c.owner_a, c.owner_b, c.free_user, c.expired_user]) as fixture(user_id);
 
-insert into auth.users (id, aud, role, email, created_at, updated_at)
+insert into auth.users (
+  id,
+  aud,
+  role,
+  email,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
 select fixture.user_id, 'authenticated', 'authenticated',
-       fixture.user_id::text || '@guide-fixture.example.test', now(), now()
+       fixture.user_id::text || '@guide-fixture.example.test',
+       jsonb_build_object(
+         'legal_terms_accepted', true,
+         'legal_terms_version', '2026-09-01',
+         'privacy_notice_accepted', true,
+         'privacy_notice_version', '2026-09-01',
+         'cross_border_consent', true,
+         'cross_border_consent_version', '2026-09-01'
+       ),
+       now(), now()
 from guide_interests_test_context c
 cross join lateral unnest(array[c.owner_a, c.owner_b, c.free_user, c.expired_user]) as fixture(user_id);
 

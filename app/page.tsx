@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import UiIcon from "@/components/ui/UiIcon";
 import BrandMark from "@/components/BrandMark";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -86,6 +87,9 @@ export default function Home() {
 
       <div className="home-content" style={contentStyle}>
         <section className="home-hero" style={heroStyle}>
+          <div className="home-language" style={languageSwitcherStyle}>
+            <LanguageSwitcher compact />
+          </div>
           <h1 className="home-brand" style={brandStyle}>
             <BrandMark size={40} tone="quiet" />
             <span style={brandCopyStyle}>
@@ -171,6 +175,7 @@ const contentStyle: CSSProperties = {
 };
 
 const heroStyle: CSSProperties = {
+  position: "relative",
   maxWidth: 860,
   width: "100%",
   margin: "0 auto",
@@ -182,6 +187,12 @@ const heroStyle: CSSProperties = {
   background:
     "radial-gradient(circle at 92% 8%, rgba(218, 234, 207, 0.72), transparent 34%), rgba(255, 255, 255, 0.9)",
   boxShadow: "0 12px 30px rgba(45, 72, 38, 0.07)",
+};
+
+const languageSwitcherStyle: CSSProperties = {
+  position: "absolute",
+  top: 14,
+  right: 14,
 };
 
 const brandStyle: CSSProperties = {

@@ -172,6 +172,7 @@ export default function LoginPage() {
             inputMode="email"
             enterKeyHint="next"
             spellCheck={false}
+            required
             style={{
               padding: "11px 12px",
               width: "100%",
@@ -185,6 +186,8 @@ export default function LoginPage() {
           <PasswordInput
             value={password}
             onChange={setPassword}
+            autoComplete="current-password"
+            required
           />
 
           <div style={{ marginTop: 10, fontSize: 12 }}>
