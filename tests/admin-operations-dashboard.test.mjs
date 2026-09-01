@@ -132,6 +132,8 @@ test("account closure is distinct from membership suspension and requires an aud
   assert.match(page, /permanent_account_delete/);
   assert.match(page, /accountDeleteConfirmation\.trim\(\) !==/);
   assert.match(page, /accountDeleteAcknowledged/);
+  assert.match(page, /supabase\.auth\.getSession\(\)/);
+  assert.match(page, /Authorization: `Bearer \$\{session\.access_token\}`/);
   assert.match(zhCopy, /delete_membership: "停用会员"/);
   assert.match(zhCopy, /permanent_account_delete: "永久注销账号"/);
   assert.match(zhCopy, /永久注销不可恢复/);
