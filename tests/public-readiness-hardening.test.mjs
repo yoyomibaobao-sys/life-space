@@ -81,6 +81,15 @@ test("optional Turnstile protection covers public authentication email flows", (
   assert.doesNotMatch(env, /TURNSTILE_SECRET/);
 });
 
+test("the launch runbook keeps indexing and production changes behind final checks", () => {
+  const checklist = read("docs/public-launch-checklist.md");
+
+  assert.match(checklist, /SEARCH_INDEXING_ENABLED=false/);
+  assert.match(checklist, /隔离数据库 CI 全部通过/);
+  assert.match(checklist, /Secret Key 不发到聊天/);
+  assert.match(checklist, /最后一步才把生产环境的 `SEARCH_INDEXING_ENABLED` 改为 `true`/);
+});
+
 test("legal copy identifies processors, region, and a fixed effective version", () => {
   const legal = read("lib/legal-content.ts");
 
