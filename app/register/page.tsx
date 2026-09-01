@@ -5,6 +5,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
+import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
 import { trackAnalyticsEvent } from "@/lib/analytics-events";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getSafeReturnTo } from "@/lib/auth-return";
@@ -58,6 +59,8 @@ export default function RegisterPage() {
   const [showLocalFallback, setShowLocalFallback] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedCrossBorder, setAcceptedCrossBorder] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -85,6 +88,11 @@ export default function RegisterPage() {
       return;
     }
 
+    if (AUTH_CAPTCHA_ENABLED && !captchaToken) {
+      setMessage(t.auth.captcha_required);
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
@@ -94,6 +102,7 @@ export default function RegisterPage() {
         email: cleanEmail,
         password,
         options: {
+          captchaToken: captchaToken || undefined,
           emailRedirectTo: `${window.location.origin}${returnTo}`,
           data: {
             legal_terms_accepted: true,
@@ -135,6 +144,7 @@ export default function RegisterPage() {
       setMessage(t.auth.network_local_fallback);
       setShowLocalFallback(true);
     } finally {
+      setCaptchaResetKey((value) => value + 1);
       setLoading(false);
     }
   }
@@ -218,6 +228,12 @@ export default function RegisterPage() {
             />
             <span>{t.auth.registration_cross_border_consent}</span>
           </label>
+
+          <AuthCaptcha
+            action="register"
+            onTokenChange={setCaptchaToken}
+            resetKey={captchaResetKey}
+          />
 
           <button
             type="submit"

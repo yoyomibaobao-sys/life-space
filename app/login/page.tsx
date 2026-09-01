@@ -5,6 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
+import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
 import { buildRegisterHref, getSafeReturnTo } from "@/lib/auth-return";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -53,6 +54,8 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [lastSentTime, setLastSentTime] = useState(0);
   const [showLocalFallback, setShowLocalFallback] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("remember_email");
@@ -72,6 +75,11 @@ export default function LoginPage() {
       return;
     }
 
+    if (AUTH_CAPTCHA_ENABLED && !captchaToken) {
+      setMessage(t.auth.captcha_required);
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
@@ -79,6 +87,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
+        options: { captchaToken: captchaToken || undefined },
       });
 
       if (error) {
@@ -106,6 +115,7 @@ export default function LoginPage() {
       setMessage(t.auth.network_local_fallback);
       setShowLocalFallback(true);
     } finally {
+      setCaptchaResetKey((value) => value + 1);
       setLoading(false);
     }
   }
@@ -126,12 +136,18 @@ export default function LoginPage() {
       return;
     }
 
+    if (AUTH_CAPTCHA_ENABLED && !captchaToken) {
+      setMessage(t.auth.captcha_required);
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
+        captchaToken: captchaToken || undefined,
       });
 
       if (error) {
@@ -144,6 +160,7 @@ export default function LoginPage() {
     } catch {
       setMessage(t.auth.network_error);
     } finally {
+      setCaptchaResetKey((value) => value + 1);
       setLoading(false);
     }
   }
@@ -201,6 +218,12 @@ export default function LoginPage() {
               {t.auth.remember_email}
             </label>
           </div>
+
+          <AuthCaptcha
+            action="auth"
+            onTokenChange={setCaptchaToken}
+            resetKey={captchaResetKey}
+          />
 
           <button
             type="submit"

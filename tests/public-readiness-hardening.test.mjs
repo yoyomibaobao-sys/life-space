@@ -31,6 +31,8 @@ test("public responses include baseline browser security headers", () => {
   assert.match(config, /X-Robots-Tag/);
   assert.match(config, /noindex, nofollow, noarchive/);
   assert.match(config, /poweredByHeader: false/);
+  assert.match(config, /https:\/\/challenges\.cloudflare\.com/);
+  assert.match(config, /frame-src 'self'/);
 });
 
 test("signed-out visitors can switch language without creating an account", () => {
@@ -59,6 +61,24 @@ test("registration requires stronger passwords and versioned separate consent", 
   assert.match(localConfig, /enable_confirmations = true/);
   assert.match(localConfig, /secure_password_change = true/);
   assert.match(localConfig, /max_frequency = "60s"/);
+});
+
+test("optional Turnstile protection covers public authentication email flows", () => {
+  const captcha = read("components/AuthCaptcha.tsx");
+  const register = read("app/register/page.tsx");
+  const login = read("app/login/page.tsx");
+  const checkEmail = read("app/check-email/page.tsx");
+  const env = read(".env.example");
+
+  assert.match(captcha, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
+  assert.match(captcha, /challenges\.cloudflare\.com\/turnstile/);
+  assert.match(captcha, /"expired-callback"/);
+  assert.match(register, /captchaToken: captchaToken \|\| undefined/);
+  assert.match(login, /signInWithPassword\([\s\S]*captchaToken/);
+  assert.match(login, /resetPasswordForEmail\([\s\S]*captchaToken/);
+  assert.match(checkEmail, /resend\([\s\S]*captchaToken/);
+  assert.match(env, /NEXT_PUBLIC_TURNSTILE_SITE_KEY=/);
+  assert.doesNotMatch(env, /TURNSTILE_SECRET/);
 });
 
 test("legal copy identifies processors, region, and a fixed effective version", () => {
