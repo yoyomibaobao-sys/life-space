@@ -14,6 +14,8 @@ create temporary table admin_residual_test_context (
 insert into admin_residual_test_context
 values (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid());
 
+grant select on admin_residual_test_context to authenticated;
+
 do $$
 declare
   c admin_residual_test_context%rowtype;
