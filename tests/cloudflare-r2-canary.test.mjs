@@ -12,6 +12,63 @@ test("Cloudflare remains an isolated canary without a production route", () => {
   assert.match(config, /"binding": "R2_MEDIA_CANARY"/);
   assert.match(config, /"bucket_name": "life-space-media-canary"/);
   assert.doesNotMatch(config, /"routes?"\s*:/);
+  assert.doesNotMatch(config, /"triggers?"\s*:/);
+});
+
+test("Cloudflare prepares maintenance without activating a second cron", () => {
+  const worker = read("cloudflare/worker-entry.mjs");
+  const maintenance = read("cloudflare/scheduled-maintenance.mjs");
+
+  assert.match(worker, /async scheduled\(_controller, env, ctx\)/);
+  assert.match(worker, /runScheduledMaintenance\(app, env, ctx\)/);
+  assert.match(maintenance, /env\?\.CRON_SECRET/);
+  assert.match(maintenance, /authorization: `Bearer \$\{getCronSecret\(env\)\}`/);
+  assert.match(maintenance, /app\.fetch\(request, env, ctx\)/);
+  assert.doesNotMatch(maintenance, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("scheduled maintenance reuses the protected internal route", async () => {
+  const { runScheduledMaintenance, STORAGE_DELETION_WORKER_PATH } = await import(
+    "../cloudflare/scheduled-maintenance.mjs"
+  );
+  const env = { CRON_SECRET: "test-only-cron-secret" };
+  const ctx = { waitUntil() {} };
+  let capturedRequest;
+  let capturedEnv;
+  let capturedContext;
+  const app = {
+    async fetch(request, receivedEnv, receivedContext) {
+      capturedRequest = request;
+      capturedEnv = receivedEnv;
+      capturedContext = receivedContext;
+      return Response.json({ ok: true });
+    },
+  };
+
+  assert.equal(await runScheduledMaintenance(app, env, ctx), 200);
+  assert.equal(new URL(capturedRequest.url).pathname, STORAGE_DELETION_WORKER_PATH);
+  assert.equal(capturedRequest.method, "GET");
+  assert.equal(
+    capturedRequest.headers.get("authorization"),
+    "Bearer test-only-cron-secret"
+  );
+  assert.equal(capturedEnv, env);
+  assert.equal(capturedContext, ctx);
+
+  await assert.rejects(
+    () => runScheduledMaintenance(app, {}, ctx),
+    /cloudflare_cron_secret_missing/
+  );
+
+  await assert.rejects(
+    () =>
+      runScheduledMaintenance(
+        { fetch: async () => new Response(null, { status: 503 }) },
+        env,
+        ctx
+      ),
+    /cloudflare_scheduled_maintenance_failed:503/
+  );
 });
 
 test("R2 canary requires a Worker secret and removes its probe object", () => {
