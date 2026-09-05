@@ -76,13 +76,13 @@ const zh = {
   },
 
   quick_record: {
-    take_photo: "拍照新建记录",
+    take_photo: "拍照或选图新建记录",
     processing_photo: "正在处理照片…",
     loading_projects: "照片已就绪，正在加载项目…",
     capture_failed: "照片暂时无法保存，请重试",
     loading: "正在准备记录...",
     missing_title: "照片已失效",
-    missing_hint: "请返回首页，重新点击中间的＋拍照。",
+    missing_hint: "请返回首页，重新点击中间的＋拍照或选择图片。",
     back_home: "返回首页",
     eyebrow: "新建记录",
     title: "选择记录所属项目",

@@ -120,7 +120,9 @@ test("the center plus accumulates photos and carries all of them into one new re
   assert.match(navbar, /<QuickCaptureNavAction/);
   assert.match(action, /type="file"/);
   assert.match(action, /accept="image\/\*"/);
-  assert.match(action, /capture="environment"/);
+  assert.match(action, /useIsNativeApp/);
+  assert.match(action, /capture=\{isNativeApp === true \? "environment" : undefined\}/);
+  assert.doesNotMatch(action, /capture="environment"/);
   assert.doesNotMatch(action, /standardizeRecordPhotoFile/);
   assert.match(action, /saveQuickCapture/);
   assert.match(action, /processing_photo/);
