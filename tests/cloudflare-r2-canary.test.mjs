@@ -153,7 +153,10 @@ test("Cloudflare deployment stays isolated and uses encrypted repository secrets
 
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /branches:\s*\n\s*- main/);
-  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
+  assert.match(
+    workflow,
+    /permissions:\s*\n\s*contents: read\s*\n\s*statuses: write/
+  );
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL: https:\/\/cloudflare-canary\.invalid/);
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_ANON_KEY: cloudflare-canary-placeholder/);
   assert.match(workflow, /npm run build:vinext/);
@@ -164,6 +167,10 @@ test("Cloudflare deployment stays isolated and uses encrypted repository secrets
   assert.match(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/);
   assert.match(workflow, /steps\.deploy\.outputs\.deployment-url/);
   assert.match(workflow, /npm run test:r2-canary/);
+  assert.match(workflow, /name: Report the canary result on the commit/);
+  assert.match(workflow, /if: always\(\)/);
+  assert.match(workflow, /gh api --method POST/);
+  assert.match(workflow, /context="Cloudflare canary"/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
 });
