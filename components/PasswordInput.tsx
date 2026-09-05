@@ -9,6 +9,9 @@ type Props = {
   onChange: (v: string) => void;
   onFocus?: (element: HTMLInputElement) => void;
   placeholder?: string;
+  autoComplete?: "current-password" | "new-password";
+  minLength?: number;
+  required?: boolean;
 };
 
 export default function PasswordInput({
@@ -16,6 +19,9 @@ export default function PasswordInput({
   onChange,
   onFocus,
   placeholder,
+  autoComplete,
+  minLength,
+  required = false,
 }: Props) {
   const { t } = useLanguage();
   const [show, setShow] = useState(false);
@@ -28,6 +34,9 @@ export default function PasswordInput({
         onChange={(e) => onChange(e.target.value)}
         onFocus={(e) => onFocus?.(e.currentTarget)}
         placeholder={placeholder || t.auth.password_placeholder}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        required={required}
         style={{
           width: "100%",
           padding: "12px 44px 12px 12px",
