@@ -63,6 +63,7 @@ import {
   getCreateContentBlockedText,
   getStorageLimitExceededText,
   normalizeMembershipRpcResult,
+  type MyMembership,
 } from "@/lib/membership";
 import {
   cancelStorageUploadReservation,
@@ -93,6 +94,12 @@ import {
   getCloudArchiveCategoryDepths,
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
+import {
+  CloudToLocalSaveError,
+  findSavedLocalCopy,
+  saveCloudArchiveToLocal,
+  type CloudToLocalSaveProgress,
+} from "@/lib/cloud-to-local-save";
 
 export default function ArchiveDetail({
   params,
@@ -128,6 +135,7 @@ function Content({ id }: { id: string }) {
   const [cycleBusy, setCycleBusy] = useState(false);
   const [cycleSettingsSaving, setCycleSettingsSaving] = useState(false);
   const [me, setMe] = useState<string | null | undefined>(undefined);
+  const [meEmail, setMeEmail] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [ownerAvatarUrl, setOwnerAvatarUrl] = useState<string | null>(null);
   const [sameTagCounts, setSameTagCounts] = useState<Record<string, number>>({});
@@ -175,6 +183,13 @@ function Content({ id }: { id: string }) {
   const [deleteArchiveDialogOpen, setDeleteArchiveDialogOpen] = useState(false);
   const [archiveStatusConfirmOpen, setArchiveStatusConfirmOpen] = useState(false);
   const [isDeletingArchive, setIsDeletingArchive] = useState(false);
+  const [localCopyId, setLocalCopyId] = useState<string | null>(null);
+  const [saveToLocalConfirmOpen, setSaveToLocalConfirmOpen] = useState(false);
+  const [saveToLocalRunning, setSaveToLocalRunning] = useState(false);
+  const [saveToLocalProgress, setSaveToLocalProgress] =
+    useState<CloudToLocalSaveProgress | null>(null);
+  const [ownerMembership, setOwnerMembership] = useState<MyMembership | null>(null);
+  const [ownerMembershipLoaded, setOwnerMembershipLoaded] = useState(false);
 
   const searchParams = useSearchParams();
   const modeParam = searchParams.get("mode");
@@ -187,12 +202,15 @@ function Content({ id }: { id: string }) {
 
   useEffect(() => {
     async function load() {
+      setOwnerMembershipLoaded(false);
+      setOwnerMembership(null);
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       const currentUserId = session?.user?.id ?? null;
       setMe(currentUserId);
+      setMeEmail(session?.user?.email || null);
 
       const { data: archiveData } = await supabase
         .from("archives")
@@ -204,6 +222,27 @@ function Content({ id }: { id: string }) {
 
       const isOwnerView = currentUserId === archiveData.user_id;
       setArchive(archiveData as ArchiveDetailArchive);
+      if (isOwnerView && currentUserId) {
+        const [savedLocalCopy, membershipResult] = await Promise.all([
+          findSavedLocalCopy(archiveData.id, {
+            userId: currentUserId,
+            email: session?.user?.email || null,
+          }).catch(() => null),
+          supabase.rpc("get_my_membership"),
+        ]);
+        setLocalCopyId(savedLocalCopy?.id || null);
+        if (membershipResult.error) {
+          console.error("load archive owner membership error:", membershipResult.error);
+          setOwnerMembership(null);
+        } else {
+          setOwnerMembership(normalizeMembershipRpcResult(membershipResult.data));
+        }
+        setOwnerMembershipLoaded(true);
+      } else {
+        setLocalCopyId(null);
+        setOwnerMembership(null);
+        setOwnerMembershipLoaded(true);
+      }
       setArchiveSubcategoryLabel(null);
       setArchiveGroupLabel(null);
 
@@ -650,7 +689,11 @@ saveRecentArchiveBrowse({
     });
   }, []);
 
-  if (!archive || me === undefined) {
+  if (
+    !archive ||
+    me === undefined ||
+    (me === archive.user_id && !ownerMembershipLoaded)
+  ) {
     return <div style={{ padding: 20 }}>{archiveCopy.loading}</div>;
   }
 
@@ -658,6 +701,7 @@ saveRecentArchiveBrowse({
   const displayUsername = username || archiveCopy.default_user;
   const cycleTerminology = getArchiveCycleTerminology(activeArchive.category, language);
   const isOwner = me === activeArchive.user_id;
+  const canWriteCloud = isOwner && canCreateMembershipContent(ownerMembership);
   const mode: ArchiveMode = isOwner ? ((modeParam as ArchiveMode | null) || "owner") : "viewer";
   const cycleEnabled = typeof activeArchive.cycle_enabled === "boolean"
     ? activeArchive.cycle_enabled
@@ -698,9 +742,24 @@ saveRecentArchiveBrowse({
   const mobileGuideCandidates = filterSystemNameCandidates(
     archiveProfileSystemNameCandidateList, mobileArchiveName, mobileArchiveCategory,
   );
+  const saveToLocalActionLabel = saveToLocalRunning
+    ? saveToLocalProgress?.phase === "downloading"
+      ? `${archiveCopy.save_to_device_downloading} ${saveToLocalProgress.completed}/${saveToLocalProgress.total}`
+      : saveToLocalProgress?.phase === "saving"
+        ? archiveCopy.save_to_device_finalizing
+        : archiveCopy.save_to_device_reading
+    : localCopyId
+      ? archiveCopy.update_device_copy
+      : archiveCopy.save_to_device;
 
   if (!isOwner && !activeArchive.is_public) {
     return <ArchivePrivateState />;
+  }
+
+  function requireCloudWriteAccess() {
+    if (isOwner && canWriteCloud) return true;
+    showToast(archiveCopy.cloud_read_only_action);
+    return false;
   }
 
   function getSameTagCount(tag: string) {
@@ -741,6 +800,7 @@ saveRecentArchiveBrowse({
   }
 
   async function updateArchiveHelpState(nextStatus: "open" | "resolved" | "none") {
+    if (!requireCloudWriteAccess()) return;
     const now = new Date().toISOString();
     const patch: Partial<ArchiveDetailArchive> =
       nextStatus === "open"
@@ -768,6 +828,7 @@ saveRecentArchiveBrowse({
   }
 
   async function setRecordHelpStatus(recordId: string, nextStatus: "help" | "resolved" | null) {
+    if (!requireCloudWriteAccess()) return;
     const targetRecord = records.find((record) => record.id === recordId);
     const shouldPublishForHelp =
       nextStatus === "help" &&
@@ -842,33 +903,30 @@ saveRecentArchiveBrowse({
     if (!isOwner) return;
 
     const nextValue = !activeArchive.is_public;
-    const nextRecordVisibility = nextValue ? "public" : "private";
+    if (nextValue && !requireCloudWriteAccess()) return;
 
-    const { error } = await supabase
-      .from("archives")
-      .update({ is_public: nextValue })
-      .eq("id", activeArchive.id);
+    const { data: downgradeResult, error } = nextValue
+      ? await supabase
+          .from("archives")
+          .update({ is_public: true })
+          .eq("id", activeArchive.id)
+          .eq("user_id", activeArchive.user_id)
+          .select("id")
+          .single()
+      : await supabase.rpc("make_my_archive_private", {
+          p_archive_id: activeArchive.id,
+        });
 
-    if (error) {
+    if (error || (!nextValue && downgradeResult !== true)) {
       showToast(recordCopy.visibility_update_failed);
       return;
     }
 
     if (!nextValue) {
-      const { error: recordsError } = await supabase
-        .from("records")
-        .update({ visibility: nextRecordVisibility })
-        .eq("archive_id", activeArchive.id);
-
-      if (recordsError) {
-        showToast(recordCopy.sync_failed);
-        return;
-      }
-
       setRecords((prev) =>
         prev.map((record) => ({
           ...record,
-          visibility: nextRecordVisibility,
+          visibility: "private",
         }))
       );
     }
@@ -883,7 +941,7 @@ saveRecentArchiveBrowse({
   }
 
   async function applyArchiveStatus(nextStatus: "active" | "ended") {
-    if (!isOwner) return;
+    if (!isOwner || !requireCloudWriteAccess()) return;
 
     const isEnding = nextStatus === "ended";
     const { error } = await supabase.rpc(
@@ -927,8 +985,75 @@ saveRecentArchiveBrowse({
     router.refresh();
   }
 
+  function getSaveToLocalErrorText(error: unknown) {
+    if (!(error instanceof CloudToLocalSaveError)) {
+      return archiveCopy.save_to_device_verify_failed;
+    }
+
+    if (error.code === "not_authenticated") {
+      return archiveCopy.save_to_device_login_required;
+    }
+    if (error.code === "not_owner") {
+      return archiveCopy.save_to_device_owner_only;
+    }
+    if (error.code === "not_found") {
+      return archiveCopy.save_to_device_not_found;
+    }
+    if (error.code === "read_failed") {
+      return archiveCopy.save_to_device_read_failed;
+    }
+    if (error.code === "not_enough_space") {
+      return archiveCopy.save_to_device_space_low;
+    }
+    if (error.code === "download_failed") {
+      return archiveCopy.save_to_device_download_failed;
+    }
+    return archiveCopy.save_to_device_verify_failed;
+  }
+
+  function openSaveToLocalPrompt() {
+    if (!isOwner || !me) {
+      showToast(
+        me
+          ? archiveCopy.save_to_device_owner_only
+          : archiveCopy.save_to_device_login_required
+      );
+      return;
+    }
+    setSaveToLocalConfirmOpen(true);
+  }
+
+  async function confirmSaveToLocal() {
+    if (!isOwner || !me || saveToLocalRunning) return;
+
+    const wasUpdating = Boolean(localCopyId);
+    setSaveToLocalConfirmOpen(false);
+    setSaveToLocalRunning(true);
+    setSaveToLocalProgress({ phase: "reading", completed: 0, total: 0 });
+
+    try {
+      const result = await saveCloudArchiveToLocal({
+        cloudArchiveId: activeArchive.id,
+        ownerContext: { userId: me, email: meEmail },
+        onProgress: setSaveToLocalProgress,
+      });
+      setLocalCopyId(result.localArchiveId);
+      showToast(
+        wasUpdating
+          ? archiveCopy.update_device_copy_success
+          : archiveCopy.save_to_device_success
+      );
+      router.push(`/local/archive/${result.localArchiveId}`);
+    } catch (error) {
+      showToast(getSaveToLocalErrorText(error));
+    } finally {
+      setSaveToLocalRunning(false);
+      setSaveToLocalProgress(null);
+    }
+  }
+
   function beginMobileArchiveEdit(field: MobileArchiveEditableField) {
-    if (!isOwner) return;
+    if (!isOwner || !requireCloudWriteAccess()) return;
 
     setMobileArchiveEditingField(field);
     setMobileArchiveError("");
@@ -945,7 +1070,11 @@ saveRecentArchiveBrowse({
     patch: Partial<ArchiveDetailArchive>,
     successMessage = archiveCopy.saved
   ) {
-    if (!isOwner || archiveProfileSavingRef.current) return false;
+    if (
+      !isOwner ||
+      archiveProfileSavingRef.current ||
+      !requireCloudWriteAccess()
+    ) return false;
 
     archiveProfileSavingRef.current = true;
     setMobileArchiveSavingField(field);
@@ -1027,7 +1156,7 @@ saveRecentArchiveBrowse({
   }
 
   async function updateArchiveTaxonomy(value: string) {
-    if (!isOwner || mobileArchiveSavingField) return;
+    if (!isOwner || mobileArchiveSavingField || !requireCloudWriteAccess()) return;
 
     const categoryOption = archiveCategoryOptions.find((option) => option.value === value);
     const selectedSubTag = ownerSubTags.find((tag) => String(tag.id) === value);
@@ -1052,7 +1181,7 @@ saveRecentArchiveBrowse({
   }
 
   async function updateArchiveGroup(value: string) {
-    if (!isOwner || mobileArchiveSavingField) return;
+    if (!isOwner || mobileArchiveSavingField || !requireCloudWriteAccess()) return;
     const nextGroup = value
       ? ownerGroupTags.find((tag) => String(tag.id) === value)
       : null;
@@ -1068,7 +1197,9 @@ saveRecentArchiveBrowse({
   }
 
   async function saveArchiveSystemNameSelection(selection: SystemNameSelection) {
-    if (!isOwner) throw new Error(archiveCopy.save_retry);
+    if (!isOwner || !requireCloudWriteAccess()) {
+      throw new Error(archiveCopy.cloud_read_only_action);
+    }
     const binding = resolveSystemNameSelection(
       archiveProfileSystemNameCandidateList, selection, normalizeArchiveCategory(activeArchive.category),
     );
@@ -1348,6 +1479,7 @@ saveRecentArchiveBrowse({
     options: { successMessage?: string | null; emptyMessage?: string | null } = {},
   ): Promise<MediaItem[]> {
     if (!files.length) return [];
+    if (!requireCloudWriteAccess()) return [];
     const { accepted: acceptedFiles, rejectedCount } =
       limitRecordPhotoBatch(files);
 
@@ -1669,7 +1801,7 @@ saveRecentArchiveBrowse({
   }: {
     enabled: boolean;
   }) {
-    if (!isOwner || cycleSettingsSaving) return;
+    if (!isOwner || cycleSettingsSaving || !requireCloudWriteAccess()) return;
     setCycleSettingsSaving(true);
 
     const { error } = await supabase
@@ -1696,7 +1828,7 @@ saveRecentArchiveBrowse({
   }
 
   async function startArchiveCycle(startedAt: string) {
-    if (!isOwner || cycleBusy) return;
+    if (!isOwner || cycleBusy || !requireCloudWriteAccess()) return;
     setCycleBusy(true);
     try {
       const { data, error } = await supabase.rpc("create_archive_cycle", {
@@ -1735,7 +1867,12 @@ saveRecentArchiveBrowse({
   }
 
   async function endArchiveCycle(cycle: ArchiveCycle, endedAt: string) {
-    if (!isOwner || cycleBusy || cycle.status !== "active") return;
+    if (
+      !isOwner ||
+      cycleBusy ||
+      cycle.status !== "active" ||
+      !requireCloudWriteAccess()
+    ) return;
     if (new Date(endedAt).getTime() < new Date(cycle.started_at).getTime()) {
       showToast(archiveCopy.end_before_start);
       return;
@@ -1767,7 +1904,7 @@ saveRecentArchiveBrowse({
     cycle: ArchiveCycle,
     dates: { startedAt: string; endedAt: string | null }
   ) {
-    if (!isOwner || cycleBusy) return;
+    if (!isOwner || cycleBusy || !requireCloudWriteAccess()) return;
     if (
       cycle.status === "ended" &&
       (!dates.endedAt || new Date(dates.endedAt).getTime() < new Date(dates.startedAt).getTime())
@@ -1802,7 +1939,7 @@ saveRecentArchiveBrowse({
   }
 
   async function renameArchiveCycle(cycle: ArchiveCycle, displayName: string) {
-    if (!isOwner || cycleBusy) return;
+    if (!isOwner || cycleBusy || !requireCloudWriteAccess()) return;
     setCycleBusy(true);
     try {
       const { error } = await supabase
@@ -1864,7 +2001,24 @@ saveRecentArchiveBrowse({
   }
 
   async function handleRecordVisibilityChange(recordId: string, nextVisibility: string) {
-    await supabase.from("records").update({ visibility: nextVisibility }).eq("id", recordId);
+    if (!isOwner) return;
+    if (nextVisibility !== "private" && !requireCloudWriteAccess()) return;
+
+    const { data, error } = nextVisibility === "private"
+      ? await supabase.rpc("make_my_record_private", { p_record_id: recordId })
+      : await supabase
+          .from("records")
+          .update({ visibility: "public" })
+          .eq("id", recordId)
+          .eq("archive_id", activeArchive.id)
+          .eq("user_id", activeArchive.user_id)
+          .select("id")
+          .single();
+
+    if (error || (nextVisibility === "private" && data !== true)) {
+      showToast(recordCopy.visibility_update_failed);
+      return;
+    }
 
     setRecords((prev) =>
       prev.map((record) =>
@@ -1874,7 +2028,7 @@ saveRecentArchiveBrowse({
   }
 
   async function handleRecordCycleChange(recordId: string, cycleId: string | null) {
-    if (!isOwner) return;
+    if (!isOwner || !requireCloudWriteAccess()) return;
     const { error } = await supabase
       .from("records")
       .update({ cycle_id: cycleId })
@@ -1900,6 +2054,7 @@ saveRecentArchiveBrowse({
   }
 
   async function handleAddTag(recordId: string, newTag: string) {
+    if (!requireCloudWriteAccess()) return;
     const target = records.find((item) => item.id === recordId);
     const existingTags = Array.isArray(target?.display_tags) ? target?.display_tags : [];
 
@@ -1998,6 +2153,21 @@ saveRecentArchiveBrowse({
           />
         </div>
 
+        {isOwner && !canWriteCloud ? (
+          <div style={cloudReadOnlyNoticeStyle}>
+            <span>
+              {ownerMembership?.plan === "trial"
+                ? archiveCopy.cloud_trial_read_only_notice
+                : ownerMembership
+                  ? archiveCopy.cloud_paid_read_only_notice
+                  : archiveCopy.cloud_read_only_notice}
+            </span>
+            <Link href="/membership" style={cloudReadOnlyNoticeLinkStyle}>
+              {archiveCopy.view_cloud_membership}
+            </Link>
+          </div>
+        ) : null}
+
         <nav style={archiveDetailTabWrapStyle} aria-label={archiveCopy.detail_navigation}>
           <button
             type="button"
@@ -2027,6 +2197,7 @@ saveRecentArchiveBrowse({
           <div id="archive-profile" style={archiveDetailAnchorStyle}>
             <ArchiveDetailHeader
               mode={mode}
+              canWriteCloud={canWriteCloud}
               archive={activeArchive}
               username={displayUsername}
               archiveDisplayName={archiveDisplayName}
@@ -2043,6 +2214,9 @@ saveRecentArchiveBrowse({
               onToggleArchiveStatus={() =>
                 void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
               }
+              onSaveToLocal={openSaveToLocalPrompt}
+              saveToLocalLabel={saveToLocalActionLabel}
+              saveToLocalDisabled={saveToLocalRunning}
               onDeleteArchive={() => setDeleteArchiveDialogOpen(true)}
               onSaveTitle={async (nextTitle) => {
                 setMobileArchiveTitle(nextTitle);
@@ -2069,7 +2243,7 @@ saveRecentArchiveBrowse({
                 );
               }}
               profileExtra={isOwner ? (
-                <>
+                canWriteCloud ? <>
                   <div style={projectManagementRowStyle}>
                     <MobileArchiveActions
                       category={normalizeArchiveCategory(activeArchive.category)}
@@ -2095,7 +2269,7 @@ saveRecentArchiveBrowse({
                     busy={cycleSettingsSaving}
                     onSave={saveArchiveCycleSettings}
                   />
-                </>
+                </> : null
               ) : (
                 <Link href={`/user/${activeArchive.user_id}`} style={attributeCreatorLinkStyle}>
                   {ownerAvatarUrl ? (
@@ -2128,6 +2302,7 @@ saveRecentArchiveBrowse({
             savingField={mobileArchiveSavingField}
             error={mobileArchiveError}
             isOwner={isOwner}
+            canWriteCloud={canWriteCloud}
             guideCandidates={mobileGuideCandidates}
             guideCandidatesLoading={archiveCandidatesLoading}
             guideSuggestionsOpen={mobileGuideSuggestionsOpen}
@@ -2164,6 +2339,7 @@ saveRecentArchiveBrowse({
                 maxDepth={categoryDepths[normalizeArchiveCategory(activeArchive.category)] || 3}
                 ended={activeArchive.status === "ended"}
                 isPublic={Boolean(activeArchive.is_public)}
+                canWriteCloud={canWriteCloud}
                 busy={Boolean(mobileArchiveSavingField)}
                 onChangeSubcategory={(value) =>
                   void updateArchiveTaxonomy(value || normalizeArchiveCategory(activeArchive.category))
@@ -2174,12 +2350,26 @@ saveRecentArchiveBrowse({
                 }
                 onTogglePublic={() => void toggleArchiveVisibility()}
               />
-              <ArchiveCycleSettings
-                key={activeArchive.id}
-                enabled={cycleEnabled}
-                busy={cycleSettingsSaving}
-                onSave={saveArchiveCycleSettings}
-              />
+              {canWriteCloud ? (
+                <ArchiveCycleSettings
+                  key={activeArchive.id}
+                  enabled={cycleEnabled}
+                  busy={cycleSettingsSaving}
+                  onSave={saveArchiveCycleSettings}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={openSaveToLocalPrompt}
+                disabled={saveToLocalRunning}
+                style={{
+                  ...mobileArchiveSaveLocalButtonStyle,
+                  opacity: saveToLocalRunning ? 0.55 : 1,
+                  cursor: saveToLocalRunning ? "not-allowed" : "pointer",
+                }}
+              >
+                {saveToLocalActionLabel}
+              </button>
               <button
                 type="button"
                 onClick={() => setDeleteArchiveDialogOpen(true)}
@@ -2196,11 +2386,12 @@ saveRecentArchiveBrowse({
           <ArchiveExperienceCards
             archiveId={activeArchive.id}
             isOwner={isOwner}
+            canCreate={canWriteCloud}
             onCountChange={setExperienceCardCount}
           />
         ) : null}
 
-        {mode === "owner" && activeDetailTab === "records" ? (
+        {mode === "owner" && canWriteCloud && activeDetailTab === "records" ? (
           <ArchiveAddRecordSection
             archiveId={activeArchive.id}
             archiveCategory={activeArchive.category}
@@ -2225,7 +2416,7 @@ saveRecentArchiveBrowse({
           records={records}
           category={activeArchive.category}
           mobileMode={isMobileViewport}
-          canManage={mode === "owner" && cycleEnabled}
+          canManage={mode === "owner" && canWriteCloud && cycleEnabled}
           busy={cycleBusy}
           onStartCycle={cycleEnabled ? startArchiveCycle : undefined}
           onEndCycle={cycleEnabled ? endArchiveCycle : undefined}
@@ -2262,6 +2453,7 @@ saveRecentArchiveBrowse({
                 item={item}
                 index={index}
                 mode={mode}
+                cloudWritable={canWriteCloud}
                 startTime={startTime}
                 isHighlighted={highlightedRecordId === item.id}
                 sameTagLinks={sameTagLinks}
@@ -2299,7 +2491,7 @@ saveRecentArchiveBrowse({
           isMobileViewport={isMobileViewport}
           metaText={lightboxMetaText}
           note={lightboxRecord?.note || ""}
-          onDeleteCurrentImage={handleDeleteLightboxImage}
+          onDeleteCurrentImage={isOwner ? handleDeleteLightboxImage : undefined}
           deleteActionLabel={archiveCopy.move_to_trash}
           deleteConfirmMessage={archiveCopy.photo_trash_message}
           onClose={() => {
@@ -2321,6 +2513,32 @@ saveRecentArchiveBrowse({
         }}
         onConfirm={confirmUnfollowProject}
         danger
+      />
+
+      <ConfirmDialog
+        open={saveToLocalConfirmOpen}
+        title={
+          localCopyId
+            ? archiveCopy.update_device_copy_title
+            : archiveCopy.save_to_device_title
+        }
+        message={
+          localCopyId
+            ? archiveCopy.update_device_copy_message
+            : archiveCopy.save_to_device_message
+        }
+        confirmText={
+          localCopyId
+            ? archiveCopy.update_device_copy
+            : archiveCopy.save_to_device
+        }
+        cancelText={t.cancel}
+        onClose={() => {
+          if (!saveToLocalRunning) setSaveToLocalConfirmOpen(false);
+        }}
+        onConfirm={() => void confirmSaveToLocal()}
+        confirmDisabled={saveToLocalRunning}
+        cancelDisabled={saveToLocalRunning}
       />
 
       <ConfirmDialog
@@ -2378,6 +2596,7 @@ function MobileArchiveOwnerFields({
   maxDepth,
   ended,
   isPublic,
+  canWriteCloud,
   busy,
   onChangeSubcategory,
   onChangeGroup,
@@ -2392,6 +2611,7 @@ function MobileArchiveOwnerFields({
   maxDepth: 1 | 2 | 3;
   ended: boolean;
   isPublic: boolean;
+  canWriteCloud: boolean;
   busy: boolean;
   onChangeSubcategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
@@ -2405,9 +2625,11 @@ function MobileArchiveOwnerFields({
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === subTagId)
     : [];
 
+  if (!canWriteCloud && !isPublic) return null;
+
   return (
     <section style={mobileArchiveOwnerFieldsStyle} aria-label={copy.project_settings}>
-      {maxDepth >= 2 ? <label style={mobileArchiveOwnerSelectRowStyle}>
+      {canWriteCloud && maxDepth >= 2 ? <label style={mobileArchiveOwnerSelectRowStyle}>
         <span style={mobileArchiveLabelStyle}>{copy.subcategory}</span>
         <span style={mobileArchiveOwnerSelectWrapStyle}>
           <select
@@ -2427,7 +2649,7 @@ function MobileArchiveOwnerFields({
         </span>
       </label> : null}
 
-      {maxDepth >= 3 ? <label style={mobileArchiveOwnerSelectRowStyle}>
+      {canWriteCloud && maxDepth >= 3 ? <label style={mobileArchiveOwnerSelectRowStyle}>
         <span style={mobileArchiveLabelStyle}>{copy.group}</span>
         <span style={mobileArchiveOwnerSelectWrapStyle}>
           <select
@@ -2447,31 +2669,35 @@ function MobileArchiveOwnerFields({
         </span>
       </label> : null}
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onToggleEnded}
-        style={mobileArchiveOwnerActionRowStyle}
-      >
-        <span style={mobileArchiveLabelStyle}>{copy.project_status}</span>
-        <span style={mobileArchiveOwnerActionValueStyle}>
-          {ended ? copy.ended : copy.ongoing}
-          <UiIcon name="chevron-right" size={14} />
-        </span>
-      </button>
+      {canWriteCloud ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onToggleEnded}
+          style={mobileArchiveOwnerActionRowStyle}
+        >
+          <span style={mobileArchiveLabelStyle}>{copy.project_status}</span>
+          <span style={mobileArchiveOwnerActionValueStyle}>
+            {ended ? copy.ended : copy.ongoing}
+            <UiIcon name="chevron-right" size={14} />
+          </span>
+        </button>
+      ) : null}
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onTogglePublic}
-        style={mobileArchiveOwnerActionRowStyle}
-      >
-        <span style={mobileArchiveLabelStyle}>{copy.visibility}</span>
-        <span style={mobileArchiveOwnerActionValueStyle}>
-          {isPublic ? copy.public_discover : copy.private_only}
-          <UiIcon name="chevron-right" size={14} />
-        </span>
-      </button>
+      {canWriteCloud || isPublic ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onTogglePublic}
+          style={mobileArchiveOwnerActionRowStyle}
+        >
+          <span style={mobileArchiveLabelStyle}>{copy.visibility}</span>
+          <span style={mobileArchiveOwnerActionValueStyle}>
+            {isPublic ? copy.public_discover : copy.private_only}
+            <UiIcon name="chevron-right" size={14} />
+          </span>
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -2491,6 +2717,7 @@ function MobileArchiveProfile({
   savingField,
   error,
   isOwner,
+  canWriteCloud,
   guideCandidates,
   guideCandidatesLoading,
   guideSuggestionsOpen,
@@ -2525,6 +2752,7 @@ function MobileArchiveProfile({
   savingField: MobileArchiveEditableField | null;
   error: string;
   isOwner: boolean;
+  canWriteCloud: boolean;
   guideCandidates: SystemNameCandidate[];
   guideCandidatesLoading: boolean;
   guideSuggestionsOpen: boolean;
@@ -2548,7 +2776,7 @@ function MobileArchiveProfile({
   const { t } = useLanguage();
   const copy = t.archive;
   const createdAtText = formatDate(archive.created_at) || copy.not_filled;
-  const canEdit = isOwner && !savingField;
+  const canEdit = isOwner && canWriteCloud && !savingField;
   const categoryLabels: Record<ArchiveCategory, string> = {
     plant: copy.categories.plant_label,
     system: copy.categories.system_label,
@@ -3176,6 +3404,21 @@ const mobileArchiveOwnerActionValueStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const mobileArchiveSaveLocalButtonStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  minHeight: 44,
+  margin: "12px 0 4px",
+  border: "1px solid #b8d0ad",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#356b34",
+  padding: "8px 14px",
+  fontSize: 14,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
 const mobileArchiveTrashButtonStyle: CSSProperties = {
   display: "block",
   margin: "12px auto 6px",
@@ -3317,4 +3560,26 @@ const mobileArchiveErrorStyle: CSSProperties = {
   marginTop: 8,
   color: "#b94a48",
   fontSize: 13,
+};
+
+const cloudReadOnlyNoticeStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  margin: "10px 0",
+  border: "1px solid #dfe8d9",
+  borderRadius: 13,
+  background: "#f8fbf6",
+  color: "#52624f",
+  padding: "10px 12px",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const cloudReadOnlyNoticeLinkStyle: CSSProperties = {
+  flexShrink: 0,
+  color: "#3f743b",
+  fontWeight: 800,
+  textDecoration: "none",
 };

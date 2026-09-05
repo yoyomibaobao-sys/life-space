@@ -12,6 +12,8 @@ create temporary table membership_access_test_context (
   plant_id uuid not null,
   archive_id uuid not null,
   record_id uuid not null,
+  expired_archive_id uuid not null,
+  expired_record_id uuid not null,
   consultation_market_id uuid not null,
   trial_ended_market_id uuid not null,
   expired_active_market_id uuid not null,
@@ -22,6 +24,8 @@ grant select on membership_access_test_context to anon, authenticated;
 
 insert into membership_access_test_context
 select
+  gen_random_uuid(),
+  gen_random_uuid(),
   gen_random_uuid(),
   gen_random_uuid(),
   gen_random_uuid(),
@@ -378,6 +382,38 @@ select
   archive_id,
   other_user,
   '游客仍可在发现页查看的公开记录',
+  'public'
+from membership_access_test_context;
+
+insert into public.archives (
+  id,
+  user_id,
+  title,
+  category,
+  is_public,
+  system_name
+)
+select
+  expired_archive_id,
+  expired_user,
+  'expired-read-only-project',
+  'other',
+  true,
+  'expired-read-only-guide'
+from membership_access_test_context;
+
+insert into public.records (
+  id,
+  archive_id,
+  user_id,
+  note,
+  visibility
+)
+select
+  expired_record_id,
+  expired_archive_id,
+  expired_user,
+  'expired-read-only-record',
   'public'
 from membership_access_test_context;
 
@@ -842,6 +878,9 @@ set local role authenticated;
 do $$
 declare
   c membership_access_test_context%rowtype;
+  v_rows integer;
+  v_ok boolean;
+  v_error_code text;
 begin
   select * into c from membership_access_test_context;
 
@@ -867,9 +906,81 @@ begin
     raise exception 'expired account lost registered core-parameter access';
   end if;
 
-  update public.market_posts
-  set status = 'ended'
-  where id = c.expired_active_market_id;
+  if not exists (
+    select 1
+    from public.archives as a
+    where a.id = c.expired_archive_id
+      and a.user_id = c.expired_user
+  ) or not exists (
+    select 1
+    from public.records as r
+    where r.id = c.expired_record_id
+      and r.user_id = c.expired_user
+  ) then
+    raise exception 'expired owner lost read access to retained cloud content';
+  end if;
+
+  update public.archives
+  set title = 'expired-edit-should-not-apply'
+  where id = c.expired_archive_id;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 0 then
+    raise exception 'expired account edited retained cloud content';
+  end if;
+
+  if not public.make_my_archive_private(c.expired_archive_id) then
+    raise exception 'expired account could not make its project private';
+  end if;
+
+  if exists (
+    select 1
+    from public.archives as a
+    where a.id = c.expired_archive_id
+      and a.is_public
+  ) or exists (
+    select 1
+    from public.records as r
+    where r.id = c.expired_record_id
+      and r.visibility <> 'private'
+  ) then
+    raise exception 'visibility downgrade did not make project records private';
+  end if;
+
+  update public.archives
+  set is_public = true
+  where id = c.expired_archive_id;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 0 then
+    raise exception 'expired account changed a private project back to public';
+  end if;
+
+  begin
+    insert into public.records (
+      archive_id,
+      user_id,
+      note,
+      visibility
+    ) values (
+      c.expired_archive_id,
+      c.expired_user,
+      'expired-new-record-should-fail',
+      'private'
+    );
+    raise exception 'expired account inserted a new cloud record';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  select cycle.ok, cycle.error_code
+  into v_ok, v_error_code
+  from public.create_archive_cycle(c.expired_archive_id, now()) as cycle;
+  if coalesce(v_ok, false) or v_error_code <> 'membership_inactive' then
+    raise exception 'expired account started a new archive cycle';
+  end if;
+
+  if not public.end_my_market_post(c.expired_active_market_id) then
+    raise exception 'expired account could not end an existing market post';
+  end if;
 
   if not exists (
     select 1
@@ -905,6 +1016,20 @@ begin
       and following_id = c.other_user
   ) then
     raise exception 'expired account could not remove an existing follow';
+  end if;
+
+  select trash.ok, trash.error_code
+  into v_ok, v_error_code
+  from public.move_record_to_trash(c.expired_record_id) as trash;
+  if not coalesce(v_ok, false) then
+    raise exception 'expired account could not move a retained record to trash: %', v_error_code;
+  end if;
+
+  select restore.ok, restore.error_code
+  into v_ok, v_error_code
+  from public.restore_record_from_trash(c.expired_record_id) as restore;
+  if coalesce(v_ok, false) or v_error_code <> 'membership_inactive' then
+    raise exception 'expired account restored cloud content without renewing';
   end if;
 end;
 $$;

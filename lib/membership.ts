@@ -19,9 +19,52 @@ export type MyMembership = {
   can_create_market_post: boolean | null;
 };
 
+export type CloudTrialOffer = {
+  eligible: boolean | null;
+  claimed: boolean | null;
+  can_claim: boolean | null;
+  reason: string | null;
+  claimed_at: string | null;
+  trial_ends_at: string | null;
+  cleanup_due_at: string | null;
+  storage_limit_bytes: number | null;
+  duration_days: number | null;
+  handling_period_days: number | null;
+  lifecycle_status: string | null;
+};
+
+export type CloudTrialClaimResult = {
+  ok: boolean | null;
+  already_claimed: boolean | null;
+  reason: string | null;
+  claimed_at: string | null;
+  trial_ends_at: string | null;
+  cleanup_due_at: string | null;
+  storage_limit_bytes: number | null;
+  duration_days: number | null;
+  handling_period_days: number | null;
+  lifecycle_status: string | null;
+};
+
 export function normalizeMembershipRpcResult(data: unknown): MyMembership | null {
   if (Array.isArray(data)) return (data[0] || null) as MyMembership | null;
   return (data || null) as MyMembership | null;
+}
+
+export function normalizeCloudTrialOfferRpcResult(
+  data: unknown
+): CloudTrialOffer | null {
+  if (Array.isArray(data)) return (data[0] || null) as CloudTrialOffer | null;
+  return (data || null) as CloudTrialOffer | null;
+}
+
+export function normalizeCloudTrialClaimRpcResult(
+  data: unknown
+): CloudTrialClaimResult | null {
+  if (Array.isArray(data)) {
+    return (data[0] || null) as CloudTrialClaimResult | null;
+  }
+  return (data || null) as CloudTrialClaimResult | null;
 }
 
 export function getMembershipPlanLabel(
@@ -134,8 +177,8 @@ export function getMembershipSummary(
 
   if (membership.can_create_content === false) {
     return language === "en"
-      ? `${label} · ${status}. Existing content can still be viewed, exported, and deleted.`
-      : `${label} · ${status}。已有内容仍可查看、导出和删除。`;
+      ? `${label} · ${status}. Existing content can still be viewed, saved locally, exported, and deleted.`
+      : `${label} · ${status}。已有内容仍可查看、保存到本机、导出和删除。`;
   }
 
   if (typeof days === "number") {

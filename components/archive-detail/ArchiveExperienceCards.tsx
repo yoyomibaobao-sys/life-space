@@ -19,6 +19,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 type ArchiveExperienceCardsProps = {
   archiveId: string;
   isOwner: boolean;
+  canCreate?: boolean;
   onCountChange?: (count: number) => void;
 };
 
@@ -29,6 +30,7 @@ type ArchiveExperienceCardItem = ExperienceCardListItem & {
 export default function ArchiveExperienceCards({
   archiveId,
   isOwner,
+  canCreate = isOwner,
   onCountChange,
 }: ArchiveExperienceCardsProps) {
   const { t } = useLanguage();
@@ -124,7 +126,7 @@ export default function ArchiveExperienceCards({
               : `${t.experience.count_prefix}${items.length}${t.experience.count_suffix}`}
           </div>
         </div>
-        {isOwner ? (
+        {isOwner && canCreate ? (
           <Link
             href={`/experience-cards/new?archiveId=${archiveId}`}
             style={createLinkStyle}

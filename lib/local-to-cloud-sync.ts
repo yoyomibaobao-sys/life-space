@@ -634,6 +634,32 @@ export async function syncLocalArchiveToCloud(params: {
     };
   }
 
+  const sourceCloudArchiveId = cleanText(archive.source_cloud_archive_id);
+  if (sourceCloudArchiveId && !archive.migration_cloud_archive_id) {
+    const { data: sourceArchive, error: sourceArchiveError } = await supabase
+      .from("archives")
+      .select("id")
+      .eq("id", sourceCloudArchiveId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (sourceArchiveError) {
+      return {
+        success: false,
+        cloudArchiveId: sourceCloudArchiveId,
+        error: "暂时无法确认原云端项目状态，请稍后重试。",
+      };
+    }
+
+    if (sourceArchive?.id) {
+      return {
+        success: false,
+        cloudArchiveId: sourceCloudArchiveId,
+        error: "原云端项目仍然保留。开通或续费后请直接打开原项目继续记录；为避免重复，本机副本不会再次新建云端项目。",
+      };
+    }
+  }
+
   const hasLocalImages = detail.records.some((record) => record.images.length > 0);
   if (hasLocalImages && (await isStorageUploadMaintenance())) {
     return {

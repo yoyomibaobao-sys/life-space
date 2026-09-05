@@ -39,19 +39,22 @@ type AdminMembershipRow = {
   record_count: number | string | null;
 };
 
-type SignupRolloutStatus = {
+type CloudTrialStatus = {
   internal_test_account_count: number | string | null;
   formal_account_count: number | string | null;
-  trial_slot_limit: number | string | null;
-  trial_slots_granted: number | string | null;
-  trial_slots_remaining: number | string | null;
+  trial_claim_count: number | string | null;
+  active_trial_count: number | string | null;
+  handling_period_count: number | string | null;
+  cleanup_due_count: number | string | null;
   trial_allowance_bytes: number | string | null;
+  trial_duration_days: number | string | null;
+  handling_period_days: number | string | null;
   platform_storage_bytes: number | string | null;
   unrealized_trial_allowance_bytes: number | string | null;
   projected_storage_bytes: number | string | null;
   platform_storage_pause_bytes: number | string | null;
-  trial_grants_enabled: boolean | null;
-  trial_grants_paused: boolean | null;
+  trial_claims_enabled: boolean | null;
+  trial_claims_paused: boolean | null;
   pause_reason: string | null;
 };
 
@@ -240,7 +243,6 @@ function getAdminMembershipStatusLabel(
 function getSignupTrialPauseLabel(reason: string | null | undefined, language: Language) {
   const copy = getTranslations(language).admin_memberships;
   if (reason === "disabled") return copy.pause_disabled;
-  if (reason === "first_twenty_registered") return copy.pause_first_twenty;
   if (reason === "storage_safety_threshold") return copy.pause_storage;
   return copy.grants_available;
 }
@@ -477,7 +479,7 @@ export default function AdminMembershipsPage() {
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [keyword, setKeyword] = useState("");
   const [rows, setRows] = useState<AdminMembershipRow[]>([]);
-  const [rolloutStatus, setRolloutStatus] = useState<SignupRolloutStatus | null>(null);
+  const [rolloutStatus, setRolloutStatus] = useState<CloudTrialStatus | null>(null);
   const [rolloutLoading, setRolloutLoading] = useState(false);
   const [rolloutError, setRolloutError] = useState("");
   const [selected, setSelected] = useState<AdminMembershipRow | null>(null);
@@ -622,7 +624,7 @@ export default function AdminMembershipsPage() {
     setRolloutError("");
 
     const { data, error } = await supabase.rpc(
-      "admin_get_signup_rollout_status"
+      "admin_get_cloud_trial_status"
     );
 
     if (error) {
@@ -635,7 +637,7 @@ export default function AdminMembershipsPage() {
       return;
     }
 
-    setRolloutStatus(firstRpcRow<SignupRolloutStatus>(data));
+    setRolloutStatus(firstRpcRow<CloudTrialStatus>(data));
     setRolloutLoading(false);
   }
 
@@ -1902,7 +1904,7 @@ export default function AdminMembershipsPage() {
           <span style={pillStyle}>
             {rolloutLoading
               ? t.admin_memberships.reading
-              : rolloutStatus?.trial_grants_paused
+              : rolloutStatus?.trial_claims_paused
                 ? getSignupTrialPauseLabel(rolloutStatus.pause_reason, language)
                 : t.admin_memberships.grants_available}
           </span>
@@ -1926,17 +1928,43 @@ export default function AdminMembershipsPage() {
             />
             <InfoItem
               label={t.admin_memberships.trial_slots}
-              value={`${Number(rolloutStatus.trial_slots_granted || 0)} / ${Number(rolloutStatus.trial_slot_limit || 0)}`}
+              value={`${Number(rolloutStatus.trial_claim_count || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.account_unit}`}
             />
             <InfoItem
               label={t.admin_memberships.trial_window_remaining}
-              value={`${Number(rolloutStatus.trial_slots_remaining || 0)}${
+              value={`${Number(rolloutStatus.active_trial_count || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.account_unit}`}
+            />
+            <InfoItem
+              label={t.admin_memberships.handling_trials}
+              value={`${Number(rolloutStatus.handling_period_count || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.account_unit}`}
+            />
+            <InfoItem
+              label={t.admin_memberships.cleanup_due_trials}
+              value={`${Number(rolloutStatus.cleanup_due_count || 0)}${
                 language === "en" ? " " : ""
               }${t.admin_memberships.account_unit}`}
             />
             <InfoItem
               label={t.admin_memberships.allowance_per_user}
               value={formatStorageBytes(Number(rolloutStatus.trial_allowance_bytes || 0))}
+            />
+            <InfoItem
+              label={t.admin_memberships.trial_duration}
+              value={`${Number(rolloutStatus.trial_duration_days || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.day_unit}`}
+            />
+            <InfoItem
+              label={t.admin_memberships.handling_duration}
+              value={`${Number(rolloutStatus.handling_period_days || 0)}${
+                language === "en" ? " " : ""
+              }${t.admin_memberships.day_unit}`}
             />
             <InfoItem
               label={t.admin_memberships.platform_storage}

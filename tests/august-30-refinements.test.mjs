@@ -69,6 +69,7 @@ test("cloud guide selection saves category and name together without changing ot
   const candidates = [{ id: "aquatic-guide", label: "金鱼藻", category: "insect_fish", source: "public_guide" }];
   const scope = {
     isOwner: true, archiveCopy: { save_retry: "重试", system_name_empty: "不能为空", system_name_updated: "已更新" },
+    requireCloudWriteAccess: () => true,
     archiveProfileSystemNameCandidateList: candidates, activeArchive,
     normalizeArchiveCategory: loadFunction("app/archive/[id]/page.tsx", "normalizeArchiveCategory", {}),
     resolveSystemNameSelection: names.resolveSystemNameSelection,

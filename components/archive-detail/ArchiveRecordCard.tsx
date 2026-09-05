@@ -34,6 +34,7 @@ type ArchiveRecordCardProps = {
   index: number;
   mode: ArchiveMode;
   variant?: "cloud" | "local";
+  cloudWritable?: boolean;
   startTime?: string | null;
   isHighlighted: boolean;
   sameTagLinks: Array<{ tag: string; count: number; href: string }>;
@@ -74,6 +75,7 @@ export default function ArchiveRecordCard({
   index,
   mode,
   variant = "cloud",
+  cloudWritable = true,
   startTime,
   isHighlighted,
   sameTagLinks,
@@ -97,6 +99,8 @@ export default function ArchiveRecordCard({
   const { language, t } = useLanguage();
   const copy = t.record;
   const isLocalMode = variant === "local";
+  const canEditRecord =
+    mode === "owner" && (isLocalMode || cloudWritable);
   const cycleTerminology = getArchiveCycleTerminology(archive.category, language);
   const mediaList = buildMediaList(item.media, archive.title || t.archive.categories.fallback_label);
   const isPlantArchive = archive.category === "plant";
@@ -104,7 +108,6 @@ export default function ArchiveRecordCard({
   const isResolvedRecord = item.status_tag === "resolved";
   const [addingMedia, setAddingMedia] = useState(false);
   const [replacingMedia, setReplacingMedia] = useState(false);
-  const [editingMedia, setEditingMedia] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
@@ -124,7 +127,7 @@ export default function ArchiveRecordCard({
 
   async function handleAddMediaFiles(fileList: FileList | null) {
     const nextFiles = Array.from(fileList || []);
-    if (!nextFiles.length || !onAddMedia || addingMedia) return;
+    if (!canEditRecord || !nextFiles.length || !onAddMedia || addingMedia) return;
 
     setAddingMedia(true);
     try {
@@ -137,6 +140,7 @@ export default function ArchiveRecordCard({
   }
 
   async function saveRecordPatch(patch: Partial<RecordItem>) {
+    if (!canEditRecord) return;
     if (isLocalMode) {
       await onRecordUpdated?.(item.id, patch);
       if (typeof patch.note === "string") {
@@ -154,6 +158,7 @@ export default function ArchiveRecordCard({
   async function handleReplaceMediaFiles(fileList: FileList | null) {
     const nextFiles = Array.from(fileList || []).slice(0, 1);
     if (
+      !canEditRecord ||
       !nextFiles.length ||
       !replaceMediaId ||
       !onReplaceMedia ||
@@ -174,7 +179,7 @@ export default function ArchiveRecordCard({
   }
 
   async function handleCycleChange(nextCycleId: string) {
-    if (!onCycleChange || cycleSaving) return;
+    if (!canEditRecord || !onCycleChange || cycleSaving) return;
     setCycleSaving(true);
     try {
       await onCycleChange(item.id, nextCycleId || null);
@@ -217,7 +222,7 @@ export default function ArchiveRecordCard({
     >
         {isMobileViewport ? (
           <>
-            {mode === "owner" && !isLocalMode ? (
+            {canEditRecord && !isLocalMode ? (
               <MobileRecordFileInputs
                 chooseInputRef={chooseInputRef}
                 cameraInputRef={cameraInputRef}
@@ -243,7 +248,7 @@ export default function ArchiveRecordCard({
                   key={`${item.id}-${mode}-mobile`}
                   id={item.id}
                   initialText={item.note || ""}
-                  readOnly={mode !== "owner"}
+                  readOnly={!canEditRecord}
                   compact
                   placeholder={copy.add_text}
                   onSaveOverride={
@@ -291,6 +296,7 @@ export default function ArchiveRecordCard({
                     <MobileRecordMoreMenu
                       archive={archive}
                       item={item}
+                      readOnly={!canEditRecord}
                       helpMenuOpen={helpMenuOpen}
                       visibilityMenuOpen={visibilityMenuOpen}
                       onCamera={() => {
@@ -323,13 +329,14 @@ export default function ArchiveRecordCard({
                         setMenuOpen(false);
                         setEditPanelOpen(true);
                       }}
+                      onRecordDeleted={onRecordDeleted}
                     />
                   ) : null}
                 </div>
               ) : null}
             </div>
 
-            {mode === "owner" && cycleOptions.length > 0 && onCycleChange ? (
+            {canEditRecord && cycleOptions.length > 0 && onCycleChange ? (
               <RecordCycleSelector
                 value={item.cycle_id || ""}
                 options={cycleOptions}
@@ -349,7 +356,7 @@ export default function ArchiveRecordCard({
                   archive={archive}
                   isPlantArchive={isPlantArchive}
                   statusBadge={statusBadge}
-                  canEdit={mode === "owner"}
+                  canEdit={canEditRecord}
                   tagEditorOpen={tagEditorOpen}
                   onToggleTagEditor={() => setTagEditorOpen((value) => !value)}
                   onRemoveTag={onRemoveTag}
@@ -374,7 +381,7 @@ export default function ArchiveRecordCard({
               </>
             )}
 
-            {editPanelOpen ? (
+            {editPanelOpen && canEditRecord ? (
               <MobileRecordEditPanel
                 item={item}
                 onClose={() => setEditPanelOpen(false)}
@@ -417,7 +424,7 @@ export default function ArchiveRecordCard({
                 key={`${item.id}-${mode}`}
                 id={item.id}
                 initialText={item.note || ""}
-                readOnly={mode !== "owner"}
+                readOnly={!canEditRecord}
                 onSaveOverride={
                   isLocalMode
                     ? async (nextText) => saveRecordPatch({ note: nextText })
@@ -431,7 +438,7 @@ export default function ArchiveRecordCard({
               />
             </div>
 
-            {mode === "owner" && cycleOptions.length > 0 && onCycleChange ? (
+            {canEditRecord && cycleOptions.length > 0 && onCycleChange ? (
               <RecordCycleSelector
                 value={item.cycle_id || ""}
                 options={cycleOptions}
@@ -450,6 +457,7 @@ export default function ArchiveRecordCard({
               <DesktopAndMobileRecordActions
                 archive={archive}
                 item={item}
+                readOnly={!canEditRecord}
                 isMobileViewport={isMobileViewport}
                 addingMedia={addingMedia}
                 chooseInputRef={chooseInputRef}
@@ -464,7 +472,7 @@ export default function ArchiveRecordCard({
             {!isLocalMode && isPlantArchive ? (
               <DesktopRecordTags
                 item={item}
-                mode={mode}
+                mode={canEditRecord ? "owner" : "viewer"}
                 onRemoveTag={onRemoveTag}
                 onAddTag={onAddTag}
               />
@@ -549,6 +557,7 @@ const recordCycleSelectStyle = {
 function DesktopAndMobileRecordActions({
   archive,
   item,
+  readOnly,
   isMobileViewport,
   addingMedia,
   chooseInputRef,
@@ -560,6 +569,7 @@ function DesktopAndMobileRecordActions({
 }: {
   archive: ArchiveDetailArchive;
   item: RecordItem;
+  readOnly: boolean;
   isMobileViewport: boolean;
   addingMedia: boolean;
   chooseInputRef: RefObject<HTMLInputElement | null>;
@@ -590,8 +600,20 @@ function DesktopAndMobileRecordActions({
         marginBottom: 10,
       }}
     >
-      {!isMobileViewport ? (
-        archive.is_public ? (
+      {archive.is_public ? (
+        readOnly ? (
+          item.visibility === "public" ? (
+            <button
+              type="button"
+              onClick={() => void onVisibilityChange(item.id, "private")}
+              style={smallActionButtonStyle("#fff", "#60705d", "#dfe5dc")}
+            >
+              {copy.set_private}
+            </button>
+          ) : (
+            <ArchiveStatusBadge>{copy.private_only}</ArchiveStatusBadge>
+          )
+        ) : (
           <select
             value={item.visibility || "public"}
             onChange={async (event) => {
@@ -608,12 +630,12 @@ function DesktopAndMobileRecordActions({
             <option value="public">{copy.public_discover}</option>
             <option value="private">{copy.private_only}</option>
           </select>
-        ) : (
-          <ArchiveStatusBadge>{copy.project_private}</ArchiveStatusBadge>
         )
-      ) : null}
+      ) : (
+        <ArchiveStatusBadge>{copy.project_private}</ArchiveStatusBadge>
+      )}
 
-      {!isMobileViewport ? (
+      {!readOnly ? (
         <>
           <button
             type="button"
@@ -646,50 +668,50 @@ function DesktopAndMobileRecordActions({
         </>
       ) : null}
 
-      <input
-        ref={chooseInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        style={{ display: "none" }}
-        onChange={(event) => void onAddMediaFiles(event.target.files)}
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: "none" }}
-        onChange={(event) => void onAddMediaFiles(event.target.files)}
-      />
-
-      <button
-        type="button"
-        onClick={() => chooseInputRef.current?.click()}
-        disabled={addingMedia}
-        style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
-      >
-        {addingMedia ? copy.adding : copy.add_photos}
-      </button>
-      <button
-        type="button"
-        onClick={() => cameraInputRef.current?.click()}
-        disabled={addingMedia}
-        style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
-      >
-        {copy.take_photo}
-      </button>
-
-      {!isMobileViewport ? (
-        <Link
-          href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
-          style={{
-            ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
-            textDecoration: "none",
-          }}
-        >
-          {copy.publish_to_market}
-        </Link>
+      {!readOnly ? (
+        <>
+          <input
+            ref={chooseInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={(event) => void onAddMediaFiles(event.target.files)}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: "none" }}
+            onChange={(event) => void onAddMediaFiles(event.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => chooseInputRef.current?.click()}
+            disabled={addingMedia}
+            style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
+          >
+            {addingMedia ? copy.adding : copy.add_photos}
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={addingMedia}
+            style={smallActionButtonStyle("#f8fbf6", "#4c7441", "#dbe9d6")}
+          >
+            {copy.take_photo}
+          </button>
+          <Link
+            href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
+            style={{
+              ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
+              textDecoration: "none",
+            }}
+          >
+            {copy.publish_to_market}
+          </Link>
+        </>
       ) : null}
 
       <DeleteRecordButton
@@ -1011,6 +1033,7 @@ function DesktopRecordMediaGrid({
 function MobileRecordMoreMenu({
   archive,
   item,
+  readOnly,
   helpMenuOpen,
   visibilityMenuOpen,
   onCamera,
@@ -1020,9 +1043,11 @@ function MobileRecordMoreMenu({
   onSetHelpStatus,
   onSetVisibility,
   onEdit,
+  onRecordDeleted,
 }: {
   archive: ArchiveDetailArchive;
   item: RecordItem;
+  readOnly: boolean;
   helpMenuOpen: boolean;
   visibilityMenuOpen: boolean;
   onCamera: () => void;
@@ -1032,6 +1057,7 @@ function MobileRecordMoreMenu({
   onSetHelpStatus: (nextStatus: "help" | "resolved" | null) => Promise<void>;
   onSetVisibility: (nextVisibility: string) => Promise<void>;
   onEdit: () => void;
+  onRecordDeleted?: (recordId: string) => void;
 }) {
   const { t } = useLanguage();
   const copy = t.record;
@@ -1050,54 +1076,69 @@ function MobileRecordMoreMenu({
 
   return (
     <div style={mobileRecordMenuStyle}>
-      <button type="button" onClick={onCamera} style={mobileRecordMenuItemStyle}>
-        {copy.take_photo}
-      </button>
-      <button type="button" onClick={onAlbum} style={mobileRecordMenuItemStyle}>
-        {copy.add_from_album}
-      </button>
-      <Link
-        href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
-        style={mobileRecordMenuLinkStyle}
-      >
-        {copy.forward_to_market}
-      </Link>
-      <button
-        type="button"
-        onClick={onToggleHelpMenu}
-        style={mobileRecordMenuItemStyle}
-      >
-        {copy.help_status}
-      </button>
-      {helpMenuOpen ? (
-        <button
-          type="button"
-          onClick={() => onSetHelpStatus(nextHelp.value)}
-          style={mobileRecordSubMenuItemStyle}
-        >
-          {nextHelp.label}
+      {!readOnly ? (
+        <>
+          <button type="button" onClick={onCamera} style={mobileRecordMenuItemStyle}>
+            {copy.take_photo}
+          </button>
+          <button type="button" onClick={onAlbum} style={mobileRecordMenuItemStyle}>
+            {copy.add_from_album}
+          </button>
+          <Link
+            href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
+            style={mobileRecordMenuLinkStyle}
+          >
+            {copy.forward_to_market}
+          </Link>
+          <button
+            type="button"
+            onClick={onToggleHelpMenu}
+            style={mobileRecordMenuItemStyle}
+          >
+            {copy.help_status}
+          </button>
+          {helpMenuOpen ? (
+            <button
+              type="button"
+              onClick={() => onSetHelpStatus(nextHelp.value)}
+              style={mobileRecordSubMenuItemStyle}
+            >
+              {nextHelp.label}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+      {!readOnly || visibility === "public" ? (
+        <>
+          <button
+            type="button"
+            onClick={onToggleVisibilityMenu}
+            style={mobileRecordMenuItemStyle}
+          >
+            {copy.visibility_settings}
+          </button>
+          {visibilityMenuOpen ? (
+            <button
+              type="button"
+              onClick={() => onSetVisibility(nextVisibility.value)}
+              disabled={!archive.is_public}
+              style={mobileRecordSubMenuItemStyle}
+            >
+              {archive.is_public ? nextVisibility.label : copy.project_private_short}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+      {!readOnly ? (
+        <button type="button" onClick={onEdit} style={mobileRecordMenuItemStyle}>
+          {copy.edit}
         </button>
       ) : null}
-      <button
-        type="button"
-        onClick={onToggleVisibilityMenu}
-        style={mobileRecordMenuItemStyle}
-      >
-        {copy.visibility_settings}
-      </button>
-      {visibilityMenuOpen ? (
-        <button
-          type="button"
-          onClick={() => onSetVisibility(nextVisibility.value)}
-          disabled={!archive.is_public}
-          style={mobileRecordSubMenuItemStyle}
-        >
-          {archive.is_public ? nextVisibility.label : copy.project_private_short}
-        </button>
-      ) : null}
-      <button type="button" onClick={onEdit} style={mobileRecordMenuItemStyle}>
-        {copy.edit}
-      </button>
+      <DeleteRecordButton
+        id={item.id}
+        onDeleted={onRecordDeleted}
+        style={mobileRecordMenuDeleteButtonStyle}
+      />
     </div>
   );
 }
@@ -1475,6 +1516,12 @@ const mobileRecordMenuLinkStyle = {
 const mobileRecordMenuDangerItemStyle = {
   ...mobileRecordMenuItemStyle,
   color: "#a44848",
+} as const;
+
+const mobileRecordMenuDeleteButtonStyle = {
+  ...mobileRecordMenuDangerItemStyle,
+  position: "relative",
+  zIndex: 10,
 } as const;
 
 const mobileRecordSubMenuItemStyle = {

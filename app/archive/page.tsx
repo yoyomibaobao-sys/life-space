@@ -459,7 +459,14 @@ export default function ArchivePage() {
     }
   }
 
+  function requireCloudWriteAccess() {
+    if (canCreateMembershipContent(membership)) return true;
+    showToast(t.archive.cloud_read_only_action);
+    return false;
+  }
+
   function beginEditPlant(item: ArchiveItem) {
+    if (!requireCloudWriteAccess()) return;
     setEditingPlantArchiveId(item.id);
     setEditingSpeciesId(item.species_id || "");
     setEditingPendingSpeciesName("");
@@ -468,6 +475,7 @@ export default function ArchivePage() {
   }
 
   function submitPendingSpeciesName(name?: string) {
+    if (!requireCloudWriteAccess()) return;
     const pendingName = (name ?? editingPlantSearch).trim();
     if (!pendingName) {
       showToast(t.archive_workspace.enter_candidate_name);
@@ -532,6 +540,7 @@ export default function ArchivePage() {
   }, [editingPlantSearch, systemNameCandidateMap]);
 
   async function savePlantSelection(item: ArchiveItem) {
+    if (!requireCloudWriteAccess()) return;
     const pendingName = editingPendingSpeciesName.trim();
 
     if (!editingSpeciesId && !pendingName) {
@@ -629,6 +638,7 @@ export default function ArchivePage() {
   }
 
   function beginEditSystem(item: ArchiveItem) {
+    if (!requireCloudWriteAccess()) return;
     setEditingSystemArchiveId(item.id);
     setEditingSystemSearch(item.system_name || "");
     setEditingSystemName(item.system_name || "");
@@ -659,6 +669,7 @@ export default function ArchivePage() {
   }
 
   async function saveSystemSelection(item: ArchiveItem) {
+    if (!requireCloudWriteAccess()) return;
     const systemName = editingSystemName.trim();
     if (!systemName) {
       showToast(t.archive_workspace.select_specific_name);
@@ -691,6 +702,7 @@ export default function ArchivePage() {
   }
 
   async function createSubTag(category: ArchiveCategory) {
+    if (!requireCloudWriteAccess()) return;
     const name = prompt(
       `${t.archive_workspace.add_category_prompt_prefix}${getArchiveCategoryLabel(
         category,
@@ -722,6 +734,7 @@ export default function ArchivePage() {
   }
 
   async function renameSubTag(tag: SubTagItem, suppliedName?: string) {
+    if (!requireCloudWriteAccess()) return;
     const name = suppliedName ?? prompt(t.archive_workspace.rename_category_prompt, tag.name);
     if (!name?.trim() || name.trim() === tag.name) return;
 
@@ -735,6 +748,7 @@ export default function ArchivePage() {
   }
 
   async function deleteSubTag(tag: SubTagItem) {
+    if (!requireCloudWriteAccess()) return;
     if (!confirm(t.archive_workspace.delete_category_confirm)) return;
 
     await supabase.from("archives").update({ sub_tag_id: null, group_tag_id: null }).eq("sub_tag_id", tag.id);
@@ -756,6 +770,7 @@ export default function ArchivePage() {
   }
 
   async function createGroupTag() {
+    if (!requireCloudWriteAccess()) return;
     if (!activeSubTag) return;
 
     const name = prompt(t.archive_workspace.add_group_prompt);
@@ -784,6 +799,7 @@ export default function ArchivePage() {
   }
 
   async function renameGroupTag(tag: GroupTagItem, suppliedName?: string) {
+    if (!requireCloudWriteAccess()) return;
     const name = suppliedName ?? prompt(t.archive_workspace.rename_group_prompt, tag.name);
     if (!name?.trim() || name.trim() === tag.name) return;
 
@@ -797,6 +813,7 @@ export default function ArchivePage() {
   }
 
   async function deleteGroupTag(tag: GroupTagItem) {
+    if (!requireCloudWriteAccess()) return;
     if (!confirm(t.archive_workspace.delete_group_confirm)) return;
 
     await supabase.from("archives").update({ group_tag_id: null }).eq("group_tag_id", tag.id);
@@ -813,6 +830,7 @@ export default function ArchivePage() {
   }
 
   async function updateArchiveStatus(item: ArchiveItem, nextStatus: "active" | "ended") {
+    if (!requireCloudWriteAccess()) return;
     const isEnding = nextStatus === "ended";
 
     if (isEnding && !confirm(t.archive.end_project_message)) {
@@ -835,25 +853,24 @@ export default function ArchivePage() {
 
   async function toggleArchivePublic(item: ArchiveItem) {
     const newValue = !item.is_public;
+    if (newValue && !requireCloudWriteAccess()) return;
     if (newValue && !window.confirm(t.archive_workspace.confirm_public_project)) return;
-    const nextRecordVisibility = newValue ? "public" : "private";
-
-    const { error } = await supabase.from("archives").update({ is_public: newValue }).eq("id", item.id);
+    const { data: downgradeResult, error } = newValue
+      ? await supabase
+          .from("archives")
+          .update({ is_public: true })
+          .eq("id", item.id)
+          .select("id")
+          .single()
+      : await supabase.rpc("make_my_archive_private", { p_archive_id: item.id });
     if (error) {
       showToast(t.archive_workspace.visibility_update_failed);
       return;
     }
 
-    if (!newValue) {
-      const { error: recordsError } = await supabase
-        .from("records")
-        .update({ visibility: nextRecordVisibility })
-        .eq("archive_id", item.id);
-
-      if (recordsError) {
-        showToast(t.archive_workspace.record_sync_failed);
-        return;
-      }
+    if (!newValue && downgradeResult !== true) {
+      showToast(t.archive_workspace.visibility_update_failed);
+      return;
     }
 
     setArchives((prev) =>
@@ -867,6 +884,7 @@ export default function ArchivePage() {
   }
 
   async function updateArchiveCategory(item: ArchiveItem, value: string) {
+    if (!requireCloudWriteAccess()) return;
     if (archiveCategoryOptions.some((option) => option.value === value)) {
       const { error } = await supabase
         .from("archives")
@@ -911,6 +929,7 @@ export default function ArchivePage() {
   }
 
   async function updateArchiveGroupTag(item: ArchiveItem, value: string) {
+    if (!requireCloudWriteAccess()) return;
     const { error } = await supabase
       .from("archives")
       .update({ group_tag_id: value || null })
@@ -989,6 +1008,7 @@ export default function ArchivePage() {
   }
 
   function renameArchiveTitle(item: ArchiveItem) {
+    if (!requireCloudWriteAccess()) return;
     const name = prompt(t.archive_workspace.rename_project_prompt, item.title || "");
     if (!name?.trim()) return;
 
@@ -1673,6 +1693,16 @@ export default function ArchivePage() {
     ? getCreateContentBlockedText(membership, language)
     : undefined;
 
+  const mobileCreateHref =
+    activeSource === "local" ||
+    (!currentOwnerContext?.userId && activeSource !== "cloud")
+      ? "/local/archive/new"
+      : !currentOwnerContext?.userId
+        ? buildLoginHref("/archive")
+        : contentBlocked
+          ? "/membership"
+          : "/archive/new";
+
   const workspaceFiltersSlot =
     activeSource === "cloud" ? (
       <ArchiveTaxonomyPanel
@@ -1712,15 +1742,15 @@ export default function ArchivePage() {
             setActiveGroupTag(null);
           })
         }
-        onRenameSubcategory={(chip, nextName) => {
+        onRenameSubcategory={contentBlocked ? undefined : (chip, nextName) => {
           const tag = subTags.find((item) => item.id === chip.id);
           if (tag) return renameSubTag(tag, nextName);
         }}
-        onDeleteSubcategory={(chip) => {
+        onDeleteSubcategory={contentBlocked ? undefined : (chip) => {
           const tag = subTags.find((item) => item.id === chip.id);
           if (tag) deleteSubTag(tag);
         }}
-        onCreateSubcategory={createSubTag}
+        onCreateSubcategory={contentBlocked ? undefined : createSubTag}
         onResetGroup={() =>
           updateFilterWithoutJump(() => {
             setActiveGroupTag(null);
@@ -1731,15 +1761,15 @@ export default function ArchivePage() {
             setActiveGroupTag(activeGroupTag === chip.id ? null : chip.id);
           })
         }
-        onRenameGroup={(chip, nextName) => {
+        onRenameGroup={contentBlocked ? undefined : (chip, nextName) => {
           const tag = groupTags.find((item) => item.id === chip.id);
           if (tag) return renameGroupTag(tag, nextName);
         }}
-        onDeleteGroup={(chip) => {
+        onDeleteGroup={contentBlocked ? undefined : (chip) => {
           const tag = groupTags.find((item) => item.id === chip.id);
           if (tag) deleteGroupTag(tag);
         }}
-        onCreateGroup={createGroupTag}
+        onCreateGroup={contentBlocked ? undefined : createGroupTag}
       />
     ) : activeSource === "local" ? (
       <ArchiveTaxonomyPanel
@@ -1827,6 +1857,20 @@ export default function ArchivePage() {
 
   const workspaceNoticeSlot = (
     <>
+      {showCloudArchives && archiveCount > 0 && currentOwnerContext?.userId && contentBlocked ? (
+        <div style={localOtherOwnerNoticeStyle}>
+          <span>
+            {membership?.plan === "trial"
+              ? t.archive.cloud_trial_read_only_notice
+              : membership
+                ? t.archive.cloud_paid_read_only_notice
+                : t.archive.cloud_read_only_notice}
+          </span>{" "}
+          <Link href="/membership" style={{ color: "#3f743b", fontWeight: 800 }}>
+            {t.archive.view_cloud_membership}
+          </Link>
+        </div>
+      ) : null}
       {activeSource === "local" ? (
         <div style={localOtherOwnerNoticeStyle}>
           {t.archive_workspace.local_taxonomy_notice}
@@ -1931,6 +1975,7 @@ export default function ArchivePage() {
         onUpdateArchiveCategory={updateArchiveCategory}
         onUpdateArchiveGroupTag={updateArchiveGroupTag}
         onDeleteArchive={deleteArchive}
+        readOnly={contentBlocked}
       />
     );
   }
@@ -2039,7 +2084,7 @@ export default function ArchivePage() {
         createDisabledHref={createDisabled ? "/membership" : undefined}
         showCreateToolbar={!isMobileViewport}
         sourceTrailingSlot={isMobileViewport ? (
-          <Link href="/archive/new" style={personalSpaceCreateProjectStyle}>
+          <Link href={mobileCreateHref} style={personalSpaceCreateProjectStyle}>
             +{t.nav.project}
           </Link>
         ) : null}

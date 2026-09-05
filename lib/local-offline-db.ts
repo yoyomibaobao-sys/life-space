@@ -73,6 +73,10 @@ export type LocalArchive = {
   local_owner_user_id?: string | null;
   local_owner_email?: string | null;
   local_owner_marked_at?: string | null;
+  source_cloud_archive_id?: string | null;
+  source_cloud_saved_at?: string | null;
+  source_cloud_updated_at?: string | null;
+  source_cloud_is_public?: boolean | null;
   migration_status?: LocalCloudMigrationStatus | null;
   migration_cloud_archive_id?: string | null;
   migration_started_at?: string | null;
@@ -101,6 +105,9 @@ export type LocalRecord = {
   record_time: string;
   created_at: string;
   updated_at: string;
+  source_cloud_visibility?: string | null;
+  source_cloud_status_tag?: string | null;
+  source_cloud_behavior_tags?: string[];
   local_only: true;
   sync: LocalSyncMeta;
 };
@@ -166,6 +173,26 @@ export type LocalArchiveVisibilityResult = {
   unownedCount: number;
   ownedByCurrentCount: number;
   hiddenOwnedByOtherCount: number;
+};
+
+export type CloudArchiveLocalCycleInput = {
+  cloud_cycle_id: string;
+  cycle_no: number;
+  display_name?: string | null;
+  status: "active" | "ended";
+  started_at: string;
+  ended_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type CloudArchiveLocalImportSession = {
+  staging_archive_id: string;
+  cloud_archive_id: string;
+  previous_local_archive_id: string | null;
+  started_at: string;
+  cycles: LocalArchiveCycle[];
+  cloud_cycle_id_map: Record<string, string>;
 };
 
 export function assertLocalOfflineAvailable() {
@@ -290,6 +317,17 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
     local_owner_user_id: normalizeOptionalText(archive.local_owner_user_id),
     local_owner_email: normalizeOptionalText(archive.local_owner_email),
     local_owner_marked_at: normalizeOptionalText(archive.local_owner_marked_at),
+    source_cloud_archive_id: normalizeOptionalText(
+      archive.source_cloud_archive_id
+    ),
+    source_cloud_saved_at: normalizeOptionalText(archive.source_cloud_saved_at),
+    source_cloud_updated_at: normalizeOptionalText(
+      archive.source_cloud_updated_at
+    ),
+    source_cloud_is_public:
+      typeof archive.source_cloud_is_public === "boolean"
+        ? archive.source_cloud_is_public
+        : null,
     migration_status: archive.migration_status || null,
     migration_cloud_archive_id: normalizeOptionalText(
       archive.migration_cloud_archive_id
@@ -1616,6 +1654,415 @@ export async function getLocalArchiveDetail(
     }));
 
   return { archive: normalizedArchive, records: detailRecords } satisfies LocalArchiveDetail;
+}
+
+export async function getLocalArchiveByCloudSource(
+  cloudArchiveId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const sourceId = normalizeOptionalText(cloudArchiveId);
+  if (!sourceId) return null;
+
+  const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
+  return (
+    archives
+      .map(normalizeLocalArchive)
+      .find(
+        (archive) =>
+          archive.source_cloud_archive_id === sourceId &&
+          isLocalArchiveVisibleToOwner(archive, ownerContext)
+      ) || null
+  );
+}
+
+async function removeAbandonedCloudArchiveLocalImportRows(
+  cloudArchiveId: string
+) {
+  const [archives, records, images] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const archiveIds = new Set(archives.map((archive) => archive.id));
+  const abandonedRecords = records.filter(
+    (record) =>
+      !archiveIds.has(record.archive_id) &&
+      normalizeOptionalText(record.sync?.cloud_archive_id) === cloudArchiveId
+  );
+  const abandonedImages = images.filter(
+    (image) =>
+      !archiveIds.has(image.archive_id) &&
+      normalizeOptionalText(image.sync?.cloud_archive_id) === cloudArchiveId
+  );
+
+  if (abandonedRecords.length === 0 && abandonedImages.length === 0) return;
+
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction([RECORD_STORE, IMAGE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+
+    for (const record of abandonedRecords) {
+      await requestToPromise(recordStore.delete(record.id));
+    }
+    for (const image of abandonedImages) {
+      await requestToPromise(imageStore.delete(image.id));
+    }
+
+    await done;
+    await refreshLocalUsageHints();
+  } finally {
+    db.close();
+  }
+}
+
+export async function beginCloudArchiveLocalImport(input: {
+  cloud_archive_id: string;
+  cycles: CloudArchiveLocalCycleInput[];
+  owner_context: LocalArchiveOwnerContext;
+}): Promise<CloudArchiveLocalImportSession> {
+  const cloudArchiveId = normalizeOptionalText(input.cloud_archive_id);
+  const ownerUserId = getOwnerUserId(input.owner_context);
+  if (!cloudArchiveId || !ownerUserId) {
+    throw new Error("请先登录，再将云端项目保存到本机。");
+  }
+
+  await removeAbandonedCloudArchiveLocalImportRows(cloudArchiveId);
+  const previous = await getLocalArchiveByCloudSource(
+    cloudArchiveId,
+    input.owner_context
+  );
+  const stagingArchiveId = createId("local_archive");
+  const timestamp = nowIso();
+  const cloudCycleIdMap: Record<string, string> = {};
+  const cycles = input.cycles
+    .map((cycle) => {
+      const cloudCycleId = normalizeOptionalText(cycle.cloud_cycle_id);
+      const cycleNo = Number(cycle.cycle_no);
+      if (!cloudCycleId || !Number.isInteger(cycleNo) || cycleNo <= 0) {
+        return null;
+      }
+
+      const localCycleId = createId("local_cycle");
+      cloudCycleIdMap[cloudCycleId] = localCycleId;
+      return normalizeLocalArchiveCycle(
+        {
+          id: localCycleId,
+          archive_id: stagingArchiveId,
+          cycle_no: cycleNo,
+          display_name: normalizeOptionalText(cycle.display_name),
+          status: cycle.status === "ended" ? "ended" : "active",
+          started_at: cycle.started_at,
+          ended_at: cycle.status === "ended" ? cycle.ended_at || null : null,
+          created_at: cycle.created_at || cycle.started_at,
+          updated_at: cycle.updated_at || cycle.created_at || cycle.started_at,
+        },
+        stagingArchiveId
+      );
+    })
+    .filter((cycle): cycle is LocalArchiveCycle => Boolean(cycle))
+    .sort((a, b) => a.cycle_no - b.cycle_no);
+
+  return {
+    staging_archive_id: stagingArchiveId,
+    cloud_archive_id: cloudArchiveId,
+    previous_local_archive_id: previous?.id || null,
+    started_at: timestamp,
+    cycles,
+    cloud_cycle_id_map: cloudCycleIdMap,
+  };
+}
+
+export async function stageCloudArchiveLocalRecord(input: {
+  session: CloudArchiveLocalImportSession;
+  cloud_record_id: string;
+  cloud_cycle_id?: string | null;
+  note?: string | null;
+  record_time: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  visibility?: string | null;
+  status_tag?: string | null;
+  behavior_tags?: string[];
+}) {
+  const cloudRecordId = normalizeOptionalText(input.cloud_record_id);
+  if (!cloudRecordId) throw new Error("云端记录编号无效。");
+
+  const timestamp = nowIso();
+  const record: LocalRecord = {
+    id: createId("local_record"),
+    archive_id: input.session.staging_archive_id,
+    cycle_id: input.cloud_cycle_id
+      ? input.session.cloud_cycle_id_map[input.cloud_cycle_id] || null
+      : null,
+    note: normalizeOptionalText(input.note) || "",
+    record_time: normalizeOptionalText(input.record_time) || timestamp,
+    created_at: normalizeOptionalText(input.created_at) || timestamp,
+    updated_at: normalizeOptionalText(input.updated_at) || timestamp,
+    source_cloud_visibility: normalizeOptionalText(input.visibility),
+    source_cloud_status_tag: normalizeOptionalText(input.status_tag),
+    source_cloud_behavior_tags: Array.from(
+      new Set(
+        (input.behavior_tags || [])
+          .map((tag) => normalizeOptionalText(tag))
+          .filter((tag): tag is string => Boolean(tag))
+      )
+    ),
+    local_only: true,
+    sync: localSyncMeta({
+      status: "local-only",
+      cloud_archive_id: input.session.cloud_archive_id,
+      cloud_record_id: cloudRecordId,
+      last_sync_at: input.session.started_at,
+    }),
+  };
+
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(RECORD_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    await requestToPromise(transaction.objectStore(RECORD_STORE).add(record));
+    await done;
+    return record;
+  } finally {
+    db.close();
+  }
+}
+
+export async function stageCloudArchiveLocalImage(input: {
+  session: CloudArchiveLocalImportSession;
+  local_record_id: string;
+  cloud_record_id: string;
+  cloud_media_id: string;
+  blob: Blob;
+  mime_type?: string | null;
+  name?: string | null;
+  original_size?: number | null;
+  width?: number | null;
+  height?: number | null;
+  captured_at?: string | null;
+  sort_order?: number | null;
+  created_at?: string | null;
+  cloud_media_url?: string | null;
+}) {
+  const cloudMediaId = normalizeOptionalText(input.cloud_media_id);
+  if (!cloudMediaId || !(input.blob instanceof Blob) || input.blob.size <= 0) {
+    throw new Error("云端图片内容无效。");
+  }
+
+  const timestamp = nowIso();
+  const image: LocalImage = {
+    id: createId("local_image"),
+    archive_id: input.session.staging_archive_id,
+    record_id: input.local_record_id,
+    blob: input.blob,
+    mime_type:
+      normalizeOptionalText(input.mime_type) ||
+      normalizeOptionalText(input.blob.type) ||
+      "image/jpeg",
+    name: normalizeOptionalText(input.name) || `${cloudMediaId}.jpg`,
+    original_size: Math.max(
+      Number(input.original_size || 0),
+      input.blob.size
+    ),
+    cached_size: input.blob.size,
+    width: Number.isFinite(Number(input.width)) ? Number(input.width) : null,
+    height: Number.isFinite(Number(input.height)) ? Number(input.height) : null,
+    captured_at: normalizeOptionalText(input.captured_at),
+    sort_order: Number.isFinite(Number(input.sort_order))
+      ? Number(input.sort_order)
+      : 0,
+    created_at: normalizeOptionalText(input.created_at) || timestamp,
+    local_only: true,
+    sync: localSyncMeta({
+      status: "local-only",
+      cloud_archive_id: input.session.cloud_archive_id,
+      cloud_record_id: normalizeOptionalText(input.cloud_record_id),
+      cloud_media_id: cloudMediaId,
+      cloud_media_url: normalizeOptionalText(input.cloud_media_url),
+      last_sync_at: input.session.started_at,
+    }),
+  };
+
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    await requestToPromise(transaction.objectStore(IMAGE_STORE).add(image));
+    await done;
+    return image;
+  } finally {
+    db.close();
+  }
+}
+
+export async function abortCloudArchiveLocalImport(
+  session: CloudArchiveLocalImportSession
+) {
+  const [records, images] = await Promise.all([
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction([RECORD_STORE, IMAGE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    for (const record of records.filter(
+      (item) => item.archive_id === session.staging_archive_id
+    )) {
+      await requestToPromise(recordStore.delete(record.id));
+    }
+    for (const image of images.filter(
+      (item) => item.archive_id === session.staging_archive_id
+    )) {
+      await requestToPromise(imageStore.delete(image.id));
+    }
+    await done;
+  } finally {
+    db.close();
+  }
+}
+
+export async function completeCloudArchiveLocalImport(input: {
+  session: CloudArchiveLocalImportSession;
+  cloud_archive_id: string;
+  title: string;
+  category: ArchiveCategory;
+  subcategory?: string | null;
+  group_name?: string | null;
+  plant_id?: string | null;
+  plant_slug?: string | null;
+  system_name?: string | null;
+  species_name?: string | null;
+  source?: string | null;
+  note?: string | null;
+  archive_summary?: string | null;
+  cycle_enabled?: boolean;
+  next_cycle_name?: string | null;
+  status?: "active" | "ended";
+  ended_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_public?: boolean;
+  owner_context: LocalArchiveOwnerContext;
+  expected_record_count: number;
+  expected_image_count: number;
+}) {
+  const cloudArchiveId = normalizeOptionalText(input.cloud_archive_id);
+  const ownerUserId = getOwnerUserId(input.owner_context);
+  if (!cloudArchiveId || !ownerUserId) {
+    throw new Error("无法确认云端项目归属。");
+  }
+
+  const [allArchives, allRecords, allImages] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const stagedRecords = allRecords.filter(
+    (item) => item.archive_id === input.session.staging_archive_id
+  );
+  const stagedImages = allImages.filter(
+    (item) => item.archive_id === input.session.staging_archive_id
+  );
+  if (
+    stagedRecords.length !== input.expected_record_count ||
+    stagedImages.length !== input.expected_image_count ||
+    stagedImages.some((image) => !image.blob || image.blob.size <= 0)
+  ) {
+    throw new Error("保存到本机的内容校验未通过，请重新操作。");
+  }
+
+  const timestamp = nowIso();
+  const previous = allArchives
+    .map(normalizeLocalArchive)
+    .find(
+      (archive) =>
+        archive.id === input.session.previous_local_archive_id &&
+        archive.source_cloud_archive_id === cloudArchiveId &&
+        isLocalArchiveVisibleToOwner(archive, input.owner_context)
+    );
+  const category = normalizeLocalArchiveCategory(input.category);
+  const archive: LocalArchive = {
+    id: input.session.staging_archive_id,
+    title: normalizeOptionalText(input.title) || "未命名项目",
+    category,
+    main_category: category,
+    subcategory: normalizeOptionalText(input.subcategory),
+    group_name: normalizeOptionalText(input.group_name),
+    plant_id: normalizeOptionalText(input.plant_id),
+    plant_slug: normalizeOptionalText(input.plant_slug),
+    system_name: normalizeOptionalText(input.system_name),
+    species_name: normalizeOptionalText(input.species_name),
+    source: normalizeOptionalText(input.source),
+    local_owner_user_id: ownerUserId,
+    local_owner_email: normalizeOptionalText(input.owner_context.email),
+    local_owner_marked_at: timestamp,
+    source_cloud_archive_id: cloudArchiveId,
+    source_cloud_saved_at: timestamp,
+    source_cloud_updated_at: normalizeOptionalText(input.updated_at),
+    source_cloud_is_public: Boolean(input.is_public),
+    migration_status: null,
+    migration_cloud_archive_id: null,
+    migration_started_at: null,
+    migration_error: null,
+    migration_visibility: null,
+    migrated_at: null,
+    note: normalizeOptionalText(input.note),
+    archive_summary: normalizeOptionalText(input.archive_summary),
+    cycle_enabled: Boolean(input.cycle_enabled || input.session.cycles.length),
+    next_cycle_name: normalizeOptionalText(input.next_cycle_name)?.slice(0, 80) || null,
+    cycles: input.session.cycles,
+    trashed_cycles: [],
+    status: input.status === "ended" ? "ended" : "active",
+    ended_at: input.status === "ended" ? normalizeOptionalText(input.ended_at) : null,
+    created_at: normalizeOptionalText(input.created_at) || timestamp,
+    updated_at: timestamp,
+    local_only: true,
+    sync: localSyncMeta({
+      status: "local-only",
+      cloud_archive_id: cloudArchiveId,
+      last_sync_at: timestamp,
+    }),
+  };
+
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(
+      [ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE],
+      "readwrite"
+    );
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+
+    if (previous) {
+      for (const record of allRecords.filter(
+        (item) => item.archive_id === previous.id
+      )) {
+        await requestToPromise(recordStore.delete(record.id));
+      }
+      for (const image of allImages.filter(
+        (item) => item.archive_id === previous.id
+      )) {
+        await requestToPromise(imageStore.delete(image.id));
+      }
+      await requestToPromise(archiveStore.delete(previous.id));
+    }
+
+    await requestToPromise(archiveStore.add(archive));
+    await done;
+    await refreshLocalUsageHints();
+    return archive;
+  } finally {
+    db.close();
+  }
 }
 
 function ensureLocalImageFile(file: File) {

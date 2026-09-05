@@ -1,6 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import { runStorageDeletionWorkerBatches } from "@/lib/server/storage-deletion-worker";
+import {
+  runCloudTrialLifecycle,
+  runStorageDeletionWorkerBatches,
+} from "@/lib/server/storage-deletion-worker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,11 +47,22 @@ export async function GET(request: Request) {
   }
 
   try {
-    const summary = await runStorageDeletionWorkerBatches({
+    const lifecycleBeforeDeletion = await runCloudTrialLifecycle(25);
+    const storageDeletion = await runStorageDeletionWorkerBatches({
       maxBatches: 5,
       maxDurationMs: 20_000,
     });
-    return noStoreJson(summary, 200);
+    const lifecycleAfterDeletion = await runCloudTrialLifecycle(25);
+    return noStoreJson(
+      {
+        cloudTrialLifecycle: {
+          beforeDeletion: lifecycleBeforeDeletion,
+          afterDeletion: lifecycleAfterDeletion,
+        },
+        storageDeletion,
+      },
+      200
+    );
   } catch {
     console.error("storage deletion worker route failed", {
       errorCode: "worker_failed",
