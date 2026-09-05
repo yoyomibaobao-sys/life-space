@@ -148,7 +148,7 @@ test("the canary checker reads credentials only from the process environment", (
   assert.doesNotMatch(checker, /console\.(?:log|error)\([^\n]*secret/i);
 });
 
-test("Cloudflare deployment stays isolated and uses encrypted repository secrets", () => {
+test("Cloudflare deployment uses low-privilege public auth config and encrypted infrastructure secrets", () => {
   const workflow = read(".github/workflows/cloudflare-canary.yml");
 
   assert.match(workflow, /workflow_dispatch:/);
@@ -157,8 +157,15 @@ test("Cloudflare deployment stays isolated and uses encrypted repository secrets
     workflow,
     /permissions:\s*\n\s*contents: read\s*\n\s*statuses: write/
   );
-  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL: https:\/\/cloudflare-canary\.invalid/);
-  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_ANON_KEY: cloudflare-canary-placeholder/);
+  assert.match(
+    workflow,
+    /NEXT_PUBLIC_SUPABASE_URL: https:\/\/[a-z0-9]+\.supabase\.co/
+  );
+  assert.match(
+    workflow,
+    /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_[A-Za-z0-9_-]+/
+  );
+  assert.doesNotMatch(workflow, /cloudflare-canary\.invalid|cloudflare-canary-placeholder/);
   assert.match(workflow, /npm run build:vinext/);
   assert.match(workflow, /ensure-cloudflare-r2-canary-bucket\.mjs/);
   assert.match(workflow, /cloudflare\/wrangler-action@v4/);
@@ -173,6 +180,16 @@ test("Cloudflare deployment stays isolated and uses encrypted repository secrets
   assert.match(workflow, /context="Cloudflare canary"/);
   assert.doesNotMatch(workflow, /^\s*schedule:/m);
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(workflow, /sb_secret_/);
+});
+
+test("browser Supabase clients prefer the modern publishable key", () => {
+  for (const path of ["lib/supabase.ts", "lib/media-storage-upload.ts"]) {
+    const source = read(path);
+    assert.match(source, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
+    assert.match(source, /NEXT_PUBLIC_SUPABASE_ANON_KEY/);
+    assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY|sb_secret_/);
+  }
 });
 
 test("R2 canary bucket setup is idempotent and never exposes its API token", async () => {
