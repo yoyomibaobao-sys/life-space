@@ -7,6 +7,7 @@ import {
   setStoredLanguage,
   type Language,
 } from "@/lib/i18n";
+import { getAuthPublicHardeningCopy } from "@/lib/i18n/auth-public-hardening";
 
 const LANGUAGE_EVENT = "lifespace-language-change";
 
@@ -48,7 +49,16 @@ export function useLanguage() {
     window.dispatchEvent(new CustomEvent<Language>(LANGUAGE_EVENT, { detail: next }));
   }, []);
 
-  const t = useMemo(() => getTranslations(language), [language]);
+  const t = useMemo(() => {
+    const base = getTranslations(language);
+    return {
+      ...base,
+      auth: {
+        ...base.auth,
+        ...getAuthPublicHardeningCopy(language),
+      },
+    };
+  }, [language]);
 
   return { language, setLanguage, t };
 }

@@ -1,12 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
+import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
 import { trackAnalyticsEvent } from "@/lib/analytics-events";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getSafeReturnTo } from "@/lib/auth-return";
+
+const LEGAL_VERSION = "2026-09-01";
 
 function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -53,6 +57,10 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [showLocalFallback, setShowLocalFallback] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedCrossBorder, setAcceptedCrossBorder] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -70,8 +78,18 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       setMessage(t.auth.password_minimum);
+      return;
+    }
+
+    if (!acceptedTerms || !acceptedCrossBorder) {
+      setMessage(t.auth.registration_consent_required);
+      return;
+    }
+
+    if (AUTH_CAPTCHA_ENABLED && !captchaToken) {
+      setMessage(t.auth.captcha_required);
       return;
     }
 
@@ -84,7 +102,16 @@ export default function RegisterPage() {
         email: cleanEmail,
         password,
         options: {
+          captchaToken: captchaToken || undefined,
           emailRedirectTo: `${window.location.origin}${returnTo}`,
+          data: {
+            legal_terms_accepted: true,
+            legal_terms_version: LEGAL_VERSION,
+            privacy_notice_accepted: true,
+            privacy_notice_version: LEGAL_VERSION,
+            cross_border_consent: true,
+            cross_border_consent_version: LEGAL_VERSION,
+          },
         },
       });
 
@@ -117,6 +144,7 @@ export default function RegisterPage() {
       setMessage(t.auth.network_local_fallback);
       setShowLocalFallback(true);
     } finally {
+      setCaptchaResetKey((value) => value + 1);
       setLoading(false);
     }
   }
@@ -144,10 +172,16 @@ export default function RegisterPage() {
         <form onSubmit={handleRegister}>
           <p>{t.auth.email}</p>
           <input
+            type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder={t.auth.email_placeholder}
             autoComplete="email"
+            autoCapitalize="none"
+            inputMode="email"
+            enterKeyHint="next"
+            spellCheck={false}
+            required
             style={{
               width: "100%",
               padding: 12,
@@ -158,7 +192,48 @@ export default function RegisterPage() {
           />
 
           <p style={{ marginTop: 16 }}>{t.auth.password}</p>
-          <PasswordInput value={password} onChange={setPassword} />
+          <PasswordInput
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
+
+          <label style={consentLabelStyle}>
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(event) => setAcceptedTerms(event.target.checked)}
+              required
+            />
+            <span>
+              {t.auth.registration_terms_prefix}
+              <Link href="/legal/terms" target="_blank" rel="noreferrer" style={consentLinkStyle}>
+                {t.auth.registration_terms}
+              </Link>
+              {t.auth.registration_terms_joiner}
+              <Link href="/legal/privacy" target="_blank" rel="noreferrer" style={consentLinkStyle}>
+                {t.auth.registration_privacy}
+              </Link>
+            </span>
+          </label>
+
+          <label style={consentLabelStyle}>
+            <input
+              type="checkbox"
+              checked={acceptedCrossBorder}
+              onChange={(event) => setAcceptedCrossBorder(event.target.checked)}
+              required
+            />
+            <span>{t.auth.registration_cross_border_consent}</span>
+          </label>
+
+          <AuthCaptcha
+            action="register"
+            onTokenChange={setCaptchaToken}
+            resetKey={captchaResetKey}
+          />
 
           <button
             type="submit"
@@ -234,3 +309,19 @@ export default function RegisterPage() {
     </main>
   );
 }
+
+const consentLabelStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 8,
+  marginTop: 14,
+  color: "#556653",
+  fontSize: 12,
+  lineHeight: 1.55,
+};
+
+const consentLinkStyle: React.CSSProperties = {
+  color: "#326b37",
+  fontWeight: 700,
+  textDecoration: "underline",
+};
