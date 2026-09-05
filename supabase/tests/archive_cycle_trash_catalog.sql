@@ -3,6 +3,7 @@
 do $$
 declare
   v_definition text;
+  v_wrapper_definition text;
 begin
   if exists (
     select 1
@@ -46,6 +47,21 @@ begin
 
   select lower(pg_get_functiondef(
     'public.create_archive_cycle(uuid,timestamp with time zone)'::regprocedure
+  )) into v_wrapper_definition;
+
+  if v_wrapper_definition not like '%security definer%'
+     or v_wrapper_definition not like '%public.is_user_membership_active(v_user_id)%'
+     or v_wrapper_definition not like '%private.create_archive_cycle_unchecked%'
+     or has_function_privilege(
+       'authenticated',
+       'private.create_archive_cycle_unchecked(uuid,timestamp with time zone)',
+       'execute'
+     ) then
+    raise exception 'archive cycle creation wrapper does not enforce active cloud access';
+  end if;
+
+  select lower(pg_get_functiondef(
+    'private.create_archive_cycle_unchecked(uuid,timestamp with time zone)'::regprocedure
   )) into v_definition;
 
   if v_definition not like '%security definer%'
@@ -72,6 +88,21 @@ begin
 
   select lower(pg_get_functiondef(
     'public.restore_archive_cycle_from_trash(uuid)'::regprocedure
+  )) into v_wrapper_definition;
+
+  if v_wrapper_definition not like '%security definer%'
+     or v_wrapper_definition not like '%public.is_user_membership_active(v_user_id)%'
+     or v_wrapper_definition not like '%private.restore_archive_cycle_from_trash_unchecked%'
+     or has_function_privilege(
+       'authenticated',
+       'private.restore_archive_cycle_from_trash_unchecked(uuid)',
+       'execute'
+     ) then
+    raise exception 'archive cycle restore wrapper does not enforce active cloud access';
+  end if;
+
+  select lower(pg_get_functiondef(
+    'private.restore_archive_cycle_from_trash_unchecked(uuid)'::regprocedure
   )) into v_definition;
 
   -- Ownership is checked on the trash_entries row before it is read into v_entry.
