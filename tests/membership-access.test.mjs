@@ -12,6 +12,8 @@ const signupRolloutMigrationPath =
   "supabase/migrations/20260730063743_add_signup_account_rollout.sql";
 const claimableTrialMigrationPath =
   "supabase/migrations/20260902033206_claimable_cloud_trial.sql";
+const unifiedVisibilityMigrationPath =
+  "supabase/migrations/20260905232113_unify_archive_visibility.sql";
 const paymentOrderMigrationPath =
   "supabase/migrations/20260814022739_add_membership_payment_orders.sql";
 
@@ -61,8 +63,9 @@ test("the public membership page treats a missing auth session as signed out", a
 });
 
 test("expired cloud access is database-enforced read-only with narrow downgrade actions", async () => {
-  const [migration, archiveListPage, detailPage, recordCard, marketPage, databaseTest] = await Promise.all([
+  const [migration, visibilityMigration, archiveListPage, detailPage, recordCard, marketPage, databaseTest] = await Promise.all([
     source(claimableTrialMigrationPath),
+    source(unifiedVisibilityMigrationPath),
     source("app/archive/page.tsx"),
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveRecordCard.tsx"),
@@ -95,8 +98,13 @@ test("expired cloud access is database-enforced read-only with narrow downgrade 
   }
 
   assert.match(detailPage, /canWriteCloud/);
-  assert.match(detailPage, /rpc\("make_my_archive_private"/);
+  assert.match(detailPage, /"make_my_archive_private"/);
+  assert.match(detailPage, /"make_my_archive_public"/);
   assert.match(detailPage, /rpc\("make_my_record_private"/);
+  assert.match(visibilityMigration, /if not public\.is_user_membership_active\(v_user_id\)/i);
+  assert.match(visibilityMigration, /set visibility = 'public'/i);
+  assert.match(visibilityMigration, /set visibility = 'private'/i);
+  assert.match(databaseTest, /expired account republished a private project/);
   assert.match(recordCard, /readOnly=\{!canEditRecord\}/);
   assert.match(marketPage, /rpc\("end_my_market_post"/);
   assert.match(archiveListPage, /const mobileCreateHref =/);

@@ -842,18 +842,24 @@ saveRecentArchiveBrowse({
       if (!confirmed) return;
 
       if (!activeArchive.is_public) {
-        const { error: archiveError } = await supabase
-          .from("archives")
-          .update({ is_public: true })
-          .eq("id", activeArchive.id)
-          .eq("user_id", activeArchive.user_id);
+        const { data: publicationResult, error: archiveError } = await supabase.rpc(
+          "make_my_archive_public",
+          { p_archive_id: activeArchive.id }
+        );
 
-        if (archiveError) {
+        if (archiveError || publicationResult !== true) {
           showToast(recordCopy.publish_shell_failed);
           return;
         }
 
-        setArchive((prev) => (prev ? { ...prev, is_public: true } : prev));
+        setArchive((prev) =>
+          prev
+            ? { ...prev, is_public: true, default_record_visibility: "public" }
+            : prev
+        );
+        setRecords((prev) =>
+          prev.map((record) => ({ ...record, visibility: "public" }))
+        );
       }
     }
 
@@ -905,37 +911,36 @@ saveRecentArchiveBrowse({
     const nextValue = !activeArchive.is_public;
     if (nextValue && !requireCloudWriteAccess()) return;
 
-    const { data: downgradeResult, error } = nextValue
-      ? await supabase
-          .from("archives")
-          .update({ is_public: true })
-          .eq("id", activeArchive.id)
-          .eq("user_id", activeArchive.user_id)
-          .select("id")
-          .single()
-      : await supabase.rpc("make_my_archive_private", {
-          p_archive_id: activeArchive.id,
-        });
+    const { data: visibilityResult, error } = await supabase.rpc(
+      nextValue ? "make_my_archive_public" : "make_my_archive_private",
+      { p_archive_id: activeArchive.id }
+    );
 
-    if (error || (!nextValue && downgradeResult !== true)) {
+    if (error || visibilityResult !== true) {
       showToast(recordCopy.visibility_update_failed);
       return;
     }
 
-    if (!nextValue) {
-      setRecords((prev) =>
-        prev.map((record) => ({
-          ...record,
-          visibility: "private",
-        }))
-      );
-    }
+    setRecords((prev) =>
+      prev.map((record) => ({
+        ...record,
+        visibility: nextValue ? "public" : "private",
+      }))
+    );
 
-    setArchive((prev) => (prev ? { ...prev, is_public: nextValue } : prev));
+    setArchive((prev) =>
+      prev
+        ? {
+            ...prev,
+            is_public: nextValue,
+            ...(nextValue ? { default_record_visibility: "public" } : {}),
+          }
+        : prev
+    );
 
     showToast(
       nextValue
-        ? archiveCopy.project_shell_public_old_private
+        ? archiveCopy.project_and_records_public
         : archiveCopy.project_and_records_private
     );
   }
@@ -2397,9 +2402,6 @@ saveRecentArchiveBrowse({
             archiveCategory={activeArchive.category}
             archiveIsPublic={activeArchive.is_public}
             activeCycles={activeCycles}
-            archiveDefaultRecordVisibility={
-              activeArchive.default_record_visibility === "public" ? "public" : "private"
-            }
             mobileMode={isMobileViewport}
             open={!isMobileViewport || mobileAddRecordOpen}
             onClose={() => setMobileAddRecordOpen(false)}

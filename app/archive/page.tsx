@@ -855,20 +855,11 @@ export default function ArchivePage() {
     const newValue = !item.is_public;
     if (newValue && !requireCloudWriteAccess()) return;
     if (newValue && !window.confirm(t.archive_workspace.confirm_public_project)) return;
-    const { data: downgradeResult, error } = newValue
-      ? await supabase
-          .from("archives")
-          .update({ is_public: true })
-          .eq("id", item.id)
-          .select("id")
-          .single()
-      : await supabase.rpc("make_my_archive_private", { p_archive_id: item.id });
-    if (error) {
-      showToast(t.archive_workspace.visibility_update_failed);
-      return;
-    }
-
-    if (!newValue && downgradeResult !== true) {
+    const { data: visibilityResult, error } = await supabase.rpc(
+      newValue ? "make_my_archive_public" : "make_my_archive_private",
+      { p_archive_id: item.id }
+    );
+    if (error || visibilityResult !== true) {
       showToast(t.archive_workspace.visibility_update_failed);
       return;
     }
@@ -878,7 +869,7 @@ export default function ArchivePage() {
     );
     showToast(
       newValue
-        ? t.archive.project_shell_public_old_private
+        ? t.archive.project_and_records_public
         : t.archive.project_and_records_private
     );
   }
