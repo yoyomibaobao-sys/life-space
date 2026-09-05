@@ -221,4 +221,34 @@ test("R2 canary bucket setup is idempotent and never exposes its API token", asy
     () => ensureR2CanaryBucket({ accountId: "", apiToken: token, fetchImpl: createFetch }),
     /Missing CLOUDFLARE_ACCOUNT_ID/
   );
+
+  const deniedFetch = async () =>
+    Response.json(
+      {
+        success: false,
+        errors: [
+          {
+            code: 10000,
+            message: `Authentication failed for ${token}`,
+          },
+        ],
+      },
+      { status: 403 }
+    );
+
+  await assert.rejects(
+    () =>
+      ensureR2CanaryBucket({
+        accountId,
+        apiToken: token,
+        fetchImpl: deniedFetch,
+      }),
+    (error) => {
+      assert.match(error.message, /HTTP 403/);
+      assert.match(error.message, /Cloudflare error code: 10000/);
+      assert.doesNotMatch(error.message, new RegExp(token));
+      assert.doesNotMatch(error.message, /Authentication failed/);
+      return true;
+    }
+  );
 });
