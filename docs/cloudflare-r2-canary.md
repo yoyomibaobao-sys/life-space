@@ -15,6 +15,10 @@ Supabase Storage.
 - Existing application media continues to use Supabase Storage. Moving real
   media to R2 requires a separate capacity-ledger, signed-access, deletion,
   export, and rollback migration.
+- The Worker includes a scheduled-maintenance handler that reuses the existing
+  secret-protected lifecycle and Storage deletion route. The canary config does
+  not declare a Cron Trigger, so deploying it cannot start another production
+  maintenance schedule.
 
 ## Current compatibility result
 
@@ -36,8 +40,9 @@ Supabase Storage.
 3. Add `R2_CANARY_SECRET` with `npx wrangler secret put R2_CANARY_SECRET`.
 4. Configure the same Supabase public URL/key used by the Vercel preview. Add
    `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET` as Worker secrets only when the
-   related server routes are tested. Never commit their values or paste them
-   into an issue or pull request.
+   related server routes and scheduled handler are tested. Never commit their
+   values or paste them into an issue or pull request. Do not add a Cron Trigger
+   to the canary while the Vercel Cron remains active.
 5. Build with `npm run build:vinext`, then deploy with
    `npm run deploy:vinext`.
 
@@ -62,8 +67,11 @@ moving real user media.
 - Supabase Auth `Redirect URLs` must include the exact Cloudflare canary origin
   with `/**` before signup confirmation and password reset are tested there.
   Keep the current production `Site URL` unchanged until final cutover.
-- Vercel Cron currently invokes the storage-deletion route. A Cloudflare
-  scheduled handler must be added and tested before production cutover.
+- Vercel Cron currently invokes the storage-deletion route. The Cloudflare
+  scheduled handler is present but deliberately has no canary trigger. During
+  final cutover, disable the Vercel Cron and add `17 3 * * *` to Cloudflare in
+  the same controlled release, then verify the first Cron Event before relying
+  on it.
 - China-mainland access, Google font behavior, all API routes, Android deep
   links, downloads, the manual PayPal payment return flow, export, and deletion
   flows must pass on the canary.
