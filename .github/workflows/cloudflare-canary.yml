@@ -20,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Reserved, non-resolving values keep this first deployment limited to
-      # Worker/R2 infrastructure until the real public canary config is added.
-      NEXT_PUBLIC_SUPABASE_URL: https://cloudflare-canary.invalid
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: cloudflare-canary-placeholder
+      # Publishable Supabase browser configuration is intentionally public and
+      # remains subject to the signed-in user's JWT and Row Level Security.
+      NEXT_PUBLIC_SUPABASE_URL: https://eidltoikfpnrzxruvawf.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_2cw-3WJnyD6x_CnPiDEiqQ_04violBa
 
     steps:
       - name: Check out the verified main branch
