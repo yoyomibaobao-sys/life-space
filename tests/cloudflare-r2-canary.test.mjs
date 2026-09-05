@@ -147,3 +147,71 @@ test("the canary checker reads credentials only from the process environment", (
   assert.match(checker, /process\.env\.R2_CANARY_SECRET/);
   assert.doesNotMatch(checker, /console\.(?:log|error)\([^\n]*secret/i);
 });
+
+test("Cloudflare deployment stays isolated and uses encrypted repository secrets", () => {
+  const workflow = read(".github/workflows/cloudflare-canary.yml");
+
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /branches:\s*\n\s*- main/);
+  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
+  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL: https:\/\/cloudflare-canary\.invalid/);
+  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_ANON_KEY: cloudflare-canary-placeholder/);
+  assert.match(workflow, /npm run build:vinext/);
+  assert.match(workflow, /ensure-cloudflare-r2-canary-bucket\.mjs/);
+  assert.match(workflow, /cloudflare\/wrangler-action@v4/);
+  assert.match(workflow, /deploy --config dist\/server\/wrangler\.json/);
+  assert.match(workflow, /secrets\.CLOUDFLARE_API_TOKEN/);
+  assert.match(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/);
+  assert.match(workflow, /steps\.deploy\.outputs\.deployment-url/);
+  assert.match(workflow, /npm run test:r2-canary/);
+  assert.doesNotMatch(workflow, /^\s*schedule:/m);
+  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("R2 canary bucket setup is idempotent and never exposes its API token", async () => {
+  const { ensureR2CanaryBucket, R2_CANARY_BUCKET_NAME } = await import(
+    "../scripts/ensure-cloudflare-r2-canary-bucket.mjs"
+  );
+  const token = "test-only-cloudflare-token";
+  const accountId = "test-account";
+  const calls = [];
+  const existingFetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    return Response.json({
+      success: true,
+      result: { buckets: [{ name: R2_CANARY_BUCKET_NAME }] },
+    });
+  };
+
+  assert.deepEqual(
+    await ensureR2CanaryBucket({ accountId, apiToken: token, fetchImpl: existingFetch }),
+    { created: false, name: R2_CANARY_BUCKET_NAME }
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.headers.Authorization, `Bearer ${token}`);
+  assert.doesNotMatch(calls[0].url, new RegExp(token));
+
+  const createCalls = [];
+  const createFetch = async (url, options = {}) => {
+    createCalls.push({ url, options });
+    if (options.method === "POST") {
+      return Response.json({ success: true, result: { name: R2_CANARY_BUCKET_NAME } });
+    }
+    return Response.json({ success: true, result: { buckets: [] } });
+  };
+
+  assert.deepEqual(
+    await ensureR2CanaryBucket({ accountId, apiToken: token, fetchImpl: createFetch }),
+    { created: true, name: R2_CANARY_BUCKET_NAME }
+  );
+  assert.equal(createCalls.length, 2);
+  assert.equal(createCalls[1].options.method, "POST");
+  assert.deepEqual(JSON.parse(createCalls[1].options.body), {
+    name: R2_CANARY_BUCKET_NAME,
+  });
+
+  await assert.rejects(
+    () => ensureR2CanaryBucket({ accountId: "", apiToken: token, fetchImpl: createFetch }),
+    /Missing CLOUDFLARE_ACCOUNT_ID/
+  );
+});

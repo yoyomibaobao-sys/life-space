@@ -10,6 +10,9 @@ Supabase Storage.
   Cloudflare Workers.
 - `life-space-media-canary` is an isolated R2 Standard bucket used only for
   write/read/delete checks.
+- The first automated deployment compiles with reserved `.invalid` Supabase
+  placeholders. It validates Worker and R2 infrastructure only; authentication
+  and application data remain deliberately disconnected.
 - `POST /__canary/r2` writes a small random object, reads and verifies it, then
   deletes it. The endpoint requires the `R2_CANARY_SECRET` Worker secret.
 - Existing application media continues to use Supabase Storage. Moving real
@@ -26,25 +29,34 @@ Supabase Storage.
   item (`next/font/google`). The production Workers build downloads and bundles
   the Geist font files, so the deployed page does not need Google Fonts at
   runtime.
-- Both the normal `next build` and `vinext build` complete successfully. This
-  keeps Vercel available while the Worker is tested in parallel.
+- Both the normal `next build` and `vinext build` complete successfully with
+  the deliberately inert canary placeholders. This keeps Vercel available
+  while the Worker and R2 are tested in parallel without reaching production
+  data.
 - The R2 handler has executable tests for wrong method, wrong token, successful
   write/read/delete, and zero residual objects. A real R2 bucket test is still
   required after the isolated Cloudflare resources are created.
 
 ## One-time Cloudflare setup
 
-1. Log in with `npx wrangler login`.
-2. Enable R2 for the Cloudflare account, then create the canary bucket:
-   `npx wrangler r2 bucket create life-space-media-canary`.
-3. Add `R2_CANARY_SECRET` with `npx wrangler secret put R2_CANARY_SECRET`.
-4. Configure the same Supabase public URL/key used by the Vercel preview. Add
-   `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET` as Worker secrets only when the
-   related server routes and scheduled handler are tested. Never commit their
-   values or paste them into an issue or pull request. Do not add a Cron Trigger
-   to the canary while the Vercel Cron remains active.
-5. Build with `npm run build:vinext`, then deploy with
-   `npm run deploy:vinext`.
+1. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions
+   repository secrets. The token is limited to `Workers Scripts: Edit` and
+   `Workers R2 Storage: Edit` for the selected account.
+2. Merge or manually run `.github/workflows/cloudflare-canary.yml`. The workflow
+   creates `life-space-media-canary` only when it does not already exist, builds
+   and deploys `life-space-canary`, rotates canary-only Worker secrets, and
+   verifies an R2 write/read/delete round trip. At this stage the deployed app
+   intentionally cannot sign in or load Supabase data.
+3. After the R2-only check passes, configure the same Supabase public URL/key
+   used by the Vercel preview in a separate application-QA change. Add
+   `SUPABASE_SERVICE_ROLE_KEY` and a stable `CRON_SECRET` as Worker secrets only
+   when the related server routes and scheduled handler are tested. Never
+   commit their values or paste them into an issue or pull request. Do not add a
+   Cron Trigger to the canary while the Vercel Cron remains active.
+
+The workflow is the preferred non-interactive path. For local-only recovery,
+`npx wrangler login`, `npm run build:vinext`, and `npm run deploy:vinext` remain
+available.
 
 The canary should stay on its generated `workers.dev` address and remain out of
 search indexes. Do not attach the production domain or disable the Vercel
