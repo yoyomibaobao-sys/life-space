@@ -16,7 +16,25 @@ async function readCloudflareResponse(response, action) {
   const payload = await response.json().catch(() => null);
 
   if (!response.ok || payload?.success !== true) {
-    throw new Error(`Cloudflare ${action} failed with HTTP ${response.status}.`);
+    const errorCodes = Array.isArray(payload?.errors)
+      ? payload.errors
+          .map((error) => error?.code)
+          .filter(
+            (code) =>
+              Number.isSafeInteger(code) ||
+              (typeof code === "string" && /^[a-z0-9_-]{1,64}$/i.test(code))
+          )
+          .slice(0, 5)
+      : [];
+    const codeSuffix = errorCodes.length
+      ? ` Cloudflare error code${errorCodes.length === 1 ? "" : "s"}: ${errorCodes.join(
+          ", "
+        )}.`
+      : "";
+
+    throw new Error(
+      `Cloudflare ${action} failed with HTTP ${response.status}.${codeSuffix}`
+    );
   }
 
   return payload;
