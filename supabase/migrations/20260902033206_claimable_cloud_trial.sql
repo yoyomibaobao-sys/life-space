@@ -2031,10 +2031,7 @@ drop policy if exists market_posts_update_own on public.market_posts;
 create policy market_posts_update_own
 on public.market_posts for update
 to authenticated
-using (
-  (select auth.uid()) = user_id
-  and public.is_user_membership_active((select auth.uid()))
-)
+using ((select auth.uid()) = user_id)
 with check (
   (select auth.uid()) = user_id
   and public.is_user_membership_active((select auth.uid()))
