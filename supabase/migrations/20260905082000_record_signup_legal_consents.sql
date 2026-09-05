@@ -1,7 +1,13 @@
--- Require the current signup policy versions and record append-only server-side
--- evidence without changing the current account-number or cloud-trial lifecycle.
+-- Record current signup policy versions as append-only server-side evidence
+-- without changing the current account-number or cloud-trial lifecycle.
 -- Account creation remains immediate; cloud trial claiming remains a separate,
 -- email-confirmed user action handled by the claimable-cloud-trial migration.
+--
+-- The public registration UI requires all current consent fields. This AFTER
+-- INSERT trigger records them when present, but deliberately does not reject
+-- system/admin/test-created auth users that do not pass through that UI. A
+-- signup-rejection policy belongs in Supabase's Before User Created Hook rather
+-- than in a data-synchronization trigger that can break all account creation.
 
 begin;
 
@@ -95,7 +101,7 @@ revoke all on function private.record_signup_legal_consents(
 ) from public, anon, authenticated, service_role;
 
 comment on function private.record_signup_legal_consents(uuid, jsonb, timestamptz) is
-  'Auth-trigger-only validation and append-only recording of signup policy versions.';
+  'Auth-trigger-only strict validation and append-only recording of signup policy versions.';
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -103,12 +109,26 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_metadata jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  v_policy_version constant text := '2026-09-01';
+  v_has_current_signup_consents boolean;
 begin
-  perform private.record_signup_legal_consents(
-    new.id,
-    new.raw_user_meta_data,
-    new.created_at
-  );
+  v_has_current_signup_consents :=
+    coalesce(v_metadata ->> 'legal_terms_accepted', 'false') = 'true'
+    and coalesce(v_metadata ->> 'privacy_notice_accepted', 'false') = 'true'
+    and coalesce(v_metadata ->> 'cross_border_consent', 'false') = 'true'
+    and coalesce(v_metadata ->> 'legal_terms_version', '') = v_policy_version
+    and coalesce(v_metadata ->> 'privacy_notice_version', '') = v_policy_version
+    and coalesce(v_metadata ->> 'cross_border_consent_version', '') = v_policy_version;
+
+  if v_has_current_signup_consents then
+    perform private.record_signup_legal_consents(
+      new.id,
+      v_metadata,
+      new.created_at
+    );
+  end if;
 
   perform *
   from private.initialize_new_account(
@@ -125,7 +145,7 @@ revoke all on function public.handle_new_user()
   from public, anon, authenticated, service_role;
 
 comment on function public.handle_new_user() is
-  'Auth INSERT trigger: validates signup consent and atomically creates the permanent local-free account. Cloud trial access is never granted here.';
+  'Auth INSERT trigger: records current web-signup consent when supplied and atomically creates the permanent local-free account. It does not reject system-created users and never grants cloud trial access.';
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
