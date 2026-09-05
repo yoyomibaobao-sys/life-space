@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, buildRegisterHref, getSafeReturnTo } from "@/lib/auth-return";
+import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
 
 function CheckEmailContent() {
   const router = useRouter();
@@ -18,6 +19,8 @@ function CheckEmailContent() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [lastSentTime, setLastSentTime] = useState(0);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   async function handleResend() {
     if (!email) {
@@ -31,6 +34,11 @@ function CheckEmailContent() {
       return;
     }
 
+    if (AUTH_CAPTCHA_ENABLED && !captchaToken) {
+      setMessage(t.auth.captcha_required);
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
@@ -39,6 +47,7 @@ function CheckEmailContent() {
         type: type === "signup" ? "signup" : "signup",
         email,
         options: {
+          captchaToken: captchaToken || undefined,
           emailRedirectTo: `${window.location.origin}${returnTo}`,
         },
       });
@@ -53,6 +62,7 @@ function CheckEmailContent() {
     } catch {
       setMessage(t.auth.network_error);
     } finally {
+      setCaptchaResetKey((value) => value + 1);
       setLoading(false);
     }
   }
@@ -89,6 +99,12 @@ function CheckEmailContent() {
         )}
 
         <div style={{ display: "grid", gap: 10, marginTop: 24 }}>
+          <AuthCaptcha
+            action="resend"
+            onTokenChange={setCaptchaToken}
+            resetKey={captchaResetKey}
+          />
+
           <button
             onClick={handleResend}
             disabled={loading}
