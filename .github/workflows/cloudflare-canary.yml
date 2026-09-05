@@ -1,0 +1,80 @@
+name: Deploy Cloudflare canary
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-canary
+  cancel-in-progress: true
+
+jobs:
+  deploy-canary:
+    name: Build, deploy, and verify isolated canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Reserved, non-resolving values keep this first deployment limited to
+      # Worker/R2 infrastructure until the real public canary config is added.
+      NEXT_PUBLIC_SUPABASE_URL: https://cloudflare-canary.invalid
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: cloudflare-canary-placeholder
+
+    steps:
+      - name: Check out the verified main branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Run Cloudflare safety tests
+        run: node --test tests/cloudflare-r2-canary.test.mjs
+
+      - name: Build the isolated Cloudflare application
+        run: npm run build:vinext
+
+      - name: Ensure the isolated R2 canary bucket exists
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/ensure-cloudflare-r2-canary-bucket.mjs
+
+      - name: Generate one-deployment canary secrets
+        shell: bash
+        run: |
+          r2_canary_secret="$(openssl rand -hex 32)"
+          cron_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$r2_canary_secret"
+          echo "::add-mask::$cron_secret"
+          {
+            echo "R2_CANARY_SECRET=$r2_canary_secret"
+            echo "CRON_SECRET=$cron_secret"
+          } >> "$GITHUB_ENV"
+
+      - name: Deploy the isolated Worker
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # vinext resolves its virtual modules and emits a no-bundle Worker
+          # plus the matching deployment config under dist/server.
+          command: deploy --config dist/server/wrangler.json
+          secrets: |
+            R2_CANARY_SECRET
+            CRON_SECRET
+
+      - name: Verify R2 write, read, and cleanup
+        env:
+          CLOUDFLARE_CANARY_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: npm run test:r2-canary
