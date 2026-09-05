@@ -8,6 +8,7 @@ import { showToast } from "@/components/Toast";
 import { saveQuickCapture, type QuickCaptureTarget } from "@/lib/quick-capture";
 import { MAX_RECORD_PHOTOS_PER_ADD } from "@/lib/record-photo-batches";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 
 export default function QuickCaptureNavAction({
   pathname,
@@ -20,6 +21,7 @@ export default function QuickCaptureNavAction({
 }) {
   const router = useRouter();
   const { language, t } = useLanguage();
+  const isNativeApp = useIsNativeApp();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const isMarketPath = pathname === "/market" || pathname.startsWith("/market/");
@@ -151,11 +153,14 @@ export default function QuickCaptureNavAction({
           {t.quick_record.processing_photo}
         </div>
       ) : null}
+      {/* Forced capture can open a black camera surface in some Android
+          browsers. Let the browser offer Camera or Photos; keep direct rear
+          camera capture only inside the installed Android app. */}
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        capture={isNativeApp === true ? "environment" : undefined}
         onChange={handleCapture}
         style={{ display: "none" }}
       />

@@ -76,13 +76,13 @@ const en = {
   },
 
   quick_record: {
-    take_photo: "Take a photo for a new record",
+    take_photo: "Take or choose a photo for a new record",
     processing_photo: "Processing photo…",
     loading_projects: "Photo ready. Loading projects…",
     capture_failed: "The photo could not be saved. Try again.",
     loading: "Preparing the record...",
     missing_title: "The photo is no longer available",
-    missing_hint: "Return Home and use the center + button to take it again.",
+    missing_hint: "Return Home and use the center + button to take or choose a photo again.",
     back_home: "Back to Home",
     eyebrow: "New record",
     title: "Choose its project",
