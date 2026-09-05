@@ -50,6 +50,16 @@ test("new registrations stay local-free and expose a one-time claim after confir
   assert.match(zhCopy, /处理期/);
 });
 
+test("the public membership page treats a missing auth session as signed out", async () => {
+  const membershipPage = await source("app/membership/page.tsx");
+
+  assert.match(
+    membershipPage,
+    /userError && userError\.name !== "AuthSessionMissingError"/
+  );
+  assert.match(membershipPage, /if \(!user\)[\s\S]*?setMembership\(null\)/);
+});
+
 test("expired cloud access is database-enforced read-only with narrow downgrade actions", async () => {
   const [migration, archiveListPage, detailPage, recordCard, marketPage, databaseTest] = await Promise.all([
     source(claimableTrialMigrationPath),

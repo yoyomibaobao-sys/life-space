@@ -53,7 +53,7 @@ export default function MembershipPage() {
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
+      if (userError && userError.name !== "AuthSessionMissingError") {
         console.error("load user error:", userError);
       }
 
