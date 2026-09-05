@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: cloudflare-canary
@@ -78,3 +79,32 @@ jobs:
         env:
           CLOUDFLARE_CANARY_URL: ${{ steps.deploy.outputs.deployment-url }}
         run: npm run test:r2-canary
+
+      - name: Report the canary result on the commit
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANARY_JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          case "$CANARY_JOB_STATUS" in
+            success)
+              state="success"
+              description="Worker deploy and R2 round trip passed"
+              ;;
+            failure)
+              state="failure"
+              description="Cloudflare canary workflow failed"
+              ;;
+            *)
+              state="error"
+              description="Cloudflare canary workflow was cancelled"
+              ;;
+          esac
+
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="$state" \
+            -f context="Cloudflare canary" \
+            -f description="$description" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

@@ -46,7 +46,9 @@ Supabase Storage.
    creates `life-space-media-canary` only when it does not already exist, builds
    and deploys `life-space-canary`, rotates canary-only Worker secrets, and
    verifies an R2 write/read/delete round trip. At this stage the deployed app
-   intentionally cannot sign in or load Supabase data.
+   intentionally cannot sign in or load Supabase data. Each run writes a
+   `Cloudflare canary` success or failure status, linked to its Actions log, on
+   the deployed commit.
 3. After the R2-only check passes, configure the same Supabase public URL/key
    used by the Vercel preview in a separate application-QA change. Add
    `SUPABASE_SERVICE_ROLE_KEY` and a stable `CRON_SECRET` as Worker secrets only
