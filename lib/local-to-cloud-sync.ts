@@ -183,6 +183,7 @@ async function ensureCloudArchive(params: {
     next_cycle_name: params.archive.next_cycle_name || null,
     user_id: params.userId,
     is_public: isPublic,
+    default_record_visibility: params.visibility,
   };
 
   if (params.existingCloudArchiveId) {

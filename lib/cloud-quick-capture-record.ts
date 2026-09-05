@@ -215,7 +215,7 @@ export async function saveQuickCaptureAsFirstCloudRecord({
       cycle_id: null,
       note: "",
       user_id: userId,
-      visibility: "private",
+      visibility: "public",
       photo_time: recordTime,
       record_time: recordTime,
       upload_time: new Date().toISOString(),

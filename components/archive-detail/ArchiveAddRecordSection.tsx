@@ -9,7 +9,6 @@ export default function ArchiveAddRecordSection({
   archiveId,
   archiveCategory,
   archiveIsPublic,
-  archiveDefaultRecordVisibility = "private",
   activeCycles = [],
   onRecordCreated,
   mobileMode = false,
@@ -19,7 +18,6 @@ export default function ArchiveAddRecordSection({
   archiveId: string;
   archiveCategory?: string | null;
   archiveIsPublic: boolean;
-  archiveDefaultRecordVisibility?: "public" | "private" | string | null;
   activeCycles?: ArchiveCycle[];
   onRecordCreated?: () => void | Promise<void>;
   mobileMode?: boolean;
@@ -29,9 +27,6 @@ export default function ArchiveAddRecordSection({
   const { t } = useLanguage();
 
   if (mobileMode && !open) return null;
-
-  const normalizedDefaultVisibility =
-    archiveDefaultRecordVisibility === "public" ? "public" : "private";
 
   return (
     <ArchiveRecordComposer
@@ -43,7 +38,6 @@ export default function ArchiveAddRecordSection({
         archiveId={archiveId}
         archiveCategory={archiveCategory}
         archiveIsPublic={archiveIsPublic}
-        archiveDefaultRecordVisibility={normalizedDefaultVisibility}
         activeCycles={activeCycles}
         placeholder={t.record.placeholder}
         mobileMode={mobileMode}

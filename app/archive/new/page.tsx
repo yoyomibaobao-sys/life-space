@@ -35,8 +35,8 @@ import {
   saveQuickCaptureAsFirstCloudRecord,
 } from "@/lib/cloud-quick-capture-record";
 
-const DEFAULT_ARCHIVE_IS_PUBLIC = false;
-const DEFAULT_RECORD_VISIBILITY = "private";
+const DEFAULT_ARCHIVE_IS_PUBLIC = true;
+const DEFAULT_RECORD_VISIBILITY = "public";
 
 export default function NewArchivePage() {
   const { t } = useLanguage();

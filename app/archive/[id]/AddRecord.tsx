@@ -61,7 +61,6 @@ type Props = {
   archiveId: string;
   archiveCategory?: string | null;
   archiveIsPublic: boolean;
-  archiveDefaultRecordVisibility?: RecordVisibility;
   activeCycles?: ArchiveCycle[];
   placeholder?: string;
   onRecordCreated?: () => void | Promise<void>;
@@ -82,7 +81,6 @@ export default function AddRecord({
   archiveId,
   archiveCategory,
   archiveIsPublic,
-  archiveDefaultRecordVisibility = "private",
   activeCycles = [],
   placeholder,
   onRecordCreated,
@@ -98,9 +96,7 @@ export default function AddRecord({
   const [customTime, setCustomTime] = useState("");
   const [mergeMode, setMergeMode] = useState(true);
   const [recordVisibility, setRecordVisibility] =
-    useState<RecordVisibility>(
-      archiveDefaultRecordVisibility === "public" ? "public" : "private"
-    );
+    useState<RecordVisibility>(archiveIsPublic ? "public" : "private");
   const [isHelpRecord, setIsHelpRecord] = useState(false);
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>(undefined);
   const [endSelectedCycleAfterSave, setEndSelectedCycleAfterSave] = useState(false);
@@ -162,12 +158,10 @@ export default function AddRecord({
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setRecordVisibility(
-        archiveDefaultRecordVisibility === "public" ? "public" : "private"
-      );
+      setRecordVisibility(archiveIsPublic ? "public" : "private");
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [archiveDefaultRecordVisibility]);
+  }, [archiveIsPublic]);
 
   useEffect(() => {
     async function loadMembership() {
@@ -645,13 +639,24 @@ export default function AddRecord({
           return;
         }
 
-        const { error: archiveError } = await supabase
+        const { data: publicationResult, error: archiveError } = await supabase.rpc(
+          "make_my_archive_public",
+          { p_archive_id: archiveId }
+        );
+
+        if (archiveError || publicationResult !== true) {
+          showToast(copy.publish_shell_failed);
+          setLoading(false);
+          return;
+        }
+
+        const { error: helpStateError } = await supabase
           .from("archives")
-          .update({ is_public: true, help_status: "open", help_updated_at: new Date().toISOString() })
+          .update({ help_status: "open", help_updated_at: new Date().toISOString() })
           .eq("id", archiveId)
           .eq("user_id", user.id);
 
-        if (archiveError) {
+        if (helpStateError) {
           showToast(copy.publish_shell_failed);
           setLoading(false);
           return;
@@ -745,7 +750,7 @@ export default function AddRecord({
       setText("");
       clearSelectedFiles();
       setCustomTime("");
-      setRecordVisibility(archiveDefaultRecordVisibility === "public" ? "public" : "private");
+      setRecordVisibility(archiveIsPublic ? "public" : "private");
       setIsHelpRecord(false);
       setSelectedCycleId(undefined);
       setEndSelectedCycleAfterSave(false);

@@ -865,6 +865,63 @@ $$;
 
 reset role;
 
+-- Active owners can switch the whole project between private and public in
+-- one operation. Existing active records and future defaults stay aligned.
+select set_config(
+  'request.jwt.claim.sub',
+  (select other_user::text from membership_access_test_context),
+  true
+);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+set local role authenticated;
+
+do $$
+declare
+  c membership_access_test_context%rowtype;
+begin
+  select * into c from membership_access_test_context;
+
+  if not public.make_my_archive_private(c.archive_id) then
+    raise exception 'active owner could not make the whole project private';
+  end if;
+
+  if exists (
+    select 1
+    from public.archives as a
+    where a.id = c.archive_id
+      and (a.is_public or a.default_record_visibility <> 'private')
+  ) or exists (
+    select 1
+    from public.records as r
+    where r.id = c.record_id
+      and r.visibility <> 'private'
+  ) then
+    raise exception 'project privacy did not propagate to all records and defaults';
+  end if;
+
+  if not public.make_my_archive_public(c.archive_id) then
+    raise exception 'active owner could not make the whole project public';
+  end if;
+
+  if not exists (
+    select 1
+    from public.archives as a
+    where a.id = c.archive_id
+      and a.is_public
+      and a.default_record_visibility = 'public'
+  ) or exists (
+    select 1
+    from public.records as r
+    where r.id = c.record_id
+      and r.visibility <> 'public'
+  ) then
+    raise exception 'project publication did not propagate to all records and defaults';
+  end if;
+end;
+$$;
+
+reset role;
+
 -- Expired users may wind down and remove existing state, but cannot reactivate
 -- or read cloud-only guide data.
 select set_config(
@@ -945,6 +1002,15 @@ begin
   ) then
     raise exception 'visibility downgrade did not make project records private';
   end if;
+
+  begin
+    perform public.make_my_archive_public(c.expired_archive_id);
+    raise exception 'expired account republished a private project';
+  exception when raise_exception then
+    if sqlerrm <> 'membership_inactive' then
+      raise;
+    end if;
+  end;
 
   update public.archives
   set is_public = true
