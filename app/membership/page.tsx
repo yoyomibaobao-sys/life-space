@@ -11,7 +11,10 @@ import {
   getMembershipPlanLabel,
   getMembershipStatusLabel,
   getMembershipSummary,
+  normalizeCloudTrialClaimRpcResult,
+  normalizeCloudTrialOfferRpcResult,
   normalizeMembershipRpcResult,
+  type CloudTrialOffer,
   type MyMembership,
 } from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -23,6 +26,10 @@ export default function MembershipPage() {
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [membershipLoadFailed, setMembershipLoadFailed] = useState(false);
+  const [trialOffer, setTrialOffer] = useState<CloudTrialOffer | null>(null);
+  const [trialOfferLoadFailed, setTrialOfferLoadFailed] = useState(false);
+  const [claimingTrial, setClaimingTrial] = useState(false);
+  const [trialClaimMessage, setTrialClaimMessage] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
@@ -39,18 +46,20 @@ export default function MembershipPage() {
     async function loadMembership() {
       setLoading(true);
       setMembershipLoadFailed(false);
+      setTrialOfferLoadFailed(false);
 
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
+      if (userError && userError.name !== "AuthSessionMissingError") {
         console.error("load user error:", userError);
       }
 
       if (!user) {
         setMembership(null);
+        setTrialOffer(null);
         setUserEmail("");
         setLoading(false);
         return;
@@ -58,13 +67,25 @@ export default function MembershipPage() {
 
       setUserEmail(user.email || "");
 
-      const { data, error } = await supabase.rpc("get_my_membership");
-      if (error) {
-        console.error("load membership error:", error);
+      const [membershipResult, trialOfferResult] = await Promise.all([
+        supabase.rpc("get_my_membership"),
+        supabase.rpc("get_my_cloud_trial_offer"),
+      ]);
+
+      if (membershipResult.error) {
+        console.error("load membership error:", membershipResult.error);
         setMembership(null);
         setMembershipLoadFailed(true);
       } else {
-        setMembership(normalizeMembershipRpcResult(data));
+        setMembership(normalizeMembershipRpcResult(membershipResult.data));
+      }
+
+      if (trialOfferResult.error) {
+        console.error("load cloud trial offer error:", trialOfferResult.error);
+        setTrialOffer(null);
+        setTrialOfferLoadFailed(true);
+      } else {
+        setTrialOffer(normalizeCloudTrialOfferRpcResult(trialOfferResult.data));
       }
 
       setLoading(false);
@@ -72,6 +93,52 @@ export default function MembershipPage() {
 
     void loadMembership();
   }, []);
+
+  async function claimCloudTrial() {
+    if (claimingTrial) return;
+
+    setClaimingTrial(true);
+    setTrialClaimMessage("");
+
+    const { data, error } = await supabase.rpc("claim_my_cloud_trial");
+    if (error) {
+      console.error("claim cloud trial error:", error);
+      setTrialClaimMessage(t.membership_page.trial_claim_failed);
+      setClaimingTrial(false);
+      return;
+    }
+
+    const result = normalizeCloudTrialClaimRpcResult(data);
+    if (!result?.ok) {
+      const reason = result?.reason || "unknown";
+      setTrialClaimMessage(
+        reason === "email_not_confirmed"
+          ? t.membership_page.trial_email_unconfirmed
+          : reason === "storage_safety_threshold"
+            ? t.membership_page.trial_storage_paused
+            : reason === "membership_active"
+              ? t.membership_page.trial_membership_active
+              : reason === "paid_membership_history"
+                ? t.membership_page.trial_paid_history
+              : t.membership_page.trial_claim_failed
+      );
+      setClaimingTrial(false);
+      return;
+    }
+
+    setTrialClaimMessage(t.membership_page.trial_claim_success);
+    const [membershipResult, trialOfferResult] = await Promise.all([
+      supabase.rpc("get_my_membership"),
+      supabase.rpc("get_my_cloud_trial_offer"),
+    ]);
+    if (!membershipResult.error) {
+      setMembership(normalizeMembershipRpcResult(membershipResult.data));
+    }
+    if (!trialOfferResult.error) {
+      setTrialOffer(normalizeCloudTrialOfferRpcResult(trialOfferResult.data));
+    }
+    setClaimingTrial(false);
+  }
 
   const endDate = getMembershipEndDate(membership);
   const daysRemaining = getDaysRemaining(endDate);
@@ -93,11 +160,29 @@ export default function MembershipPage() {
   const marketQuotaText = membership
     ? `${Number(membership.market_post_limit || 0)}${t.membership_page.simultaneous_posts_suffix}`
     : t.membership_page.zero_posts;
-  const isSignupTrialAllowance = Boolean(
-    membership?.plan === "trial" && !membership.trial_ends_at
-  );
-
   const isLocalFreeUser = Boolean(userEmail && !membership && !membershipLoadFailed);
+  const trialOfferStatusText = trialOffer?.claimed
+    ? trialOffer.lifecycle_status === "converted_to_paid"
+      ? t.membership_page.trial_converted_to_paid
+      : trialOffer.lifecycle_status === "cleanup_completed"
+        ? t.membership_page.trial_cleanup_completed
+        : trialOffer.lifecycle_status === "cleanup_in_progress" ||
+            trialOffer.lifecycle_status === "cleanup_due"
+          ? t.membership_page.trial_cleanup_in_progress
+          : trialOffer.lifecycle_status === "handling_period"
+            ? t.membership_page.trial_handling_period
+            : t.membership_page.trial_already_claimed
+    : trialOffer?.reason === "email_not_confirmed"
+      ? t.membership_page.trial_email_unconfirmed
+      : trialOffer?.reason === "membership_active"
+        ? t.membership_page.trial_membership_active
+        : trialOffer?.reason === "paid_membership_history"
+          ? t.membership_page.trial_paid_history
+        : trialOffer?.reason === "storage_safety_threshold"
+          ? t.membership_page.trial_storage_paused
+          : trialOffer?.can_claim
+            ? t.membership_page.trial_available
+            : t.membership_page.trial_unavailable;
 
   return (
     <main style={isMobileViewport ? mobilePageStyle : pageStyle}>
@@ -138,16 +223,12 @@ export default function MembershipPage() {
               label={t.membership_page.valid_until}
               value={
                 membership
-                  ? isSignupTrialAllowance
-                    ? t.membership_page.no_fixed_expiry
-                    : formatMembershipDate(endDate, language)
+                  ? formatMembershipDate(endDate, language)
                   : t.membership_page.not_applicable
               }
               hint={
                 membership
-                  ? isSignupTrialAllowance
-                    ? t.membership_page.trial_upgrade_hint
-                    : t.membership_page.use_until_expiry
+                  ? t.membership_page.use_until_expiry
                   : t.membership_page.local_no_expiry
               }
               compact={isMobileViewport}
@@ -156,7 +237,7 @@ export default function MembershipPage() {
               label={t.membership_page.storage_capacity}
               value={membership ? storageLimitText : "0 B"}
               hint={
-                isSignupTrialAllowance
+                membership?.plan === "trial"
                   ? t.membership_page.trial_storage_hint
                   : t.membership_page.cloud_storage_hint
               }
@@ -173,6 +254,47 @@ export default function MembershipPage() {
           {isLocalFreeUser && !isMobileViewport ? (
             <div style={localFreeNoticeStyle}>
               {t.membership_page.local_user_notice}
+            </div>
+          ) : null}
+
+          {!trialOfferLoadFailed && trialOffer && (trialOffer.eligible || trialOffer.claimed) ? (
+            <div style={trialClaimCardStyle}>
+              <div>
+                <div style={sectionLabelStyle}>{t.membership_page.trial_claim_eyebrow}</div>
+                <strong style={trialClaimTitleStyle}>{t.membership_page.trial_claim_title}</strong>
+                <p style={trialClaimTextStyle}>{t.membership_page.trial_claim_description}</p>
+                <p style={trialClaimStatusStyle}>{trialOfferStatusText}</p>
+                {trialOffer.claimed && trialOffer.trial_ends_at ? (
+                  <p style={trialClaimTextStyle}>
+                    {t.membership_page.trial_valid_until_prefix}
+                    {formatMembershipDate(trialOffer.trial_ends_at, language)}
+                  </p>
+                ) : null}
+                {trialOffer.claimed &&
+                trialOffer.cleanup_due_at &&
+                trialOffer.lifecycle_status !== "converted_to_paid" &&
+                trialOffer.lifecycle_status !== "cleanup_completed" ? (
+                  <p style={trialClaimTextStyle}>
+                    {t.membership_page.trial_handling_until_prefix}
+                    {formatMembershipDate(trialOffer.cleanup_due_at, language)}
+                  </p>
+                ) : null}
+                {trialClaimMessage ? (
+                  <p style={trialClaimStatusStyle}>{trialClaimMessage}</p>
+                ) : null}
+              </div>
+              {trialOffer.can_claim && !trialOffer.claimed ? (
+                <button
+                  type="button"
+                  style={primaryButtonStyle}
+                  onClick={() => void claimCloudTrial()}
+                  disabled={claimingTrial}
+                >
+                  {claimingTrial
+                    ? t.membership_page.trial_claiming
+                    : t.membership_page.trial_claim_action}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -477,6 +599,38 @@ const trialNoticeStyle: CSSProperties = {
   ...cardStyle,
   marginBottom: 20,
   background: "#f7faf3",
+};
+
+const trialClaimCardStyle: CSSProperties = {
+  border: "1px solid #d7e5d0",
+  borderRadius: 16,
+  background: "#f7faf3",
+  padding: "14px 16px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  flexWrap: "wrap",
+};
+
+const trialClaimTitleStyle: CSSProperties = {
+  color: "#243123",
+  fontSize: 16,
+};
+
+const trialClaimTextStyle: CSSProperties = {
+  margin: "6px 0 0",
+  color: "#6f7b69",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+const trialClaimStatusStyle: CSSProperties = {
+  margin: "6px 0 0",
+  color: "#3f6f3d",
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.5,
 };
 
 const sectionLabelStyle: CSSProperties = {

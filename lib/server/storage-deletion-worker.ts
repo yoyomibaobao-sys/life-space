@@ -38,6 +38,15 @@ export type StorageDeletionWorkerSummary = {
   failed: number;
 };
 
+export type CloudTrialLifecycleSummary = {
+  processed: number;
+  notificationsCreated: number;
+  convertedToPaid: number;
+  cleanupStarted: number;
+  cleanupCompleted: number;
+  cleanupFailed: number;
+};
+
 type StorageDeletionWorkerBatchOptions = {
   maxBatches?: number;
   maxDurationMs?: number;
@@ -57,6 +66,41 @@ function createEmptySummary(): StorageDeletionWorkerSummary {
     retainedShared: 0,
     retryScheduled: 0,
     failed: 0,
+  };
+}
+
+function toSafeCount(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
+}
+
+export async function runCloudTrialLifecycle(
+  limit = 25
+): Promise<CloudTrialLifecycleSummary> {
+  const supabase = getSupabaseAdmin();
+  const result = await supabase.rpc("process_cloud_trial_lifecycle", {
+    p_limit: Math.min(Math.max(Math.trunc(limit), 1), 100),
+  });
+
+  if (result.error) {
+    console.error("cloud trial lifecycle failed", {
+      errorCode: "cloud_trial_lifecycle_rpc_failed",
+    });
+    throw new Error("cloud_trial_lifecycle_rpc_failed");
+  }
+
+  const data =
+    result.data && typeof result.data === "object" && !Array.isArray(result.data)
+      ? (result.data as Record<string, unknown>)
+      : {};
+
+  return {
+    processed: toSafeCount(data.processed),
+    notificationsCreated: toSafeCount(data.notifications_created),
+    convertedToPaid: toSafeCount(data.converted_to_paid),
+    cleanupStarted: toSafeCount(data.cleanup_started),
+    cleanupCompleted: toSafeCount(data.cleanup_completed),
+    cleanupFailed: toSafeCount(data.cleanup_failed),
   };
 }
 

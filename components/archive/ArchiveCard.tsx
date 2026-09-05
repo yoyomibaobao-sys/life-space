@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -21,7 +20,6 @@ import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
-import UiIcon from "@/components/ui/UiIcon";
 import { getTranslations, type Language } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { ArchiveCategoryDepths } from "@/lib/archive-category-settings";
@@ -65,6 +63,7 @@ type Props = {
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
   onDeleteArchive: (item: ArchiveItem) => void;
   mobileMode?: boolean;
+  readOnly?: boolean;
 };
 
 type StatusPill = {
@@ -188,6 +187,7 @@ export default function ArchiveCard({
   onUpdateArchiveGroupTag,
   onDeleteArchive,
   mobileMode = false,
+  readOnly = false,
 }: Props) {
   const { language, t } = useLanguage();
   const hasLatestRecord = Boolean(
@@ -228,6 +228,7 @@ export default function ArchiveCard({
         onUpdateArchiveCategory={onUpdateArchiveCategory}
         onUpdateArchiveGroupTag={onUpdateArchiveGroupTag}
         onDeleteArchive={onDeleteArchive}
+        readOnly={readOnly}
       />
     );
   }
@@ -362,10 +363,10 @@ export default function ArchiveCard({
             <span
               onClick={(e) => {
                 e.stopPropagation();
-                onRenameTitle(item);
+                if (!readOnly) onRenameTitle(item);
               }}
-              style={{ cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-              title={t.archive_workspace.click_edit_name}
+              style={{ cursor: readOnly ? "default" : "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              title={readOnly ? undefined : t.archive_workspace.click_edit_name}
             >
               {item.title}
             </span>
@@ -390,17 +391,17 @@ export default function ArchiveCard({
               <span
                 onClick={(e) => {
                   e.stopPropagation();
-                  onBeginEditPlant(item);
+                  if (!readOnly) onBeginEditPlant(item);
                 }}
                 style={{
-                  cursor: "pointer",
+                  cursor: readOnly ? "default" : "pointer",
                   color: ended ? "#888" : "#546b4e",
                   fontWeight: 500,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
-                title={t.archive_workspace.click_edit_system_name}
+                title={readOnly ? undefined : t.archive_workspace.click_edit_system_name}
               >
                 {systemName}
               </span>
@@ -420,17 +421,17 @@ export default function ArchiveCard({
               <span
                 onClick={(e) => {
                   e.stopPropagation();
-                  onBeginEditSystem(item);
+                  if (!readOnly) onBeginEditSystem(item);
                 }}
                 style={{
-                  cursor: "pointer",
+                  cursor: readOnly ? "default" : "pointer",
                   color: ended ? "#888" : "#546b4e",
                   fontWeight: 500,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
-                title={t.archive_workspace.click_edit_specific_name}
+                title={readOnly ? undefined : t.archive_workspace.click_edit_specific_name}
               >
                 {systemName}
               </span>
@@ -469,33 +470,39 @@ export default function ArchiveCard({
             alignItems: "center",
           }}
         >
-          <button
-            type="button"
-            title={item.is_public ? t.archive.set_private : t.archive_workspace.publish}
-            onClick={(e) => {
-              e.stopPropagation();
-              onTogglePublic(item);
-            }}
-            style={{
-              fontSize: 12,
-              padding: "2px 7px",
-              borderRadius: 999,
-              border: item.is_public ? "1px solid #b7dfbb" : "1px solid #ddd",
-              background: item.is_public ? "#f1fff1" : "#fff",
-              color: item.is_public ? "#2f8f2f" : "#888",
-              cursor: "pointer",
-            }}
-          >
-            {item.is_public ? t.archive.public_discover : t.archive.private_only}
-          </button>
+          {!readOnly || item.is_public ? (
+            <button
+              type="button"
+              title={item.is_public ? t.archive.set_private : t.archive_workspace.publish}
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePublic(item);
+              }}
+              style={{
+                fontSize: 12,
+                padding: "2px 7px",
+                borderRadius: 999,
+                border: item.is_public ? "1px solid #b7dfbb" : "1px solid #ddd",
+                background: item.is_public ? "#f1fff1" : "#fff",
+                color: item.is_public ? "#2f8f2f" : "#888",
+                cursor: "pointer",
+              }}
+            >
+              {item.is_public ? t.archive.public_discover : t.archive.private_only}
+            </button>
+          ) : (
+            <span style={{ color: "#888" }}>{t.archive.private_only}</span>
+          )}
 
-          <ArchiveCategoryDropdown
-            value={item.sub_tag_id || item.category}
-            subTags={subTags}
-            onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
-          />
+          {!readOnly ? (
+            <ArchiveCategoryDropdown
+              value={item.sub_tag_id || item.category}
+              subTags={subTags}
+              onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
+            />
+          ) : null}
 
-          {item.sub_tag_id && availableGroupTags.length > 0 ? (
+          {!readOnly && item.sub_tag_id && availableGroupTags.length > 0 ? (
             <ArchiveGroupDropdown
               value={item.group_tag_id || ""}
               groupTags={availableGroupTags}
@@ -552,21 +559,23 @@ export default function ArchiveCard({
     gap: 8,
   }}
 >
-  <button
-    type="button"
-    onClick={() => onUpdateArchiveStatus(item, ended ? "active" : "ended")}
-    style={{
-      border: "none",
-      background: "transparent",
-      color: ended ? "#4f8f46" : "#8a8f84",
-      cursor: "pointer",
-      fontSize: 12,
-      padding: 0,
-      whiteSpace: "nowrap",
-    }}
-  >
-    {ended ? t.archive_workspace.restore : t.archive_workspace.end}
-  </button>
+  {!readOnly ? (
+    <button
+      type="button"
+      onClick={() => onUpdateArchiveStatus(item, ended ? "active" : "ended")}
+      style={{
+        border: "none",
+        background: "transparent",
+        color: ended ? "#4f8f46" : "#8a8f84",
+        cursor: "pointer",
+        fontSize: 12,
+        padding: 0,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {ended ? t.archive_workspace.restore : t.archive_workspace.end}
+    </button>
+  ) : null}
 
   <button
     type="button"
@@ -602,6 +611,7 @@ function MobileArchiveCard({
   onUpdateArchiveCategory,
   onUpdateArchiveGroupTag,
   onDeleteArchive,
+  readOnly,
 }: {
   item: ArchiveItem;
   ended: boolean;
@@ -616,11 +626,11 @@ function MobileArchiveCard({
   onUpdateArchiveCategory: (item: ArchiveItem, value: string) => void;
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
   onDeleteArchive: (item: ArchiveItem) => void;
+  readOnly: boolean;
 }) {
   const { language, t } = useLanguage();
   const ongoingDays = getOngoingDays(item.created_at);
   const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
-  const latestRecordPreview = getLatestRecordPreview(item, language);
   const visibilityText = item.is_public ? t.experience.public : t.experience.private;
   const mobileEndedText = ended ? t.archive_workspace.ended : "";
   const maxDepth = categoryDepths[item.category] || 3;
@@ -668,10 +678,11 @@ function MobileArchiveCard({
       categoryDepths={categoryDepths}
       ended={ended}
       isPublic={Boolean(item.is_public)}
+      allowTaxonomyEdit={!readOnly}
       onChangeCategory={(value) => onUpdateArchiveCategory(item, value)}
       onChangeGroup={(value) => onUpdateArchiveGroupTag(item, value)}
-      onToggleEnded={() => onUpdateArchiveStatus(item, ended ? "active" : "ended")}
-      onTogglePublic={() => onTogglePublic(item)}
+      onToggleEnded={readOnly ? undefined : () => onUpdateArchiveStatus(item, ended ? "active" : "ended")}
+      onTogglePublic={readOnly && !item.is_public ? undefined : () => onTogglePublic(item)}
       onMoveToTrash={() => onDeleteArchive(item)}
     />
   );

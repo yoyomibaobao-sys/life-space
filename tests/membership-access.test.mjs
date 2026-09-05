@@ -10,13 +10,16 @@ const migrationPath =
   "supabase/migrations/20260726140000_align_membership_access_and_market_limits.sql";
 const signupRolloutMigrationPath =
   "supabase/migrations/20260730063743_add_signup_account_rollout.sql";
+const claimableTrialMigrationPath =
+  "supabase/migrations/20260902033206_claimable_cloud_trial.sql";
 const paymentOrderMigrationPath =
   "supabase/migrations/20260814022739_add_membership_payment_orders.sql";
 
-test("new registrations use the bounded 30 MB signup rollout instead of the legacy automatic trial", async () => {
-  const [migration, signupRolloutMigration, registration, zhCopy] = await Promise.all([
+test("new registrations stay local-free and expose a one-time claim after confirmation", async () => {
+  const [migration, signupRolloutMigration, claimableTrialMigration, registration, zhCopy] = await Promise.all([
     source(migrationPath),
     source(signupRolloutMigrationPath),
+    source(claimableTrialMigrationPath),
     source("app/register/page.tsx"),
     source("lib/i18n/zh.ts"),
   ]);
@@ -34,20 +37,76 @@ test("new registrations use the bounded 30 MB signup rollout instead of the lega
     /alter table public\.profiles\s+alter column storage_limit set default 0;/i
   );
   assert.match(
-    signupRolloutMigration,
-    /trial_slot_limit integer not null default 20/i
+    claimableTrialMigration,
+    /create or replace function public\.claim_my_cloud_trial\(\)/i
   );
   assert.match(
-    signupRolloutMigration,
-    /trial_allowance_bytes bigint not null default 30000000/i
+    claimableTrialMigration,
+    /storage_limit_bytes bigint not null default 30000000/i
   );
-  assert.match(
-    signupRolloutMigration,
-    /from private\.initialize_new_account/i
-  );
+  assert.match(signupRolloutMigration, /from private\.initialize_new_account/i);
   assert.match(registration, /t\.auth\.registration_intro/);
-  assert.match(zhCopy, /首批20名正式注册用户/);
-  assert.match(zhCopy, /30MB云空间体验/);
+  assert.match(zhCopy, /每个正式账号可主动领取一次30MB云端体验/);
+  assert.match(zhCopy, /处理期/);
+});
+
+test("the public membership page treats a missing auth session as signed out", async () => {
+  const membershipPage = await source("app/membership/page.tsx");
+
+  assert.match(
+    membershipPage,
+    /userError && userError\.name !== "AuthSessionMissingError"/
+  );
+  assert.match(membershipPage, /if \(!user\)[\s\S]*?setMembership\(null\)/);
+});
+
+test("expired cloud access is database-enforced read-only with narrow downgrade actions", async () => {
+  const [migration, archiveListPage, detailPage, recordCard, marketPage, databaseTest] = await Promise.all([
+    source(claimableTrialMigrationPath),
+    source("app/archive/page.tsx"),
+    source("app/archive/[id]/page.tsx"),
+    source("components/archive-detail/ArchiveRecordCard.tsx"),
+    source("app/market/[id]/page.tsx"),
+    source("supabase/tests/membership_access_dynamic.sql"),
+  ]);
+
+  for (const policy of [
+    "archives_update_own",
+    "records_update_own_archive",
+    "media_update_own",
+    "market_posts_update_own",
+  ]) {
+    assert.match(
+      migration,
+      new RegExp(`create policy ${policy}[\\s\\S]*?public\\.is_user_membership_active\\(\\(select auth\\.uid\\(\\)\\)\\)`, "i")
+    );
+  }
+
+  for (const rpc of [
+    "make_my_archive_private",
+    "make_my_record_private",
+    "end_my_market_post",
+  ]) {
+    assert.match(migration, new RegExp(`create or replace function public\\.${rpc}\\(`, "i"));
+    assert.match(
+      migration,
+      new RegExp(`revoke all on function public\\.${rpc}\\(uuid\\)[\\s\\S]*?grant execute on function public\\.${rpc}\\(uuid\\)[\\s\\S]*?to authenticated, service_role`, "i")
+    );
+  }
+
+  assert.match(detailPage, /canWriteCloud/);
+  assert.match(detailPage, /rpc\("make_my_archive_private"/);
+  assert.match(detailPage, /rpc\("make_my_record_private"/);
+  assert.match(recordCard, /readOnly=\{!canEditRecord\}/);
+  assert.match(marketPage, /rpc\("end_my_market_post"/);
+  assert.match(archiveListPage, /const mobileCreateHref =/);
+  assert.match(
+    archiveListPage,
+    /activeSource === "local"[\s\S]*?"\/local\/archive\/new"[\s\S]*?contentBlocked[\s\S]*?"\/membership"/
+  );
+  assert.match(archiveListPage, /<Link href=\{mobileCreateHref\}/);
+  assert.match(databaseTest, /expired account edited retained cloud content/);
+  assert.match(databaseTest, /expired account restored cloud content without renewing/);
 });
 
 test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async () => {
@@ -459,8 +518,35 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /¥64\/年或 US\$8\/year/);
   assert.match(docs, /现有 4 个内部试用账号保留原到期日、原容量和原集市额度/);
   assert.match(docs, /已结束的集市条目不占 30 条额度/);
-  assert.match(docs, /先执行账号编号与首批体验额度 migration，再发布/);
-  assert.match(docs, /第21个正式账号与存储安全线两条路径都只停止赠送，不阻断注册/);
+  assert.match(docs, /先执行可领取云体验 migration，再发布/);
+  assert.match(docs, /存储安全线只暂停新领取，不阻断注册/);
+  assert.match(docs, /处理期结束后的清理只作用于从未转为有效付费会员/);
+  assert.match(docs, /处理期以站内通知为主/);
+  assert.match(docs, /最终结束云端保留前7天发送一次关键邮件/);
+  assert.match(docs, /会员到期未续费后，未由用户主动删除的云端内容长期保留并只读/);
+  assert.match(docs, /可随时、多次保存到本机/);
+  assert.match(docs, /允许查看、导出、删除和公开转私密/);
+  assert.match(docs, /禁止新增、编辑、上传、互动、重新发布以及私密转公开/);
+});
+
+test("Cloud Membership benefits promise durable read-only access after expiry", async () => {
+  const [zhCopy, enCopy] = await Promise.all([
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
+
+  assert.match(
+    zhCopy,
+    /会员期满后，未主动删除的云端内容长期只读保留，可随时、多次保存到本机/
+  );
+  assert.match(
+    zhCopy,
+    /到期后云端内容只读保留，可随时保存到本机/
+  );
+  assert.match(
+    enCopy,
+    /After membership ends, cloud content you have not deleted remains available read-only and can be saved to your devices at any time, as often as needed/
+  );
 });
 
 test("isolated database CI runs membership behavior and all concurrency suites", async () => {

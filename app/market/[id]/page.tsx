@@ -233,17 +233,23 @@ export default function MarketDetailPage() {
 
     setWorking(true);
 
-    const { error } = await supabase
-      .from("market_posts")
-      .update({ status: nextStatus })
-      .eq("id", item.id)
-      .eq("user_id", item.user_id);
+    const statusResult = nextStatus === "ended"
+      ? await supabase.rpc("end_my_market_post", {
+          p_market_post_id: item.id,
+        })
+      : await supabase
+          .from("market_posts")
+          .update({ status: "active" })
+          .eq("id", item.id)
+          .eq("user_id", item.user_id)
+          .select("id")
+          .single();
 
     setWorking(false);
 
-    if (error) {
-      console.error("update market status error:", error);
-      const message = String(error.message || "");
+    if (statusResult.error || (nextStatus === "ended" && statusResult.data !== true)) {
+      console.error("update market status error:", statusResult.error);
+      const message = String(statusResult.error?.message || "");
       if (message.includes("market_post_limit_reached")) {
         window.alert(t.market.post_limit_alert);
       } else if (message.includes("membership_inactive")) {

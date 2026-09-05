@@ -17,6 +17,7 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function ArchiveDetailHeader({
   mode,
+  canWriteCloud = true,
   archive,
   username,
   archiveDisplayName,
@@ -31,6 +32,9 @@ export default function ArchiveDetailHeader({
   systemNameMode,
   onToggleArchiveVisibility,
   onToggleArchiveStatus,
+  onSaveToLocal,
+  saveToLocalLabel,
+  saveToLocalDisabled,
   onDeleteArchive,
   onSaveTitle,
   onSaveCategory,
@@ -41,6 +45,7 @@ export default function ArchiveDetailHeader({
   profileExtra,
 }: {
   mode: ArchiveMode;
+  canWriteCloud?: boolean;
   archive: ArchiveDetailArchive;
   username: string;
   archiveDisplayName: string;
@@ -55,6 +60,9 @@ export default function ArchiveDetailHeader({
   systemNameMode?: "candidate" | "text";
   onToggleArchiveVisibility: () => void;
   onToggleArchiveStatus?: () => void;
+  onSaveToLocal?: () => void;
+  saveToLocalLabel?: string;
+  saveToLocalDisabled?: boolean;
   onDeleteArchive?: () => void;
   onSaveTitle?: (value: string) => Promise<void> | void;
   onSaveCategory?: (value: ArchiveCategory) => Promise<void> | void;
@@ -190,7 +198,7 @@ export default function ArchiveDetailHeader({
       encyclopediaHref={encyclopediaHref}
       profileRows={profileRows}
       profileEditor={
-        mode === "owner"
+        mode === "owner" && canWriteCloud
           ? {
               values: {
                 title: archive.title || "",
@@ -214,12 +222,30 @@ export default function ArchiveDetailHeader({
       profileActions={
         mode === "owner" ? (
           <>
-            <button type="button" onClick={onToggleArchiveStatus} style={profileActionButtonStyle}>
-              {archive.status === "ended" ? copy.restore : copy.end}
-            </button>
-            <button type="button" onClick={onToggleArchiveVisibility} style={profileActionButtonStyle}>
-              {archive.is_public ? copy.set_private : copy.set_public}
-            </button>
+            {onSaveToLocal && saveToLocalLabel ? (
+              <button
+                type="button"
+                onClick={onSaveToLocal}
+                disabled={saveToLocalDisabled}
+                style={{
+                  ...profileActionButtonStyle,
+                  opacity: saveToLocalDisabled ? 0.55 : 1,
+                  cursor: saveToLocalDisabled ? "not-allowed" : "pointer",
+                }}
+              >
+                {saveToLocalLabel}
+              </button>
+            ) : null}
+            {canWriteCloud ? (
+              <button type="button" onClick={onToggleArchiveStatus} style={profileActionButtonStyle}>
+                {archive.status === "ended" ? copy.restore : copy.end}
+              </button>
+            ) : null}
+            {canWriteCloud || archive.is_public ? (
+              <button type="button" onClick={onToggleArchiveVisibility} style={profileActionButtonStyle}>
+                {archive.is_public ? copy.set_private : copy.set_public}
+              </button>
+            ) : null}
             <button type="button" onClick={onDeleteArchive} style={profileDangerButtonStyle}>
               {copy.move_to_trash}
             </button>
