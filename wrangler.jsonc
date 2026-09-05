@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "life-space-canary",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "./cloudflare/worker-entry.mjs",
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "cache": {
+    "enabled": true
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2_MEDIA_CANARY",
+      "bucket_name": "life-space-media-canary"
+    }
+  ]
+}
