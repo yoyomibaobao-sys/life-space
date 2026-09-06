@@ -10,16 +10,20 @@ const read = (relativePath) =>
 test("Android shell keeps its identity, HTTPS host, and offline fallback explicit", () => {
   const config = read("capacitor.config.ts");
   const offline = read("mobile-shell/offline.html");
+  const offlineSource = read("mobile-offline-src/main.tsx");
 
   assert.match(config, /appId: "com\.youshi\.cultivation"/);
   assert.match(config, /appName: "有时·耕作"/);
   assert.match(read("android/app/src/main/res/values/strings.xml"), /有时·耕作/);
   assert.match(config, /CAPACITOR_SERVER_URL/);
+  assert.match(config, /https:\/\/life-space\.uk/);
   assert.match(config, /url\.protocol !== "https:"/);
+  assert.match(config, /hostname: serverUrl\.hostname/);
+  assert.match(config, /androidScheme: "https"/);
   assert.match(config, /cleartext: false/);
   assert.match(config, /errorPath: "offline\.html"/);
-  assert.match(offline, /暂时无法连接/);
-  assert.match(offline, /已保存在 App 内的数据不会因此被删除/);
+  assert.match(offline, /本地离线模式/);
+  assert.match(offlineSource, /云端暂时不可用/);
 });
 
 test("Android system bars use modern edge-to-edge insets and page-aware contrast", () => {
@@ -145,10 +149,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '4'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.3'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '4' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.3' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '7'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc3'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '7' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc3' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);

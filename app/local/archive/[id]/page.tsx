@@ -85,6 +85,7 @@ import {
   getLocalArchiveCategoryDepths,
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
+import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
 
 function formatDate(value?: string | null) {
   return formatPreciseDateTime(value);
@@ -203,6 +204,21 @@ export default function LocalArchiveDetailPage() {
 
   useEffect(() => {
     void loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [archiveId]);
+
+  useEffect(() => {
+    function handleLocalOriginMigration() {
+      void loadDetail();
+    }
+
+    window.addEventListener(LOCAL_ORIGIN_MIGRATED_EVENT, handleLocalOriginMigration);
+    return () =>
+      window.removeEventListener(
+        LOCAL_ORIGIN_MIGRATED_EVENT,
+        handleLocalOriginMigration,
+      );
+    // The detail loader resolves the current route id and owner context.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [archiveId]);
 

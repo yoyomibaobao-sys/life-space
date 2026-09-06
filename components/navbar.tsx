@@ -13,6 +13,7 @@ import { buildLoginHref } from "@/lib/auth-return";
 import QuickCaptureNavAction from "@/components/quick-record/QuickCaptureNavAction";
 import BrandMark from "@/components/BrandMark";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
 
 type MobileArchiveTitleInfo = {
   archiveId: string;
@@ -230,6 +231,7 @@ export default function Navbar() {
   }, [pathname, t, user?.id]);
 
   async function handleLogout() {
+    clearRememberedLocalOwnerContext();
     await supabase.auth.signOut({ scope: "local" });
     router.push("/login");
   }

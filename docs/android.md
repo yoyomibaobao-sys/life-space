@@ -19,7 +19,7 @@ Application ID 发布后不得随意改变，否则 Android 会把它识别成�
 CAPACITOR_SERVER_URL=https://example.com npm run android:sync
 ```
 
-未提供时暂时使用当前 Vercel 地址。获得稳定正式域名后，CI 和正式 APK 应明确传入正式域名，避免长期只依赖 `vercel.app`。
+未提供时使用正式域名 `https://life-space.uk`。CI 和正式 APK 也必须明确传入该正式域名，不再把 `workers.dev` 或 `vercel.app` 预览地址作为用户入口。
 
 ## 本地构建
 
@@ -77,9 +77,11 @@ android/app/build/outputs/apk/release/app-release.apk
 
 不要提交 `.jks`、`.keystore`、密码、Base64 密钥、`local.properties` 或 APK 构建产物。
 
-## 当前离线边界
+## 离线边界
 
-项目和记录数据会保存在 WebView 的 IndexedDB 中，但网页资源仍从网站加载。外壳提供断网错误页，不代表已经支持断网冷启动。要实现完全断网打开页面，需要另行增加并验证 App Shell 缓存或可打包的本地前端，不应只依赖 WebView 临时缓存。
+APK 内置本地项目、记录和照片的离线页面。正式域名无法连接时，外壳自动打开该页面；它与正式网页使用同一个 IndexedDB 存储域，因此离线新增内容在重新联网后仍然可见，但不会自动上传云端。
+
+从早期签名 RC 包升级到正式域名时，APK 内置只读迁移桥，把旧 Workers 存储域内的项目、记录、照片和本地分组复制到正式域名存储域。迁移完全发生在设备内，按图片逐张处理，并保留旧数据作为可重试来源。`workers.dev` 只作为 Android WebView 识别旧 IndexedDB 的兼容 origin，不承载任何云端请求。
 
 ## 返回顺序
 

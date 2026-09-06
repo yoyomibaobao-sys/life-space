@@ -9,5 +9,10 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeSystemUiPlugin.class);
         super.onCreate(savedInstanceState);
+        if (bridge != null) {
+            bridge.getWebView().setWebViewClient(
+                new LifeSpaceWebViewClient(bridge, getAssets())
+            );
+        }
     }
 }

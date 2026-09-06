@@ -77,6 +77,7 @@ import {
   getLocalArchiveCategoryDepths,
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
+import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
 
 type LatestArchiveRecord = {
   id: string;
@@ -214,6 +215,21 @@ export default function ArchivePage() {
       setLocalLoading(false);
     }
   }
+
+  useEffect(() => {
+    function handleLocalOriginMigration() {
+      void loadLocalArchives();
+    }
+
+    window.addEventListener(LOCAL_ORIGIN_MIGRATED_EVENT, handleLocalOriginMigration);
+    return () =>
+      window.removeEventListener(
+        LOCAL_ORIGIN_MIGRATED_EVENT,
+        handleLocalOriginMigration,
+      );
+    // The callback intentionally reads the latest owner context from state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOwnerContext]);
 
   async function loadData() {
     if (loadingRef.current) return;

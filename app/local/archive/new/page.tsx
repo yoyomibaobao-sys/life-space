@@ -125,6 +125,10 @@ export default function NewLocalArchivePage() {
     try {
       let archiveId = createdArchiveId;
       if (!archiveId) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const currentUser = session?.user || null;
         const archive = await createLocalArchive({
           title: cleanTitle,
           category,
@@ -136,6 +140,9 @@ export default function NewLocalArchivePage() {
           species_name: category === "plant" ? cleanSystemName : "",
           source: source.trim() || null,
           note,
+          local_owner_user_id: currentUser?.id || null,
+          local_owner_email: currentUser?.email || null,
+          local_owner_marked_at: currentUser ? new Date().toISOString() : null,
         });
         archiveId = archive.id;
         setCreatedArchiveId(archiveId);

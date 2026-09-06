@@ -162,6 +162,12 @@ export type LocalArchiveDetail = {
   records: LocalRecordWithImages[];
 };
 
+export type LocalOriginBaseSnapshot = {
+  archives: LocalArchive[];
+  records: LocalRecord[];
+  taxonomy: LocalTaxonomyItem[];
+};
+
 export type LocalArchiveOwnerContext = {
   userId?: string | null;
   email?: string | null;
@@ -2743,4 +2749,111 @@ export async function deleteLocalArchive(archiveId: string) {
   } finally {
     db.close();
   }
+}
+
+function getMigrationRowTime(value: {
+  updated_at?: string | null;
+  created_at?: string | null;
+}) {
+  const timestamp = new Date(value.updated_at || value.created_at || 0).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+async function putNewerMigrationRow<T extends {
+  id: string;
+  updated_at?: string | null;
+  created_at?: string | null;
+}>(store: IDBObjectStore, incoming: T) {
+  if (!incoming?.id) return;
+
+  const existing = await requestToPromise<T | undefined>(store.get(incoming.id));
+  if (!existing || getMigrationRowTime(incoming) > getMigrationRowTime(existing)) {
+    await requestToPromise(store.put(incoming));
+  }
+}
+
+/**
+ * Merges the non-image portion of the one-time Android origin migration.
+ * Existing production-origin rows win unless the legacy copy is newer, so a
+ * retry cannot roll back edits made after the domain switch.
+ */
+export async function mergeLocalOriginBaseSnapshot(
+  snapshot: LocalOriginBaseSnapshot,
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(
+      [ARCHIVE_STORE, RECORD_STORE, TAXONOMY_STORE],
+      "readwrite",
+    );
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const taxonomyStore = transaction.objectStore(TAXONOMY_STORE);
+
+    for (const archive of Array.isArray(snapshot.archives)
+      ? snapshot.archives
+      : []) {
+      if (!archive?.id) continue;
+      await putNewerMigrationRow(archiveStore, normalizeLocalArchive(archive));
+    }
+
+    for (const record of Array.isArray(snapshot.records)
+      ? snapshot.records
+      : []) {
+      if (!record?.id || !record.archive_id) continue;
+      await putNewerMigrationRow(recordStore, {
+        ...record,
+        note: normalizeOptionalText(record.note) || "",
+        local_only: true,
+        sync: normalizeLocalSyncMeta(record.sync),
+      } satisfies LocalRecord);
+    }
+
+    for (const taxonomy of Array.isArray(snapshot.taxonomy)
+      ? snapshot.taxonomy
+      : []) {
+      if (!taxonomy?.id) continue;
+      await putNewerMigrationRow(
+        taxonomyStore,
+        normalizeLocalTaxonomyItem(taxonomy),
+      );
+    }
+
+    await done;
+  } finally {
+    db.close();
+  }
+}
+
+/** Images are streamed one at a time to avoid holding every photo in memory. */
+export async function mergeLocalOriginImage(image: LocalImage) {
+  if (!image?.id || !image.archive_id || !image.record_id || !image.blob) return;
+
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(IMAGE_STORE);
+    const existing = await requestToPromise<LocalImage | undefined>(
+      store.get(image.id),
+    );
+    if (!existing) {
+      await requestToPromise(
+        store.put({
+          ...image,
+          local_only: true,
+          sync: normalizeLocalSyncMeta(image.sync),
+        } satisfies LocalImage),
+      );
+    }
+    await done;
+  } finally {
+    db.close();
+  }
+}
+
+export async function finalizeLocalOriginMigration() {
+  await refreshLocalUsageHints();
 }
