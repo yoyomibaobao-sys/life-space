@@ -5,6 +5,8 @@ import AnalyticsTracker from "@/components/AnalyticsTracker";
 import Toast from "@/components/Toast";
 import MobileBackNavigation from "@/components/MobileBackNavigation";
 import KeyboardLayoutGuard from "@/components/KeyboardLayoutGuard";
+import LocalOwnerContextSync from "@/components/LocalOwnerContextSync";
+import LocalOriginMigration from "@/components/LocalOriginMigration";
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -53,6 +55,8 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <StatusBarTheme />
         <KeyboardLayoutGuard />
+        <LocalOwnerContextSync />
+        <LocalOriginMigration />
         <Suspense fallback={null}>
           <MobileBackNavigation />
         </Suspense>

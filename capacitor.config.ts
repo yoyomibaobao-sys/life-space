@@ -4,7 +4,13 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const DEFAULT_SERVER_URL =
-  "https://life-space-mobile-ui-polish.vercel.app";
+  "https://life-space.uk";
+
+// This host was used by the signed RC builds. It remains allow-listed only so
+// the native bridge can read the previous WebView IndexedDB once during the
+// move to the production origin. Cloud traffic no longer depends on it.
+const LEGACY_LOCAL_STORAGE_HOST =
+  "life-space-canary.yoyomibaobao.workers.dev";
 
 function resolveServerUrl() {
   const raw = process.env.CAPACITOR_SERVER_URL || DEFAULT_SERVER_URL;
@@ -33,8 +39,12 @@ const config: CapacitorConfig = {
   },
   server: {
     url: serverUrl.origin,
+    // Keep the bundled offline page on the same origin as the production web
+    // app so both surfaces read and write one IndexedDB database.
+    hostname: serverUrl.hostname,
+    androidScheme: "https",
     cleartext: false,
-    allowNavigation: [serverUrl.hostname],
+    allowNavigation: [serverUrl.hostname, LEGACY_LOCAL_STORAGE_HOST],
     errorPath: "offline.html",
   },
   plugins: {

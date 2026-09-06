@@ -6,6 +6,8 @@ const turnstileEnabled = Boolean(
 const turnstileSource = turnstileEnabled
   ? " https://challenges.cloudflare.com"
   : "";
+const legacyAndroidLocalOrigin =
+  " https://life-space-canary.yoyomibaobao.workers.dev";
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -19,7 +21,9 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob: https:",
   "media-src 'self' data: blob: https:",
   `connect-src 'self' https://*.supabase.co wss://*.supabase.co${turnstileSource}`,
-  `frame-src 'self'${turnstileSource}`,
+  // The signed RC-to-production Android upgrade loads one APK-bundled iframe
+  // under the previous WebView origin to copy local-only IndexedDB records.
+  `frame-src 'self'${turnstileSource}${legacyAndroidLocalOrigin}`,
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "upgrade-insecure-requests",

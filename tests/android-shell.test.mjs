@@ -10,16 +10,20 @@ const read = (relativePath) =>
 test("Android shell keeps its identity, HTTPS host, and offline fallback explicit", () => {
   const config = read("capacitor.config.ts");
   const offline = read("mobile-shell/offline.html");
+  const offlineSource = read("mobile-offline-src/main.tsx");
 
   assert.match(config, /appId: "com\.youshi\.cultivation"/);
   assert.match(config, /appName: "有时·耕作"/);
   assert.match(read("android/app/src/main/res/values/strings.xml"), /有时·耕作/);
   assert.match(config, /CAPACITOR_SERVER_URL/);
+  assert.match(config, /https:\/\/life-space\.uk/);
   assert.match(config, /url\.protocol !== "https:"/);
+  assert.match(config, /hostname: serverUrl\.hostname/);
+  assert.match(config, /androidScheme: "https"/);
   assert.match(config, /cleartext: false/);
   assert.match(config, /errorPath: "offline\.html"/);
-  assert.match(offline, /暂时无法连接/);
-  assert.match(offline, /已保存在 App 内的数据不会因此被删除/);
+  assert.match(offline, /本地离线模式/);
+  assert.match(offlineSource, /云端暂时不可用/);
 });
 
 test("Android system bars use modern edge-to-edge insets and page-aware contrast", () => {

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>LifeSpace local data bridge</title>
+  </head>
+  <body>
+    <script>
+      (() => {
+        "use strict";
+
+        const CLOUD_ORIGIN = "https://life-space.uk";
+        const CHANNEL = "lifespace-local-origin-migration-v1";
+        const DB_NAME = "life-space-local-offline";
+        const ARCHIVE_STORE = "archives";
+        const RECORD_STORE = "records";
+        const IMAGE_STORE = "images";
+        const TAXONOMY_STORE = "taxonomy";
+        const ackWaiters = new Map();
+        let exporting = false;
+
+        function requestValue(request) {
+          return new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error || new Error("IndexedDB request failed"));
+          });
+        }
+
+        async function databaseExists() {
+          if (typeof indexedDB.databases !== "function") return true;
+          const databases = await indexedDB.databases();
+          return databases.some((item) => item.name === DB_NAME);
+        }
+
+        async function openLegacyDb() {
+          if (!(await databaseExists())) return null;
+
+          return new Promise((resolve, reject) => {
+            let createdByProbe = false;
+            const request = indexedDB.open(DB_NAME);
+            request.onupgradeneeded = () => {
+              createdByProbe = true;
+              request.transaction?.abort();
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => {
+              if (createdByProbe) resolve(null);
+              else reject(request.error || new Error("Could not open legacy IndexedDB"));
+            };
+          });
+        }
+
+        async function getAll(db, storeName) {
+          if (!db.objectStoreNames.contains(storeName)) return [];
+          const transaction = db.transaction(storeName, "readonly");
+          return requestValue(transaction.objectStore(storeName).getAll());
+        }
+
+        async function getAllKeys(db, storeName) {
+          if (!db.objectStoreNames.contains(storeName)) return [];
+          const transaction = db.transaction(storeName, "readonly");
+          return requestValue(transaction.objectStore(storeName).getAllKeys());
+        }
+
+        async function getByKey(db, storeName, key) {
+          const transaction = db.transaction(storeName, "readonly");
+          return requestValue(transaction.objectStore(storeName).get(key));
+        }
+
+        function ackKey(nonce, type, seq) {
+          return `${nonce}:${type}:${seq ?? ""}`;
+        }
+
+        function waitForAck(nonce, type, seq) {
+          return new Promise((resolve, reject) => {
+            const key = ackKey(nonce, type, seq);
+            const timer = window.setTimeout(() => {
+              ackWaiters.delete(key);
+              reject(new Error("Migration acknowledgement timed out"));
+            }, 30000);
+            ackWaiters.set(key, () => {
+              window.clearTimeout(timer);
+              resolve();
+            });
+          });
+        }
+
+        function send(target, origin, message) {
+          target.postMessage({ ...message, channel: CHANNEL }, origin);
+        }
+
+        async function exportLegacyData(event, nonce) {
+          if (exporting) return;
+          exporting = true;
+          let db = null;
+
+          try {
+            db = await openLegacyDb();
+            const archives = db ? await getAll(db, ARCHIVE_STORE) : [];
+            const records = db ? await getAll(db, RECORD_STORE) : [];
+            const taxonomy = db ? await getAll(db, TAXONOMY_STORE) : [];
+            const imageKeys = db ? await getAllKeys(db, IMAGE_STORE) : [];
+
+            send(event.source, event.origin, {
+              type: "base",
+              nonce,
+              snapshot: { archives, records, taxonomy },
+            });
+            await waitForAck(nonce, "base-ack");
+
+            for (let seq = 0; seq < imageKeys.length; seq += 1) {
+              const image = await getByKey(db, IMAGE_STORE, imageKeys[seq]);
+              send(event.source, event.origin, {
+                type: "image",
+                nonce,
+                seq,
+                image,
+              });
+              await waitForAck(nonce, "image-ack", seq);
+            }
+
+            send(event.source, event.origin, {
+              type: "complete",
+              nonce,
+              archiveCount: archives.length,
+              recordCount: records.length,
+              imageCount: imageKeys.length,
+            });
+          } catch (error) {
+            send(event.source, event.origin, {
+              type: "error",
+              nonce,
+              message: error instanceof Error ? error.message : "Legacy migration failed",
+            });
+          } finally {
+            db?.close();
+            exporting = false;
+          }
+        }
+
+        window.addEventListener("message", (event) => {
+          if (
+            event.origin !== CLOUD_ORIGIN ||
+            event.data?.channel !== CHANNEL ||
+            !event.data?.nonce
+          ) {
+            return;
+          }
+
+          if (event.data.type === "export-request") {
+            void exportLegacyData(event, event.data.nonce);
+            return;
+          }
+
+          if (event.data.type === "base-ack") {
+            const resolve = ackWaiters.get(ackKey(event.data.nonce, "base-ack"));
+            ackWaiters.delete(ackKey(event.data.nonce, "base-ack"));
+            resolve?.();
+            return;
+          }
+
+          if (event.data.type === "image-ack") {
+            const key = ackKey(event.data.nonce, "image-ack", event.data.seq);
+            const resolve = ackWaiters.get(key);
+            ackWaiters.delete(key);
+            resolve?.();
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
