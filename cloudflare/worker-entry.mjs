@@ -3,6 +3,10 @@ import {
   R2_CANARY_PATH,
   handleR2CanaryRequest,
 } from "./r2-canary.mjs";
+import {
+  handleAndroidReleaseDownload,
+  isAndroidReleaseDownloadPath,
+} from "./android-release-download.mjs";
 import { runScheduledMaintenance } from "./scheduled-maintenance.mjs";
 
 const worker = {
@@ -11,6 +15,10 @@ const worker = {
 
     if (url.pathname === R2_CANARY_PATH) {
       return handleR2CanaryRequest(request, env);
+    }
+
+    if (isAndroidReleaseDownloadPath(url.pathname)) {
+      return handleAndroidReleaseDownload(request, env);
     }
 
     return app.fetch(request, env, ctx);

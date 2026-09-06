@@ -35,6 +35,33 @@ const zh = {
     ],
   },
 
+  android_download: {
+    eyebrow: "官方网站下载",
+    title: "下载有时·耕作安卓版",
+    intro: "适合 Android 手机和平板。安装包使用固定密钥签名，后续版本可以直接覆盖更新。",
+    test_badge: "小范围测试版",
+    stable_badge: "正式版",
+    published: "更新时间",
+    file_size: "文件大小",
+    compatibility: "系统要求",
+    download_now: "下载安卓版 APK",
+    already_in_app: "当前已经在安卓版中",
+    install_title: "安装方法",
+    install_steps: [
+      "点击下载，等待 APK 文件完成。",
+      "打开下载的文件；如果系统询问，允许本次从浏览器安装应用。",
+      "选择安装或更新，然后从桌面打开有时·耕作。",
+    ],
+    update_title: "更新与本地数据",
+    update_text: "以后从同一页面下载新版，直接覆盖安装即可。使用同一正式签名更新时，已有本地项目、记录和照片缓存会继续保留。",
+    do_not_uninstall: "更新前不要卸载旧版，也不要清除应用数据。",
+    checksum_title: "安装包校验",
+    checksum_intro: "SHA-256 用于确认下载文件完整且未被替换。",
+    website_home: "网站介绍主页",
+    experience_prompt: "正在查看一张真实经验卡？安卓版可以继续建立自己的长期记录。",
+    experience_action: "下载安卓版",
+  },
+
   nav: {
     brand: "有时·耕作",
     project: "项目",

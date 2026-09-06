@@ -317,7 +317,7 @@ export default function LoginPage() {
             {t.local_mode.home}
           </Link>
           {isNativeApp === false ? (
-            <Link href="/api/download/android" style={loginDownloadLinkStyle}>
+            <Link href="/download/android" style={loginDownloadLinkStyle}>
               {t.home.download_android}
             </Link>
           ) : null}

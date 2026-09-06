@@ -136,10 +136,49 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
+      - name: Verify permanent release signature
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          EXPECTED_SIGNER_SHA256: ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk | tee "$RUNNER_TEMP/apksigner-report.txt"
+          grep -F "Signer #1 certificate SHA-256 digest: $EXPECTED_SIGNER_SHA256" "$RUNNER_TEMP/apksigner-report.txt"
+
+      - name: Prepare signed release metadata
+        id: release_metadata
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          ANDROID_RELEASE_APK_PATH: android/app/build/outputs/apk/release/app-release.apk
+          ANDROID_RELEASE_MANIFEST_PATH: ${{ runner.temp }}/android-release.json
+          ANDROID_MINIMUM_VERSION: "7.0"
+        run: node scripts/write-android-release-manifest.mjs
+
       - name: Upload signed release APK
         if: env.ANDROID_KEYSTORE_BASE64 != ''
         uses: actions/upload-artifact@v4
         with:
           name: youshi-cultivation-android-release
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            ${{ runner.temp }}/android-release.json
           if-no-files-found: error
+
+      - name: Publish signed release to website storage
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npx wrangler r2 object put "life-space-media-canary/${{ steps.release_metadata.outputs.object_key }}" --file android/app/build/outputs/apk/release/app-release.apk --remote --content-type application/vnd.android.package-archive --cache-control no-store
+          npx wrangler r2 object put "life-space-media-canary/releases/android/release.json" --file "${{ runner.temp }}/android-release.json" --remote --content-type application/json --cache-control no-store
+
+      - name: Verify published release bytes
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npx wrangler r2 object get "life-space-media-canary/${{ steps.release_metadata.outputs.object_key }}" --file "${{ runner.temp }}/published-android.apk" --remote
+          npx wrangler r2 object get "life-space-media-canary/releases/android/release.json" --file "${{ runner.temp }}/published-android-release.json" --remote
+          cmp android/app/build/outputs/apk/release/app-release.apk "${{ runner.temp }}/published-android.apk"
+          cmp "${{ runner.temp }}/android-release.json" "${{ runner.temp }}/published-android-release.json"

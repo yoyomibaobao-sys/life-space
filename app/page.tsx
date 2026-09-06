@@ -112,7 +112,7 @@ export default function Home() {
               {currentUserId ? t.home.enter_my_space : t.register}
             </Link>
             {isNativeApp === false ? (
-              <Link href="/api/download/android" style={actionBaseStyle}>
+              <Link href="/download/android" style={actionBaseStyle}>
                 {t.home.download_android}
               </Link>
             ) : null}

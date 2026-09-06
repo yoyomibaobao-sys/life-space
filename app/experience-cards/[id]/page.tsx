@@ -18,6 +18,7 @@ import ExperienceCardVideoPanel, {
 } from "@/components/experience-card/ExperienceCardVideoPanel";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
+import AndroidAppDownloadPrompt from "@/components/AndroidAppDownloadPrompt";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
@@ -706,6 +707,8 @@ export default function ExperienceCardPage({
         currentUserId={viewerId}
         isPublic={detail.isPubliclyAvailable}
       />
+
+      {!isOwner ? <AndroidAppDownloadPrompt /> : null}
 
       {!isOwner ? (
         <section style={timelineSectionStyle}>

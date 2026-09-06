@@ -85,6 +85,19 @@ test("R2 canary requires a Worker secret and removes its probe object", () => {
   assert.doesNotMatch(canary, /R2_CANARY_SECRET\s*=\s*["'][^"']+["']/);
 });
 
+test("the Worker serves signed Android releases through the private R2 binding", () => {
+  const worker = read("cloudflare/worker-entry.mjs");
+  const androidDownload = read("cloudflare/android-release-download.mjs");
+
+  assert.match(worker, /isAndroidReleaseDownloadPath/);
+  assert.match(worker, /handleAndroidReleaseDownload/);
+  assert.match(androidDownload, /env\?\.R2_MEDIA_CANARY/);
+  assert.match(androidDownload, /releases\/android\/release\.json/);
+  assert.match(androidDownload, /application\/vnd\.android\.package-archive/);
+  assert.match(androidDownload, /Content-Disposition/);
+  assert.match(androidDownload, /object\.size !== manifest\.size_bytes/);
+});
+
 test("R2 canary enforces method and token before completing a round trip", async () => {
   const { handleR2CanaryRequest } = await import("../cloudflare/r2-canary.mjs");
   const objects = new Map();
