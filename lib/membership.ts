@@ -194,6 +194,20 @@ export function canCreateMembershipContent(membership?: MyMembership | null) {
   return membership?.can_create_content === true;
 }
 
+export type CloudToLocalMode = "copy" | "move";
+
+/**
+ * Active cloud access uses a true move so that only one editable project
+ * remains. An ended never-paid trial also moves projects back to local use.
+ * Paid memberships that have ended keep their promised read-only cloud copy.
+ */
+export function getCloudToLocalMode(
+  membership?: MyMembership | null
+): CloudToLocalMode {
+  if (membership?.plan === "trial") return "move";
+  return canCreateMembershipContent(membership) ? "move" : "copy";
+}
+
 export function canCreateMembershipMarketPost(membership?: MyMembership | null) {
   return membership?.can_create_market_post === true;
 }

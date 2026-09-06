@@ -1928,6 +1928,31 @@ export async function abortCloudArchiveLocalImport(
   }
 }
 
+export async function verifyCloudArchiveLocalImport(input: {
+  session: CloudArchiveLocalImportSession;
+  expected_record_count: number;
+  expected_image_count: number;
+}) {
+  const [allRecords, allImages] = await Promise.all([
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const stagedRecords = allRecords.filter(
+    (item) => item.archive_id === input.session.staging_archive_id
+  );
+  const stagedImages = allImages.filter(
+    (item) => item.archive_id === input.session.staging_archive_id
+  );
+
+  if (
+    stagedRecords.length !== input.expected_record_count ||
+    stagedImages.length !== input.expected_image_count ||
+    stagedImages.some((image) => !image.blob || image.blob.size <= 0)
+  ) {
+    throw new Error("保存到本机的内容校验未通过，请重新操作。");
+  }
+}
+
 export async function completeCloudArchiveLocalImport(input: {
   session: CloudArchiveLocalImportSession;
   cloud_archive_id: string;
@@ -1952,6 +1977,7 @@ export async function completeCloudArchiveLocalImport(input: {
   owner_context: LocalArchiveOwnerContext;
   expected_record_count: number;
   expected_image_count: number;
+  retain_cloud_source?: boolean;
 }) {
   const cloudArchiveId = normalizeOptionalText(input.cloud_archive_id);
   const ownerUserId = getOwnerUserId(input.owner_context);
@@ -1959,26 +1985,19 @@ export async function completeCloudArchiveLocalImport(input: {
     throw new Error("无法确认云端项目归属。");
   }
 
+  await verifyCloudArchiveLocalImport({
+    session: input.session,
+    expected_record_count: input.expected_record_count,
+    expected_image_count: input.expected_image_count,
+  });
+
   const [allArchives, allRecords, allImages] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
-  const stagedRecords = allRecords.filter(
-    (item) => item.archive_id === input.session.staging_archive_id
-  );
-  const stagedImages = allImages.filter(
-    (item) => item.archive_id === input.session.staging_archive_id
-  );
-  if (
-    stagedRecords.length !== input.expected_record_count ||
-    stagedImages.length !== input.expected_image_count ||
-    stagedImages.some((image) => !image.blob || image.blob.size <= 0)
-  ) {
-    throw new Error("保存到本机的内容校验未通过，请重新操作。");
-  }
-
   const timestamp = nowIso();
+  const retainCloudSource = input.retain_cloud_source !== false;
   const previous = allArchives
     .map(normalizeLocalArchive)
     .find(
@@ -2003,10 +2022,12 @@ export async function completeCloudArchiveLocalImport(input: {
     local_owner_user_id: ownerUserId,
     local_owner_email: normalizeOptionalText(input.owner_context.email),
     local_owner_marked_at: timestamp,
-    source_cloud_archive_id: cloudArchiveId,
-    source_cloud_saved_at: timestamp,
-    source_cloud_updated_at: normalizeOptionalText(input.updated_at),
-    source_cloud_is_public: Boolean(input.is_public),
+    source_cloud_archive_id: retainCloudSource ? cloudArchiveId : null,
+    source_cloud_saved_at: retainCloudSource ? timestamp : null,
+    source_cloud_updated_at: retainCloudSource
+      ? normalizeOptionalText(input.updated_at)
+      : null,
+    source_cloud_is_public: retainCloudSource ? Boolean(input.is_public) : null,
     migration_status: null,
     migration_cloud_archive_id: null,
     migration_started_at: null,
@@ -2026,7 +2047,7 @@ export async function completeCloudArchiveLocalImport(input: {
     local_only: true,
     sync: localSyncMeta({
       status: "local-only",
-      cloud_archive_id: cloudArchiveId,
+      cloud_archive_id: retainCloudSource ? cloudArchiveId : null,
       last_sync_at: timestamp,
     }),
   };
@@ -2054,6 +2075,29 @@ export async function completeCloudArchiveLocalImport(input: {
         await requestToPromise(imageStore.delete(image.id));
       }
       await requestToPromise(archiveStore.delete(previous.id));
+    }
+
+    if (!retainCloudSource) {
+      for (const record of allRecords.filter(
+        (item) => item.archive_id === input.session.staging_archive_id
+      )) {
+        await requestToPromise(
+          recordStore.put({
+            ...record,
+            sync: localSyncMeta({ last_sync_at: timestamp }),
+          })
+        );
+      }
+      for (const image of allImages.filter(
+        (item) => item.archive_id === input.session.staging_archive_id
+      )) {
+        await requestToPromise(
+          imageStore.put({
+            ...image,
+            sync: localSyncMeta({ last_sync_at: timestamp }),
+          })
+        );
+      }
     }
 
     await requestToPromise(archiveStore.add(archive));
