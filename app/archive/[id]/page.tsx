@@ -60,6 +60,7 @@ import {
 } from "@/lib/archive-detail-utils";
 import {
   canCreateMembershipContent,
+  getCloudToLocalMode,
   getCreateContentBlockedText,
   getStorageLimitExceededText,
   normalizeMembershipRpcResult,
@@ -702,6 +703,8 @@ saveRecentArchiveBrowse({
   const cycleTerminology = getArchiveCycleTerminology(activeArchive.category, language);
   const isOwner = me === activeArchive.user_id;
   const canWriteCloud = isOwner && canCreateMembershipContent(ownerMembership);
+  const cloudToLocalMode = getCloudToLocalMode(ownerMembership);
+  const movesCloudToLocal = cloudToLocalMode === "move";
   const mode: ArchiveMode = isOwner ? ((modeParam as ArchiveMode | null) || "owner") : "viewer";
   const cycleEnabled = typeof activeArchive.cycle_enabled === "boolean"
     ? activeArchive.cycle_enabled
@@ -745,12 +748,18 @@ saveRecentArchiveBrowse({
   const saveToLocalActionLabel = saveToLocalRunning
     ? saveToLocalProgress?.phase === "downloading"
       ? `${archiveCopy.save_to_device_downloading} ${saveToLocalProgress.completed}/${saveToLocalProgress.total}`
+      : saveToLocalProgress?.phase === "moving"
+        ? archiveCopy.transfer_to_device_moving
       : saveToLocalProgress?.phase === "saving"
         ? archiveCopy.save_to_device_finalizing
         : archiveCopy.save_to_device_reading
-    : localCopyId
-      ? archiveCopy.update_device_copy
-      : archiveCopy.save_to_device;
+    : movesCloudToLocal
+      ? localCopyId
+        ? archiveCopy.update_and_transfer_to_device
+        : archiveCopy.transfer_to_device
+      : localCopyId
+        ? archiveCopy.update_device_copy
+        : archiveCopy.save_to_device;
 
   if (!isOwner && !activeArchive.is_public) {
     return <ArchivePrivateState />;
@@ -1013,6 +1022,12 @@ saveRecentArchiveBrowse({
     if (error.code === "download_failed") {
       return archiveCopy.save_to_device_download_failed;
     }
+    if (error.code === "cloud_move_failed") {
+      return archiveCopy.transfer_to_device_failed;
+    }
+    if (error.code === "cloud_restore_failed") {
+      return archiveCopy.transfer_to_device_restore_failed;
+    }
     return archiveCopy.save_to_device_verify_failed;
   }
 
@@ -1040,13 +1055,16 @@ saveRecentArchiveBrowse({
       const result = await saveCloudArchiveToLocal({
         cloudArchiveId: activeArchive.id,
         ownerContext: { userId: me, email: meEmail },
+        mode: cloudToLocalMode,
         onProgress: setSaveToLocalProgress,
       });
       setLocalCopyId(result.localArchiveId);
       showToast(
-        wasUpdating
-          ? archiveCopy.update_device_copy_success
-          : archiveCopy.save_to_device_success
+        result.movedCloudOriginal
+          ? archiveCopy.transfer_to_device_success
+          : wasUpdating
+            ? archiveCopy.update_device_copy_success
+            : archiveCopy.save_to_device_success
       );
       router.push(`/local/archive/${result.localArchiveId}`);
     } catch (error) {
@@ -2520,19 +2538,31 @@ saveRecentArchiveBrowse({
       <ConfirmDialog
         open={saveToLocalConfirmOpen}
         title={
-          localCopyId
-            ? archiveCopy.update_device_copy_title
-            : archiveCopy.save_to_device_title
+          movesCloudToLocal
+            ? localCopyId
+              ? archiveCopy.update_and_transfer_to_device_title
+              : archiveCopy.transfer_to_device_title
+            : localCopyId
+              ? archiveCopy.update_device_copy_title
+              : archiveCopy.save_to_device_title
         }
         message={
-          localCopyId
-            ? archiveCopy.update_device_copy_message
-            : archiveCopy.save_to_device_message
+          movesCloudToLocal
+            ? localCopyId
+              ? archiveCopy.update_and_transfer_to_device_message
+              : archiveCopy.transfer_to_device_message
+            : localCopyId
+              ? archiveCopy.update_device_copy_message
+              : archiveCopy.save_to_device_message
         }
         confirmText={
-          localCopyId
-            ? archiveCopy.update_device_copy
-            : archiveCopy.save_to_device
+          movesCloudToLocal
+            ? localCopyId
+              ? archiveCopy.update_and_transfer_to_device
+              : archiveCopy.transfer_to_device
+            : localCopyId
+              ? archiveCopy.update_device_copy
+              : archiveCopy.save_to_device
         }
         cancelText={t.cancel}
         onClose={() => {

@@ -6,7 +6,7 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("cloud projects are copied through authenticated storage without removing the cloud original", async () => {
+test("cloud projects are staged through authenticated storage before their final location changes", async () => {
   const [download, workflow] = await Promise.all([
     source("lib/media-storage-download.ts"),
     source("lib/cloud-to-local-save.ts"),
@@ -25,8 +25,23 @@ test("cloud projects are copied through authenticated storage without removing t
   assert.match(workflow, /\.range\(offset, offset \+ CLOUD_READ_PAGE_SIZE - 1\)/);
   assert.match(workflow, /recordIds\.slice\(/);
   assert.match(workflow, /downloadMediaStorageObject\(item\)/);
+  assert.match(
+    workflow,
+    /"id, cycle_id, note, record_time, created_at, visibility, status_tag, record_tags\(tag, tag_type, is_active\)"/
+  );
+  assert.doesNotMatch(
+    workflow,
+    /"id, cycle_id, note, record_time, created_at, updated_at, visibility/
+  );
+  assert.match(
+    workflow,
+    /verifyCloudArchiveLocalImport\([\s\S]*?if \(params\.mode === "move"\)[\s\S]*?requestCloudTrash\("archives", archive\.id\)[\s\S]*?completeCloudArchiveLocalImport/
+  );
+  assert.match(
+    workflow,
+    /if \(movedCloudOriginal\)[\s\S]*?restoreCloudTrashItem\("archive", archive\.id\)[\s\S]*?abortCloudArchiveLocalImport/
+  );
   assert.doesNotMatch(workflow, /\.from\("archives"\)[\s\S]*?\.delete\(\)/);
-  assert.doesNotMatch(workflow, /requestCloudTrash/);
 });
 
 test("an interrupted cloud download cannot replace an existing local copy", async () => {
@@ -49,7 +64,7 @@ test("an interrupted cloud download cannot replace an existing local copy", asyn
   );
   assert.match(
     localDb,
-    /stagedRecords\.length !== input\.expected_record_count[\s\S]*?stagedImages\.length !== input\.expected_image_count/
+    /verifyCloudArchiveLocalImport[\s\S]*?stagedRecords\.length !== input\.expected_record_count[\s\S]*?stagedImages\.length !== input\.expected_image_count/
   );
   assert.match(
     localDb,
@@ -57,12 +72,18 @@ test("an interrupted cloud download cannot replace an existing local copy", asyn
   );
   assert.match(localDb, /source_cloud_archive_id/);
   assert.match(localDb, /previous_local_archive_id/);
+  assert.match(workflow, /retain_cloud_source: params\.mode !== "move"/);
+  assert.match(
+    localDb,
+    /if \(!retainCloudSource\)[\s\S]*?recordStore\.put[\s\S]*?imageStore\.put/
+  );
 });
 
-test("the owner saves or updates one project at a time and sees that cloud data remains", async () => {
-  const [page, header, zhCopy, enCopy, localMode, rules] = await Promise.all([
+test("the owner gets move or copy behavior from membership state without two editable versions", async () => {
+  const [page, header, membership, zhCopy, enCopy, localMode, rules] = await Promise.all([
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveDetailHeader.tsx"),
+    source("lib/membership.ts"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
     source("app/local/page.tsx"),
@@ -70,18 +91,26 @@ test("the owner saves or updates one project at a time and sees that cloud data 
   ]);
 
   assert.match(page, /saveCloudArchiveToLocal/);
+  assert.match(page, /mode: cloudToLocalMode/);
+  assert.match(page, /movesCloudToLocal[\s\S]*?transfer_to_device/);
   assert.match(page, /localCopyId[\s\S]*?update_device_copy/);
   assert.match(page, /onSaveToLocal=\{openSaveToLocalPrompt\}/);
   assert.match(header, /mode === "owner"[\s\S]*?onSaveToLocal/);
+  assert.match(
+    membership,
+    /if \(membership\?\.plan === "trial"\) return "move";[\s\S]*?canCreateMembershipContent\(membership\) \? "move" : "copy"/
+  );
+  assert.match(zhCopy, /transfer_to_device: "转到本地"/);
   assert.match(zhCopy, /save_to_device: "保存到本机"/);
-  assert.match(zhCopy, /云端原件会继续保留/);
+  assert.match(zhCopy, /本地成为唯一可编辑版本/);
   assert.match(enCopy, /save_to_device: "Save to this device"/);
-  assert.match(enCopy, /The cloud original remains available/);
-  assert.match(zhCopy, /云端项目可以在项目属性中逐个“保存到本机”/);
+  assert.match(enCopy, /transfer_to_device: "Move to this device"/);
+  assert.match(zhCopy, /付费会员到期后仍是“保存到本机”/);
   assert.match(localMode, /t\.local_mode\.backup_notice/);
   assert.match(rules, /不增加“启用本地”的总开关/);
-  assert.match(rules, /“保存到本机”只复制，不自动删除云端原件/);
-  assert.match(rules, /同一设备再次保存同一云端项目时必须识别来源并更新原本机副本/);
+  assert.match(rules, /同一项目始终只允许一个可编辑主版本/);
+  assert.match(rules, /付费会员到期未续费时，项目操作仍叫“保存到本机”/);
+  assert.match(rules, /任何状态都不增加“是否删除云端”的询问/);
 });
 
 test("optional cloud classification cannot block a complete local rescue", async () => {

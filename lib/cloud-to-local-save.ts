@@ -7,9 +7,14 @@ import {
   getLocalArchiveByCloudSource,
   stageCloudArchiveLocalImage,
   stageCloudArchiveLocalRecord,
+  verifyCloudArchiveLocalImport,
   type CloudArchiveLocalCycleInput,
   type LocalArchiveOwnerContext,
 } from "@/lib/local-offline-db";
+import {
+  requestCloudTrash,
+  restoreCloudTrashItem,
+} from "@/lib/cloud-trash";
 import { downloadMediaStorageObject } from "@/lib/media-storage-download";
 import { supabase } from "@/lib/supabase";
 
@@ -24,6 +29,8 @@ export type CloudToLocalSaveErrorCode =
   | "read_failed"
   | "not_enough_space"
   | "download_failed"
+  | "cloud_move_failed"
+  | "cloud_restore_failed"
   | "verification_failed";
 
 export class CloudToLocalSaveError extends Error {
@@ -37,7 +44,7 @@ export class CloudToLocalSaveError extends Error {
 }
 
 export type CloudToLocalSaveProgress = {
-  phase: "reading" | "downloading" | "saving";
+  phase: "reading" | "downloading" | "moving" | "saving";
   completed: number;
   total: number;
 };
@@ -47,7 +54,10 @@ export type CloudToLocalSaveResult = {
   replacedExistingCopy: boolean;
   recordCount: number;
   imageCount: number;
+  movedCloudOriginal: boolean;
 };
+
+export type CloudToLocalMode = "copy" | "move";
 
 type CloudArchiveRow = {
   id: string;
@@ -77,7 +87,6 @@ type CloudRecordRow = {
   note?: string | null;
   record_time: string;
   created_at?: string | null;
-  updated_at?: string | null;
   visibility?: string | null;
   status_tag?: string | null;
   record_tags?: Array<{
@@ -211,7 +220,7 @@ async function readAllCloudRecords(archiveId: string) {
     const { data, error } = await supabase
       .from("records")
       .select(
-        "id, cycle_id, note, record_time, created_at, updated_at, visibility, status_tag, record_tags(tag, tag_type, is_active)"
+        "id, cycle_id, note, record_time, created_at, visibility, status_tag, record_tags(tag, tag_type, is_active)"
       )
       .eq("archive_id", archiveId)
       .order("record_time", { ascending: true })
@@ -275,6 +284,7 @@ export async function findSavedLocalCopy(
 export async function saveCloudArchiveToLocal(params: {
   cloudArchiveId: string;
   ownerContext: LocalArchiveOwnerContext;
+  mode?: CloudToLocalMode;
   onProgress?: (progress: CloudToLocalSaveProgress) => void;
 }): Promise<CloudToLocalSaveResult> {
   const userId = String(params.ownerContext.userId || "").trim();
@@ -345,6 +355,7 @@ export async function saveCloudArchiveToLocal(params: {
   }
 
   let completedImages = 0;
+  let movedCloudOriginal = false;
   try {
     for (const record of records) {
       const localRecord = await stageCloudArchiveLocalRecord({
@@ -354,7 +365,7 @@ export async function saveCloudArchiveToLocal(params: {
         note: record.note,
         record_time: record.record_time,
         created_at: record.created_at,
-        updated_at: record.updated_at,
+        updated_at: record.created_at,
         visibility: record.visibility,
         status_tag: record.status_tag,
         behavior_tags: (record.record_tags || [])
@@ -404,6 +415,28 @@ export async function saveCloudArchiveToLocal(params: {
       }
     }
 
+    await verifyCloudArchiveLocalImport({
+      session,
+      expected_record_count: records.length,
+      expected_image_count: media.length,
+    });
+
+    if (params.mode === "move") {
+      params.onProgress?.({
+        phase: "moving",
+        completed: completedImages,
+        total: media.length,
+      });
+      const moved = await requestCloudTrash("archives", archive.id);
+      if (!moved) {
+        throw new CloudToLocalSaveError(
+          "cloud_move_failed",
+          "The cloud project could not be moved out of cloud space"
+        );
+      }
+      movedCloudOriginal = true;
+    }
+
     params.onProgress?.({
       phase: "saving",
       completed: completedImages,
@@ -433,6 +466,7 @@ export async function saveCloudArchiveToLocal(params: {
       owner_context: params.ownerContext,
       expected_record_count: records.length,
       expected_image_count: media.length,
+      retain_cloud_source: params.mode !== "move",
     });
 
     return {
@@ -440,9 +474,21 @@ export async function saveCloudArchiveToLocal(params: {
       replacedExistingCopy: Boolean(session.previous_local_archive_id),
       recordCount: records.length,
       imageCount: media.length,
+      movedCloudOriginal,
     };
   } catch (error) {
+    let cloudRestoreFailed = false;
+    if (movedCloudOriginal) {
+      const restored = await restoreCloudTrashItem("archive", archive.id);
+      cloudRestoreFailed = !restored;
+    }
     await abortCloudArchiveLocalImport(session).catch(() => undefined);
+    if (cloudRestoreFailed) {
+      throw new CloudToLocalSaveError(
+        "cloud_restore_failed",
+        "The cloud project needs to be restored from Trash"
+      );
+    }
     if (error instanceof CloudToLocalSaveError) throw error;
     throw new CloudToLocalSaveError(
       "verification_failed",
