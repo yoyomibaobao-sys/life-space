@@ -129,6 +129,8 @@ export default function ProfilePage() {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
+    { href: "/", label: language === "en" ? "Website introduction" : "网站介绍主页" },
+    { href: "/download/android", label: language === "en" ? "Download Android app" : "下载安卓版" },
     { href: "/membership/payment", label: language === "en" ? "Cloud Membership" : "开通云会员" },
     { value: "payment", label: language === "en" ? "Order progress" : "订单进度查询" },
     { href: "/membership/refund", label: t.profile.refund_request_nav },

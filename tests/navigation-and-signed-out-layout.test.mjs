@@ -309,10 +309,10 @@ test("account navigation exposes the confirmed independent menu entries", async 
   assert.match(zhCopy, /membership_description: "本地免费使用，云会员可云端保存与公开互动"/);
   assert.match(
     home,
-    /href=\{currentUserId \? "\/archive" : "\/register"\}[\s\S]*?t\.home\.enter_my_space[\s\S]*?isNativeApp === false[\s\S]*?href="\/api\/download\/android"[\s\S]*?href="\/discover"/
+    /href=\{currentUserId \? "\/archive" : "\/register"\}[\s\S]*?t\.home\.enter_my_space[\s\S]*?isNativeApp === false[\s\S]*?href="\/download\/android"[\s\S]*?href="\/discover"/
   );
   assert.match(home, /session\?\.user && Capacitor\.isNativePlatform\(\)/);
-  assert.match(login, /isNativeApp === false[\s\S]*?href="\/api\/download\/android"/);
+  assert.match(login, /isNativeApp === false[\s\S]*?href="\/download\/android"/);
   assert.match(home, /membershipLinkArrowStyle/);
   assert.match(navbar, /buildLoginHref\(pathname\)[\s\S]*?t\.nav\.login/);
 });
@@ -473,7 +473,7 @@ test("signed-out home uses a compact viewport-oriented layout", async () => {
   assert.match(zhCopy, /记录四时变化，留下发现、收获与成长/);
   assert.match(zhCopy, /其他自然生活相关项目/);
   assert.match(home, /href=\{currentUserId \? "\/archive" : "\/register"\}/);
-  assert.match(home, /href="\/api\/download\/android"/);
+  assert.match(home, /href="\/download\/android"/);
   assert.doesNotMatch(home, /href="\/login"/);
   assert.doesNotMatch(home, /background: "rgba\(255,255,255,0\.82\)"/);
   assert.doesNotMatch(home, /boxShadow: "0 14px 36px/);

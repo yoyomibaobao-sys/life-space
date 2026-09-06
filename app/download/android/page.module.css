@@ -1,0 +1,252 @@
+.page {
+  width: min(920px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 28px 0 72px;
+  color: #283428;
+}
+
+.hero {
+  padding: clamp(22px, 5vw, 42px);
+  border: 1px solid #dce8d7;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(216, 233, 207, 0.78), transparent 36%),
+    #fbfdf9;
+  box-shadow: 0 16px 42px rgba(52, 78, 46, 0.07);
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #355233;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.eyebrow {
+  margin-top: 24px;
+  color: #668060;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.hero h1 {
+  margin: 7px 0 0;
+  color: #213020;
+  font-size: clamp(29px, 6vw, 45px);
+  line-height: 1.15;
+}
+
+.intro {
+  max-width: 650px;
+  margin: 13px 0 0;
+  color: #687565;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.releaseCard {
+  max-width: 650px;
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid #d6e4d1;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.releaseHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.releaseHeading strong {
+  color: #263d24;
+  font-size: 21px;
+}
+
+.releaseHeading span {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #edf5e9;
+  color: #4d7146;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.releaseMeta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 17px 0 0;
+}
+
+.releaseMeta div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f7faf5;
+}
+
+.releaseMeta dt {
+  color: #798474;
+  font-size: 11px;
+}
+
+.releaseMeta dd {
+  margin: 4px 0 0;
+  color: #354b32;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.downloadButton,
+.installedNotice {
+  width: 100%;
+  min-height: 50px;
+  margin-top: 16px;
+  border-radius: 14px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.downloadButton {
+  background: #4f8249;
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 9px 20px rgba(63, 109, 57, 0.2);
+}
+
+.installedNotice {
+  border: 1px solid #d9e5d5;
+  background: #f5f9f2;
+  color: #52714d;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.infoCard,
+.checksumCard {
+  border: 1px solid #e0e8dc;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.infoCard {
+  padding: 19px;
+}
+
+.infoCard h2,
+.checksumCard h2 {
+  margin: 0;
+  color: #30472e;
+  font-size: 17px;
+}
+
+.infoCard p,
+.infoCard ol,
+.checksumCard p {
+  margin: 10px 0 0;
+  color: #697566;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.infoCard ol {
+  padding-left: 20px;
+}
+
+.infoCard li + li {
+  margin-top: 6px;
+}
+
+.infoCard .warning {
+  color: #9a594d;
+  font-weight: 800;
+}
+
+.checksumCard {
+  margin-top: 14px;
+  padding: 17px 19px;
+}
+
+.checksumCard code {
+  display: block;
+  margin-top: 10px;
+  padding: 11px;
+  border-radius: 10px;
+  background: #f4f7f2;
+  color: #44553f;
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.bottomLinks {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 20px;
+}
+
+.bottomLinks a {
+  color: #52724d;
+  font-size: 13px;
+  font-weight: 800;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .page {
+    width: min(100% - 24px, 920px);
+    padding-top: 14px;
+  }
+
+  .hero {
+    padding: 20px 17px;
+    border-radius: 20px;
+  }
+
+  .eyebrow {
+    margin-top: 18px;
+  }
+
+  .releaseCard {
+    padding: 14px;
+  }
+
+  .releaseMeta {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .releaseMeta div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .releaseMeta dd {
+    text-align: right;
+  }
+
+  .infoGrid {
+    grid-template-columns: 1fr;
+  }
+}

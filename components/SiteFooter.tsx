@@ -18,6 +18,9 @@ export default function SiteFooter() {
           <span>{legal.serviceName}</span>
         </div>
         <div className={styles.actions}>
+          <Link href="/download/android" className={styles.link}>
+            {t.android_download.experience_action}
+          </Link>
           <Link href="/legal/privacy" className={styles.link}>
             {legal.nav.privacy.title}
           </Link>

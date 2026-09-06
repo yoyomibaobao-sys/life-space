@@ -35,6 +35,33 @@ const en = {
     ],
   },
 
+  android_download: {
+    eyebrow: "Official website download",
+    title: "Download LifeSpace for Android",
+    intro: "For Android phones and tablets. The APK uses a permanent signing key so future versions can be installed as updates.",
+    test_badge: "Limited test build",
+    stable_badge: "Stable release",
+    published: "Updated",
+    file_size: "File size",
+    compatibility: "Requires",
+    download_now: "Download Android APK",
+    already_in_app: "You are already using the Android app",
+    install_title: "How to install",
+    install_steps: [
+      "Tap Download and wait for the APK to finish downloading.",
+      "Open the downloaded file. If Android asks, allow this browser to install the app for this update.",
+      "Choose Install or Update, then open LifeSpace from your home screen.",
+    ],
+    update_title: "Updates and local data",
+    update_text: "For future versions, return to this page and install the new APK over the existing app. Updates signed with the same permanent key retain local projects, records, and cached photos.",
+    do_not_uninstall: "Do not uninstall the old version or clear app data before updating.",
+    checksum_title: "APK verification",
+    checksum_intro: "The SHA-256 value confirms that the downloaded file is complete and has not been replaced.",
+    website_home: "Website introduction",
+    experience_prompt: "Viewing a real Experience Card? Use the Android app to start your own long-term record.",
+    experience_action: "Download Android app",
+  },
+
   nav: {
     brand: "LifeSpace for Cultivation",
     project: "Project",

@@ -118,7 +118,7 @@ test("Android login uses one resize path and blocks IME extracted-text overlays"
   assert.match(login, /useIsNativeApp\(\)/);
   assert.match(nativePlatformHook, /Capacitor\.isNativePlatform\(\)/);
   assert.match(nativePlatformHook, /useSyncExternalStore/);
-  assert.match(login, /isNativeApp === false[\s\S]*?href="\/api\/download\/android"/);
+  assert.match(login, /isNativeApp === false[\s\S]*?href="\/download\/android"/);
 });
 
 test("mobile Market lightbox requests the dark native status bar", () => {
