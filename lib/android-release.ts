@@ -1,6 +1,8 @@
 export const ANDROID_RELEASE_MANIFEST_PATH =
   "/downloads/android/release.json";
 export const ANDROID_RELEASE_APK_PATH = "/downloads/android/latest.apk";
+export const ANDROID_RELEASE_APK_URL =
+  `https://life-space.uk${ANDROID_RELEASE_APK_PATH}`;
 
 export type AndroidReleaseManifest = {
   version_name: string;

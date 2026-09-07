@@ -34,9 +34,8 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "有时·耕作",
+    title: "有时·耕作网页版",
   },
-  manifest: "/manifest.webmanifest",
 };
 
 export const viewport: Viewport = {

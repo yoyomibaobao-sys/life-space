@@ -115,6 +115,10 @@ export default function Home() {
               <Link href="/download/android" style={actionBaseStyle}>
                 {t.home.download_android}
               </Link>
+            ) : isNativeApp === true ? (
+              <Link href="/app-update" style={actionBaseStyle}>
+                {t.home.check_android_update}
+              </Link>
             ) : null}
             <Link href="/discover" style={actionBaseStyle}>{t.home.browse_discover}</Link>
           </div>

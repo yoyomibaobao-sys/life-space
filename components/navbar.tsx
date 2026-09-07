@@ -644,6 +644,7 @@ function hasPageManagedMobileTopNav(pathname: string) {
     "/profile/recent",
     "/profile/project-categories",
     "/admin/guides",
+    "/app-update",
   ].includes(pathname)) return true;
 
   return (
@@ -670,6 +671,7 @@ function shouldShowMobileBackButton(pathname: string) {
 }
 
 function getMobileBackFallback(pathname: string) {
+  if (pathname.startsWith("/app-update")) return "/profile";
   if (pathname.startsWith("/download/android")) return "/";
   if (pathname.startsWith("/archive")) return "/archive";
   if (pathname.startsWith("/experience-cards")) return "/archive";
@@ -722,6 +724,7 @@ function getMobilePageTitle(pathname: string, copy: TranslationDictionary) {
   const labels = copy.nav;
   const marketLabels = copy.market;
   const settingsTitles: Record<string, string> = {
+    "/app-update": copy.app_update.title,
     "/download/android": copy.android_download.title,
     "/profile": copy.profile.settings_title,
     "/profile/project-categories": copy.archive_workspace.group_settings_title,

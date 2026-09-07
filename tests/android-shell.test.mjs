@@ -149,11 +149,51 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '7'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc3'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '7' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc3' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '8'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc4'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '8' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc4' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
+});
+
+test("Android updates are manual, official-only, and verified before the system installer", () => {
+  const activity = read(
+    "android/app/src/main/java/com/youshi/cultivation/MainActivity.java",
+  );
+  const plugin = read(
+    "android/app/src/main/java/com/youshi/cultivation/NativeAppUpdatePlugin.java",
+  );
+  const manifest = read("android/app/src/main/AndroidManifest.xml");
+  const filePaths = read("android/app/src/main/res/xml/file_paths.xml");
+  const updatePage = read("app/app-update/page.tsx");
+  const versionEntry = read("components/AndroidAppVersionEntry.tsx");
+  const profile = read("app/profile/page.tsx");
+  const home = read("app/page.tsx");
+  const layout = read("app/layout.tsx");
+
+  assert.match(activity, /registerPlugin\(NativeAppUpdatePlugin\.class\)/);
+  assert.match(plugin, /@CapacitorPlugin\(name = "NativeAppUpdate"\)/);
+  assert.match(plugin, /https:\/\/life-space\.uk\/downloads\/android\/latest\.apk/);
+  assert.match(plugin, /BuildConfig\.APPLICATION_ID\.equals\(archive\.packageName\)/);
+  assert.match(plugin, /archiveVersionCode <= currentVersionCode\(\)/);
+  assert.match(plugin, /OFFICIAL_SIGNER_SHA256\.equals\(signerSha256\)/);
+  assert.match(plugin, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);
+  assert.match(plugin, /expectedSha256\.equals\(toHex\(digest\.digest\(\)\)\)/);
+  assert.match(plugin, /Intent\.ACTION_VIEW/);
+  assert.match(plugin, /application\/vnd\.android\.package-archive/);
+  assert.match(plugin, /Settings\.ACTION_MANAGE_UNKNOWN_APP_SOURCES/);
+  assert.match(manifest, /android\.permission\.REQUEST_INSTALL_PACKAGES/);
+  assert.match(filePaths, /cache-path name="app_updates" path="updates\/"/);
+
+  assert.match(updatePage, /NativeAppUpdate\.installUpdate/);
+  assert.match(updatePage, /value\.version_code <= currentVersion\.versionCode/);
+  assert.match(versionEntry, /App\.getInfo\(\)/);
+  assert.match(versionEntry, /value\.version_code > currentVersionCode/);
+  assert.match(profile, /<AndroidAppVersionEntry \/>/);
+  assert.match(profile, /isNativeApp === true[\s\S]*\? \[\][\s\S]*href: "\/download\/android"/);
+  assert.doesNotMatch(home, /explicitlyViewingIntroduction/);
+  assert.doesNotMatch(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(layout, /title: "有时·耕作网页版"/);
 });
