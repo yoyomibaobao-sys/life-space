@@ -43,6 +43,8 @@ import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
+import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
+import AndroidAppVersionEntry from "@/components/AndroidAppVersionEntry";
 
 
 type MembershipPaymentRow = {
@@ -128,9 +130,14 @@ function fillExportTemplate(
 export default function ProfilePage() {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
+  const isNativeApp = useIsNativeApp();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
-    { href: "/", label: language === "en" ? "Website introduction" : "网站介绍主页" },
-    { href: "/download/android", label: language === "en" ? "Download Android app" : "下载安卓版" },
+    ...(isNativeApp === true
+      ? []
+      : [
+          { href: "/", label: language === "en" ? "Website introduction" : "网站介绍主页" },
+          { href: "/download/android", label: language === "en" ? "Download Android app" : "下载安卓版" },
+        ]),
     { href: "/membership/payment", label: language === "en" ? "Cloud Membership" : "开通云会员" },
     { value: "payment", label: language === "en" ? "Order progress" : "订单进度查询" },
     { href: "/membership/refund", label: t.profile.refund_request_nav },
@@ -931,6 +938,7 @@ export default function ProfilePage() {
         </section>
 
         <section aria-label={language === "en" ? "Preferences" : "常用设置"} style={isMobileViewport ? mobileProfileGroupStyle : { display: "contents" }}>
+        {isNativeApp === true ? <AndroidAppVersionEntry /> : null}
         <section id="language-settings" style={{ ...languageInlineStyle, ...(isMobileViewport ? mobileGroupedRowStyle : {}) }}>
           <span style={{ color: "#334c32", fontSize: 15, fontWeight: 800 }}>
             {t.profile.language_setting}

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -43,14 +44,13 @@ test("profile uses an editable identity card and explicit account entries", asyn
 });
 
 test("mobile shell keeps an ordered fixed navigation and returns within the app", async () => {
-  const [navbar, backNavigation, authReturn, lightbox, footerStyles, layout, manifest, globals, zhCopy, enCopy] = await Promise.all([
+  const [navbar, backNavigation, authReturn, lightbox, footerStyles, layout, globals, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
     source("components/MobileBackNavigation.tsx"),
     source("lib/auth-return.ts"),
     source("components/archive-detail/ArchiveLightbox.tsx"),
     source("components/SiteFooter.module.css"),
     source("app/layout.tsx"),
-    source("app/manifest.ts"),
     source("app/globals.css"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
@@ -96,8 +96,12 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(authReturn, /encodeURIComponent\(getSafeReturnTo\(returnTo\)\)/);
   assert.match(layout, /<MobileBackNavigation \/>/);
   assert.match(layout, /viewportFit: "cover"/);
-  assert.match(manifest, /display: "standalone"/);
-  assert.match(manifest, /theme_color: "#f6f8f3"/);
+  assert.doesNotMatch(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(layout, /appleWebApp:[\s\S]*title: "有时·耕作网页版"/);
+  assert.equal(
+    existsSync(new URL("../app/manifest.ts", import.meta.url)),
+    false,
+  );
   assert.match(globals, /overscroll-behavior-x: none/);
   assert.match(lightbox, /data-mobile-swipe-ignore="true"/);
   assert.match(lightbox, /mobileOverlayOpen = "true"/);

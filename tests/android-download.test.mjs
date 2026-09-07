@@ -217,6 +217,7 @@ test("website exposes one download page before and after login", () => {
   assert.match(login, /href="\/download\/android"/);
   assert.match(profile, /href: "\/download\/android"/);
   assert.match(profile, /href: "\/"/);
+  assert.match(profile, /isNativeApp === true[\s\S]*\? \[\]/);
   assert.match(footer, /href="\/download\/android"/);
   assert.match(experience, /<AndroidAppDownloadPrompt \/>/);
 });

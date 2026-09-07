@@ -123,7 +123,6 @@ export default function AndroidDownloadPage() {
         <article className={styles.infoCard}>
           <h2>{t.android_download.update_title}</h2>
           <p>{t.android_download.update_text}</p>
-          <p className={styles.warning}>{t.android_download.do_not_uninstall}</p>
         </article>
       </section>
 

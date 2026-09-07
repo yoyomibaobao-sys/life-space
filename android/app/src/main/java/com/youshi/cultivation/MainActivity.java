@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(NativeAppUpdatePlugin.class);
         registerPlugin(NativeSystemUiPlugin.class);
         super.onCreate(savedInstanceState);
         if (bridge != null) {
