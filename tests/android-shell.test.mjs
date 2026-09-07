@@ -176,7 +176,8 @@ test("Android updates are manual, official-only, and verified before the system 
   assert.match(activity, /registerPlugin\(NativeAppUpdatePlugin\.class\)/);
   assert.match(plugin, /@CapacitorPlugin\(name = "NativeAppUpdate"\)/);
   assert.match(plugin, /https:\/\/life-space\.uk\/downloads\/android\/latest\.apk/);
-  assert.match(plugin, /BuildConfig\.APPLICATION_ID\.equals\(archive\.packageName\)/);
+  assert.match(plugin, /getContext\(\)\.getPackageName\(\)\.equals\(archive\.packageName\)/);
+  assert.doesNotMatch(plugin, /BuildConfig\./);
   assert.match(plugin, /archiveVersionCode <= currentVersionCode\(\)/);
   assert.match(plugin, /OFFICIAL_SIGNER_SHA256\.equals\(signerSha256\)/);
   assert.match(plugin, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);

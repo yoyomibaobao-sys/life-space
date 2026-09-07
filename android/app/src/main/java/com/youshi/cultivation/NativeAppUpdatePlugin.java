@@ -46,10 +46,14 @@ public final class NativeAppUpdatePlugin extends Plugin {
 
     @PluginMethod
     public void getCurrentVersion(PluginCall call) {
-        JSObject result = new JSObject();
-        result.put("versionName", BuildConfig.VERSION_NAME);
-        result.put("versionCode", currentVersionCode());
-        call.resolve(result);
+        try {
+            JSObject result = new JSObject();
+            result.put("versionName", currentVersionName());
+            result.put("versionCode", currentVersionCode());
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Android could not read the installed app version.");
+        }
     }
 
     @PluginMethod
@@ -199,7 +203,10 @@ public final class NativeAppUpdatePlugin extends Plugin {
             flags
         );
 
-        if (archive == null || !BuildConfig.APPLICATION_ID.equals(archive.packageName)) {
+        if (
+            archive == null ||
+            !getContext().getPackageName().equals(archive.packageName)
+        ) {
             throw new IllegalStateException("The update package identity is invalid.");
         }
 
@@ -234,7 +241,7 @@ public final class NativeAppUpdatePlugin extends Plugin {
         try {
             Uri apkUri = FileProvider.getUriForFile(
                 getContext(),
-                BuildConfig.APPLICATION_ID + ".fileprovider",
+                getContext().getPackageName() + ".fileprovider",
                 apkFile
             );
             Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -275,8 +282,29 @@ public final class NativeAppUpdatePlugin extends Plugin {
         return result.toString();
     }
 
-    private static long currentVersionCode() {
-        return BuildConfig.VERSION_CODE;
+    @SuppressWarnings("deprecation")
+    private PackageInfo currentPackageInfo() {
+        try {
+            return getContext().getPackageManager().getPackageInfo(
+                getContext().getPackageName(),
+                0
+            );
+        } catch (PackageManager.NameNotFoundException error) {
+            throw new IllegalStateException("The installed app package was not found.", error);
+        }
+    }
+
+    private String currentVersionName() {
+        String versionName = currentPackageInfo().versionName;
+        return versionName == null ? "" : versionName;
+    }
+
+    @SuppressWarnings("deprecation")
+    private long currentVersionCode() {
+        PackageInfo current = currentPackageInfo();
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+            ? current.getLongVersionCode()
+            : current.versionCode;
     }
 
     @Override
