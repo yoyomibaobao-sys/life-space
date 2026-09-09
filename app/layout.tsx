@@ -1,3 +1,4 @@
+import GuideDirectoryCache from "@/components/GuideDirectoryCache";
 import Navbar from "@/components/navbar";
 import SiteFooter from "@/components/SiteFooter";
 import StatusBarTheme from "@/components/StatusBarTheme";
@@ -55,6 +56,7 @@ export default function RootLayout({
         <StatusBarTheme />
         <KeyboardLayoutGuard />
         <LocalOwnerContextSync />
+        <GuideDirectoryCache />
         <LocalOriginMigration />
         <Suspense fallback={null}>
           <MobileBackNavigation />

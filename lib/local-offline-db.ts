@@ -1,3 +1,5 @@
+import { normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-region";
+import { loadDefaultRecordLocation, normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
@@ -70,6 +72,7 @@ export type LocalArchive = {
   system_name?: string | null;
   species_name?: string | null;
   source?: string | null;
+  planting_region?: PlantingRegion | null;
   local_owner_user_id?: string | null;
   local_owner_email?: string | null;
   local_owner_marked_at?: string | null;
@@ -98,6 +101,7 @@ export type LocalArchive = {
 };
 
 export type LocalRecord = {
+  location?: RecordLocation | null;
   id: string;
   archive_id: string;
   cycle_id?: string | null;
@@ -120,6 +124,7 @@ export type LocalImage = {
   mime_type: string;
   name: string;
   original_size: number;
+  metadata_stripped?: boolean;
   cached_size: number;
   width?: number | null;
   height?: number | null;
@@ -589,11 +594,13 @@ async function getRowById<T>(storeName: string, id: string) {
 function updateLocalUsageHints(archiveCount: number, recordCount: number) {
   if (typeof window === "undefined") return;
 
+  try {
   window.localStorage.setItem("lifespace_local_project_count", String(archiveCount));
   window.localStorage.setItem("lifespace_local_record_count", String(recordCount));
   if (!window.localStorage.getItem("lifespace_first_local_used_at")) {
     window.localStorage.setItem("lifespace_first_local_used_at", nowIso());
   }
+  } catch { /* Usage badges are optional; a committed record must remain successful. */ }
 }
 
 async function refreshLocalUsageHints() {
@@ -1028,6 +1035,7 @@ export async function updateLocalArchiveFields(
     plant_id?: string | null;
     plant_slug?: string | null;
     source?: string | null;
+  planting_region?: PlantingRegion | null;
     note?: string | null;
     archive_summary?: string | null;
     cycle_enabled?: boolean;
@@ -1037,6 +1045,9 @@ export async function updateLocalArchiveFields(
   },
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  if (updates.planting_region != null && !normalizePlantingRegion(updates.planting_region)) {
+    throw new Error("种植地区无效 / Invalid planting region.");
+  }
   const db = await openLocalDb();
 
   try {
@@ -1102,6 +1113,7 @@ export async function updateLocalArchiveFields(
         updates.source === undefined
           ? normalizedArchive.source
           : normalizeOptionalText(updates.source),
+      planting_region: updates.planting_region === undefined ? normalizedArchive.planting_region : normalizePlantingRegion(updates.planting_region),
       note:
         updates.note === undefined
           ? normalizedArchive.note
@@ -1215,80 +1227,57 @@ export async function updateLocalArchiveMigrationState(
   }
 }
 
-export async function updateLocalRecordFields(
-  recordId: string,
-  updates: {
-    note?: string | null;
-    record_time?: string | null;
-    cycle_id?: string | null;
-  }
-) {
+export async function updateLocalRecordFields(recordId: string, updates: {
+  note?: string | null; record_time?: string | null; cycle_id?: string | null;
+  location?: RecordLocation | null; image_files?: File[]; image_captured_at?: Array<string | null>;
+}) {
+  const files = updates.image_files || [];
+  if (files.length > 10) throw new Error("每次最多添加10张照片。");
+  // Decode before the transaction. Conversion failure must not commit partial edits.
+  const prepared = await Promise.all(files.map((file, index) => prepareLocalImage(file, index)));
   const db = await openLocalDb();
-
+  const transaction = db.transaction([RECORD_STORE, ARCHIVE_STORE, IMAGE_STORE], "readwrite");
+  const done = transactionDone(transaction);
+  void done.catch(() => undefined);
   try {
-    const transaction = db.transaction([RECORD_STORE, ARCHIVE_STORE], "readwrite");
-    const done = transactionDone(transaction);
     const recordStore = transaction.objectStore(RECORD_STORE);
     const archiveStore = transaction.objectStore(ARCHIVE_STORE);
-    const record = await requestToPromise<LocalRecord | undefined>(
-      recordStore.get(recordId)
-    );
-
-    if (!record) {
-      transaction.abort();
-      await done.catch(() => undefined);
-      throw new Error("本地记录不存在。");
-    }
-
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    const record = await requestToPromise<LocalRecord | undefined>(recordStore.get(recordId));
+    if (!record) throw new Error("本地记录不存在。");
+    const archive = await requestToPromise<LocalArchive | undefined>(archiveStore.get(record.archive_id));
+    if (!archive) throw new Error("本地项目不存在。");
+    const normalizedArchive = normalizeLocalArchive(archive);
+    const nextCycleId = updates.cycle_id === undefined ? record.cycle_id || null : normalizeOptionalText(updates.cycle_id);
+    if (updates.cycle_id !== undefined && nextCycleId && !normalizedArchive.cycles?.some((cycle) => cycle.id === nextCycleId)) throw new Error("选择的期次不属于这个本地项目。");
     const timestamp = nowIso();
-    const archive = await requestToPromise<LocalArchive | undefined>(
-      archiveStore.get(record.archive_id)
-    );
-    const normalizedArchive = archive ? normalizeLocalArchive(archive) : null;
-    const nextCycleId =
-      updates.cycle_id === undefined
-        ? record.cycle_id || null
-        : normalizeOptionalText(updates.cycle_id);
-
-    if (
-      nextCycleId &&
-      !normalizedArchive?.cycles?.some((cycle) => cycle.id === nextCycleId)
-    ) {
-      transaction.abort();
-      await done.catch(() => undefined);
-      throw new Error("选择的周期不属于这个本地项目。");
-    }
-
     const nextRecord: LocalRecord = {
-      ...record,
-      note:
-        updates.note === undefined
-          ? record.note
-          : normalizeOptionalText(updates.note) || "",
-      record_time:
-        updates.record_time === undefined
-          ? record.record_time
-          : normalizeOptionalText(updates.record_time) || record.record_time,
-      cycle_id: nextCycleId,
-      updated_at: timestamp,
+      ...record, location: updates.location === undefined ? record.location : normalizeRecordLocation(updates.location),
+      note: updates.note === undefined ? record.note : normalizeOptionalText(updates.note) || "",
+      record_time: updates.record_time === undefined ? record.record_time : normalizeOptionalText(updates.record_time) || record.record_time,
+      cycle_id: nextCycleId, updated_at: timestamp,
     };
-
-    await requestToPromise(recordStore.put(nextRecord));
-    if (normalizedArchive) {
-      await requestToPromise(
-        archiveStore.put({
-          ...normalizedArchive,
-          updated_at: timestamp,
-        })
-      );
+    if (prepared.length) {
+      const previous = await requestToPromise<LocalImage[]>(imageStore.getAll());
+      const order = Math.max(-1, ...previous.filter((image) => image.record_id === recordId).map((image) => image.sort_order || 0)) + 1;
+      for (let index = 0; index < prepared.length; index++) {
+        const capturedAt = updates.image_captured_at?.[index];
+        await requestToPromise(imageStore.add({ ...prepared[index], id: createId("local_image"), archive_id: record.archive_id, record_id: recordId,
+          sort_order: order + index, created_at: timestamp, captured_at: capturedAt && !Number.isNaN(new Date(capturedAt).getTime()) ? new Date(capturedAt).toISOString() : null,
+          local_only: true, sync: localSyncMeta(),
+        } satisfies LocalImage));
+      }
     }
-
+    await requestToPromise(recordStore.put(nextRecord));
+    await requestToPromise(archiveStore.put({ ...normalizedArchive, updated_at: timestamp }));
     await done;
     await refreshLocalUsageHints();
     return nextRecord;
-  } finally {
-    db.close();
-  }
+  } catch (error) {
+    try { transaction.abort(); } catch { /* Already completed. */ }
+    await done.catch(() => undefined);
+    throw error;
+  } finally { db.close(); }
 }
 
 export async function updateLocalRecordSyncMeta(
@@ -1567,6 +1556,7 @@ export async function createLocalArchive(input: {
   system_name?: string | null;
   species_name?: string | null;
   source?: string | null;
+  planting_region?: PlantingRegion | null;
   local_owner_user_id?: string | null;
   local_owner_email?: string | null;
   local_owner_marked_at?: string | null;
@@ -1577,6 +1567,9 @@ export async function createLocalArchive(input: {
 }) {
   const timestamp = nowIso();
   const category = normalizeLocalArchiveCategory(input.category);
+  if (category === "plant" && !normalizePlantingRegion(input.planting_region)) {
+    throw new Error("请填写项目种植地区 / Enter the planting region.");
+  }
   const archive: LocalArchive = {
     id: createId("local_archive"),
     title: input.title.trim(),
@@ -1589,6 +1582,7 @@ export async function createLocalArchive(input: {
     system_name: normalizeOptionalText(input.system_name),
     species_name: normalizeOptionalText(input.species_name),
     source: normalizeOptionalText(input.source),
+    planting_region: normalizePlantingRegion(input.planting_region),
     local_owner_user_id: normalizeOptionalText(input.local_owner_user_id),
     local_owner_email: normalizeOptionalText(input.local_owner_email),
     local_owner_marked_at: normalizeOptionalText(input.local_owner_marked_at),
@@ -1782,6 +1776,7 @@ export async function beginCloudArchiveLocalImport(input: {
 }
 
 export async function stageCloudArchiveLocalRecord(input: {
+  location?: RecordLocation | null;
   session: CloudArchiveLocalImportSession;
   cloud_record_id: string;
   cloud_cycle_id?: string | null;
@@ -1800,6 +1795,7 @@ export async function stageCloudArchiveLocalRecord(input: {
   const record: LocalRecord = {
     id: createId("local_record"),
     archive_id: input.session.staging_archive_id,
+    location: normalizeRecordLocation(input.location),
     cycle_id: input.cloud_cycle_id
       ? input.session.cloud_cycle_id_map[input.cloud_cycle_id] || null
       : null,
@@ -1971,6 +1967,7 @@ export async function completeCloudArchiveLocalImport(input: {
   system_name?: string | null;
   species_name?: string | null;
   source?: string | null;
+  planting_region?: PlantingRegion | null;
   note?: string | null;
   archive_summary?: string | null;
   cycle_enabled?: boolean;
@@ -2025,6 +2022,7 @@ export async function completeCloudArchiveLocalImport(input: {
     system_name: normalizeOptionalText(input.system_name),
     species_name: normalizeOptionalText(input.species_name),
     source: normalizeOptionalText(input.source),
+    planting_region: normalizePlantingRegion(input.planting_region),
     local_owner_user_id: ownerUserId,
     local_owner_email: normalizeOptionalText(input.owner_context.email),
     local_owner_marked_at: timestamp,
@@ -2132,6 +2130,7 @@ async function prepareLocalImage(file: File, sortOrder: number) {
 
   return {
     blob: standard.file,
+    metadata_stripped: standard.wasCompressed,
     mime_type: standard.file.type || file.type,
     original_size: file.size,
     cached_size: standard.file.size,
@@ -2519,14 +2518,14 @@ export async function restoreLocalArchiveCycle(
     if (!trashEntry) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个已删除轮不存在。");
+      throw new Error("这个已删除期次不存在。");
     }
 
     const cycles = normalizedArchive.cycles || [];
     if (cycles.some((cycle) => cycle.id === trashEntry.cycle.id)) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个轮已经恢复。");
+      throw new Error("这个期次已经恢复。");
     }
 
     const timestamp = nowIso();
@@ -2560,6 +2559,7 @@ export async function restoreLocalArchiveCycle(
 }
 
 export async function createLocalRecord(input: {
+  location?: RecordLocation | null;
   archive_id: string;
   cycle_id?: string | null;
   end_cycle_after_record?: boolean;
@@ -2583,6 +2583,7 @@ export async function createLocalRecord(input: {
   const record: LocalRecord = {
     id: createId("local_record"),
     archive_id: input.archive_id,
+    location: input.location === undefined ? loadDefaultRecordLocation() : normalizeRecordLocation(input.location),
     cycle_id: normalizeOptionalText(input.cycle_id),
     note,
     record_time: recordTime,
@@ -2603,6 +2604,7 @@ export async function createLocalRecord(input: {
     name: image.name,
     original_size: image.original_size,
     cached_size: image.cached_size,
+    metadata_stripped: image.metadata_stripped,
     width: image.width,
     height: image.height,
     captured_at:

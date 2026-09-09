@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PlantingRegionField from "@/components/archive/PlantingRegionField";
+import { usePlantingRegionDraft } from "@/lib/use-planting-region";
+import { normalizePlantingRegion } from "@/lib/planting-region";
 import { useRouter, useSearchParams } from "next/navigation";
 import { showToast } from "@/components/Toast";
 import ArchiveNewProjectFormShell, {
@@ -76,6 +79,7 @@ function NewArchiveContent() {
     ? (preselectedCategory as ArchiveCategory)
     : null;
 
+  const { plantingRegion, changePlantingRegion } = usePlantingRegionDraft();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory | null>(
     validPreselectedCategory && !preselectedSpeciesId
@@ -228,6 +232,11 @@ function NewArchiveContent() {
       return;
     }
 
+    if (category === "plant" && !normalizePlantingRegion(plantingRegion)) {
+      showToast(language === "en" ? "Enter the planting country and city / district." : "请填写项目实际种植的国家及城市／区县。");
+      return;
+    }
+
     const cleanSystemName =
       category === "plant" ? speciesSearch.trim() : systemName.trim() || systemSearch.trim();
 
@@ -258,31 +267,25 @@ function NewArchiveContent() {
           ? pendingSpeciesName || selectedSpecies?.label || cleanSystemName
           : null;
 
-      const { data: createdArchive, error } = await supabase
-        .from("archives")
-        .insert([
-          {
-            title: title.trim(),
-            category,
-            species_id: category === "plant" ? speciesId : null,
-            species_name_snapshot: speciesNameSnapshot,
-            system_name: category === "plant" ? null : cleanSystemName,
-            source: cleanObjectName || null,
-            note: note.trim() || null,
-            user_id: user.id,
-            is_public: DEFAULT_ARCHIVE_IS_PUBLIC,
-            default_record_visibility: DEFAULT_RECORD_VISIBILITY,
-          },
-        ])
-        .select("id")
-        .single();
+      const { data: createdArchive, error } = await supabase.rpc("create_project", {
+        p_project: {
+          title: title.trim(), category,
+          species_id: category === "plant" ? speciesId : null,
+          species_name_snapshot: speciesNameSnapshot,
+          system_name: category === "plant" ? null : cleanSystemName,
+          source: cleanObjectName || null, note: note.trim() || null,
+          planting_region: normalizePlantingRegion(plantingRegion),
+          is_public: DEFAULT_ARCHIVE_IS_PUBLIC,
+          default_record_visibility: DEFAULT_RECORD_VISIBILITY,
+        },
+      });
 
-      if (error || !createdArchive?.id) {
+      if (error || typeof createdArchive !== "string" || !createdArchive) {
         setLoading(false);
         showToast(copy.create_failed);
         return;
       }
-      archiveId = String(createdArchive.id);
+      archiveId = createdArchive;
       setCreatedArchiveId(archiveId);
     }
 
@@ -413,6 +416,7 @@ function NewArchiveContent() {
           {!category ? <span style={archiveNewProjectHelperTextStyle}>{copy.guide_category_manual_hint}</span> : null}
         </>
       }
+      plantingRegionControl={category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={changePlantingRegion} language={language} required /> : null}
       sourceControl={
         <input
           value={source}

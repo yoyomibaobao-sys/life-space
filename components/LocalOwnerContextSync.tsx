@@ -1,15 +1,29 @@
 "use client";
 
+import { rememberDefaultPlantingRegion } from "@/lib/planting-region";
+import { rememberDefaultRecordLocation } from "@/lib/record-location";
 import { useEffect } from "react";
 import { rememberLocalOwnerContext } from "@/lib/local-owner-context";
 
 export default function LocalOwnerContextSync() {
   useEffect(() => {
     let cancelled = false;
+    let rememberedUserId = "";
     let unsubscribe: (() => void) | undefined;
 
     function remember(user?: { id?: string; email?: string | null } | null) {
-      if (!user?.id) return;
+      if (!user?.id) { rememberedUserId = ""; return; }
+      if (rememberedUserId !== user.id) {
+        rememberedUserId = user.id;
+        const id = user.id;
+        void import("@/lib/supabase").then(async ({ supabase }) => {
+          const { data, error } = await supabase.from("profiles").select("location,country_code,country_name,region_name,city_name").eq("id", id).maybeSingle();
+          if (!cancelled && !error && rememberedUserId === id) {
+            rememberDefaultRecordLocation(id, data?.location);
+            rememberDefaultPlantingRegion(id, data);
+          }
+        }).catch(() => { /* Retain the last known optional address while offline. */ });
+      }
       rememberLocalOwnerContext({
         userId: user.id,
         email: user.email || null,
@@ -34,7 +48,7 @@ export default function LocalOwnerContextSync() {
       unsubscribe = () => subscription.unsubscribe();
     }
 
-    void start();
+    void start().catch(() => { /* Offline operation does not require a cloud session. */ });
 
     return () => {
       cancelled = true;

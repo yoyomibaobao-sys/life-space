@@ -1,5 +1,9 @@
 "use client";
 
+import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
+import RecordLocationField from "@/components/record/RecordLocationField";
+import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
+
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -137,6 +141,7 @@ export default function LocalArchiveDetailPage() {
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [location, setLocation] = useState<RecordLocation | null>(() => loadDefaultRecordLocation());
   const [note, setNote] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [timeMode, setTimeMode] = useState<"exif" | "now" | "custom">("exif");
@@ -304,6 +309,7 @@ export default function LocalArchiveDetailPage() {
 
     return records.map((record) => ({
       id: record.id,
+      location: record.location || null,
       cycle_id: record.cycle_id || null,
       note: record.note,
       record_time: record.record_time,
@@ -448,12 +454,14 @@ export default function LocalArchiveDetailPage() {
             Boolean(effectiveCycleId) &&
             index === groupsToSave.length - 1,
           note,
+          location,
           image_files: group.photos.map((photo) => photo.file),
           image_captured_at: group.photos.map((photo) => photo.capturedAt),
           record_time: group.recordTimeISO,
         });
       }
       setNote("");
+      setLocation(loadDefaultRecordLocation());
       setSelectedFiles([]);
       setTimeMode("exif");
       setCustomTime("");
@@ -1063,6 +1071,10 @@ export default function LocalArchiveDetailPage() {
           }
           profileExtra={
             <div style={localCycleProfileExtraStyle}>
+              {archive.category === "plant" ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit onSave={async (region) => {
+                const updated = await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
+                setDetail((current) => current ? { ...current, archive: updated } : current);
+              }} /> : null}
               <ArchiveCycleSettings
                 key={archive.id}
                 enabled={cycleEnabled}
@@ -1229,6 +1241,8 @@ export default function LocalArchiveDetailPage() {
               placeholder={recordCopy.placeholder}
               style={recordInputStyle}
             />
+
+            <RecordLocationField value={location} onChange={setLocation} files={selectedFiles} language={language} disabled={saving} />
 
             {activeCycles.length > 0 ? (
               <label style={recordCycleSelectLabelStyle}>
@@ -1406,6 +1420,7 @@ export default function LocalArchiveDetailPage() {
               onAddTag={async () => undefined}
               onRecordUpdated={async (recordId, patch) => {
                 await updateLocalRecordFields(recordId, {
+                  location: patch.location,
                   note: typeof patch.note === "string" ? patch.note : undefined,
                   record_time:
                     typeof patch.record_time === "string"

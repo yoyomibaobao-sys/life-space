@@ -340,21 +340,10 @@ const panelStyle: CSSProperties = {
   borderRadius: 18,
   background: "#fff",
 };
-const headingStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 14,
-  marginBottom: 18,
-};
+const headingStyle: CSSProperties = { display: "grid", gap: 6, marginBottom: 14 };
 const eyebrowStyle: CSSProperties = { color: "#758470", fontSize: 12 };
-const titleStyle: CSSProperties = { margin: "3px 0 0", color: "#253725", fontSize: 22 };
-const photoCountStyle: CSSProperties = {
-  flexShrink: 0,
-  color: "#63755f",
-  fontSize: 13,
-  fontWeight: 750,
-};
+const titleStyle: CSSProperties = { margin: "3px 0 0", color: "#253725", fontSize: 18, lineHeight: 1.35, fontWeight: 650 };
+const photoCountStyle: CSSProperties = { color: "#63755f", fontSize: 13, fontWeight: 500 };
 const previewGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
@@ -437,7 +426,10 @@ const primaryLinkStyle: CSSProperties = {
 const secondaryLinkStyle: CSSProperties = {
   display: "inline-flex",
   justifyContent: "center",
-  padding: "10px 14px",
+  padding: "10px 6px",
+  fontSize: 14,
+  lineHeight: 1.3,
+  textAlign: "center",
   border: "1px solid #dbe5d7",
   borderRadius: 12,
   color: "#4f6d4d",

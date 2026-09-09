@@ -1,4 +1,7 @@
 "use client";
+
+import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
+import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
 import { use, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
@@ -1540,7 +1543,7 @@ saveRecentArchiveBrowse({
     const preparedFiles = await Promise.all(
       acceptedFiles.map(async (originalFile) => {
         const capturedAt = await readImageCapturedAt(originalFile);
-        const compressed = await standardizeRecordPhotoFile(originalFile);
+        const compressed = await standardizeRecordPhotoFile(originalFile, { requireSanitized: true });
         const file = compressed.file;
         const thumbnail = await createImageThumbnailFile(file);
         const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
@@ -2216,6 +2219,16 @@ saveRecentArchiveBrowse({
           </button>
         </nav>
 
+        {activeDetailTab === "profile" && activeArchive.category === "plant" ? <PlantingRegionEditor
+          key={activeArchive.id} language={language} value={activeArchive.planting_region} canEdit={isOwner && canWriteCloud}
+          onSave={async (region) => {
+            const { data, error } = await supabase.from("archives").update({ planting_region: region })
+              .eq("id", activeArchive.id).eq("user_id", activeArchive.user_id).select("id").single();
+            if (error || !data) throw new Error("planting_region_save_failed");
+            setArchive((current) => current ? { ...current, planting_region: region } : current);
+          }}
+        /> : null}
+
         {!isMobileViewport && activeDetailTab === "profile" ? (
           <div id="archive-profile" style={archiveDetailAnchorStyle}>
             <ArchiveDetailHeader
@@ -2701,35 +2714,14 @@ function MobileArchiveOwnerFields({
         </span>
       </label> : null}
 
-      {canWriteCloud ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onToggleEnded}
-          style={mobileArchiveOwnerActionRowStyle}
-        >
-          <span style={mobileArchiveLabelStyle}>{copy.project_status}</span>
-          <span style={mobileArchiveOwnerActionValueStyle}>
-            {ended ? copy.ended : copy.ongoing}
-            <UiIcon name="chevron-right" size={14} />
-          </span>
-        </button>
-      ) : null}
-
-      {canWriteCloud || isPublic ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onTogglePublic}
-          style={mobileArchiveOwnerActionRowStyle}
-        >
-          <span style={mobileArchiveLabelStyle}>{copy.visibility}</span>
-          <span style={mobileArchiveOwnerActionValueStyle}>
-            {isPublic ? copy.public_discover : copy.private_only}
-            <UiIcon name="chevron-right" size={14} />
-          </span>
-        </button>
-      ) : null}
+      {canWriteCloud ? <div style={mobileArchiveOwnerActionRowStyle}>
+        <span style={mobileArchiveLabelStyle}>{copy.project_status}</span>
+        <SegmentedChoice label={copy.project_status} value={ended ? "ended" : "active"} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} disabled={busy} onChange={onToggleEnded} />
+      </div> : null}
+      {canWriteCloud || isPublic ? <div style={mobileArchiveOwnerActionRowStyle}>
+        <span style={mobileArchiveLabelStyle}>{copy.visibility}</span>
+        <SegmentedChoice label={copy.visibility} value={isPublic ? "public" : "private"} options={[{ value: "private", label: copy.private_only }, { value: "public", label: copy.public_discover, disabled: !canWriteCloud }]} disabled={busy} onChange={onTogglePublic} />
+      </div> : null}
     </section>
   );
 }
@@ -2851,7 +2843,6 @@ function MobileArchiveProfile({
         editing={editingField === "name"}
         canEdit={canEdit}
         onBeginEdit={() => onBeginEdit("name")}
-        valueHref={encyclopediaHref}
         editLabel={copy.edit}
         wideEditor
       >

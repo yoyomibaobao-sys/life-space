@@ -1,3 +1,4 @@
+import { matchesAccountConfirmation } from "@/lib/account-number";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { getSupabaseServer } from "@/lib/supabaseServer";
@@ -906,7 +907,7 @@ export async function POST(request: Request) {
 
       if (
         body.confirmPermanent !== true ||
-        confirmationText !== requiredConfirmation
+        !matchesAccountConfirmation(confirmationText, requiredConfirmation)
       ) {
         return Response.json(
           { error: "请准确输入账号编号并确认永久注销" },

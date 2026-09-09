@@ -1,3 +1,4 @@
+import CategoryLabel from "@/components/ui/CategoryLabel";
 import type { FilterMode, FilterOption } from "@/lib/discover-types";
 import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 
@@ -30,9 +31,7 @@ export function DiscoverFilterBar({
                 aria-pressed={active}
                 className={filterStyles.button}
               >
-                {/^[\u4e00-\u9fff]{4}$/.test(option.label) ? (
-                  <>{option.label.slice(0, 2)}<br />{option.label.slice(2)}</>
-                ) : option.label}
+                <CategoryLabel label={option.label} discovery />
               </button>
             );
           })}

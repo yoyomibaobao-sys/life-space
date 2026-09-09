@@ -1,3 +1,4 @@
+import { loadOfflineGuideDirectory, rememberGuideDirectory } from "@/lib/offline-guide-directory";
 import {
   archiveCategoryOptions,
   getDefaultSystemNames,
@@ -404,6 +405,9 @@ export function getSystemNameCandidateLabels(candidates: SystemNameCandidate[]) 
 export async function getSystemNameCandidates(
   params: GetSystemNameCandidatesParams
 ): Promise<SystemNameCandidate[]> {
+  if (params.mode === "local" && typeof navigator !== "undefined" && !navigator.onLine) {
+    params = { ...params, supabase: null };
+  }
   const category = normalizeCategory(params.category);
   const limit = params.limit === null ? undefined : params.limit ?? 10;
   const candidates: Array<Omit<SystemNameCandidate, "label"> & { label?: string | null }> = [];
@@ -438,6 +442,8 @@ export async function getSystemNameCandidates(
     });
   }
 
+  rememberGuideDirectory(candidates as SystemNameCandidate[]);
+  if (params.mode === "local") candidates.push(...loadOfflineGuideDirectory().filter((row) => params.includeOtherCategories || row.category === category));
   return dedupeSystemNameCandidates(candidates, params.currentValue)
     .filter((candidate) => matchesQuery(candidate, params.query))
     .slice(0, limit);

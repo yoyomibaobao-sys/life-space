@@ -8,21 +8,21 @@
   grid-template-columns: repeat(5, minmax(0, 1fr)) max-content;
 }
 
-.experience {
+.standard, .experience {
   grid-template-columns: 1fr 1fr 1.65fr 1.65fr 1fr;
 }
 
 .button {
   min-width: 0;
-  min-height: 38px;
+  min-height: 40px;
   padding: 4px 3px;
   border: 1px solid #e2e8df;
   border-radius: 999px;
   background: #fff;
   color: #314131;
-  font-size: 13px;
-  font-weight: 550;
-  line-height: 1.15;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
   text-align: center;
   white-space: nowrap;
   cursor: pointer;
@@ -59,6 +59,6 @@
   grid-template-columns: .55fr .95fr 1.15fr 1.05fr .8fr .8fr;
 }
 
-.row:lang(en).experience {
+.row:lang(en).standard, .row:lang(en).experience {
   grid-template-columns: .55fr 1fr 1.2fr 1.1fr .9fr;
 }

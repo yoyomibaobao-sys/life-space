@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import MobileNotificationLink from "@/components/mobile/MobileNotificationLink";
 import UiIcon from "@/components/ui/UiIcon";
+import GuestLanguageSwitcher from "@/components/GuestLanguageSwitcher";
 
 export type MobileContentTopBarItem = {
   key: string;
@@ -80,6 +81,7 @@ export default function MobileContentTopBar({
           <UiIcon name="search" size={18} />
         </button>
       ) : null}
+      <GuestLanguageSwitcher />
       {showNotification ? <MobileNotificationLink /> : null}
     </nav>
   );

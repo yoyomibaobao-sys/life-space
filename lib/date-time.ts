@@ -21,10 +21,44 @@ export function formatCardDate(value?: string | number | Date | null) {
 }
 
 /** Detail, edit history, audit and notification surfaces: minute precision. */
-export function formatPreciseDateTime(value?: string | number | Date | null) {
+export function formatPreciseDateTime(value?: string | number | Date | null, timeZone?: string) {
   const date = parseDate(value);
   if (!date) return "";
+  if (timeZone) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: normalizeTimeZone(timeZone), year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(date);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || "";
+    return `${part("year")}/${part("month")}/${part("day")} ${part("hour")}:${part("minute")}`;
+  }
   return `${formatCardDate(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function normalizeTimeZone(value?: string | null) {
+  if (!value || value.length > 100) return "UTC";
+  try { return new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone; }
+  catch { return "UTC"; }
+}
+
+export function getClientTimeZone() {
+  return normalizeTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+}
+
+export function toLocalDateTimeInputValue(value: string | Date | null | undefined = new Date()) {
+  const date = parseDate(value);
+  if (!date) return "";
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Keep the original instant for text-only edits, including the repeated DST hour. */
+export function localDateTimeInputToIso(value: string, original?: string | null) {
+  const previous = parseDate(original);
+  if (previous && toLocalDateTimeInputValue(previous) === value) return previous.toISOString();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+  const date = parseDate(value);
+  // Reject impossible dates and spring-forward gaps instead of silently changing the time.
+  return date && toLocalDateTimeInputValue(date) === value ? date.toISOString() : null;
 }
 
 /** Activity metadata may be relative while recent, then falls back to YYYY/MM/DD. */

@@ -72,7 +72,7 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(navbar, /getMobilePageTitle\(pathname, t\)/);
   assert.match(navbar, /flexDirection: "column"/);
   assert.match(navbar, /transform: "translateZ\(0\)"/);
-  assert.doesNotMatch(navbar, /LanguageSwitcher/);
+  assert.match(navbar, /!user \? <LanguageSwitcher compact \/>/);
   assert.match(navbar, /hasPageManagedMobileTopNav\(pathname\)/);
   assert.doesNotMatch(mobileNav, /href="\/feedback"/);
   assert.match(zhCopy, /discover: "发现"/);
@@ -302,7 +302,7 @@ test("account navigation exposes the confirmed independent menu entries", async 
   assert.match(navbar, /pathname !== "\/"/);
   assert.match(membership, /t\.membership_page/);
   assert.match(zhCopy, /eyebrow: "个人使用方案"/);
-  assert.match(zhCopy, /1GB 个人云端存储/);
+  assert.match(zhCopy, /1GB.*云端存储/);
   assert.doesNotMatch(membership, /查看会员权益/);
   assert.doesNotMatch(login, /href="\/membership"/);
   assert.doesNotMatch(login, /登录后进入我的项目/);

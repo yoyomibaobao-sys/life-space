@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { buildAuthEmailRedirect } from "@/lib/auth-return";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
@@ -103,7 +104,7 @@ export default function RegisterPage() {
         password,
         options: {
           captchaToken: captchaToken || undefined,
-          emailRedirectTo: `${window.location.origin}${returnTo}`,
+          emailRedirectTo: buildAuthEmailRedirect("signup", returnTo),
           data: {
             legal_terms_accepted: true,
             legal_terms_version: LEGAL_VERSION,

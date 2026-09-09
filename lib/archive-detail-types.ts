@@ -1,3 +1,5 @@
+import type { PlantingRegion } from "@/lib/planting-region";
+import type { RecordLocation } from "@/lib/record-location";
 import type { MediaItem } from "@/lib/domain-types";
 
 export type RecordComment = {
@@ -49,6 +51,7 @@ export type RelatedTagCountRow = {
 };
 
 export type RecordItem = {
+  location?: RecordLocation | null;
   id: string;
   cycle_id?: string | null;
   note: string | null;
@@ -82,6 +85,7 @@ export type LightboxImage = {
 };
 
 export type ArchiveDetailArchive = {
+  planting_region?: PlantingRegion | null;
   id: string;
   user_id: string;
   title: string;

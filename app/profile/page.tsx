@@ -1,6 +1,11 @@
 "use client";
+import { rememberDefaultPlantingRegion } from "@/lib/planting-region";
+import { rememberDefaultRecordLocation } from "@/lib/record-location";
 
 import Link from "next/link";
+import CloudTrialEntry from "@/components/CloudTrialEntry";
+import { formatAccountNumber } from "@/lib/account-number";
+import { getClientTimeZone } from "@/lib/date-time";
 import {
   Fragment,
   useEffect,
@@ -24,6 +29,7 @@ import {
   getDaysRemaining,
   getMembershipEndDate,
   getMembershipPlanLabel,
+  getUserTypeLabel,
   getMembershipStatusLabel,
   getMembershipSummary,
   normalizeMembershipRpcResult,
@@ -498,6 +504,8 @@ export default function ProfilePage() {
       return;
     }
 
+    rememberDefaultRecordLocation(user.id, locationText);
+    rememberDefaultPlantingRegion(user.id, { country_code: countryCode, country_name: customCountryName, region_name: regionName, city_name: cityName });
     showToast(t.profile.saved);
     setIsEditingProfile(false);
     void refreshProfile(user.id);
@@ -559,6 +567,7 @@ export default function ProfilePage() {
 
       const headers = {
         Authorization: `Bearer ${session.access_token}`,
+        "X-Client-Timezone": getClientTimeZone(),
       };
       const estimateResponse = await fetch("/api/export/my-records?estimate=1", {
         headers,
@@ -818,7 +827,9 @@ export default function ProfilePage() {
             </label>
             <div style={{ minWidth: 0, flex: 1 }}>
               <label style={fieldLabelStyle}>{t.profile.username}</label>
-              {isEditingProfile ? (
+              {!initLoading && !membershipError && !membership ? <CloudTrialEntry /> : null}
+
+          {isEditingProfile ? (
                 <input
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
@@ -849,7 +860,7 @@ export default function ProfilePage() {
                 : "repeat(4, minmax(0, 1fr))",
             }}
           >
-            <IdentityStat label={language === "en" ? "Member no." : "会员编号"} value={String(profile.account_number || "—")} />
+            <IdentityStat label={language === "en" ? "Member no." : "会员编号"} value={formatAccountNumber(profile.account_number) || "—"} />
             <IdentityStat
               label={language === "en" ? "Suggestions adopted" : "被采纳的次数"}
               value={language === "en"
@@ -857,7 +868,7 @@ export default function ProfilePage() {
                 : `${profileStats?.receivedFlowerCount || 0}次`}
               href="/profile/helpful"
             />
-            <IdentityStat label={language === "en" ? "Membership" : "会员类别"} value={getMembershipPlanLabel(membership?.plan, language)} />
+            <IdentityStat label={language === "en" ? "User type" : "用户类型"} value={getUserTypeLabel({ signedIn: !!user, membership, loading: initLoading, failed: !!membershipError }, language)} />
             <IdentityStat label={language === "en" ? "Storage" : "空间用量"} value={storageText} />
           </div>
 
@@ -1025,7 +1036,7 @@ export default function ProfilePage() {
           <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
             <InfoCard
               label={t.profile.account_identity}
-              value={membership ? getMembershipPlanLabel(membership.plan, language) : t.profile.local_free}
+              value={getUserTypeLabel({ signedIn: !!user, membership, loading: initLoading, failed: !!membershipError }, language)}
               hint={membership ? getMembershipStatusLabel(membership.status, language) : t.profile.local_free_hint}
             />
             <InfoCard

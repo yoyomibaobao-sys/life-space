@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatAccountNumber, matchesAccountConfirmation } from "@/lib/account-number";
 import { buildLoginHref } from "@/lib/auth-return";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
@@ -17,6 +18,7 @@ import { getTranslations, type Language } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type AdminMembershipRow = {
+  auth_missing?: boolean;
   user_id: string;
   email: string | null;
   username: string | null;
@@ -520,6 +522,26 @@ export default function AdminMembershipsPage() {
   const [accountDeleteAcknowledged, setAccountDeleteAcknowledged] = useState(false);
   const [accountDeleteSaving, setAccountDeleteSaving] = useState(false);
   const [activeAdminSection, setActiveAdminSection] = useState("overview");
+  const [memberPage, setMemberPage] = useState(0);
+  const [hasMoreMembers, setHasMoreMembers] = useState(false);
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const memberRequest = useRef(0);
+  const memberListScroll = useRef(0);
+  function openMember(row: AdminMembershipRow) {
+    memberListScroll.current = window.scrollY;
+    setSelected(row);
+    if (window.innerWidth < 760) window.scrollTo({ top: 0 });
+  }
+  function closeMember() {
+    setSelected(null);
+    requestAnimationFrame(() => window.scrollTo({ top: memberListScroll.current }));
+  }
+  function changeAdminSection(section: string) {
+    setSelected(null);
+    setActiveAdminSection(section);
+    window.history.replaceState(null, "", `#${section}`);
+    window.scrollTo({ top: 0 });
+  }
   const paymentSubmittingRef = useRef(false);
 
   const isMobileViewport = viewportWidth < 760;
@@ -554,14 +576,14 @@ export default function AdminMembershipsPage() {
     const sectionId = window.location.hash.slice(1);
     setActiveAdminSection(sectionId);
     const frameId = window.requestAnimationFrame(() => {
-      document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
+      if (window.innerWidth >= 760) document.getElementById(sectionId)?.scrollIntoView({ block: "start" });
     });
 
     return () => window.cancelAnimationFrame(frameId);
   }, [checking, isAdmin]);
 
   useEffect(() => {
-    if (checking || !isAdmin) return;
+    if (checking || !isAdmin || isMobileViewport) return;
     const sectionIds = [
       "overview",
       "traffic",
@@ -587,35 +609,29 @@ export default function AdminMembershipsPage() {
     );
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
-  }, [checking, isAdmin]);
+  }, [checking, isAdmin, isMobileViewport]);
 
-  async function loadRows(searchKeyword = keyword) {
+  async function loadRows(searchKeyword = appliedKeyword, page = memberPage) {
+    const requestId = ++memberRequest.current;
     setLoading(true);
     setErrorMsg("");
-
-    const { data, error } = await supabase.rpc("admin_search_memberships", {
-      p_keyword: searchKeyword.trim(),
+    const { data, error } = await supabase.rpc("admin_search_memberships_page", {
+      p_keyword: formatAccountNumber(searchKeyword), p_limit: 11, p_offset: page * 10,
     });
-
+    if (requestId !== memberRequest.current) return;
     if (error) {
       logSupabaseError("admin search memberships error:", error);
-      setRows([]);
-      setErrorMsg(
-        describeSupabaseError(error, language) ||
-          t.admin_memberships.read_memberships_failed
-      );
+      setErrorMsg(describeSupabaseError(error, language) || t.admin_memberships.read_memberships_failed);
       setLoading(false);
       return;
     }
-
-    const nextRows = normalizeRows(data);
+    const result = normalizeRows(data);
+    const nextRows = result.slice(0, 10);
+    setHasMoreMembers(result.length > 10);
     setRows(nextRows);
-
-    if (selected) {
-      const updatedSelected = nextRows.find((item) => item.user_id === selected.user_id) || null;
-      setSelected(updatedSelected);
-    }
-
+    setMemberPage(page);
+    setAppliedKeyword(searchKeyword.trim());
+    setSelected((previous) => previous ? nextRows.find((row) => row.user_id === previous.user_id) || null : null);
     setLoading(false);
   }
 
@@ -745,7 +761,7 @@ export default function AdminMembershipsPage() {
   async function confirmPendingPayment(row: PendingPaymentQueueRow) {
     if (pendingPaymentActionId) return;
     const confirmed = window.confirm(
-      `${t.admin_memberships.confirm_submitted_payment_prefix}${row.email || row.user_id}${t.admin_memberships.confirm_submitted_payment_suffix}\n${row.order_number || ""}\n${formatPaymentAmount(row.amount, row.currency)}\n\n${t.admin_memberships.confirm_submitted_payment_notice}`
+      `${t.admin_memberships.confirm_submitted_payment_prefix}${row.email || (language === "zh" ? "未提供邮箱" : "Email not available")}${t.admin_memberships.confirm_submitted_payment_suffix}\n${row.order_number || ""}\n${formatPaymentAmount(row.amount, row.currency)}\n\n${t.admin_memberships.confirm_submitted_payment_notice}`
     );
     if (!confirmed) return;
 
@@ -1089,7 +1105,8 @@ export default function AdminMembershipsPage() {
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await loadRows(keyword);
+    setSelected(null);
+    await loadRows(keyword, 0);
   }
 
   async function handleSave() {
@@ -1192,9 +1209,11 @@ export default function AdminMembershipsPage() {
     setErrorMsg("");
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
       const response = await fetch("/api/admin/memberships/delete", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
         body: JSON.stringify({ userId: deleteTarget.user_id }),
       });
 
@@ -1251,7 +1270,7 @@ export default function AdminMembershipsPage() {
 
     if (
       !accountDeleteAcknowledged ||
-      accountDeleteConfirmation.trim() !== requiredConfirmation
+      !matchesAccountConfirmation(accountDeleteConfirmation, requiredConfirmation)
     ) {
       showToast(t.admin_memberships.account_delete_confirmation_mismatch);
       return;
@@ -1491,6 +1510,18 @@ export default function AdminMembershipsPage() {
         style={adminAnchorNavStyle(isMobileViewport)}
         aria-label={t.admin_memberships.admin_sections_aria}
       >
+        {isMobileViewport ? <label style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", alignItems: "center", gap: 10, width: "100%", fontSize: 14 }}>
+          {t.admin_memberships.title}
+          <select aria-label={t.admin_memberships.admin_sections_aria} value={activeAdminSection} onChange={(e) => changeAdminSection(e.target.value)} style={{ ...inputStyle, margin: 0, minWidth: 0 }}>
+            <option value="overview">{t.admin_memberships.nav_overview}</option>
+            <option value="traffic">{t.admin_memberships.nav_traffic}</option>
+            <option value="registrations">{t.admin_memberships.nav_registrations}</option>
+            <option value="payment-review">{t.admin_memberships.nav_payments}</option>
+            <option value="refund-review">{t.admin_memberships.nav_refunds}</option>
+            <option value="capacity">{t.admin_memberships.nav_capacity}</option>
+            <option value="account-closures">{t.admin_memberships.nav_account_closures}</option>
+          </select>
+        </label> : <>
         <a href="#overview" style={adminAnchorLinkStyle(activeAdminSection === "overview")} onClick={() => setActiveAdminSection("overview")}>{t.admin_memberships.nav_overview}</a>
         <a href="#traffic" style={adminAnchorLinkStyle(activeAdminSection === "traffic")} onClick={() => setActiveAdminSection("traffic")}>{t.admin_memberships.nav_traffic}</a>
         <a href="#registrations" style={adminAnchorLinkStyle(activeAdminSection === "registrations")} onClick={() => setActiveAdminSection("registrations")}>{t.admin_memberships.nav_registrations}</a>
@@ -1498,12 +1529,14 @@ export default function AdminMembershipsPage() {
         <a href="#refund-review" style={adminAnchorLinkStyle(activeAdminSection === "refund-review")} onClick={() => setActiveAdminSection("refund-review")}>{t.admin_memberships.nav_refunds}</a>
         <a href="#capacity" style={adminAnchorLinkStyle(activeAdminSection === "capacity")} onClick={() => setActiveAdminSection("capacity")}>{t.admin_memberships.nav_capacity}</a>
         <a href="#account-closures" style={adminAnchorLinkStyle(activeAdminSection === "account-closures")} onClick={() => setActiveAdminSection("account-closures")}>{t.admin_memberships.nav_account_closures}</a>
+        </>}
       </nav>
 
       <section
         id="overview"
         style={{
           ...currentCardStyle,
+          display: isMobileViewport && activeAdminSection !== "overview" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -1605,6 +1638,7 @@ export default function AdminMembershipsPage() {
         id="traffic"
         style={{
           ...currentCardStyle,
+          display: isMobileViewport && activeAdminSection !== "traffic" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -1676,6 +1710,7 @@ export default function AdminMembershipsPage() {
         id="payment-review"
         style={{
           ...currentCardStyle,
+          display: isMobileViewport && activeAdminSection !== "payment-review" ? "none" : undefined,
           ...pendingPaymentQueueStyle(pendingPaymentRows.length > 0),
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
@@ -1711,7 +1746,7 @@ export default function AdminMembershipsPage() {
                   <strong style={userNameStyle}>{row.username || row.email || row.user_id}</strong>
                   <span style={pendingPaymentAmountStyle}>{formatPaymentAmount(row.amount, row.currency)}</span>
                 </div>
-                <div style={smallTextStyle}>{row.email || row.user_id}</div>
+                <div style={smallTextStyle}>{row.email || (language === "zh" ? "未提供邮箱" : "Email not available")}</div>
                 <div style={pendingPaymentMetaStyle}>
                   <span>{t.admin_memberships.order_number_prefix}{row.order_number || t.admin_memberships.not_recorded}</span>
                   <span>{getPaymentMethodLabel(row.payment_method, language)}</span>
@@ -1758,6 +1793,7 @@ export default function AdminMembershipsPage() {
         id="refund-review"
         style={{
           ...currentCardStyle,
+          display: isMobileViewport && activeAdminSection !== "refund-review" ? "none" : undefined,
           ...refundQueueStyle(openRefundCount > 0),
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
@@ -1803,7 +1839,7 @@ export default function AdminMembershipsPage() {
                     {getRefundStatusLabel(row.status, language)}
                   </span>
                 </div>
-                <div style={smallTextStyle}>{row.email || row.user_id}</div>
+                <div style={smallTextStyle}>{row.email || (language === "zh" ? "未提供邮箱" : "Email not available")}</div>
                 <div style={refundAmountRowStyle}>
                   <span>{t.admin_memberships.refund_requested_amount}</span>
                   <strong>{formatPaymentAmount(row.refund_amount, row.currency)}</strong>
@@ -1889,6 +1925,7 @@ export default function AdminMembershipsPage() {
         id="capacity"
         style={{
           ...currentCardStyle,
+          display: isMobileViewport && activeAdminSection !== "capacity" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -1992,7 +2029,7 @@ export default function AdminMembershipsPage() {
                     <span style={pillStyle}>{formatStorageBytes(Number(item.storage_used || 0))}</span>
                   </div>
                   <div style={smallTextStyle}>
-                    {t.admin_memberships.account_number_prefix}{item.account_number || t.admin_memberships.not_recorded}
+                    {t.admin_memberships.account_number_prefix}{formatAccountNumber(item.account_number) || t.admin_memberships.not_recorded}
                     {" · "}{formatStorageBytes(Number(item.storage_used || 0))} / {formatStorageBytes(Number(item.storage_limit_bytes || 0))}
                   </div>
                 </article>
@@ -2015,6 +2052,7 @@ export default function AdminMembershipsPage() {
         id="registrations"
         style={{
           ...currentCardStyle,
+          display: isMobileViewport && activeAdminSection !== "registrations" ? "none" : undefined,
           marginBottom: isMobileViewport ? 12 : 16,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
@@ -2027,7 +2065,7 @@ export default function AdminMembershipsPage() {
           </div>
           <span style={pillStyle}>{formatAdminCount(rows.length, language)} {t.admin_memberships.current_results}</span>
         </div>
-        <form onSubmit={handleSearch} style={searchRowStyle}>
+        <form onSubmit={handleSearch} style={{ ...searchRowStyle, display: isMobileViewport && selected ? "none" : searchRowStyle.display }}>
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
@@ -2042,7 +2080,8 @@ export default function AdminMembershipsPage() {
             style={secondaryButtonStyle}
             onClick={() => {
               setKeyword("");
-              void loadRows("");
+              setSelected(null);
+              void loadRows("", 0);
             }}
             disabled={loading}
           >
@@ -2053,8 +2092,8 @@ export default function AdminMembershipsPage() {
         {errorMsg ? <p style={errorStyle}>{errorMsg}</p> : null}
 
         <div style={currentLayoutStyle}>
-          <div style={listStyle}>
-            {loading ? (
+          <div style={{ ...listStyle, display: isMobileViewport && selected ? "none" : listStyle.display }} aria-busy={loading}>
+            {loading && rows.length === 0 ? (
               <div style={emptyStyle}>{t.admin_memberships.loading_users}</div>
             ) : rows.length === 0 ? (
               <div style={emptyStyle}>{t.admin_memberships.no_users}</div>
@@ -2065,11 +2104,11 @@ export default function AdminMembershipsPage() {
                   <article
                     key={row.user_id}
                     style={userItemStyle(active)}
-                    onClick={() => setSelected(row)}
+                    onClick={() => openMember(row)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        setSelected(row);
+                        openMember(row);
                       }
                     }}
                     role="button"
@@ -2083,46 +2122,36 @@ export default function AdminMembershipsPage() {
                         {getAdminMembershipStatusLabel(row.status, language)}
                       </span>
                     </div>
-                    <div style={smallTextStyle}>{row.email || row.user_id}</div>
+                    <div style={smallTextStyle}>{row.email || (language === "zh" ? "未提供邮箱" : "Email not available")}</div>
                     <div style={smallTextStyle}>
-                      {t.admin_memberships.account_number_prefix}{row.account_number || t.admin_memberships.not_recorded}
+                      {t.admin_memberships.account_number_prefix}{formatAccountNumber(row.account_number) || t.admin_memberships.not_recorded}
                       {" · "}{t.admin_memberships.registered_at_prefix}{formatMembershipDate(row.registered_at, language)}
                       {row.is_internal_test ? ` · ${t.admin_memberships.internal_account_short}` : ""}
                     </div>
-                    <div style={smallTextStyle}>
+                    <div style={{ ...smallTextStyle, display: isMobileViewport ? "none" : undefined }}>
                       {getMembershipPlanLabel(row.plan, language)} · {t.admin_memberships.capacity}{" "}
                       {formatStorageBytes(row.storage_used || 0)} / {formatStorageBytes(row.storage_limit_bytes || 0)} · {t.admin_memberships.market}{" "}
                       {Number(row.active_market_post_count || 0)} / {Number(row.market_post_limit || 0)}
                     </div>
-                    <div style={smallTextStyle}>
+                    <div style={{ ...smallTextStyle, display: isMobileViewport ? "none" : undefined }}>
                       {t.admin_memberships.last_login_prefix}{formatMembershipDate(row.last_sign_in_at, language)}
                       {" · "}{formatAdminCount(row.archive_count, language)} {t.admin_memberships.project_unit}
                       {" · "}{formatAdminCount(row.record_count, language)} {t.admin_memberships.record_unit}
                     </div>
-                    <div style={memberRowActionStyle}>
-                      {canDeleteMembership(row, currentUserId) ? (
-                        <button
-                          type="button"
-                          style={dangerMiniButtonStyle}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openDeleteMembershipDialog(row);
-                          }}
-                          disabled={deleteSaving}
-                        >
-                          {t.admin_memberships.delete_membership}
-                        </button>
-                      ) : row.status === "canceled" ? (
-                        <span style={deletedHintStyle}>{t.admin_memberships.deleted}</span>
-                      ) : null}
-                    </div>
+
                   </article>
                 );
               })
             )}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, paddingBlock: 10 }}>
+              <button type="button" style={secondaryButtonStyle} disabled={loading || memberPage === 0} onClick={() => void loadRows(appliedKeyword, memberPage - 1)}>{language === "zh" ? "上一页" : "Previous"}</button>
+              <span aria-live="polite" style={smallTextStyle}>{language === "zh" ? `第 ${memberPage + 1} 页` : `Page ${memberPage + 1}`}</span>
+              <button type="button" style={secondaryButtonStyle} disabled={loading || !hasMoreMembers} onClick={() => void loadRows(appliedKeyword, memberPage + 1)}>{language === "zh" ? "下一页" : "Next"}</button>
+            </div>
           </div>
 
-          <aside style={currentDetailStyle}>
+          <aside style={{ ...currentDetailStyle, display: isMobileViewport && !selected ? "none" : undefined }}>
+            {isMobileViewport && selected ? <button type="button" onClick={closeMember} style={{ ...secondaryButtonStyle, marginBottom: 12 }}>{language === "zh" ? "返回会员列表" : "Back to members"}</button> : null}
             {selected ? (
               <>
                 <div style={detailTopStyle}>
@@ -2131,7 +2160,9 @@ export default function AdminMembershipsPage() {
                     <h2 style={sectionTitleStyle}>
                       {selected.username || selected.email || t.admin_memberships.username_unset}
                     </h2>
-                    <p style={smallTextStyle}>{selected.user_id}</p>
+                    <p style={{ ...smallTextStyle, overflowWrap: "anywhere" }}>{selected.email || (language === "zh" ? "未提供邮箱" : "Email not available")}</p>
+                    <p style={{ ...smallTextStyle, overflowWrap: "anywhere" }}>{selected.user_id}</p>
+                    {selected.auth_missing ? <p style={smallTextStyle}>{language === "zh" ? "登录身份已不存在，仍有关联资料。可在下方“账号操作”核对处理。" : "The login identity is missing; related data remains. Review Account actions below."}</p> : null}
                   </div>
                   <span style={pillStyle}>
                     {getAdminMembershipStatusLabel(selected.status, language)}
@@ -2141,7 +2172,7 @@ export default function AdminMembershipsPage() {
                 <div style={currentSummaryGridStyle}>
                   <InfoItem
                     label={t.admin_memberships.account_number}
-                    value={selected.account_number || t.admin_memberships.not_recorded}
+                    value={formatAccountNumber(selected.account_number) || t.admin_memberships.not_recorded}
                   />
                   <InfoItem
                     label={t.admin_memberships.registration_time}
@@ -2180,6 +2211,7 @@ export default function AdminMembershipsPage() {
                   />
                 </div>
 
+                <details key={`${selected.user_id}-membership`} open={!isMobileViewport} style={{ marginTop: 14 }}><summary style={adminDetailSummaryStyle}>{language === "zh" ? "会员权益设置" : "Membership benefits"}</summary>
                 <div style={currentPresetGridStyle}>
                   {PLAN_PRESETS.map((preset) => (
                     <button
@@ -2255,6 +2287,13 @@ export default function AdminMembershipsPage() {
                   <button type="button" style={secondaryButtonStyle} onClick={() => void loadRows(keyword)} disabled={saving}>
                     {t.admin_memberships.reload}
                   </button>
+
+                </div>
+
+                </details>
+                <details key={`${selected.user_id}-account`} style={{ marginBlock: 14 }}><summary style={adminDetailSummaryStyle}>{language === "zh" ? "账号操作" : "Account actions"}</summary>
+                  <p style={smallTextStyle}>{language === "zh" ? "停用会员权益会保留账号和资料；永久注销会删除账号及关联内容。" : "Stopping benefits keeps the account and its data. Permanent deletion removes the account and related content."}</p>
+                  <div style={actionRowStyle}>
                   {canDeleteMembership(selected, currentUserId) ? (
                     <button type="button" style={dangerButtonStyle} onClick={() => openDeleteMembershipDialog(selected)} disabled={deleteSaving}>
                       {t.admin_memberships.delete_membership}
@@ -2270,11 +2309,12 @@ export default function AdminMembershipsPage() {
                       {t.admin_memberships.permanent_account_delete}
                     </button>
                   ) : null}
-                </div>
-
+                  </div>
+                </details>
                 <div style={dividerStyle} />
 
-                <section style={paymentSectionStyle}>
+                <details key={`${selected.user_id}-payment`} open={!isMobileViewport} style={paymentSectionStyle}>
+                  <summary style={adminDetailSummaryStyle}>{language === "zh" ? "付款与历史订单" : "Payments and order history"}</summary>
                   <div style={detailTopStyle}>
                     <div>
                       <div style={sectionLabelStyle}>{t.admin_memberships.manual_payment}</div>
@@ -2452,7 +2492,7 @@ export default function AdminMembershipsPage() {
                       ))
                     )}
                   </div>
-                </section>
+                </details>
               </>
             ) : (
               <div style={emptyDetailStyle}>
@@ -2467,6 +2507,7 @@ export default function AdminMembershipsPage() {
         id="account-closures"
         style={{
           ...currentCardStyle,
+          display: isMobileViewport && activeAdminSection !== "account-closures" ? "none" : undefined,
           scrollMarginTop: adminSectionScrollMarginTop,
         }}
       >
@@ -2502,7 +2543,7 @@ export default function AdminMembershipsPage() {
             {deletionAuditRows.map((row) => (
               <article key={row.id} style={accountClosureRowStyle}>
                 <div style={userTitleRowStyle}>
-                  <strong>{row.target_account_number || row.target_user_id}</strong>
+                  <strong>{formatAccountNumber(row.target_account_number) || row.target_user_id}</strong>
                   <span style={accountClosureStatusStyle(row.status)}>
                     {row.status === "completed"
                       ? t.admin_memberships.account_closure_completed
@@ -2512,7 +2553,7 @@ export default function AdminMembershipsPage() {
                   </span>
                 </div>
                 <div style={smallTextStyle}>
-                  {t.admin_memberships.account_number_prefix}{row.target_account_number || t.admin_memberships.not_recorded}
+                  {t.admin_memberships.account_number_prefix}{formatAccountNumber(row.target_account_number) || t.admin_memberships.not_recorded}
                   {" · "}
                   {row.initiated_by === "admin"
                     ? t.admin_memberships.initiated_by_admin
@@ -2570,8 +2611,7 @@ export default function AdminMembershipsPage() {
         confirmDisabled={
           accountDeleteSaving ||
           !accountDeleteAcknowledged ||
-          accountDeleteConfirmation.trim() !==
-            (accountDeleteTarget?.account_number || accountDeleteTarget?.user_id || "")
+          !matchesAccountConfirmation(accountDeleteConfirmation, accountDeleteTarget?.account_number || accountDeleteTarget?.user_id || "")
         }
         cancelDisabled={accountDeleteSaving}
         onClose={closeAccountDeletionDialog}
@@ -2590,7 +2630,7 @@ export default function AdminMembershipsPage() {
             <label style={labelStyle}>
               {t.admin_memberships.type_account_number_prefix}
               <strong style={confirmationCodeStyle}>
-                {accountDeleteTarget.account_number || accountDeleteTarget.user_id}
+                {formatAccountNumber(accountDeleteTarget.account_number) || accountDeleteTarget.user_id}
               </strong>
               <input
                 value={accountDeleteConfirmation}
@@ -3557,3 +3597,5 @@ const errorStyle: CSSProperties = {
   padding: "9px 11px",
   fontSize: 13,
 };
+
+const adminDetailSummaryStyle: CSSProperties = { cursor: "pointer", fontSize: 15, fontWeight: 650, color: "#34552e", padding: "12px 0" };

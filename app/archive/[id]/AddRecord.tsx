@@ -1,4 +1,6 @@
 "use client";
+import RecordLocationField from "@/components/record/RecordLocationField";
+import { loadDefaultRecordLocation, rememberDefaultRecordLocation, normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
@@ -89,6 +91,8 @@ export default function AddRecord({
   const { language, t } = useLanguage();
   const copy = t.record;
   const terminology = getArchiveCycleTerminology(archiveCategory, language);
+  const [location, setLocation] = useState<RecordLocation | null>(() => loadDefaultRecordLocation());
+  const locationEdited = useRef(false);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<SelectedPreview[]>([]);
@@ -175,8 +179,13 @@ export default function AddRecord({
 
       const [membershipResult, profileResult] = await Promise.all([
         supabase.rpc("get_my_membership"),
-        supabase.from("profiles").select("storage_used").eq("id", user.id).maybeSingle(),
+        supabase.from("profiles").select("storage_used, location").eq("id", user.id).maybeSingle(),
       ]);
+
+      if (!profileResult.error) {
+        rememberDefaultRecordLocation(user.id, profileResult.data?.location);
+        if (!locationEdited.current) setLocation(loadDefaultRecordLocation(user.id));
+      }
 
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
@@ -326,36 +335,24 @@ export default function AddRecord({
   }) {
     const note = params.note.trim();
 
-    const { data: record, error } = await supabase
-      .from("records")
-      .insert([
-        {
-          archive_id: params.archiveId,
-          cycle_id: effectiveCycleId || null,
-          note,
-          user_id: params.userId,
-          visibility: params.visibility,
-          photo_time: params.recordTimeISO,
-          record_time: params.recordTimeISO,
-          upload_time: new Date().toISOString(),
-          status_tag: params.statusTag,
-        },
-      ])
-      .select()
-      .single();
+    const { data: record, error } = await supabase.rpc("create_record_with_location", {
+      p_archive_id: params.archiveId, p_cycle_id: effectiveCycleId || null,
+      p_note: note, p_record_time: params.recordTimeISO, p_visibility: params.visibility,
+      p_status_tag: params.statusTag, p_location: normalizeRecordLocation(location),
+    }).single();
 
     if (error) {
       console.error("record 创建失败", error);
       return null;
     }
 
-    return record;
+    return record as { id: string };
   }
 
   async function refreshStorageUsed(userId: string) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("storage_used")
+      .select("storage_used, location")
       .eq("id", userId)
       .maybeSingle();
 
@@ -373,7 +370,7 @@ export default function AddRecord({
     file: File,
     capturedAt: string | null,
   ) {
-    const compressed = await standardizeRecordPhotoFile(file);
+    const compressed = await standardizeRecordPhotoFile(file, { requireSanitized: true });
     const uploadFile = compressed.file;
     const thumbnail = await createImageThumbnailFile(uploadFile);
     const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
@@ -748,6 +745,7 @@ export default function AddRecord({
       }
 
       setText("");
+      setLocation(loadDefaultRecordLocation());
       clearSelectedFiles();
       setCustomTime("");
       setRecordVisibility(archiveIsPublic ? "public" : "private");
@@ -824,6 +822,8 @@ export default function AddRecord({
           boxSizing: "border-box",
         }}
       />
+
+      <RecordLocationField value={location} onChange={(value) => { locationEdited.current = true; setLocation(value); }} files={files} language={language} disabled={loading || contentBlocked} />
 
       {sortedActiveCycles.length > 0 ? (
         <label style={cycleSelectLabelStyle}>

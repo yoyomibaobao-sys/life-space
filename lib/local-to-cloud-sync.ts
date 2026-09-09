@@ -1,4 +1,5 @@
-import { createImageThumbnailFile } from "@/lib/image-compression";
+import { normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-region";
+import { createImageThumbnailFile, standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
   completeLocalArchiveCloudTransfer,
@@ -177,6 +178,7 @@ async function ensureCloudArchive(params: {
         : null,
     system_name: params.archive.category === "plant" ? null : systemName,
     source: params.archive.source || null,
+    planting_region: normalizePlantingRegion(params.archive.planting_region),
     note: params.archive.note || null,
     archive_summary: params.archive.archive_summary || null,
     cycle_enabled: Boolean(params.archive.cycle_enabled),
@@ -387,9 +389,11 @@ async function uploadLocalImageToCloud(params: {
       ).getTime(),
     }
   );
-  // 本地图片已经在写入 IndexedDB 前生成标准版，转到云空间时直接复用，
-  // 避免对已有缓存再次有损压缩。
-  const uploadFile = originalFile;
+  // Reuse photos known to have been re-encoded locally. Legacy files may
+  // retain EXIF GPS; process a copy before cloud upload, keeping local bytes intact.
+  const standard = params.image.metadata_stripped ? null
+    : await standardizeRecordPhotoFile(originalFile, { requireSanitized: true });
+  const uploadFile = standard?.file || originalFile;
   const thumbnail = await createImageThumbnailFile(uploadFile);
   const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
   const safeName = safeFileName(uploadFile.name);
@@ -499,8 +503,8 @@ async function uploadLocalImageToCloud(params: {
       thumb_url: null,
       thumb_path: uploadedThumbPath,
       mime_type: uploadFile.type || "image/jpeg",
-      width: params.image.width ?? null,
-      height: params.image.height ?? null,
+      width: standard?.width ?? params.image.width ?? null,
+      height: standard?.height ?? params.image.height ?? null,
       original_filename: originalFile.name,
       captured_at: params.image.captured_at || null,
       sort_order: params.image.sort_order || 0,
@@ -743,6 +747,11 @@ export async function syncLocalArchiveToCloud(params: {
         record,
         cycleId: cloudCycleId,
       });
+      if (record.location) {
+        const { error: locationError } = await supabase.rpc("set_record_location", { p_record_id: cloudRecordId, p_location: record.location });
+        if (locationError) throw new Error("记录地点保存失败，本地资料已保留，请稍后重试。");
+      }
+
 
       for (const image of [...record.images].sort((a, b) => a.sort_order - b.sort_order)) {
         await uploadLocalImageToCloud({

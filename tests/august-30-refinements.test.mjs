@@ -276,14 +276,14 @@ test("market/card locations show only city, then region, then country", () => {
   assert.match(source("app/market/page.tsx"), /getCompactCardLocation/);
 });
 
-test("all project categories use rounds while stored custom names remain authoritative", () => {
+test("all project categories use periods while stored custom names remain authoritative", () => {
   for (const category of ["plant", "system", "insect_fish", "other", null, "unknown"]) {
     const zh = getArchiveCycleTerminology(category, "zh");
     const en = getArchiveCycleTerminology(category, "en");
-    assert.equal(zh.unit, "轮");
-    assert.equal(zh.cycleLabel(7), "第7轮");
-    assert.equal(en.unit, "round");
-    assert.equal(en.cycleLabel(7), "Round 7");
+    assert.equal(zh.unit, "期");
+    assert.equal(zh.cycleLabel(7), "第7期");
+    assert.equal(en.unit, "period");
+    assert.equal(en.cycleLabel(7), "Period 7");
   }
   assert.match(source("components/archive-detail/ArchiveCycleTimeline.tsx"), /cycle\.display_name \|\| terminology\.cycleLabel/);
   assert.match(source("lib/i18n/zh.ts"), /生长周期/);
@@ -490,7 +490,7 @@ test("mobile filters use compact independent help and one-line experience catego
   const css = source("components/ui/CategoryFilterRow.module.css");
   assert.match(css, /\.withHelp \{[^}]*repeat\(5, minmax\(0, 1fr\)\) max-content/);
   assert.match(css, /\.experience \{[^}]*1fr 1fr 1\.65fr 1\.65fr 1fr/);
-  assert.match(css, /font-size: 13px/);
+  assert.match(css, /font-size: 14px/);
   assert.match(css, /white-space: nowrap/);
   assert.doesNotMatch(css, /overflow-x:\s*(auto|scroll)/);
   assert.match(discover, /aria-pressed=\{helpOnly\}/);

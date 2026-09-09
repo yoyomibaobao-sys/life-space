@@ -1,3 +1,4 @@
+import CategoryLabel from "@/components/ui/CategoryLabel";
 import {
   type ArchiveCategory,
   getArchiveCategoryLabel,
@@ -70,7 +71,7 @@ export default function UserSpaceFilters({
             onClick={() => onSelectCategory(category as ArchiveCategory)}
             style={mainFilterStyle(activeCategory === category && !activeSubTag)}
           >
-            {getArchiveCategoryLabel(category, language)}
+            <CategoryLabel label={getArchiveCategoryLabel(category, language)} />
           </button>
         ))}
       </div>

@@ -1,4 +1,10 @@
 const DEFAULT_SIGNED_IN_PATH = "/archive";
+export const OFFICIAL_AUTH_ORIGIN = "https://life-space.uk";
+
+export function buildAuthEmailRedirect(kind: "signup" | "recovery", returnTo?: string | null) {
+  if (kind === "recovery") return `${OFFICIAL_AUTH_ORIGIN}/auth/confirm?type=recovery`;
+  return `${OFFICIAL_AUTH_ORIGIN}/auth/confirm?returnTo=${encodeURIComponent(getSafeReturnTo(returnTo))}`;
+}
 
 function isSafeInternalPath(value: string) {
   return (

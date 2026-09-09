@@ -1,6 +1,10 @@
 "use client";
+import RecordLocationField from "@/components/record/RecordLocationField";
+import { normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
+import { readRecordLocations } from "@/lib/record-location-cloud";
+import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
@@ -110,8 +114,6 @@ export default function ArchiveRecordCard({
   const [replacingMedia, setReplacingMedia] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
-  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
-  const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false);
   const [editPanelOpen, setEditPanelOpen] = useState(false);
   const [cycleSaving, setCycleSaving] = useState(false);
   const [replaceMediaId, setReplaceMediaId] = useState<string | null>(null);
@@ -270,8 +272,6 @@ export default function ArchiveRecordCard({
                     type="button"
                     onClick={() => {
                       setMenuOpen((value) => !value);
-                      setHelpMenuOpen(false);
-                      setVisibilityMenuOpen(false);
                     }}
                     aria-label={copy.more_actions}
                     style={mobileRecordMoreButtonStyle}
@@ -297,8 +297,6 @@ export default function ArchiveRecordCard({
                       archive={archive}
                       item={item}
                       readOnly={!canEditRecord}
-                      helpMenuOpen={helpMenuOpen}
-                      visibilityMenuOpen={visibilityMenuOpen}
                       onCamera={() => {
                         setMenuOpen(false);
                         cameraInputRef.current?.click();
@@ -307,23 +305,13 @@ export default function ArchiveRecordCard({
                         setMenuOpen(false);
                         chooseInputRef.current?.click();
                       }}
-                      onToggleHelpMenu={() => {
-                        setHelpMenuOpen((value) => !value);
-                        setVisibilityMenuOpen(false);
-                      }}
-                      onToggleVisibilityMenu={() => {
-                        setVisibilityMenuOpen((value) => !value);
-                        setHelpMenuOpen(false);
-                      }}
                       onSetHelpStatus={async (nextStatus) => {
                         await onSetHelpStatus(item.id, nextStatus);
                         setMenuOpen(false);
-                        setHelpMenuOpen(false);
                       }}
                       onSetVisibility={async (nextVisibility) => {
                         await onVisibilityChange(item.id, nextVisibility);
                         setMenuOpen(false);
-                        setVisibilityMenuOpen(false);
                       }}
                       onEdit={() => {
                         setMenuOpen(false);
@@ -1034,12 +1022,8 @@ function MobileRecordMoreMenu({
   archive,
   item,
   readOnly,
-  helpMenuOpen,
-  visibilityMenuOpen,
   onCamera,
   onAlbum,
-  onToggleHelpMenu,
-  onToggleVisibilityMenu,
   onSetHelpStatus,
   onSetVisibility,
   onEdit,
@@ -1048,12 +1032,8 @@ function MobileRecordMoreMenu({
   archive: ArchiveDetailArchive;
   item: RecordItem;
   readOnly: boolean;
-  helpMenuOpen: boolean;
-  visibilityMenuOpen: boolean;
   onCamera: () => void;
   onAlbum: () => void;
-  onToggleHelpMenu: () => void;
-  onToggleVisibilityMenu: () => void;
   onSetHelpStatus: (nextStatus: "help" | "resolved" | null) => Promise<void>;
   onSetVisibility: (nextVisibility: string) => Promise<void>;
   onEdit: () => void;
@@ -1090,44 +1070,11 @@ function MobileRecordMoreMenu({
           >
             {copy.forward_to_market}
           </Link>
-          <button
-            type="button"
-            onClick={onToggleHelpMenu}
-            style={mobileRecordMenuItemStyle}
-          >
-            {copy.help_status}
-          </button>
-          {helpMenuOpen ? (
-            <button
-              type="button"
-              onClick={() => onSetHelpStatus(nextHelp.value)}
-              style={mobileRecordSubMenuItemStyle}
-            >
-              {nextHelp.label}
-            </button>
-          ) : null}
+          <button type="button" onClick={() => onSetHelpStatus(nextHelp.value)} style={mobileRecordMenuItemStyle}>{nextHelp.label}</button>
         </>
       ) : null}
       {!readOnly || visibility === "public" ? (
-        <>
-          <button
-            type="button"
-            onClick={onToggleVisibilityMenu}
-            style={mobileRecordMenuItemStyle}
-          >
-            {copy.visibility_settings}
-          </button>
-          {visibilityMenuOpen ? (
-            <button
-              type="button"
-              onClick={() => onSetVisibility(nextVisibility.value)}
-              disabled={!archive.is_public}
-              style={mobileRecordSubMenuItemStyle}
-            >
-              {archive.is_public ? nextVisibility.label : copy.project_private_short}
-            </button>
-          ) : null}
-        </>
+        <button type="button" onClick={() => onSetVisibility(nextVisibility.value)} disabled={!archive.is_public} style={mobileRecordMenuItemStyle}>{archive.is_public ? nextVisibility.label : copy.project_private_short}</button>
       ) : null}
       {!readOnly ? (
         <button type="button" onClick={onEdit} style={mobileRecordMenuItemStyle}>
@@ -1288,24 +1235,40 @@ function MobileRecordEditPanel({
   onSaveOverride?: (patch: Partial<RecordItem>) => Promise<void> | void;
   onDeleteRequest?: () => void;
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const copy = t.record;
   const [note, setNote] = useState(item.note || "");
   const [timeValue, setTimeValue] = useState(toDateTimeLocalValue(item.record_time));
   const [saving, setSaving] = useState(false);
 
-  async function save() {
-    if (saving) return;
+  const [location, setLocation] = useState<RecordLocation | null>(item.location || null);
+  const [locationReady, setLocationReady] = useState(Boolean(onSaveOverride));
+  const [locationError, setLocationError] = useState(false);
+  const [locationAttempt, setLocationAttempt] = useState(0);
+  const local = Boolean(onSaveOverride);
+  useEffect(() => {
+    if (local) return;
+    let canceled = false;
+    setLocationReady(false); setLocationError(false);
+    void readRecordLocations(supabase, [item.id]).then((locations) => {
+      if (!canceled) { setLocation(locations.get(item.id) || null); setLocationReady(true); }
+    }).catch(() => { if (!canceled) setLocationError(true); });
+    return () => { canceled = true; };
+  }, [item.id, local, locationAttempt]);
 
-    const recordTime = timeValue ? new Date(timeValue) : new Date(item.record_time);
-    if (Number.isNaN(recordTime.getTime())) {
+  async function save() {
+    if (saving || !locationReady) return;
+
+    const recordTime = localDateTimeInputToIso(timeValue, item.record_time);
+    if (!recordTime) {
       showToast(copy.invalid_time);
       return;
     }
 
     const patch = {
       note: note.trim(),
-      record_time: recordTime.toISOString(),
+      location: normalizeRecordLocation(location),
+      record_time: recordTime,
     };
 
     setSaving(true);
@@ -1317,10 +1280,10 @@ function MobileRecordEditPanel({
         error = err;
       }
     } else {
-      const result = await supabase
-        .from("records")
-        .update(patch)
-        .eq("id", item.id);
+      const result = await supabase.rpc("save_record_details", {
+        p_record_id: item.id, p_note: patch.note, p_record_time: patch.record_time,
+        p_location: patch.location,
+      });
       error = result.error;
     }
     setSaving(false);
@@ -1370,27 +1333,13 @@ function MobileRecordEditPanel({
           />
         </label>
 
-        <label style={mobileEditFieldStyle}>
-          <span style={mobileEditLabelStyle}>{copy.record_location}</span>
-          <input
-            value={copy.location_not_saved}
-            disabled
-            style={mobileEditDisabledInputStyle}
-            aria-label={copy.location_reserved}
-          />
-        </label>
-
-        <div style={mobileEditFieldStyle}>
-          <span style={mobileEditLabelStyle}>{copy.image_order}</span>
-          <div style={mobileEditHintStyle}>
-            {copy.image_order_hint}
-          </div>
-        </div>
+        <RecordLocationField value={location} onChange={setLocation} language={language} disabled={saving || !locationReady} />
+        {locationError ? <p role="alert" style={mobileEditHintStyle}>{language === "zh" ? "地点读取失败，请重试后保存。" : "Location could not be loaded. Retry before saving."}<button type="button" onClick={() => setLocationAttempt((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button></p> : null}
 
         <button
           type="button"
           onClick={() => void save()}
-          disabled={saving}
+          disabled={saving || !locationReady}
           style={mobileEditSaveButtonStyle}
         >
           {saving ? t.saving : t.save}
@@ -1419,12 +1368,7 @@ function MobileRecordEditPanel({
 }
 
 function toDateTimeLocalValue(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return offsetDate.toISOString().slice(0, 16);
+  return value ? toLocalDateTimeInputValue(value) : "";
 }
 
 const mobileRecordMediaGridStyle = {

@@ -71,7 +71,8 @@ test("mobile My Space is single-line and taxonomy actions move to long press", a
   assert.doesNotMatch(archivePage, /storageUsageLabel/);
   assert.match(archivePage, /sourceTrailingSlot=\{isMobileViewport \? \([\s\S]*?\+\{t\.nav\.project\}/);
   assert.match(workspace, /flexWrap: singleLine \? "nowrap" : "wrap"/);
-  assert.match(workspace, /overflowX: singleLine \? "auto"/);
+  assert.match(workspace, /gridTemplateColumns: singleLine \? "1fr 1.25fr 1fr auto"/);
+  assert.doesNotMatch(workspace, /overflowX:/);
 
   assert.match(taxonomy, /setTimeout\(\(\) => \{[\s\S]*?onLongPress\(\)[\s\S]*?\}, 520\)/);
   assert.match(taxonomy, /onContextMenu=/);

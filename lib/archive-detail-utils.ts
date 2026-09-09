@@ -20,7 +20,8 @@ export function formatDateTime(value?: string | null) {
 function getLocalDayStartTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  // Count calendar dates: local midnights can be 23 or 25 hours apart at DST changes.
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 export function getDayNumber(start: string, current: string) {
