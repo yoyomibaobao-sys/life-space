@@ -1,4 +1,5 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import type { PlantingRegion } from "@/lib/planting-region";
 
 export type DiscoveryProjectFeedRow = {
   archive_id: string;
@@ -34,6 +35,7 @@ export type DiscoveryProjectFeedItem = Omit<
   has_public_help: boolean;
   view_count: number;
   follower_count: number;
+  project_region: PlantingRegion | null;
   profile_country: string | null;
   profile_region_name: string | null;
   profile_city: string | null;
