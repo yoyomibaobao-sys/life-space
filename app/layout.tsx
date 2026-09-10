@@ -8,6 +8,7 @@ import MobileBackNavigation from "@/components/MobileBackNavigation";
 import KeyboardLayoutGuard from "@/components/KeyboardLayoutGuard";
 import LocalOwnerContextSync from "@/components/LocalOwnerContextSync";
 import LocalOriginMigration from "@/components/LocalOriginMigration";
+import AppUpdateNotifier from "@/components/AppUpdateNotifier";
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -61,6 +62,7 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <MobileBackNavigation />
         </Suspense>
+        <AppUpdateNotifier />
         <AnalyticsTracker />
         <Navbar />
         <main className="app-main">{children}</main>
