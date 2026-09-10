@@ -36,12 +36,20 @@ export function DiscoverProjectCard({
     item.archive_ended_at
   );
   const ownerName = item.profile_display_name?.trim() || t.discover.default_grower;
-  const region = getCompactCardLocation({
+  const projectRegion = item.project_region
+    ? getCompactCardLocation({
+        city: item.project_region.city_name,
+        region: item.project_region.region_name,
+        country: item.project_region.country_name,
+      })
+    : "";
+  const profileRegion = getCompactCardLocation({
     city: item.profile_city,
     region: item.profile_region_name,
     country: item.profile_country,
     fallback: item.profile_region,
   });
+  const region = projectRegion || profileRegion;
   const showImage = Boolean(item.display_image_url) && !imageFailed;
 
   return (
@@ -63,10 +71,7 @@ export function DiscoverProjectCard({
             onError={() => setImageFailed(true)}
           />
         ) : (
-          <div
-            className={styles.imagePlaceholder}
-            aria-hidden="true"
-          >
+          <div className={styles.imagePlaceholder} aria-hidden="true">
             <UiIcon name={categoryIcon} size={28} strokeWidth={1.6} />
           </div>
         )}
@@ -74,22 +79,16 @@ export function DiscoverProjectCard({
         {showCategoryBadge || item.has_public_help ? (
           <div className={styles.imageMeta}>
             {showCategoryBadge ? (
-              <span className={styles.categoryChip}>
-                {categoryLabel}
-              </span>
+              <span className={styles.categoryChip}>{categoryLabel}</span>
             ) : null}
             {item.has_public_help ? (
-              <span className={styles.helpChip}>
-                {t.discover.help_badge}
-              </span>
+              <span className={styles.helpChip}>{t.discover.help_badge}</span>
             ) : null}
           </div>
         ) : null}
 
         <div className={styles.imageTitleArea}>
-          <h2 className={styles.title}>
-            {title}
-          </h2>
+          <h2 className={styles.title}>{title}</h2>
         </div>
       </div>
 
@@ -98,23 +97,23 @@ export function DiscoverProjectCard({
           <InlineRecordSummary text={item.card_summary} time={item.public_activity_at} className={styles.summary} />
         </div>
 
-      <ProjectMetaLine
-        recordCount={item.public_record_count}
-        durationDays={durationDays}
-        ended={Boolean(item.archive_ended_at)}
-        followerCount={item.follower_count}
-        order={["follow", "record", "duration"]}
-        compactProjectStats
-        style={{ flexWrap: "nowrap", gap: 8 }}
-        className={styles.projectMeta}
-      />
+        <ProjectMetaLine
+          recordCount={item.public_record_count}
+          durationDays={durationDays}
+          ended={Boolean(item.archive_ended_at)}
+          followerCount={item.follower_count}
+          order={["follow", "record", "duration"]}
+          compactProjectStats
+          style={{ flexWrap: "nowrap", gap: 8 }}
+          className={styles.projectMeta}
+        />
 
-      <div className={styles.ownerRow}>
-        <span className={styles.owner}>
-          {ownerName}
-          {region ? ` · ${region}` : ""}
-        </span>
-      </div>
+        <div className={styles.ownerRow}>
+          <span className={styles.owner}>
+            {ownerName}
+            {region ? ` · ${region}` : ""}
+          </span>
+        </div>
       </div>
     </Link>
   );
