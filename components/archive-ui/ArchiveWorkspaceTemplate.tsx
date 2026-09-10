@@ -3,6 +3,10 @@
 import {
   cloneElement,
   isValidElement,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
   type CSSProperties,
   type ReactElement,
   type ReactNode,
@@ -47,6 +51,47 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   sourceTrailingSlot,
   children,
 }: Props<T>) {
+  const [online, setOnline] = useState(true);
+  const sourceBeforeOfflineRef = useRef<T | null>(null);
+  const localOption = useMemo(
+    () => sourceOptions.find((item) => item.value === "local"),
+    [sourceOptions],
+  );
+
+  useEffect(() => {
+    const refresh = () => setOnline(navigator.onLine);
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("offline", refresh);
+    return () => {
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("offline", refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!localOption) return;
+
+    if (!online) {
+      if (activeSource !== localOption.value) {
+        if (sourceBeforeOfflineRef.current === null) {
+          sourceBeforeOfflineRef.current = activeSource;
+        }
+        onSelectSource(localOption.value);
+      }
+      return;
+    }
+
+    const previousSource = sourceBeforeOfflineRef.current;
+    if (previousSource !== null) {
+      sourceBeforeOfflineRef.current = null;
+      if (activeSource === localOption.value && previousSource !== activeSource) {
+        onSelectSource(previousSource);
+      }
+    }
+  }, [activeSource, localOption, online, onSelectSource]);
+
+  const visibleSourceOptions = !online && localOption ? [localOption] : sourceOptions;
   const trailingSlot = isValidElement(sourceTrailingSlot)
     ? cloneElement(
         sourceTrailingSlot as ReactElement<{ style?: CSSProperties }>,
@@ -72,8 +117,8 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
     <>
       {statsText ? <div style={statsStyle}>{statsText}</div> : null}
 
-      <section style={sourceSwitchStyle(Boolean(sourceTrailingSlot))}>
-        {sourceOptions.map((item) => (
+      <section style={sourceSwitchStyle(Boolean(sourceTrailingSlot), visibleSourceOptions.length)}>
+        {visibleSourceOptions.map((item) => (
           <button
             key={item.value}
             type="button"
@@ -109,15 +154,17 @@ const statsStyle: CSSProperties = {
   marginBottom: 18,
 };
 
-function sourceSwitchStyle(singleLine: boolean): CSSProperties {
+function sourceSwitchStyle(singleLine: boolean, optionCount: number): CSSProperties {
+  const compactColumns = Math.max(1, Math.min(optionCount, 3));
   return {
     margin: "0 0 12px",
     display: singleLine ? "grid" : "flex",
-    gridTemplateColumns: singleLine ? "1fr 1.25fr 1fr auto" : undefined,
+    gridTemplateColumns: singleLine
+      ? `repeat(${compactColumns}, minmax(0, 1fr)) auto`
+      : undefined,
     alignItems: "center",
     gap: singleLine ? 6 : 8,
     flexWrap: singleLine ? "nowrap" : "wrap",
-
   };
 }
 
