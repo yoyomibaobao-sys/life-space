@@ -114,8 +114,8 @@ begin
       and not u.is_internal_test
       and u.registration_sequence in (1, 2)
       and u.account_number in (
-        format('LSa-%s-0001', v_year),
-        format('LSa-%s-0002', v_year)
+        format('LSa%s001', v_year),
+        format('LSa%s002', v_year)
       )
       and u.signup_trial_slot is null
       and u.signup_trial_granted_at is null
