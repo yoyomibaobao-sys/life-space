@@ -11,6 +11,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const config = read("capacitor.config.ts");
   const packageJson = read("package.json");
   const source = read("mobile-offline-src/main.tsx");
+  const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
 
   assert.match(config, /url: serverUrl\.origin/);
@@ -27,8 +28,10 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /capture="environment"/);
   assert.match(source, /copy.camera/);
   assert.match(source, /copy.album/);
+  assert.match(parityStyles, /\.brand-mode,[\s\S]*\.offline-status[\s\S]*display: none/);
+  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
+  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
   assert.match(generated, /life-space-local-offline/);
-  assert.match(generated, /本地离线模式/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
 });
