@@ -149,16 +149,16 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '9'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc5'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '9' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc5' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '10'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc6'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '10' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc6' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
 });
 
-test("Android updates are manual, official-only, and verified before the system installer", () => {
+test("Android updates notify automatically, stay official-only, and require the system installer", () => {
   const activity = read(
     "android/app/src/main/java/com/youshi/cultivation/MainActivity.java",
   );
@@ -168,6 +168,7 @@ test("Android updates are manual, official-only, and verified before the system 
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const filePaths = read("android/app/src/main/res/xml/file_paths.xml");
   const updatePage = read("app/app-update/page.tsx");
+  const updateNotifier = read("components/AppUpdateNotifier.tsx");
   const versionEntry = read("components/AndroidAppVersionEntry.tsx");
   const profile = read("app/profile/page.tsx");
   const home = read("app/page.tsx");
@@ -190,6 +191,11 @@ test("Android updates are manual, official-only, and verified before the system 
 
   assert.match(updatePage, /NativeAppUpdate\.installUpdate/);
   assert.match(updatePage, /value\.version_code <= currentVersion\.versionCode/);
+  assert.match(updateNotifier, /Capacitor\.isPluginAvailable\("NativeAppUpdate"\)/);
+  assert.match(updateNotifier, /release\.version_code <= currentVersion\.versionCode/);
+  assert.match(updateNotifier, /CHECK_INTERVAL_MS = 60 \* 60 \* 1000/);
+  assert.match(updateNotifier, /DISMISS_INTERVAL_MS = 24 \* 60 \* 60 \* 1000/);
+  assert.match(layout, /<AppUpdateNotifier \/>/);
   assert.match(versionEntry, /App\.getInfo\(\)/);
   assert.match(versionEntry, /value\.version_code > currentVersionCode/);
   assert.match(profile, /<AndroidAppVersionEntry \/>/);
