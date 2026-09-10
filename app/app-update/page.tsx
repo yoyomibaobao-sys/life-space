@@ -51,7 +51,7 @@ function withVersion(template: string, version: string) {
 }
 
 export default function AndroidAppUpdatePage() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [currentVersion, setCurrentVersion] = useState<NativeAppVersion | null>(null);
   const [availableVersion, setAvailableVersion] = useState("");
   const [state, setState] = useState<UpdateState>("loading");
@@ -129,6 +129,10 @@ export default function AndroidAppUpdatePage() {
   const actionLabel = state === "permission_required"
     ? t.app_update.continue_update
     : t.app_update.check_now;
+  const legacyVersionLabel = language === "en" ? "Legacy app" : "旧版 APP";
+  const legacyUpdateMessage = language === "en"
+    ? "This installation uses the older update component. Complete this one upgrade in the system browser; later versions can update directly inside the app."
+    : "当前安装的是旧版更新组件。请先通过系统浏览器完成这一次覆盖安装；升级后，后续版本即可在 APP 内直接更新。";
 
   return (
     <main className={styles.page}>
@@ -146,7 +150,8 @@ export default function AndroidAppUpdatePage() {
         <div className={styles.versionRow}>
           <span>{t.app_update.current_version}</span>
           <strong>
-            {currentVersion?.versionName || t.app_update.reading_version}
+            {currentVersion?.versionName ||
+              (state === "unsupported" ? legacyVersionLabel : t.app_update.reading_version)}
           </strong>
         </div>
 
@@ -172,7 +177,7 @@ export default function AndroidAppUpdatePage() {
         ) : null}
         {state === "unsupported" ? (
           <div className={styles.noticeBlock}>
-            <p>{t.app_update.unsupported}</p>
+            <p>{legacyUpdateMessage}</p>
             <a href="https://life-space.uk/download/android" target="_blank" rel="noreferrer">
               {t.app_update.website_download}
             </a>
