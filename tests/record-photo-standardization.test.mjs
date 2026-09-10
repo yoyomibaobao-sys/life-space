@@ -33,13 +33,14 @@ test("new local and cloud record photos share the 1800px quality-82 standard", a
   assert.doesNotMatch(localDb, /MAX_LOCAL_IMAGE_EDGE = 1600/);
 });
 
-test("local-to-cloud transfer reuses the existing app standard without recompression", async () => {
+test("local-to-cloud transfer reuses sanitized photos and sanitizes a copy of legacy photos", async () => {
   const sync = await source("lib/local-to-cloud-sync.ts");
 
   assert.doesNotMatch(sync, /compressImageFile/);
-  assert.match(sync, /const uploadFile = originalFile/);
-  assert.match(sync, /width: params\.image\.width \?\? null/);
-  assert.match(sync, /height: params\.image\.height \?\? null/);
+  assert.match(sync, /params\.image\.metadata_stripped \? null[\s\S]*standardizeRecordPhotoFile\(originalFile, \{ requireSanitized: true \}\)/);
+  assert.match(sync, /const uploadFile = standard\?\.file \|\| originalFile/);
+  assert.match(sync, /width: standard\?\.width \?\? params\.image\.width \?\? null/);
+  assert.match(sync, /height: standard\?\.height \?\? params\.image\.height \?\? null/);
 });
 
 test("the web UI states the standard and does not promise automatic system-album writes", async () => {

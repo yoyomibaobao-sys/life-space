@@ -1,10 +1,14 @@
+import { formatPlantingRegion, type PlantingRegion } from "@/lib/planting-region";
+import { formatAccountNumber } from "@/lib/account-number";
+import { readRecordLocations } from "@/lib/record-location-cloud";
+import type { RecordLocation } from "@/lib/record-location";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import { SimpleZipBuilder } from "@/lib/export-zip";
 import { getMediaStoragePathFromUrl } from "@/lib/media-urls";
 import { isMissingDatabaseColumn } from "@/lib/supabase-schema-compat";
-import { formatPreciseDateTime } from "@/lib/date-time";
+import { formatPreciseDateTime, normalizeTimeZone } from "@/lib/date-time";
 
 type ProfileRow = {
   id: string;
@@ -20,6 +24,7 @@ type ProfileRow = {
 };
 
 type ArchiveRow = {
+  planting_region?: PlantingRegion | null;
   id: string;
   title: string;
   category: string | null;
@@ -50,6 +55,7 @@ type ArchiveCycleRow = {
 };
 
 type RecordRow = {
+  location?: RecordLocation | null;
   id: string;
   archive_id: string | null;
   cycle_id: string | null;
@@ -155,17 +161,13 @@ function padNumber(value: number, length = 2) {
   return String(value).padStart(length, "0");
 }
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: string | null | undefined, timeZone: string) {
   if (!value) return "未记录时间";
-  return formatPreciseDateTime(value) || String(value);
+  return formatPreciseDateTime(value, timeZone) || String(value);
 }
 
-function formatDateForFile(value = new Date()) {
-  return [
-    value.getFullYear(),
-    padNumber(value.getMonth() + 1),
-    padNumber(value.getDate()),
-  ].join("-");
+function formatDateForFile(timeZone: string, value = new Date()) {
+  return formatPreciseDateTime(value, timeZone).slice(0, 10).replaceAll("/", "-");
 }
 
 function uniquePath(basePath: string, usedPaths: Set<string>) {
@@ -289,7 +291,7 @@ async function downloadUrlAsBytes({
 }
 
 function buildReadme() {
-  return `有时·耕作导出说明\n\n1. 双击 index.html，可以查看所有项目目录。\n2. 每个项目文件夹里也有一个 index.html，可以查看该项目的记录时间线。\n3. images 文件夹里保存该项目相关图片或视频。\n4. data.json 和各项目 records.json 保存档案、轮和记录的结构化备份。\n5. 导出仅包含你本人创建的项目、档案、轮、记录及记录中的图片或视频。集市发布、经验卡成品和互动数据不在导出范围内；经验卡引用的本人原始记录和原始图片仍会包含在记录备份中。\n`;
+  return `有时·耕作导出说明\n\n1. 双击 index.html，可以查看所有项目目录。\n2. 每个项目文件夹里也有一个 index.html，可以查看该项目的记录时间线。\n3. images 文件夹里保存该项目相关图片或视频。\n4. data.json 和各项目 records.json 保存档案、期和记录的结构化备份。\n5. 导出仅包含你本人创建的项目、档案、期、记录及记录中的图片或视频。集市发布、经验卡成品和互动数据不在导出范围内；经验卡引用的本人原始记录和原始图片仍会包含在记录备份中。\n`;
 }
 
 function buildRootHtml({
@@ -297,16 +299,18 @@ function buildRootHtml({
   archives,
   archiveDirs,
   exportedAt,
+  timeZone,
 }: {
   profile: ProfileRow | null;
   archives: ArchiveRow[];
   archiveDirs: Map<string, string>;
   exportedAt: string;
+  timeZone: string;
 }) {
   const archiveLinks = archives.map((archive) => {
     const dir = archiveDirs.get(archive.id) || "";
     const category = getArchiveCategoryLabel(archive.category);
-    return `<li><a href="${escapeHtml(dir)}index.html">${escapeHtml(archive.title || "未命名项目")}</a><span>${escapeHtml(category)} · ${escapeHtml(formatDate(archive.created_at))}</span></li>`;
+    return `<li><a href="${escapeHtml(dir)}index.html">${escapeHtml(archive.title || "未命名项目")}</a><span>${escapeHtml(category)} · ${escapeHtml(formatDate(archive.created_at, timeZone))}</span></li>`;
   }).join("\n");
 
   return `<!doctype html>
@@ -326,7 +330,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
     <h1>${escapeHtml(profile?.username || "我的空间")}</h1>
     <p>人生，是一个场的旅行，也是一场修行。<br />有时，记录你的照料、陪伴、滋养与成长，让生命有迹可循。</p>
     <div class="grid">
-      <div class="meta"><strong>导出时间</strong><br />${escapeHtml(exportedAt)}</div>
+      <div class="meta"><strong>导出时间</strong><br />${escapeHtml(exportedAt)}<br />${escapeHtml(timeZone)}</div>
       <div class="meta"><strong>项目数量</strong><br />${archives.length}</div>
       <div class="meta"><strong>账号邮箱</strong><br />${escapeHtml(profile?.email || "未记录")}</div>
       <div class="meta"><strong>所在地区</strong><br />${escapeHtml([profile?.country_name, profile?.region_name, profile?.city_name].filter(Boolean).join(" · ") || profile?.location || "未记录")}</div>
@@ -349,16 +353,18 @@ function buildArchiveHtml({
   cycles,
   records,
   mediaByRecord,
+  timeZone,
 }: {
   archive: ArchiveRow;
   cycles: ArchiveCycleRow[];
   records: RecordRow[];
   mediaByRecord: Map<string, ExportMedia[]>;
+  timeZone: string;
 }) {
   const cycleNames = new Map(
     cycles.map((cycle) => [
       cycle.id,
-      cycle.display_name?.trim() || `第${cycle.cycle_no}轮`,
+      cycle.display_name?.trim() || `第${cycle.cycle_no}期`,
     ])
   );
   const recordItems = records.map((record) => {
@@ -378,7 +384,7 @@ function buildArchiveHtml({
 
     const cycleName = record.cycle_id ? cycleNames.get(record.cycle_id) : null;
     return `<article class="record">
-  <div class="time">${escapeHtml(formatDate(record.photo_time || record.record_time || record.created_at))}${cycleName ? ` · ${escapeHtml(cycleName)}` : " · 未分轮"}</div>
+  <div class="time">${escapeHtml(formatDate(record.record_time || record.photo_time || record.created_at, timeZone))}${cycleName ? ` · ${escapeHtml(cycleName)}` : " · 未分期"}</div>
   <div class="note">${escapeHtml(record.note || "（无文字记录）").replace(/\n/g, "<br />")}</div>
   ${images ? `<div class="images">${images}</div>` : ""}
 </article>`;
@@ -405,8 +411,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
       <span class="tag">${archive.is_public ? "公开" : "私密"}</span>
       <span class="tag">${archive.status === "ended" ? "已结束" : "进行中"}</span>
     </div>
+    ${archive.planting_region ? `<p class="muted">种植地区：${escapeHtml(formatPlantingRegion(archive.planting_region))}</p>` : ""}
     ${archive.note ? `<p>${escapeHtml(archive.note).replace(/\n/g, "<br />")}</p>` : ""}
-    <p class="muted">创建时间：${escapeHtml(formatDate(archive.created_at))} · 记录数量：${records.length}</p>
+    <p class="muted">创建时间：${escapeHtml(formatDate(archive.created_at, timeZone))} · 记录数量：${records.length} · 时区：${escapeHtml(timeZone)}</p>
   </section>
   ${recordItems || `<section class="record">暂无记录</section>`}
 </div>
@@ -415,6 +422,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0
 }
 
 export async function GET(request: Request) {
+  const timeZone = normalizeTimeZone(request.headers.get("X-Client-Timezone"));
   const estimateOnly = new URL(request.url).searchParams.get("estimate") === "1";
   let supabase = await getSupabaseServer();
   let {
@@ -444,7 +452,7 @@ export async function GET(request: Request) {
     return new Response("请先登录后再导出。", { status: 401 });
   }
 
-  const [profileResult, archivesResult] = await Promise.all([
+  const [profileResult, archivesResult, accountResult] = await Promise.all([
     supabase
       .from("profiles")
       .select("id,email,username,location,avatar_url,country_code,country_name,region_name,city_name,created_at")
@@ -452,9 +460,10 @@ export async function GET(request: Request) {
       .maybeSingle(),
     supabase
       .from("archives")
-      .select("id,title,category,note,system_name,species_name_snapshot,cover_image_url,cover_image_path,is_public,status,created_at,ended_at,record_count,last_record_time,cycle_enabled,next_cycle_name")
+      .select("id,title,category,planting_region,note,system_name,species_name_snapshot,cover_image_url,cover_image_path,is_public,status,created_at,ended_at,record_count,last_record_time,cycle_enabled,next_cycle_name")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true }),
+    supabase.from("users").select("account_number, registration_year, registration_sequence, is_internal_test").eq("id", user.id).maybeSingle(),
   ]);
 
   if (profileResult.error) {
@@ -465,6 +474,7 @@ export async function GET(request: Request) {
     return new Response(`读取项目失败：${archivesResult.error.message}`, { status: 500 });
   }
 
+  if (accountResult.error) return new Response("读取账号编号失败，请稍后重试。", { status: 500 });
   const profile = (profileResult.data || null) as ProfileRow | null;
   const archives = (archivesResult.data || []) as ArchiveRow[];
   const archiveIds = archives.map((archive) => archive.id);
@@ -478,7 +488,7 @@ export async function GET(request: Request) {
       .order("started_at", { ascending: true });
 
     if (cyclesResult.error) {
-      return new Response(`读取轮记录失败：${cyclesResult.error.message}`, { status: 500 });
+      return new Response(`读取期记录失败：${cyclesResult.error.message}`, { status: 500 });
     }
 
     cycles = (cyclesResult.data || []) as ArchiveCycleRow[];
@@ -501,6 +511,12 @@ export async function GET(request: Request) {
   }
 
   const recordIds = records.map((record) => record.id);
+  try {
+    const locations = await readRecordLocations(supabase, recordIds);
+    records = records.map((record) => ({ ...record, location: locations.get(record.id) || null }));
+  } catch {
+    return new Response("读取记录地点失败，请稍后重试；原始资料未变更。", { status: 500 });
+  }
   let mediaRows: ExportMedia[] = [];
   if (recordIds.length > 0) {
     const mediaWithCaptureResult = await supabase
@@ -623,7 +639,7 @@ export async function GET(request: Request) {
           zip.addFile(zipPath, downloaded.bytes);
         } else {
           item.download_failed = true;
-          failedDownloads.push(`${archive.title || archive.id} / ${formatDate(record.record_time || record.created_at)} / ${item.id}`);
+          failedDownloads.push(`${archive.title || archive.id} / ${formatDate(record.record_time || record.created_at, timeZone)} / ${item.id}`);
         }
       }
     }
@@ -664,7 +680,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const exportedAt = formatPreciseDateTime(new Date());
+  const exportedAt = formatPreciseDateTime(new Date(), timeZone);
 
   for (const archive of archives) {
     const archiveDir = archiveDirs.get(archive.id) || `项目档案/${archive.id}/`;
@@ -672,7 +688,7 @@ export async function GET(request: Request) {
     const archiveCycles = cyclesByArchive.get(archive.id) || [];
     zip.addFile(
       `${archiveDir}index.html`,
-      buildArchiveHtml({ archive, cycles: archiveCycles, records: archiveRecords, mediaByRecord })
+      buildArchiveHtml({ archive, cycles: archiveCycles, records: archiveRecords, mediaByRecord, timeZone })
     );
     zip.addFile(
       `${archiveDir}records.json`,
@@ -693,9 +709,11 @@ export async function GET(request: Request) {
 
   const exportData = {
     exported_at: new Date().toISOString(),
+    display_time_zone: timeZone,
     product: "有时·耕作",
-    scope: "仅包含用户本人创建的项目、档案、轮、记录及记录媒体；不包含集市发布、经验卡成品或互动数据。",
+    scope: "仅包含用户本人创建的项目、档案、期、记录及记录媒体；不包含集市发布、经验卡成品或互动数据。",
     profile,
+    account_identity: accountResult.data ? { ...accountResult.data, display_number: formatAccountNumber(accountResult.data.account_number) || null } : null,
     archives: archives.map((archive) => ({
       ...archive,
       cycles: cyclesByArchive.get(archive.id) || [],
@@ -707,7 +725,7 @@ export async function GET(request: Request) {
   };
 
   zip.addFile("README.txt", buildReadme());
-  zip.addFile("index.html", buildRootHtml({ profile, archives, archiveDirs, exportedAt }));
+  zip.addFile("index.html", buildRootHtml({ profile, archives, archiveDirs, exportedAt, timeZone }));
   zip.addFile("data.json", JSON.stringify(exportData, null, 2));
 
   if (failedDownloads.length > 0) {
@@ -722,13 +740,13 @@ export async function GET(request: Request) {
     zipBytes.byteOffset,
     zipBytes.byteOffset + zipBytes.byteLength
   );
-  const fileName = `有时耕作-我的记录-${formatDateForFile()}.zip`;
+  const fileName = `有时耕作-我的记录-${formatDateForFile(timeZone)}.zip`;
 
   return new Response(zipBody, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="youshi-export-${formatDateForFile()}.zip"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      "Content-Disposition": `attachment; filename="youshi-export-${formatDateForFile(timeZone)}.zip"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
       "Content-Length": String(zipBytes.length),
       "Cache-Control": "no-store",
     },

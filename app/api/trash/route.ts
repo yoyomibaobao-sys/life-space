@@ -98,7 +98,7 @@ export async function GET(request: Request) {
             : type === "archive"
               ? "未命名项目"
             : type === "cycle"
-              ? "轮"
+              ? "期"
               : type === "record"
                 ? "记录"
                 : "照片",

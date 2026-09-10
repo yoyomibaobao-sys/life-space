@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { buildAuthEmailRedirect } from "@/lib/auth-return";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, buildRegisterHref, getSafeReturnTo } from "@/lib/auth-return";
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
@@ -48,7 +49,7 @@ function CheckEmailContent() {
         email,
         options: {
           captchaToken: captchaToken || undefined,
-          emailRedirectTo: `${window.location.origin}${returnTo}`,
+          emailRedirectTo: buildAuthEmailRedirect("signup", returnTo),
         },
       });
 

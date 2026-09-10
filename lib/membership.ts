@@ -76,7 +76,7 @@ export function getMembershipPlanLabel(
       case "trial":
         return "Cloud trial";
       case "basic":
-        return "Cloud Membership";
+        return "Plus";
       case "large":
         return "Large storage";
       case "seller":
@@ -84,14 +84,14 @@ export function getMembershipPlanLabel(
       case "admin":
         return "Administrator account";
       default:
-        return "Not set";
+        return plan ? "Unknown plan" : "Registered user";
     }
   }
   switch (plan) {
     case "trial":
-      return "云空间体验";
+      return "云体验";
     case "basic":
-      return "云会员";
+      return "Plus";
     case "large":
       return "大空间";
     case "seller":
@@ -99,8 +99,25 @@ export function getMembershipPlanLabel(
     case "admin":
       return "管理账号";
     default:
-      return "未设置";
+      return plan ? "未知方案" : "注册用户";
   }
+}
+
+/** User type is separate from administrator privileges and request status. */
+export function getUserTypeLabel({ signedIn, membership, loading = false, failed = false }: {
+  signedIn: boolean;
+  membership?: MyMembership | null;
+  loading?: boolean;
+  failed?: boolean;
+}, language: Language = "zh") {
+  if (loading) return language === "en" ? "Loading…" : "读取中…";
+  if (failed) return language === "en" ? "Unavailable" : "暂时无法读取";
+  if (!signedIn) return language === "en" ? "Visitor" : "游客";
+  // An admin plan is a legacy access grant, not a paid customer tier.
+  if (membership?.plan === "admin") return language === "en" ? "Registered user" : "注册用户";
+  if (membership?.plan === "trial" && membership.can_create_content !== true) return language === "en" ? "Registered user" : "注册用户";
+  if (membership?.plan === "large") return "Plus";
+  return getMembershipPlanLabel(membership?.plan, language);
 }
 
 export function getMembershipStatusLabel(
@@ -166,8 +183,8 @@ export function getMembershipSummary(
 ) {
   if (!membership) {
     return language === "en"
-      ? "Local user · Free local features"
-      : "本地用户 · 免费使用本地功能";
+      ? "Registered user · Free local features"
+      : "注册用户 · 免费使用本地功能";
   }
 
   const label = getMembershipPlanLabel(membership.plan, language);

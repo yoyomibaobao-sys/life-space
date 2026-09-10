@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { getSupabaseServer } from "@/lib/supabaseServer";
-import { hasValidMutationOrigin } from "@/lib/server/authenticated-request";
+import { hasValidMutationOrigin, getAuthenticatedRequestClient } from "@/lib/server/authenticated-request";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,29 +32,26 @@ export async function POST(request: Request) {
     return errorResponse("会员 ID 不正确", 400);
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return errorResponse("请先登录管理员账号", 401);
-  }
+  const auth = await getAuthenticatedRequestClient(request);
+  if (!auth) return errorResponse("请先登录管理员账号", 401);
+  const { supabase, userId } = auth;
 
   const { data: isAdmin, error: adminError } = await supabase.rpc("is_app_admin", {
-    p_user_id: user.id,
+    p_user_id: userId,
   });
 
   if (adminError || !isAdmin) {
     return errorResponse("没有管理员权限", 403);
   }
 
-  if (targetUserId === user.id) {
-    return errorResponse("不能删除当前管理员自己", 400);
+  if (targetUserId === userId) {
+    return errorResponse("不能停用当前管理员自己", 400);
   }
 
   const adminClient = getSupabaseAdmin();
+  const { data: targetAdmin, error: targetAdminError } = await adminClient.rpc("is_app_admin", { p_user_id: targetUserId });
+  if (targetAdminError) return errorResponse("无法核对目标账号权限", 500);
+  if (targetAdmin) return errorResponse("管理员账号不能停用会员权益", 400);
   const { data: membership, error: membershipError } = await adminClient
     .from("user_memberships")
     .select("user_id, plan, status, trial_started_at")
@@ -67,11 +63,11 @@ export async function POST(request: Request) {
   }
 
   if (!membership) {
-    return errorResponse("会员不存在", 404);
+    return errorResponse("该账号没有会员权益，若需删除账号请使用永久注销", 404);
   }
 
   if (membership.plan === "admin") {
-    return errorResponse("管理员账号不能通过删除会员按钮处理", 400);
+    return errorResponse("管理员账号不能停用会员权益", 400);
   }
 
   if (membership.status === "canceled") {
@@ -100,7 +96,7 @@ export async function POST(request: Request) {
     .single();
 
   if (updateError) {
-    return errorResponse("删除会员失败", 500);
+    return errorResponse("停用会员权益失败", 500);
   }
 
   return NextResponse.json({

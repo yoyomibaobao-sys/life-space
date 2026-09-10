@@ -56,7 +56,12 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
             border: "1px solid #4f844b",
             background: "#4f844b",
             color: "#fff",
-            fontWeight: 850,
+            fontWeight: 600,
+            fontSize: 14,
+            marginLeft: 8,
+            padding: "0 8px",
+            minWidth: 0,
+            whiteSpace: "nowrap",
             boxShadow: "0 3px 9px rgba(79,132,75,0.16)",
           },
         },
@@ -73,7 +78,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
             key={item.value}
             type="button"
             onClick={() => onSelectSource(item.value)}
-            style={sourceButtonStyle(activeSource === item.value)}
+            style={sourceButtonStyle(activeSource === item.value, Boolean(sourceTrailingSlot))}
           >
             {item.label} {item.count}
           </button>
@@ -107,25 +112,26 @@ const statsStyle: CSSProperties = {
 function sourceSwitchStyle(singleLine: boolean): CSSProperties {
   return {
     margin: "0 0 12px",
-    display: "flex",
+    display: singleLine ? "grid" : "flex",
+    gridTemplateColumns: singleLine ? "1fr 1.25fr 1fr auto" : undefined,
     alignItems: "center",
     gap: singleLine ? 6 : 8,
     flexWrap: singleLine ? "nowrap" : "wrap",
-    overflowX: singleLine ? "auto" : undefined,
-    WebkitOverflowScrolling: singleLine ? "touch" : undefined,
+
   };
 }
 
-function sourceButtonStyle(active: boolean): CSSProperties {
+function sourceButtonStyle(active: boolean, compact: boolean): CSSProperties {
   return {
     minHeight: 34,
-    padding: "0 12px",
+    padding: compact ? "0 4px" : "0 12px",
+    minWidth: 0,
     borderRadius: 999,
     border: active ? "1px solid #9fc796" : "1px solid #dfe7d9",
     background: active ? "#eef7e8" : "#fff",
     color: active ? "#2f6a2c" : "#5d6957",
     fontSize: 13,
-    fontWeight: active ? 800 : 700,
+    fontWeight: 600,
     cursor: "pointer",
     whiteSpace: "nowrap",
     flexShrink: 0,

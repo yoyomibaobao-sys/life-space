@@ -1,5 +1,8 @@
 "use client";
 
+import CategoryLabel from "@/components/ui/CategoryLabel";
+
+
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
@@ -85,7 +88,7 @@ export default function PublicExperiencePage() {
               className={filterStyles.button}
               aria-pressed={categoryFilter === option.value}
             >
-              {getArchiveCategoryLabel(option.value, language)}
+              <CategoryLabel label={getArchiveCategoryLabel(option.value, language)} />
             </button>
           ))}
         </section>

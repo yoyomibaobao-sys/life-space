@@ -1,32 +1,33 @@
 .tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  padding: 5px;
+  grid-template-columns: 1fr 1.65fr 1.65fr 1fr;
+  gap: 3px;
+  padding: 0;
   margin-bottom: 10px;
-  border: 1px solid #dfe8dc;
+  border: 0;
   border-radius: 16px;
-  background: #fff;
+  background: transparent;
 }
 
 .tabs button {
   min-width: 0;
   min-height: 40px;
-  padding: 6px 2px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: #667361;
+  padding: 4px 3px;
+  border: 1px solid #e2e8df;
+  border-radius: 999px;
+  background: #fff;
+  color: #314131;
   font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-weight: 600;
+  line-height: 1.25;
   cursor: pointer;
 }
 
 .tabs button[aria-current="page"] {
-  background: #eaf5e6;
-  color: #315f30;
-  font-weight: 850;
+  background: #f0fff4;
+  border-color: #8bc58b;
+  color: #2e7d32;
+  font-weight: 700;
 }
 
 .tabs:lang(en) button {
@@ -35,5 +36,5 @@
 }
 
 @media (max-width: 759px) {
-  .tabs button { font-size: 12.5px; }
+  .tabs button { font-size: 14px; }
 }

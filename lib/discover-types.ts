@@ -59,7 +59,7 @@ export const filterOptions: FilterOption[] = [
   { value: "system", label: "农法设施" },
   { value: "insect_fish", label: "虫鱼生态" },
   { value: "other", label: "其他" },
-  { value: "help", label: "只看求助" },
+  { value: "help", label: "仅求助" },
 ];
 
 export function getDiscoverFilterOptions(language: Language): FilterOption[] {

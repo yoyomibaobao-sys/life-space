@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import CloudTrialEntry from "@/components/CloudTrialEntry";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { buildLoginHref } from "@/lib/auth-return";
@@ -47,7 +48,7 @@ import {
 } from "@/lib/system-name-candidates";
 import {
   canCreateMembershipContent,
-  getMembershipPlanLabel,
+  getUserTypeLabel,
   getCreateContentBlockedText,
   normalizeMembershipRpcResult,
   type MyMembership,
@@ -150,6 +151,8 @@ export default function ArchivePage() {
   const [deleteArchiveTarget, setDeleteArchiveTarget] = useState<ArchiveItem | null>(null);
   const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MyMembership | null>(null);
+  const [membershipFailed, setMembershipFailed] = useState(false);
+  const [membershipLoading, setMembershipLoading] = useState(true);
   const [experienceCardCount, setExperienceCardCount] = useState(0);
   const [spaceProfile, setSpaceProfile] = useState<SpaceProfile | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -234,6 +237,8 @@ export default function ArchivePage() {
   async function loadData() {
     if (loadingRef.current) return;
     loadingRef.current = true;
+    setMembershipLoading(true);
+    setMembershipFailed(false);
 
     try {
       const {
@@ -457,6 +462,7 @@ export default function ArchivePage() {
       setSpeciesList(speciesRows);
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
+        setMembershipFailed(true);
         setMembership(null);
       } else {
         setMembership(normalizeMembershipRpcResult(membershipResult.data));
@@ -470,7 +476,10 @@ export default function ArchivePage() {
         setExperienceCardCount(Number(experienceCardCountResult.count || 0));
       }
       setSpaceProfile((profileResult.data as SpaceProfile | null) || null);
+    } catch {
+      setMembershipFailed(true);
     } finally {
+      setMembershipLoading(false);
       loadingRef.current = false;
     }
   }
@@ -1154,7 +1163,7 @@ export default function ArchivePage() {
     (activeSource === "local" ? 0 : archiveCount) +
     (activeSource === "cloud" ? 0 : localArchives.length);
   const contentBlocked = !canCreateMembershipContent(membership);
-  const membershipLabel = getMembershipPlanLabel(membership?.plan, language);
+  const membershipLabel = getUserTypeLabel({ signedIn: !!currentOwnerContext, membership, loading: membershipLoading, failed: membershipFailed }, language);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
     0,
@@ -2072,6 +2081,8 @@ export default function ArchivePage() {
           </>
         )}
       </section>
+
+      {currentOwnerContext && !membershipLoading && !membershipFailed && !membership ? <CloudTrialEntry /> : null}
 
       <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
         sourceOptions={[

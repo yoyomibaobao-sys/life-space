@@ -24,7 +24,9 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /deleteLocalArchive/);
   assert.match(source, /deleteLocalRecord/);
   assert.match(source, /accept="image\/\*"/);
-  assert.doesNotMatch(source, /capture=/);
+  assert.match(source, /capture="environment"/);
+  assert.match(source, /copy.camera/);
+  assert.match(source, /copy.album/);
   assert.match(generated, /life-space-local-offline/);
   assert.match(generated, /本地离线模式/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);

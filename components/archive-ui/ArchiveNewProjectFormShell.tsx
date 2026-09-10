@@ -24,6 +24,7 @@ type Props = {
   onProjectTitleChange: (value: string) => void;
   systemControl: ReactNode;
   sourceControl: ReactNode;
+  plantingRegionControl?: ReactNode;
   note: string;
   onNoteChange: (value: string) => void;
   notice: ReactNode;
@@ -50,6 +51,7 @@ export default function ArchiveNewProjectFormShell({
   onProjectTitleChange,
   systemControl,
   sourceControl,
+  plantingRegionControl,
   note,
   onNoteChange,
   notice,
@@ -156,6 +158,8 @@ export default function ArchiveNewProjectFormShell({
               ))}
             </div>
           </ArchiveNewProjectField>
+
+          {plantingRegionControl}
 
           <ArchiveNewProjectField label={copy.source}>
             {sourceControl}

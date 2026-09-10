@@ -1,5 +1,9 @@
 "use client";
 
+import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
+import CategoryLabel from "@/components/ui/CategoryLabel";
+
+
 import {
   useRef,
   useState,
@@ -131,8 +135,8 @@ export default function ArchiveTaxonomyPanel({
     <>
       <section style={panelStyle(compact)}>
         {showCategoryRow ? (
-          <div style={categoryRowStyle(compact, compactEnglish)}>
-            <button type="button" onClick={onReset} style={pillStyle(!activeCategory, compact, compactEnglish)}>
+          <div className={compact ? `${filterStyles.row} ${filterStyles.standard}` : undefined} style={compact ? undefined : categoryRowStyle(compact, compactEnglish)}>
+            <button type="button" onClick={onReset} aria-pressed={!activeCategory} className={compact ? filterStyles.button : undefined} style={compact ? undefined : pillStyle(!activeCategory, compact, compactEnglish)}>
               {t.archive_workspace.all}
             </button>
             {archiveCategoryOptions.map((option) => (
@@ -140,10 +144,10 @@ export default function ArchiveTaxonomyPanel({
                 key={option.value}
                 type="button"
                 onClick={() => onSelectCategory(option.value)}
-                style={pillStyle(activeCategory === option.value && !activeSubcategoryId, compact, compactEnglish)}
+                aria-pressed={activeCategory === option.value && !activeSubcategoryId} className={compact ? filterStyles.button : undefined} style={compact ? undefined : pillStyle(activeCategory === option.value && !activeSubcategoryId, compact, compactEnglish)}
                 title={getArchiveCategoryDescription(option.value, language)}
               >
-                {getArchiveCategoryLabel(option.value, language)}
+                <CategoryLabel label={getArchiveCategoryLabel(option.value, language)} />
               </button>
             ))}
           </div>

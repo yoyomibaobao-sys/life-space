@@ -1,5 +1,8 @@
 "use client";
 
+import CategoryLabel from "@/components/ui/CategoryLabel";
+
+
 import type { CSSProperties } from "react";
 import {
   archiveCategoryOptions,
@@ -52,7 +55,7 @@ export default function ArchiveCategoryTabs({
             onClick={() => onSelect(tab.value)}
             style={tabButtonStyle(active, mobileMode)}
           >
-            {tab.label}（{tab.count}）
+            <CategoryLabel label={tab.label} />（{tab.count}）
           </button>
         );
       })}

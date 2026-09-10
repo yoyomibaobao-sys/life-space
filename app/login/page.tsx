@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
+import { buildAuthEmailRedirect } from "@/lib/auth-return";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
@@ -146,7 +147,7 @@ export default function LoginPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: buildAuthEmailRedirect("recovery"),
         captchaToken: captchaToken || undefined,
       });
 

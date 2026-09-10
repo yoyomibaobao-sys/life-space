@@ -254,13 +254,20 @@ export async function compressImageFile(
 }
 
 export async function standardizeRecordPhotoFile(
-  file: File
+  file: File,
+  options: { requireSanitized?: boolean } = {}
 ): Promise<CompressImageResult> {
   const originalSize = file.size;
   const standard = await renderImageVariant(file, {
     maxWidthOrHeight: RECORD_PHOTO_MAX_EDGE,
     quality: RECORD_PHOTO_QUALITY,
   });
+
+  if (options.requireSanitized && !standard.wasGenerated) {
+    // Cloud photos can later become public. A failed re-encode must not upload
+    // the original camera file with its private EXIF GPS metadata.
+    throw new Error("无法安全处理照片，请重试或选择 JPG、PNG、WebP 图片。 / Could not process this photo safely. Try a JPG, PNG or WebP image.");
+  }
 
   return {
     file: standard.file,

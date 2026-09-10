@@ -1,3 +1,4 @@
+import { loadDefaultRecordLocation } from "@/lib/record-location";
 import { createImageThumbnailFile, standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -48,7 +49,7 @@ async function uploadQuickCapturePhoto({
   userId: string;
   onStoredPath: (path: string) => void;
 }) {
-  const compressed = await standardizeRecordPhotoFile(file);
+  const compressed = await standardizeRecordPhotoFile(file, { requireSanitized: true });
   const uploadFile = compressed.file;
   const thumbnail = await createImageThumbnailFile(uploadFile);
   const thumbFile = thumbnail.wasGenerated ? thumbnail.file : null;
@@ -208,21 +209,10 @@ export async function saveQuickCaptureAsFirstCloudRecord({
       new Date(value).getTime() > new Date(latest).getTime() ? value : latest,
     capture.createdAt || new Date().toISOString(),
   );
-  const { data: record, error: recordError } = await supabase
-    .from("records")
-    .insert([{
-      archive_id: archiveId,
-      cycle_id: null,
-      note: "",
-      user_id: userId,
-      visibility: "public",
-      photo_time: recordTime,
-      record_time: recordTime,
-      upload_time: new Date().toISOString(),
-      status_tag: null,
-    }])
-    .select("id")
-    .single();
+  const { data: record, error: recordError } = await supabase.rpc("create_record_with_location", {
+    p_archive_id: archiveId, p_cycle_id: null, p_note: "", p_visibility: "public",
+    p_record_time: recordTime, p_status_tag: null, p_location: loadDefaultRecordLocation(userId),
+  }).single<{ id: string }>();
 
   if (recordError || !record?.id) {
     console.error("quick capture record create failed:", recordError);

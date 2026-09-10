@@ -43,6 +43,7 @@ export default function MarketCommentsSection({
   const [replyTarget, setReplyTarget] = useState<MarketCommentItem | null>(null);
   const [repliesSupported, setRepliesSupported] = useState(false);
 
+  const isOwner = Boolean(currentUserId && currentUserId === postOwnerId);
   const canWrite = Boolean(currentUserId && postStatus === "active");
 
   useEffect(() => {
@@ -138,6 +139,7 @@ export default function MarketCommentsSection({
   }
 
   async function handleSubmitComment() {
+    if (isOwner && (!replyTarget || replyTarget.user_id === currentUserId)) return;
     const content = commentText.trim();
 
     if (!currentUserId) {
@@ -320,7 +322,7 @@ export default function MarketCommentsSection({
         )}
       </div>
 
-      <div id="market-comment-composer" style={formWrapStyle}>
+      {!isOwner || replyTarget ? <div id="market-comment-composer" style={formWrapStyle}>
         {canWrite ? (
           <>
               {replyTarget ? (
@@ -360,16 +362,16 @@ export default function MarketCommentsSection({
                   {submitting ? t.market.sending : t.market.send_comment}
                 </button>
               </div>
-              <div style={consultationHintStyle}>
+              {!isOwner ? <div style={consultationHintStyle}>
                 {t.market.comment_permission_hint}
-              </div>
+              </div> : null}
             </>
         ) : currentUserId && postStatus !== "active" ? (
           <div style={closedNoticeStyle}>{t.market.comments_closed}</div>
         ) : (
           <div style={closedNoticeStyle}>{t.market.login_to_comment}</div>
         )}
-      </div>
+      </div> : null}
     </section>
   );
 }

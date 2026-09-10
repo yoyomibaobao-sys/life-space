@@ -1,4 +1,5 @@
 "use client";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -280,6 +281,7 @@ export default function Navbar() {
 
     const mobileHeaderActions = (
       <div style={mobileTopActionGroupStyle}>
+        {!user ? <LanguageSwitcher compact /> : null}
         {isMobileDiscoverIndexPath(pathname) ? (
           <button
             type="button"
@@ -332,7 +334,7 @@ export default function Navbar() {
             fallbackHref={getMobileBackFallback(pathname)}
             showBack={shouldShowMobileBackButton(pathname)}
             ariaLabel={t.nav.back}
-            right={isMobileDiscoverIndexPath(pathname) || canShowMobileCreateAction || (!user && shouldShowMobileLoginAction(pathname)) ? mobileHeaderActions : undefined}
+            right={isMobileDiscoverIndexPath(pathname) || canShowMobileCreateAction || !user ? mobileHeaderActions : undefined}
           />
         ) : null}
 
@@ -442,6 +444,7 @@ export default function Navbar() {
         </div>
       ) : (
         <div style={getGuestAreaStyle(isCompact)}>
+          <LanguageSwitcher compact />
           <DesktopUtilityActions feedbackLabel={t.feedback} />
 
           <Link href={buildLoginHref(pathname)} style={loginLinkStyle}>

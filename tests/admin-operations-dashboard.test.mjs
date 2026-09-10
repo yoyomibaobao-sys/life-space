@@ -109,7 +109,7 @@ test("account closure is distinct from membership suspension and requires an aud
 
   assert.match(deleteRoute, /hasValidMutationOrigin\(request\)/);
   assert.match(deleteRoute, /body\.confirmPermanent !== true/);
-  assert.match(deleteRoute, /confirmationText !== requiredConfirmation/);
+  assert.match(deleteRoute, /!matchesAccountConfirmation\(confirmationText, requiredConfirmation\)/);
   assert.match(deleteRoute, /userId === requestedBy/);
   assert.match(deleteRoute, /targetMembership\?\.plan === "admin"/);
   assert.match(deleteRoute, /\.from\("account_deletion_audits"\)/);
@@ -134,7 +134,7 @@ test("account closure is distinct from membership suspension and requires an aud
   assert.match(membershipRoute, /hasValidMutationOrigin\(request\)/);
 
   assert.match(page, /permanent_account_delete/);
-  assert.match(page, /accountDeleteConfirmation\.trim\(\) !==/);
+  assert.match(page, /!matchesAccountConfirmation\(accountDeleteConfirmation, requiredConfirmation\)/);
   assert.match(page, /accountDeleteAcknowledged/);
   assert.match(page, /supabase\.auth\.getSession\(\)/);
   assert.match(page, /Authorization: `Bearer \$\{session\.access_token\}`/);

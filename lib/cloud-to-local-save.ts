@@ -1,3 +1,5 @@
+import { normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-region";
+import { readRecordLocations } from "@/lib/record-location-cloud";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import type { MediaItem } from "@/lib/domain-types";
 import {
@@ -68,6 +70,7 @@ type CloudArchiveRow = {
   species_name_snapshot?: string | null;
   system_name?: string | null;
   source?: string | null;
+  planting_region?: PlantingRegion | null;
   note?: string | null;
   archive_summary?: string | null;
   cycle_enabled?: boolean | null;
@@ -334,6 +337,7 @@ export async function saveCloudArchiveToLocal(params: {
     updated_at: cycle.updated_at,
   })) satisfies CloudArchiveLocalCycleInput[];
   const recordIds = records.map((record) => record.id);
+  const locations = await readRecordLocations(supabase, recordIds);
 
   const media = recordIds.length > 0
     ? await readAllCloudMedia(recordIds)
@@ -361,6 +365,7 @@ export async function saveCloudArchiveToLocal(params: {
       const localRecord = await stageCloudArchiveLocalRecord({
         session,
         cloud_record_id: record.id,
+        location: locations.get(record.id) || null,
         cloud_cycle_id: record.cycle_id,
         note: record.note,
         record_time: record.record_time,
@@ -454,6 +459,7 @@ export async function saveCloudArchiveToLocal(params: {
       system_name: archive.system_name,
       species_name: archive.species_name_snapshot,
       source: archive.source,
+      planting_region: normalizePlantingRegion(archive.planting_region),
       note: archive.note,
       archive_summary: archive.archive_summary,
       cycle_enabled: Boolean(archive.cycle_enabled),

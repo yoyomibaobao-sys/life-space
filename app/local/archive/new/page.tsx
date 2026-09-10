@@ -8,6 +8,9 @@ import ArchiveNewProjectFormShell, {
 } from "@/components/archive-ui/ArchiveNewProjectFormShell";
 import SystemNameSelector, { type SystemNameSelectorCandidate } from "@/components/archive/SystemNameSelector";
 import { supabase } from "@/lib/supabase";
+import PlantingRegionField from "@/components/archive/PlantingRegionField";
+import { usePlantingRegionDraft } from "@/lib/use-planting-region";
+import { normalizePlantingRegion } from "@/lib/planting-region";
 import {
   archiveCategoryOptions,
   type ArchiveCategory,
@@ -48,6 +51,7 @@ export default function NewLocalArchivePage() {
   const { language, t } = useLanguage();
   const copy = t.archive;
   const router = useRouter();
+  const { plantingRegion, changePlantingRegion } = usePlantingRegionDraft();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ArchiveCategory | null>(null);
   const [plantId, setPlantId] = useState("");
@@ -115,6 +119,11 @@ export default function NewLocalArchivePage() {
       return;
     }
 
+    if (category === "plant" && !normalizePlantingRegion(plantingRegion)) {
+      showToast(language === "en" ? "Enter the planting country and city / district." : "请填写项目实际种植的国家及城市／区县。");
+      return;
+    }
+
     const cleanSystemName = (systemName || systemSearch).trim();
     if (!cleanSystemName) {
       showToast(copy.system_name_required_error);
@@ -139,6 +148,7 @@ export default function NewLocalArchivePage() {
           system_name: cleanSystemName,
           species_name: category === "plant" ? cleanSystemName : "",
           source: source.trim() || null,
+          planting_region: normalizePlantingRegion(plantingRegion),
           note,
           local_owner_user_id: currentUser?.id || null,
           local_owner_email: currentUser?.email || null,
@@ -259,6 +269,7 @@ export default function NewLocalArchivePage() {
           />
         </div>
       }
+      plantingRegionControl={category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={changePlantingRegion} language={language} required /> : null}
       sourceControl={
         <input
           value={source}
