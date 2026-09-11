@@ -3,28 +3,25 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 
+import { getPayPalPaymentCopy } from "@/lib/i18n/paypal-payment";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function MembershipPaymentSuccessPage() {
   const { language } = useLanguage();
-  const zh = language !== "en";
+  const copy = getPayPalPaymentCopy(language);
 
   return (
     <main style={pageStyle}>
       <section style={cardStyle}>
         <div style={markStyle}>✓</div>
-        <h1 style={titleStyle}>{zh ? "PayPal 付款成功" : "PayPal payment complete"}</h1>
-        <p style={bodyStyle}>
-          {zh
-            ? "Plus 云会员已自动开通或顺延一年，无需上传付款凭证，也无需等待人工确认。"
-            : "Plus Cloud Membership has been activated or extended by one year automatically. No payment proof or manual confirmation is required."}
-        </p>
+        <h1 style={titleStyle}>{copy.success_title}</h1>
+        <p style={bodyStyle}>{copy.success_body}</p>
         <div style={actionsStyle}>
           <Link href="/profile" style={primaryButtonStyle}>
-            {zh ? "返回我的信息" : "Back to profile"}
+            {copy.success_profile}
           </Link>
           <Link href="/membership" style={secondaryButtonStyle}>
-            {zh ? "查看会员权益" : "View membership"}
+            {copy.success_membership}
           </Link>
         </div>
       </section>
