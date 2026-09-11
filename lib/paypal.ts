@@ -177,7 +177,6 @@ export async function createPayPalMembershipOrder(input: {
         payment_source: {
           paypal: {
             experience_context: {
-              payment_method_preference: "IMMEDIATE_PAYMENT_REQUIRED",
               landing_page: "LOGIN",
               shipping_preference: "NO_SHIPPING",
               user_action: "PAY_NOW",
