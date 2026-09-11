@@ -43,11 +43,16 @@ type PaymentOrderRpcResult = Partial<PaymentOrder> & {
   error_message?: string | null;
 };
 
+type PayPalCheckoutResult = {
+  ok?: boolean;
+  approveUrl?: string;
+  redirectUrl?: string;
+  error?: string;
+};
+
 const DEFAULT_ALIPAY_PAYMENT_QR_URL =
   "/payments/alipay-cloud-membership-64.jpg";
 const DEFAULT_ALIPAY_PAYEE_NAME = "有时空间";
-const DEFAULT_PAYPAL_PAYMENT_URL =
-  "https://www.paypal.com/ncp/payment/PZEB4Z4SDSLLE";
 const configuredAlipayQrUrl =
   process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL?.trim() ||
   DEFAULT_ALIPAY_PAYMENT_QR_URL;
@@ -91,11 +96,25 @@ export default function MembershipPaymentPage() {
   const [creating, setCreating] = useState<PaymentOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [paypalStarting, setPaypalStarting] = useState(false);
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const zh = language !== "en";
+  const paymentIntro = zh
+    ? "PayPal 付款成功后自动开通一年；支付宝付款后上传凭证，由管理员确认。"
+    : "PayPal activates one year automatically after payment. Alipay still uses proof upload and administrator confirmation.";
+  const paypalOrderHint = zh
+    ? "生成订单后进入 PayPal 支付 US$8；付款成功后自动开通一年，无需上传凭证。"
+    : "Create an order and pay US$8 through PayPal. One year is activated automatically after payment, with no proof upload.";
+  const paypalPaymentSteps = zh
+    ? "进入 PayPal 核对 US$8 订单并完成付款。付款确认后会自动返回并开通或顺延一年 Plus。"
+    : "Open PayPal, verify the US$8 order, and complete payment. After confirmation, Plus is activated or extended by one year automatically.";
+  const paypalCheckoutFailed = zh
+    ? "暂时无法进入 PayPal 付款，请稍后重试。"
+    : "PayPal checkout could not be opened. Try again later.";
 
   useEffect(() => {
     let active = true;
@@ -171,6 +190,61 @@ export default function MembershipPaymentPage() {
     showToast(t.membership_page.order_created);
   }
 
+  async function startPayPalCheckout() {
+    if (
+      !order ||
+      order.payment_method !== "paypal" ||
+      order.status !== "pending_payment" ||
+      paypalStarting
+    ) {
+      return;
+    }
+
+    setPaypalStarting(true);
+    setErrorMessage("");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+
+      const response = await fetch("/api/paypal/checkout", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ paymentId: order.id }),
+      });
+      const result = (await response.json().catch(() => null)) as PayPalCheckoutResult | null;
+
+      if (!response.ok || !result?.ok) {
+        console.error("start PayPal checkout failed:", result);
+        setErrorMessage(paypalCheckoutFailed);
+        showToast(paypalCheckoutFailed);
+        return;
+      }
+
+      const destination = result.redirectUrl || result.approveUrl;
+      if (!destination) {
+        setErrorMessage(paypalCheckoutFailed);
+        showToast(paypalCheckoutFailed);
+        return;
+      }
+
+      window.location.assign(destination);
+    } catch (error) {
+      console.error("start PayPal checkout error:", error);
+      setErrorMessage(paypalCheckoutFailed);
+      showToast(paypalCheckoutFailed);
+    } finally {
+      setPaypalStarting(false);
+    }
+  }
+
   async function copyPaymentEmail() {
     if (!userEmail) return;
     try {
@@ -232,7 +306,7 @@ export default function MembershipPaymentPage() {
   }
 
   async function submitProof() {
-    if (!order || !userId || !proofFile || submitting) {
+    if (!order || !userId || !proofFile || submitting || order.payment_method !== "alipay") {
       if (!proofFile) showToast(t.membership_page.proof_required);
       return;
     }
@@ -294,18 +368,13 @@ export default function MembershipPaymentPage() {
         ? t.membership_page.order_status_needs_update
         : t.membership_page.order_status_pending
     : "";
-  const orderDestinationUrl = order
-    ? safePaymentDestinationUrl(
-        order.payment_destination_url,
-        order.payment_method === "alipay"
-          ? ALIPAY_PAYMENT_QR_URL
-          : DEFAULT_PAYPAL_PAYMENT_URL
-      )
+  const orderDestinationUrl = order?.payment_method === "alipay"
+    ? safePaymentDestinationUrl(order.payment_destination_url, ALIPAY_PAYMENT_QR_URL)
     : "";
   const orderDestinationLabel = order?.payment_destination_label
     || (order?.payment_method === "alipay" ? ALIPAY_PAYEE_NAME : "LifeSpace");
   const orderDestinationReady = Boolean(
-    orderDestinationUrl && orderDestinationLabel
+    order?.payment_method === "alipay" && orderDestinationUrl && orderDestinationLabel
   );
   const expiryText = order?.expires_at
     ? new Intl.DateTimeFormat(language === "en" ? "en" : "zh-CN", {
@@ -330,7 +399,7 @@ export default function MembershipPaymentPage() {
         <div className="mobile-app-desktop-only" style={eyebrowStyle}>{t.membership_page.payment_label}</div>
         <h1 className="mobile-app-desktop-only" style={titleStyle}>{t.membership_page.payment_page_title}</h1>
         <h2 className="mobile-app-block-only" style={{ ...cardTitleStyle, fontSize: 20 }}>{t.membership_page.payment_label}</h2>
-        <p style={subtitleStyle}>{t.membership_page.payment_order_intro}</p>
+        <p style={subtitleStyle}>{paymentIntro}</p>
       </header>
 
       {errorMessage ? <div style={errorStyle}>{errorMessage}</div> : null}
@@ -389,7 +458,7 @@ export default function MembershipPaymentPage() {
               <article style={paymentCardStyle}>
                 <div style={paymentLabelStyle}>{t.membership_page.overseas_users}</div>
                 <div style={priceStyle}>{t.membership_page.overseas_price}</div>
-                <p style={bodyStyle}>{t.membership_page.paypal_order_hint}</p>
+                <p style={bodyStyle}>{paypalOrderHint}</p>
                 <button type="button" onClick={() => void createOrder("paypal")} disabled={creating !== null} style={primaryButtonStyle}>
                   {creating === "paypal" ? t.membership_page.creating_order : t.membership_page.create_paypal_order}
                 </button>
@@ -419,7 +488,7 @@ export default function MembershipPaymentPage() {
                       type="button"
                       style={cancelOrderButtonStyle}
                       onClick={() => void cancelPendingOrder()}
-                      disabled={canceling}
+                      disabled={canceling || paypalStarting}
                     >
                       {canceling
                         ? t.membership_page.canceling_order
@@ -452,15 +521,17 @@ export default function MembershipPaymentPage() {
                     <div>
                       <h2 style={stepTitleStyle}>{t.membership_page.complete_payment}</h2>
                       <p style={bodyStyle}>
-                        {order.payment_method === "alipay" ? t.membership_page.alipay_payment_steps : t.membership_page.paypal_payment_steps}
+                        {order.payment_method === "alipay" ? t.membership_page.alipay_payment_steps : paypalPaymentSteps}
                       </p>
-                      <div style={paymentNoteStyle}>
-                        <span>{t.membership_page.payment_note_email}</span>
-                        <strong>{userEmail}</strong>
-                        <button type="button" onClick={() => void copyPaymentEmail()} style={copyButtonStyle}>
-                          {t.membership_page.copy_payment_email}
-                        </button>
-                      </div>
+                      {order.payment_method === "alipay" ? (
+                        <div style={paymentNoteStyle}>
+                          <span>{t.membership_page.payment_note_email}</span>
+                          <strong>{userEmail}</strong>
+                          <button type="button" onClick={() => void copyPaymentEmail()} style={copyButtonStyle}>
+                            {t.membership_page.copy_payment_email}
+                          </button>
+                        </div>
+                      ) : null}
                       {order.payment_method === "alipay" ? (
                         orderDestinationReady ? (
                           <div style={alipayQrPanelStyle}>
@@ -492,32 +563,51 @@ export default function MembershipPaymentPage() {
                           </div>
                         )
                       ) : (
-                        <a href={orderDestinationUrl} target="_blank" rel="noreferrer" style={primaryButtonStyle}>
-                          {t.membership_page.overseas_payment_action}
-                        </a>
+                        <div style={{ display: "grid", gap: 9, marginTop: 12 }}>
+                          <button
+                            type="button"
+                            onClick={() => void startPayPalCheckout()}
+                            disabled={paypalStarting}
+                            style={{
+                              ...primaryButtonStyle,
+                              opacity: paypalStarting ? 0.7 : 1,
+                            }}
+                          >
+                            {paypalStarting
+                              ? (zh ? "正在进入 PayPal..." : "Opening PayPal...")
+                              : t.membership_page.overseas_payment_action}
+                          </button>
+                          <div style={paypalAutoNoticeStyle}>
+                            {zh
+                              ? "付款成功后自动开通，无需上传付款凭证。"
+                              : "Membership activates automatically after payment. No proof upload is needed."}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </section>
 
-                  <section style={stepCardStyle}>
-                    <div style={stepNumberStyle}>2</div>
-                    <div style={{ minWidth: 0 }}>
-                      <h2 style={stepTitleStyle}>{t.membership_page.upload_payment_proof}</h2>
-                      <p style={bodyStyle}>{t.membership_page.upload_payment_proof_hint}</p>
-                      <label style={fieldLabelStyle} htmlFor="payment-proof">{t.membership_page.payment_proof}</label>
-                      <input
-                        id="payment-proof"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        onChange={selectProof}
-                        style={fileInputStyle}
-                      />
-                      {proofFile ? <div style={fileNameStyle}>{proofFile.name}</div> : null}
-                      <button type="button" onClick={() => void submitProof()} disabled={submitting || !proofFile} style={primaryButtonStyle}>
-                        {submitting ? t.membership_page.submitting_order : t.membership_page.submit_for_confirmation}
-                      </button>
-                    </div>
-                  </section>
+                  {order.payment_method === "alipay" ? (
+                    <section style={stepCardStyle}>
+                      <div style={stepNumberStyle}>2</div>
+                      <div style={{ minWidth: 0 }}>
+                        <h2 style={stepTitleStyle}>{t.membership_page.upload_payment_proof}</h2>
+                        <p style={bodyStyle}>{t.membership_page.upload_payment_proof_hint}</p>
+                        <label style={fieldLabelStyle} htmlFor="payment-proof">{t.membership_page.payment_proof}</label>
+                        <input
+                          id="payment-proof"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={selectProof}
+                          style={fileInputStyle}
+                        />
+                        {proofFile ? <div style={fileNameStyle}>{proofFile.name}</div> : null}
+                        <button type="button" onClick={() => void submitProof()} disabled={submitting || !proofFile} style={primaryButtonStyle}>
+                          {submitting ? t.membership_page.submitting_order : t.membership_page.submit_for_confirmation}
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
                 </>
               )}
             </>
@@ -569,6 +659,7 @@ const stepCardStyle: CSSProperties = { ...cardStyle, gridTemplateColumns: "32px 
 const stepNumberStyle: CSSProperties = { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", color: "#fff", background: "#547d4d", fontSize: 14, fontWeight: 900 };
 const stepTitleStyle: CSSProperties = { margin: "2px 0 7px", color: "#243123", fontSize: 18 };
 const paymentNoteStyle: CSSProperties = { display: "grid", gap: 5, marginTop: 10, padding: "10px 11px", border: "1px solid #dce6d7", borderRadius: 12, background: "#f8fbf6", color: "#556650", fontSize: 12 };
+const paypalAutoNoticeStyle: CSSProperties = { color: "#5f7059", fontSize: 12, lineHeight: 1.55 };
 const fieldLabelStyle: CSSProperties = { display: "block", margin: "13px 0 6px", color: "#4e5e49", fontSize: 13, fontWeight: 800 };
 const fileInputStyle: CSSProperties = { width: "100%", minHeight: 42, color: "#596554", fontSize: 14 };
 const fileNameStyle: CSSProperties = { margin: "-4px 0 10px", color: "#6c7867", fontSize: 12, overflowWrap: "anywhere" };
