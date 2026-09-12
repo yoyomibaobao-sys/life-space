@@ -88,6 +88,13 @@
   text-underline-offset: 3px;
 }
 
+.websiteLink {
+  display: inline-block;
+  margin-top: 16px;
+  color: #416f39;
+  font-weight: 700;
+}
+
 .primaryButton {
   width: 100%;
   min-height: 48px;
