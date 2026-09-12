@@ -1,72 +1,27 @@
 "use client";
 
-import { App } from "@capacitor/app";
-import { Capacitor } from "@capacitor/core";
 import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useSyncExternalStore, type CSSProperties } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import {
-  ANDROID_RELEASE_MANIFEST_PATH,
-  isAndroidReleaseManifest,
-} from "@/lib/android-release";
+  checkAndroidUpdate, getAndroidUpdateSnapshot, getAndroidUpdateServerSnapshot,
+  subscribeAndroidUpdates,
+} from "@/lib/android-app-update";
 import { useLanguage } from "@/lib/i18n/useLanguage";
-
-type VersionState = "loading" | "latest" | "available" | "unavailable";
 
 export default function AndroidAppVersionEntry() {
   const { t } = useLanguage();
-  const [versionName, setVersionName] = useState("");
-  const [availableVersion, setAvailableVersion] = useState("");
-  const [state, setState] = useState<VersionState>("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadVersionState() {
-      if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") {
-        return;
-      }
-
-      try {
-        const info = await App.getInfo();
-        if (cancelled) return;
-        setVersionName(info.version);
-
-        const response = await fetch(ANDROID_RELEASE_MANIFEST_PATH, {
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error("Release metadata is unavailable.");
-        const value: unknown = await response.json();
-        if (!isAndroidReleaseManifest(value)) {
-          throw new Error("Release metadata is invalid.");
-        }
-
-        const currentVersionCode = Number(info.build);
-        if (
-          Number.isSafeInteger(currentVersionCode) &&
-          value.version_code > currentVersionCode
-        ) {
-          setAvailableVersion(value.version_name);
-          setState("available");
-          return;
-        }
-        setState("latest");
-      } catch {
-        if (!cancelled) setState("unavailable");
-      }
-    }
-
-    void loadVersionState();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const update = useSyncExternalStore(subscribeAndroidUpdates, getAndroidUpdateSnapshot, getAndroidUpdateServerSnapshot);
+  useEffect(() => { void checkAndroidUpdate(); }, []);
+  const versionName = update.currentVersion?.versionName || "";
+  const availableVersion = update.release?.version_name || "";
+  const state = update.status;
 
   const status = state === "available"
     ? t.app_update.available_version.replace("{version}", availableVersion)
     : state === "latest"
       ? t.app_update.latest_short
-      : state === "unavailable"
+      : state === "failed"
         ? t.app_update.check_now
         : t.app_update.reading_version;
 
