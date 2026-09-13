@@ -168,7 +168,8 @@ test("Android updates notify automatically, stay official-only, and require the 
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const filePaths = read("android/app/src/main/res/xml/file_paths.xml");
   const updatePage = read("app/app-update/page.tsx");
-  const updateNotifier = read("components/AppUpdateNotifier.tsx");
+  const updateClient = read("lib/android-app-update.ts");
+  const updateNotice = read("components/AppUpdateNotifier.tsx");
   const versionEntry = read("components/AndroidAppVersionEntry.tsx");
   const profile = read("app/profile/page.tsx");
   const home = read("app/page.tsx");
@@ -189,15 +190,14 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(manifest, /android\.permission\.REQUEST_INSTALL_PACKAGES/);
   assert.match(filePaths, /cache-path name="app_updates" path="updates\/"/);
 
-  assert.match(updatePage, /NativeAppUpdate\.installUpdate/);
-  assert.match(updatePage, /value\.version_code <= currentVersion\.versionCode/);
-  assert.match(updateNotifier, /Capacitor\.isPluginAvailable\("NativeAppUpdate"\)/);
-  assert.match(updateNotifier, /release\.version_code <= currentVersion\.versionCode/);
-  assert.match(updateNotifier, /CHECK_INTERVAL_MS = 60 \* 60 \* 1000/);
-  assert.match(updateNotifier, /DISMISS_INTERVAL_MS = 24 \* 60 \* 60 \* 1000/);
+  assert.match(updatePage, /installAndroidUpdate\(checked\.release\)/);
+  assert.match(updateClient, /NativeAppUpdate\.installUpdate/);
+  assert.match(updateClient, /release\.version_code > currentVersion\.versionCode/);
+  assert.match(versionEntry, /subscribeAndroidUpdates/);
+  assert.match(updateClient, /App\.getInfo\(\)/);
+  assert.match(updateNotice, /checkAndroidUpdate/);
   assert.match(layout, /<AppUpdateNotifier \/>/);
-  assert.match(versionEntry, /App\.getInfo\(\)/);
-  assert.match(versionEntry, /value\.version_code > currentVersionCode/);
+  assert.doesNotMatch(updateNotice, /installAndroidUpdate|installUpdate\(/);
   assert.match(profile, /<AndroidAppVersionEntry \/>/);
   assert.match(profile, /isNativeApp === true[\s\S]*\? \[\][\s\S]*href: "\/download\/android"/);
   assert.doesNotMatch(home, /explicitlyViewingIntroduction/);

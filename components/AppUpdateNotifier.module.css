@@ -92,3 +92,7 @@
     width: min(420px, calc(100vw - 48px));
   }
 }
+
+:global(html[data-app-keyboard-open="true"]) .notice {
+  display: none;
+}
