@@ -15,16 +15,26 @@ type ConfirmResult = {
   service_ends_at?: string;
 };
 
+type ExpectedMembershipPayment = {
+  paymentId: string;
+  orderNumber: string;
+  paypalOrderId: string;
+};
+
 export async function confirmMembershipFromPayPalOrder(
   order: PayPalOrder,
-  expectedPaymentId?: string
+  expected: ExpectedMembershipPayment
 ) {
   const capture = getCompletedMembershipCapture(order);
   if (!capture) {
     throw new Error("PayPal order is not a valid completed LifeSpace membership payment.");
   }
 
-  if (expectedPaymentId && capture.paymentId !== expectedPaymentId) {
+  if (
+    capture.paymentId !== expected.paymentId ||
+    capture.invoiceId !== expected.orderNumber ||
+    capture.paypalOrderId !== expected.paypalOrderId
+  ) {
     throw new Error("PayPal order does not match the LifeSpace payment order.");
   }
 

@@ -5,6 +5,7 @@ import { useEffect, useState, type CSSProperties, type ChangeEvent } from "react
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import { buildLoginHref } from "@/lib/auth-return";
+import { getPayPalPaymentCopy } from "@/lib/i18n/paypal-payment";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
 
@@ -102,19 +103,7 @@ export default function MembershipPaymentPage() {
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const zh = language !== "en";
-  const paymentIntro = zh
-    ? "PayPal 付款成功后自动开通一年；支付宝付款后上传凭证，由管理员确认。"
-    : "PayPal activates one year automatically after payment. Alipay still uses proof upload and administrator confirmation.";
-  const paypalOrderHint = zh
-    ? "生成订单后进入 PayPal 支付 US$8；付款成功后自动开通一年，无需上传凭证。"
-    : "Create an order and pay US$8 through PayPal. One year is activated automatically after payment, with no proof upload.";
-  const paypalPaymentSteps = zh
-    ? "进入 PayPal 核对 US$8 订单并完成付款。付款确认后会自动返回并开通或顺延一年 Plus。"
-    : "Open PayPal, verify the US$8 order, and complete payment. After confirmation, Plus is activated or extended by one year automatically.";
-  const paypalCheckoutFailed = zh
-    ? "暂时无法进入 PayPal 付款，请稍后重试。"
-    : "PayPal checkout could not be opened. Try again later.";
+  const paypalCopy = getPayPalPaymentCopy(language);
 
   useEffect(() => {
     let active = true;
@@ -223,23 +212,23 @@ export default function MembershipPaymentPage() {
 
       if (!response.ok || !result?.ok) {
         console.error("start PayPal checkout failed:", result);
-        setErrorMessage(paypalCheckoutFailed);
-        showToast(paypalCheckoutFailed);
+        setErrorMessage(paypalCopy.checkout_failed);
+        showToast(paypalCopy.checkout_failed);
         return;
       }
 
       const destination = result.redirectUrl || result.approveUrl;
       if (!destination) {
-        setErrorMessage(paypalCheckoutFailed);
-        showToast(paypalCheckoutFailed);
+        setErrorMessage(paypalCopy.checkout_failed);
+        showToast(paypalCopy.checkout_failed);
         return;
       }
 
       window.location.assign(destination);
     } catch (error) {
       console.error("start PayPal checkout error:", error);
-      setErrorMessage(paypalCheckoutFailed);
-      showToast(paypalCheckoutFailed);
+      setErrorMessage(paypalCopy.checkout_failed);
+      showToast(paypalCopy.checkout_failed);
     } finally {
       setPaypalStarting(false);
     }
@@ -399,7 +388,7 @@ export default function MembershipPaymentPage() {
         <div className="mobile-app-desktop-only" style={eyebrowStyle}>{t.membership_page.payment_label}</div>
         <h1 className="mobile-app-desktop-only" style={titleStyle}>{t.membership_page.payment_page_title}</h1>
         <h2 className="mobile-app-block-only" style={{ ...cardTitleStyle, fontSize: 20 }}>{t.membership_page.payment_label}</h2>
-        <p style={subtitleStyle}>{paymentIntro}</p>
+        <p style={subtitleStyle}>{paypalCopy.payment_intro}</p>
       </header>
 
       {errorMessage ? <div style={errorStyle}>{errorMessage}</div> : null}
@@ -458,7 +447,7 @@ export default function MembershipPaymentPage() {
               <article style={paymentCardStyle}>
                 <div style={paymentLabelStyle}>{t.membership_page.overseas_users}</div>
                 <div style={priceStyle}>{t.membership_page.overseas_price}</div>
-                <p style={bodyStyle}>{paypalOrderHint}</p>
+                <p style={bodyStyle}>{paypalCopy.order_hint}</p>
                 <button type="button" onClick={() => void createOrder("paypal")} disabled={creating !== null} style={primaryButtonStyle}>
                   {creating === "paypal" ? t.membership_page.creating_order : t.membership_page.create_paypal_order}
                 </button>
@@ -521,7 +510,9 @@ export default function MembershipPaymentPage() {
                     <div>
                       <h2 style={stepTitleStyle}>{t.membership_page.complete_payment}</h2>
                       <p style={bodyStyle}>
-                        {order.payment_method === "alipay" ? t.membership_page.alipay_payment_steps : paypalPaymentSteps}
+                        {order.payment_method === "alipay"
+                          ? t.membership_page.alipay_payment_steps
+                          : paypalCopy.payment_steps}
                       </p>
                       {order.payment_method === "alipay" ? (
                         <div style={paymentNoteStyle}>
@@ -574,13 +565,11 @@ export default function MembershipPaymentPage() {
                             }}
                           >
                             {paypalStarting
-                              ? (zh ? "正在进入 PayPal..." : "Opening PayPal...")
+                              ? paypalCopy.opening_paypal
                               : t.membership_page.overseas_payment_action}
                           </button>
                           <div style={paypalAutoNoticeStyle}>
-                            {zh
-                              ? "付款成功后自动开通，无需上传付款凭证。"
-                              : "Membership activates automatically after payment. No proof upload is needed."}
+                            {paypalCopy.auto_notice}
                           </div>
                         </div>
                       )}

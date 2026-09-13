@@ -12,8 +12,9 @@ Supabase Storage.
   write/read/delete checks.
 - The Worker compiles with the production Supabase project URL and a modern
   low-privilege publishable key, so email/password sign-in and RLS-protected
-  application data can be tested on the canary. No secret/service-role key is
-  present in the client bundle or Worker configuration.
+  application data can be tested on the canary. Elevated keys are never
+  present in the client bundle; server-only routes receive them only through
+  encrypted Worker secrets when their flows are explicitly enabled for test.
 - `POST /__canary/r2` writes a small random object, reads and verifies it, then
   deletes it. The endpoint requires the `R2_CANARY_SECRET` Worker secret.
 - Existing application media continues to use Supabase Storage. Moving real
@@ -52,11 +53,17 @@ Supabase Storage.
 3. The canary uses the same Supabase public URL and publishable key as the
    application. A publishable key is intentionally safe for browser bundles and
    public source; authorization still comes from the signed-in user's token and
-   Row Level Security. Add `SUPABASE_SERVICE_ROLE_KEY` and a stable
-   `CRON_SECRET` as Worker secrets only when the related server routes and
-   scheduled handler are tested. Never commit those elevated values or paste
-   them into an issue or pull request. Do not add a Cron Trigger to the canary
-   while the Vercel Cron remains active.
+   Row Level Security. Add `SUPABASE_SERVICE_ROLE_KEY` only when testing the
+   trusted PayPal or maintenance routes, and add a stable `CRON_SECRET` only
+   when testing the scheduled handler. Never commit those elevated values or
+   paste them into an issue or pull request. Do not add a Cron Trigger to the
+   canary while the Vercel Cron remains active.
+4. For PayPal Sandbox, store `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, and
+   `PAYPAL_WEBHOOK_ID` as Worker secrets, set `PAYPAL_ENV=sandbox`, and set
+   `PAYPAL_SITE_ORIGIN` to the exact canary HTTPS origin. Register
+   `<canary-origin>/api/paypal/webhook` for `CHECKOUT.ORDER.APPROVED` and
+   `PAYMENT.CAPTURE.COMPLETED`. Live credentials and the production webhook are
+   configured separately only after the Sandbox acceptance flow passes.
 
 The workflow is the preferred non-interactive path. For local-only recovery,
 `npx wrangler login`, `npm run build:vinext`, and `npm run deploy:vinext` remain
@@ -89,12 +96,13 @@ moving real user media.
   the same controlled release, then verify the first Cron Event before relying
   on it.
 - China-mainland access, Google font behavior, all API routes, Android deep
-  links, downloads, the manual PayPal payment return flow, export, and deletion
-  flows must pass on the canary.
-- The current PayPal flow is an external fixed-price payment page followed by a
-  proof upload and administrator confirmation. There is no PayPal webhook or
-  callback endpoint in this repository, so no PayPal callback URL changes are
-  needed for the canary.
+  links, downloads, PayPal Sandbox checkout/return/webhook handling, export,
+  and deletion flows must pass on the canary.
+- PayPal uses server-side Orders v2 creation and capture. Verify both the return
+  route and signed webhook path, including a payer who closes the browser after
+  payment and duplicate-event replay. Before production cutover, create a
+  separate Live webhook at `https://life-space.uk/api/paypal/webhook`, rotate to
+  Live credentials, and set `PAYPAL_SITE_ORIGIN=https://life-space.uk`.
 - Real media can move only after R2 capacity accounting, private-object access,
   deletion queues, export, and rollback have dedicated database migrations and
   isolated tests.

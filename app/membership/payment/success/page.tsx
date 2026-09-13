@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 
+import UiIcon from "@/components/ui/UiIcon";
 import { getPayPalPaymentCopy } from "@/lib/i18n/paypal-payment";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
@@ -13,7 +14,9 @@ export default function MembershipPaymentSuccessPage() {
   return (
     <main style={pageStyle}>
       <section style={cardStyle}>
-        <div style={markStyle}>✓</div>
+        <div style={markStyle}>
+          <UiIcon name="check" size={28} strokeWidth={2.4} />
+        </div>
         <h1 style={titleStyle}>{copy.success_title}</h1>
         <p style={bodyStyle}>{copy.success_body}</p>
         <div style={actionsStyle}>

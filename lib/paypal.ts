@@ -1,41 +1,22 @@
 import "server-only";
 
-export const PAYPAL_MEMBERSHIP_AMOUNT = "8.00";
-export const PAYPAL_MEMBERSHIP_CURRENCY = "USD";
+import {
+  PAYPAL_MEMBERSHIP_AMOUNT,
+  PAYPAL_MEMBERSHIP_CURRENCY,
+  type PayPalOrder,
+} from "@/lib/paypal-order";
 
-export type PayPalLink = {
-  href?: string;
-  rel?: string;
-  method?: string;
-};
-
-export type PayPalCapture = {
-  id?: string;
-  status?: string;
-  amount?: {
-    currency_code?: string;
-    value?: string;
-  };
-  create_time?: string;
-  update_time?: string;
-};
-
-export type PayPalOrder = {
-  id?: string;
-  status?: string;
-  links?: PayPalLink[];
-  purchase_units?: Array<{
-    custom_id?: string;
-    invoice_id?: string;
-    amount?: {
-      currency_code?: string;
-      value?: string;
-    };
-    payments?: {
-      captures?: PayPalCapture[];
-    };
-  }>;
-};
+export {
+  getCompletedMembershipCapture,
+  PAYPAL_MEMBERSHIP_AMOUNT,
+  PAYPAL_MEMBERSHIP_CURRENCY,
+} from "@/lib/paypal-order";
+export type {
+  CompletedPayPalMembershipCapture,
+  PayPalCapture,
+  PayPalLink,
+  PayPalOrder,
+} from "@/lib/paypal-order";
 
 type PayPalEnvironment = "sandbox" | "live";
 
@@ -64,7 +45,10 @@ function getPayPalConfig() {
   const clientId = process.env.PAYPAL_CLIENT_ID?.trim();
   const clientSecret = process.env.PAYPAL_CLIENT_SECRET?.trim();
   const rawEnvironment = process.env.PAYPAL_ENV?.trim().toLowerCase() || "sandbox";
-  const environment: PayPalEnvironment = rawEnvironment === "live" ? "live" : "sandbox";
+  if (rawEnvironment !== "sandbox" && rawEnvironment !== "live") {
+    throw new Error("PAYPAL_ENV must be either sandbox or live.");
+  }
+  const environment: PayPalEnvironment = rawEnvironment;
 
   if (!clientId || !clientSecret) {
     throw new Error("Missing PayPal server credentials.");
@@ -79,6 +63,46 @@ function getPayPalConfig() {
         ? "https://api-m.paypal.com"
         : "https://api-m.sandbox.paypal.com",
   };
+}
+
+export function getPayPalSiteOrigin(requestUrl: string) {
+  const configuredOrigin =
+    process.env.PAYPAL_SITE_ORIGIN?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim();
+
+  if (!configuredOrigin) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Missing PAYPAL_SITE_ORIGIN.");
+    }
+    return new URL(requestUrl).origin;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(configuredOrigin);
+  } catch {
+    throw new Error("PAYPAL_SITE_ORIGIN must be an absolute URL origin.");
+  }
+
+  const isLoopback = ["localhost", "127.0.0.1", "[::1]"].includes(
+    url.hostname
+  );
+  const validProtocol =
+    url.protocol === "https:" || (url.protocol === "http:" && isLoopback);
+  const originOnly =
+    (url.pathname === "/" || url.pathname === "") &&
+    !url.search &&
+    !url.hash &&
+    !url.username &&
+    !url.password;
+
+  if (!validProtocol || !originOnly) {
+    throw new Error(
+      "PAYPAL_SITE_ORIGIN must be an HTTPS origin without a path, query, or credentials."
+    );
+  }
+
+  return url.origin;
 }
 
 async function readJson<T>(response: Response): Promise<T | null> {
@@ -226,35 +250,6 @@ export async function capturePayPalOrder(orderId: string) {
     }
     throw error;
   }
-}
-
-export function getCompletedMembershipCapture(order: PayPalOrder) {
-  const purchaseUnit = order.purchase_units?.[0];
-  const capture = purchaseUnit?.payments?.captures?.find(
-    (item) => item.status === "COMPLETED"
-  );
-
-  if (!order.id || order.status !== "COMPLETED" || !purchaseUnit || !capture?.id) {
-    return null;
-  }
-
-  if (
-    purchaseUnit.amount?.currency_code !== PAYPAL_MEMBERSHIP_CURRENCY ||
-    purchaseUnit.amount?.value !== PAYPAL_MEMBERSHIP_AMOUNT ||
-    capture.amount?.currency_code !== PAYPAL_MEMBERSHIP_CURRENCY ||
-    capture.amount?.value !== PAYPAL_MEMBERSHIP_AMOUNT ||
-    !purchaseUnit.custom_id
-  ) {
-    return null;
-  }
-
-  return {
-    paymentId: purchaseUnit.custom_id,
-    invoiceId: purchaseUnit.invoice_id || null,
-    paypalOrderId: order.id,
-    paypalCaptureId: capture.id,
-    paidAt: capture.create_time || capture.update_time || new Date().toISOString(),
-  };
 }
 
 export async function verifyPayPalWebhookSignature(

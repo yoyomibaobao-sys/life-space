@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   capturePayPalOrder,
   getPayPalOrder,
+  getPayPalSiteOrigin,
   PAYPAL_MEMBERSHIP_AMOUNT,
   PAYPAL_MEMBERSHIP_CURRENCY,
 } from "@/lib/paypal";
@@ -13,6 +14,7 @@ export const runtime = "nodejs";
 
 type PaymentRow = {
   id: string;
+  order_number: string | null;
   status: string;
   payment_method: string;
   currency: string;
@@ -21,7 +23,10 @@ type PaymentRow = {
 };
 
 function redirectTo(request: Request, path: string) {
-  return NextResponse.redirect(new URL(path, request.url), 303);
+  return NextResponse.redirect(
+    new URL(path, getPayPalSiteOrigin(request.url)),
+    303
+  );
 }
 
 export async function GET(request: Request) {
@@ -35,7 +40,7 @@ export async function GET(request: Request) {
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("membership_payments")
-    .select("id,status,payment_method,currency,amount,provider_order_id")
+    .select("id,order_number,status,payment_method,currency,amount,provider_order_id")
     .eq("provider_order_id", paypalOrderId)
     .maybeSingle();
 
@@ -45,7 +50,7 @@ export async function GET(request: Request) {
   }
 
   const payment = data as PaymentRow | null;
-  if (!payment) {
+  if (!payment?.order_number) {
     return redirectTo(request, "/membership/payment?paypal=not-found");
   }
 
@@ -63,11 +68,17 @@ export async function GET(request: Request) {
 
   try {
     let paypalOrder = await getPayPalOrder(paypalOrderId);
-    if (paypalOrder.status !== "COMPLETED") {
+    if (paypalOrder.status === "APPROVED") {
       paypalOrder = await capturePayPalOrder(paypalOrderId);
+    } else if (paypalOrder.status !== "COMPLETED") {
+      throw new Error("PayPal return order is not ready to capture.");
     }
 
-    await confirmMembershipFromPayPalOrder(paypalOrder, payment.id);
+    await confirmMembershipFromPayPalOrder(paypalOrder, {
+      paymentId: payment.id,
+      orderNumber: payment.order_number,
+      paypalOrderId,
+    });
     return redirectTo(request, "/membership/payment/success");
   } catch (error) {
     console.error("PayPal return capture error:", error);

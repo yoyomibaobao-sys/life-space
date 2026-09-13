@@ -71,7 +71,8 @@ test("mobile My Space is single-line and taxonomy actions move to long press", a
   assert.doesNotMatch(archivePage, /storageUsageLabel/);
   assert.match(archivePage, /sourceTrailingSlot=\{isMobileViewport \? \([\s\S]*?\+\{t\.nav\.project\}/);
   assert.match(workspace, /flexWrap: singleLine \? "nowrap" : "wrap"/);
-  assert.match(workspace, /gridTemplateColumns: singleLine \? "1fr 1.25fr 1fr auto"/);
+  assert.match(workspace, /const compactColumns = Math\.max\(1, Math\.min\(optionCount, 3\)\)/);
+  assert.match(workspace, /`repeat\(\$\{compactColumns\}, minmax\(0, 1fr\)\) auto`/);
   assert.doesNotMatch(workspace, /overflowX:/);
 
   assert.match(taxonomy, /setTimeout\(\(\) => \{[\s\S]*?onLongPress\(\)[\s\S]*?\}, 520\)/);
@@ -333,7 +334,8 @@ test("Alipay is direct on-page payment and never falls back to email", async () 
   assert.match(envExample, /NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL=/);
   assert.match(envExample, /NEXT_PUBLIC_ALIPAY_PAYEE_NAME=/);
   assert.match(accessDocs, /订单页直接显示已配置的支付宝经营／商家收款码/);
-  assert.match(accessDocs, /PayPal\.Me 链接必须在 PayPal 账户中标记为商业用途/);
+  assert.match(accessDocs, /PayPal 必须使用获准收款的商家账户和 REST App/);
+  assert.match(accessDocs, /PayPal Sandbox/);
   assert.doesNotMatch(accessDocs, /按订单邮件获取收款方式/);
   assert.ok(qrPoster.length > 100_000);
   assert.equal(qrPoster.subarray(0, 2).toString("hex"), "ffd8");

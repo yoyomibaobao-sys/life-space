@@ -110,7 +110,9 @@ SMTP 密码只保存在服务商或 Supabase 后台，不写入 Git，也不放�
 
 - 清理或私密化 R、000 等旧测试内容；不要误删无法确认所有者的真实内容。
 - 公开项目、记录、经验卡和集市信息均使用访客能理解的标题、封面和状态。
-- 支付宝和 PayPal（如正式保留）各完成至少一次真实的付款、开通、退款闭环测试。
+- PayPal 先在 Sandbox 验证 US$8 一次性订单、返回页、签名 Webhook、关闭付款页后的补开通、重复事件不重复延长，以及错误金额／币种／订单标识被拒绝；通过后再独立配置 Live REST App、Live Webhook 和 `PAYPAL_SITE_ORIGIN=https://life-space.uk`。
+- `PAYPAL_CLIENT_SECRET`、`PAYPAL_WEBHOOK_ID` 和 `SUPABASE_SERVICE_ROLE_KEY` 只存在于服务端部署密钥中；生产 Webhook 只订阅所需事件，不能使用 Sandbox 密钥或回调地址。
+- 支付宝和 PayPal（如正式保留）各完成至少一次真实的付款、开通、退款闭环测试。支付宝走凭证和管理员核对；PayPal 必须由服务端核验并自动开通，无需用户上传凭证。
 - 付款成功、退款、会员到期后的状态在用户页和管理员页一致。
 
 ## 七、最终公开闸门

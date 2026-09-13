@@ -5,6 +5,7 @@ import {
   createPayPalMembershipOrder,
   getPayPalApprovalUrl,
   getPayPalOrder,
+  getPayPalSiteOrigin,
   PAYPAL_MEMBERSHIP_AMOUNT,
   PAYPAL_MEMBERSHIP_CURRENCY,
 } from "@/lib/paypal";
@@ -41,15 +42,10 @@ function jsonError(error: string, status: number) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
-function successUrl(request: Request) {
-  return `${new URL(request.url).origin}/membership/payment/success`;
-}
+const PAYMENT_SUCCESS_PATH = "/membership/payment/success";
 
-async function finishExistingPayPalOrder(
-  request: Request,
-  payment: MembershipPaymentRow
-) {
-  if (!payment.provider_order_id) return null;
+async function finishExistingPayPalOrder(payment: MembershipPaymentRow) {
+  if (!payment.provider_order_id || !payment.order_number) return null;
 
   let paypalOrder = await getPayPalOrder(payment.provider_order_id);
 
@@ -58,11 +54,15 @@ async function finishExistingPayPalOrder(
   }
 
   if (paypalOrder.status === "COMPLETED") {
-    await confirmMembershipFromPayPalOrder(paypalOrder, payment.id);
+    await confirmMembershipFromPayPalOrder(paypalOrder, {
+      paymentId: payment.id,
+      orderNumber: payment.order_number,
+      paypalOrderId: payment.provider_order_id,
+    });
     return NextResponse.json({
       ok: true,
       completed: true,
-      redirectUrl: successUrl(request),
+      redirectUrl: PAYMENT_SUCCESS_PATH,
     });
   }
 
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       completed: true,
-      redirectUrl: successUrl(request),
+      redirectUrl: PAYMENT_SUCCESS_PATH,
     });
   }
 
@@ -139,10 +139,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const existingResponse = await finishExistingPayPalOrder(request, payment);
+    const existingResponse = await finishExistingPayPalOrder(payment);
     if (existingResponse) return existingResponse;
 
-    const origin = new URL(request.url).origin;
+    const origin = getPayPalSiteOrigin(request.url);
     const paypalOrder = await createPayPalMembershipOrder({
       paymentId: payment.id,
       orderNumber: payment.order_number,

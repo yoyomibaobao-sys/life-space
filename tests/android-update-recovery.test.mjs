@@ -64,10 +64,10 @@ function harness(overrides = {}) {
     const code = ts.transpileModule(fs.readFileSync(file, "utf8"), {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
     }).outputText;
-    const module = { exports: {} };
+    const loadedModule = { exports: {} };
     const run = vm.runInNewContext(`(function(require, module, exports) {${code}\n})`, context);
-    run((name) => mocks[name] || load(path.resolve(path.dirname(file), `${name}.ts`)), module, module.exports);
-    return module.exports;
+    run((name) => mocks[name] || load(path.resolve(path.dirname(file), `${name}.ts`)), loadedModule, loadedModule.exports);
+    return loadedModule.exports;
   }
   return { api: load("lib/android-app-update.ts"), calls, storage };
 }
