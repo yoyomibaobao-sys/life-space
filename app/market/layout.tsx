@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import NetworkRequiredBoundary from "@/components/network/NetworkRequiredBoundary";
 import { buildPublicPageMetadata } from "@/lib/public-page-metadata";
 
 export const metadata = buildPublicPageMetadata(
@@ -8,5 +9,5 @@ export const metadata = buildPublicPageMetadata(
 );
 
 export default function MarketLayout({ children }: { children: ReactNode }) {
-  return children;
+  return <NetworkRequiredBoundary>{children}</NetworkRequiredBoundary>;
 }

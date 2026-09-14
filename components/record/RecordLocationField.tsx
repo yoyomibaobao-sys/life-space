@@ -6,13 +6,29 @@ const NO_FILES: File[] = [];
 export default function RecordLocationField({ value, onChange, files = NO_FILES, language, disabled = false }: {
   value: RecordLocation | null; onChange: (value: RecordLocation | null) => void; files?: File[]; language: "zh" | "en"; disabled?: boolean;
 }) {
-  const [photoLocation, setPhotoLocation] = useState<RecordLocation | null>(null);
+  const [photoLocationResult, setPhotoLocationResult] = useState<{
+    files: File[];
+    location: RecordLocation | null;
+  } | null>(null);
   useEffect(() => {
     let canceled = false;
-    setPhotoLocation(null);
-    void (async () => { for (const file of files) { const location = await readImageLocation(file); if (canceled) return; if (location) { setPhotoLocation(location); return; } } })();
+    void (async () => {
+      let nextLocation: RecordLocation | null = null;
+      for (const file of files) {
+        const location = await readImageLocation(file);
+        if (canceled) return;
+        if (location) {
+          nextLocation = location;
+          break;
+        }
+      }
+      if (!canceled) setPhotoLocationResult({ files, location: nextLocation });
+    })();
     return () => { canceled = true; };
   }, [files]);
+  const photoLocation = photoLocationResult?.files === files
+    ? photoLocationResult.location
+    : null;
   const en = language === "en";
   return <div style={{ display: "grid", gap: 6, marginBlock: 12 }}>
     <label style={{ display: "grid", gap: 7, color: "#53654e", fontSize: 14 }}>{en ? "Record location" : "记录地点"}

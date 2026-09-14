@@ -48,14 +48,15 @@ const buildResult = await build({
 const javascript = buildResult.outputFiles.find((file) => file.path.endsWith(".js"));
 if (!javascript) throw new Error("Offline bundle did not emit JavaScript.");
 
-const [template, css, bridgeTemplate] = await Promise.all([
+const [template, css, localParityCss, bridgeTemplate] = await Promise.all([
   fs.readFile(path.join(sourceRoot, "offline.template.html"), "utf8"),
   fs.readFile(path.join(sourceRoot, "offline.css"), "utf8"),
+  fs.readFile(path.join(sourceRoot, "local-parity.css"), "utf8"),
   fs.readFile(path.join(sourceRoot, "legacy-local-bridge.template.html"), "utf8"),
 ]);
 
 const offlineHtml = template
-  .replace("__LIFESPACE_OFFLINE_CSS__", () => css)
+  .replace("__LIFESPACE_OFFLINE_CSS__", () => `${css}\n${localParityCss}`)
   .replace(
     "__LIFESPACE_OFFLINE_JS__",
     () => javascript.text.replaceAll("</script", "<\\/script"),

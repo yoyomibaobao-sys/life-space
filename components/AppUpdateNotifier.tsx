@@ -4,6 +4,7 @@ import { App } from "@capacitor/app";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
+import UiIcon from "@/components/ui/UiIcon";
 import {
   checkAndroidUpdate, getAndroidUpdateSnapshot, getAndroidUpdateServerSnapshot,
   isNativeAndroid, snoozeAndroidUpdate, subscribeAndroidUpdates,
@@ -65,7 +66,9 @@ export default function AppUpdateNotifier() {
           <h2 className={styles.title}>{title}</h2>
           <p className={styles.message}>{message}</p>
         </div>
-        <button type="button" className={styles.closeButton} onClick={dismiss} aria-label={t.app_update.dismiss_reminder}>×</button>
+        <button type="button" className={styles.closeButton} onClick={dismiss} aria-label={t.app_update.dismiss_reminder}>
+          <UiIcon name="close" size={17} />
+        </button>
       </div>
       <div className={styles.actions}>
         <button type="button" className={styles.laterButton} onClick={dismiss}>{t.app_update.later}</button>

@@ -1,0 +1,35 @@
+/*
+ * Cold-start offline uses the same local data model and should look like the
+ * normal local workspace, not like a separate degraded product mode.
+ * Keep connectivity as runtime state only; never rewrite cloud/local identity.
+ */
+
+/* The local workspace header is enough context. Avoid a second "offline mode" label. */
+.brand-mode,
+.offline-status {
+  display: none;
+}
+
+/* Offline can only operate on device-local projects. Present the same local source
+ * directly instead of offering inactive All / Cloud source switches. */
+.source-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.source-row > button:nth-child(1),
+.source-row > button:nth-child(2) {
+  display: none;
+}
+
+.source-row .add-project {
+  margin-left: 8px;
+}
+
+/* Online-only destinations remain in the normal navigation, but their fallback
+ * screen should be visually quiet rather than styled as a special offline mode. */
+.panel.empty {
+  box-shadow: none;
+  background: transparent;
+  border-color: transparent;
+}

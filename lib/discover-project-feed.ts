@@ -1,6 +1,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { normalizePlantingRegion } from "@/lib/planting-region";
 import type {
   DiscoveryProjectCursor,
   DiscoveryProjectFeedFilters,
@@ -28,6 +29,7 @@ type DiscoveryProjectMediaRow = {
 type DiscoveryArchiveCountRow = {
   id: string;
   view_count: number | string | null;
+  planting_region: unknown;
 };
 
 type DiscoveryArchiveFollowRow = { archive_id: string | null };
@@ -71,6 +73,7 @@ export function normalizeDiscoveryProjectFeedRow(
     public_comment_count: normalizeCount(row.public_comment_count),
     view_count: normalizeCount(row.view_count ?? null),
     follower_count: 0,
+    project_region: null,
     profile_country: null,
     profile_region_name: null,
     profile_city: null,
@@ -92,7 +95,7 @@ export async function enrichDiscoveryProjectViewCounts(
   const [archiveResult, followResult, profileResult] = await Promise.all([
     supabase
       .from("archives")
-      .select("id, view_count")
+      .select("id, view_count, planting_region")
       .in("id", archiveIds)
       .eq("is_public", true),
     supabase.from("archive_follows").select("archive_id").in("archive_id", archiveIds),
@@ -105,7 +108,7 @@ export async function enrichDiscoveryProjectViewCounts(
   ]);
 
   if (archiveResult.error) {
-    console.warn("discovery project view count load failed:", archiveResult.error.message);
+    console.warn("discovery project metadata load failed:", archiveResult.error.message);
   }
   if (followResult.error) {
     console.warn("discovery project follower count load failed:", followResult.error.message);
@@ -114,10 +117,10 @@ export async function enrichDiscoveryProjectViewCounts(
     console.warn("discovery project owner location load failed:", profileResult.error.message);
   }
 
-  const countMap = new Map(
+  const archiveMap = new Map(
     ((archiveResult.data || []) as DiscoveryArchiveCountRow[]).map((row) => [
       String(row.id),
-      normalizeCount(row.view_count),
+      row,
     ]),
   );
   const followerMap = new Map<string, number>();
@@ -134,11 +137,13 @@ export async function enrichDiscoveryProjectViewCounts(
   );
 
   return items.map((item) => {
+    const archive = archiveMap.get(item.archive_id);
     const profile = item.owner_user_id ? profileMap.get(item.owner_user_id) : null;
     return {
       ...item,
-      view_count: countMap.get(item.archive_id) ?? item.view_count,
+      view_count: archive ? normalizeCount(archive.view_count) : item.view_count,
       follower_count: followerMap.get(item.archive_id) || 0,
+      project_region: normalizePlantingRegion(archive?.planting_region),
       profile_country: String(profile?.country_name || "").trim() || null,
       profile_region_name: String(profile?.region_name || "").trim() || null,
       profile_city: String(profile?.city_name || "").trim() || null,

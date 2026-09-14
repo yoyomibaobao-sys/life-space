@@ -151,9 +151,10 @@ test("the launch cloud plan is fixed at 1 GB and 30 active market posts", async 
   assert.match(zhCopy, /暂不提供集市加量包/);
 });
 
-test("manual membership orders keep fixed prices, private proof, and transactional confirmation", async () => {
-  const [migration, paymentPage, profile, admin, accountDelete, docs] = await Promise.all([
+test("membership orders keep fixed prices, private Alipay proof, and transactional confirmation", async () => {
+  const [migration, paypalMigration, paymentPage, profile, admin, accountDelete, docs] = await Promise.all([
     source(paymentOrderMigrationPath),
+    source("supabase/migrations/20260911173500_add_paypal_auto_membership.sql"),
     source("app/membership/payment/page.tsx"),
     source("app/profile/page.tsx"),
     source("app/admin/memberships/page.tsx"),
@@ -189,6 +190,9 @@ test("manual membership orders keep fixed prices, private proof, and transaction
   assert.match(profile, /"\/admin\/memberships#refund-review"/);
   assert.match(profile, /"\/admin\/memberships#payment-review"/);
   assert.match(admin, /admin_confirm_submitted_membership_payment_json/);
+  assert.match(paypalMigration, /confirm_paypal_membership_payment_json/);
+  assert.match(paypalMigration, /provider_capture_id = v_capture_id/);
+  assert.match(paypalMigration, /v_service_ends_at := v_service_started_at \+ interval '12 months'/);
   assert.match(admin, /createSignedUrl\(row\.proof_path, 300\)/);
   assert.match(accountDelete, /listStoragePrefix\(supabase, "payment-proofs", userId\)/);
   assert.match(accountDelete, /removeStoragePaths\(supabase, "payment-proofs", storagePaths\.paymentProofs\)/);
@@ -201,7 +205,8 @@ test("manual membership orders keep fixed prices, private proof, and transaction
     admin,
     /\.in\("status", \["confirmed", "refunded", "canceled"\]\)/
   );
-  assert.match(docs, /确认付款并开通.*同一数据库事务/);
+  assert.match(docs, /PayPal 自动开通与支付宝人工确认/);
+  assert.match(docs, /同一订单或捕获重复送达时只返回既有结果，不重复延长/);
 });
 
 test("plant guidance is split into visitor, registered, and cloud-member tiers", async () => {

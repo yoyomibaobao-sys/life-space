@@ -1242,19 +1242,35 @@ function MobileRecordEditPanel({
   const [saving, setSaving] = useState(false);
 
   const [location, setLocation] = useState<RecordLocation | null>(item.location || null);
-  const [locationReady, setLocationReady] = useState(Boolean(onSaveOverride));
-  const [locationError, setLocationError] = useState(false);
   const [locationAttempt, setLocationAttempt] = useState(0);
   const local = Boolean(onSaveOverride);
+  const locationRequestKey = `${item.id}:${locationAttempt}`;
+  const [locationLoad, setLocationLoad] = useState<{
+    requestKey: string;
+    status: "ready" | "error";
+  } | null>(null);
+  const locationReady = local || (
+    locationLoad?.requestKey === locationRequestKey &&
+    locationLoad.status === "ready"
+  );
+  const locationError = !local &&
+    locationLoad?.requestKey === locationRequestKey &&
+    locationLoad.status === "error";
   useEffect(() => {
     if (local) return;
     let canceled = false;
-    setLocationReady(false); setLocationError(false);
     void readRecordLocations(supabase, [item.id]).then((locations) => {
-      if (!canceled) { setLocation(locations.get(item.id) || null); setLocationReady(true); }
-    }).catch(() => { if (!canceled) setLocationError(true); });
+      if (!canceled) {
+        setLocation(locations.get(item.id) || null);
+        setLocationLoad({ requestKey: locationRequestKey, status: "ready" });
+      }
+    }).catch(() => {
+      if (!canceled) {
+        setLocationLoad({ requestKey: locationRequestKey, status: "error" });
+      }
+    });
     return () => { canceled = true; };
-  }, [item.id, local, locationAttempt]);
+  }, [item.id, local, locationAttempt, locationRequestKey]);
 
   async function save() {
     if (saving || !locationReady) return;

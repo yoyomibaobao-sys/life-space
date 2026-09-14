@@ -35,7 +35,7 @@ const zh: LegalContent = {
     eyebrow: "公开规则",
     title: "隐私、服务与退款说明",
     intro: "这里集中说明有时·耕作如何处理数据、提供服务、受理退款以及与运营者联系。",
-    version: "版本日期：2026/08/25；自页面正式上线时生效。",
+    version: "版本日期：2026/09/13；自页面正式上线时生效。",
   },
   nav: {
     privacy: {
@@ -63,7 +63,7 @@ const zh: LegalContent = {
       eyebrow: "隐私与个人信息",
       title: "隐私说明",
       intro: "本说明适用于有时·耕作网页端、手机网页端及加载同一服务的 App。我们坚持数据最少化、本地优先和由用户决定是否公开。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "版本日期：2026/09/13；自页面正式上线时生效。",
       sections: [
         {
           title: "1. 谁处理你的信息",
@@ -77,7 +77,7 @@ const zh: LegalContent = {
             "账号与身份信息：注册邮箱、用户名、头像、会员编号、登录与账号状态。",
             "用户主动填写的信息：国家或地区、省州、城市、语言偏好及反馈内容。位置字段由用户填写，不用于获取精确定位。",
             "耕作与互动内容：档案、记录、图片或视频、标签、分类、经验卡、评论、关注、收藏、集市内容及其公开状态。",
-            "会员与付款信息：订单号、金额、币种、付款方式、交易参考号、付款凭证、审核记录、服务期限和退款记录。付款凭证存放在私有空间，仅订单本人和授权管理员可按权限查看。",
+            "会员与付款信息：订单号、金额、币种、付款方式、支付渠道订单号与交易号、支付宝付款凭证、审核记录、服务期限和退款记录。支付宝付款凭证存放在私有空间，仅订单本人和授权管理员可按权限查看；PayPal 付款由服务端向 PayPal 核验订单状态，不要求上传凭证。",
             "运行与安全信息：会话、错误、下载和防滥用所需的技术信息。基础设施提供商为交付和保护服务可能处理网络地址、设备或请求日志。",
           ],
         },
@@ -145,7 +145,7 @@ const zh: LegalContent = {
       eyebrow: "使用规则",
       title: "服务条款",
       intro: "使用有时·耕作即表示你同意遵守本条款。强制性法律赋予消费者的权利不因本条款而被排除。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "版本日期：2026/09/13；自页面正式上线时生效。",
       sections: [
         {
           title: "1. 服务内容",
@@ -173,7 +173,7 @@ const zh: LegalContent = {
           title: "4. 云会员与付款",
           bullets: [
             "当前云会员标准方案为12个月，人民币64元或8美元，以付款页显示和订单确认为准。当前不自动续费。",
-            "支付宝或PayPal付款后，用户需提交订单要求的交易参考信息或付款凭证；管理员会在真实收款渠道核对后开通或续费。上传截图本身不代表付款已确认。",
+            "PayPal 付款由服务端核验订单号、金额、币种和完成状态后自动开通或顺延一年；仅返回成功页面不代表付款已确认。支付宝付款后需按订单要求提交付款凭证，由管理员在真实收款渠道核对后开通或续费；上传截图本身不代表付款已确认。",
             "服务期限、容量和权益以已确认订单及会员页面为准。已购买期限内的核心权益不会因后续价格调整而追溯缩减。",
           ],
         },
@@ -209,7 +209,7 @@ const zh: LegalContent = {
       eyebrow: "云会员",
       title: "退款规则",
       intro: "本规则适用于通过有时·耕作购买并已确认的云会员订单。退款申请时间以系统成功接收申请的时间为准。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "版本日期：2026/09/13；自页面正式上线时生效。",
       sections: [
         {
           title: "1. 标准退款金额",
@@ -261,7 +261,7 @@ const zh: LegalContent = {
       eyebrow: "公开联系信息",
       title: "运营者联系信息",
       intro: "服务、账号、付款、退款、隐私与安全问题均可通过同一公开邮箱联系。",
-      version: "版本日期：2026/08/25；自页面正式上线时生效。",
+      version: "版本日期：2026/09/13；自页面正式上线时生效。",
       sections: [
         {
           title: "服务信息",
@@ -295,7 +295,7 @@ const en: LegalContent = {
     eyebrow: "PUBLIC POLICIES",
     title: "Privacy, Terms and Refunds",
     intro: "This hub explains how LifeSpace for Cultivation handles data, provides the service, reviews refunds and can be contacted.",
-    version: "Version date: 2026/08/25. Effective when published on the service.",
+    version: "Version date: 2026/09/13. Effective when published on the service.",
   },
   nav: {
     privacy: {
@@ -323,7 +323,7 @@ const en: LegalContent = {
       eyebrow: "PRIVACY AND PERSONAL DATA",
       title: "Privacy Notice",
       intro: "This notice applies to the desktop web service, mobile web service and the App that loads the same LifeSpace for Cultivation service. We follow data minimization, local-first use and user-controlled sharing.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Version date: 2026/09/13. Effective when published on the service.",
       sections: [
         {
           title: "1. Who handles your information",
@@ -335,7 +335,7 @@ const en: LegalContent = {
             "Account and identity data: registration email, username, avatar, member number, login and account status.",
             "Information you enter: country or region, state or province, city, language preference and feedback. Location fields are user-entered and are not precise geolocation.",
             "Cultivation and interaction content: archives, records, photos or videos, tags, categories, experience cards, comments, follows, saves, market posts and their visibility settings.",
-            "Membership and payment data: order number, amount, currency, method, transaction reference, private payment proof, review records, service term and refund records. Payment proof is held privately and can be accessed only by the order owner and authorized administrators under access controls.",
+            "Membership and payment data: order number, amount, currency, method, provider order and transaction identifiers, private Alipay payment proof, review records, service term and refund records. Alipay proof is held privately and can be accessed only by the order owner and authorized administrators; PayPal payments are verified server-to-server with PayPal and do not require proof upload.",
             "Operations and security data: session, error, download and anti-abuse information needed to run the service. Infrastructure providers may process network addresses, device headers or request logs to deliver and protect it.",
           ],
         },
@@ -397,7 +397,7 @@ const en: LegalContent = {
       eyebrow: "SERVICE RULES",
       title: "Terms of Service",
       intro: "By using LifeSpace for Cultivation, you agree to follow these terms. Mandatory consumer rights are not excluded.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Version date: 2026/09/13. Effective when published on the service.",
       sections: [
         {
           title: "1. The service",
@@ -425,7 +425,7 @@ const en: LegalContent = {
           title: "4. Cloud membership and payment",
           bullets: [
             "The current standard cloud membership is 12 months for CNY 64 or USD 8, subject to the payment page and confirmed order. It does not auto-renew.",
-            "After Alipay or PayPal payment, submit the transaction reference or payment proof requested by the order. An administrator activates or renews only after checking the real receiving account. An uploaded screenshot alone is not confirmation.",
+            "PayPal activates or extends one year automatically only after the server verifies the order number, amount, currency, and completed status with PayPal; reaching a success page alone is not payment confirmation. Alipay requires the proof requested by the order and administrator verification against the real receiving account; an uploaded screenshot alone is not confirmation.",
             "The confirmed order and membership page govern the service term, capacity and benefits. Later pricing changes do not retroactively reduce core benefits already purchased for a confirmed term.",
           ],
         },
@@ -457,7 +457,7 @@ const en: LegalContent = {
       eyebrow: "CLOUD MEMBERSHIP",
       title: "Refund Policy",
       intro: "This policy applies to confirmed cloud-membership orders purchased through LifeSpace for Cultivation. Eligibility is determined by the time the service successfully receives the request.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Version date: 2026/09/13. Effective when published on the service.",
       sections: [
         {
           title: "1. Standard refund amount",
@@ -503,7 +503,7 @@ const en: LegalContent = {
       eyebrow: "PUBLIC CONTACT",
       title: "Operator Contact",
       intro: "Use the same public email for service, account, payment, refund, privacy and security matters.",
-      version: "Version date: 2026/08/25. Effective when published on the service.",
+      version: "Version date: 2026/09/13. Effective when published on the service.",
       sections: [
         {
           title: "Service information",
