@@ -34,6 +34,7 @@ test("PayPal client keeps credentials server-only and uses fixed one-time US$8 O
   assert.match(env, /PAYPAL_WEBHOOK_ID=/);
   assert.match(env, /PAYPAL_SITE_ORIGIN=/);
   assert.match(env, /NEXT_PUBLIC_PAYPAL_ENABLED=false/);
+  assert.match(env, /PAYPAL_ENABLED=false/);
   assert.match(env, /SUPABASE_SERVICE_ROLE_KEY=/);
   assert.doesNotMatch(env, /NEXT_PUBLIC_PAYPAL_CLIENT_SECRET/);
 });
@@ -158,14 +159,27 @@ test("database confirmation is service-role-only and idempotently extends Plus b
 test("payment page keeps Alipay proof review but removes proof upload from the PayPal path", () => {
   const page = read("app/membership/payment/page.tsx");
   const copy = read("lib/i18n/paypal-payment.ts");
+  const statusRoute = read("app/api/paypal/status/route.ts");
 
   assert.match(page, /fetch\("\/api\/paypal\/checkout"/);
-  assert.match(page, /NEXT_PUBLIC_PAYPAL_ENABLED/);
-  assert.match(page, /disabled=\{creating !== null \|\| !PAYPAL_PAYMENT_READY\}/);
-  assert.match(page, /disabled=\{paypalStarting \|\| !PAYPAL_PAYMENT_READY\}/);
+  assert.match(page, /fetch\("\/api\/paypal\/status"/);
+  assert.match(page, /disabled=\{creating !== null \|\| !paypalPaymentReady\}/);
+  assert.match(page, /disabled=\{paypalStarting \|\| !paypalPaymentReady\}/);
+  assert.doesNotMatch(page, /NEXT_PUBLIC_PAYPAL_ENABLED/);
   assert.match(page, /order\.payment_method === "alipay" \? \(/);
   assert.match(page, /getPayPalPaymentCopy/);
   assert.match(copy, /付款成功后自动开通，无需上传付款凭证/);
   assert.match(copy, /No proof upload is needed/);
   assert.doesNotMatch(page, /paypal\.com\/ncp\/payment/);
+
+  assert.match(statusRoute, /PAYPAL_ENABLED/);
+  assert.match(statusRoute, /NEXT_PUBLIC_PAYPAL_ENABLED/);
+  assert.match(statusRoute, /PAYPAL_CLIENT_SECRET/);
+  assert.match(statusRoute, /PAYPAL_WEBHOOK_ID/);
+  assert.match(statusRoute, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(statusRoute, /"Cache-Control": "no-store"/);
+  assert.match(
+    statusRoute,
+    /\{ enabled: requested && hasPayPalRuntimeConfiguration\(\) \}/
+  );
 });

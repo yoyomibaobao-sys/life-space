@@ -51,6 +51,10 @@ type PayPalCheckoutResult = {
   error?: string;
 };
 
+type PayPalStatusResult = {
+  enabled?: boolean;
+};
+
 const DEFAULT_ALIPAY_PAYMENT_QR_URL =
   "/payments/alipay-cloud-membership-64.jpg";
 const DEFAULT_ALIPAY_PAYEE_NAME = "有时空间";
@@ -68,9 +72,6 @@ const ALIPAY_PAYEE_NAME =
 const ALIPAY_PAYMENT_READY = Boolean(
   ALIPAY_PAYMENT_QR_URL && ALIPAY_PAYEE_NAME
 );
-const PAYPAL_PAYMENT_READY =
-  process.env.NEXT_PUBLIC_PAYPAL_ENABLED?.trim().toLowerCase() === "true";
-
 function normalizeOrder(value: unknown): PaymentOrder | null {
   const candidate = Array.isArray(value) ? value[0] : value;
   if (!candidate || typeof candidate !== "object") return null;
@@ -100,12 +101,37 @@ export default function MembershipPaymentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [paypalStarting, setPaypalStarting] = useState(false);
+  const [paypalPaymentReady, setPaypalPaymentReady] = useState(false);
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const paypalCopy = getPayPalPaymentCopy(language);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPayPalStatus() {
+      try {
+        const response = await fetch("/api/paypal/status", { cache: "no-store" });
+        const result = (await response.json().catch(() => null)) as
+          | PayPalStatusResult
+          | null;
+        if (active) {
+          setPaypalPaymentReady(Boolean(response.ok && result?.enabled));
+        }
+      } catch (error) {
+        console.error("load PayPal status error:", error);
+        if (active) setPaypalPaymentReady(false);
+      }
+    }
+
+    void loadPayPalStatus();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -147,7 +173,12 @@ export default function MembershipPaymentPage() {
   }, [t.membership_page.order_load_failed]);
 
   async function createOrder(option: PaymentOption) {
-    if (creating || !userId || (option === "alipay" && !ALIPAY_PAYMENT_READY)) {
+    if (
+      creating ||
+      !userId ||
+      (option === "alipay" && !ALIPAY_PAYMENT_READY) ||
+      (option === "paypal" && !paypalPaymentReady)
+    ) {
       if (option === "alipay" && !ALIPAY_PAYMENT_READY) {
         showToast(t.membership_page.alipay_not_configured);
       }
@@ -186,7 +217,8 @@ export default function MembershipPaymentPage() {
       !order ||
       order.payment_method !== "paypal" ||
       order.status !== "pending_payment" ||
-      paypalStarting
+      paypalStarting ||
+      !paypalPaymentReady
     ) {
       return;
     }
@@ -453,20 +485,20 @@ export default function MembershipPaymentPage() {
                 <button
                   type="button"
                   onClick={() => void createOrder("paypal")}
-                  disabled={creating !== null || !PAYPAL_PAYMENT_READY}
+                  disabled={creating !== null || !paypalPaymentReady}
                   style={{
                     ...primaryButtonStyle,
-                    opacity: PAYPAL_PAYMENT_READY ? 1 : 0.55,
-                    cursor: PAYPAL_PAYMENT_READY ? "pointer" : "not-allowed",
+                    opacity: paypalPaymentReady ? 1 : 0.55,
+                    cursor: paypalPaymentReady ? "pointer" : "not-allowed",
                   }}
                 >
                   {creating === "paypal"
                     ? t.membership_page.creating_order
-                    : PAYPAL_PAYMENT_READY
+                    : paypalPaymentReady
                       ? t.membership_page.create_paypal_order
                       : paypalCopy.unavailable_action}
                 </button>
-                {!PAYPAL_PAYMENT_READY ? (
+                {!paypalPaymentReady ? (
                   <div style={paymentUnavailableStyle}>{paypalCopy.unavailable}</div>
                 ) : null}
               </article>
@@ -576,21 +608,21 @@ export default function MembershipPaymentPage() {
                           <button
                             type="button"
                             onClick={() => void startPayPalCheckout()}
-                            disabled={paypalStarting || !PAYPAL_PAYMENT_READY}
+                            disabled={paypalStarting || !paypalPaymentReady}
                             style={{
                               ...primaryButtonStyle,
-                              opacity: paypalStarting || !PAYPAL_PAYMENT_READY ? 0.55 : 1,
-                              cursor: PAYPAL_PAYMENT_READY ? "pointer" : "not-allowed",
+                              opacity: paypalStarting || !paypalPaymentReady ? 0.55 : 1,
+                              cursor: paypalPaymentReady ? "pointer" : "not-allowed",
                             }}
                           >
                             {paypalStarting
                               ? paypalCopy.opening_paypal
-                              : PAYPAL_PAYMENT_READY
+                              : paypalPaymentReady
                                 ? t.membership_page.overseas_payment_action
                                 : paypalCopy.unavailable_action}
                           </button>
                           <div style={paypalAutoNoticeStyle}>
-                            {PAYPAL_PAYMENT_READY
+                            {paypalPaymentReady
                               ? paypalCopy.auto_notice
                               : paypalCopy.unavailable}
                           </div>
