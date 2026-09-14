@@ -33,6 +33,7 @@ test("PayPal client keeps credentials server-only and uses fixed one-time US$8 O
   assert.match(env, /PAYPAL_CLIENT_SECRET=/);
   assert.match(env, /PAYPAL_WEBHOOK_ID=/);
   assert.match(env, /PAYPAL_SITE_ORIGIN=/);
+  assert.match(env, /NEXT_PUBLIC_PAYPAL_ENABLED=false/);
   assert.match(env, /SUPABASE_SERVICE_ROLE_KEY=/);
   assert.doesNotMatch(env, /NEXT_PUBLIC_PAYPAL_CLIENT_SECRET/);
 });
@@ -159,6 +160,9 @@ test("payment page keeps Alipay proof review but removes proof upload from the P
   const copy = read("lib/i18n/paypal-payment.ts");
 
   assert.match(page, /fetch\("\/api\/paypal\/checkout"/);
+  assert.match(page, /NEXT_PUBLIC_PAYPAL_ENABLED/);
+  assert.match(page, /disabled=\{creating !== null \|\| !PAYPAL_PAYMENT_READY\}/);
+  assert.match(page, /disabled=\{paypalStarting \|\| !PAYPAL_PAYMENT_READY\}/);
   assert.match(page, /order\.payment_method === "alipay" \? \(/);
   assert.match(page, /getPayPalPaymentCopy/);
   assert.match(copy, /付款成功后自动开通，无需上传付款凭证/);

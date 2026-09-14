@@ -7,6 +7,8 @@ type PayPalPaymentCopy = {
   checkout_failed: string;
   opening_paypal: string;
   auto_notice: string;
+  unavailable_action: string;
+  unavailable: string;
   success_title: string;
   success_body: string;
   success_profile: string;
@@ -21,6 +23,8 @@ const copies: Record<Language, PayPalPaymentCopy> = {
     checkout_failed: "暂时无法进入 PayPal 付款，请稍后重试。",
     opening_paypal: "正在进入 PayPal...",
     auto_notice: "付款成功后自动开通，无需上传付款凭证。",
+    unavailable_action: "PayPal 暂未启用",
+    unavailable: "PayPal 自动开通仍在完成 Sandbox 与正式环境配置，当前暂不可付款。",
     success_title: "PayPal 付款成功",
     success_body: "Plus 云会员已自动开通或顺延一年，无需上传付款凭证，也无需等待人工确认。",
     success_profile: "返回我的信息",
@@ -33,6 +37,8 @@ const copies: Record<Language, PayPalPaymentCopy> = {
     checkout_failed: "PayPal checkout could not be opened. Try again later.",
     opening_paypal: "Opening PayPal...",
     auto_notice: "Membership activates automatically after payment. No proof upload is needed.",
+    unavailable_action: "PayPal is not enabled",
+    unavailable: "PayPal automatic activation is still being configured and cannot accept payments yet.",
     success_title: "PayPal payment complete",
     success_body: "Plus Cloud Membership has been activated or extended by one year automatically. No payment proof or manual confirmation is required.",
     success_profile: "Back to profile",

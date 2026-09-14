@@ -68,6 +68,8 @@ const ALIPAY_PAYEE_NAME =
 const ALIPAY_PAYMENT_READY = Boolean(
   ALIPAY_PAYMENT_QR_URL && ALIPAY_PAYEE_NAME
 );
+const PAYPAL_PAYMENT_READY =
+  process.env.NEXT_PUBLIC_PAYPAL_ENABLED?.trim().toLowerCase() === "true";
 
 function normalizeOrder(value: unknown): PaymentOrder | null {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -448,9 +450,25 @@ export default function MembershipPaymentPage() {
                 <div style={paymentLabelStyle}>{t.membership_page.overseas_users}</div>
                 <div style={priceStyle}>{t.membership_page.overseas_price}</div>
                 <p style={bodyStyle}>{paypalCopy.order_hint}</p>
-                <button type="button" onClick={() => void createOrder("paypal")} disabled={creating !== null} style={primaryButtonStyle}>
-                  {creating === "paypal" ? t.membership_page.creating_order : t.membership_page.create_paypal_order}
+                <button
+                  type="button"
+                  onClick={() => void createOrder("paypal")}
+                  disabled={creating !== null || !PAYPAL_PAYMENT_READY}
+                  style={{
+                    ...primaryButtonStyle,
+                    opacity: PAYPAL_PAYMENT_READY ? 1 : 0.55,
+                    cursor: PAYPAL_PAYMENT_READY ? "pointer" : "not-allowed",
+                  }}
+                >
+                  {creating === "paypal"
+                    ? t.membership_page.creating_order
+                    : PAYPAL_PAYMENT_READY
+                      ? t.membership_page.create_paypal_order
+                      : paypalCopy.unavailable_action}
                 </button>
+                {!PAYPAL_PAYMENT_READY ? (
+                  <div style={paymentUnavailableStyle}>{paypalCopy.unavailable}</div>
+                ) : null}
               </article>
             </section>
           ) : (
@@ -558,18 +576,23 @@ export default function MembershipPaymentPage() {
                           <button
                             type="button"
                             onClick={() => void startPayPalCheckout()}
-                            disabled={paypalStarting}
+                            disabled={paypalStarting || !PAYPAL_PAYMENT_READY}
                             style={{
                               ...primaryButtonStyle,
-                              opacity: paypalStarting ? 0.7 : 1,
+                              opacity: paypalStarting || !PAYPAL_PAYMENT_READY ? 0.55 : 1,
+                              cursor: PAYPAL_PAYMENT_READY ? "pointer" : "not-allowed",
                             }}
                           >
                             {paypalStarting
                               ? paypalCopy.opening_paypal
-                              : t.membership_page.overseas_payment_action}
+                              : PAYPAL_PAYMENT_READY
+                                ? t.membership_page.overseas_payment_action
+                                : paypalCopy.unavailable_action}
                           </button>
                           <div style={paypalAutoNoticeStyle}>
-                            {paypalCopy.auto_notice}
+                            {PAYPAL_PAYMENT_READY
+                              ? paypalCopy.auto_notice
+                              : paypalCopy.unavailable}
                           </div>
                         </div>
                       )}
