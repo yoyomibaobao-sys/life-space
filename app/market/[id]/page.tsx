@@ -1,4 +1,5 @@
 "use client";
+import ReportLink from "@/components/support/ReportLink";
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
@@ -514,6 +515,7 @@ export default function MarketDetailPage() {
               </div>
             ) : null}
           </section>
+          {!isOwner && <ReportLink targetUrl={`/market/${item.id}`} />}
         </div>
       </main>
 

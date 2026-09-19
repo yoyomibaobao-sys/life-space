@@ -1,0 +1,35 @@
+name: Support workflow checks
+
+on:
+  pull_request:
+    paths:
+      - 'components/support/**'
+      - 'app/admin/support/**'
+      - 'app/report/**'
+      - 'app/feedback/**'
+      - 'lib/support-*.ts'
+      - 'lib/i18n/support-workflow.ts'
+      - 'tests/support-workflow.test.mjs'
+      - '.github/workflows/support-workflow-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: public-test-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx eslint app/admin/support/page.tsx app/report/page.tsx app/feedback/page.tsx components/support lib/support-links.ts lib/i18n/support-workflow.ts
+      - run: node --test tests/support-workflow.test.mjs tests/feedback-i18n.test.mjs tests/notification-separation.test.mjs tests/navigation-and-signed-out-layout.test.mjs tests/ui-icon-consistency.test.mjs
+      - run: npm run build:vinext

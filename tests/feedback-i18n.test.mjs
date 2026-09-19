@@ -4,14 +4,15 @@ import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("feedback page uses local email handoff without database writes", () => {
-  const page = read("app/feedback/page.tsx");
+test("feedback submits in-app and keeps an email contact for private issues", () => {
+  const page = read("components/support/SupportCenter.tsx");
 
   assert.match(page, /yoyomibaobao@gmail\.com/);
   assert.match(page, /mailto:/);
   assert.match(page, /navigator\.clipboard\.writeText/);
-  assert.doesNotMatch(page, /supabase/);
-  assert.doesNotMatch(page, /fetch\(/);
+  assert.match(page, /submit_support_submission/);
+  assert.match(page, /SupportHistory/);
+  assert.match(read("app/feedback/page.tsx"), /kind="feedback"/);
 });
 
 test("feedback stays in navigation and the profile list without a duplicate banner", () => {

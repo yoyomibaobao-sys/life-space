@@ -1,4 +1,5 @@
 "use client";
+import ReportLink from "@/components/support/ReportLink";
 
 import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
@@ -2155,6 +2156,7 @@ saveRecentArchiveBrowse({
         </header>
 
         <div style={projectDetailStatsStyle}>
+          {!isOwner && <ReportLink targetUrl={`/archive/${activeArchive.id}`} />}
           {archiveDisplayName ? (
             encyclopediaHref ? (
               <Link href={encyclopediaHref} style={projectDetailGuideLinkStyle}>
