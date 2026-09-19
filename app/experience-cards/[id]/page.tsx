@@ -1,4 +1,5 @@
 "use client";
+import ReportLink from "@/components/support/ReportLink";
 
 import Link from "next/link";
 import {
@@ -683,6 +684,7 @@ export default function ExperienceCardPage({
           ) : null}
         </article>
       </section>
+      {!isOwner && <ReportLink targetUrl={`/experience-cards/${detail.card.id}`} />}
 
       {isOwner && !detail.sourceIsComplete ? (
         <section style={warningStyle}>

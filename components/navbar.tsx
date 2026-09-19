@@ -685,7 +685,7 @@ function getMobileBackFallback(pathname: string) {
   if (pathname.startsWith("/membership")) return "/profile";
   if (pathname.startsWith("/notifications")) return "/archive";
   if (pathname.startsWith("/user")) return "/discover";
-  if (pathname.startsWith("/feedback") || pathname.startsWith("/legal")) {
+  if (pathname.startsWith("/feedback") || pathname.startsWith("/report") || pathname.startsWith("/admin/support") || pathname.startsWith("/legal")) {
     return "/profile";
   }
   return "/discover";
@@ -741,6 +741,8 @@ function getMobilePageTitle(pathname: string, copy: TranslationDictionary) {
     "/membership/benefits": copy.membership_page.benefits_rules_title,
     "/membership/refund": copy.refund_request_page.title,
     "/feedback": copy.feedback_and_contact,
+    "/report": copy.report_title,
+    "/admin/support": copy.support_admin_title,
   };
   if (settingsTitles[pathname]) return settingsTitles[pathname];
   if (pathname === "/archive") return labels.my_space;

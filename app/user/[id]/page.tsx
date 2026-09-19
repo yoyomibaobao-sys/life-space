@@ -1,4 +1,5 @@
 "use client";
+import ReportLink from "@/components/support/ReportLink";
 
 import { supabase } from "@/lib/supabase";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -418,6 +419,7 @@ export default function UserSpacePage() {
         followBusy={followBusy}
         onToggleFollow={() => void toggleUserFollow()}
       />
+      {viewerId !== userId && <ReportLink targetUrl={`/user/${userId}`} />}
       <UserSpaceFilters
         activeCategory={activeCategory}
         activeSubTag={activeSubTag}

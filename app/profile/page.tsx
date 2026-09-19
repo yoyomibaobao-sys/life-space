@@ -163,6 +163,10 @@ export default function ProfilePage() {
     href: "/admin/guides",
     label: language === "en" ? "Linked guide review" : "关联指引审核",
   };
+  const adminSupportProfileModule: MobileProfileNavItem = {
+    href: "/admin/support",
+    label: t.support_admin_title,
+  };
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [profileStats, setProfileStats] = useState<UserProfileStats | null>(null);
@@ -386,7 +390,7 @@ export default function ProfilePage() {
     ? t.profile.membership_load_failed
     : getMembershipSummary(membership, language);
   const visibleMobileProfileModules = isAdmin
-    ? [...baseMobileProfileModules, adminMembershipProfileModule, adminGuideProfileModule]
+    ? [...baseMobileProfileModules, adminMembershipProfileModule, adminGuideProfileModule, adminSupportProfileModule]
     : baseMobileProfileModules;
   const statsGridColumns = isMobileViewport
     ? "1fr"

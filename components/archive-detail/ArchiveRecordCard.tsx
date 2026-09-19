@@ -1,4 +1,5 @@
 "use client";
+import ReportLink from "@/components/support/ReportLink";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
 import { readRecordLocations } from "@/lib/record-location-cloud";
@@ -485,6 +486,7 @@ export default function ArchiveRecordCard({
             ) : null}
           </>
         )}
+      {!isLocalMode && mode !== "owner" && <ReportLink targetUrl={`/archive/${archive.id}?record=${item.id}`} />}
     </ArchiveRecordCardShell>
   );
 }
