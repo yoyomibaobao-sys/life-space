@@ -118,12 +118,53 @@ test("a full optional preference cache does not report a committed record as fai
   await assertOriginalPhoto(await dbModule.getLocalArchiveDetail("old-project", owner));
 });
 
-test("guide directory starts offline, excludes private project names and tolerates cache corruption", async () => {
+test("guide directory caches only signed-in overview fields, excludes private names and tolerates corruption", async () => {
   await fixture();
   assert.ok(guides.loadOfflineGuideDirectory().some((row) => row.label === "番茄"));
-  guides.rememberGuideDirectory([{ label: "私密项目", category: "plant", source: "local_archive" }, { label: "新的公开指引", category: "plant", source: "public_guide", id: "guide-id" }]);
+  guides.rememberGuideDirectory([
+    { label: "私密项目", category: "plant", source: "local_archive", overviewZh: "不应缓存" },
+    {
+      label: "新的公开指引",
+      nameEn: "New public guide",
+      category: "system",
+      source: "public_guide",
+      id: "guide-id",
+      overviewZh: "  已核实的基础概要。  ",
+      overviewEn: "Verified basic overview.",
+      parametersZh: Array.from({ length: 8 }, (_, index) => ({ label: `参数${index + 1}`, value: `值${index + 1}` })),
+      sections: [{ title: "付费完整实操", items: ["不应缓存"] }],
+    },
+    {
+      label: "离线测试番茄",
+      category: "plant",
+      source: "plant_species",
+      plantCoreParameters: {
+        sun_score: 8,
+        need_trellis: true,
+        container_friendly_score: 8,
+        indoor_friendly_score: 4,
+        balcony_friendly_score: 9,
+        soil_moisture_score: 10,
+      },
+    },
+  ]);
   assert.ok(!guides.loadOfflineGuideDirectory().some((row) => row.label === "私密项目"));
-  assert.equal(guides.loadOfflineGuideDirectory().find((row) => row.label === "新的公开指引").id, "guide-id");
+  const publicGuide = guides.loadOfflineGuideDirectory().find((row) => row.label === "新的公开指引");
+  assert.equal(publicGuide.id, "guide-id");
+  assert.equal(publicGuide.overviewZh, "已核实的基础概要。");
+  assert.equal(publicGuide.parametersZh.length, 6);
+  assert.equal("sections" in publicGuide, false, "full practice sections never enter the cache");
+  assert.equal(guides.getOfflineGuideOverview(publicGuide, "en"), "Verified basic overview.");
+  guides.rememberGuideDirectory([{ label: "新的公开指引", category: "system", source: "public_guide", id: "guide-id" }]);
+  assert.equal(guides.loadOfflineGuideDirectory().find((row) => row.id === "guide-id").overviewZh, "已核实的基础概要。", "a later names-only refresh keeps richer cached fields");
+  const plantGuide = guides.loadOfflineGuideDirectory().find((row) => row.label === "离线测试番茄");
+  assert.deepEqual(guides.getOfflineGuideParameters(plantGuide, "zh"), [
+    { label: "光照", value: "喜阳" },
+    { label: "栽培场景", value: "可盆栽 · 阳台友好" },
+    { label: "室内", value: "可短期室内" },
+    { label: "搭架", value: "通常需要" },
+  ]);
+  assert.equal("soil_moisture_score" in plantGuide.plantCoreParameters, false, "only registered-free core fields are cached");
   localStorage.setItem("lifespace:guide-directory:v1", "invalid-json");
   assert.ok(guides.loadOfflineGuideDirectory().length > 40);
 });

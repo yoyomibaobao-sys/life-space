@@ -212,6 +212,19 @@ button:disabled { opacity: 0.55; }
 .guide-item { border: 1px solid var(--line); border-radius: 16px; background: #fff; padding: 14px; text-align: left; color: #314131; }
 .guide-item strong, .guide-item small { display: block; }
 .guide-item small { color: var(--muted); margin-top: 6px; }
+.guide-item p { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.guide-hero { display: grid; gap: 12px; background: linear-gradient(145deg, #f4faef, #fff); }
+.guide-hero h1 { margin: 0; font-size: 25px; }
+.guide-hero .primary-button { width: 100%; }
+.guide-category { width: fit-content; border-radius: 999px; padding: 5px 10px; background: #e8f3e2; color: var(--green-dark); font-size: 12px; font-weight: 750; }
+.guide-overview p { margin: 0; color: #3d4c39; line-height: 1.7; white-space: pre-wrap; }
+.guide-parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.guide-parameter { min-width: 0; border: 1px solid #e1e9dd; border-radius: 15px; background: #fafcf8; padding: 13px; }
+.guide-parameter small, .guide-parameter strong { display: block; overflow-wrap: anywhere; }
+.guide-parameter small { color: var(--muted); margin-bottom: 7px; }
+.guide-parameter strong { color: #2f402d; line-height: 1.45; }
+.guide-parameter p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.guide-access-notice { margin-top: 2px; }
 .guide-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
 .guide-suggestions button { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: 14px; background: #f7faf5; color: var(--green-dark); }
 .property-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid #eef2ec; font-size: 14px; }
@@ -237,4 +250,5 @@ button:disabled { opacity: 0.55; }
 .bottom-nav button[aria-current="page"] { background: #eef6e7; color: #386d34; }
 .bottom-nav .quick-add { justify-self: center; width: 54px; height: 54px; margin-top: -12px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 4px 14px #315a2d30; }
 .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
+@media (max-width: 420px) { .guide-parameter-grid { grid-template-columns: 1fr; } }
 @media (max-width: 360px) { .source-row button { font-size: 12px; } }

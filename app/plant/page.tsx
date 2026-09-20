@@ -18,6 +18,10 @@ import {
   loadPlantCoreParametersCompat,
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
+import {
+  rememberGuideDirectory,
+  type OfflineGuideDirectoryEntry,
+} from "@/lib/offline-guide-directory";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import GuideCategoryTabs from "@/components/plant/GuideCategoryTabs";
@@ -241,6 +245,7 @@ export default function PlantIndexPage() {
   const [plantCatalogError, setPlantCatalogError] = useState(false);
   const [aliases, setAliases] = useState<AliasItem[]>([]);
   const [basicOverviews, setBasicOverviews] = useState<BasicOverview[]>([]);
+  const [basicOverviewsEn, setBasicOverviewsEn] = useState<BasicOverview[]>([]);
   const [parameters, setParameters] = useState<PlantParameterLite[]>([]);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
@@ -423,6 +428,7 @@ export default function PlantIndexPage() {
         { data: plantData, error: plantError },
         { data: aliasData, error: aliasError },
         { data: overviewData },
+        { data: overviewDataEn },
         { data: parameterData },
         interestCountResult,
       ] = await Promise.all([
@@ -448,9 +454,13 @@ export default function PlantIndexPage() {
           ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))
           : Promise.resolve({ data: [] as BasicOverview[] }),
 
+        user
+          ? loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data }))
+          : Promise.resolve({ data: [] as BasicOverview[] }),
+
         canReadFullGuide
           ? supabase.from("plant_parameters").select(
-              "species_id, sun_score, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
+              "species_id, sun_score, need_trellis, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
             )
           : user
             ? loadPlantCoreParametersCompat(null).then((data) => ({ data }))
@@ -463,6 +473,7 @@ export default function PlantIndexPage() {
       setAliases(aliasData || []);
       setPlantCatalogError(Boolean(plantError || aliasError));
       setBasicOverviews((overviewData || []) as BasicOverview[]);
+      setBasicOverviewsEn((overviewDataEn || []) as BasicOverview[]);
       setParameters(parameterData || []);
       setInterestCount(interestCountResult);
       setLoading(false);
@@ -482,7 +493,7 @@ export default function PlantIndexPage() {
         loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
           .from("guide_entries")
           .select(
-            "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, sort_order, is_active",
+            "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, content_en, sort_order, is_active",
           )
           .eq("is_active", true)
           .order("sort_order", { ascending: true })
@@ -616,6 +627,18 @@ export default function PlantIndexPage() {
     return map;
   }, [basicOverviews]);
 
+  const guideMapEn = useMemo(() => {
+    const map: Record<string, BasicOverview> = {};
+
+    basicOverviewsEn.forEach((overview) => {
+      if (overview.species_id) {
+        map[overview.species_id] = overview;
+      }
+    });
+
+    return map;
+  }, [basicOverviewsEn]);
+
   const globalSearchMatches = useMemo(
     () => searchGuideDirectory({ query, plants, aliases: aliasMap, entries: publicGuides, sections: publicGuideSections }),
     [query, plants, aliasMap, publicGuides, publicGuideSections],
@@ -632,6 +655,82 @@ export default function PlantIndexPage() {
 
     return map;
   }, [parameters]);
+
+  useEffect(() => {
+    if (!isSignedIn || loading || !plants.length) return;
+
+    const rows: OfflineGuideDirectoryEntry[] = plants.flatMap((plant) => {
+      const label = String(plant.common_name || plant.scientific_name || "").trim();
+      if (!label) return [];
+      const core = parameterMap[plant.id];
+      const plantAliases = aliasMap[plant.id] || [];
+      const row: OfflineGuideDirectoryEntry = {
+        id: plant.id,
+        plantId: plant.id,
+        plantSlug: plant.slug || undefined,
+        label,
+        nameEn: plant.scientific_name || undefined,
+        source: "plant_species",
+        category: "plant",
+        aliases: plantAliases,
+        description: plant.scientific_name || undefined,
+        searchText: [
+          plant.common_name,
+          plant.scientific_name,
+          plant.slug,
+          ...plantAliases,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        overviewZh: guideMap[plant.id]?.summary || undefined,
+        overviewEn: guideMapEn[plant.id]?.summary || undefined,
+        plantCoreParameters: core
+          ? {
+              sun_score: core.sun_score,
+              need_trellis: core.need_trellis,
+              container_friendly_score: core.container_friendly_score,
+              indoor_friendly_score: core.indoor_friendly_score,
+              balcony_friendly_score: core.balcony_friendly_score,
+            }
+          : undefined,
+      };
+      return [row];
+    });
+
+    rememberGuideDirectory(rows);
+  }, [
+    aliasMap,
+    guideMap,
+    guideMapEn,
+    isSignedIn,
+    loading,
+    parameterMap,
+    plants,
+  ]);
+
+  useEffect(() => {
+    if (!isSignedIn || publicGuidesLoading || !publicGuides.length) return;
+
+    const rows: OfflineGuideDirectoryEntry[] = publicGuides.map((entry) => {
+      const zh = buildPublicGuideContent(entry, "zh");
+      const en = buildPublicGuideContent(entry, "en");
+      return {
+        id: entry.id,
+        label: entry.name,
+        nameEn: entry.name_en || undefined,
+        source: "public_guide",
+        category: entry.category,
+        aliases: entry.name_en ? [entry.name_en] : [],
+        searchText: [entry.name, entry.name_en].filter(Boolean).join(" "),
+        overviewZh: zh.overview,
+        overviewEn: en.overview,
+        parametersZh: zh.parameters.slice(0, 3),
+        parametersEn: en.parameters.slice(0, 3),
+      };
+    });
+
+    rememberGuideDirectory(rows);
+  }, [isSignedIn, publicGuides, publicGuidesLoading]);
 
   const categories = useMemo(() => {
     const existing = Array.from(

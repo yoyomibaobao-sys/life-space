@@ -24,6 +24,7 @@ const buildResult = await build({
   platform: "browser",
   target: ["chrome120"],
   minify: true,
+  charset: "utf8",
   write: false,
   outfile: path.join(outputRoot, "offline.js"),
   jsx: "automatic",
