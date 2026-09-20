@@ -36,6 +36,25 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
 });
 
+test("offline guides expose only the registered-user overview boundary", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const guideCache = read("lib/offline-guide-directory.ts");
+  const plantIndex = read("app/plant/page.tsx");
+
+  assert.match(source, /kind: "guide-detail"/);
+  assert.match(source, /!owner[\s\S]*guideSignInRequired/);
+  assert.match(source, /getOfflineGuideOverview\(guide, language\)/);
+  assert.match(source, /getOfflineGuideParameters\(guide, language\)/);
+  assert.match(source, /owner && guide\.description/);
+  assert.match(source, /full practice guidance, experience cards, and related projects/);
+  assert.match(guideCache, /PUBLIC_SOURCES/);
+  assert.match(guideCache, /plantCoreParameters/);
+  assert.match(guideCache, /\["light", "scene", "indoor"\]/);
+  assert.match(plantIndex, /if \(!isSignedIn \|\| loading \|\| !plants\.length\) return/);
+  assert.match(plantIndex, /parametersZh: zh\.parameters\.slice\(0, 3\)/);
+  assert.match(plantIndex, /content, content_en/);
+});
+
 test("signed RC local data migrates on-device before the old origin is retired", () => {
   const migration = read("lib/local-origin-migration.ts");
   const nextConfig = read("next.config.ts");

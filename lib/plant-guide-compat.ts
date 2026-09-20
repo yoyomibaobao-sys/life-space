@@ -26,11 +26,12 @@ type CareGuideOverviewFallbackRow = {
 };
 
 export async function loadPlantBasicOverviewsCompat(
-  speciesId: string | null
+  speciesId: string | null,
+  languageCode: "zh" | "en" = "zh",
 ): Promise<PlantBasicOverviewCompatRow[]> {
   const rpcResult = await supabase.rpc("get_plant_basic_overviews", {
     p_species_id: speciesId,
-    p_language_code: "zh",
+    p_language_code: languageCode,
   });
 
   if (!isMissingDatabaseFunction(rpcResult.error, "get_plant_basic_overviews")) {
@@ -44,7 +45,7 @@ export async function loadPlantBasicOverviewsCompat(
   let careGuideQuery = supabase
     .from("plant_care_guides")
     .select("plant_id, summary")
-    .eq("language_code", "zh");
+    .eq("language_code", languageCode);
 
   if (speciesId) {
     speciesQuery = speciesQuery.eq("id", speciesId);
