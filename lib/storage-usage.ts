@@ -147,6 +147,8 @@ async function reserveLegacyStorageBytes(bytes: number) {
 
 export async function reserveStorageUpload(params: {
   reservationId?: string;
+  preserveOnUncertainError?: boolean;
+  requireIdempotentReservation?: boolean;
   targetType: StorageUploadTargetType;
   targetId: string;
   targetParentId?: string | null;
@@ -173,6 +175,17 @@ export async function reserveStorageUpload(params: {
   let { data, error } = await supabase.rpc("reserve_storage_upload", rpcParams);
 
   if (isMissingReservationRpc(error)) {
+    if (params.requireIdempotentReservation) {
+      return {
+        ok: false,
+        reservation_id: null,
+        reservation_mode: "reservation",
+        storage_used: 0,
+        storage_limit_bytes: 0,
+        remaining_bytes: 0,
+        message: "idempotent_reservation_unavailable",
+      } satisfies StorageReserveResult;
+    }
     return reserveLegacyStorageBytes(reservedBytes);
   }
 
@@ -184,9 +197,11 @@ export async function reserveStorageUpload(params: {
 
   if (error) {
     console.error("reserve storage upload error:", error);
-    await supabase.rpc("cancel_storage_upload_reservation", {
-      p_reservation_id: reservationId,
-    });
+    if (!params.preserveOnUncertainError) {
+      await supabase.rpc("cancel_storage_upload_reservation", {
+        p_reservation_id: reservationId,
+      });
+    }
     return {
       ok: false,
       reservation_id: null,

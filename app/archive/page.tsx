@@ -62,11 +62,13 @@ import {
   markLocalArchiveForOwner,
   renameLocalTaxonomyItem,
   updateLocalArchiveFields,
+  listPendingCloudSyncSummaries,
   listVisibleLocalTaxonomyItems,
   listVisibleLocalArchiveSummaries,
   markUnownedLocalArchivesForOwner,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
+  type PendingCloudSyncSummary,
   type LocalTaxonomyItem,
 } from "@/lib/local-offline-db";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -79,6 +81,7 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
+import { PENDING_CLOUD_SYNC_UPDATED_EVENT } from "@/lib/pending-cloud-sync";
 
 type LatestArchiveRecord = {
   id: string;
@@ -159,6 +162,9 @@ export default function ArchivePage() {
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
   const [localArchives, setLocalArchives] = useState<LocalArchiveSummary[]>([]);
+  const [pendingCloudSyncSummaries, setPendingCloudSyncSummaries] = useState<
+    PendingCloudSyncSummary[]
+  >([]);
   const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
   const [localError, setLocalError] = useState("");
@@ -203,12 +209,14 @@ export default function ArchivePage() {
   async function loadLocalArchives(ownerContext: LocalArchiveOwnerContext | null = currentOwnerContext) {
     setLocalLoading(true);
     try {
-      const [result, taxonomyItems] = await Promise.all([
+      const [result, taxonomyItems, pendingSummaries] = await Promise.all([
         listVisibleLocalArchiveSummaries(ownerContext),
         listVisibleLocalTaxonomyItems(ownerContext),
+        listPendingCloudSyncSummaries(ownerContext),
       ]);
       setLocalArchives(result.archives);
       setLocalTaxonomyItems(taxonomyItems);
+      setPendingCloudSyncSummaries(pendingSummaries);
       setLocalUnownedCount(result.unownedCount);
       setLocalHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
       setLocalError("");
@@ -225,11 +233,20 @@ export default function ArchivePage() {
     }
 
     window.addEventListener(LOCAL_ORIGIN_MIGRATED_EVENT, handleLocalOriginMigration);
-    return () =>
+    window.addEventListener(
+      PENDING_CLOUD_SYNC_UPDATED_EVENT,
+      handleLocalOriginMigration
+    );
+    return () => {
       window.removeEventListener(
         LOCAL_ORIGIN_MIGRATED_EVENT,
         handleLocalOriginMigration,
       );
+      window.removeEventListener(
+        PENDING_CLOUD_SYNC_UPDATED_EVENT,
+        handleLocalOriginMigration
+      );
+    };
     // The callback intentionally reads the latest owner context from state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOwnerContext]);
@@ -1143,6 +1160,17 @@ export default function ArchivePage() {
 
     return counts;
   }, [localArchives]);
+
+  const pendingCloudSyncByArchiveId = useMemo(
+    () =>
+      new Map(
+        pendingCloudSyncSummaries.map((summary) => [
+          summary.local_archive_id,
+          summary,
+        ])
+      ),
+    [pendingCloudSyncSummaries]
+  );
   const visibleCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1892,6 +1920,24 @@ export default function ArchivePage() {
           {t.archive_workspace.local_taxonomy_notice}
         </div>
       ) : null}
+      {showLocalArchives && pendingCloudSyncSummaries.length > 0 ? (
+        <div style={pendingCloudSyncNoticeStyle}>
+          <strong>{t.archive.pending_sync_workspace_notice}</strong>
+          <div style={pendingCloudSyncLinkRowStyle}>
+            {pendingCloudSyncSummaries.map((summary) => (
+              <Link
+                key={summary.local_archive_id}
+                href={`/local/archive/${summary.local_archive_id}?sync=1`}
+                style={pendingCloudSyncLinkStyle}
+              >
+                {summary.title} · {summary.record_count}{" "}
+                {t.archive.pending_sync_record_unit} · {summary.image_count}{" "}
+                {t.archive.pending_sync_photo_unit}
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {showLocalArchives && currentOwnerContext?.userId && localUnownedCount > 0 && !localOwnershipPromptDismissed ? (
         <div style={localOwnershipNoticeStyle}>
           <span>
@@ -2158,6 +2204,9 @@ export default function ArchivePage() {
               const availableLocalGroups = archive.subcategory
                 ? localGroupTagItems.filter((tag) => tag.sub_tag_id === archive.subcategory)
                 : [];
+              const pendingCloudSyncSummary = pendingCloudSyncByArchiveId.get(
+                archive.id
+              );
 
               return (
                 <ArchiveProjectCard
@@ -2246,10 +2295,27 @@ export default function ArchivePage() {
                         ended={archive.status === "ended"}
                         onToggleEnded={() => void toggleLocalArchiveEnded(archive)}
                         extraActions={[
-                          {
-                            label: t.archive.transfer_to_cloud,
-                            onClick: () => router.push(`/local/archive/${archive.id}?transfer=1`),
-                          },
+                          ...(pendingCloudSyncSummary
+                            ? [
+                                {
+                                  label: t.archive.pending_sync_upload,
+                                  onClick: () =>
+                                    router.push(
+                                      `/local/archive/${archive.id}?sync=1`
+                                    ),
+                                },
+                              ]
+                            : archive.source_cloud_archive_id
+                              ? []
+                              : [
+                                  {
+                                    label: t.archive.transfer_to_cloud,
+                                    onClick: () =>
+                                      router.push(
+                                        `/local/archive/${archive.id}?transfer=1`
+                                      ),
+                                  },
+                                ]),
                           ...(!archive.local_owner_user_id && currentOwnerContext?.userId
                             ? [{
                                 label: t.archive_workspace.mark_ownership,
@@ -2268,6 +2334,19 @@ export default function ArchivePage() {
                   actionRailSlot={
                     !isMobileViewport ? (
                     <>
+                      {pendingCloudSyncSummary ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            router.push(`/local/archive/${archive.id}?sync=1`);
+                          }}
+                          style={localProjectRailSyncButtonStyle}
+                        >
+                          {t.archive.pending_sync_upload}
+                        </button>
+                      ) : null}
                       {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
                         <button
                           type="button"
@@ -2763,6 +2842,36 @@ const localOtherOwnerNoticeStyle: CSSProperties = {
   lineHeight: 1.5,
 };
 
+const pendingCloudSyncNoticeStyle: CSSProperties = {
+  margin: "0 0 10px",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #d6e6cf",
+  background: "#f5faf1",
+  color: "#40583a",
+  fontSize: 13,
+  lineHeight: 1.55,
+};
+
+const pendingCloudSyncLinkRowStyle: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 7,
+};
+
+const pendingCloudSyncLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  padding: "5px 9px",
+  borderRadius: 999,
+  border: "1px solid #c8ddbf",
+  background: "#fff",
+  color: "#3f683a",
+  fontSize: 12,
+  fontWeight: 750,
+  textDecoration: "none",
+};
+
 const localInlineEditWrapStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -2817,6 +2926,12 @@ const localProjectRailButtonStyle: CSSProperties = {
 const localProjectRailDangerButtonStyle: CSSProperties = {
   ...localProjectRailButtonStyle,
   color: "#d66",
+};
+
+const localProjectRailSyncButtonStyle: CSSProperties = {
+  ...localProjectRailButtonStyle,
+  color: "#3f743b",
+  fontWeight: 800,
 };
 
 type ArchiveSourceFilter = "all" | "cloud" | "local";

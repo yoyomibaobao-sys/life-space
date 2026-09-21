@@ -7,6 +7,7 @@ import Toast from "@/components/Toast";
 import MobileBackNavigation from "@/components/MobileBackNavigation";
 import KeyboardLayoutGuard from "@/components/KeyboardLayoutGuard";
 import LocalOwnerContextSync from "@/components/LocalOwnerContextSync";
+import PendingCloudSyncPrompt from "@/components/PendingCloudSyncPrompt";
 import LocalOriginMigration from "@/components/LocalOriginMigration";
 import AppUpdateNotifier from "@/components/AppUpdateNotifier";
 import { Suspense } from "react";
@@ -57,6 +58,7 @@ export default function RootLayout({
         <StatusBarTheme />
         <KeyboardLayoutGuard />
         <LocalOwnerContextSync />
+        <PendingCloudSyncPrompt />
         <GuideDirectoryCache />
         <LocalOriginMigration />
         <Suspense fallback={null}>

@@ -56,7 +56,9 @@ import {
   deleteLocalRecord,
   endLocalArchiveCycle,
   getLocalArchiveDetail,
+  listPendingCloudSyncSummaries,
   markLocalArchiveForOwner,
+  preparePendingCloudSyncQueue,
   restoreLocalArchiveCycle,
   updateLocalArchiveCycleDates,
   updateLocalArchiveCycleName,
@@ -65,7 +67,13 @@ import {
   type LocalArchiveOwnerContext,
   type LocalArchiveDetail,
   type LocalRecordWithImages,
+  type PendingCloudSyncSummary,
 } from "@/lib/local-offline-db";
+import {
+  PENDING_CLOUD_SYNC_UPDATED_EVENT,
+  syncPendingCloudArchive,
+  type PendingCloudSyncProgress,
+} from "@/lib/pending-cloud-sync";
 import {
   getArchiveCategoryIcon,
   type ArchiveCategory,
@@ -137,6 +145,7 @@ export default function LocalArchiveDetailPage() {
   const searchParams = useSearchParams();
   const quickCaptureId = searchParams.get("quickCapture") || "";
   const transferRequested = searchParams.get("transfer") === "1";
+  const syncRequested = searchParams.get("sync") === "1";
 
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -168,6 +177,13 @@ export default function LocalArchiveDetailPage() {
   const [transferErrorDetail, setTransferErrorDetail] = useState("");
   const [showTransferErrorReason, setShowTransferErrorReason] = useState(false);
   const [transferredCloudArchiveId, setTransferredCloudArchiveId] = useState("");
+  const [pendingSyncSummary, setPendingSyncSummary] =
+    useState<PendingCloudSyncSummary | null>(null);
+  const [pendingSyncPromptOpen, setPendingSyncPromptOpen] = useState(false);
+  const [pendingSyncRunning, setPendingSyncRunning] = useState(false);
+  const [pendingSyncProgress, setPendingSyncProgress] =
+    useState<PendingCloudSyncProgress | null>(null);
+  const [pendingSyncError, setPendingSyncError] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
@@ -196,8 +212,16 @@ export default function LocalArchiveDetailPage() {
         : null;
       setOwnerContext(ownerContext);
       setCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId));
-      const nextDetail = await getLocalArchiveDetail(archiveId, ownerContext);
+      await preparePendingCloudSyncQueue(ownerContext);
+      const [nextDetail, pendingSummaries] = await Promise.all([
+        getLocalArchiveDetail(archiveId, ownerContext),
+        listPendingCloudSyncSummaries(ownerContext),
+      ]);
       setDetail(nextDetail);
+      setPendingSyncSummary(
+        pendingSummaries.find((item) => item.local_archive_id === archiveId) ||
+          null
+      );
       setLocalRecordItems(nextDetail ? buildLocalRecordItems(nextDetail.records) : []);
       setError(nextDetail ? "" : archiveCopy.local_not_found);
     } catch (err) {
@@ -228,8 +252,41 @@ export default function LocalArchiveDetailPage() {
   }, [archiveId]);
 
   useEffect(() => {
-    if (transferRequested && detail) setTransferPromptOpen(true);
-  }, [detail, transferRequested]);
+    function handlePendingSyncUpdated(event: Event) {
+      const localArchiveId = (event as CustomEvent<{ localArchiveId?: string }>).detail
+        ?.localArchiveId;
+      if (!localArchiveId || localArchiveId === archiveId) void loadDetail();
+    }
+
+    window.addEventListener(
+      PENDING_CLOUD_SYNC_UPDATED_EVENT,
+      handlePendingSyncUpdated
+    );
+    return () =>
+      window.removeEventListener(
+        PENDING_CLOUD_SYNC_UPDATED_EVENT,
+        handlePendingSyncUpdated
+      );
+    // The detail loader resolves the current owner and route id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [archiveId]);
+
+  useEffect(() => {
+    if (
+      transferRequested &&
+      detail &&
+      !detail.archive.source_cloud_archive_id
+    ) {
+      setTransferPromptOpen(true);
+    }
+    if (
+      syncRequested &&
+      detail?.archive.source_cloud_archive_id &&
+      pendingSyncSummary
+    ) {
+      setPendingSyncPromptOpen(true);
+    }
+  }, [detail, pendingSyncSummary, syncRequested, transferRequested]);
 
   useEffect(() => {
     if (!quickCaptureId || loadedQuickCaptureIdRef.current === quickCaptureId) {
@@ -648,6 +705,54 @@ export default function LocalArchiveDetailPage() {
     }
   }
 
+  function openPendingSyncPrompt() {
+    setPendingSyncError("");
+    setPendingSyncProgress(null);
+    if (!ownerContext?.userId) {
+      setPendingSyncError(archiveCopy.transfer_login_required);
+      return;
+    }
+    if (!navigator.onLine) {
+      setPendingSyncError(archiveCopy.pending_sync_offline);
+      return;
+    }
+    if (!pendingSyncSummary) return;
+    setPendingSyncPromptOpen(true);
+  }
+
+  async function confirmPendingCloudSync() {
+    if (
+      !archiveId ||
+      !ownerContext?.userId ||
+      !pendingSyncSummary ||
+      pendingSyncRunning
+    ) {
+      return;
+    }
+
+    setPendingSyncRunning(true);
+    setPendingSyncError("");
+    setPendingSyncProgress(null);
+    const result = await syncPendingCloudArchive({
+      localArchiveId: archiveId,
+      ownerContext,
+      onProgress: setPendingSyncProgress,
+    });
+    setPendingSyncRunning(false);
+
+    if (result.success) {
+      setPendingSyncPromptOpen(false);
+      setPendingSyncSummary(null);
+      setPendingSyncProgress(null);
+      showToast(archiveCopy.pending_sync_success);
+      await loadDetail();
+      return;
+    }
+
+    setPendingSyncError(result.error || archiveCopy.pending_sync_incomplete);
+    await loadDetail();
+  }
+
   function openTransferPrompt() {
     if (!detail) return;
 
@@ -999,6 +1104,19 @@ export default function LocalArchiveDetailPage() {
         localLightboxRecord.record_time
       )}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""} · ${formatDate(localLightboxRecord.record_time)}`
     : "";
+  const pendingSyncParts = pendingSyncSummary
+    ? [
+        pendingSyncSummary.archive_update_pending
+          ? archiveCopy.pending_sync_archive_item
+          : null,
+        pendingSyncSummary.record_count > 0
+          ? `${pendingSyncSummary.record_count} ${archiveCopy.pending_sync_record_unit}`
+          : null,
+        pendingSyncSummary.image_count > 0
+          ? `${pendingSyncSummary.image_count} ${archiveCopy.pending_sync_photo_unit}`
+          : null,
+      ].filter(Boolean)
+    : [];
 
   return (
     <main style={pageStyle}>
@@ -1014,7 +1132,11 @@ export default function LocalArchiveDetailPage() {
           }
           recordCountText={`${archiveCopy.records} ${records.length}`}
           durationText={ongoingDays ? durationText : undefined}
-          hint={archiveCopy.local_hint}
+          hint={
+            archive.source_cloud_archive_id
+              ? archiveCopy.cloud_local_copy_hint
+              : archiveCopy.local_hint
+          }
           actionSlot={
             <div style={headerActionSlotStyle}>
               {!archive.local_owner_user_id && ownerContext?.userId ? (
@@ -1026,24 +1148,50 @@ export default function LocalArchiveDetailPage() {
                   {archiveCopy.mark_owner}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={openTransferPrompt}
-                disabled={transferRunning || archive.migration_status === "migrating"}
-                style={{
-                  ...transferActionButtonStyle,
-                  opacity:
-                    transferRunning || archive.migration_status === "migrating"
-                      ? 0.55
-                      : 1,
-                  cursor:
-                    transferRunning || archive.migration_status === "migrating"
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                {archiveCopy.transfer_to_cloud}
-              </button>
+              {archive.source_cloud_archive_id ? (
+                pendingSyncSummary ? (
+                  <button
+                    type="button"
+                    onClick={openPendingSyncPrompt}
+                    disabled={pendingSyncRunning}
+                    style={{
+                      ...transferActionButtonStyle,
+                      opacity: pendingSyncRunning ? 0.55 : 1,
+                      cursor: pendingSyncRunning ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {pendingSyncRunning
+                      ? archiveCopy.pending_sync_uploading
+                      : archiveCopy.pending_sync_upload}
+                  </button>
+                ) : (
+                  <Link
+                    href={`/archive/${archive.source_cloud_archive_id}`}
+                    style={transferActionLinkStyle}
+                  >
+                    {archiveCopy.view_cloud_project}
+                  </Link>
+                )
+              ) : (
+                <button
+                  type="button"
+                  onClick={openTransferPrompt}
+                  disabled={transferRunning || archive.migration_status === "migrating"}
+                  style={{
+                    ...transferActionButtonStyle,
+                    opacity:
+                      transferRunning || archive.migration_status === "migrating"
+                        ? 0.55
+                        : 1,
+                    cursor:
+                      transferRunning || archive.migration_status === "migrating"
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {archiveCopy.transfer_to_cloud}
+                </button>
+              )}
             </div>
           }
           profileRows={localProfileRows}
@@ -1120,7 +1268,9 @@ export default function LocalArchiveDetailPage() {
         />
       </section>
 
-      {transferError ? (
+      {pendingSyncError && !pendingSyncPromptOpen ? (
+        <div style={transferErrorStyle}>{pendingSyncError}</div>
+      ) : transferError ? (
         <div style={transferErrorStyle}>
           <div>{transferError}</div>
           {transferErrorDetail ? (
@@ -1151,6 +1301,72 @@ export default function LocalArchiveDetailPage() {
           {showTransferErrorReason ? (
             <div style={transferReasonTextStyle}>{archive.migration_error}</div>
           ) : null}
+        </div>
+      ) : null}
+
+      {pendingSyncPromptOpen && pendingSyncSummary ? (
+        <div
+          style={transferOverlayStyle}
+          onClick={() => {
+            if (!pendingSyncRunning) setPendingSyncPromptOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pending-cloud-sync-title"
+            style={transferDialogStyle}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={transferPanelHeaderStyle}>
+              <h2 id="pending-cloud-sync-title" style={transferTitleStyle}>
+                {archiveCopy.pending_sync_title}
+              </h2>
+            </div>
+            <p style={transferTextStyle}>
+              {archiveCopy.pending_sync_intro}
+              <br />
+              {pendingSyncParts.join(" · ")}
+            </p>
+            {pendingSyncSummary.failed_record_count +
+              pendingSyncSummary.failed_image_count >
+            0 ? (
+              <div style={pendingSyncHintStyle}>
+                {archiveCopy.pending_sync_failed_hint}
+              </div>
+            ) : null}
+            {pendingSyncProgress ? (
+              <div style={pendingSyncHintStyle}>
+                {archiveCopy.pending_sync_progress} {pendingSyncProgress.completed}/
+                {pendingSyncProgress.total}
+              </div>
+            ) : null}
+            {pendingSyncError ? (
+              <div role="alert" style={pendingSyncDialogErrorStyle}>
+                {pendingSyncError}
+              </div>
+            ) : null}
+            <div style={transferActionRowStyle}>
+              <button
+                type="button"
+                onClick={confirmPendingCloudSync}
+                disabled={pendingSyncRunning}
+                style={transferPrimaryButtonStyle}
+              >
+                {pendingSyncRunning
+                  ? archiveCopy.pending_sync_uploading
+                  : archiveCopy.pending_sync_now}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingSyncPromptOpen(false)}
+                disabled={pendingSyncRunning}
+                style={transferSecondaryButtonStyle}
+              >
+                {t.cancel}
+              </button>
+            </div>
+          </section>
         </div>
       ) : null}
 
@@ -1631,6 +1847,14 @@ const transferActionButtonStyle = {
   cursor: "pointer",
 } satisfies CSSProperties;
 
+const transferActionLinkStyle = {
+  ...transferActionButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textDecoration: "none",
+} satisfies CSSProperties;
+
 const transferOverlayStyle = {
   position: "fixed",
   inset: 0,
@@ -1689,6 +1913,22 @@ const transferTextStyle = {
   color: "#4f5d4a",
   fontSize: 14,
   lineHeight: 1.8,
+} satisfies CSSProperties;
+
+const pendingSyncHintStyle = {
+  marginTop: 10,
+  padding: "9px 11px",
+  borderRadius: 11,
+  background: "#f4f8f1",
+  color: "#566650",
+  fontSize: 13,
+  lineHeight: 1.6,
+} satisfies CSSProperties;
+
+const pendingSyncDialogErrorStyle = {
+  ...pendingSyncHintStyle,
+  background: "#fff3ef",
+  color: "#a44848",
 } satisfies CSSProperties;
 
 const transferVisibilityGroupStyle = {
