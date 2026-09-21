@@ -3,6 +3,7 @@ export const ANDROID_RELEASE_MANIFEST_PATH =
   "/downloads/android/release.json";
 
 const ANDROID_RELEASE_MANIFEST_KEY = "releases/android/release.json";
+const ANDROID_NATIVE_BUFFER_LIMIT_BYTES = 16 * 1024 * 1024;
 
 function jsonError(message, status) {
   return Response.json(
@@ -117,7 +118,19 @@ export async function handleAndroidReleaseDownload(request, env) {
   headers.set("X-Checksum-SHA256", manifest.sha256);
   if (object.httpEtag) headers.set("ETag", object.httpEtag);
 
-  return new Response(request.method === "HEAD" ? null : object.body, {
+  // Small APKs are buffered before sending so Android's native URLConnection
+  // receives one complete, length-stable body instead of depending on a long
+  // R2 stream remaining open until EOF. Larger future releases stay streamed.
+  let body = object.body;
+  if (
+    request.method !== "HEAD" &&
+    object.size <= ANDROID_NATIVE_BUFFER_LIMIT_BYTES &&
+    typeof object.arrayBuffer === "function"
+  ) {
+    body = await object.arrayBuffer();
+  }
+
+  return new Response(request.method === "HEAD" ? null : body, {
     status: 200,
     headers,
   });
