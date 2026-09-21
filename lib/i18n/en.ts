@@ -40,7 +40,7 @@ const en = {
     eyebrow: "Official website download",
     title: "Download LifeSpace for Android",
     intro: "For Android phones and tablets. The APK uses a permanent signing key so future versions can be installed as updates.",
-    test_badge: "Limited test build",
+    test_badge: "Release candidate",
     stable_badge: "Stable release",
     published: "Updated",
     file_size: "File size",
@@ -93,6 +93,8 @@ const en = {
     download_failed: "The download or verification did not complete. Try again or download from the official website.",
     unsupported: "This installed version does not support in-app updates yet. Install the next release once from the official website.",
     website_download: "Open official download",
+    website_copied: "This installed version cannot open the system browser directly. The official download address was copied; paste it into your phone browser.",
+    website_manual: "This installed version cannot open the system browser directly. Open the address below manually in your phone browser.",
     android_only: "Update checking is available only in the official Android app.",
   },
 

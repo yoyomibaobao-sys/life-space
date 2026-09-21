@@ -5,19 +5,23 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import {
   androidInstallFailure, checkAndroidUpdate, getAndroidUpdateSnapshot,
-  getAndroidUpdateServerSnapshot, installAndroidUpdate, subscribeAndroidUpdates,
+  getAndroidUpdateServerSnapshot, installAndroidUpdate, openAndroidOfficialDownload,
+  subscribeAndroidUpdates,
 } from "@/lib/android-app-update";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import styles from "./page.module.css";
 
 type InstallState = "idle" | "preparing" | "downloading" | "permission_required" | "installer_opened";
 type InstallFailure = ReturnType<typeof androidInstallFailure> | null;
+type DownloadFallbackState = "idle" | "copied" | "copy_failed";
+const OFFICIAL_DOWNLOAD_PAGE = "https://life-space.uk/download/android";
 
 export default function AndroidAppUpdatePage() {
   const { t } = useLanguage();
   const update = useSyncExternalStore(subscribeAndroidUpdates, getAndroidUpdateSnapshot, getAndroidUpdateServerSnapshot);
   const [installState, setInstallState] = useState<InstallState>("idle");
   const [installFailure, setInstallFailure] = useState<InstallFailure>(null);
+  const [downloadFallbackState, setDownloadFallbackState] = useState<DownloadFallbackState>("idle");
   const installing = useRef(false);
   const mounted = useRef(true);
 
@@ -50,6 +54,24 @@ export default function AndroidAppUpdatePage() {
       }
     } finally {
       installing.current = false;
+    }
+  }
+
+  async function openOfficialDownload() {
+    setDownloadFallbackState("idle");
+    try {
+      await openAndroidOfficialDownload();
+      return;
+    } catch {
+      // rc6 and earlier do not have the native browser handoff yet. The live
+      // web page can still provide a one-time rescue path without another APK.
+    }
+
+    try {
+      await navigator.clipboard.writeText(OFFICIAL_DOWNLOAD_PAGE);
+      setDownloadFallbackState("copied");
+    } catch {
+      setDownloadFallbackState("copy_failed");
     }
   }
 
@@ -101,7 +123,18 @@ export default function AndroidAppUpdatePage() {
         ) : null}
         {(failed || unsupported) ? (
           <div className={styles.noticeBlock}>
-            <a href="https://life-space.uk/api/download/android?source=app_update_fallback" target="_blank" rel="noreferrer">{t.app_update.website_download}</a>
+            <button type="button" className={styles.websiteButton} onClick={() => void openOfficialDownload()}>
+              {t.app_update.website_download}
+            </button>
+            {downloadFallbackState === "copied" ? (
+              <p>{t.app_update.website_copied}</p>
+            ) : null}
+            {downloadFallbackState === "copy_failed" ? (
+              <p>{t.app_update.website_manual}</p>
+            ) : null}
+            {downloadFallbackState !== "idle" ? (
+              <code className={styles.websiteUrl}>{OFFICIAL_DOWNLOAD_PAGE}</code>
+            ) : null}
           </div>
         ) : null}
         {androidOnly ? <Link className={styles.websiteLink} href="/download/android">{t.app_update.website_download}</Link> : null}

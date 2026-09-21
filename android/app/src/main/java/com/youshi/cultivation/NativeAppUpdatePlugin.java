@@ -48,6 +48,24 @@ public final class NativeAppUpdatePlugin extends Plugin {
     private final AtomicBoolean updateInProgress = new AtomicBoolean(false);
 
     @PluginMethod
+    public void openOfficialDownload(PluginCall call) {
+        try {
+            Intent intent = new Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://life-space.uk/download/android")
+            );
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            getActivity().startActivity(intent);
+
+            JSObject result = new JSObject();
+            result.put("status", "browser_opened");
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Android could not open the official download page.");
+        }
+    }
+
+    @PluginMethod
     public void getCurrentVersion(PluginCall call) {
         try {
             JSObject result = new JSObject();

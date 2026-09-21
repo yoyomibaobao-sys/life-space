@@ -88,6 +88,28 @@
   text-underline-offset: 3px;
 }
 
+.websiteButton {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #416f39;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.websiteUrl {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+  color: #53634f;
+  font-size: 12px;
+  user-select: all;
+}
+
 .websiteLink {
   display: inline-block;
   margin-top: 16px;

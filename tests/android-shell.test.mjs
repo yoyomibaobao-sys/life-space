@@ -149,10 +149,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '12'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc8'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '12' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc8' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '13'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc9'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '13' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc9' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
@@ -190,11 +190,15 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(plugin, /Intent\.ACTION_VIEW/);
   assert.match(plugin, /application\/vnd\.android\.package-archive/);
   assert.match(plugin, /Settings\.ACTION_MANAGE_UNKNOWN_APP_SOURCES/);
+  assert.match(plugin, /openOfficialDownload/);
+  assert.match(plugin, /Intent\.CATEGORY_BROWSABLE/);
+  assert.match(plugin, /https:\/\/life-space\.uk\/download\/android/);
   assert.match(manifest, /android\.permission\.REQUEST_INSTALL_PACKAGES/);
   assert.match(filePaths, /cache-path name="app_updates" path="updates\/"/);
 
   assert.match(updatePage, /installAndroidUpdate\(checked\.release\)/);
   assert.match(updateClient, /NativeAppUpdate\.installUpdate/);
+  assert.match(updateClient, /NativeAppUpdate\.openOfficialDownload/);
   assert.match(updateClient, /release\.version_code > currentVersion\.versionCode/);
   assert.match(versionEntry, /subscribeAndroidUpdates/);
   assert.match(updateClient, /App\.getInfo\(\)/);
