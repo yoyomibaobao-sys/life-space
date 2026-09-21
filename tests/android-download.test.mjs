@@ -40,6 +40,12 @@ function createR2Object(value, contentType) {
     async text() {
       return bytes.toString("utf8");
     },
+    async arrayBuffer() {
+      return bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      );
+    },
     writeHttpMetadata(headers) {
       if (contentType) headers.set("Content-Type", contentType);
     },
@@ -225,7 +231,11 @@ test("website exposes one download page before and after login", () => {
 test("main-branch signed builds publish and verify the R2 release", () => {
   const workflow = read(".github/workflows/android-apk.yml");
   const worker = read("cloudflare/worker-entry.mjs");
+  const updatePage = read("app/app-update/page.tsx");
 
+  assert.match(worker, /url\.pathname === "\/download\/android"/);
+  assert.match(worker, /source", "official_download"/);
+  assert.match(updatePage, /api\/download\/android\?source=app_update_fallback/);
   assert.match(workflow, /Verify permanent release signature/);
   assert.match(workflow, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);
   assert.match(workflow, /write-android-release-manifest\.mjs/);

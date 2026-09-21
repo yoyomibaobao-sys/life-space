@@ -8,6 +8,7 @@ import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.util.Log;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @CapacitorPlugin(name = "NativeAppUpdate")
 public final class NativeAppUpdatePlugin extends Plugin {
 
+    private static final String TAG = "LifeSpaceAppUpdate";
     private static final String OFFICIAL_UPDATE_URL =
         "https://life-space.uk/downloads/android/latest.apk";
     private static final String OFFICIAL_SIGNER_SHA256 =
@@ -40,6 +42,7 @@ public final class NativeAppUpdatePlugin extends Plugin {
     private static final long MAX_APK_BYTES = 200L * 1024L * 1024L;
     private static final int CONNECT_TIMEOUT_MS = 30_000;
     private static final int READ_TIMEOUT_MS = 60_000;
+    private static final int DOWNLOAD_ATTEMPTS = 2;
 
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean updateInProgress = new AtomicBoolean(false);
@@ -106,6 +109,7 @@ public final class NativeAppUpdatePlugin extends Plugin {
                 getBridge().executeOnMainThread(() -> openPackageInstaller(call, verifiedApk));
             } catch (Exception error) {
                 if (apkFile != null) apkFile.delete();
+                Log.w(TAG, "Verified in-app update failed.", error);
                 rejectOnMainThread(call, "The Android update could not be verified or opened.");
             } finally {
                 updateInProgress.set(false);
@@ -139,17 +143,50 @@ public final class NativeAppUpdatePlugin extends Plugin {
         }
 
         File apkFile = new File(updateDirectory, "youshi-cultivation-update.apk");
-        if (apkFile.exists() && !apkFile.delete()) {
-            throw new IllegalStateException("Could not replace the previous update file.");
+        Exception lastError = null;
+
+        for (int attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+            if (apkFile.exists() && !apkFile.delete()) {
+                throw new IllegalStateException("Could not replace the previous update file.");
+            }
+
+            try {
+                downloadVerifiedApkOnce(
+                    downloadUrl,
+                    expectedSize,
+                    expectedSha256,
+                    apkFile
+                );
+                return apkFile;
+            } catch (Exception error) {
+                lastError = error;
+                if (apkFile.exists()) apkFile.delete();
+                if (attempt < DOWNLOAD_ATTEMPTS) {
+                    Log.w(TAG, "Android update download attempt " + attempt + " failed; retrying.", error);
+                }
+            }
         }
 
+        throw lastError != null
+            ? lastError
+            : new IllegalStateException("The Android update download failed.");
+    }
+
+    private void downloadVerifiedApkOnce(
+        String downloadUrl,
+        long expectedSize,
+        String expectedSha256,
+        File apkFile
+    ) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(downloadUrl).openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
         connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
+        connection.setRequestProperty("Accept-Encoding", "identity");
         connection.setRequestProperty("Cache-Control", "no-cache");
-        connection.setRequestProperty("User-Agent", "LifeSpaceAndroidUpdater/1.0");
+        connection.setRequestProperty("Connection", "close");
+        connection.setRequestProperty("User-Agent", "LifeSpaceAndroidUpdater/1.1");
 
         try {
             if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
@@ -168,11 +205,15 @@ public final class NativeAppUpdatePlugin extends Plugin {
                 InputStream input = connection.getInputStream();
                 FileOutputStream output = new FileOutputStream(apkFile)
             ) {
-                int count;
-                while ((count = input.read(buffer)) != -1) {
+                while (bytesWritten < expectedSize) {
+                    int remaining = (int) Math.min(buffer.length, expectedSize - bytesWritten);
+                    int count = input.read(buffer, 0, remaining);
+                    if (count == -1) {
+                        throw new IllegalStateException("The downloaded update is incomplete.");
+                    }
                     bytesWritten += count;
-                    if (bytesWritten > expectedSize || bytesWritten > MAX_APK_BYTES) {
-                        throw new IllegalStateException("The update exceeded its expected size.");
+                    if (bytesWritten > MAX_APK_BYTES) {
+                        throw new IllegalStateException("The update exceeded its allowed size.");
                     }
                     output.write(buffer, 0, count);
                     digest.update(buffer, 0, count);
@@ -180,13 +221,9 @@ public final class NativeAppUpdatePlugin extends Plugin {
                 output.getFD().sync();
             }
 
-            if (bytesWritten != expectedSize) {
-                throw new IllegalStateException("The downloaded update is incomplete.");
-            }
             if (!expectedSha256.equals(toHex(digest.digest()))) {
                 throw new IllegalStateException("The update checksum does not match.");
             }
-            return apkFile;
         } finally {
             connection.disconnect();
         }

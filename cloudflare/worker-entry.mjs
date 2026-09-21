@@ -17,6 +17,12 @@ const worker = {
       return handleR2CanaryRequest(request, env);
     }
 
+    if (url.pathname === "/download/android") {
+      const fallbackUrl = new URL("/api/download/android", url.origin);
+      fallbackUrl.searchParams.set("source", "official_download");
+      return Response.redirect(fallbackUrl.toString(), 302);
+    }
+
     if (isAndroidReleaseDownloadPath(url.pathname)) {
       return handleAndroidReleaseDownload(request, env);
     }
