@@ -149,9 +149,9 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '11'/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '12'/);
   assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc7'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '11' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\|inputs\\.version_code \\|\\| '12' \}\}/);
   assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc7' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
@@ -184,6 +184,9 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(plugin, /OFFICIAL_SIGNER_SHA256\.equals\(signerSha256\)/);
   assert.match(plugin, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);
   assert.match(plugin, /expectedSha256\.equals\(toHex\(digest\.digest\(\)\)\)/);
+  assert.match(plugin, /DOWNLOAD_ATTEMPTS = 2/);
+  assert.match(plugin, /Accept-Encoding", "identity"/);
+  assert.match(plugin, /while \(bytesWritten < expectedSize\)/);
   assert.match(plugin, /Intent\.ACTION_VIEW/);
   assert.match(plugin, /application\/vnd\.android\.package-archive/);
   assert.match(plugin, /Settings\.ACTION_MANAGE_UNKNOWN_APP_SOURCES/);
