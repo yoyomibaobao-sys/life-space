@@ -225,6 +225,15 @@ export type PendingCloudSyncSummary = {
   deferred_at: string | null;
 };
 
+export type LocalCloudSyncOperationUpdate = {
+  status: "uploading" | "failed" | "synced";
+  cloud_archive_id?: string | null;
+  cloud_record_id?: string | null;
+  cloud_media_id?: string | null;
+  cloud_media_url?: string | null;
+  last_error?: string | null;
+};
+
 export type CloudArchiveLocalCycleInput = {
   cloud_cycle_id: string;
   cycle_no: number;
@@ -561,27 +570,107 @@ function queueCloudSyncOperation(
   }
 ) {
   const normalized = normalizeLocalSyncMeta(current);
+  // A successful operation is immutable. Edits made while another operation is
+  // in flight also need their own identity so the older response cannot clear
+  // newer pending fields. Images are immutable, so their retry identity stays
+  // stable while uploading.
+  const startNewOperation =
+    normalized.status === "synced" ||
+    (normalized.status === "uploading" && input.operationKind !== "upload-image");
+  const base = startNewOperation
+    ? normalizeLocalSyncMeta({
+        ...normalized,
+        client_operation_id: null,
+        depends_on_operation_id: null,
+        operation_kind: null,
+        queued_at: null,
+        last_error: null,
+        pending_fields: [],
+      })
+    : normalized;
+
   return normalizeLocalSyncMeta({
-    ...normalized,
+    ...base,
     status: "pending-cloud-sync",
     cloud_archive_id: input.cloudArchiveId,
     cloud_record_id:
       input.cloudRecordId === undefined
-        ? normalized.cloud_record_id
+        ? base.cloud_record_id
         : input.cloudRecordId,
     client_operation_id:
-      normalized.client_operation_id || createOperationId(),
+      base.client_operation_id || createOperationId(),
     depends_on_operation_id:
       input.dependsOnOperationId === undefined
-        ? normalized.depends_on_operation_id
+        ? base.depends_on_operation_id
         : input.dependsOnOperationId,
-    operation_kind: normalized.operation_kind || input.operationKind,
-    queued_at: normalized.queued_at || input.timestamp,
+    operation_kind: base.operation_kind || input.operationKind,
+    queued_at: base.queued_at || input.timestamp,
     last_error: null,
     pending_fields: [
-      ...(normalized.pending_fields || []),
+      ...(base.pending_fields || []),
       ...(input.pendingFields || []),
     ],
+  });
+}
+
+function applyCloudSyncOperationUpdate(
+  current: Partial<LocalSyncMeta> | null | undefined,
+  operationId: string,
+  update: LocalCloudSyncOperationUpdate,
+  timestamp: string
+) {
+  const normalized = normalizeLocalSyncMeta(current);
+  if (normalized.client_operation_id !== operationId) {
+    return normalized;
+  }
+
+  const withCloudIds = normalizeLocalSyncMeta({
+    ...normalized,
+    cloud_archive_id:
+      update.cloud_archive_id === undefined
+        ? normalized.cloud_archive_id
+        : update.cloud_archive_id,
+    cloud_record_id:
+      update.cloud_record_id === undefined
+        ? normalized.cloud_record_id
+        : update.cloud_record_id,
+    cloud_media_id:
+      update.cloud_media_id === undefined
+        ? normalized.cloud_media_id
+        : update.cloud_media_id,
+    cloud_media_url:
+      update.cloud_media_url === undefined
+        ? normalized.cloud_media_url
+        : update.cloud_media_url,
+  });
+
+  if (update.status === "uploading") {
+    return normalizeLocalSyncMeta({
+      ...withCloudIds,
+      status: "uploading",
+      attempt_count: (withCloudIds.attempt_count || 0) + 1,
+      last_error: null,
+    });
+  }
+
+  if (update.status === "failed") {
+    return normalizeLocalSyncMeta({
+      ...withCloudIds,
+      status: "failed",
+      last_error: update.last_error || "云端上传失败，请稍后重试。",
+    });
+  }
+
+  return normalizeLocalSyncMeta({
+    ...withCloudIds,
+    status: "synced",
+    last_sync_at: timestamp,
+    client_operation_id: null,
+    depends_on_operation_id: null,
+    operation_kind: null,
+    queued_at: null,
+    last_error: null,
+    pending_fields: [],
   });
 }
 
@@ -1562,7 +1651,6 @@ export async function updateLocalArchiveFields(
       ["system_name", updates.system_name !== undefined && nextArchive.system_name !== normalizedArchive.system_name],
       ["species_name", updates.species_name !== undefined && nextArchive.species_name !== normalizedArchive.species_name],
       ["plant_id", updates.plant_id !== undefined && nextArchive.plant_id !== normalizedArchive.plant_id],
-      ["plant_slug", updates.plant_slug !== undefined && nextArchive.plant_slug !== normalizedArchive.plant_slug],
       ["source", updates.source !== undefined && nextArchive.source !== normalizedArchive.source],
       ["planting_region", updates.planting_region !== undefined && JSON.stringify(nextArchive.planting_region || null) !== JSON.stringify(normalizedArchive.planting_region || null)],
       ["note", updates.note !== undefined && nextArchive.note !== normalizedArchive.note],
@@ -1666,6 +1754,54 @@ export async function updateLocalArchiveMigrationState(
     await requestToPromise(archiveStore.put(nextArchive));
     await done;
     await refreshLocalUsageHints();
+    return nextArchive;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalArchiveCloudSyncOperation(
+  archiveId: string,
+  operationId: string,
+  update: LocalCloudSyncOperationUpdate,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const nextArchive: LocalArchive = {
+      ...normalizedArchive,
+      sync: applyCloudSyncOperationUpdate(
+        normalizedArchive.sync,
+        operationId,
+        update,
+        timestamp
+      ),
+      updated_at: timestamp,
+    };
+    await requestToPromise(archiveStore.put(nextArchive));
+    await done;
     return nextArchive;
   } finally {
     db.close();
@@ -1837,6 +1973,156 @@ export async function updateLocalImageSyncMeta(
     await requestToPromise(imageStore.put(nextImage));
     await done;
     return nextImage;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalRecordCloudSyncOperation(
+  recordId: string,
+  operationId: string,
+  update: LocalCloudSyncOperationUpdate
+) {
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+
+  try {
+    const transaction = db.transaction(RECORD_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const record = await requestToPromise<LocalRecord | undefined>(
+      recordStore.get(recordId)
+    );
+
+    if (!record) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地记录不存在。");
+    }
+
+    const nextRecord: LocalRecord = {
+      ...record,
+      sync: applyCloudSyncOperationUpdate(
+        record.sync,
+        operationId,
+        update,
+        timestamp
+      ),
+      updated_at: timestamp,
+    };
+    await requestToPromise(recordStore.put(nextRecord));
+    await done;
+    return nextRecord;
+  } finally {
+    db.close();
+  }
+}
+
+export async function updateLocalImageCloudSyncOperation(
+  imageId: string,
+  operationId: string,
+  update: LocalCloudSyncOperationUpdate
+) {
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+
+  try {
+    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    const image = await requestToPromise<LocalImage | undefined>(
+      imageStore.get(imageId)
+    );
+
+    if (!image) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地图片缓存不存在。");
+    }
+
+    const nextImage: LocalImage = {
+      ...image,
+      sync: applyCloudSyncOperationUpdate(
+        image.sync,
+        operationId,
+        update,
+        timestamp
+      ),
+    };
+    await requestToPromise(imageStore.put(nextImage));
+    await done;
+    return nextImage;
+  } finally {
+    db.close();
+  }
+}
+
+export async function clearPendingCloudSyncPromptIfComplete(
+  archiveId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+
+  try {
+    const transaction = db.transaction(
+      [ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE],
+      "readwrite"
+    );
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(archiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const [records, images] = await Promise.all([
+      requestToPromise<LocalRecord[]>(
+        transaction.objectStore(RECORD_STORE).getAll()
+      ),
+      requestToPromise<LocalImage[]>(
+        transaction.objectStore(IMAGE_STORE).getAll()
+      ),
+    ]);
+    const hasPending =
+      isPendingCloudSyncStatus(normalizedArchive.sync.status) ||
+      records.some(
+        (record) =>
+          record.archive_id === archiveId &&
+          isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)
+      ) ||
+      images.some(
+        (image) =>
+          image.archive_id === archiveId &&
+          isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status)
+      );
+
+    if (hasPending) {
+      await done;
+      return false;
+    }
+
+    await requestToPromise(
+      archiveStore.put({
+        ...normalizedArchive,
+        pending_sync_prompt_mode: null,
+        pending_sync_first_detected_at: null,
+        pending_sync_deferred_at: null,
+      } satisfies LocalArchive)
+    );
+    await done;
+    return true;
   } finally {
     db.close();
   }

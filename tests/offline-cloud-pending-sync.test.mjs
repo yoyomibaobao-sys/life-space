@@ -357,3 +357,85 @@ test("failed media keeps its operation identity and remains resumable", async ()
   assert.equal(retrying.sync.attempt_count, 1);
   assert.equal(retrying.sync.last_error, null);
 });
+
+test("an in-flight create cannot clear a newer record edit", async () => {
+  await fixture();
+  const created = await dbModule.createLocalRecord({
+    archive_id: "cloud-local-copy",
+    note: "第一次离线保存",
+  });
+  const createOperationId = created.sync.client_operation_id;
+
+  const uploading = await dbModule.updateLocalRecordCloudSyncOperation(
+    created.id,
+    createOperationId,
+    {
+      status: "uploading",
+      cloud_archive_id: cloudArchiveId,
+      cloud_record_id: createOperationId,
+    },
+  );
+  assert.equal(uploading.sync.status, "uploading");
+  assert.equal(uploading.sync.cloud_record_id, createOperationId);
+
+  const edited = await dbModule.updateLocalRecordFields(created.id, {
+    note: "上传时又改了一次",
+  });
+  assert.equal(edited.sync.status, "pending-cloud-sync");
+  assert.equal(edited.sync.operation_kind, "update-record");
+  assert.notEqual(edited.sync.client_operation_id, createOperationId);
+  assert.equal(edited.sync.cloud_record_id, createOperationId);
+
+  await dbModule.updateLocalRecordCloudSyncOperation(
+    created.id,
+    createOperationId,
+    {
+      status: "synced",
+      cloud_archive_id: cloudArchiveId,
+      cloud_record_id: createOperationId,
+    },
+  );
+  const afterOldCompletion = await dbModule.getLocalArchiveDetail(
+    "cloud-local-copy",
+    owner,
+  );
+  const pendingEdit = afterOldCompletion.records.find(
+    (record) => record.id === created.id,
+  );
+  assert.equal(pendingEdit.sync.status, "pending-cloud-sync");
+  assert.equal(pendingEdit.sync.client_operation_id, edited.sync.client_operation_id);
+  assert.deepEqual(pendingEdit.sync.pending_fields, ["note"]);
+});
+
+test("a completed queue clears its one-time prompt and starts fresh next time", async () => {
+  await fixture();
+  const created = await dbModule.createLocalRecord({
+    archive_id: "cloud-local-copy",
+    note: "待上传",
+  });
+  const operationId = created.sync.client_operation_id;
+  await dbModule.deferPendingCloudSyncPrompt("cloud-local-copy", owner);
+
+  await dbModule.updateLocalRecordCloudSyncOperation(created.id, operationId, {
+    status: "synced",
+    cloud_archive_id: cloudArchiveId,
+    cloud_record_id: operationId,
+  });
+  assert.equal(
+    await dbModule.clearPendingCloudSyncPromptIfComplete(
+      "cloud-local-copy",
+      owner,
+    ),
+    true,
+  );
+  assert.deepEqual(await dbModule.listPendingCloudSyncSummaries(owner), []);
+
+  const edited = await dbModule.updateLocalRecordFields(created.id, {
+    note: "下一次改动",
+  });
+  const summaries = await dbModule.listPendingCloudSyncSummaries(owner);
+  assert.equal(edited.sync.operation_kind, "update-record");
+  assert.notEqual(edited.sync.client_operation_id, operationId);
+  assert.equal(summaries[0].prompt_mode, "ask");
+  assert.equal(summaries[0].should_prompt, true);
+});
