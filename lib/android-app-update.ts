@@ -11,8 +11,10 @@ import {
 
 export type NativeAppVersion = { versionName: string; versionCode: number };
 export type NativeInstallResult = { status: "permission_required" | "installer_opened" };
+export type NativeOfficialDownloadResult = { status: "browser_opened" };
 type NativeAppUpdatePlugin = {
   getCurrentVersion(): Promise<NativeAppVersion>;
+  openOfficialDownload(): Promise<NativeOfficialDownloadResult>;
   installUpdate(options: {
     downloadUrl: string;
     versionCode: number;
@@ -148,6 +150,13 @@ export function checkAndroidUpdate(force = false): Promise<AndroidUpdateSnapshot
     }
   })();
   return inFlight;
+}
+
+export async function openAndroidOfficialDownload(): Promise<NativeOfficialDownloadResult> {
+  if (!supportsAndroidInstall()) {
+    throw new Error("Native Android download handoff is unavailable");
+  }
+  return NativeAppUpdate.openOfficialDownload();
 }
 
 export async function installAndroidUpdate(release: AndroidReleaseManifest): Promise<NativeInstallResult> {
