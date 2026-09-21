@@ -40,7 +40,7 @@ const zh = {
     eyebrow: "官方网站下载",
     title: "下载有时·耕作安卓版",
     intro: "适合 Android 手机和平板。安装包使用固定密钥签名，后续版本可以直接覆盖更新。",
-    test_badge: "小范围测试版",
+    test_badge: "候选版本",
     stable_badge: "正式版",
     published: "更新时间",
     file_size: "文件大小",
@@ -93,6 +93,8 @@ const zh = {
     download_failed: "新版下载或校验未完成，请重试，或从官网下载新版。",
     unsupported: "当前安装版本尚不支持应用内更新，请先从官网下载一次新版。",
     website_download: "前往官网下载",
+    website_copied: "当前版本无法直接调起系统浏览器。官网地址已复制，请打开手机浏览器后粘贴访问。",
+    website_manual: "当前版本无法直接调起系统浏览器。请在手机浏览器中手动打开下面的网址。",
     android_only: "检查更新仅在正式安卓版中提供。",
   },
 
