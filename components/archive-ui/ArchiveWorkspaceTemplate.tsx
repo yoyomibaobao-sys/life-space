@@ -12,7 +12,9 @@ import {
   type ReactNode,
 } from "react";
 import ArchiveToolbar from "@/components/archive/ArchiveToolbar";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
 import type { ArchiveCategory } from "@/lib/archive-categories";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type SourceOption<T extends string> = {
   value: T;
@@ -51,6 +53,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   sourceTrailingSlot,
   children,
 }: Props<T>) {
+  const { t } = useLanguage();
   const [online, setOnline] = useState(true);
   const sourceBeforeOfflineRef = useRef<T | null>(null);
   const localOption = useMemo(
@@ -141,6 +144,9 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
       ) : null}
 
       {filtersSlot}
+      {!online ? (
+        <ConnectivityNotice message={t.archive_workspace.offline_notice} />
+      ) : null}
       {noticeSlot}
 
       <section style={projectListStyle}>{children}</section>

@@ -21,6 +21,7 @@ import {
   getLocalArchiveDetail,
   listVisibleLocalArchiveSummaries,
   markUnownedLocalArchivesForOwner,
+  preparePendingCloudSyncQueue,
   updateLocalArchiveFields,
   updateLocalRecordFields,
   type LocalArchive,
@@ -39,6 +40,13 @@ import type { ArchiveCategory } from "@/lib/archive-categories";
 
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
+import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
+import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
+import MobileBottomNavigationView, {
+  type MobileBottomNavigationItem,
+} from "@/components/mobile/MobileBottomNavigationView";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -308,6 +316,9 @@ function App() {
         if (cancelled) return;
         const nextOwner = loadRememberedLocalOwnerContext();
         setOwner(nextOwner);
+        await preparePendingCloudSyncQueue(
+          nextOwner ? { userId: nextOwner.userId, email: nextOwner.email } : null,
+        ).catch((error) => console.warn("pending sync queue preparation", error));
         await loadList(
           nextOwner ? { userId: nextOwner.userId, email: nextOwner.email } : null,
         );
@@ -394,6 +405,39 @@ function App() {
   const activeGuide = screen.kind === "guide-detail"
     ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
     : undefined;
+  const bottomNavigationItems: [
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+  ] = [
+    {
+      id: "home",
+      label: copy.home,
+      icon: "home",
+      active: screen.kind === "guides" || screen.kind === "guide-detail",
+      onSelect: () => setScreen({ kind: "guides" }),
+    },
+    {
+      id: "following",
+      label: copy.follow,
+      icon: "follow",
+      onSelect: () => setScreen({ kind: "cloud" }),
+    },
+    {
+      id: "market",
+      label: copy.market,
+      icon: "store",
+      onSelect: () => setScreen({ kind: "cloud" }),
+    },
+    {
+      id: "me",
+      label: copy.me,
+      icon: "user",
+      active: !["guides", "guide-detail", "cloud"].includes(screen.kind),
+      onSelect: goList,
+    },
+  ];
 
   if (loading) {
     return <main className="offline-shell loading">{copy.loading}</main>;
@@ -415,7 +459,11 @@ function App() {
         </div>
       </header>
 
-      <div className="offline-status"><span>{copy.offlineTitle}</span><button type="button" onClick={reconnect}><UiIcon name="refresh" size={16} />{language === "zh" ? "重连" : "Reconnect"}</button></div>
+      <ConnectivityNotice
+        message={copy.offlineTitle}
+        actionLabel={language === "zh" ? "重连" : "Reconnect"}
+        onAction={reconnect}
+      />
 
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
@@ -450,20 +498,15 @@ function App() {
           {archives.length ? (
             <div className="project-list">
               {archives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
-                <button className="project-card" type="button" key={archive.id} onClick={() => openDetail(archive.id)}>
-                  {archive.cover_image ? (
-                    <BlobImage key={archive.cover_image.id} image={archive.cover_image} className="project-cover" alt="" />
-                  ) : (
-                    <span className="project-cover placeholder">🌱</span>
-                  )}
-                  <span>
-                    <span className="project-title">{archive.title}</span>
-                    <span className="project-meta">
-                      {copy[archive.category]} · {archive.record_count} {copy.records} · {archive.image_count} {copy.photos}
-                    </span>
-                    {archive.latest_record_note ? <span className="project-note">{archive.latest_record_note}</span> : null}
-                  </span>
-                </button>
+                <ArchiveProjectCard
+                  key={archive.id}
+                  project={{
+                    ...localArchiveToProjectView(archive, ownerContext, language),
+                    href: undefined,
+                  }}
+                  onClick={() => openDetail(archive.id)}
+                  mobileMode
+                />
               ))}
             </div>
           ) : (
@@ -563,13 +606,24 @@ function App() {
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? <section className="panel empty"><strong>{copy.cloudUnavailable}</strong><div className="action-row"><button type="button" className="secondary-button" onClick={goList}>{copy.mySpace}</button><button type="button" className="secondary-button" onClick={() => setScreen({ kind: "guides" })}>{copy.guides}</button></div></section> : null}
-      <nav className="bottom-nav" aria-label={language === "zh" ? "主导航" : "Main navigation"}>
-        <button type="button" aria-current={screen.kind === "guides" || screen.kind === "guide-detail" ? "page" : undefined} onClick={() => setScreen({ kind: "guides" })}><UiIcon name="home" size={23} /><span>{copy.home}</span></button>
-        <button type="button" onClick={() => setScreen({ kind: "cloud" })}><UiIcon name="follow" size={23} /><span>{copy.follow}</span></button>
-        <button type="button" className="quick-add" aria-label={copy.addRecord} onClick={() => setScreen(screen.kind === "detail" && detail ? { kind: "new-record", archiveId: detail.archive.id } : { kind: "choose-project" })}><UiIcon name="plus" size={30} /></button>
-        <button type="button" onClick={() => setScreen({ kind: "cloud" })}><UiIcon name="store" size={23} /><span>{copy.market}</span></button>
-        <button type="button" aria-current={screen.kind === "list" ? "page" : undefined} onClick={goList}><UiIcon name="user" size={23} /><span>{copy.me}</span></button>
-      </nav>
+      <MobileBottomNavigationView
+        ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
+        items={bottomNavigationItems}
+        centerAction={(
+          <button
+            type="button"
+            className="quick-add"
+            aria-label={copy.addRecord}
+            onClick={() => setScreen(
+              screen.kind === "detail" && detail
+                ? { kind: "new-record", archiveId: detail.archive.id }
+                : { kind: "choose-project" },
+            )}
+          >
+            <UiIcon name="plus" size={25} strokeWidth={2.2} />
+          </button>
+        )}
+      />
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </main>
   );
@@ -815,13 +869,12 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
     </> : <>
       <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {copy.local}</span><button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button></div>
       {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
-      <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <article className="record-card" key={record.id}>
-        <div className="record-meta">{formatDate(record.record_time, language)}</div>
+      <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <ArchiveRecordCardShell key={record.id} metaText={formatDate(record.record_time, language)} mobileMode>
         {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={language === "zh" ? "查看照片" : "View photo"} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
         {record.note ? <p className="record-note">{record.note}</p> : null}
         {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
         <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div>
-      </article>)}</div>
+      </ArchiveRecordCardShell>)}</div>
       {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
     </>}
     {lightbox ? <dialog className="photo-lightbox" open aria-label={language === "zh" ? "照片" : "Photo"} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}
