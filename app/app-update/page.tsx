@@ -101,7 +101,7 @@ export default function AndroidAppUpdatePage() {
         ) : null}
         {(failed || unsupported) ? (
           <div className={styles.noticeBlock}>
-            <a href="https://life-space.uk/download/android" target="_blank" rel="noreferrer">{t.app_update.website_download}</a>
+            <a href="https://life-space.uk/api/download/android?source=app_update_fallback" target="_blank" rel="noreferrer">{t.app_update.website_download}</a>
           </div>
         ) : null}
         {androidOnly ? <Link className={styles.websiteLink} href="/download/android">{t.app_update.website_download}</Link> : null}
