@@ -5,8 +5,7 @@
  */
 
 /* The local workspace header is enough context. Avoid a second "offline mode" label. */
-.brand-mode,
-.offline-status {
+.brand-mode {
   display: none;
 }
 

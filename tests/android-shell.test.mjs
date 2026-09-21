@@ -69,6 +69,7 @@ test("Android login uses one resize path and blocks IME extracted-text overlays"
   const config = read("capacitor.config.ts");
   const login = read("app/login/page.tsx");
   const navbar = read("components/navbar.tsx");
+  const mobileNavigation = read("components/mobile/MobileBottomNavigationView.tsx");
   const globals = read("app/globals.css");
   const nativePlatformHook = read("lib/capacitor/useIsNativeApp.ts");
   const keyboardGuard = read("components/KeyboardLayoutGuard.tsx");
@@ -101,7 +102,8 @@ test("Android login uses one resize path and blocks IME extracted-text overlays"
   assert.match(keyboardGuard, /appKeyboardOpen/);
   assert.match(keyboardGuard, /HTMLInputElement/);
   assert.match(keyboardGuard, /HTMLTextAreaElement/);
-  assert.match(navbar, /data-mobile-bottom-nav="true"/);
+  assert.match(navbar, /<MobileBottomNavigationView/);
+  assert.match(mobileNavigation, /data-mobile-bottom-nav="true"/);
   assert.match(
     globals,
     /data-app-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/,

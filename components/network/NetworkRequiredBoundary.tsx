@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function NetworkRequiredBoundary({ children }: { children: ReactNode }) {
@@ -20,22 +21,10 @@ export default function NetworkRequiredBoundary({ children }: { children: ReactN
 
   if (!online) {
     return (
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          minHeight: "46vh",
-          display: "grid",
-          placeItems: "center",
-          padding: 24,
-          color: "#788276",
-          fontSize: 15,
-          fontWeight: 650,
-          textAlign: "center",
-        }}
-      >
-        {language === "en" ? "Offline" : "未联网"}
-      </div>
+      <ConnectivityNotice
+        variant="page"
+        message={language === "en" ? "Offline" : "未联网"}
+      />
     );
   }
 

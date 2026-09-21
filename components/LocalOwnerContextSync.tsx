@@ -13,6 +13,10 @@ export default function LocalOwnerContextSync() {
 
     function remember(user?: { id?: string; email?: string | null } | null) {
       if (!user?.id) { rememberedUserId = ""; return; }
+      const ownerContext = {
+        userId: user.id,
+        email: user.email || null,
+      };
       if (rememberedUserId !== user.id) {
         rememberedUserId = user.id;
         const id = user.id;
@@ -23,11 +27,13 @@ export default function LocalOwnerContextSync() {
             rememberDefaultPlantingRegion(id, data);
           }
         }).catch(() => { /* Retain the last known optional address while offline. */ });
+        void import("@/lib/local-offline-db")
+          .then(({ preparePendingCloudSyncQueue }) =>
+            preparePendingCloudSyncQueue(ownerContext)
+          )
+          .catch(() => { /* Queue metadata can be prepared again on the next start. */ });
       }
-      rememberLocalOwnerContext({
-        userId: user.id,
-        email: user.email || null,
-      });
+      rememberLocalOwnerContext(ownerContext);
     }
 
     async function start() {

@@ -28,7 +28,12 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /capture="environment"/);
   assert.match(source, /copy.camera/);
   assert.match(source, /copy.album/);
-  assert.match(parityStyles, /\.brand-mode,[\s\S]*\.offline-status[\s\S]*display: none/);
+  assert.match(source, /<MobileBottomNavigationView/);
+  assert.match(source, /<ArchiveProjectCard/);
+  assert.match(source, /<ArchiveRecordCardShell/);
+  assert.match(source, /<ConnectivityNotice/);
+  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.doesNotMatch(parityStyles, /\.offline-status/);
   assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
   assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
   assert.match(generated, /life-space-local-offline/);
@@ -90,5 +95,6 @@ test("new local projects inherit the signed-in account only on this device", () 
   assert.match(newLocalProject, /supabase\.auth\.getSession\(\)/);
   assert.match(newLocalProject, /local_owner_user_id: currentUser\?\.id \|\| null/);
   assert.match(ownerSync, /rememberLocalOwnerContext/);
+  assert.match(ownerSync, /preparePendingCloudSyncQueue/);
   assert.match(zh, /这不会上传云端/);
 });

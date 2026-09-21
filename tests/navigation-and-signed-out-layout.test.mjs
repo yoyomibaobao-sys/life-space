@@ -44,8 +44,9 @@ test("profile uses an editable identity card and explicit account entries", asyn
 });
 
 test("mobile shell keeps an ordered fixed navigation and returns within the app", async () => {
-  const [navbar, backNavigation, authReturn, lightbox, footerStyles, layout, globals, zhCopy, enCopy] = await Promise.all([
+  const [navbar, sharedNavigation, backNavigation, authReturn, lightbox, footerStyles, layout, globals, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
+    source("components/mobile/MobileBottomNavigationView.tsx"),
     source("components/MobileBackNavigation.tsx"),
     source("lib/auth-return.ts"),
     source("components/archive-detail/ArchiveLightbox.tsx"),
@@ -58,20 +59,24 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
 
   const mobileNav = navbar.slice(
     navbar.indexOf("function MobileBottomNav"),
-    navbar.indexOf("function MobileBottomNavItem")
+    navbar.indexOf("function NavItem")
   );
   assert.ok(mobileNav.indexOf("labels.home") < mobileNav.indexOf("labels.following"));
   assert.ok(mobileNav.indexOf("labels.following") < mobileNav.indexOf("labels.market"));
   assert.ok(mobileNav.indexOf("labels.market") < mobileNav.indexOf("labels.me"));
   assert.match(
     mobileNav,
-    /MobileBottomNavItem \{\.\.\.items\[1\]\}[\s\S]*?QuickCaptureNavAction[\s\S]*?MobileBottomNavItem \{\.\.\.items\[2\]\}/
+    /centerAction=\{<QuickCaptureNavAction/
+  );
+  assert.match(
+    sharedNavigation,
+    /items\.slice\(0, 2\)[\s\S]*?\{centerAction\}[\s\S]*?items\.slice\(2\)/,
   );
   assert.doesNotMatch(mobileNav, /labels\.personal_space|labels\.guide/);
   assert.match(mobileNav, /href: user \? "\/archive" : buildLoginHref\("\/archive"\)/);
   assert.match(navbar, /getMobilePageTitle\(pathname, t\)/);
-  assert.match(navbar, /flexDirection: "column"/);
-  assert.match(navbar, /transform: "translateZ\(0\)"/);
+  assert.match(sharedNavigation, /flexDirection: "column"/);
+  assert.match(sharedNavigation, /transform: "translateZ\(0\)"/);
   assert.match(navbar, /!user \? <LanguageSwitcher compact \/>/);
   assert.match(navbar, /hasPageManagedMobileTopNav\(pathname\)/);
   assert.doesNotMatch(mobileNav, /href="\/feedback"/);

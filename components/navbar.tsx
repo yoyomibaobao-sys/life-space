@@ -7,13 +7,16 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { MARKET_NOTIFICATION_FILTER } from "@/lib/notification-types";
 import type { AppProfile, SupabaseUser } from "@/lib/domain-types";
-import UiIcon, { type UiIconName } from "@/components/ui/UiIcon";
+import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import type { TranslationDictionary } from "@/lib/i18n";
 import { buildLoginHref } from "@/lib/auth-return";
 import QuickCaptureNavAction from "@/components/quick-record/QuickCaptureNavAction";
 import BrandMark from "@/components/BrandMark";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobileBottomNavigationView, {
+  type MobileBottomNavigationItem,
+} from "@/components/mobile/MobileBottomNavigationView";
 import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
 
 type MobileArchiveTitleInfo = {
@@ -508,35 +511,44 @@ function MobileBottomNav({
     (isPathActive(pathname, "/archive") && !isOtherUsersArchive) ||
     isPersonalExperiencePath;
 
-  const items = [
+  const items: [
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+  ] = [
     {
+      id: "home",
       label: labels.home,
-      icon: "home" as UiIconName,
+      icon: "home",
       href: "/discover",
       active:
         (pathname === "/discover" && discoverTab === "feed") ||
         isHomeSection,
-      onClick: () => {
+      onSelect: () => {
         window.dispatchEvent(
           new CustomEvent("discover-tab-change", { detail: "feed" }),
         );
       },
     },
     {
+      id: "following",
       label: labels.following,
-      icon: "follow" as UiIconName,
+      icon: "follow",
       href: user ? "/follow" : buildLoginHref("/follow"),
       active: pathname.startsWith("/follow"),
     },
     {
+      id: "market",
       label: labels.market,
-      icon: "store" as UiIconName,
+      icon: "store",
       href: "/market",
       active: isPathActive(pathname, "/market"),
     },
     {
+      id: "me",
       label: labels.me,
-      icon: "user" as UiIconName,
+      icon: "user",
       href: user ? "/archive" : buildLoginHref("/archive"),
       active: isPersonalSection,
     },
@@ -549,53 +561,25 @@ function MobileBottomNav({
       : null;
 
   return (
-    <nav
-      data-mobile-bottom-nav="true"
-      style={mobileBottomNavStyle}
-      aria-label={labels.mobile_navigation}
-    >
-      <MobileBottomNavItem {...items[0]}>{items[0].label}</MobileBottomNavItem>
-      <MobileBottomNavItem {...items[1]}>{items[1].label}</MobileBottomNavItem>
-      <QuickCaptureNavAction
+    <MobileBottomNavigationView
+      ariaLabel={labels.mobile_navigation}
+      items={items}
+      centerAction={<QuickCaptureNavAction
         pathname={pathname}
         cloudArchiveId={currentCloudArchiveId}
         localArchiveId={currentLocalArchiveId}
-      />
-      <MobileBottomNavItem {...items[2]}>{items[2].label}</MobileBottomNavItem>
-      <MobileBottomNavItem {...items[3]}>{items[3].label}</MobileBottomNavItem>
-    </nav>
-  );
-}
-
-function MobileBottomNavItem({
-  href,
-  active,
-  badge,
-  icon,
-  onClick,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  badge?: string | null;
-  icon: UiIconName;
-  onClick?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Link href={href} style={mobileBottomNavItemStyle(active)} onClick={onClick}>
-      <span
-        style={{
-          ...mobileBottomNavLabelStyle,
-          fontSize:
-            typeof children === "string" && children.length > 8 ? 10.5 : undefined,
-        }}
-      >
-        <UiIcon name={icon} size={17} strokeWidth={1.7} />
-        {children}
-        {badge ? <span style={mobileBottomBadgeStyle}>{badge}</span> : null}
-      </span>
-    </Link>
+      />}
+      renderItem={(item, content, style) => (
+        <Link
+          href={item.href || "/"}
+          style={style}
+          onClick={item.onSelect}
+          aria-current={item.active ? "page" : undefined}
+        >
+          {content}
+        </Link>
+      )}
+    />
   );
 }
 
@@ -858,74 +842,6 @@ const mobileLoginActionStyle: CSSProperties = {
   padding: "0 12px",
   whiteSpace: "nowrap",
   flexShrink: 0,
-};
-
-const mobileBottomNavStyle: CSSProperties = {
-  position: "fixed",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  zIndex: 1100,
-  height: "calc(58px + var(--app-safe-area-bottom))",
-  padding: "5px 8px calc(5px + var(--app-safe-area-bottom))",
-  display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-  gap: 4,
-  borderTop: "1px solid #dfe8da",
-  background: "rgba(255,255,255,0.98)",
-  boxShadow: "0 -8px 22px rgba(40, 62, 34, 0.08)",
-  boxSizing: "border-box",
-  transform: "translateZ(0)",
-  backfaceVisibility: "hidden",
-  WebkitBackfaceVisibility: "hidden",
-  willChange: "transform",
-  touchAction: "manipulation",
-  overflow: "visible",
-};
-
-function mobileBottomNavItemStyle(active: boolean): CSSProperties {
-  return {
-    position: "relative",
-    minWidth: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-    color: active ? "#2f6a31" : "#657160",
-    background: active ? "#edf6e8" : "transparent",
-    borderRadius: 12,
-    fontSize: 12,
-    fontWeight: active ? 800 : 650,
-    lineHeight: 1,
-  };
-}
-
-const mobileBottomNavLabelStyle: CSSProperties = {
-  position: "relative",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  minWidth: 0,
-  maxWidth: "100%",
-  gap: 3,
-  whiteSpace: "nowrap",
-};
-
-const mobileBottomBadgeStyle: CSSProperties = {
-  position: "absolute",
-  top: -5,
-  right: -13,
-  minWidth: 16,
-  height: 16,
-  borderRadius: 999,
-  background: "#e85d3f",
-  color: "#fff",
-  fontSize: 10,
-  lineHeight: "16px",
-  textAlign: "center",
-  fontWeight: 800,
-  padding: "0 4px",
 };
 
 function getLeftGroupStyle(compact: boolean): CSSProperties {
