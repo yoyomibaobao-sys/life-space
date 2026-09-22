@@ -41,6 +41,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/android-apk.yml"
+      - "tests/android-shell.test.mjs"
+      - "tests/android-shell.test.mjs"
   pull_request:
     paths:
       - "android/**"
