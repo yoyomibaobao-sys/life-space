@@ -1,34 +1,108 @@
 /*
- * Cold-start offline uses the same local data model and should look like the
- * normal local workspace, not like a separate degraded product mode.
- * Keep connectivity as runtime state only; never rewrite cloud/local identity.
+ * The APK-bundled workspace deliberately reuses the same shared archive
+ * components as the online My Space page. These final overrides keep the
+ * standalone document on the same compact mobile canvas instead of presenting
+ * a separate "offline app" visual language.
  */
 
-/* The local workspace header is enough context. Avoid a second "offline mode" label. */
+html,
+body {
+  background: #fff;
+}
+
+.offline-shell {
+  width: min(1080px, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 8px
+    calc(env(safe-area-inset-bottom, 0px) + 82px);
+  background: #fff;
+}
+
+.offline-header {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 7px 2px;
+  border-bottom: 1px solid #edf1ea;
+  background: transparent;
+}
+
+.brand {
+  min-width: 0;
+  flex: 1;
+  gap: 9px;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #edf3ea;
+  color: #587155;
+}
+
+.brand-name {
+  color: #253725;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
 .brand-mode {
-  display: none;
+  display: block;
+  max-width: 240px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #6e7f69;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Offline can only operate on device-local projects. Present the same local source
- * directly instead of offering inactive All / Cloud source switches. */
-.source-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
 }
 
-.source-row > button:nth-child(1),
-.source-row > button:nth-child(2) {
-  display: none;
+.header-actions .icon-button {
+  width: auto;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
 }
 
-.source-row .add-project {
-  margin-left: 8px;
+.category-row {
+  margin: 0 0 12px;
 }
 
-/* Online-only destinations remain in the normal navigation, but their fallback
- * screen should be visually quiet rather than styled as a special offline mode. */
 .panel.empty {
   box-shadow: none;
   background: transparent;
   border-color: transparent;
+}
+
+.native-captcha {
+  display: grid;
+  justify-items: center;
+  min-height: 65px;
+  margin-top: 4px;
+}
+
+@media (max-width: 420px) {
+  .offline-shell {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
 }
