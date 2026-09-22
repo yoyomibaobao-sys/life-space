@@ -46,6 +46,7 @@ import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
+import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
@@ -263,6 +264,48 @@ function formatDate(value: string | null | undefined, language: Language) {
 
 function toDateTimeLocal(value?: string | null) {
   return toLocalDateTimeInputValue(value || new Date());
+}
+
+function normalizeCloudCategory(value?: string | null): ArchiveCategory {
+  if (
+    value === "plant" ||
+    value === "system" ||
+    value === "insect_fish" ||
+    value === "other"
+  ) {
+    return value;
+  }
+  return "other";
+}
+
+function cloudArchiveToProjectView(
+  archive: CloudArchiveSummary,
+  language: Language,
+): ArchiveProjectView {
+  const category = normalizeCloudCategory(archive.category);
+  const ended = archive.status === "ended";
+  return {
+    id: archive.id,
+    mode: "cloud",
+    title: archive.title || (language === "en" ? "Untitled project" : "未命名项目"),
+    category,
+    categoryLabel: getArchiveCategoryLabel(category, language),
+    categoryIcon: getArchiveCategoryIcon(category),
+    systemName:
+      archive.species_name_snapshot ||
+      archive.system_name ||
+      (language === "en" ? "Not filled" : "未填写"),
+    latestTime: archive.updated_at || null,
+    visibilityLabel: archive.is_public
+      ? language === "en" ? "Public" : "公开"
+      : language === "en" ? "Private" : "私密",
+    visibilityTone: archive.is_public ? "public" : "private",
+    statusLabel: ended ? (language === "en" ? "Ended" : "已结束") : null,
+    ended,
+    showClassificationRow: false,
+    footerItems: [],
+    badges: [],
+  };
 }
 
 function BlobImage({ image, className, alt }: {
