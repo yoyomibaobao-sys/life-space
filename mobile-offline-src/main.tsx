@@ -69,9 +69,6 @@ import { supabase } from "@/lib/supabase";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 
-declare const __LIFESPACE_CLOUD_ORIGIN__: string;
-
-const CLOUD_ORIGIN = __LIFESPACE_CLOUD_ORIGIN__;
 const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
@@ -638,11 +635,40 @@ function App() {
         </div>
       </header>
 
-      <ConnectivityNotice
-        message={copy.offlineTitle}
-        actionLabel={language === "zh" ? "重连" : "Reconnect"}
-        onAction={reconnect}
-      />
+      {!online ? (
+        <ConnectivityNotice
+          message={copy.offlineTitle}
+          actionLabel={language === "zh" ? "重连" : "Reconnect"}
+          onAction={reconnect}
+        />
+      ) : null}
+
+      {online && pendingSync.find((item) => item.should_prompt) ? (() => {
+        const pending = pendingSync.find((item) => item.should_prompt)!;
+        return (
+          <section className="notice warning">
+            <strong>{copy.pendingUpload}</strong>
+            <p>{pending.title}</p>
+            <div className="action-row">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={syncingArchiveId === pending.local_archive_id}
+                onClick={() => void uploadPending(pending.local_archive_id)}
+              >
+                {syncingArchiveId === pending.local_archive_id ? copy.uploading : copy.uploadNow}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void deferPending(pending.local_archive_id)}
+              >
+                {copy.later}
+              </button>
+            </div>
+          </section>
+        );
+      })() : null}
 
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
@@ -713,19 +739,36 @@ function App() {
       ) : null}
 
       {screen.kind === "detail" && detail ? (
-        <ProjectDetail
-          detail={detail}
-          ownerContext={ownerContext}
-          onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
-          language={language}
-          copy={copy}
-          onBack={goList}
-          onEdit={() => setScreen({ kind: "edit-project", archiveId: detail.archive.id })}
-          onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
-          onEditRecord={(recordId) => setScreen({ kind: "edit-record", archiveId: detail.archive.id, recordId })}
-          onDelete={() => void handleDeleteArchive(detail.archive.id)}
-          onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
-        />
+        <>
+          <ProjectDetail
+            detail={detail}
+            ownerContext={ownerContext}
+            onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
+            language={language}
+            copy={copy}
+            onBack={goList}
+            onEdit={() => setScreen({ kind: "edit-project", archiveId: detail.archive.id })}
+            onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
+            onEditRecord={(recordId) => setScreen({ kind: "edit-record", archiveId: detail.archive.id, recordId })}
+            onDelete={() => void handleDeleteArchive(detail.archive.id)}
+            onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
+          />
+          {online && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
+            <section className="notice warning">
+              <strong>{copy.pendingUpload}</strong>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={syncingArchiveId === detail.archive.id}
+                  onClick={() => void uploadPending(detail.archive.id)}
+                >
+                  {syncingArchiveId === detail.archive.id ? copy.uploading : copy.uploadNow}
+                </button>
+              </div>
+            </section>
+          ) : null}
+        </>
       ) : null}
 
       {screen.kind === "edit-project" && detail ? (
@@ -784,7 +827,67 @@ function App() {
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
-      {screen.kind === "cloud" ? <section className="panel empty"><strong>{copy.cloudUnavailable}</strong><div className="action-row"><button type="button" className="secondary-button" onClick={goList}>{copy.mySpace}</button><button type="button" className="secondary-button" onClick={() => setScreen({ kind: "guides" })}>{copy.guides}</button></div></section> : null}
+      {screen.kind === "cloud" ? (
+        !online ? (
+          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+        ) : !cloudUserId ? (
+          <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
+        ) : (
+          <>
+            <div className="section-title">
+              <h1>{copy.cloudProjects}</h1>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => void supabase.auth.signOut()}
+              >
+                {copy.logout}
+              </button>
+            </div>
+            {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
+            {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
+            {!cloudLoading && !cloudError && cloudArchives.length === 0 ? (
+              <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
+            ) : null}
+            <div className="project-list">
+              {cloudArchives.map((archive) => {
+                const localCopy = archives.find(
+                  (item) => item.source_cloud_archive_id === archive.id,
+                );
+                const busy = cloudBusyArchiveId === archive.id;
+                return (
+                  <section className="panel" key={archive.id}>
+                    <h2>{archive.title || copy.project}</h2>
+                    <p className="project-meta">
+                      {archive.species_name_snapshot || archive.system_name || archive.category || ""}
+                      {archive.updated_at ? ` · ${formatDate(archive.updated_at, language)}` : ""}
+                    </p>
+                    <div className="action-row">
+                      {localCopy ? (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => openDetail(localCopy.id)}
+                        >
+                          {copy.openLocalCopy}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={busy}
+                        onClick={() => void saveCloudCopy(archive.id)}
+                      >
+                        {busy ? copy.savingCloudCopy : localCopy ? copy.refreshLocalCopy : copy.saveLocalCopy}
+                      </button>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </>
+        )
+      ) : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
@@ -809,6 +912,79 @@ function App() {
 }
 
 type OfflineCopy = typeof text.zh | typeof text.en;
+
+function CloudLogin({
+  copy,
+  onSuccess,
+}: {
+  copy: OfflineCopy;
+  onSuccess: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) return;
+
+    setSubmitting(true);
+    setMessage("");
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+      if (error) {
+        setMessage(`${copy.loginFailed}: ${error.message}`);
+        return;
+      }
+      onSuccess();
+    } catch (error) {
+      setMessage(
+        `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h1>{copy.cloudSignIn}</h1>
+      <form className="form" onSubmit={submit}>
+        <div className="field">
+          <label>{copy.email}</label>
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </div>
+        <div className="field">
+          <label>{copy.password}</label>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </div>
+        {message ? <p className="project-meta">{message}</p> : null}
+        <div className="submit-row">
+          <button type="submit" className="primary-button" disabled={submitting}>
+            {submitting ? copy.loading : copy.login}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
 
 function OfflineGuideDetail({
   guide,
