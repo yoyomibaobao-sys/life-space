@@ -104,6 +104,23 @@ test("the owner always saves a local copy without automatically removing the clo
   assert.match(rules, /重命名并另存为新的云端项目/);
 });
 
+test("local-to-cloud uploads stay behind explicit user actions and never run on reconnect", async () => {
+  const [localPage, workspace, zhCopy, enCopy] = await Promise.all([
+    source("app/local/archive/[id]/page.tsx"),
+    source("components/archive-ui/ArchiveWorkspaceTemplate.tsx"),
+    source("lib/i18n/zh.ts"),
+    source("lib/i18n/en.ts"),
+  ]);
+
+  assert.equal((localPage.match(/syncLocalArchiveToCloud\(/g) || []).length, 2);
+  assert.match(localPage, /confirmTransferToCloud[\s\S]*?syncLocalArchiveToCloud/);
+  assert.match(localPage, /saveConflictAsNewCloudProject[\s\S]*?syncLocalArchiveToCloud/);
+  assert.doesNotMatch(localPage, /addEventListener\("online"[\s\S]*?syncLocalArchiveToCloud/);
+  assert.doesNotMatch(workspace, /syncLocalArchiveToCloud/);
+  assert.match(zhCopy, /开通云会员不会自动上传本地记录/);
+  assert.match(enCopy, /does not upload local records automatically/);
+});
+
 test("optional cloud classification cannot block a complete local rescue", async () => {
   const [workflow, localDb] = await Promise.all([
     source("lib/cloud-to-local-save.ts"),
