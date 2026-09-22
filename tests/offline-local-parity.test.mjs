@@ -18,10 +18,9 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /bundledComponentCss/);
   assert.match(buildScript, /`\$\{css\}\\n\$\{localParityCss\}\\n\$\{bundledComponentCss\}`/);
-  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.match(parityStyles, /\.brand-mode[\s\S]*display: block/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.match(source, /<ArchiveWorkspaceTemplate/);
   assert.match(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(source, /<MobileBottomNavigationView/);
   assert.match(source, /<ArchiveProjectCard/);
