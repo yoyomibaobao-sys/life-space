@@ -108,8 +108,8 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
-      - name: Run Android shell contracts
-        run: node --test tests/android-shell.test.mjs
+      - name: Run Android and local-data contracts
+        run: node --test tests/android-shell.test.mjs tests/android-offline-shell.test.mjs tests/offline-local-parity.test.mjs tests/cloud-to-local-save.test.mjs tests/local-persistence-contract.test.mjs tests/local-upgrade-data.test.mjs
 
       - name: Sync Capacitor Android project
         run: npm run android:sync
