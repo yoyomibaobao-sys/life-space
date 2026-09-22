@@ -76,7 +76,7 @@ type Screen =
 const text = {
   zh: {
     mySpace: "我的空间", settings: "设置", language: "语言", all: "全部", cloud: "云空间", local: "本地", project: "项目",
-    home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
+    home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "记录", experience: "经验",
     cloudUnavailable: "未联网", camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
     guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
     guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
@@ -133,7 +133,7 @@ const text = {
   },
   en: {
     mySpace: "My space", settings: "Settings", language: "Language", all: "All", cloud: "Cloud", local: "Local", project: "Project",
-    home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
+    home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Records", experience: "Experience",
     cloudUnavailable: "Offline", camera: "Camera", album: "Gallery", chooseProject: "Choose project",
     guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
     guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
@@ -213,6 +213,20 @@ function formatDate(value: string | null | undefined, language: Language) {
   }).format(date);
 }
 
+function projectDurationDays(archive: LocalArchiveSummary) {
+  const start = new Date(archive.created_at).getTime();
+  const end = new Date(archive.ended_at || Date.now()).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 1;
+  return Math.max(1, Math.floor((end - start) / 86_400_000) + 1);
+}
+
+function archiveIcon(category: ArchiveCategory) {
+  if (category === "plant") return "sprout" as const;
+  if (category === "system") return "wrench" as const;
+  if (category === "insect_fish") return "fish" as const;
+  return "project" as const;
+}
+
 function toDateTimeLocal(value?: string | null) {
   return toLocalDateTimeInputValue(value || new Date());
 }
@@ -238,7 +252,7 @@ function BlobImage({ image, className, alt }: {
 function App() {
   const [language, setLanguage] = useState<Language>(getLanguage);
   const copy = text[language];
-  const [screen, setScreenState] = useState<Screen>({ kind: "list" });
+  const [screen, setScreenState] = useState<Screen>({ kind: "cloud", section: "discover" });
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
   const [guideQuery, setGuideQuery] = useState("");
   const [directory] = useState(loadOfflineGuideDirectory);
@@ -248,8 +262,8 @@ function App() {
     window.scrollTo({ top: 0 });
   }
   useEffect(() => {
-    window.history.replaceState({ offlineScreen: { kind: "list" } }, "", "#list");
-    const back = (event: PopStateEvent) => setScreenState(event.state?.offlineScreen || { kind: "list" });
+    window.history.replaceState({ offlineScreen: { kind: "cloud", section: "discover" } }, "", "#home");
+    const back = (event: PopStateEvent) => setScreenState(event.state?.offlineScreen || { kind: "cloud", section: "discover" });
     window.addEventListener("popstate", back);
     return () => window.removeEventListener("popstate", back);
   }, []);
@@ -456,25 +470,33 @@ function App() {
             </section>
           ) : null}
 
-          <div className="section-title">
-            <h1>{copy.localProjects}</h1>
-            <span className="count">{archives.length}</span>
-          </div>
           {archives.length ? (
-            <div className="project-list">
+            <div className="project-list online-project-list">
               {archives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
-                <button className="project-card" type="button" key={archive.id} onClick={() => openDetail(archive.id)}>
-                  {archive.cover_image ? (
-                    <BlobImage key={archive.cover_image.id} image={archive.cover_image} className="project-cover" alt="" />
-                  ) : (
-                    <span className="project-cover placeholder">🌱</span>
-                  )}
-                  <span>
-                    <span className="project-title">{archive.title}</span>
-                    <span className="project-meta">
-                      {copy[archive.category]} · {archive.record_count} {copy.records} · {archive.image_count} {copy.photos}
+                <button className="online-project-card" type="button" key={archive.id} onClick={() => openDetail(archive.id)}>
+                  <span className="online-project-media">
+                    {archive.cover_image ? (
+                      <BlobImage key={archive.cover_image.id} image={archive.cover_image} className="online-project-image" alt="" />
+                    ) : (
+                      <UiIcon name={archiveIcon(archive.category)} size={29} strokeWidth={1.6} />
+                    )}
+                    <span className="online-project-category">{copy[archive.category]}</span>
+                  </span>
+                  <span className="online-project-body">
+                    <span className="online-project-title-row">
+                      <strong className="online-project-title">{archive.title}</strong>
+                      <span className="online-project-visibility">{copy.local}</span>
                     </span>
-                    {archive.latest_record_note ? <span className="project-note">{archive.latest_record_note}</span> : null}
+                    <span className="online-project-update">
+                      {archive.latest_record_note || (archive.latest_record_time ? formatDate(archive.latest_record_time, language) : "")}
+                    </span>
+                    <span className="online-project-classification">
+                      {[archive.subcategory, archive.group_name].filter(Boolean).join(" · ") || archive.system_name || archive.species_name || ""}
+                    </span>
+                    <span className="online-project-footer">
+                      <span>{archive.record_count} {copy.records} · {projectDurationDays(archive)} {language === "zh" ? "天" : "days"}</span>
+                      {archive.status === "ended" ? <span className="online-project-ended">{copy.ended}</span> : null}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -566,8 +588,9 @@ function App() {
         />
       ) : null}
 
+      {homeActive ? <div className="top-tabs home-section-tabs"><button type="button" aria-pressed={screen.kind === "cloud" && screen.section === "discover"} onClick={() => setScreen({ kind: "cloud", section: "discover" })}>{copy.discover}</button><button type="button" aria-pressed={screen.kind === "cloud" && screen.section === "experience"} onClick={() => setScreen({ kind: "cloud", section: "experience" })}>{copy.experience}</button><button type="button" aria-pressed={screen.kind === "guides" || screen.kind === "guide-detail"} onClick={() => setScreen({ kind: "guides" })}>{copy.guides}</button></div> : null}
+
       {screen.kind === "guides" ? <>
-        <div className="top-tabs"><button type="button" onClick={() => setScreen({ kind: "cloud", section: "discover" })}>{copy.discover}</button><button type="button" onClick={() => setScreen({ kind: "cloud", section: "experience" })}>{copy.experience}</button><button type="button" aria-pressed="true">{copy.guides}</button></div>
         <div className="field"><input type="search" value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder={copy.guideSearch} aria-label={copy.guideSearch} /></div>
         <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
         <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
@@ -577,7 +600,7 @@ function App() {
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? <section className="network-offline" role="status" aria-live="polite">{copy.cloudUnavailable}</section> : null}
       <nav className="bottom-nav" aria-label={language === "zh" ? "主导航" : "Main navigation"}>
-        <button type="button" aria-current={homeActive ? "page" : undefined} onClick={() => setScreen({ kind: "guides" })}><UiIcon name="home" size={17} strokeWidth={1.7} /><span>{copy.home}</span></button>
+        <button type="button" aria-current={homeActive ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "discover" })}><UiIcon name="home" size={17} strokeWidth={1.7} /><span>{copy.home}</span></button>
         <button type="button" aria-current={screen.kind === "cloud" && screen.section === "follow" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "follow" })}><UiIcon name="follow" size={17} strokeWidth={1.7} /><span>{copy.follow}</span></button>
         <button type="button" className="quick-add" aria-label={copy.addRecord} onClick={() => setScreen(screen.kind === "detail" && detail ? { kind: "new-record", archiveId: detail.archive.id } : { kind: "choose-project" })}><UiIcon name="plus" size={25} strokeWidth={2.2} /></button>
         <button type="button" aria-current={screen.kind === "cloud" && screen.section === "market" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "market" })}><UiIcon name="store" size={17} strokeWidth={1.7} /><span>{copy.market}</span></button>

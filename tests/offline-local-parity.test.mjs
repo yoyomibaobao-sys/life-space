@@ -7,7 +7,7 @@ const root = process.cwd();
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("cold-start Android offline shell presents the local workspace rather than a separate mode", () => {
+test("cold-start Android offline shell keeps the online app hierarchy and exposes local workspace under Me", () => {
   const buildScript = read("scripts/build-mobile-offline.mjs");
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const source = read("mobile-offline-src/main.tsx");
@@ -20,9 +20,19 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.doesNotMatch(source, /offline-status/);
   assert.match(source, /cloudUnavailable: "未联网"/);
   assert.match(source, /kind: "cloud"; section:/);
+  assert.match(source, /useState<Screen>\(\{ kind: "cloud", section: "discover" \}\)/);
+  assert.match(source, /discover: "记录"/);
+  assert.match(source, /home-section-tabs/);
+  assert.match(source, /onClick=\{\(\) => setScreen\(\{ kind: "cloud", section: "discover" \}\)\}/);
+  assert.match(source, /online-project-card/);
+  assert.match(source, /online-project-media/);
+  assert.match(source, /online-project-footer/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(styles, /height: calc\(env\(safe-area-inset-bottom, 0px\) \+ 58px\)/);
   assert.match(styles, /width: 48px; height: 48px; margin-top: -16px/);
+  assert.match(styles, /\.online-project-card[\s\S]*grid-template-columns: 112px minmax\(0, 1fr\)/);
+  assert.match(styles, /\.online-project-media[\s\S]*width: 112px;[\s\S]*height: 112px/);
+  assert.match(styles, /\.online-project-title[\s\S]*font-size: 16px;[\s\S]*font-weight: 850/);
   assert.match(parityStyles, /\.network-offline[\s\S]*min-height: 46vh/);
   assert.doesNotMatch(template, /本地离线模式/);
 });

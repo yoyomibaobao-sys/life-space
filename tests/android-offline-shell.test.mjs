@@ -31,6 +31,9 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /cloudUnavailable: "未联网"/);
   assert.match(source, /section: "follow"/);
   assert.match(source, /section: "market"/);
+  assert.match(source, /discover: "记录"/);
+  assert.match(source, /useState<Screen>\(\{ kind: "cloud", section: "discover" \}\)/);
+  assert.match(source, /online-project-card/);
   assert.match(parityStyles, /\.network-offline[\s\S]*min-height: 46vh/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);

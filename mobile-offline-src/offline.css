@@ -106,7 +106,7 @@ button:disabled { opacity: 0.55; }
 .section-title h1, .section-title h2 { margin: 0; font-size: 22px; }
 .count { color: var(--muted); font-size: 14px; }
 
-.project-list, .record-list { display: grid; gap: 12px; }
+.project-list, .record-list { display: grid; gap: 9px; }
 .project-card, .record-card, .panel {
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -133,6 +133,71 @@ button:disabled { opacity: 0.55; }
 .project-title { font-size: 18px; font-weight: 750; margin: 3px 0 6px; overflow-wrap: anywhere; }
 .project-meta, .record-meta { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .project-note { margin-top: 8px; color: #465441; font-size: 14px; line-height: 1.45; }
+
+/* Match the online ProjectSummaryCard hierarchy for local projects. */
+.online-project-list { gap: 9px; }
+.online-project-card {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 128px;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 11px;
+  padding: 8px;
+  overflow: visible;
+  border: 1px solid #e1e8de;
+  border-radius: 16px;
+  background: #fff;
+  color: #263527;
+  text-align: left;
+}
+.online-project-media {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  align-self: start;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #f4f7f1, #eef4ed);
+  color: #91a18e;
+}
+.online-project-image { width: 100%; height: 100%; display: block; object-fit: cover; }
+.online-project-category {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid rgba(191, 218, 187, 0.92);
+  border-radius: 999px;
+  background: rgba(247, 252, 245, 0.94);
+  color: #477546;
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.online-project-body {
+  min-width: 0;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 1px;
+}
+.online-project-title-row { min-width: 0; min-height: 22px; display: flex; align-items: flex-start; gap: 5px; }
+.online-project-title { min-width: 0; flex: 1; color: #263527; font-size: 16px; font-weight: 850; line-height: 1.3; overflow-wrap: anywhere; }
+.online-project-visibility { flex: 0 0 auto; padding: 3px 1px; color: #5e7258; font-size: 12px; font-weight: 600; line-height: 1.3; }
+.online-project-update { min-width: 0; min-height: 16px; overflow: hidden; color: #667463; font-size: 11.5px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.online-project-classification { min-width: 0; min-height: 15px; color: #667463; font-size: 11.5px; line-height: 1.3; overflow-wrap: anywhere; }
+.online-project-footer { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-top: auto; color: #7a8578; font-size: 11.5px; line-height: 1.3; }
+.online-project-ended { flex: 0 0 auto; padding: 2px 6px; border: 1px solid #e4d8ca; border-radius: 999px; background: #f6f2ec; color: #7f7668; font-size: 10.5px; font-weight: 750; }
 
 .empty {
   text-align: center;
@@ -206,8 +271,9 @@ button:disabled { opacity: 0.55; }
 .offline-shell { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 94px); }
 .header-actions { display: flex; gap: 8px; }
 .source-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-bottom: 12px; }
-.source-row button, .category-row button { min-width: 0; min-height: 40px; font-size: 14px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #52644e; padding: 5px 3px; white-space: nowrap; }
-.source-row .add-project { margin-left: 8px; padding-inline: 8px; background: var(--green); color: #fff; }
+.source-row button { min-width: 0; min-height: 34px; font-size: 13px; font-weight: 600; border: 1px solid #dfe7d9; border-radius: 999px; background: #fff; color: #5d6957; padding: 0 4px; white-space: nowrap; }
+.category-row button { min-width: 0; min-height: 36px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #52644e; padding: 4px 3px; white-space: nowrap; }
+.source-row .add-project { margin-left: 8px; padding-inline: 8px; border-color: #4f844b; background: #4f844b; color: #fff; box-shadow: 0 3px 9px rgba(79,132,75,0.16); }
 .source-row button[aria-pressed="true"], .category-row button[aria-pressed="true"] { background: #f0fff4; border-color: #8bc58b; color: #2e7d32; font-weight: 700; }
 .category-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; margin: 12px 0; }
 .project-title, .project-meta, .project-note { display: block; }
@@ -219,6 +285,7 @@ button:disabled { opacity: 0.55; }
 .top-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
 .top-tabs button { flex: 1; min-height: 44px; padding: 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 16px; font-weight: 600; }
 .top-tabs button[aria-pressed="true"] { color: var(--green-dark); border-bottom-color: var(--green); }
+.home-section-tabs { margin-top: -4px; }
 .guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .guide-item { border: 1px solid var(--line); border-radius: 16px; background: #fff; padding: 14px; text-align: left; color: #314131; }
 .guide-item strong, .guide-item small { display: block; }
@@ -261,5 +328,8 @@ button:disabled { opacity: 0.55; }
 .bottom-nav button[aria-current="page"] { background: #edf6e8; color: #2f6a31; font-weight: 800; }
 .bottom-nav .quick-add { justify-self: center; width: 48px; height: 48px; margin-top: -16px; border: 3px solid #fff; border-radius: 50%; background: #527b50; color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
 .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
+@media (max-width: 420px) {
+  .online-project-card { grid-template-columns: 112px minmax(0, 1fr); }
+}
 @media (max-width: 420px) { .guide-parameter-grid { grid-template-columns: 1fr; } }
 @media (max-width: 360px) { .source-row button { font-size: 12px; } }
