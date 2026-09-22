@@ -21,7 +21,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(parityStyles, /\.brand-mode[\s\S]*display: block/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
-  assert.match(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(parityStyles, /\.offline-shell[\s\S]*width: min\(1080px/);
   assert.match(source, /<MobileBottomNavigationView/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
