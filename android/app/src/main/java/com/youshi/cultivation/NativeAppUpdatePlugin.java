@@ -1,12 +1,17 @@
 package com.youshi.cultivation;
 
+import android.app.DownloadManager;
 import android.content.ClipData;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import androidx.core.content.FileProvider;
@@ -16,6 +21,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -43,6 +49,7 @@ public final class NativeAppUpdatePlugin extends Plugin {
     private static final int CONNECT_TIMEOUT_MS = 30_000;
     private static final int READ_TIMEOUT_MS = 60_000;
     private static final int DOWNLOAD_ATTEMPTS = 2;
+    private static final long DOWNLOAD_MANAGER_TIMEOUT_MS = 180_000L;
 
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean updateInProgress = new AtomicBoolean(false);
@@ -155,6 +162,132 @@ public final class NativeAppUpdatePlugin extends Plugin {
         long expectedSize,
         String expectedSha256
     ) throws Exception {
+        Exception systemDownloadError = null;
+        try {
+            return downloadVerifiedApkWithDownloadManager(
+                downloadUrl,
+                expectedSize,
+                expectedSha256
+            );
+        } catch (Exception error) {
+            systemDownloadError = error;
+            Log.w(TAG, "Android system download failed; falling back to direct HTTP.", error);
+        }
+
+        try {
+            return downloadVerifiedApkWithUrlConnection(
+                downloadUrl,
+                expectedSize,
+                expectedSha256
+            );
+        } catch (Exception error) {
+            if (systemDownloadError != null) {
+                error.addSuppressed(systemDownloadError);
+            }
+            throw error;
+        }
+    }
+
+    private File downloadVerifiedApkWithDownloadManager(
+        String downloadUrl,
+        long expectedSize,
+        String expectedSha256
+    ) throws Exception {
+        File downloadDirectory = getContext().getExternalFilesDir(
+            Environment.DIRECTORY_DOWNLOADS
+        );
+        if (downloadDirectory == null) {
+            throw new IllegalStateException("Android download storage is unavailable.");
+        }
+        if (!downloadDirectory.exists() && !downloadDirectory.mkdirs()) {
+            throw new IllegalStateException("Could not create Android download storage.");
+        }
+
+        String fileName = "youshi-cultivation-update.apk";
+        File apkFile = new File(downloadDirectory, fileName);
+        if (apkFile.exists() && !apkFile.delete()) {
+            throw new IllegalStateException("Could not replace the previous update file.");
+        }
+
+        DownloadManager manager =
+            (DownloadManager) getContext().getSystemService(Context.DOWNLOAD_SERVICE);
+        if (manager == null) {
+            throw new IllegalStateException("Android DownloadManager is unavailable.");
+        }
+
+        DownloadManager.Request request =
+            new DownloadManager.Request(Uri.parse(downloadUrl))
+                .setMimeType("application/vnd.android.package-archive")
+                .setTitle("LifeSpace update")
+                .setDescription("Downloading verified Android update")
+                .setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                )
+                .addRequestHeader("Accept", "application/vnd.android.package-archive")
+                .addRequestHeader("Cache-Control", "no-cache")
+                .setDestinationInExternalFilesDir(
+                    getContext(),
+                    Environment.DIRECTORY_DOWNLOADS,
+                    fileName
+                );
+
+        long downloadId = manager.enqueue(request);
+        long deadline = SystemClock.elapsedRealtime() + DOWNLOAD_MANAGER_TIMEOUT_MS;
+
+        try {
+            while (SystemClock.elapsedRealtime() < deadline) {
+                DownloadManager.Query query = new DownloadManager.Query()
+                    .setFilterById(downloadId);
+                try (Cursor cursor = manager.query(query)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int statusIndex = cursor.getColumnIndex(
+                            DownloadManager.COLUMN_STATUS
+                        );
+                        int reasonIndex = cursor.getColumnIndex(
+                            DownloadManager.COLUMN_REASON
+                        );
+                        int status = statusIndex >= 0
+                            ? cursor.getInt(statusIndex)
+                            : DownloadManager.STATUS_FAILED;
+
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            verifyDownloadedFile(
+                                apkFile,
+                                expectedSize,
+                                expectedSha256
+                            );
+                            return apkFile;
+                        }
+
+                        if (status == DownloadManager.STATUS_FAILED) {
+                            int reason = reasonIndex >= 0
+                                ? cursor.getInt(reasonIndex)
+                                : -1;
+                            throw new IllegalStateException(
+                                "Android DownloadManager failed with reason " + reason + "."
+                            );
+                        }
+                    }
+                }
+
+                Thread.sleep(500L);
+            }
+        } catch (Exception error) {
+            manager.remove(downloadId);
+            if (apkFile.exists()) apkFile.delete();
+            throw error;
+        }
+
+        manager.remove(downloadId);
+        if (apkFile.exists()) apkFile.delete();
+        throw new IllegalStateException("Android update download timed out.");
+    }
+
+    private File downloadVerifiedApkWithUrlConnection(
+        String downloadUrl,
+        long expectedSize,
+        String expectedSha256
+    ) throws Exception {
         File updateDirectory = new File(getContext().getCacheDir(), "updates");
         if (!updateDirectory.exists() && !updateDirectory.mkdirs()) {
             throw new IllegalStateException("Could not create the update directory.");
@@ -188,6 +321,29 @@ public final class NativeAppUpdatePlugin extends Plugin {
         throw lastError != null
             ? lastError
             : new IllegalStateException("The Android update download failed.");
+    }
+
+    private void verifyDownloadedFile(
+        File apkFile,
+        long expectedSize,
+        String expectedSha256
+    ) throws Exception {
+        if (!apkFile.isFile() || apkFile.length() != expectedSize) {
+            throw new IllegalStateException("The downloaded update size is invalid.");
+        }
+
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[32 * 1024];
+        try (InputStream input = new FileInputStream(apkFile)) {
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, count);
+            }
+        }
+
+        if (!expectedSha256.equals(toHex(digest.digest()))) {
+            throw new IllegalStateException("The update checksum does not match.");
+        }
     }
 
     private void downloadVerifiedApkOnce(
@@ -251,7 +407,7 @@ public final class NativeAppUpdatePlugin extends Plugin {
     private void verifyArchive(File apkFile, long expectedVersionCode) throws Exception {
         PackageManager packageManager = getContext().getPackageManager();
         int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-            ? PackageManager.GET_SIGNING_CERTIFICATES
+            ? PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_SIGNATURES
             : PackageManager.GET_SIGNATURES;
         PackageInfo archive = packageManager.getPackageArchiveInfo(
             apkFile.getAbsolutePath(),
@@ -278,6 +434,9 @@ public final class NativeAppUpdatePlugin extends Plugin {
         Signature[] signatures;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && archive.signingInfo != null) {
             signatures = archive.signingInfo.getApkContentsSigners();
+            if (signatures == null || signatures.length == 0) {
+                signatures = archive.signatures;
+            }
         } else {
             signatures = archive.signatures;
         }

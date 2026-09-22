@@ -196,6 +196,10 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(plugin, /ccc03e33fed7ce95dd4d203aa3451a08cdc175874e4a6ae159b81c367164635d/);
   assert.match(plugin, /expectedSha256\.equals\(toHex\(digest\.digest\(\)\)\)/);
   assert.match(plugin, /DOWNLOAD_ATTEMPTS = 2/);
+  assert.match(plugin, /DownloadManager/);
+  assert.match(plugin, /setDestinationInExternalFilesDir/);
+  assert.match(plugin, /verifyDownloadedFile/);
+  assert.match(plugin, /GET_SIGNING_CERTIFICATES \| PackageManager\.GET_SIGNATURES/);
   assert.match(plugin, /Accept-Encoding", "identity"/);
   assert.match(plugin, /while \(bytesWritten < expectedSize\)/);
   assert.match(plugin, /Intent\.ACTION_VIEW/);
