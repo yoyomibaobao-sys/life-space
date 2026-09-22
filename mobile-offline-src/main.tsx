@@ -20,6 +20,8 @@ import {
   deleteLocalRecord,
   getLocalArchiveDetail,
   listVisibleLocalArchiveSummaries,
+  listPendingCloudSyncSummaries,
+  deferPendingCloudSyncPrompt,
   markUnownedLocalArchivesForOwner,
   preparePendingCloudSyncQueue,
   updateLocalArchiveFields,
@@ -28,11 +30,13 @@ import {
   type LocalArchiveDetail,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
+  type PendingCloudSyncSummary,
   type LocalImage,
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import {
   loadRememberedLocalOwnerContext,
+  rememberLocalOwnerContext,
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
@@ -61,6 +65,9 @@ import {
 import type { SystemNameCandidate } from "@/lib/system-name-candidates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
+import { supabase } from "@/lib/supabase";
+import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
+import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 
 declare const __LIFESPACE_CLOUD_ORIGIN__: string;
 
@@ -68,6 +75,18 @@ const CLOUD_ORIGIN = __LIFESPACE_CLOUD_ORIGIN__;
 const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
+
+type CloudArchiveSummary = {
+  id: string;
+  title?: string | null;
+  category?: string | null;
+  system_name?: string | null;
+  species_name_snapshot?: string | null;
+  status?: string | null;
+  updated_at?: string | null;
+  is_public?: boolean | null;
+};
+
 type Screen =
   | { kind: "list" }
   | { kind: "new-project"; guide?: SystemNameCandidate }
@@ -85,7 +104,14 @@ const text = {
   zh: {
     mySpace: "我的空间", settings: "设置", language: "语言", all: "全部", cloud: "云空间", local: "本地", project: "项目",
     home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
-    cloudUnavailable: "联网后可查看云端内容", camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
+    cloudUnavailable: "当前未联网，云端内容暂不可用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
+    cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
+    saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
+    savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
+    pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
+    uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
+    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败",
+    camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
     guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
     guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
     guideOfflineNotice: "离线可查看基础概要；完整实操、经验卡和关联项目请联网后查看。",
@@ -144,7 +170,14 @@ const text = {
   en: {
     mySpace: "My space", settings: "Settings", language: "Language", all: "All", cloud: "Cloud", local: "Local", project: "Project",
     home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
-    cloudUnavailable: "Reconnect to view cloud content", camera: "Camera", album: "Gallery", chooseProject: "Choose project",
+    cloudUnavailable: "Cloud content is unavailable while offline", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
+    cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
+    saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
+    savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
+    pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
+    uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
+    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed",
+    camera: "Camera", album: "Gallery", chooseProject: "Choose project",
     guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
     guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
     guideOfflineNotice: "The basic overview is available offline. Reconnect for full practice guidance, experience cards, and related projects.",
@@ -274,6 +307,14 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [migrationWarning, setMigrationWarning] = useState(false);
   const [toast, setToast] = useState("");
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [cloudUserId, setCloudUserId] = useState<string | null>(null);
+  const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudError, setCloudError] = useState("");
+  const [cloudBusyArchiveId, setCloudBusyArchiveId] = useState<string | null>(null);
+  const [pendingSync, setPendingSync] = useState<PendingCloudSyncSummary[]>([]);
+  const [syncingArchiveId, setSyncingArchiveId] = useState<string | null>(null);
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -288,12 +329,42 @@ function App() {
   }, []);
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
-    const result = await listVisibleLocalArchiveSummaries(
-      context === undefined ? ownerContext : context,
-    );
+    const resolvedContext = context === undefined ? ownerContext : context;
+    const [result, pending] = await Promise.all([
+      listVisibleLocalArchiveSummaries(resolvedContext),
+      listPendingCloudSyncSummaries(resolvedContext),
+    ]);
     setArchives(result.archives);
     setUnownedCount(result.unownedCount);
+    setPendingSync(pending);
   }, [ownerContext]);
+
+  const loadCloudList = useCallback(async (userId?: string | null) => {
+    const resolvedUserId = userId || cloudUserId;
+    if (!navigator.onLine || !resolvedUserId) {
+      setCloudArchives([]);
+      setCloudError("");
+      return;
+    }
+
+    setCloudLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("archives")
+        .select("id,title,category,system_name,species_name_snapshot,status,updated_at,is_public")
+        .eq("user_id", resolvedUserId)
+        .is("trashed_at", null)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      setCloudArchives((data || []) as CloudArchiveSummary[]);
+      setCloudError("");
+    } catch (error) {
+      console.warn("local shell cloud list", error);
+      setCloudError(copy.cloudLoadFailed);
+    } finally {
+      setCloudLoading(false);
+    }
+  }, [cloudUserId, copy.cloudLoadFailed]);
 
   const loadDetail = useCallback(async (
     archiveId: string,
