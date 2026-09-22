@@ -44,6 +44,17 @@ const buildResult = await build({
     "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY":
       JSON.stringify(supabasePublishableKey),
     "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": "undefined",
+    // A few shared UI components pull in Next client helpers. In the normal
+    // Next build these flags are replaced by the compiler. The standalone
+    // Android shell is bundled by esbuild, so leaving them behind causes
+    // "process is not defined" before React can render and results in a blank
+    // screen. Keep their browser defaults explicit in the APK bundle.
+    "process.env.__NEXT_I18N_SUPPORT": "false",
+    "process.env.__NEXT_LINK_NO_TOUCH_START": "false",
+    "process.env.__NEXT_MANUAL_CLIENT_BASE_PATH": "false",
+    "process.env.__NEXT_MANUAL_TRAILING_SLASH": "false",
+    "process.env.__NEXT_ROUTER_BASEPATH": JSON.stringify(""),
+    "process.env.__NEXT_TRAILING_SLASH": "false",
   },
   plugins: [
     {
