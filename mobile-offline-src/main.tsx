@@ -1141,11 +1141,23 @@ function CloudLogin({
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaRequired, setCaptchaRequired] = useState<boolean | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) return;
+
+    if (captchaRequired === null) {
+      setMessage(copy.captchaLoading);
+      return;
+    }
+    if (captchaRequired && !captchaToken) {
+      setMessage(copy.captchaRequired);
+      return;
+    }
 
     setSubmitting(true);
     setMessage("");
@@ -1153,9 +1165,12 @@ function CloudLogin({
       const { error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
+        options: captchaToken ? { captchaToken } : undefined,
       });
       if (error) {
         setMessage(`${copy.loginFailed}: ${error.message}`);
+        setCaptchaToken(null);
+        setCaptchaResetKey((value) => value + 1);
         return;
       }
       onSuccess();
@@ -1163,6 +1178,8 @@ function CloudLogin({
       setMessage(
         `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
       );
+      setCaptchaToken(null);
+      setCaptchaResetKey((value) => value + 1);
     } finally {
       setSubmitting(false);
     }
@@ -1177,6 +1194,8 @@ function CloudLogin({
           <input
             type="email"
             autoComplete="email"
+            autoCapitalize="none"
+            inputMode="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
@@ -1192,9 +1211,23 @@ function CloudLogin({
             required
           />
         </div>
+        <NativeTurnstile
+          copy={copy}
+          resetKey={captchaResetKey}
+          onTokenChange={setCaptchaToken}
+          onRequiredChange={setCaptchaRequired}
+        />
         {message ? <p className="project-meta">{message}</p> : null}
         <div className="submit-row">
-          <button type="submit" className="primary-button" disabled={submitting}>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={
+              submitting ||
+              captchaRequired === null ||
+              (captchaRequired === true && !captchaToken)
+            }
+          >
             {submitting ? copy.loading : copy.login}
           </button>
         </div>
