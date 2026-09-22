@@ -18,7 +18,6 @@ on:
   push:
     branches:
       - main
-      - rc09-simple-offline-sync
     paths:
       - "android/**"
       - "mobile-shell/**"
@@ -111,12 +110,6 @@ jobs:
 
       - name: Run Android shell contracts
         run: node --test tests/android-shell.test.mjs
-
-      - name: Set rc09 rework test APK version
-        if: github.ref == 'refs/heads/rc09-simple-offline-sync'
-        run: |
-          echo "ANDROID_VERSION_CODE=17" >> "$GITHUB_ENV"
-          echo "ANDROID_VERSION_NAME=1.0.4-rc9-r1" >> "$GITHUB_ENV"
 
       - name: Sync Capacitor Android project
         run: npm run android:sync
