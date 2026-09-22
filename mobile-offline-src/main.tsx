@@ -40,11 +40,12 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
-import type { ArchiveCategory } from "@/lib/archive-categories";
+import { getArchiveCategoryIcon, getArchiveCategoryLabel, type ArchiveCategory } from "@/lib/archive-categories";
 
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
@@ -68,10 +69,15 @@ import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-t
 import { supabase } from "@/lib/supabase";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
+import { CapacitorHttp } from "@capacitor/core";
 
+declare const __LIFESPACE_CLOUD_ORIGIN__: string;
+
+const CLOUD_ORIGIN = __LIFESPACE_CLOUD_ORIGIN__;
 const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
+type ArchiveSourceFilter = "all" | "cloud" | "local";
 
 type CloudArchiveSummary = {
   id: string;
