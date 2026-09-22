@@ -379,6 +379,57 @@ function App() {
   }, [ownerContext]);
 
   useEffect(() => {
+    const updateConnectivity = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateConnectivity);
+    window.addEventListener("offline", updateConnectivity);
+    return () => {
+      window.removeEventListener("online", updateConnectivity);
+      window.removeEventListener("offline", updateConnectivity);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function applySession(user?: { id?: string; email?: string | null } | null) {
+      if (cancelled) return;
+      if (!user?.id) {
+        setCloudUserId(null);
+        return;
+      }
+
+      const nextOwner = { userId: user.id, email: user.email || null };
+      rememberLocalOwnerContext(nextOwner);
+      setOwner(nextOwner);
+      setCloudUserId(user.id);
+    }
+
+    void supabase.auth.getSession()
+      .then(({ data }) => applySession(data.session?.user))
+      .catch(() => undefined);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session?.user);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!online || !cloudUserId || !ownerContext) return;
+
+    void loadCloudList(cloudUserId);
+    void preparePendingCloudSyncQueue(ownerContext)
+      .then(() => loadList(ownerContext))
+      .catch(() => undefined);
+  }, [online, cloudUserId, ownerContext, loadCloudList, loadList]);
+
+  useEffect(() => {
     let cancelled = false;
     async function initialize() {
       try {
