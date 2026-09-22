@@ -93,6 +93,8 @@ test("the Worker serves signed Android releases through the private R2 binding",
   assert.match(worker, /handleAndroidReleaseDownload/);
   assert.match(androidDownload, /env\?\.R2_MEDIA_CANARY/);
   assert.match(androidDownload, /releases\/android\/release\.json/);
+  assert.match(androidDownload, /releases\/android\/test\/youshi-cultivation-android-1\.0\.4-rc9-r1\.apk/);
+  assert.match(androidDownload, /\/downloads\/android\/rc09-r1\.apk/);
   assert.match(androidDownload, /application\/vnd\.android\.package-archive/);
   assert.match(androidDownload, /Content-Disposition/);
   assert.match(androidDownload, /object\.size !== manifest\.size_bytes/);

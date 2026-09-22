@@ -1,8 +1,11 @@
 export const ANDROID_RELEASE_APK_PATH = "/downloads/android/latest.apk";
 export const ANDROID_RELEASE_MANIFEST_PATH =
   "/downloads/android/release.json";
+export const ANDROID_RC09_REWORK_APK_PATH = "/downloads/android/rc09-r1.apk";
 
 const ANDROID_RELEASE_MANIFEST_KEY = "releases/android/release.json";
+const ANDROID_RC09_REWORK_APK_KEY =
+  "releases/android/test/youshi-cultivation-android-1.0.4-rc9-r1.apk";
 const ANDROID_NATIVE_BUFFER_LIMIT_BYTES = 16 * 1024 * 1024;
 
 function jsonError(message, status) {
@@ -53,7 +56,8 @@ async function loadManifest(bucket) {
 export function isAndroidReleaseDownloadPath(pathname) {
   return (
     pathname === ANDROID_RELEASE_APK_PATH ||
-    pathname === ANDROID_RELEASE_MANIFEST_PATH
+    pathname === ANDROID_RELEASE_MANIFEST_PATH ||
+    pathname === ANDROID_RC09_REWORK_APK_PATH
   );
 }
 
@@ -84,6 +88,38 @@ export async function handleAndroidReleaseDownload(request, env) {
     if (object.httpEtag) headers.set("ETag", object.httpEtag);
 
     return new Response(request.method === "HEAD" ? null : object.body, {
+      status: 200,
+      headers,
+    });
+  }
+
+  if (pathname === ANDROID_RC09_REWORK_APK_PATH) {
+    const object = await bucket.get(ANDROID_RC09_REWORK_APK_KEY);
+    if (!object) return jsonError("Android rc09 test release is not published.", 404);
+
+    const headers = new Headers();
+    object.writeHttpMetadata?.(headers);
+    headers.set("Cache-Control", "no-store");
+    headers.set(
+      "Content-Disposition",
+      'attachment; filename="youshi-cultivation-android-1.0.4-rc9-r1.apk"',
+    );
+    headers.set("Content-Length", String(object.size));
+    headers.set("Content-Type", "application/vnd.android.package-archive");
+    headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Android-Version", "1.0.4-rc9-r1");
+    if (object.httpEtag) headers.set("ETag", object.httpEtag);
+
+    let body = object.body;
+    if (
+      request.method !== "HEAD" &&
+      object.size <= ANDROID_NATIVE_BUFFER_LIMIT_BYTES &&
+      typeof object.arrayBuffer === "function"
+    ) {
+      body = await object.arrayBuffer();
+    }
+
+    return new Response(request.method === "HEAD" ? null : body, {
       status: 200,
       headers,
     });

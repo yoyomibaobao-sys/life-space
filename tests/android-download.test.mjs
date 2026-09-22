@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   ANDROID_RELEASE_APK_PATH,
   ANDROID_RELEASE_MANIFEST_PATH,
+  ANDROID_RC09_REWORK_APK_PATH,
   handleAndroidReleaseDownload,
   isAndroidReleaseDownloadPath,
 } from "../cloudflare/android-release-download.mjs";
@@ -52,7 +53,7 @@ function createR2Object(value, contentType) {
   };
 }
 
-function createR2Bucket({ manifest = releaseManifest, apk = Buffer.alloc(12, 7) } = {}) {
+function createR2Bucket({ manifest = releaseManifest, apk = Buffer.alloc(12, 7), testApk = Buffer.alloc(13, 9) } = {}) {
   return {
     async get(key) {
       if (key === "releases/android/release.json") {
@@ -60,6 +61,9 @@ function createR2Bucket({ manifest = releaseManifest, apk = Buffer.alloc(12, 7) 
       }
       if (key === manifest.object_key) {
         return createR2Object(apk, "application/vnd.android.package-archive");
+      }
+      if (key === "releases/android/test/youshi-cultivation-android-1.0.4-rc9-r1.apk") {
+        return createR2Object(testApk, "application/vnd.android.package-archive");
       }
       return null;
     },
@@ -69,6 +73,7 @@ function createR2Bucket({ manifest = releaseManifest, apk = Buffer.alloc(12, 7) 
 test("Android release routes are served from the private R2 binding", async () => {
   assert.equal(isAndroidReleaseDownloadPath(ANDROID_RELEASE_APK_PATH), true);
   assert.equal(isAndroidReleaseDownloadPath(ANDROID_RELEASE_MANIFEST_PATH), true);
+  assert.equal(isAndroidReleaseDownloadPath(ANDROID_RC09_REWORK_APK_PATH), true);
   assert.equal(isAndroidReleaseDownloadPath("/download/android"), false);
 
   const env = { R2_MEDIA_CANARY: createR2Bucket() };
@@ -95,6 +100,14 @@ test("Android release routes are served from the private R2 binding", async () =
   );
   assert.equal(apkResponse.headers.get("x-checksum-sha256"), releaseManifest.sha256);
   assert.equal((await apkResponse.arrayBuffer()).byteLength, 12);
+
+  const testApkResponse = await handleAndroidReleaseDownload(
+    new Request(`https://life-space.uk${ANDROID_RC09_REWORK_APK_PATH}`),
+    env,
+  );
+  assert.equal(testApkResponse.status, 200);
+  assert.equal(testApkResponse.headers.get("x-android-version"), "1.0.4-rc9-r1");
+  assert.equal((await testApkResponse.arrayBuffer()).byteLength, 13);
 
   const headResponse = await handleAndroidReleaseDownload(
     new Request(`https://life-space.uk${ANDROID_RELEASE_APK_PATH}`, {
