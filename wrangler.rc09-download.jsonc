@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "life-space-rc09-download",
+  "main": "./cloudflare/rc09-download-worker.mjs",
+  "compatibility_date": "2026-09-01",
+  "r2_buckets": [
+    {
+      "binding": "R2_MEDIA_CANARY",
+      "bucket_name": "life-space-media-canary"
+    }
+  ]
+}

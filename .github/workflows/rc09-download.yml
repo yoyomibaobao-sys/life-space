@@ -1,0 +1,35 @@
+name: Deploy rc09 APK download
+
+on:
+  push:
+    branches:
+      - rc09-simple-offline-sync
+    paths:
+      - "cloudflare/rc09-download-worker.mjs"
+      - "wrangler.rc09-download.jsonc"
+      - ".github/workflows/rc09-download.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Deploy isolated rc09 download Worker
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config wrangler.rc09-download.jsonc
+
+      - name: Print test download URL
+        run: |
+          echo "Deployment URL: ${{ steps.deploy.outputs.deployment-url }}"
+          echo "APK URL: ${{ steps.deploy.outputs.deployment-url }}/rc09-r1.apk"

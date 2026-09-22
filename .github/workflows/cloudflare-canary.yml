@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - rc09-simple-offline-sync
   workflow_dispatch:
 
 permissions:
