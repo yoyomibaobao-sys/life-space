@@ -841,10 +841,12 @@ function App() {
     <main className="offline-shell">
       <header className="offline-header">
         <div className="brand">
-          <div className="brand-mark"><UiIcon name="sprout" size={25} /></div>
+          <div className="brand-mark"><UiIcon name="user" size={17} /></div>
           <div>
             <div className="brand-name">{copy.mySpace}</div>
-            <div className="brand-mode">{copy.offlineMode}</div>
+            <div className="brand-mode">
+              {owner?.email || (online ? copy.cloudSignIn : copy.offlineTitle)}
+            </div>
           </div>
         </div>
         <div className="header-actions">
@@ -887,10 +889,6 @@ function App() {
           </section>
         );
       })() : null}
-
-      {migrationWarning ? (
-        <section className="notice warning"><p>{copy.migrationWarning}</p></section>
-      ) : null}
 
       {screen.kind === "list" ? (
         <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
@@ -966,7 +964,7 @@ function App() {
         >
           {activeSource !== "local" ? (
             !online ? null : !cloudUserId ? (
-              <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
+              <CloudLogin copy={copy} onSuccess={() => setActiveSource("cloud")} />
             ) : cloudLoading ? (
               <section className="panel empty">{copy.cloudLoading}</section>
             ) : cloudError ? (
