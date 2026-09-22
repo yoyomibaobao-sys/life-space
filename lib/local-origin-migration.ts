@@ -10,17 +10,12 @@ import {
   rememberLocalOwnerContext,
 } from "@/lib/local-owner-context";
 
-export const PRODUCTION_REMOTE_LOCAL_ORIGIN = "https://life-space.uk";
 export const LEGACY_LOCAL_ORIGIN =
   "https://life-space-canary.yoyomibaobao.workers.dev";
-export const LOCAL_ORIGIN_MIGRATION_SOURCES = [
-  PRODUCTION_REMOTE_LOCAL_ORIGIN,
-  LEGACY_LOCAL_ORIGIN,
-] as const;
 export const LEGACY_LOCAL_BRIDGE_PATH =
   "/__lifespace_local_bridge_v1__.html";
 export const LOCAL_ORIGIN_MIGRATION_STORAGE_KEY =
-  "lifespace:local-origin-migration:v2";
+  "lifespace:local-origin-migration:v1";
 export const LOCAL_ORIGIN_MIGRATED_EVENT =
   "lifespace-local-origin-migrated";
 
@@ -83,7 +78,19 @@ function rememberSingleLegacyOwner(snapshot: LocalOriginBaseSnapshot) {
   rememberLocalOwnerContext({ userId, email });
 }
 
-async function migrateOneOrigin(origin: string) {
+export async function migrateLegacyLocalOrigin(): Promise<MigrationResult> {
+  if (typeof window === "undefined" || !isAndroidShell()) {
+    return {
+      status: "not-android",
+      archiveCount: 0,
+      recordCount: 0,
+      imageCount: 0,
+    };
+  }
+
+  const completed = readCompletedMigration();
+  if (completed) return completed;
+
   const nonce =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -91,17 +98,14 @@ async function migrateOneOrigin(origin: string) {
   const iframe = document.createElement("iframe");
   iframe.hidden = true;
   iframe.setAttribute("aria-hidden", "true");
-  iframe.src = `${origin}${LEGACY_LOCAL_BRIDGE_PATH}`;
+  iframe.src = `${LEGACY_LOCAL_ORIGIN}${LEGACY_LOCAL_BRIDGE_PATH}`;
   document.body.appendChild(iframe);
 
-  return new Promise<Omit<MigrationResult, "status">>((resolve, reject) => {
+  return new Promise<MigrationResult>((resolve, reject) => {
     let settled = false;
     let baseSnapshot: LocalOriginBaseSnapshot | null = null;
 
-    const finish = (
-      error?: Error,
-      result?: Omit<MigrationResult, "status">,
-    ) => {
+    const finish = (error?: Error, result?: MigrationResult) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timeoutId);
@@ -114,13 +118,13 @@ async function migrateOneOrigin(origin: string) {
     const post = (message: BridgeMessage) => {
       iframe.contentWindow?.postMessage(
         { ...message, channel: CHANNEL, nonce },
-        origin,
+        LEGACY_LOCAL_ORIGIN,
       );
     };
 
     const onMessage = async (event: MessageEvent<BridgeMessage>) => {
       if (
-        event.origin !== origin ||
+        event.origin !== LEGACY_LOCAL_ORIGIN ||
         event.source !== iframe.contentWindow ||
         event.data?.channel !== CHANNEL ||
         event.data?.nonce !== nonce
@@ -148,13 +152,23 @@ async function migrateOneOrigin(origin: string) {
         }
 
         if (event.data.type === "complete") {
-          finish(undefined, {
+          await finalizeLocalOriginMigration();
+          const result: MigrationResult = {
+            status: "migrated",
             archiveCount:
               Number(event.data.archiveCount) || baseSnapshot?.archives.length || 0,
             recordCount:
               Number(event.data.recordCount) || baseSnapshot?.records.length || 0,
             imageCount: Number(event.data.imageCount) || 0,
-          });
+          };
+          window.localStorage.setItem(
+            LOCAL_ORIGIN_MIGRATION_STORAGE_KEY,
+            JSON.stringify({ ...result, completedAt: new Date().toISOString() }),
+          );
+          window.dispatchEvent(
+            new CustomEvent(LOCAL_ORIGIN_MIGRATED_EVENT, { detail: result }),
+          );
+          finish(undefined, result);
           return;
         }
 
@@ -181,49 +195,4 @@ async function migrateOneOrigin(origin: string) {
       post({ type: "export-request" });
     });
   });
-}
-
-export async function migrateLegacyLocalOrigin(): Promise<MigrationResult> {
-  if (typeof window === "undefined" || !isAndroidShell()) {
-    return {
-      status: "not-android",
-      archiveCount: 0,
-      recordCount: 0,
-      imageCount: 0,
-    };
-  }
-
-  const completed = readCompletedMigration();
-  if (completed) return completed;
-
-  const totals = {
-    archiveCount: 0,
-    recordCount: 0,
-    imageCount: 0,
-  };
-
-  // The newest remote-shell origin is imported first. The older canary origin
-  // is merged afterwards so no on-device records from signed RC builds are
-  // stranded when Android moves permanently to the APK-bundled localhost UI.
-  for (const origin of LOCAL_ORIGIN_MIGRATION_SOURCES) {
-    const result = await migrateOneOrigin(origin);
-    totals.archiveCount += result.archiveCount;
-    totals.recordCount += result.recordCount;
-    totals.imageCount += result.imageCount;
-  }
-
-  await finalizeLocalOriginMigration();
-
-  const result: MigrationResult = {
-    status: "migrated",
-    ...totals,
-  };
-  window.localStorage.setItem(
-    LOCAL_ORIGIN_MIGRATION_STORAGE_KEY,
-    JSON.stringify({ ...result, completedAt: new Date().toISOString() }),
-  );
-  window.dispatchEvent(
-    new CustomEvent(LOCAL_ORIGIN_MIGRATED_EVENT, { detail: result }),
-  );
-  return result;
 }

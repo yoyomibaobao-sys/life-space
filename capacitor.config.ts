@@ -40,12 +40,12 @@ const config: CapacitorConfig = {
   server: {
     // Android now boots the APK-bundled app shell first. Network availability
     // only controls cloud data; it must never decide whether the UI can start.
-    hostname: "localhost",
+    hostname: cloudUrl.hostname,
     androidScheme: "https",
     cleartext: false,
-    // These hosts are retained for on-device migration of IndexedDB created by
-    // the earlier remote-shell builds. The bridge document itself is served
-    // from the APK by LifeSpaceWebViewClient, so migration also works offline.
+    // Keep the bundled shell on the production origin. This preserves the
+    // existing WebView IndexedDB and Supabase auth session while removing the
+    // network dependency that the old server.url introduced.
     allowNavigation: [cloudUrl.hostname, LEGACY_LOCAL_STORAGE_HOST],
     errorPath: "offline.html",
   },

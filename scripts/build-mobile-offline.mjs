@@ -7,7 +7,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRoot = path.join(root, "mobile-offline-src");
 const outputRoot = path.join(root, "mobile-shell");
 const defaultServerUrl = "https://life-space.uk";
-const localAppOrigin = "https://localhost";
 
 function resolveCloudOrigin() {
   const url = new URL(process.env.CAPACITOR_SERVER_URL || defaultServerUrl);
@@ -69,8 +68,8 @@ const offlineHtml = template
     () => javascript.text.replaceAll("</script", "<\\/script"),
   );
 const bridgeHtml = bridgeTemplate.replace(
-  "__LIFESPACE_PARENT_ORIGIN_JSON__",
-  () => JSON.stringify(localAppOrigin),
+  "__LIFESPACE_CLOUD_ORIGIN_JSON__",
+  () => JSON.stringify(cloudOrigin),
 );
 
 await fs.mkdir(outputRoot, { recursive: true });

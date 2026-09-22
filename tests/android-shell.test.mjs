@@ -18,7 +18,7 @@ test("Android shell keeps its identity, HTTPS host, and offline fallback explici
   assert.match(config, /CAPACITOR_SERVER_URL/);
   assert.match(config, /https:\/\/life-space\.uk/);
   assert.match(config, /url\.protocol !== "https:"/);
-  assert.match(config, /hostname: "localhost"/);
+  assert.match(config, /hostname: cloudUrl\.hostname/);
   assert.doesNotMatch(config, /url: cloudUrl\.origin/);
   assert.match(config, /androidScheme: "https"/);
   assert.match(config, /cleartext: false/);
