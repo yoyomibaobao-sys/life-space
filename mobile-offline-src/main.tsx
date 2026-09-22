@@ -489,7 +489,64 @@ function App() {
   }
 
   function reconnect() {
-    window.location.assign(`${CLOUD_ORIGIN}/archive?source=local`);
+    setOnline(navigator.onLine);
+    if (!navigator.onLine) {
+      showToast(copy.offlineTitle);
+      return;
+    }
+    if (cloudUserId) void loadCloudList(cloudUserId);
+    void loadList(ownerContext);
+    setScreen({ kind: "cloud" });
+  }
+
+  async function saveCloudCopy(cloudArchiveId: string) {
+    if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
+      showToast(copy.cloudSignIn);
+      return;
+    }
+
+    setCloudBusyArchiveId(cloudArchiveId);
+    try {
+      const result = await saveCloudArchiveToLocal({
+        cloudArchiveId,
+        ownerContext,
+        mode: "copy",
+      });
+      await loadList(ownerContext);
+      showToast(copy.cloudCopySaved);
+      openDetail(result.localArchiveId);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.cloudLoadFailed);
+    } finally {
+      setCloudBusyArchiveId(null);
+    }
+  }
+
+  async function uploadPending(localArchiveId: string) {
+    if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
+      showToast(copy.cloudSignIn);
+      return;
+    }
+
+    setSyncingArchiveId(localArchiveId);
+    try {
+      const result = await syncPendingCloudArchive({
+        localArchiveId,
+        ownerContext,
+      });
+      await loadList(ownerContext);
+      showToast(
+        result.success ? copy.uploadSuccess : result.error || copy.uploadFailed,
+      );
+    } finally {
+      setSyncingArchiveId(null);
+    }
+  }
+
+  async function deferPending(localArchiveId: string) {
+    if (!ownerContext) return;
+    await deferPendingCloudSyncPrompt(localArchiveId, ownerContext);
+    await loadList(ownerContext);
   }
 
   async function claimUnowned() {
