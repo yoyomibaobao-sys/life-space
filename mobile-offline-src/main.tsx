@@ -20,6 +20,8 @@ import {
   deleteLocalRecord,
   getLocalArchiveDetail,
   listVisibleLocalArchiveSummaries,
+  listPendingCloudSyncSummaries,
+  deferPendingCloudSyncPrompt,
   markUnownedLocalArchivesForOwner,
   preparePendingCloudSyncQueue,
   updateLocalArchiveFields,
@@ -28,11 +30,13 @@ import {
   type LocalArchiveDetail,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
+  type PendingCloudSyncSummary,
   type LocalImage,
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import {
   loadRememberedLocalOwnerContext,
+  rememberLocalOwnerContext,
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
@@ -61,13 +65,25 @@ import {
 import type { SystemNameCandidate } from "@/lib/system-name-candidates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
+import { supabase } from "@/lib/supabase";
+import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
+import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 
-declare const __LIFESPACE_CLOUD_ORIGIN__: string;
-
-const CLOUD_ORIGIN = __LIFESPACE_CLOUD_ORIGIN__;
 const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
+
+type CloudArchiveSummary = {
+  id: string;
+  title?: string | null;
+  category?: string | null;
+  system_name?: string | null;
+  species_name_snapshot?: string | null;
+  status?: string | null;
+  updated_at?: string | null;
+  is_public?: boolean | null;
+};
+
 type Screen =
   | { kind: "list" }
   | { kind: "new-project"; guide?: SystemNameCandidate }
@@ -85,7 +101,14 @@ const text = {
   zh: {
     mySpace: "我的空间", settings: "设置", language: "语言", all: "全部", cloud: "云空间", local: "本地", project: "项目",
     home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
-    cloudUnavailable: "联网后可查看云端内容", camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
+    cloudUnavailable: "当前未联网，云端内容暂不可用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
+    cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
+    saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
+    savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
+    pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
+    uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
+    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败",
+    camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
     guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
     guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
     guideOfflineNotice: "离线可查看基础概要；完整实操、经验卡和关联项目请联网后查看。",
@@ -144,7 +167,14 @@ const text = {
   en: {
     mySpace: "My space", settings: "Settings", language: "Language", all: "All", cloud: "Cloud", local: "Local", project: "Project",
     home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
-    cloudUnavailable: "Reconnect to view cloud content", camera: "Camera", album: "Gallery", chooseProject: "Choose project",
+    cloudUnavailable: "Cloud content is unavailable while offline", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
+    cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
+    saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
+    savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
+    pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
+    uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
+    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed",
+    camera: "Camera", album: "Gallery", chooseProject: "Choose project",
     guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
     guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
     guideOfflineNotice: "The basic overview is available offline. Reconnect for full practice guidance, experience cards, and related projects.",
@@ -274,6 +304,14 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [migrationWarning, setMigrationWarning] = useState(false);
   const [toast, setToast] = useState("");
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [cloudUserId, setCloudUserId] = useState<string | null>(null);
+  const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudError, setCloudError] = useState("");
+  const [cloudBusyArchiveId, setCloudBusyArchiveId] = useState<string | null>(null);
+  const [pendingSync, setPendingSync] = useState<PendingCloudSyncSummary[]>([]);
+  const [syncingArchiveId, setSyncingArchiveId] = useState<string | null>(null);
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -288,12 +326,42 @@ function App() {
   }, []);
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
-    const result = await listVisibleLocalArchiveSummaries(
-      context === undefined ? ownerContext : context,
-    );
+    const resolvedContext = context === undefined ? ownerContext : context;
+    const [result, pending] = await Promise.all([
+      listVisibleLocalArchiveSummaries(resolvedContext),
+      listPendingCloudSyncSummaries(resolvedContext),
+    ]);
     setArchives(result.archives);
     setUnownedCount(result.unownedCount);
+    setPendingSync(pending);
   }, [ownerContext]);
+
+  const loadCloudList = useCallback(async (userId?: string | null) => {
+    const resolvedUserId = userId || cloudUserId;
+    if (!navigator.onLine || !resolvedUserId) {
+      setCloudArchives([]);
+      setCloudError("");
+      return;
+    }
+
+    setCloudLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("archives")
+        .select("id,title,category,system_name,species_name_snapshot,status,updated_at,is_public")
+        .eq("user_id", resolvedUserId)
+        .is("trashed_at", null)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      setCloudArchives((data || []) as CloudArchiveSummary[]);
+      setCloudError("");
+    } catch (error) {
+      console.warn("local shell cloud list", error);
+      setCloudError(copy.cloudLoadFailed);
+    } finally {
+      setCloudLoading(false);
+    }
+  }, [cloudUserId, copy.cloudLoadFailed]);
 
   const loadDetail = useCallback(async (
     archiveId: string,
@@ -306,6 +374,57 @@ function App() {
     setDetail(next);
     return next;
   }, [ownerContext]);
+
+  useEffect(() => {
+    const updateConnectivity = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateConnectivity);
+    window.addEventListener("offline", updateConnectivity);
+    return () => {
+      window.removeEventListener("online", updateConnectivity);
+      window.removeEventListener("offline", updateConnectivity);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function applySession(user?: { id?: string; email?: string | null } | null) {
+      if (cancelled) return;
+      if (!user?.id) {
+        setCloudUserId(null);
+        return;
+      }
+
+      const nextOwner = { userId: user.id, email: user.email || null };
+      rememberLocalOwnerContext(nextOwner);
+      setOwner(nextOwner);
+      setCloudUserId(user.id);
+    }
+
+    void supabase.auth.getSession()
+      .then(({ data }) => applySession(data.session?.user))
+      .catch(() => undefined);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session?.user);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!online || !cloudUserId || !ownerContext) return;
+
+    void loadCloudList(cloudUserId);
+    void preparePendingCloudSyncQueue(ownerContext)
+      .then(() => loadList(ownerContext))
+      .catch(() => undefined);
+  }, [online, cloudUserId, ownerContext, loadCloudList, loadList]);
 
   useEffect(() => {
     let cancelled = false;
@@ -367,7 +486,64 @@ function App() {
   }
 
   function reconnect() {
-    window.location.assign(`${CLOUD_ORIGIN}/archive?source=local`);
+    setOnline(navigator.onLine);
+    if (!navigator.onLine) {
+      showToast(copy.offlineTitle);
+      return;
+    }
+    if (cloudUserId) void loadCloudList(cloudUserId);
+    void loadList(ownerContext);
+    setScreen({ kind: "cloud" });
+  }
+
+  async function saveCloudCopy(cloudArchiveId: string) {
+    if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
+      showToast(copy.cloudSignIn);
+      return;
+    }
+
+    setCloudBusyArchiveId(cloudArchiveId);
+    try {
+      const result = await saveCloudArchiveToLocal({
+        cloudArchiveId,
+        ownerContext,
+        mode: "copy",
+      });
+      await loadList(ownerContext);
+      showToast(copy.cloudCopySaved);
+      openDetail(result.localArchiveId);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.cloudLoadFailed);
+    } finally {
+      setCloudBusyArchiveId(null);
+    }
+  }
+
+  async function uploadPending(localArchiveId: string) {
+    if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
+      showToast(copy.cloudSignIn);
+      return;
+    }
+
+    setSyncingArchiveId(localArchiveId);
+    try {
+      const result = await syncPendingCloudArchive({
+        localArchiveId,
+        ownerContext,
+      });
+      await loadList(ownerContext);
+      showToast(
+        result.success ? copy.uploadSuccess : result.error || copy.uploadFailed,
+      );
+    } finally {
+      setSyncingArchiveId(null);
+    }
+  }
+
+  async function deferPending(localArchiveId: string) {
+    if (!ownerContext) return;
+    await deferPendingCloudSyncPrompt(localArchiveId, ownerContext);
+    await loadList(ownerContext);
   }
 
   async function claimUnowned() {
@@ -459,11 +635,40 @@ function App() {
         </div>
       </header>
 
-      <ConnectivityNotice
-        message={copy.offlineTitle}
-        actionLabel={language === "zh" ? "重连" : "Reconnect"}
-        onAction={reconnect}
-      />
+      {!online ? (
+        <ConnectivityNotice
+          message={copy.offlineTitle}
+          actionLabel={language === "zh" ? "重连" : "Reconnect"}
+          onAction={reconnect}
+        />
+      ) : null}
+
+      {online && pendingSync.find((item) => item.should_prompt) ? (() => {
+        const pending = pendingSync.find((item) => item.should_prompt)!;
+        return (
+          <section className="notice warning">
+            <strong>{copy.pendingUpload}</strong>
+            <p>{pending.title}</p>
+            <div className="action-row">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={syncingArchiveId === pending.local_archive_id}
+                onClick={() => void uploadPending(pending.local_archive_id)}
+              >
+                {syncingArchiveId === pending.local_archive_id ? copy.uploading : copy.uploadNow}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void deferPending(pending.local_archive_id)}
+              >
+                {copy.later}
+              </button>
+            </div>
+          </section>
+        );
+      })() : null}
 
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
@@ -534,19 +739,36 @@ function App() {
       ) : null}
 
       {screen.kind === "detail" && detail ? (
-        <ProjectDetail
-          detail={detail}
-          ownerContext={ownerContext}
-          onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
-          language={language}
-          copy={copy}
-          onBack={goList}
-          onEdit={() => setScreen({ kind: "edit-project", archiveId: detail.archive.id })}
-          onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
-          onEditRecord={(recordId) => setScreen({ kind: "edit-record", archiveId: detail.archive.id, recordId })}
-          onDelete={() => void handleDeleteArchive(detail.archive.id)}
-          onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
-        />
+        <>
+          <ProjectDetail
+            detail={detail}
+            ownerContext={ownerContext}
+            onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
+            language={language}
+            copy={copy}
+            onBack={goList}
+            onEdit={() => setScreen({ kind: "edit-project", archiveId: detail.archive.id })}
+            onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
+            onEditRecord={(recordId) => setScreen({ kind: "edit-record", archiveId: detail.archive.id, recordId })}
+            onDelete={() => void handleDeleteArchive(detail.archive.id)}
+            onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
+          />
+          {online && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
+            <section className="notice warning">
+              <strong>{copy.pendingUpload}</strong>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={syncingArchiveId === detail.archive.id}
+                  onClick={() => void uploadPending(detail.archive.id)}
+                >
+                  {syncingArchiveId === detail.archive.id ? copy.uploading : copy.uploadNow}
+                </button>
+              </div>
+            </section>
+          ) : null}
+        </>
       ) : null}
 
       {screen.kind === "edit-project" && detail ? (
@@ -605,7 +827,67 @@ function App() {
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
-      {screen.kind === "cloud" ? <section className="panel empty"><strong>{copy.cloudUnavailable}</strong><div className="action-row"><button type="button" className="secondary-button" onClick={goList}>{copy.mySpace}</button><button type="button" className="secondary-button" onClick={() => setScreen({ kind: "guides" })}>{copy.guides}</button></div></section> : null}
+      {screen.kind === "cloud" ? (
+        !online ? (
+          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+        ) : !cloudUserId ? (
+          <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
+        ) : (
+          <>
+            <div className="section-title">
+              <h1>{copy.cloudProjects}</h1>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => void supabase.auth.signOut()}
+              >
+                {copy.logout}
+              </button>
+            </div>
+            {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
+            {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
+            {!cloudLoading && !cloudError && cloudArchives.length === 0 ? (
+              <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
+            ) : null}
+            <div className="project-list">
+              {cloudArchives.map((archive) => {
+                const localCopy = archives.find(
+                  (item) => item.source_cloud_archive_id === archive.id,
+                );
+                const busy = cloudBusyArchiveId === archive.id;
+                return (
+                  <section className="panel" key={archive.id}>
+                    <h2>{archive.title || copy.project}</h2>
+                    <p className="project-meta">
+                      {archive.species_name_snapshot || archive.system_name || archive.category || ""}
+                      {archive.updated_at ? ` · ${formatDate(archive.updated_at, language)}` : ""}
+                    </p>
+                    <div className="action-row">
+                      {localCopy ? (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => openDetail(localCopy.id)}
+                        >
+                          {copy.openLocalCopy}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={busy}
+                        onClick={() => void saveCloudCopy(archive.id)}
+                      >
+                        {busy ? copy.savingCloudCopy : localCopy ? copy.refreshLocalCopy : copy.saveLocalCopy}
+                      </button>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </>
+        )
+      ) : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
@@ -630,6 +912,79 @@ function App() {
 }
 
 type OfflineCopy = typeof text.zh | typeof text.en;
+
+function CloudLogin({
+  copy,
+  onSuccess,
+}: {
+  copy: OfflineCopy;
+  onSuccess: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) return;
+
+    setSubmitting(true);
+    setMessage("");
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+      if (error) {
+        setMessage(`${copy.loginFailed}: ${error.message}`);
+        return;
+      }
+      onSuccess();
+    } catch (error) {
+      setMessage(
+        `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h1>{copy.cloudSignIn}</h1>
+      <form className="form" onSubmit={submit}>
+        <div className="field">
+          <label>{copy.email}</label>
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </div>
+        <div className="field">
+          <label>{copy.password}</label>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </div>
+        {message ? <p className="project-meta">{message}</p> : null}
+        <div className="submit-row">
+          <button type="submit" className="primary-button" disabled={submitting}>
+            {submitting ? copy.loading : copy.login}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
 
 function OfflineGuideDetail({
   guide,

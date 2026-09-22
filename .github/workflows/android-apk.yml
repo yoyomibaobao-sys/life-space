@@ -10,11 +10,11 @@ on:
       version_code:
         description: Monotonically increasing Android version code
         required: false
-        default: "14"
+        default: "15"
       version_name:
         description: User-facing Android version
         required: false
-        default: 1.0.4-rc10
+        default: 1.0.4-rc11
   push:
     branches:
       - main
@@ -77,8 +77,10 @@ jobs:
     timeout-minutes: 30
     env:
       CAPACITOR_SERVER_URL: ${{ inputs.server_url || 'https://life-space.uk' }}
-      ANDROID_VERSION_CODE: ${{ inputs.version_code || '14' }}
-      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.4-rc10' }}
+      NEXT_PUBLIC_SUPABASE_URL: https://eidltoikfpnrzxruvawf.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_2cw-3WJnyD6x_CnPiDEiqQ_04violBa
+      ANDROID_VERSION_CODE: ${{ inputs.version_code || '15' }}
+      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.4-rc11' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -111,7 +113,7 @@ jobs:
         run: npm ci
 
       - name: Run Android shell contracts
-        run: node --test tests/android-shell.test.mjs
+        run: node --test tests/android-shell.test.mjs tests/android-offline-shell.test.mjs tests/offline-local-parity.test.mjs
 
       - name: Sync Capacitor Android project
         run: npm run android:sync

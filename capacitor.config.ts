@@ -23,7 +23,7 @@ function resolveServerUrl() {
   return url;
 }
 
-const serverUrl = resolveServerUrl();
+const cloudUrl = resolveServerUrl();
 
 const config: CapacitorConfig = {
   appId: "com.youshi.cultivation",
@@ -38,13 +38,15 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: false,
   },
   server: {
-    url: serverUrl.origin,
-    // Keep the bundled offline page on the same origin as the production web
-    // app so both surfaces read and write one IndexedDB database.
-    hostname: serverUrl.hostname,
+    // Android now boots the APK-bundled app shell first. Network availability
+    // only controls cloud data; it must never decide whether the UI can start.
+    hostname: cloudUrl.hostname,
     androidScheme: "https",
     cleartext: false,
-    allowNavigation: [serverUrl.hostname, LEGACY_LOCAL_STORAGE_HOST],
+    // Keep the bundled shell on the production origin. This preserves the
+    // existing WebView IndexedDB and Supabase auth session while removing the
+    // network dependency that the old server.url introduced.
+    allowNavigation: [cloudUrl.hostname, LEGACY_LOCAL_STORAGE_HOST],
     errorPath: "offline.html",
   },
   plugins: {

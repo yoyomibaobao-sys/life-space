@@ -18,10 +18,12 @@ test("Android shell keeps its identity, HTTPS host, and offline fallback explici
   assert.match(config, /CAPACITOR_SERVER_URL/);
   assert.match(config, /https:\/\/life-space\.uk/);
   assert.match(config, /url\.protocol !== "https:"/);
-  assert.match(config, /hostname: serverUrl\.hostname/);
+  assert.match(config, /hostname: cloudUrl\.hostname/);
+  assert.doesNotMatch(config, /url: cloudUrl\.origin/);
   assert.match(config, /androidScheme: "https"/);
   assert.match(config, /cleartext: false/);
   assert.match(config, /errorPath: "offline\.html"/);
+  assert.match(read("scripts/build-mobile-offline.mjs"), /"index\.html"/);
   assert.match(offline, /本地离线模式/);
   assert.match(offlineSource, /当前离线，本地记录可用/);
 });
@@ -151,10 +153,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '14'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc10'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '14' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc10' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '15'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc11'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '15' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc11' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
