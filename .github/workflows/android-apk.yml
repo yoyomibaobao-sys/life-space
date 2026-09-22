@@ -181,7 +181,7 @@ jobs:
           cmp android/app/build/outputs/apk/release/app-release.apk "${{ runner.temp }}/rc09-r3-published.apk"
 
       - name: Publish signed release to website storage
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != ''
+        if: github.event_name != 'pull_request' && env.ANDROID_KEYSTORE_BASE64 != '' && (github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/rc09-r3-updatefix' && contains(github.event.head_commit.message, '[publish-official]')))
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -190,7 +190,7 @@ jobs:
           npx wrangler r2 object put "life-space-media-canary/releases/android/release.json" --file "${{ runner.temp }}/android-release.json" --remote --content-type application/json --cache-control no-store
 
       - name: Verify published release bytes
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != ''
+        if: github.event_name != 'pull_request' && env.ANDROID_KEYSTORE_BASE64 != '' && (github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/rc09-r3-updatefix' && contains(github.event.head_commit.message, '[publish-official]')))
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
