@@ -10,14 +10,20 @@ const read = (relativePath) =>
 test("cold-start Android offline shell presents the local workspace rather than a separate mode", () => {
   const buildScript = read("scripts/build-mobile-offline.mjs");
   const parityStyles = read("mobile-offline-src/local-parity.css");
+  const source = read("mobile-offline-src/main.tsx");
+  const styles = read("mobile-offline-src/offline.css");
   const template = read("mobile-offline-src/offline.template.html");
 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /`\$\{css\}\\n\$\{localParityCss\}`/);
-  assert.match(parityStyles, /\.brand-mode,[\s\S]*\.offline-status[\s\S]*display: none/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
-  assert.match(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.doesNotMatch(source, /本地离线模式|Local offline mode/);
+  assert.doesNotMatch(source, /offline-status/);
+  assert.match(source, /cloudUnavailable: "未联网"/);
+  assert.match(source, /kind: "cloud"; section:/);
+  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(styles, /height: calc\(env\(safe-area-inset-bottom, 0px\) \+ 58px\)/);
+  assert.match(styles, /width: 48px; height: 48px; margin-top: -16px/);
+  assert.match(parityStyles, /\.network-offline[\s\S]*min-height: 46vh/);
   assert.doesNotMatch(template, /本地离线模式/);
 });
 

@@ -67,7 +67,7 @@ type Screen =
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "settings" }
   | { kind: "choose-project" }
-  | { kind: "cloud" }
+  | { kind: "cloud"; section: "discover" | "experience" | "follow" | "market" }
   | { kind: "detail"; archiveId: string }
   | { kind: "edit-project"; archiveId: string }
   | { kind: "new-record"; archiveId: string }
@@ -77,7 +77,7 @@ const text = {
   zh: {
     mySpace: "我的空间", settings: "设置", language: "语言", all: "全部", cloud: "云空间", local: "本地", project: "项目",
     home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
-    cloudUnavailable: "联网后可查看云端内容", camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
+    cloudUnavailable: "未联网", camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
     guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
     guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
     guideOfflineNotice: "离线可查看基础概要；完整实操、经验卡和关联项目请联网后查看。",
@@ -85,8 +85,6 @@ const text = {
     ongoing: "进行中", ended: "已结束", period: "项目分期", enablePeriod: "开启分期", periodDate: "期次开始日期", status: "项目状态", visibility: "可见范围", private: "仅自己可见",
     photoLimit: "每次最多选择10张，可分多次添加", removePhoto: "移除照片",
     brand: "有时·耕作",
-    offlineMode: "本地离线模式",
-    offlineTitle: "当前离线，本地记录可用",
     offlineBody: "项目、记录和照片只保存在本机。重新联网后不会自动上传，也不会覆盖云端资料。",
     migrationWarning: "旧版本地资料暂未完成迁移。现有资料不会被删除，请稍后重新打开 App 再试。",
     reconnect: "重新连接云端",
@@ -136,7 +134,7 @@ const text = {
   en: {
     mySpace: "My space", settings: "Settings", language: "Language", all: "All", cloud: "Cloud", local: "Local", project: "Project",
     home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
-    cloudUnavailable: "Reconnect to view cloud content", camera: "Camera", album: "Gallery", chooseProject: "Choose project",
+    cloudUnavailable: "Offline", camera: "Camera", album: "Gallery", chooseProject: "Choose project",
     guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
     guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
     guideOfflineNotice: "The basic overview is available offline. Reconnect for full practice guidance, experience cards, and related projects.",
@@ -144,8 +142,6 @@ const text = {
     ongoing: "Ongoing", ended: "Ended", period: "Project periods", enablePeriod: "Enable periods", periodDate: "Period start date", status: "Project status", visibility: "Visibility", private: "Only me",
     photoLimit: "Select up to 10 at a time; add more later", removePhoto: "Remove photo",
     brand: "LifeSpace",
-    offlineMode: "Local offline mode",
-    offlineTitle: "Cloud is temporarily unavailable. Local records still work.",
     offlineBody: "Projects, records and photos stay on this device. Reconnecting will not upload them or overwrite cloud data.",
     migrationWarning: "Previous local data has not finished migrating. Nothing was deleted; reopen the app later to retry.",
     reconnect: "Reconnect to cloud",
@@ -394,6 +390,32 @@ function App() {
   const activeGuide = screen.kind === "guide-detail"
     ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
     : undefined;
+  const headerTitle = screen.kind === "cloud"
+    ? screen.section === "follow"
+      ? copy.follow
+      : screen.section === "market"
+        ? copy.market
+        : copy.home
+    : screen.kind === "guides" || screen.kind === "guide-detail"
+      ? copy.home
+      : screen.kind === "settings"
+        ? copy.settings
+        : copy.mySpace;
+  const homeActive =
+    screen.kind === "guides" ||
+    screen.kind === "guide-detail" ||
+    (screen.kind === "cloud" &&
+      (screen.section === "discover" || screen.section === "experience"));
+  const personalActive = [
+    "list",
+    "new-project",
+    "settings",
+    "choose-project",
+    "detail",
+    "edit-project",
+    "new-record",
+    "edit-record",
+  ].includes(screen.kind);
 
   if (loading) {
     return <main className="offline-shell loading">{copy.loading}</main>;
@@ -402,20 +424,13 @@ function App() {
   return (
     <main className="offline-shell">
       <header className="offline-header">
-        <div className="brand">
-          <div className="brand-mark"><UiIcon name="sprout" size={25} /></div>
-          <div>
-            <div className="brand-name">{copy.mySpace}</div>
-            <div className="brand-mode">{copy.offlineMode}</div>
-          </div>
-        </div>
+        <span className="header-spacer" aria-hidden="true" />
+        <div className="brand-name">{headerTitle}</div>
         <div className="header-actions">
           {!owner ? <button className="icon-button" type="button" onClick={toggleLanguage}>{language === "zh" ? "EN" : "中文"}</button> : null}
-          <button className="icon-button" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={22} /></button>
+          <button className="icon-button" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={20} strokeWidth={1.8} /></button>
         </div>
       </header>
-
-      <div className="offline-status"><span>{copy.offlineTitle}</span><button type="button" onClick={reconnect}><UiIcon name="refresh" size={16} />{language === "zh" ? "重连" : "Reconnect"}</button></div>
 
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
@@ -424,8 +439,6 @@ function App() {
       {screen.kind === "list" ? (
         <>
           <div className="source-row">
-            <button type="button" aria-pressed={false} onClick={() => setCategoryFilter("all")}>{copy.all} {archives.length}</button>
-            <button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.cloud}</button>
             <button type="button" aria-pressed="true" onClick={() => setCategoryFilter("all")}>{copy.local} {archives.length}</button>
             <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
           </div>
@@ -554,7 +567,7 @@ function App() {
       ) : null}
 
       {screen.kind === "guides" ? <>
-        <div className="top-tabs"><button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.discover}</button><button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.experience}</button><button type="button" aria-pressed="true">{copy.guides}</button></div>
+        <div className="top-tabs"><button type="button" onClick={() => setScreen({ kind: "cloud", section: "discover" })}>{copy.discover}</button><button type="button" onClick={() => setScreen({ kind: "cloud", section: "experience" })}>{copy.experience}</button><button type="button" aria-pressed="true">{copy.guides}</button></div>
         <div className="field"><input type="search" value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder={copy.guideSearch} aria-label={copy.guideSearch} /></div>
         <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
         <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
@@ -562,13 +575,13 @@ function App() {
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
-      {screen.kind === "cloud" ? <section className="panel empty"><strong>{copy.cloudUnavailable}</strong><div className="action-row"><button type="button" className="secondary-button" onClick={goList}>{copy.mySpace}</button><button type="button" className="secondary-button" onClick={() => setScreen({ kind: "guides" })}>{copy.guides}</button></div></section> : null}
+      {screen.kind === "cloud" ? <section className="network-offline" role="status" aria-live="polite">{copy.cloudUnavailable}</section> : null}
       <nav className="bottom-nav" aria-label={language === "zh" ? "主导航" : "Main navigation"}>
-        <button type="button" aria-current={screen.kind === "guides" || screen.kind === "guide-detail" ? "page" : undefined} onClick={() => setScreen({ kind: "guides" })}><UiIcon name="home" size={23} /><span>{copy.home}</span></button>
-        <button type="button" onClick={() => setScreen({ kind: "cloud" })}><UiIcon name="follow" size={23} /><span>{copy.follow}</span></button>
-        <button type="button" className="quick-add" aria-label={copy.addRecord} onClick={() => setScreen(screen.kind === "detail" && detail ? { kind: "new-record", archiveId: detail.archive.id } : { kind: "choose-project" })}><UiIcon name="plus" size={30} /></button>
-        <button type="button" onClick={() => setScreen({ kind: "cloud" })}><UiIcon name="store" size={23} /><span>{copy.market}</span></button>
-        <button type="button" aria-current={screen.kind === "list" ? "page" : undefined} onClick={goList}><UiIcon name="user" size={23} /><span>{copy.me}</span></button>
+        <button type="button" aria-current={homeActive ? "page" : undefined} onClick={() => setScreen({ kind: "guides" })}><UiIcon name="home" size={17} strokeWidth={1.7} /><span>{copy.home}</span></button>
+        <button type="button" aria-current={screen.kind === "cloud" && screen.section === "follow" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "follow" })}><UiIcon name="follow" size={17} strokeWidth={1.7} /><span>{copy.follow}</span></button>
+        <button type="button" className="quick-add" aria-label={copy.addRecord} onClick={() => setScreen(screen.kind === "detail" && detail ? { kind: "new-record", archiveId: detail.archive.id } : { kind: "choose-project" })}><UiIcon name="plus" size={25} strokeWidth={2.2} /></button>
+        <button type="button" aria-current={screen.kind === "cloud" && screen.section === "market" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "market" })}><UiIcon name="store" size={17} strokeWidth={1.7} /><span>{copy.market}</span></button>
+        <button type="button" aria-current={personalActive ? "page" : undefined} onClick={goList}><UiIcon name="user" size={17} strokeWidth={1.7} /><span>{copy.me}</span></button>
       </nav>
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </main>

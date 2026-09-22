@@ -28,9 +28,10 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /capture="environment"/);
   assert.match(source, /copy.camera/);
   assert.match(source, /copy.album/);
-  assert.match(parityStyles, /\.brand-mode,[\s\S]*\.offline-status[\s\S]*display: none/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.match(source, /cloudUnavailable: "未联网"/);
+  assert.match(source, /section: "follow"/);
+  assert.match(source, /section: "market"/);
+  assert.match(parityStyles, /\.network-offline[\s\S]*min-height: 46vh/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
