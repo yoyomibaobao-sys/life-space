@@ -114,7 +114,7 @@ const text = {
     savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
     pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
     uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
-    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败",
+    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败", captchaLoading: "正在加载安全验证…", captchaRequired: "请先完成安全验证。", captchaLoadFailed: "安全验证加载失败，请检查网络后重试。",
     camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
     guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
     guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
@@ -180,7 +180,7 @@ const text = {
     savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
     pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
     uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
-    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed",
+    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed", captchaLoading: "Loading security check…", captchaRequired: "Complete the security check first.", captchaLoadFailed: "Security check could not load. Check the network and retry.",
     camera: "Camera", album: "Gallery", chooseProject: "Choose project",
     guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
     guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
@@ -306,6 +306,174 @@ function cloudArchiveToProjectView(
     footerItems: [],
     badges: [],
   };
+}
+
+type TurnstileApi = {
+  render: (container: HTMLElement, options: {
+    sitekey: string;
+    action: string;
+    theme: "auto";
+    language: "auto";
+    callback: (token: string) => void;
+    "expired-callback": () => void;
+    "error-callback": () => void;
+  }) => string;
+  remove: (widgetId: string) => void;
+  reset: (widgetId: string) => void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
+
+let publicAuthConfigPromise: Promise<{ turnstileSiteKey: string }> | null = null;
+let turnstileScriptPromise: Promise<void> | null = null;
+
+function loadPublicAuthConfig() {
+  if (publicAuthConfigPromise) return publicAuthConfigPromise;
+
+  publicAuthConfigPromise = (async () => {
+    const response = await CapacitorHttp.get({
+      url: `${CLOUD_ORIGIN}/api/public-auth-config?ts=${Date.now()}`,
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+      },
+      connectTimeout: 12_000,
+      readTimeout: 12_000,
+      disableRedirects: true,
+      responseType: "json",
+    });
+    if (response.status !== 200) {
+      throw new Error(`Auth config HTTP ${response.status}`);
+    }
+    const value =
+      typeof response.data === "string"
+        ? JSON.parse(response.data)
+        : response.data;
+    return {
+      turnstileSiteKey:
+        typeof value?.turnstileSiteKey === "string"
+          ? value.turnstileSiteKey.trim()
+          : "",
+    };
+  })();
+
+  return publicAuthConfigPromise;
+}
+
+function ensureTurnstileScript() {
+  if (window.turnstile) return Promise.resolve();
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+
+  turnstileScriptPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-lifespace-turnstile="true"]',
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Turnstile failed to load")), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src =
+      "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.dataset.lifespaceTurnstile = "true";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Turnstile failed to load"));
+    document.head.appendChild(script);
+  });
+
+  return turnstileScriptPromise;
+}
+
+function NativeTurnstile({
+  copy,
+  resetKey,
+  onTokenChange,
+  onRequiredChange,
+}: {
+  copy: OfflineCopy;
+  resetKey: number;
+  onTokenChange: (token: string | null) => void;
+  onRequiredChange: (required: boolean | null) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    onRequiredChange(null);
+    setFailed(false);
+
+    void loadPublicAuthConfig()
+      .then(async ({ turnstileSiteKey }) => {
+        if (cancelled) return;
+        if (!turnstileSiteKey) {
+          setSiteKey("");
+          onRequiredChange(false);
+          return;
+        }
+
+        setSiteKey(turnstileSiteKey);
+        onRequiredChange(true);
+        await ensureTurnstileScript();
+        if (cancelled || !containerRef.current || !window.turnstile) return;
+
+        widgetIdRef.current = window.turnstile.render(containerRef.current, {
+          sitekey: turnstileSiteKey,
+          action: "auth",
+          theme: "auto",
+          language: "auto",
+          callback: (token) => onTokenChange(token),
+          "expired-callback": () => onTokenChange(null),
+          "error-callback": () => onTokenChange(null),
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFailed(true);
+        onRequiredChange(true);
+        onTokenChange(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (window.turnstile && widgetIdRef.current) {
+        window.turnstile.remove(widgetIdRef.current);
+      }
+      widgetIdRef.current = null;
+    };
+  }, [onRequiredChange, onTokenChange]);
+
+  useEffect(() => {
+    if (!resetKey || !window.turnstile || !widgetIdRef.current) return;
+    window.turnstile.reset(widgetIdRef.current);
+    onTokenChange(null);
+  }, [resetKey, onTokenChange]);
+
+  if (siteKey === "") return null;
+
+  return (
+    <div className="native-captcha">
+      <div ref={containerRef} />
+      {siteKey === null && !failed ? (
+        <p className="project-meta">{copy.captchaLoading}</p>
+      ) : null}
+      {failed ? (
+        <p className="project-meta">{copy.captchaLoadFailed}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function BlobImage({ image, className, alt }: {
