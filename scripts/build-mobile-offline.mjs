@@ -17,6 +17,15 @@ function resolveCloudOrigin() {
 }
 
 const cloudOrigin = resolveCloudOrigin();
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const supabasePublishableKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+if (!supabaseUrl || !supabasePublishableKey) {
+  throw new Error("Android local shell requires public Supabase configuration.");
+}
+
 const buildResult = await build({
   entryPoints: [path.join(sourceRoot, "main.tsx")],
   bundle: true,
@@ -30,6 +39,11 @@ const buildResult = await build({
   jsx: "automatic",
   define: {
     __LIFESPACE_CLOUD_ORIGIN__: JSON.stringify(cloudOrigin),
+    "process.env.NODE_ENV": JSON.stringify("production"),
+    "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
+    "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY":
+      JSON.stringify(supabasePublishableKey),
+    "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": "undefined",
   },
   plugins: [
     {
