@@ -10,6 +10,7 @@ const read = (relativePath) =>
 test("Android packages a same-origin standalone local project surface", () => {
   const config = read("capacitor.config.ts");
   const packageJson = read("package.json");
+  const buildScript = read("scripts/build-mobile-offline.mjs");
   const source = read("mobile-offline-src/main.tsx");
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
