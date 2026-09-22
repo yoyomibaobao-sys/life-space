@@ -196,3 +196,35 @@ test("new local planting projects require a region without changing legacy proje
   assert.equal(legacy.archive.planting_region, undefined);
   await assertOriginalPhoto(legacy);
 });
+
+test("new local project, record and photo survive a fresh app module instance", async () => {
+  await fixture();
+  const created = await dbModule.createLocalArchive({
+    title: "重启保留项目",
+    category: "system",
+    system_name: "木工",
+    local_owner_user_id: owner.userId,
+    local_owner_email: owner.email,
+  });
+  const record = await dbModule.createLocalRecord({
+    archive_id: created.id,
+    note: "关闭 App 后仍应存在",
+    location: null,
+    image_files: [new File([photoBytes], "persist.gif", { type: "image/gif" })],
+  });
+
+  const reopenedModule = await moduleFrom("lib/local-offline-db.ts");
+  const detail = await reopenedModule.getLocalArchiveDetail(created.id, owner);
+
+  assert.equal(detail.archive.id, created.id);
+  assert.equal(detail.archive.title, "重启保留项目");
+  assert.equal(detail.records.length, 1);
+  assert.equal(detail.records[0].id, record.id);
+  assert.equal(detail.records[0].note, "关闭 App 后仍应存在");
+  assert.equal(detail.records[0].images.length, 1);
+  assert.equal(detail.records[0].images[0].name, "persist.gif");
+  assert.ok(detail.records[0].images[0].blob.size > 0);
+  assert.ok((await rawRows("archives")).some((row) => row.id === created.id));
+  assert.ok((await rawRows("records")).some((row) => row.id === record.id));
+  assert.ok((await rawRows("images")).some((row) => row.record_id === record.id));
+});
