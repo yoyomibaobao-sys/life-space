@@ -14,6 +14,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const source = read("mobile-offline-src/main.tsx");
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
+  const publicAuthConfig = read("app/api/public-auth-config/route.ts");
 
   assert.match(config, /hostname: cloudUrl\.hostname/);
   assert.doesNotMatch(config, /url: cloudUrl\.origin/);
@@ -34,6 +35,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /copy.album/);
   assert.match(source, /<MobileBottomNavigationView/);
   assert.match(source, /<ArchiveProjectCard/);
+  assert.match(source, /<ArchiveWorkspaceTemplate/);
   assert.match(source, /<ArchiveRecordCardShell/);
   assert.match(source, /<ConnectivityNotice/);
   assert.match(source, /navigator\.onLine/);
@@ -41,11 +43,14 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
   assert.match(source, /supabase\.auth\.getSession/);
+  assert.match(source, /CapacitorHttp\.get/);
+  assert.match(source, /NativeTurnstile/);
+  assert.match(source, /captchaToken/);
+  assert.match(publicAuthConfig, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(source, /supabase[\s\S]*?\.from\("archives"\)/);
-  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.match(parityStyles, /\.brand-mode[\s\S]*display: block/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.match(parityStyles, /\.offline-shell[\s\S]*width: min\(1080px/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
