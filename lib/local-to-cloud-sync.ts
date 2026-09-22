@@ -43,6 +43,7 @@ export type LocalToCloudResult =
       cloudArchiveId?: string | null;
       error: string;
       partialFailure?: boolean;
+      conflict?: "source-cloud-exists";
     };
 
 type CloudRecordRow = {
@@ -660,7 +661,8 @@ export async function syncLocalArchiveToCloud(params: {
       return {
         success: false,
         cloudArchiveId: sourceCloudArchiveId,
-        error: "原云端项目仍然保留。开通或续费后请直接打开原项目继续记录；为避免重复，本机副本不会再次新建云端项目。",
+        conflict: "source-cloud-exists",
+        error: "原云端项目仍然存在。为避免覆盖或自动合并，本地副本不会直接写回原项目；如需保留本地修改，请重命名后另存为新的云端项目。",
       };
     }
   }

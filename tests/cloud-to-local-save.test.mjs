@@ -129,13 +129,22 @@ test("optional cloud classification cannot block a complete local rescue", async
   );
 });
 
-test("a cloud-derived local copy cannot accidentally create a duplicate cloud project", async () => {
-  const sync = await source("lib/local-to-cloud-sync.ts");
+test("a cloud-derived local copy never overwrites the original and can be renamed into a new cloud project", async () => {
+  const [sync, page, localDb] = await Promise.all([
+    source("lib/local-to-cloud-sync.ts"),
+    source("app/local/archive/[id]/page.tsx"),
+    source("lib/local-offline-db.ts"),
+  ]);
 
   assert.match(sync, /sourceCloudArchiveId = cleanText\(archive\.source_cloud_archive_id\)/);
   assert.match(
     sync,
     /\.from\("archives"\)[\s\S]*?\.eq\("id", sourceCloudArchiveId\)[\s\S]*?\.eq\("user_id", userId\)/
   );
-  assert.match(sync, /为避免重复，本机副本不会再次新建云端项目/);
+  assert.match(sync, /conflict: "source-cloud-exists"/);
+  assert.match(sync, /自动合并/);
+  assert.match(page, /saveConflictAsNewCloudProject/);
+  assert.match(page, /source_cloud_archive_id: null/);
+  assert.match(page, /transfer_conflict_save_new/);
+  assert.match(localDb, /source_cloud_archive_id\?: string \| null/);
 });

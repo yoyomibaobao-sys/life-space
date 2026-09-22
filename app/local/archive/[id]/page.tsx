@@ -167,6 +167,8 @@ export default function LocalArchiveDetailPage() {
   const [transferError, setTransferError] = useState("");
   const [transferErrorDetail, setTransferErrorDetail] = useState("");
   const [showTransferErrorReason, setShowTransferErrorReason] = useState(false);
+  const [transferConflict, setTransferConflict] = useState(false);
+  const [transferConflictRename, setTransferConflictRename] = useState("");
   const [transferredCloudArchiveId, setTransferredCloudArchiveId] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
@@ -654,6 +656,8 @@ export default function LocalArchiveDetailPage() {
     setTransferError("");
     setTransferErrorDetail("");
     setShowTransferErrorReason(false);
+    setTransferConflict(false);
+    setTransferConflictRename("");
 
     if (!ownerContext?.userId) {
       setTransferError(archiveCopy.transfer_login_required);
@@ -705,6 +709,70 @@ export default function LocalArchiveDetailPage() {
 
       if (result.success) {
         setTransferPromptOpen(false);
+        setTransferredCloudArchiveId(result.cloudArchiveId);
+        setDetail(null);
+        setLocalRecordItems([]);
+        revokeLocalRecordUrls();
+        showToast(archiveCopy.transferred_to_cloud);
+        return;
+      }
+
+      setTransferError(
+        result.conflict === "source-cloud-exists"
+          ? archiveCopy.transfer_conflict_title
+          : archiveCopy.transfer_incomplete
+      );
+      setTransferErrorDetail(result.error);
+      if (result.conflict === "source-cloud-exists") {
+        setTransferConflict(true);
+        setTransferConflictRename(
+          `${detail?.archive.title || ""}${language === "en" ? " (offline copy)" : "（离线副本）"}`
+        );
+        setTransferPromptOpen(false);
+      }
+      await loadDetail();
+    } catch (err) {
+      setTransferError(archiveCopy.transfer_incomplete);
+      setTransferErrorDetail(
+        err instanceof Error ? err.message : archiveCopy.transfer_failed
+      );
+      await loadDetail();
+    } finally {
+      setTransferRunning(false);
+    }
+  }
+
+  async function saveConflictAsNewCloudProject() {
+    if (!archiveId || !detail || !ownerContext?.userId || transferRunning) return;
+
+    const nextTitle = transferConflictRename.trim();
+    if (!nextTitle || nextTitle === detail.archive.title.trim()) {
+      setTransferError(archiveCopy.transfer_conflict_name_required);
+      return;
+    }
+
+    setTransferRunning(true);
+    setTransferError("");
+    setTransferErrorDetail("");
+    try {
+      await updateLocalArchiveFields(
+        archiveId,
+        {
+          title: nextTitle,
+          source_cloud_archive_id: null,
+        },
+        ownerContext
+      );
+
+      const result = await syncLocalArchiveToCloud({
+        localArchiveId: archiveId,
+        ownerContext,
+        visibility: transferVisibility,
+      });
+
+      if (result.success) {
+        setTransferConflict(false);
+        setTransferConflictRename("");
         setTransferredCloudArchiveId(result.cloudArchiveId);
         setDetail(null);
         setLocalRecordItems([]);
@@ -1138,6 +1206,30 @@ export default function LocalArchiveDetailPage() {
             </div>
           ) : null}
         </div>
+          {transferConflict ? (
+            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+              <div>{archiveCopy.transfer_conflict_message}</div>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>{archiveCopy.transfer_conflict_name}</span>
+                <input
+                  value={transferConflictRename}
+                  onChange={(event) => setTransferConflictRename(event.target.value)}
+                  disabled={transferRunning}
+                  style={recordInputStyle}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void saveConflictAsNewCloudProject()}
+                disabled={transferRunning}
+                style={transferPrimaryButtonStyle}
+              >
+                {transferRunning
+                  ? archiveCopy.transferring_to_cloud
+                  : archiveCopy.transfer_conflict_save_new}
+              </button>
+            </div>
+          ) : null}
       ) : archive.migration_status === "failed" && archive.migration_error ? (
         <div style={transferErrorStyle}>
           <div>{archiveCopy.transfer_incomplete}</div>

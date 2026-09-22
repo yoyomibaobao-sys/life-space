@@ -1035,6 +1035,7 @@ export async function updateLocalArchiveFields(
     plant_id?: string | null;
     plant_slug?: string | null;
     source?: string | null;
+    source_cloud_archive_id?: string | null;
   planting_region?: PlantingRegion | null;
     note?: string | null;
     archive_summary?: string | null;
@@ -1113,6 +1114,10 @@ export async function updateLocalArchiveFields(
         updates.source === undefined
           ? normalizedArchive.source
           : normalizeOptionalText(updates.source),
+      source_cloud_archive_id:
+        updates.source_cloud_archive_id === undefined
+          ? normalizedArchive.source_cloud_archive_id
+          : normalizeOptionalText(updates.source_cloud_archive_id),
       planting_region: updates.planting_region === undefined ? normalizedArchive.planting_region : normalizePlantingRegion(updates.planting_region),
       note:
         updates.note === undefined
