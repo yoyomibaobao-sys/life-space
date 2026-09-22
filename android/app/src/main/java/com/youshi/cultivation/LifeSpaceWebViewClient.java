@@ -16,12 +16,14 @@ import java.util.Map;
  * Preserves local-only data created by signed RC builds when the cloud shell
  * moves from its generated Workers host to the production domain.
  *
- * The legacy bridge document is always read from the APK asset bundle. No
- * request is sent to workers.dev. Its origin is retained only because Android
- * WebView scopes IndexedDB by origin.
+ * The migration bridge document is always read from the APK asset bundle. No
+ * request is sent to life-space.uk or workers.dev. Those origins are retained
+ * only because Android WebView scopes IndexedDB by origin.
  */
 public final class LifeSpaceWebViewClient extends BridgeWebViewClient {
 
+    private static final String PRODUCTION_LOCAL_STORAGE_HOST =
+        "life-space.uk";
     private static final String LEGACY_LOCAL_STORAGE_HOST =
         "life-space-canary.yoyomibaobao.workers.dev";
     private static final String LEGACY_BRIDGE_PATH =
@@ -42,7 +44,10 @@ public final class LifeSpaceWebViewClient extends BridgeWebViewClient {
         Uri uri = request.getUrl();
         if (
             "https".equalsIgnoreCase(uri.getScheme()) &&
-            LEGACY_LOCAL_STORAGE_HOST.equalsIgnoreCase(uri.getHost()) &&
+            (
+                PRODUCTION_LOCAL_STORAGE_HOST.equalsIgnoreCase(uri.getHost()) ||
+                LEGACY_LOCAL_STORAGE_HOST.equalsIgnoreCase(uri.getHost())
+            ) &&
             LEGACY_BRIDGE_PATH.equals(uri.getPath())
         ) {
             try {

@@ -14,8 +14,9 @@ test("Android packages a same-origin standalone local project surface", () => {
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
 
-  assert.match(config, /url: serverUrl\.origin/);
-  assert.match(config, /hostname: serverUrl\.hostname/);
+  assert.match(config, /hostname: "localhost"/);
+  assert.doesNotMatch(config, /url: cloudUrl\.origin/);
+  assert.match(read("scripts/build-mobile-offline.mjs"), /"index\.html"/);
   assert.match(packageJson, /"android:sync": "npm run android:offline && cap sync android"/);
   assert.match(source, /listVisibleLocalArchiveSummaries/);
   assert.match(source, /createLocalArchive/);
@@ -72,7 +73,9 @@ test("signed RC local data migrates on-device before the old origin is retired",
   );
   const bridge = read("mobile-shell/legacy-local-bridge.html");
 
+  assert.match(migration, /https:\/\/life-space\.uk/);
   assert.match(migration, /life-space-canary\.yoyomibaobao\.workers\.dev/);
+  assert.match(migration, /LOCAL_ORIGIN_MIGRATION_SOURCES/);
   assert.match(nextConfig, /frame-src 'self'/);
   assert.match(nextConfig, /life-space-canary\.yoyomibaobao\.workers\.dev/);
   assert.match(migration, /mergeLocalOriginBaseSnapshot/);
@@ -80,7 +83,8 @@ test("signed RC local data migrates on-device before the old origin is retired",
   assert.match(db, /export async function mergeLocalOriginBaseSnapshot/);
   assert.match(db, /export async function mergeLocalOriginImage/);
   assert.match(nativeClient, /assets\.open\("public\/legacy-local-bridge\.html"\)/);
-  assert.match(nativeClient, /request is sent to workers\.dev/);
+  assert.match(nativeClient, /PRODUCTION_LOCAL_STORAGE_HOST/);
+  assert.match(nativeClient, /request is sent to life-space\.uk or workers\.dev/);
   assert.match(activity, /new LifeSpaceWebViewClient\(bridge, getAssets\(\)\)/);
   assert.match(bridge, /lifespace-local-origin-migration-v1/);
   assert.match(bridge, /getAllKeys\(db, IMAGE_STORE\)/);

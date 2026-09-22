@@ -18,10 +18,12 @@ test("Android shell keeps its identity, HTTPS host, and offline fallback explici
   assert.match(config, /CAPACITOR_SERVER_URL/);
   assert.match(config, /https:\/\/life-space\.uk/);
   assert.match(config, /url\.protocol !== "https:"/);
-  assert.match(config, /hostname: serverUrl\.hostname/);
+  assert.match(config, /hostname: "localhost"/);
+  assert.doesNotMatch(config, /url: cloudUrl\.origin/);
   assert.match(config, /androidScheme: "https"/);
   assert.match(config, /cleartext: false/);
   assert.match(config, /errorPath: "offline\.html"/);
+  assert.match(read("scripts/build-mobile-offline.mjs"), /"index\.html"/);
   assert.match(offline, /本地离线模式/);
   assert.match(offlineSource, /当前离线，本地记录可用/);
 });

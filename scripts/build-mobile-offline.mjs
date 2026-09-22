@@ -7,6 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRoot = path.join(root, "mobile-offline-src");
 const outputRoot = path.join(root, "mobile-shell");
 const defaultServerUrl = "https://life-space.uk";
+const localAppOrigin = "https://localhost";
 
 function resolveCloudOrigin() {
   const url = new URL(process.env.CAPACITOR_SERVER_URL || defaultServerUrl);
@@ -68,14 +69,17 @@ const offlineHtml = template
     () => javascript.text.replaceAll("</script", "<\\/script"),
   );
 const bridgeHtml = bridgeTemplate.replace(
-  "__LIFESPACE_CLOUD_ORIGIN_JSON__",
-  () => JSON.stringify(cloudOrigin),
+  "__LIFESPACE_PARENT_ORIGIN_JSON__",
+  () => JSON.stringify(localAppOrigin),
 );
 
 await fs.mkdir(outputRoot, { recursive: true });
 await Promise.all([
+  // The same self-contained shell is the normal Android entry point and the
+  // fallback document. Android therefore starts with or without a network.
+  fs.writeFile(path.join(outputRoot, "index.html"), offlineHtml),
   fs.writeFile(path.join(outputRoot, "offline.html"), offlineHtml),
   fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml),
 ]);
 
-console.log(`Built Android offline shell for ${cloudOrigin}`);
+console.log(`Built Android local app shell; cloud data origin is ${cloudOrigin}`);

@@ -9,7 +9,7 @@
       (() => {
         "use strict";
 
-        const CLOUD_ORIGIN = __LIFESPACE_CLOUD_ORIGIN_JSON__;
+        const PARENT_ORIGIN = __LIFESPACE_PARENT_ORIGIN_JSON__;
         const CHANNEL = "lifespace-local-origin-migration-v1";
         const DB_NAME = "life-space-local-offline";
         const ARCHIVE_STORE = "archives";
@@ -140,7 +140,7 @@
 
         window.addEventListener("message", (event) => {
           if (
-            event.origin !== CLOUD_ORIGIN ||
+            event.origin !== PARENT_ORIGIN ||
             event.data?.channel !== CHANNEL ||
             !event.data?.nonce
           ) {
