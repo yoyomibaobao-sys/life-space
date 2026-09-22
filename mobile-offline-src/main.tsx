@@ -499,6 +499,7 @@ function App() {
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
+  const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
   const [guideQuery, setGuideQuery] = useState("");
   const [directory] = useState(loadOfflineGuideDirectory);
   function setScreen(next: Screen, replace = false) {
@@ -892,54 +893,174 @@ function App() {
       ) : null}
 
       {screen.kind === "list" ? (
-        <>
-          <div className="source-row">
-            <button type="button" aria-pressed={false} onClick={() => setCategoryFilter("all")}>{copy.all} {archives.length}</button>
-            <button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.cloud}</button>
-            <button type="button" aria-pressed="true" onClick={() => setCategoryFilter("all")}>{copy.local} {archives.length}</button>
-            <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
-          </div>
-          <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
-
-          {ownerContext && unownedCount > 0 ? (
-            <section className="notice warning">
-              <strong>{copy.unownedTitle}</strong>
-              <p>{copy.unownedBody}</p>
-              <div className="action-row">
-                <button className="secondary-button" type="button" onClick={() => void claimUnowned()}>
-                  {copy.claim}
-                </button>
-              </div>
-            </section>
+        <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
+          sourceOptions={[
+            {
+              value: "all",
+              label: copy.all,
+              count: archives.length + cloudArchives.length,
+            },
+            {
+              value: "cloud",
+              label: copy.cloud,
+              count: cloudArchives.length,
+            },
+            {
+              value: "local",
+              label: copy.local,
+              count: archives.length,
+            },
+          ]}
+          activeSource={activeSource}
+          onSelectSource={setActiveSource}
+          onCreateArchive={() => setScreen({ kind: "new-project" })}
+          showCreateToolbar={false}
+          sourceTrailingSlot={(
+            <button
+              type="button"
+              onClick={() => setScreen({ kind: "new-project" })}
+            >
+              +{copy.project}
+            </button>
+          )}
+          filtersSlot={(
+            <div className="category-row">
+              {(["all", "plant", "system", "insect_fish", "other"] as const).map(
+                (category) => (
+                  <button
+                    type="button"
+                    key={category}
+                    aria-pressed={categoryFilter === category}
+                    onClick={() => setCategoryFilter(category)}
+                  >
+                    {copy[category]}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+          noticeSlot={(
+            <>
+              {ownerContext && unownedCount > 0 ? (
+                <section className="notice warning">
+                  <strong>{copy.unownedTitle}</strong>
+                  <p>{copy.unownedBody}</p>
+                  <div className="action-row">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void claimUnowned()}
+                    >
+                      {copy.claim}
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+              {migrationWarning ? (
+                <section className="notice warning">
+                  <p>{copy.migrationWarning}</p>
+                </section>
+              ) : null}
+            </>
+          )}
+        >
+          {activeSource !== "local" ? (
+            !online ? null : !cloudUserId ? (
+              <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
+            ) : cloudLoading ? (
+              <section className="panel empty">{copy.cloudLoading}</section>
+            ) : cloudError ? (
+              <section className="notice warning"><p>{cloudError}</p></section>
+            ) : (
+              cloudArchives
+                .filter((archive) => {
+                  const category = normalizeCloudCategory(archive.category);
+                  return categoryFilter === "all" || category === categoryFilter;
+                })
+                .map((archive) => {
+                  const localCopy = archives.find(
+                    (item) => item.source_cloud_archive_id === archive.id,
+                  );
+                  const busy = cloudBusyArchiveId === archive.id;
+                  return (
+                    <ArchiveProjectCard
+                      key={`cloud:${archive.id}`}
+                      project={cloudArchiveToProjectView(archive, language)}
+                      onClick={() => {
+                        if (localCopy) openDetail(localCopy.id);
+                      }}
+                      mobileMode
+                      actionSlot={(
+                        <button
+                          type="button"
+                          className="link-button"
+                          disabled={busy}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (localCopy) {
+                              openDetail(localCopy.id);
+                            } else {
+                              void saveCloudCopy(archive.id);
+                            }
+                          }}
+                        >
+                          {busy
+                            ? copy.savingCloudCopy
+                            : localCopy
+                              ? copy.openLocalCopy
+                              : copy.saveLocalCopy}
+                        </button>
+                      )}
+                    />
+                  );
+                })
+            )
           ) : null}
 
-          <div className="section-title">
-            <h1>{copy.localProjects}</h1>
-            <span className="count">{archives.length}</span>
-          </div>
-          {archives.length ? (
-            <div className="project-list">
-              {archives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
-                <ArchiveProjectCard
-                  key={archive.id}
-                  project={{
-                    ...localArchiveToProjectView(archive, ownerContext, language),
-                    href: undefined,
-                  }}
-                  onClick={() => openDetail(archive.id)}
-                  mobileMode
-                />
-              ))}
-            </div>
-          ) : (
+          {activeSource !== "cloud"
+            ? archives
+                .filter(
+                  (archive) =>
+                    categoryFilter === "all" ||
+                    archive.category === categoryFilter,
+                )
+                .map((archive) => (
+                  <ArchiveProjectCard
+                    key={`local:${archive.id}`}
+                    project={{
+                      ...localArchiveToProjectView(
+                        archive,
+                        ownerContext,
+                        language,
+                      ),
+                      href: undefined,
+                    }}
+                    onClick={() => openDetail(archive.id)}
+                    mobileMode
+                  />
+                ))
+            : null}
+
+          {activeSource === "local" && archives.length === 0 ? (
             <section className="panel empty">
               <strong>{copy.noProjects}</strong>
               {copy.noProjectsHint}
             </section>
-          )}
-        </>
+          ) : null}
+          {activeSource === "cloud" &&
+          online &&
+          cloudUserId &&
+          !cloudLoading &&
+          !cloudError &&
+          cloudArchives.length === 0 ? (
+            <section className="panel empty">
+              <strong>{copy.cloudProjects}</strong>
+              {copy.noProjects}
+            </section>
+          ) : null}
+        </ArchiveWorkspaceTemplate>
       ) : null}
-
       {screen.kind === "new-project" ? (
         <ProjectForm
           language={language}
