@@ -48,9 +48,13 @@ export default function AndroidAppUpdatePage() {
       const result = await installAndroidUpdate(checked.release);
       if (mounted.current) setInstallState(result.status);
     } catch (error) {
+      const failure = androidInstallFailure(error);
       if (mounted.current) {
-        setInstallFailure(androidInstallFailure(error));
+        setInstallFailure(failure);
         setInstallState("idle");
+      }
+      if (failure === "download" || failure === "installer") {
+        await openOfficialDownload();
       }
     } finally {
       installing.current = false;

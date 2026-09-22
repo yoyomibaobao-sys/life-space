@@ -188,6 +188,11 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(plugin, /DOWNLOAD_ATTEMPTS = 2/);
   assert.match(plugin, /Accept-Encoding", "identity"/);
   assert.match(plugin, /while \(bytesWritten < expectedSize\)/);
+  assert.match(plugin, /DownloadManager/);
+  assert.match(plugin, /downloadVerifiedApkWithDownloadManager/);
+  assert.match(plugin, /verifyDownloadedFile/);
+  assert.match(plugin, /GET_SIGNING_CERTIFICATES \| PackageManager\.GET_SIGNATURES/);
+  assert.match(plugin, /signatures = archive\.signatures/);
   assert.match(plugin, /Intent\.ACTION_VIEW/);
   assert.match(plugin, /application\/vnd\.android\.package-archive/);
   assert.match(plugin, /Settings\.ACTION_MANAGE_UNKNOWN_APP_SOURCES/);
@@ -198,6 +203,8 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(filePaths, /cache-path name="app_updates" path="updates\/"/);
 
   assert.match(updatePage, /installAndroidUpdate\(checked\.release\)/);
+  assert.match(updatePage, /failure === "download" \|\| failure === "installer"/);
+  assert.match(updatePage, /await openOfficialDownload\(\)/);
   assert.match(updateClient, /NativeAppUpdate\.installUpdate/);
   assert.match(updateClient, /NativeAppUpdate\.openOfficialDownload/);
   assert.match(updateClient, /release\.version_code > currentVersion\.versionCode/);
