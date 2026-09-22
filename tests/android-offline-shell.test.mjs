@@ -18,6 +18,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.doesNotMatch(config, /url: cloudUrl\.origin/);
   assert.match(read("scripts/build-mobile-offline.mjs"), /"index\.html"/);
   assert.match(packageJson, /"android:sync": "npm run android:offline && cap sync android"/);
+  assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
   assert.match(source, /listVisibleLocalArchiveSummaries/);
   assert.match(source, /createLocalArchive/);
   assert.match(source, /createLocalRecord/);
@@ -33,6 +35,12 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
   assert.match(source, /<ConnectivityNotice/);
+  assert.match(source, /navigator\.onLine/);
+  assert.match(source, /saveCloudArchiveToLocal/);
+  assert.match(source, /syncPendingCloudArchive/);
+  assert.match(source, /listPendingCloudSyncSummaries/);
+  assert.match(source, /supabase\.auth\.getSession/);
+  assert.match(source, /supabase[\s\S]*?\.from\("archives"\)/);
   assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
   assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
