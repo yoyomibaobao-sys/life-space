@@ -44,6 +44,7 @@ import UiIcon from "@/components/ui/UiIcon";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveDetailHeaderView from "@/components/archive-ui/ArchiveDetailHeaderView";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
+import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
@@ -894,13 +895,12 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
     </> : <>
       <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {isCloudCache ? copy.offlineCopies : copy.local}</span>{archive.status === "active" ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
       {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
-      <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <article className="record-card" key={record.id}>
-        <div className="record-meta">{formatDate(record.record_time, language)}</div>
+      <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record, index) => <ArchiveRecordCardShell key={record.id} mobileMode latest={index === 0} metaText={formatDate(record.record_time, language)} statusSlot={record.sync?.status === "pending-cloud-sync" ? <span className="project-meta">{copy.pendingUpload}</span> : undefined}>
         {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={language === "zh" ? "查看照片" : "View photo"} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
         {record.note ? <p className="record-note">{record.note}</p> : null}
         {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
-        {record.sync?.status === "pending-cloud-sync" ? <div className="record-actions"><span className="project-meta">{copy.pendingUpload}</span><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
-      </article>)}</div>
+        {record.sync?.status === "pending-cloud-sync" || !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
+      </ArchiveRecordCardShell>)}</div>
       {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
     </>}
     {lightbox ? <dialog className="photo-lightbox" open aria-label={language === "zh" ? "照片" : "Photo"} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}

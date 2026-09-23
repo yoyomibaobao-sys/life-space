@@ -132,7 +132,7 @@ button:disabled { opacity: 0.55; }
 .count { color: var(--muted); font-size: 14px; }
 
 .project-list, .record-list { display: grid; gap: 9px; }
-.project-card, .record-card, .panel {
+.project-card, .panel {
   border: 1px solid var(--line);
   border-radius: 20px;
   background: var(--card);
@@ -177,7 +177,6 @@ button:disabled { opacity: 0.55; }
 .action-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 .action-row button { flex: 1 1 130px; }
 
-.record-card { padding: 16px; }
 .record-note { margin: 9px 0 0; white-space: pre-wrap; line-height: 1.55; }
 .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
 .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #e9efe6; }
