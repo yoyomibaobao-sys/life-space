@@ -193,7 +193,11 @@ export default function ArchivePage() {
 
   useEffect(() => {
     function updateConnection() {
-      setIsOffline(!navigator.onLine);
+      if (!navigator.onLine) {
+        setIsOffline(true);
+      } else {
+        void loadData();
+      }
       void loadLocalArchives();
     }
 
@@ -207,6 +211,16 @@ export default function ArchivePage() {
     // The event callback reads the current owner context.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOwnerContext]);
+
+  useEffect(() => {
+    if (!isOffline) return;
+    const retry = window.setInterval(() => {
+      if (navigator.onLine) void loadData();
+    }, 30000);
+    return () => window.clearInterval(retry);
+    // The loader reads the current auth session on every retry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOffline]);
 
   function shouldIgnoreCardNavigation(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -260,6 +274,10 @@ export default function ArchivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOwnerContext]);
 
+  function isNetworkRequestError(error: { message?: string } | null) {
+    return !navigator.onLine || Boolean(error?.message && /failed to fetch|fetch failed|networkerror|load failed|network request failed/i.test(error.message));
+  }
+
   async function loadData() {
     if (loadingRef.current) return;
     loadingRef.current = true;
@@ -274,9 +292,9 @@ export default function ArchivePage() {
       const user = session?.user;
       const ownerContext = user
         ? { userId: user.id, email: user.email || null }
-        : null;
+        : (!navigator.onLine || isOffline) ? loadRememberedLocalOwnerContext() : null;
       setCurrentOwnerContext(ownerContext);
-      setLocalCategoryDepths(getLocalArchiveCategoryDepths(user?.id));
+      setLocalCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId || undefined));
 
       if (!user) {
         setArchives([]);
@@ -286,6 +304,7 @@ export default function ArchivePage() {
         setMembership(null);
         setExperienceCardCount(0);
         setSpaceProfile(null);
+        setIsOffline(!navigator.onLine || Boolean(isOffline && ownerContext));
         return;
       }
 
@@ -297,7 +316,7 @@ export default function ArchivePage() {
       }
 
       const [
-        { data: archivesData },
+        { data: archivesData, error: archivesError },
         { data: groupTagsData },
         { data: subTagsData },
         { data: speciesData },
@@ -331,6 +350,18 @@ export default function ArchivePage() {
           .eq("id", user.id)
           .maybeSingle(),
       ]);
+
+      if (archivesError) {
+        if (isNetworkRequestError(archivesError)) {
+          setIsOffline(true);
+          await loadLocalArchives(ownerContext);
+        } else {
+          console.error("load cloud archives error:", archivesError);
+        }
+        setMembershipFailed(true);
+        return;
+      }
+      setIsOffline(!navigator.onLine);
 
       const aliasesBySpecies = new Map<string, string[]>();
       ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
@@ -512,7 +543,7 @@ export default function ArchivePage() {
   }
 
   async function uploadOfflinePendingRecords() {
-    if (!currentOwnerContext?.userId || uploadingOfflineCacheId) return;
+    if (!currentOwnerContext?.userId || uploadingOfflineCacheId || isOffline) return;
     if (!requireCloudWriteAccess()) return;
     const pendingCaches = offlineCloudCaches.filter(
       (cache) => cache.pending_record_count > 0
@@ -1957,7 +1988,8 @@ export default function ArchivePage() {
             <button
               type="button"
               onClick={() => void uploadOfflinePendingRecords()}
-              disabled={Boolean(uploadingOfflineCacheId)}
+              disabled={Boolean(uploadingOfflineCacheId) || isOffline}
+              title={isOffline ? language === "zh" ? "联网后可手动上传" : "Upload manually when online" : undefined}
               style={localOwnershipPrimaryButtonStyle}
             >
               {uploadingOfflineCacheId
@@ -2189,6 +2221,7 @@ export default function ArchivePage() {
           { value: "local", label: t.archive_workspace.local, count: visibleLocalArchives.length },
         ]}
         activeSource={activeSource}
+        forceOffline={isOffline}
         onSelectSource={handleSelectSource}
         onCreateArchive={handleCreateFromWorkspace}
         createDisabled={createDisabled}

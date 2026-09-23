@@ -24,6 +24,7 @@ type Props<T extends string> = {
   statsText?: ReactNode;
   sourceOptions: Array<SourceOption<T>>;
   activeSource: T;
+  forceOffline?: boolean;
   onSelectSource: (source: T) => void;
   onCreateArchive: (category: ArchiveCategory) => void;
   createDisabled?: boolean;
@@ -41,6 +42,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   sourceOptions,
   activeSource,
   onSelectSource,
+  forceOffline = false,
   onCreateArchive,
   createDisabled,
   createDisabledTitle,
@@ -51,7 +53,8 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   sourceTrailingSlot,
   children,
 }: Props<T>) {
-  const [online, setOnline] = useState(true);
+  const [browserOnline, setBrowserOnline] = useState(true);
+  const online = browserOnline && !forceOffline;
   const sourceBeforeOfflineRef = useRef<T | null>(null);
   const localOption = useMemo(
     () => sourceOptions.find((item) => item.value === "local"),
@@ -59,7 +62,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   );
 
   useEffect(() => {
-    const refresh = () => setOnline(navigator.onLine);
+    const refresh = () => setBrowserOnline(navigator.onLine);
     refresh();
     window.addEventListener("online", refresh);
     window.addEventListener("offline", refresh);
