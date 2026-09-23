@@ -29,22 +29,22 @@ test("rc09 download Worker redirects root and serves only the isolated signed AP
   assert.equal(redirect.status, 302);
   assert.equal(
     new URL(redirect.headers.get("location")).pathname,
-    "/rc09-r3.apk",
+    "/rc09-r4.apk",
   );
 
   const response = await worker.fetch(
-    new Request("https://download.invalid/rc09-r3.apk"),
+    new Request("https://download.invalid/rc09-r4.apk"),
     env,
   );
   assert.equal(response.status, 200);
   assert.equal(
     requestedKey,
-    "releases/android/test/youshi-cultivation-android-1.0.4-rc9-r3.apk",
+    "releases/android/test/youshi-cultivation-android-1.0.4-rc9-r4.apk",
   );
-  assert.equal(response.headers.get("x-android-version"), "1.0.4-rc9-r3");
+  assert.equal(response.headers.get("x-android-version"), "1.0.4-rc9-r4");
   assert.equal(
     response.headers.get("content-disposition"),
-    'attachment; filename="youshi-cultivation-android-1.0.4-rc9-r3.apk"',
+    'attachment; filename="youshi-cultivation-android-1.0.4-rc9-r4.apk"',
   );
   assert.equal((await response.arrayBuffer()).byteLength, 4);
 

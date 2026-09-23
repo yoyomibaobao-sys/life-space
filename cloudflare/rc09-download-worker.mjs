@@ -1,7 +1,7 @@
-const APK_PATH = "/rc09-r3.apk";
+const APK_PATH = "/rc09-r4.apk";
 const APK_KEY =
-  "releases/android/test/youshi-cultivation-android-1.0.4-rc9-r3.apk";
-const APK_NAME = "youshi-cultivation-android-1.0.4-rc9-r3.apk";
+  "releases/android/test/youshi-cultivation-android-1.0.4-rc9-r4.apk";
+const APK_NAME = "youshi-cultivation-android-1.0.4-rc9-r4.apk";
 
 function errorResponse(message, status) {
   return new Response(message, {
@@ -53,7 +53,7 @@ export default {
     headers.set("Content-Length", String(object.size));
     headers.set("Content-Type", "application/vnd.android.package-archive");
     headers.set("X-Content-Type-Options", "nosniff");
-    headers.set("X-Android-Version", "1.0.4-rc9-r3");
+    headers.set("X-Android-Version", "1.0.4-rc9-r4");
     if (object.httpEtag) headers.set("ETag", object.httpEtag);
 
     return new Response(request.method === "HEAD" ? null : object.body, {

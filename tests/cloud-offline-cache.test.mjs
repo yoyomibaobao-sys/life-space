@@ -38,6 +38,8 @@ test("pending cloud records upload only from an explicit user action", () => {
 
   assert.match(sync, /export async function uploadPendingCloudOfflineRecords/);
   assert.match(sync, /record\.sync\?\.status === "pending-cloud-sync"/);
+  assert.match(sync, /const currentPayload = \{/);
+  assert.match(sync, /\.update\(currentPayload\)/);
   assert.match(sync, /原云端项目已不存在/);
   assert.match(sync, /原云端项目已结束/);
   assert.match(page, /onClick=\{\(\) => void uploadOfflinePendingRecords\(\)\}/);
