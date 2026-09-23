@@ -1,4 +1,4 @@
-import { normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-region";
+import { normalizePlantingRegion } from "@/lib/planting-region";
 import { createImageThumbnailFile, standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
@@ -45,6 +45,10 @@ export type LocalToCloudResult =
       partialFailure?: boolean;
       conflict?: "source-cloud-exists";
     };
+
+export type PendingCloudOfflineUploadResult =
+  | { success: true; cloudArchiveId: string; uploadedCount: number }
+  | { success: false; cloudArchiveId?: string | null; error: string; uploadedCount: number };
 
 type CloudRecordRow = {
   id: string;
@@ -227,15 +231,22 @@ async function ensureCloudRecord(params: {
   record: LocalRecordWithImages;
   cycleId?: string | null;
 }) {
+  const currentPayload = {
+    cycle_id: params.cycleId || null,
+    note: params.record.note || "",
+    visibility: params.visibility,
+    photo_time: params.record.record_time,
+    record_time: params.record.record_time,
+  };
   const existingRecordId = cleanText(params.record.sync?.cloud_record_id);
   if (existingRecordId) {
     const { error } = await supabase
       .from("records")
-      .update({ cycle_id: params.cycleId || null })
+      .update(currentPayload)
       .eq("id", existingRecordId)
       .eq("archive_id", params.archiveId)
       .eq("user_id", params.userId);
-    if (error) throw new Error("恢复云端记录周期归属失败，请稍后重试。");
+    if (error) throw new Error("更新待上传云端记录失败，请稍后重试。");
     return existingRecordId;
   }
 
@@ -243,11 +254,11 @@ async function ensureCloudRecord(params: {
   if (foundRecordId) {
     const { error: cycleError } = await supabase
       .from("records")
-      .update({ cycle_id: params.cycleId || null })
+      .update(currentPayload)
       .eq("id", foundRecordId)
       .eq("archive_id", params.archiveId)
       .eq("user_id", params.userId);
-    if (cycleError) throw new Error("恢复云端记录周期归属失败，请稍后重试。");
+    if (cycleError) throw new Error("更新待上传云端记录失败，请稍后重试。");
 
     await updateLocalRecordSyncMeta(params.record.id, {
       status: "pending-cloud-sync",
@@ -366,7 +377,7 @@ async function ensureCloudCycles(params: {
   return cycleIdMap;
 }
 
-async function uploadLocalImageToCloud(params: {
+export async function uploadLocalImageToCloud(params: {
   image: LocalImage;
   cloudRecordId: string;
   cloudArchiveId: string;
@@ -592,6 +603,157 @@ async function markRecordSynced(params: {
   });
 }
 
+export async function uploadPendingCloudOfflineRecords(params: {
+  localArchiveId: string;
+  ownerContext: LocalArchiveOwnerContext;
+}): Promise<PendingCloudOfflineUploadResult> {
+  const userId = cleanText(params.ownerContext.userId);
+  if (!userId) {
+    return { success: false, error: "请先登录，再上传离线记录。", uploadedCount: 0 };
+  }
+
+  const detail = await getLocalArchiveDetail(
+    params.localArchiveId,
+    params.ownerContext
+  );
+  if (!detail || detail.archive.local_role !== "cloud-offline-cache") {
+    return {
+      success: false,
+      error: "离线副本不存在，或当前账号无权查看。",
+      uploadedCount: 0,
+    };
+  }
+
+  const cloudArchiveId = cleanText(detail.archive.source_cloud_archive_id);
+  if (!cloudArchiveId) {
+    return {
+      success: false,
+      error: "无法确认原云端项目，待上传记录仍保留在本机。",
+      uploadedCount: 0,
+    };
+  }
+
+  const { data: cloudArchive, error: cloudArchiveError } = await supabase
+    .from("archives")
+    .select("id, status, is_public")
+    .eq("id", cloudArchiveId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (cloudArchiveError) {
+    return {
+      success: false,
+      cloudArchiveId,
+      error: "暂时无法确认原云端项目状态，待上传记录仍保留在本机。",
+      uploadedCount: 0,
+    };
+  }
+  if (!cloudArchive?.id) {
+    return {
+      success: false,
+      cloudArchiveId,
+      error: "原云端项目已不存在，待上传记录仍保留在本机。",
+      uploadedCount: 0,
+    };
+  }
+  if (cloudArchive.status === "ended") {
+    return {
+      success: false,
+      cloudArchiveId,
+      error: "原云端项目已结束，待上传记录仍保留在本机。",
+      uploadedCount: 0,
+    };
+  }
+
+  const pendingRecords = detail.records
+    .filter((record) => record.sync?.status === "pending-cloud-sync")
+    .sort(
+      (a, b) =>
+        new Date(a.record_time || a.created_at).getTime() -
+        new Date(b.record_time || b.created_at).getTime()
+    );
+  if (pendingRecords.length === 0) {
+    return { success: true, cloudArchiveId, uploadedCount: 0 };
+  }
+
+  if (
+    pendingRecords.some((record) =>
+      record.images.some((image) => image.sync?.status === "pending-cloud-sync")
+    ) &&
+    (await isStorageUploadMaintenance())
+  ) {
+    return {
+      success: false,
+      cloudArchiveId,
+      error: STORAGE_UPLOAD_MAINTENANCE_SYNC_NOT_STARTED_MESSAGE,
+      uploadedCount: 0,
+    };
+  }
+
+  const visibility: LocalToCloudVisibility =
+    cloudArchive.is_public === false ? "private" : "public";
+  let uploadedCount = 0;
+
+  try {
+    for (const record of pendingRecords) {
+      const localCycle = record.cycle_id
+        ? detail.archive.cycles?.find((cycle) => cycle.id === record.cycle_id)
+        : null;
+      if (record.cycle_id && !localCycle?.source_cloud_cycle_id) {
+        throw new Error("无法确认记录所属的云端期次，待上传内容仍保留在本机。");
+      }
+
+      const cloudRecordId = await ensureCloudRecord({
+        archiveId: cloudArchiveId,
+        userId,
+        visibility,
+        record,
+        cycleId: localCycle?.source_cloud_cycle_id || null,
+      });
+
+      if (record.location) {
+        const { error: locationError } = await supabase.rpc(
+          "set_record_location",
+          { p_record_id: cloudRecordId, p_location: record.location }
+        );
+        if (locationError) {
+          throw new Error("记录地点上传失败，待上传内容仍保留在本机。");
+        }
+      }
+
+      for (const image of [...record.images]
+        .filter((item) => item.sync?.status === "pending-cloud-sync")
+        .sort((a, b) => a.sort_order - b.sort_order)) {
+        await uploadLocalImageToCloud({
+          image,
+          cloudRecordId,
+          cloudArchiveId,
+          userId,
+        });
+      }
+
+      await markRecordSynced({
+        record,
+        cloudArchiveId,
+        cloudRecordId,
+      });
+      uploadedCount += 1;
+    }
+
+    return { success: true, cloudArchiveId, uploadedCount };
+  } catch (error) {
+    return {
+      success: false,
+      cloudArchiveId,
+      uploadedCount,
+      error:
+        error instanceof Error
+          ? error.message
+          : "上传离线记录失败，未完成内容仍保留在本机。",
+    };
+  }
+}
+
 export async function syncLocalArchiveToCloud(params: {
   localArchiveId: string;
   ownerContext: LocalArchiveOwnerContext;
@@ -614,6 +776,12 @@ export async function syncLocalArchiveToCloud(params: {
   }
 
   const archive = detail.archive;
+  if (archive.local_role === "cloud-offline-cache") {
+    return {
+      success: false,
+      error: "云项目离线副本不能作为新的本地项目转云；请使用待上传记录入口。",
+    };
+  }
   if (!isLocalArchiveVisibleToOwner(archive, params.ownerContext)) {
     return {
       success: false,

@@ -19,6 +19,8 @@ import {
   deleteLocalArchive,
   deleteLocalRecord,
   getLocalArchiveDetail,
+  inferSingleLocalArchiveOwnerContext,
+  listVisibleCloudOfflineArchiveSummaries,
   listVisibleLocalArchiveSummaries,
   markUnownedLocalArchivesForOwner,
   updateLocalArchiveFields,
@@ -32,6 +34,7 @@ import {
 } from "@/lib/local-offline-db";
 import {
   loadRememberedLocalOwnerContext,
+  rememberLocalOwnerContext,
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
@@ -90,6 +93,10 @@ const text = {
     reconnect: "重新连接云端",
     newProject: "新建项目",
     localProjects: "本地项目",
+    offlineCopies: "离线副本",
+    offlineStatus: "离线",
+    pendingUpload: "待上传",
+    cloudCacheReadOnly: "云端已有内容离线只读；新记录会先保存在本机，联网后手动上传。",
     noProjects: "还没有本地项目",
     noProjectsHint: "断网时也可以先创建，内容会保存在这台设备。",
     records: "条记录",
@@ -147,6 +154,10 @@ const text = {
     reconnect: "Reconnect to cloud",
     newProject: "New local project",
     localProjects: "Local projects",
+    offlineCopies: "Offline copies",
+    offlineStatus: "Offline",
+    pendingUpload: "Pending upload",
+    cloudCacheReadOnly: "Existing cloud content is read-only offline. New records stay on this device until you upload them manually online.",
     noProjects: "No local projects yet",
     noProjectsHint: "You can create one offline and keep it on this device.",
     records: "records",
@@ -271,6 +282,8 @@ function App() {
     loadRememberedLocalOwnerContext(),
   );
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
+  const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "cache" | "local">("all");
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -290,10 +303,13 @@ function App() {
   }, []);
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
-    const result = await listVisibleLocalArchiveSummaries(
-      context === undefined ? ownerContext : context,
-    );
+    const activeOwner = context === undefined ? ownerContext : context;
+    const [result, cachedCloud] = await Promise.all([
+      listVisibleLocalArchiveSummaries(activeOwner),
+      listVisibleCloudOfflineArchiveSummaries(activeOwner),
+    ]);
     setArchives(result.archives);
+    setCloudCaches(cachedCloud);
     setUnownedCount(result.unownedCount);
   }, [ownerContext]);
 
@@ -316,7 +332,20 @@ function App() {
         assertLocalOfflineAvailable();
         const migration = await migrateLegacyLocalOrigin();
         if (cancelled) return;
-        const nextOwner = loadRememberedLocalOwnerContext();
+        let nextOwner = loadRememberedLocalOwnerContext();
+        if (!nextOwner) {
+          const inferredOwner = await inferSingleLocalArchiveOwnerContext();
+          if (inferredOwner?.userId) {
+            rememberLocalOwnerContext({
+              userId: inferredOwner.userId,
+              email: inferredOwner.email || null,
+            });
+            nextOwner = {
+              userId: inferredOwner.userId,
+              email: inferredOwner.email || null,
+            };
+          }
+        }
         setOwner(nextOwner);
         await loadList(
           nextOwner ? { userId: nextOwner.userId, email: nextOwner.email } : null,
@@ -420,6 +449,11 @@ function App() {
     screen.kind === "guide-detail" ||
     (screen.kind === "cloud" &&
       (screen.section === "discover" || screen.section === "experience"));
+  const listedArchives = sourceFilter === "local"
+    ? archives
+    : sourceFilter === "cache"
+      ? cloudCaches
+      : [...cloudCaches, ...archives];
   const personalActive = [
     "list",
     "new-project",
@@ -437,14 +471,26 @@ function App() {
 
   return (
     <main className="offline-shell">
-      <header className="offline-header">
-        <span className="header-spacer" aria-hidden="true" />
-        <div className="brand-name">{headerTitle}</div>
-        <div className="header-actions">
-          {!owner ? <button className="icon-button" type="button" onClick={toggleLanguage}>{language === "zh" ? "EN" : "中文"}</button> : null}
-          <button className="icon-button" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={20} strokeWidth={1.8} /></button>
-        </div>
-      </header>
+      {screen.kind === "list" ? (
+        <section className="offline-space-identity">
+          <span className="offline-space-avatar"><UiIcon name="user" size={24} strokeWidth={1.7} /></span>
+          <span className="offline-space-person">
+            <strong>{owner?.email?.split("@")[0] || copy.mySpace}</strong>
+            <small>{copy.offlineStatus}</small>
+          </span>
+          <span className="offline-space-summary">{copy.offlineCopies} {cloudCaches.length}</span>
+          <button className="offline-space-menu" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={21} strokeWidth={1.8} /></button>
+        </section>
+      ) : (
+        <header className="offline-header">
+          <span className="header-spacer" aria-hidden="true" />
+          <div className="brand-name">{headerTitle}</div>
+          <div className="header-actions">
+            {!owner ? <button className="icon-button" type="button" onClick={toggleLanguage}>{language === "zh" ? "EN" : "中文"}</button> : null}
+            <button className="icon-button" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={20} strokeWidth={1.8} /></button>
+          </div>
+        </header>
+      )}
 
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
@@ -453,7 +499,9 @@ function App() {
       {screen.kind === "list" ? (
         <>
           <div className="source-row">
-            <button type="button" aria-pressed="true" onClick={() => setCategoryFilter("all")}>{copy.local} {archives.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "all"} onClick={() => setSourceFilter("all")}>{copy.all} {archives.length + cloudCaches.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "cache"} onClick={() => setSourceFilter("cache")}>{copy.offlineCopies} {cloudCaches.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "local"} onClick={() => setSourceFilter("local")}>{copy.local} {archives.length}</button>
             <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
           </div>
           <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
@@ -470,9 +518,9 @@ function App() {
             </section>
           ) : null}
 
-          {archives.length ? (
+          {listedArchives.length ? (
             <div className="project-list online-project-list">
-              {archives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
+              {listedArchives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
                 <button className="online-project-card" type="button" key={archive.id} onClick={() => openDetail(archive.id)}>
                   <span className="online-project-media">
                     {archive.cover_image ? (
@@ -485,7 +533,7 @@ function App() {
                   <span className="online-project-body">
                     <span className="online-project-title-row">
                       <strong className="online-project-title">{archive.title}</strong>
-                      <span className="online-project-visibility">{copy.local}</span>
+                      <span className="online-project-visibility">{archive.local_role === "cloud-offline-cache" ? copy.offlineCopies : copy.local}</span>
                     </span>
                     <span className="online-project-update">
                       {archive.latest_record_note || (archive.latest_record_time ? formatDate(archive.latest_record_time, language) : "")}
@@ -495,6 +543,7 @@ function App() {
                     </span>
                     <span className="online-project-footer">
                       <span>{archive.record_count} {copy.records} · {projectDurationDays(archive)} {language === "zh" ? "天" : "days"}</span>
+                      {archive.pending_record_count > 0 ? <span>{copy.pendingUpload} {archive.pending_record_count}</span> : null}
                       {archive.status === "ended" ? <span className="online-project-ended">{copy.ended}</span> : null}
                     </span>
                   </span>
@@ -815,6 +864,7 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   const [filter, setFilter] = useState("all");
   const [lightbox, setLightbox] = useState<LocalImage | null>(null);
   const archive = detail.archive;
+  const isCloudCache = archive.local_role === "cloud-offline-cache";
   const periods = getArchiveCycleTerminology(archive.category, language);
   async function change(work: () => Promise<unknown>) {
     if (busy) return;
@@ -825,8 +875,9 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
     <div className="detail-heading"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{archive.title}</h1><span /></div>
     <div className="top-tabs"><button type="button" aria-pressed={tab === "details"} onClick={() => setTab("details")}>{copy.details}</button><button type="button" aria-pressed={tab === "properties"} onClick={() => setTab("properties")}>{copy.properties}</button></div>
     {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
+    {isCloudCache ? <section className="notice"><p>{copy.cloudCacheReadOnly}</p></section> : null}
     {tab === "properties" ? <>
-      {archive.category === "plant" ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy} onSave={async (region) => {
+      {archive.category === "plant" ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy && !isCloudCache} onSave={async (region) => {
         await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
         await onChanged();
       }} /> : null}
@@ -836,27 +887,27 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
         <div className="property-row"><span>{copy.category}</span><span>{copy[archive.category]}</span></div>
         <div className="property-row"><span>{copy.source}</span><span>{archive.source || "—"}</span></div>
         <div className="property-row"><span>{copy.note}</span><span>{archive.note || "—"}</span></div>
-        <div className="property-row"><span>{copy.status}</span><SegmentedChoice label={copy.status} value={archive.status} disabled={busy} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} /></div>
+        <div className="property-row"><span>{copy.status}</span><SegmentedChoice label={copy.status} value={archive.status} disabled={busy || isCloudCache} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} /></div>
         <div className="property-row"><span>{copy.visibility}</span><span>{copy.private}</span></div>
-        <button type="button" className="secondary-button" onClick={onEdit}>{copy.edit}</button>
+        {!isCloudCache ? <button type="button" className="secondary-button" onClick={onEdit}>{copy.edit}</button> : null}
       </section>
-      <section className="panel"><h2>{copy.period}</h2><label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
+      <section className="panel"><h2>{copy.period}</h2><label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy || isCloudCache} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
         {archive.cycle_enabled ? <div className="form">
-          {(archive.cycles || []).map((cycle) => <div className="property-row" key={cycle.id}><div><strong>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</strong><small className="project-meta">{formatDate(cycle.started_at, language)}</small></div>{cycle.status === "active" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { if (window.confirm(periods.endDialogMessage)) void change(() => endLocalArchiveCycle(archive.id, cycle.id, new Date().toISOString(), ownerContext)); }}>{periods.endAction}</button> : <span>{copy.ended}</span>}</div>)}
+          {(archive.cycles || []).map((cycle) => <div className="property-row" key={cycle.id}><div><strong>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</strong><small className="project-meta">{formatDate(cycle.started_at, language)}</small></div>{cycle.status === "active" && !isCloudCache ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { if (window.confirm(periods.endDialogMessage)) void change(() => endLocalArchiveCycle(archive.id, cycle.id, new Date().toISOString(), ownerContext)); }}>{periods.endAction}</button> : cycle.status === "ended" ? <span>{copy.ended}</span> : null}</div>)}
           <label className="field">{copy.periodDate}<input type="date" value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} /></label>
-          <button type="button" className="primary-button" disabled={busy || !periodDate || archive.status === "ended"} onClick={() => void change(() => createLocalArchiveCycle(archive.id, new Date(`${periodDate}T00:00:00`).toISOString(), ownerContext))}>{periods.newAction}</button>
+          {!isCloudCache ? <button type="button" className="primary-button" disabled={busy || !periodDate || archive.status === "ended"} onClick={() => void change(() => createLocalArchiveCycle(archive.id, new Date(`${periodDate}T00:00:00`).toISOString(), ownerContext))}>{periods.newAction}</button> : null}
         </div> : null}
       </section>
-      <button className="danger-button" type="button" disabled={busy} onClick={onDelete}>{copy.remove}</button>
+      {!isCloudCache ? <button className="danger-button" type="button" disabled={busy} onClick={onDelete}>{copy.remove}</button> : null}
     </> : <>
-      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {copy.local}</span><button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button></div>
+      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {isCloudCache ? copy.offlineCopies : copy.local}</span>{archive.status === "active" ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
       {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
       <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <article className="record-card" key={record.id}>
         <div className="record-meta">{formatDate(record.record_time, language)}</div>
         {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={language === "zh" ? "查看照片" : "View photo"} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
         {record.note ? <p className="record-note">{record.note}</p> : null}
         {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
-        <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div>
+        {record.sync?.status === "pending-cloud-sync" ? <div className="record-actions"><span className="project-meta">{copy.pendingUpload}</span><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
       </article>)}</div>
       {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
     </>}

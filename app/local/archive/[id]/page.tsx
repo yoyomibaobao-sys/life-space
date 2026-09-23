@@ -1205,7 +1205,6 @@ export default function LocalArchiveDetailPage() {
               ) : null}
             </div>
           ) : null}
-        </div>
           {transferConflict ? (
             <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
               <div>{archiveCopy.transfer_conflict_message}</div>
@@ -1230,6 +1229,7 @@ export default function LocalArchiveDetailPage() {
               </button>
             </div>
           ) : null}
+        </div>
       ) : archive.migration_status === "failed" && archive.migration_error ? (
         <div style={transferErrorStyle}>
           <div>{archiveCopy.transfer_incomplete}</div>

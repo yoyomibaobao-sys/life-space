@@ -27,7 +27,8 @@ test("cold-start Android offline shell keeps the online app hierarchy and expose
   assert.match(source, /online-project-card/);
   assert.match(source, /online-project-media/);
   assert.match(source, /online-project-footer/);
-  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(styles, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\) auto/);
+  assert.match(styles, /\.offline-space-identity/);
   assert.match(styles, /height: calc\(env\(safe-area-inset-bottom, 0px\) \+ 58px\)/);
   assert.match(styles, /width: 48px; height: 48px; margin-top: -16px/);
   assert.match(styles, /\.online-project-card[\s\S]*grid-template-columns: 112px minmax\(0, 1fr\)/);

@@ -64,6 +64,7 @@ import {
   updateLocalArchiveFields,
   listVisibleLocalTaxonomyItems,
   listVisibleLocalArchiveSummaries,
+  listVisibleCloudOfflineArchiveSummaries,
   markUnownedLocalArchivesForOwner,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
@@ -79,6 +80,8 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
+import { refreshCloudOfflineCaches } from "@/lib/cloud-offline-cache";
+import { uploadPendingCloudOfflineRecords } from "@/lib/local-to-cloud-sync";
 
 type LatestArchiveRecord = {
   id: string;
@@ -159,6 +162,8 @@ export default function ArchivePage() {
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
   const [localArchives, setLocalArchives] = useState<LocalArchiveSummary[]>([]);
+  const [offlineCloudCaches, setOfflineCloudCaches] = useState<LocalArchiveSummary[]>([]);
+  const [uploadingOfflineCacheId, setUploadingOfflineCacheId] = useState<string | null>(null);
   const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
   const [localError, setLocalError] = useState("");
@@ -203,11 +208,13 @@ export default function ArchivePage() {
   async function loadLocalArchives(ownerContext: LocalArchiveOwnerContext | null = currentOwnerContext) {
     setLocalLoading(true);
     try {
-      const [result, taxonomyItems] = await Promise.all([
+      const [result, taxonomyItems, cachedCloud] = await Promise.all([
         listVisibleLocalArchiveSummaries(ownerContext),
         listVisibleLocalTaxonomyItems(ownerContext),
+        listVisibleCloudOfflineArchiveSummaries(ownerContext),
       ]);
       setLocalArchives(result.archives);
+      setOfflineCloudCaches(cachedCloud);
       setLocalTaxonomyItems(taxonomyItems);
       setLocalUnownedCount(result.unownedCount);
       setLocalHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
@@ -457,6 +464,7 @@ export default function ArchivePage() {
       });
 
       setArchives(enrichedArchives);
+      void refreshCloudOfflineCaches(enrichedArchives, ownerContext);
       setGroupTags((groupTagsData || []) as GroupTagItem[]);
       setSubTags((subTagsData || []) as SubTagItem[]);
       setSpeciesList(speciesRows);
@@ -482,6 +490,40 @@ export default function ArchivePage() {
       setMembershipLoading(false);
       loadingRef.current = false;
     }
+  }
+
+  async function uploadOfflinePendingRecords() {
+    if (!currentOwnerContext?.userId || uploadingOfflineCacheId) return;
+    if (!requireCloudWriteAccess()) return;
+    const pendingCaches = offlineCloudCaches.filter(
+      (cache) => cache.pending_record_count > 0
+    );
+    if (pendingCaches.length === 0) return;
+
+    let uploadedTotal = 0;
+    for (const cache of pendingCaches) {
+      setUploadingOfflineCacheId(cache.id);
+      const result = await uploadPendingCloudOfflineRecords({
+        localArchiveId: cache.id,
+        ownerContext: currentOwnerContext,
+      });
+      uploadedTotal += result.uploadedCount;
+      if (!result.success) {
+        showToast(result.error);
+        setUploadingOfflineCacheId(null);
+        await loadLocalArchives(currentOwnerContext);
+        return;
+      }
+    }
+
+    setUploadingOfflineCacheId(null);
+    await loadLocalArchives(currentOwnerContext);
+    await loadData();
+    showToast(
+      language === "zh"
+        ? `已上传 ${uploadedTotal} 条离线记录`
+        : `Uploaded ${uploadedTotal} offline record(s)`
+    );
   }
 
   function requireCloudWriteAccess() {
@@ -1873,6 +1915,27 @@ export default function ArchivePage() {
 
   const workspaceNoticeSlot = (
     <>
+      {offlineCloudCaches.some((cache) => cache.pending_record_count > 0) ? (
+        <div style={localOwnershipNoticeStyle}>
+          <span>
+            {language === "zh"
+              ? `有 ${offlineCloudCaches.reduce((sum, cache) => sum + cache.pending_record_count, 0)} 条离线记录待上传`
+              : `${offlineCloudCaches.reduce((sum, cache) => sum + cache.pending_record_count, 0)} offline record(s) pending upload`}
+          </span>
+          <div style={localOwnershipActionRowStyle}>
+            <button
+              type="button"
+              onClick={() => void uploadOfflinePendingRecords()}
+              disabled={Boolean(uploadingOfflineCacheId)}
+              style={localOwnershipPrimaryButtonStyle}
+            >
+              {uploadingOfflineCacheId
+                ? language === "zh" ? "上传中…" : "Uploading…"
+                : language === "zh" ? "上传" : "Upload"}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {showCloudArchives && archiveCount > 0 && currentOwnerContext?.userId && contentBlocked ? (
         <div style={localOtherOwnerNoticeStyle}>
           <span>
