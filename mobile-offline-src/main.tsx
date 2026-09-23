@@ -88,13 +88,13 @@ const text = {
     ongoing: "进行中", ended: "已结束", period: "项目分期", enablePeriod: "开启分期", periodDate: "期次开始日期", status: "项目状态", visibility: "可见范围", private: "仅自己可见",
     photoLimit: "每次最多选择10张，可分多次添加", removePhoto: "移除照片",
     brand: "有时·耕作",
-    offlineBody: "项目、记录和照片只保存在本机。重新联网后不会自动上传，也不会覆盖云端资料。",
+    offlineBody: "本机项目不会自动上传。云项目离线新增记录保存在本机，联网后可手动上传到原项目。",
     migrationWarning: "旧版本地资料暂未完成迁移。现有资料不会被删除，请稍后重新打开 App 再试。",
     reconnect: "重新连接云端",
     newProject: "新建项目",
     localProjects: "本地项目",
-    offlineCopies: "离线副本",
-    offlineStatus: "离线",
+    offlineCopies: "缓存副本",
+    offlineStatus: "本机",
     pendingUpload: "待上传",
     cloudCacheReadOnly: "云端已有内容离线只读；新记录会先保存在本机，联网后手动上传。",
     noProjects: "还没有本地项目",
@@ -122,7 +122,7 @@ const text = {
     save: "保存",
     cancel: "取消",
     saving: "保存中…",
-    loading: "正在读取本地资料…",
+    loading: "正在准备空间…",
     requiredProject: "请填写项目名称和对象名称。",
     requiredRecord: "请填写记录内容，或至少选择一张照片。",
     createSuccess: "本地项目已创建",
@@ -149,13 +149,13 @@ const text = {
     ongoing: "Ongoing", ended: "Ended", period: "Project periods", enablePeriod: "Enable periods", periodDate: "Period start date", status: "Project status", visibility: "Visibility", private: "Only me",
     photoLimit: "Select up to 10 at a time; add more later", removePhoto: "Remove photo",
     brand: "LifeSpace",
-    offlineBody: "Projects, records and photos stay on this device. Reconnecting will not upload them or overwrite cloud data.",
+    offlineBody: "Local projects do not upload automatically. New records on cached cloud projects stay on this device until you choose to upload them to the original project online.",
     migrationWarning: "Previous local data has not finished migrating. Nothing was deleted; reopen the app later to retry.",
     reconnect: "Reconnect to cloud",
     newProject: "New local project",
     localProjects: "Local projects",
-    offlineCopies: "Offline copies",
-    offlineStatus: "Offline",
+    offlineCopies: "Cached copies",
+    offlineStatus: "On this device",
     pendingUpload: "Pending upload",
     cloudCacheReadOnly: "Existing cloud content is read-only offline. New records stay on this device until you upload them manually online.",
     noProjects: "No local projects yet",
@@ -183,7 +183,7 @@ const text = {
     save: "Save",
     cancel: "Cancel",
     saving: "Saving…",
-    loading: "Reading local data…",
+    loading: "Preparing space…",
     requiredProject: "Enter a project name and subject name.",
     requiredRecord: "Enter notes or select at least one photo.",
     createSuccess: "Local project created",
@@ -590,7 +590,7 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "edit-project" && detail ? (
+      {screen.kind === "edit-project" && detail && detail.archive.local_role !== "cloud-offline-cache" ? (
         <ProjectForm
           language={language}
           copy={copy}
@@ -606,7 +606,7 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "new-record" && detail ? (
+      {screen.kind === "new-record" && detail && detail.archive.status === "active" ? (
         <RecordForm
           copy={copy}
           archive={detail.archive}
@@ -621,7 +621,7 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "edit-record" && detail ? (
+      {screen.kind === "edit-record" && detail && (detail.archive.local_role !== "cloud-offline-cache" || detail.records.some((item) => item.id === screen.recordId && item.sync?.status === "pending-cloud-sync")) ? (
         <RecordForm
           copy={copy}
           archive={detail.archive}
@@ -645,13 +645,13 @@ function App() {
         <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
       </> : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
+      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? <section className="network-offline" role="status" aria-live="polite">{copy.cloudUnavailable}</section> : null}
       <nav className="bottom-nav" aria-label={language === "zh" ? "主导航" : "Main navigation"}>
         <button type="button" aria-current={homeActive ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "discover" })}><UiIcon name="home" size={17} strokeWidth={1.7} /><span>{copy.home}</span></button>
         <button type="button" aria-current={screen.kind === "cloud" && screen.section === "follow" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "follow" })}><UiIcon name="follow" size={17} strokeWidth={1.7} /><span>{copy.follow}</span></button>
-        <button type="button" className="quick-add" aria-label={copy.addRecord} onClick={() => setScreen(screen.kind === "detail" && detail ? { kind: "new-record", archiveId: detail.archive.id } : { kind: "choose-project" })}><UiIcon name="plus" size={25} strokeWidth={2.2} /></button>
+        <button type="button" className="quick-add" aria-label={copy.addRecord} onClick={() => setScreen(screen.kind === "detail" && detail && detail.archive.status === "active" ? { kind: "new-record", archiveId: detail.archive.id } : { kind: "choose-project" })}><UiIcon name="plus" size={25} strokeWidth={2.2} /></button>
         <button type="button" aria-current={screen.kind === "cloud" && screen.section === "market" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "market" })}><UiIcon name="store" size={17} strokeWidth={1.7} /><span>{copy.market}</span></button>
         <button type="button" aria-current={personalActive ? "page" : undefined} onClick={goList}><UiIcon name="user" size={17} strokeWidth={1.7} /><span>{copy.me}</span></button>
       </nav>

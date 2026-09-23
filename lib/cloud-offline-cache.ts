@@ -16,8 +16,11 @@ import {
   type LocalArchiveOwnerContext,
 } from "@/lib/local-offline-db";
 
-const CLOUD_CACHE_PAGE_SIZE = 500;
 const CLOUD_CACHE_MEDIA_BATCH_SIZE = 100;
+const CLOUD_CACHE_RECORD_LIMIT = 500;
+const CLOUD_CACHE_IMAGE_LIMIT = 240;
+const CLOUD_CACHE_MAX_THUMBNAIL_BYTES = 256 * 1024;
+const CLOUD_CACHE_MAX_PROJECT_IMAGE_BYTES = 24 * 1024 * 1024;
 const THUMBNAIL_TIMEOUT_MS = 12_000;
 
 export type CloudOfflineCacheArchiveSource = ArchiveItem & {
@@ -68,27 +71,21 @@ function cacheRevision(archive: CloudOfflineCacheArchiveSource) {
 }
 
 async function readCloudRecords(archiveId: string) {
-  const rows: CloudCacheRecordRow[] = [];
-  for (let offset = 0; ; offset += CLOUD_CACHE_PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from("records")
-      .select(
-        "id, archive_id, cycle_id, note, record_time, created_at, visibility, status_tag, record_tags(tag, tag_type, is_active)"
-      )
-      .eq("archive_id", archiveId)
-      .order("record_time", { ascending: true })
-      .range(offset, offset + CLOUD_CACHE_PAGE_SIZE - 1);
-    if (error) throw error;
-    const page = (data || []) as CloudCacheRecordRow[];
-    rows.push(...page);
-    if (page.length < CLOUD_CACHE_PAGE_SIZE) break;
-  }
-  return rows;
+  const { data, error } = await supabase
+    .from("records")
+    .select(
+      "id, archive_id, cycle_id, note, record_time, created_at, visibility, status_tag, record_tags(tag, tag_type, is_active)"
+    )
+    .eq("archive_id", archiveId)
+    .order("record_time", { ascending: false })
+    .limit(CLOUD_CACHE_RECORD_LIMIT);
+  if (error) throw error;
+  return (data || []) as CloudCacheRecordRow[];
 }
 
 async function readCloudMedia(recordIds: string[]) {
   const rows: CloudCacheMediaRow[] = [];
-  for (let offset = 0; offset < recordIds.length; offset += CLOUD_CACHE_MEDIA_BATCH_SIZE) {
+  for (let offset = 0; offset < recordIds.length && rows.length < CLOUD_CACHE_IMAGE_LIMIT; offset += CLOUD_CACHE_MEDIA_BATCH_SIZE) {
     const batch = recordIds.slice(offset, offset + CLOUD_CACHE_MEDIA_BATCH_SIZE);
     const { data, error } = await supabase
       .from("media")
@@ -101,7 +98,10 @@ async function readCloudMedia(recordIds: string[]) {
     rows.push(...((data || []) as CloudCacheMediaRow[]));
   }
   if (rows.length === 0) return rows;
-  return (await attachMediaDisplayUrls(supabase, rows)) as CloudCacheMediaRow[];
+  return (await attachMediaDisplayUrls(
+    supabase,
+    rows.slice(0, CLOUD_CACHE_IMAGE_LIMIT)
+  )) as CloudCacheMediaRow[];
 }
 
 async function downloadThumbnail(
@@ -119,8 +119,10 @@ async function downloadThumbnail(
       signal: controller.signal,
     });
     if (!response.ok) return null;
+    const declaredSize = Number(response.headers.get("content-length"));
+    if (declaredSize > CLOUD_CACHE_MAX_THUMBNAIL_BYTES) return null;
     const blob = await response.blob();
-    if (!blob.size) return null;
+    if (!blob.size || blob.size > CLOUD_CACHE_MAX_THUMBNAIL_BYTES) return null;
     return {
       id: media.id,
       record_id: media.record_id,
@@ -178,15 +180,16 @@ async function refreshOneCloudOfflineCache(
 
   const media = await readCloudMedia(records.map((record) => record.id));
   const images: CloudOfflineCacheImageInput[] = [];
-  for (let offset = 0; offset < media.length; offset += 6) {
+  let imageBytes = 0;
+  for (let offset = 0; offset < media.length && imageBytes < CLOUD_CACHE_MAX_PROJECT_IMAGE_BYTES; offset += 6) {
     const batch = await Promise.all(
       media.slice(offset, offset + 6).map(downloadThumbnail)
     );
-    images.push(
-      ...batch.filter(
-        (image): image is CloudOfflineCacheImageInput => Boolean(image)
-      )
-    );
+    for (const image of batch) {
+      if (!image || imageBytes + image.blob.size > CLOUD_CACHE_MAX_PROJECT_IMAGE_BYTES) continue;
+      images.push(image);
+      imageBytes += image.blob.size;
+    }
   }
 
   const cacheRecords: CloudOfflineCacheRecordInput[] = records.map((record) => ({
@@ -235,7 +238,7 @@ export async function refreshCloudOfflineCaches(
   archives: CloudOfflineCacheArchiveSource[],
   ownerContext: LocalArchiveOwnerContext | null
 ) {
-  if (!isNativeAndroid() || !ownerContext?.userId) return;
+  if (!ownerContext?.userId || !isNativeAndroid()) return;
 
   for (const archive of archives) {
     try {
