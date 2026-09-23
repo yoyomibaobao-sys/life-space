@@ -28,10 +28,27 @@ const buildResult = await build({
   write: false,
   outfile: path.join(outputRoot, "offline.js"),
   jsx: "automatic",
+  loader: { ".module.css": "local-css" },
   define: {
     __LIFESPACE_CLOUD_ORIGIN__: JSON.stringify(cloudOrigin),
   },
   plugins: [
+    {
+      name: "offline-next-link",
+      setup(pluginBuild) {
+        // Shared cards render with onOpen in the offline shell. Keep their
+        // optional Next link branch bundlable without mounting a Next router.
+        pluginBuild.onResolve({ filter: /^next\/link$/ }, () => ({
+          path: "link",
+          namespace: "offline-next",
+        }));
+        pluginBuild.onLoad({ filter: /^link$/, namespace: "offline-next" }, () => ({
+          contents: 'import React from "react"; export default function Link(props) { return React.createElement("a", props, props.children); }',
+          resolveDir: root,
+          loader: "jsx",
+        }));
+      },
+    },
     {
       name: "lifespace-path-alias",
       setup(pluginBuild) {
@@ -47,6 +64,7 @@ const buildResult = await build({
 });
 
 const javascript = buildResult.outputFiles.find((file) => file.path.endsWith(".js"));
+const sharedCss = buildResult.outputFiles.find((file) => file.path.endsWith(".css"));
 if (!javascript) throw new Error("Offline bundle did not emit JavaScript.");
 
 const [template, css, localParityCss, bridgeTemplate] = await Promise.all([
@@ -57,7 +75,7 @@ const [template, css, localParityCss, bridgeTemplate] = await Promise.all([
 ]);
 
 const offlineHtml = template
-  .replace("__LIFESPACE_OFFLINE_CSS__", () => `${css}\n${localParityCss}`)
+  .replace("__LIFESPACE_OFFLINE_CSS__", () => `${css}\n${localParityCss}\n${sharedCss?.text || ""}`)
   .replace(
     "__LIFESPACE_OFFLINE_JS__",
     () => javascript.text.replaceAll("</script", "<\\/script"),

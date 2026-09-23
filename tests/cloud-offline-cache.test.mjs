@@ -51,7 +51,7 @@ test("offline shell separates true local projects from cloud offline copies", ()
   const offline = read("mobile-offline-src/main.tsx");
 
   assert.match(offline, /listVisibleCloudOfflineArchiveSummaries/);
-  assert.match(offline, /"all" \| "cache" \| "local"/);
+  assert.match(offline, /const listedArchives = \[\.\.\.cloudCaches, \.\.\.archives\]/);
   assert.match(offline, /archive\.local_role === "cloud-offline-cache"/);
   assert.match(offline, /record\.sync\?\.status === "pending-cloud-sync"/);
   assert.match(offline, /cloudCacheReadOnly/);

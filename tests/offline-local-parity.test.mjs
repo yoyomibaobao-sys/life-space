@@ -15,7 +15,8 @@ test("cold-start Android offline shell keeps the online app hierarchy and expose
   const template = read("mobile-offline-src/offline.template.html");
 
   assert.match(buildScript, /local-parity\.css/);
-  assert.match(buildScript, /`\$\{css\}\\n\$\{localParityCss\}`/);
+  assert.match(buildScript, /sharedCss\?\.text/);
+  assert.match(buildScript, /"local-css"/);
   assert.doesNotMatch(source, /本地离线模式|Local offline mode/);
   assert.doesNotMatch(source, /offline-status/);
   assert.match(source, /cloudUnavailable: "未联网"/);
@@ -24,16 +25,12 @@ test("cold-start Android offline shell keeps the online app hierarchy and expose
   assert.match(source, /discover: "记录"/);
   assert.match(source, /home-section-tabs/);
   assert.match(source, /onClick=\{\(\) => setScreen\(\{ kind: "cloud", section: "discover" \}\)\}/);
-  assert.match(source, /online-project-card/);
-  assert.match(source, /online-project-media/);
-  assert.match(source, /online-project-footer/);
-  assert.match(styles, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\) auto/);
+  assert.match(source, /<ArchiveProjectCard/);
+  assert.match(source, /localArchiveToProjectView/);
+  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(styles, /\.offline-space-identity/);
   assert.match(styles, /height: calc\(env\(safe-area-inset-bottom, 0px\) \+ 58px\)/);
   assert.match(styles, /width: 48px; height: 48px; margin-top: -16px/);
-  assert.match(styles, /\.online-project-card[\s\S]*grid-template-columns: 112px minmax\(0, 1fr\)/);
-  assert.match(styles, /\.online-project-media[\s\S]*width: 112px;[\s\S]*height: 112px/);
-  assert.match(styles, /\.online-project-title[\s\S]*font-size: 16px;[\s\S]*font-weight: 850/);
   assert.match(parityStyles, /\.network-offline[\s\S]*min-height: 46vh/);
   assert.doesNotMatch(template, /本地离线模式/);
 });

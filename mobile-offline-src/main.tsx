@@ -41,6 +41,8 @@ import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 
 import UiIcon from "@/components/ui/UiIcon";
+import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
@@ -224,20 +226,6 @@ function formatDate(value: string | null | undefined, language: Language) {
   }).format(date);
 }
 
-function projectDurationDays(archive: LocalArchiveSummary) {
-  const start = new Date(archive.created_at).getTime();
-  const end = new Date(archive.ended_at || Date.now()).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return 1;
-  return Math.max(1, Math.floor((end - start) / 86_400_000) + 1);
-}
-
-function archiveIcon(category: ArchiveCategory) {
-  if (category === "plant") return "sprout" as const;
-  if (category === "system") return "wrench" as const;
-  if (category === "insect_fish") return "fish" as const;
-  return "project" as const;
-}
-
 function toDateTimeLocal(value?: string | null) {
   return toLocalDateTimeInputValue(value || new Date());
 }
@@ -283,7 +271,6 @@ function App() {
   );
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
-  const [sourceFilter, setSourceFilter] = useState<"all" | "cache" | "local">("all");
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -427,6 +414,7 @@ function App() {
     const next = language === "zh" ? "en" : "zh";
     setLanguage(next);
     try { window.localStorage.setItem("lang", next); } catch { /* no-op */ }
+    window.dispatchEvent(new CustomEvent("lifespace-language-change", { detail: next }));
     document.documentElement.lang = next === "zh" ? "zh-CN" : "en";
   }
 
@@ -449,11 +437,7 @@ function App() {
     screen.kind === "guide-detail" ||
     (screen.kind === "cloud" &&
       (screen.section === "discover" || screen.section === "experience"));
-  const listedArchives = sourceFilter === "local"
-    ? archives
-    : sourceFilter === "cache"
-      ? cloudCaches
-      : [...cloudCaches, ...archives];
+  const listedArchives = [...cloudCaches, ...archives];
   const personalActive = [
     "list",
     "new-project",
@@ -499,9 +483,7 @@ function App() {
       {screen.kind === "list" ? (
         <>
           <div className="source-row">
-            <button type="button" aria-pressed={sourceFilter === "all"} onClick={() => setSourceFilter("all")}>{copy.all} {archives.length + cloudCaches.length}</button>
-            <button type="button" aria-pressed={sourceFilter === "cache"} onClick={() => setSourceFilter("cache")}>{copy.offlineCopies} {cloudCaches.length}</button>
-            <button type="button" aria-pressed={sourceFilter === "local"} onClick={() => setSourceFilter("local")}>{copy.local} {archives.length}</button>
+            <button type="button" aria-pressed="true">{copy.local} {archives.length + cloudCaches.length}</button>
             <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
           </div>
           <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
@@ -521,33 +503,18 @@ function App() {
           {listedArchives.length ? (
             <div className="project-list online-project-list">
               {listedArchives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
-                <button className="online-project-card" type="button" key={archive.id} onClick={() => openDetail(archive.id)}>
-                  <span className="online-project-media">
-                    {archive.cover_image ? (
-                      <BlobImage key={archive.cover_image.id} image={archive.cover_image} className="online-project-image" alt="" />
-                    ) : (
-                      <UiIcon name={archiveIcon(archive.category)} size={29} strokeWidth={1.6} />
-                    )}
-                    <span className="online-project-category">{copy[archive.category]}</span>
-                  </span>
-                  <span className="online-project-body">
-                    <span className="online-project-title-row">
-                      <strong className="online-project-title">{archive.title}</strong>
-                      <span className="online-project-visibility">{archive.local_role === "cloud-offline-cache" ? copy.offlineCopies : copy.local}</span>
-                    </span>
-                    <span className="online-project-update">
-                      {archive.latest_record_note || (archive.latest_record_time ? formatDate(archive.latest_record_time, language) : "")}
-                    </span>
-                    <span className="online-project-classification">
-                      {[archive.subcategory, archive.group_name].filter(Boolean).join(" · ") || archive.system_name || archive.species_name || ""}
-                    </span>
-                    <span className="online-project-footer">
-                      <span>{archive.record_count} {copy.records} · {projectDurationDays(archive)} {language === "zh" ? "天" : "days"}</span>
-                      {archive.pending_record_count > 0 ? <span>{copy.pendingUpload} {archive.pending_record_count}</span> : null}
-                      {archive.status === "ended" ? <span className="online-project-ended">{copy.ended}</span> : null}
-                    </span>
-                  </span>
-                </button>
+                <ArchiveProjectCard
+                  key={archive.id}
+                  project={{
+                    ...localArchiveToProjectView(archive, ownerContext, language),
+                    href: undefined,
+                    visibilityLabel: archive.local_role === "cloud-offline-cache" ? copy.offlineCopies : copy.local,
+                  }}
+                  mobileMode
+                  mobileShowCategoryBadge={false}
+                  onClick={() => openDetail(archive.id)}
+                  actionSlot={archive.pending_record_count > 0 ? <span>{copy.pendingUpload} {archive.pending_record_count}</span> : undefined}
+                />
               ))}
             </div>
           ) : (
