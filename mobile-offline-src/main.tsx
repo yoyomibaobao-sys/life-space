@@ -38,10 +38,12 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
-import type { ArchiveCategory } from "@/lib/archive-categories";
+import { getArchiveCategoryIcon, getArchiveCategoryLabel, type ArchiveCategory } from "@/lib/archive-categories";
 
 import UiIcon from "@/components/ui/UiIcon";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import ArchiveDetailHeaderView from "@/components/archive-ui/ArchiveDetailHeaderView";
+import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import RecordLocationField from "@/components/record/RecordLocationField";
@@ -833,16 +835,38 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   const archive = detail.archive;
   const isCloudCache = archive.local_role === "cloud-offline-cache";
   const periods = getArchiveCycleTerminology(archive.category, language);
+  const projectView: ArchiveProjectView = {
+    id: archive.id,
+    mode: "local",
+    title: archive.title,
+    category: archive.category,
+    categoryLabel: getArchiveCategoryLabel(archive.category, language),
+    categoryIcon: getArchiveCategoryIcon(archive.category),
+    systemName: archive.system_name || archive.species_name || "",
+    subcategoryLabel: archive.subcategory || null,
+    groupLabel: archive.group_name || null,
+    visibilityLabel: isCloudCache ? copy.offlineCopies : copy.local,
+    visibilityTone: "neutral",
+    storageLabel: copy.local,
+    storageTone: "device",
+    recordCount: detail.records.length,
+    latestTime: detail.records[0]?.record_time || archive.updated_at,
+    ended: archive.status === "ended",
+  };
   async function change(work: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true); setError("");
     try { await work(); await onChanged(); } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
   }
   return <>
-    <div className="detail-heading"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{archive.title}</h1><span /></div>
+    <div className="back-row"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}>← {copy.back}</button></div>
+    <ArchiveDetailHeaderView
+      project={projectView}
+      hint={isCloudCache ? copy.cloudCacheReadOnly : undefined}
+      showSystemNameInTitle
+    />
     <div className="top-tabs"><button type="button" aria-pressed={tab === "details"} onClick={() => setTab("details")}>{copy.details}</button><button type="button" aria-pressed={tab === "properties"} onClick={() => setTab("properties")}>{copy.properties}</button></div>
     {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
-    {isCloudCache ? <section className="notice"><p>{copy.cloudCacheReadOnly}</p></section> : null}
     {tab === "properties" ? <>
       {archive.category === "plant" ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy && !isCloudCache} onSave={async (region) => {
         await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
