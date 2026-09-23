@@ -1068,6 +1068,66 @@ export default function LocalArchiveDetailPage() {
       )}${recordCopy.day_suffix ? ` ${recordCopy.day_suffix}` : ""} · ${formatDate(localLightboxRecord.record_time)}`
     : "";
 
+  if (archive.local_role === "cloud-offline-cache") {
+    return (
+      <main style={pageStyle}>
+        <section style={headerStyle}>
+          <Link href="/archive?source=local" style={backLinkStyle}>
+            {archiveCopy.back_to_local_projects}
+          </Link>
+          <ArchiveDetailHeaderView
+            project={{ ...projectView, visibilityLabel: language === "en" ? "Cached cloud copy" : "云端缓存副本" }}
+            eyebrow={language === "en" ? "Cached cloud copy" : "云端缓存副本"}
+            latestUpdateText={`${archiveCopy.latest_update} ${formatDate(latestUpdate) || archiveCopy.none}`}
+            recordCountText={`${archiveCopy.records} ${records.length}`}
+            hint={language === "en" ? "Cached cloud records are read only. Pending offline records are kept on this device until you upload them manually." : "云端缓存记录仅供查看。离线新增的记录留在此设备，需手动上传。"}
+            profileRows={localProfileRows}
+          />
+        </section>
+        <ArchiveCycleTimeline
+          cycles={cycleEnabled ? cycles : []}
+          records={localRecordItems}
+          category={archive.category}
+          mobileMode={isMobileViewport}
+          canManage={false}
+          busy={false}
+          emptyState={<div style={emptyRecordsStyle}>{recordCopy.no_local_records}</div>}
+          renderRecord={(record, index) => (
+            <ArchiveRecordCard
+              key={record.id}
+              variant="local"
+              archive={localArchiveRecordShell}
+              item={record}
+              index={index}
+              mode="viewer"
+              startTime={startTime}
+              isHighlighted={false}
+              sameTagLinks={[]}
+              onOpenLightbox={(media, mediaIndex, item) => openLocalRecordItemLightbox(media, mediaIndex, item)}
+              onDeleteMedia={async () => undefined}
+              onVisibilityChange={async () => undefined}
+              onSetHelpStatus={async () => undefined}
+              onRemoveTag={() => undefined}
+              onAddTag={async () => undefined}
+              isMobileViewport={isMobileViewport}
+            />
+          )}
+        />
+        {localLightboxImages.length > 0 ? (
+          <ArchiveLightbox
+            images={localLightboxImages}
+            index={localLightboxIndex}
+            onChange={setLocalLightboxIndex}
+            isMobileViewport={isMobileViewport}
+            metaText={localLightboxMetaText}
+            note={localLightboxRecord?.note || ""}
+            onClose={closeLocalLightbox}
+          />
+        ) : null}
+      </main>
+    );
+  }
+
   return (
     <main style={pageStyle}>
       <section style={headerStyle}>

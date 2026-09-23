@@ -163,6 +163,7 @@ export default function ArchivePage() {
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
   const [localArchives, setLocalArchives] = useState<LocalArchiveSummary[]>([]);
   const [offlineCloudCaches, setOfflineCloudCaches] = useState<LocalArchiveSummary[]>([]);
+  const [isOffline, setIsOffline] = useState(false);
   const [uploadingOfflineCacheId, setUploadingOfflineCacheId] = useState<string | null>(null);
   const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
@@ -188,6 +189,23 @@ export default function ArchivePage() {
 
     return () => window.removeEventListener("resize", updateViewportMode);
   }, []);
+
+  useEffect(() => {
+    function updateConnection() {
+      setIsOffline(!navigator.onLine);
+      void loadLocalArchives();
+    }
+
+    setIsOffline(!navigator.onLine);
+    window.addEventListener("offline", updateConnection);
+    window.addEventListener("online", updateConnection);
+    return () => {
+      window.removeEventListener("offline", updateConnection);
+      window.removeEventListener("online", updateConnection);
+    };
+    // The event callback reads the current owner context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOwnerContext]);
 
   function shouldIgnoreCardNavigation(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -1171,6 +1189,10 @@ export default function ArchivePage() {
 
     return counts;
   }, [archives]);
+  const visibleLocalArchives = useMemo(
+    () => isOffline ? [...localArchives, ...offlineCloudCaches] : localArchives,
+    [isOffline, localArchives, offlineCloudCaches]
+  );
   const localArchiveCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1179,12 +1201,12 @@ export default function ArchivePage() {
       other: 0,
     };
 
-    localArchives.forEach((item) => {
+    visibleLocalArchives.forEach((item) => {
       counts[item.category] += 1;
     });
 
     return counts;
-  }, [localArchives]);
+  }, [visibleLocalArchives]);
   const visibleCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1203,7 +1225,7 @@ export default function ArchivePage() {
   }, [activeSource, archiveCategoryCounts, localArchiveCategoryCounts]);
   const sourceTotalCount =
     (activeSource === "local" ? 0 : archiveCount) +
-    (activeSource === "cloud" ? 0 : localArchives.length);
+    (activeSource === "cloud" ? 0 : visibleLocalArchives.length);
   const contentBlocked = !canCreateMembershipContent(membership);
   const membershipLabel = getUserTypeLabel({ signedIn: !!currentOwnerContext, membership, loading: membershipLoading, failed: membershipFailed }, language);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
@@ -1280,7 +1302,7 @@ export default function ArchivePage() {
 
   const filteredLocalArchives = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
-    const filtered = localArchives.filter((item) => {
+    const filtered = visibleLocalArchives.filter((item) => {
       if (activeCategory && item.category !== activeCategory) return false;
       if (activeSubTag && item.subcategory !== activeSubTag) return false;
       if (activeGroupTag && item.group_name !== activeGroupTag) return false;
@@ -1320,7 +1342,7 @@ export default function ArchivePage() {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [
-    localArchives,
+    visibleLocalArchives,
     activeCategory,
     activeSubTag,
     activeGroupTag,
@@ -2152,10 +2174,10 @@ export default function ArchivePage() {
           {
             value: "all",
             label: t.archive_workspace.all,
-            count: archiveCount + localArchives.length,
+            count: archiveCount + visibleLocalArchives.length,
           },
           { value: "cloud", label: t.archive_workspace.cloud_space, count: archiveCount },
-          { value: "local", label: t.archive_workspace.local, count: localArchives.length },
+          { value: "local", label: t.archive_workspace.local, count: visibleLocalArchives.length },
         ]}
         activeSource={activeSource}
         onSelectSource={handleSelectSource}
@@ -2204,7 +2226,7 @@ export default function ArchivePage() {
             <div style={emptyPanelStyle}>{t.archive_workspace.reading_local}</div>
           ) : localError ? (
             <div style={emptyPanelStyle}>{localError}</div>
-          ) : localArchives.length === 0 ? (
+          ) : visibleLocalArchives.length === 0 ? (
             isMobileViewport ? null : (
               <div style={emptyPanelStyle}>{t.archive_workspace.no_local_projects}</div>
             )
@@ -2212,6 +2234,27 @@ export default function ArchivePage() {
             <div style={emptyPanelStyle}>{t.archive_workspace.no_local_matches}</div>
           ) : (
             filteredLocalArchives.map((archive) => {
+              if (archive.local_role === "cloud-offline-cache") {
+                const cachedProject = localArchiveToProjectView(
+                  archive,
+                  currentOwnerContext,
+                  language,
+                  getArchiveCategoryDepth(localCategoryDepths, archive.category),
+                );
+                return (
+                  <ArchiveProjectCard
+                    key={archive.id}
+                    project={{
+                      ...cachedProject,
+                      visibilityLabel: language === "en" ? "Cached cloud copy" : "云端缓存副本",
+                    }}
+                    mobileMode={isMobileViewport}
+                    mobileShowCategoryBadge={false}
+                    onClick={isMobileViewport ? undefined : () => router.push(`/local/archive/${archive.id}`)}
+                  />
+                );
+              }
+
               const project = localArchiveToProjectView(
                 archive,
                 currentOwnerContext,
