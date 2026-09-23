@@ -9,6 +9,7 @@
   --line: #dce5d8;
   --card: rgba(255, 255, 255, 0.92);
   --danger: #a0443b;
+  --app-safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 * { box-sizing: border-box; }

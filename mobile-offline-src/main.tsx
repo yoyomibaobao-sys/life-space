@@ -43,6 +43,7 @@ import { getArchiveCategoryIcon, getArchiveCategoryLabel, type ArchiveCategory }
 import UiIcon from "@/components/ui/UiIcon";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveDetailHeaderView from "@/components/archive-ui/ArchiveDetailHeaderView";
+import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
@@ -945,9 +946,9 @@ function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
       await onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
   }
-  return <>
-    <div className="detail-heading"><button type="button" className="back-button" onClick={onCancel} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{record ? copy.edit : copy.addRecord}</h1><span /></div>
-    <section className="panel"><form className="form" onSubmit={submit}>
+  return (
+    <ArchiveRecordComposer mobileMode open title={record ? copy.edit : copy.addRecord} onClose={onCancel}>
+      <form className="form" onSubmit={submit}>
       <div className="project-meta">{archive.title} · {copy.local}</div>
       <label className="field">{copy.recordTime}<input type="datetime-local" value={recordTime} onChange={(e) => setRecordTime(e.target.value)} required disabled={busy} /></label>
       {archive.cycle_enabled ? <label className="field">{periods.assignLabel}<select value={cycleId} disabled={busy} onChange={(e) => setCycleId(e.target.value)}><option value="">{periods.unassignedOption}</option>{(archive.cycles || []).filter((cycle) => record || cycle.status === "active").map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
@@ -962,8 +963,9 @@ function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
       <RecordLocationField value={location} onChange={setLocation} files={files} language={language} disabled={busy} />
       {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
       <div className="submit-row"><button className="secondary-button" type="button" onClick={onCancel} disabled={busy}>{copy.cancel}</button><button className="primary-button" type="submit" disabled={busy}>{busy ? copy.saving : copy.save}</button></div>
-    </form></section>
-  </>;
+      </form>
+    </ArchiveRecordComposer>
+  );
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
