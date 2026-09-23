@@ -90,6 +90,7 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
+import { loadRememberedLocalOwnerContext, rememberLocalOwnerContext } from "@/lib/local-owner-context";
 
 function formatDate(value?: string | null) {
   return formatPreciseDateTime(value);
@@ -192,10 +193,19 @@ export default function LocalArchiveDetailPage() {
 
     setLoading(true);
     try {
-      const { data } = await supabase.auth.getUser();
-      const ownerContext = data.user
-        ? { userId: data.user.id, email: data.user.email || null }
-        : null;
+      let ownerContext: LocalArchiveOwnerContext | null = null;
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (data.user) {
+          ownerContext = { userId: data.user.id, email: data.user.email || null };
+          rememberLocalOwnerContext({ userId: data.user.id, email: data.user.email || null });
+        }
+      } catch {
+        // A previously identified owner can still read their device cache offline.
+      }
+      if (!ownerContext && !navigator.onLine) {
+        ownerContext = loadRememberedLocalOwnerContext();
+      }
       setOwnerContext(ownerContext);
       setCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId));
       const nextDetail = await getLocalArchiveDetail(archiveId, ownerContext);
@@ -1084,6 +1094,66 @@ export default function LocalArchiveDetailPage() {
             profileRows={localProfileRows}
           />
         </section>
+        {archive.status === "active" ? (
+          <ArchiveRecordComposer
+            mobileMode={isMobileViewport}
+            open={!isMobileViewport || addRecordOpen}
+            onClose={() => setAddRecordOpen(false)}
+          >
+            <form onSubmit={handleAddRecord} style={recordFormStyle}>
+              <input
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder={recordCopy.placeholder}
+                style={recordInputStyle}
+              />
+              <RecordLocationField value={location} onChange={setLocation} files={selectedFiles} language={language} disabled={saving} />
+              <div style={recordControlRowStyle}>
+                <select
+                  value={timeMode}
+                  onChange={(event) => setTimeMode(event.target.value as "exif" | "now" | "custom")}
+                  style={recordSelectStyle}
+                >
+                  <option value="exif">{t.photo_time}</option>
+                  <option value="now">{t.current_time}</option>
+                  <option value="custom">{t.custom_time}</option>
+                </select>
+                {timeMode === "custom" ? (
+                  <input type="datetime-local" value={customTime} onChange={(event) => setCustomTime(event.target.value)} style={recordTimeInputStyle} />
+                ) : null}
+              </div>
+              <div style={imageActionRowStyle}>
+                <label style={imagePickerStyle}>
+                  {recordCopy.choose_photos}
+                  <input type="file" accept="image/*" multiple onChange={(event) => { appendFiles(event.target.files); event.target.value = ""; }} style={{ display: "none" }} />
+                </label>
+                <label style={imagePickerStyle}>
+                  {recordCopy.take_photo}
+                  <input type="file" accept="image/*" capture="environment" onChange={(event) => { appendFiles(event.target.files); event.target.value = ""; }} style={{ display: "none" }} />
+                </label>
+              </div>
+              {selectedFiles.length > 0 ? (
+                <div style={selectedFilesStyle}>
+                  {recordCopy.selected_photos_prefix} {selectedFiles.length} {recordCopy.selected_photos_suffix}
+                  {selectedSizeLabel ? ` · ${recordCopy.raw_size} ${selectedSizeLabel}` : ""}
+                </div>
+              ) : null}
+              {selectedFiles.length > 1 ? (
+                <label style={selectedFilesStyle}>
+                  <input type="checkbox" checked={mergeMode} onChange={(event) => setMergeMode(event.target.checked)} /> {recordCopy.merge_photos}
+                </label>
+              ) : null}
+              <div style={submitRowStyle}>
+                <button type="submit" disabled={saving} style={submitButtonStyle}>
+                  {saving ? t.saving : recordCopy.save_record}
+                </button>
+              </div>
+            </form>
+          </ArchiveRecordComposer>
+        ) : null}
+        {isMobileViewport && archive.status === "active" && !addRecordOpen ? (
+          <button type="button" onClick={() => setAddRecordOpen(true)} style={mobileFloatingAddButtonStyle}>{recordCopy.add_record_short}</button>
+        ) : null}
         <ArchiveCycleTimeline
           cycles={cycleEnabled ? cycles : []}
           records={localRecordItems}

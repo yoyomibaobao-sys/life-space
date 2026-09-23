@@ -80,6 +80,7 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
+import { loadRememberedLocalOwnerContext, rememberLocalOwnerContext } from "@/lib/local-owner-context";
 import { refreshCloudOfflineCaches } from "@/lib/cloud-offline-cache";
 import { uploadPendingCloudOfflineRecords } from "@/lib/local-to-cloud-sync";
 
@@ -1098,11 +1099,19 @@ export default function ArchivePage() {
 
     async function safeLoad() {
       try {
-        const { data } = await supabase.auth.getUser();
-        const user = data.user;
-        const ownerContext = user
-          ? { userId: user.id, email: user.email || null }
-          : null;
+        let ownerContext: LocalArchiveOwnerContext | null = null;
+        try {
+          const { data } = await supabase.auth.getUser();
+          if (data.user) {
+            ownerContext = { userId: data.user.id, email: data.user.email || null };
+            rememberLocalOwnerContext({ userId: data.user.id, email: data.user.email || null });
+          }
+        } catch {
+          // The device cache remains available if auth cannot reach the network.
+        }
+        if (!ownerContext && !navigator.onLine) {
+          ownerContext = loadRememberedLocalOwnerContext();
+        }
         const sourceParam = new URLSearchParams(window.location.search).get("source");
 
         if (sourceParam === "local" || sourceParam === "cloud") {
