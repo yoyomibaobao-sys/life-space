@@ -63,6 +63,20 @@ test("network-only sections use one quiet offline state", () => {
   assert.match(followLayout, /<NetworkRequiredBoundary>/);
 });
 
+test("cloud projects expose a small read-only device cache while offline", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const cache = read("lib/offline-cloud-archive-cache.ts");
+
+  assert.match(source, /cachedCloudNotice/);
+  assert.match(source, /cachedCloudReadOnly/);
+  assert.match(source, /cloudListIsCached/);
+  assert.match(source, /clearOfflineCloudArchiveCache/);
+  assert.match(source, /cover_thumbnail/);
+  assert.match(cache, /status: "active"/);
+  assert.match(cache, /archive\.status === "ended"/);
+  assert.doesNotMatch(cache, /record_body|media_blob|full_photo/);
+});
+
 test("temporary single-character startup placeholder is replaced by the product brand", () => {
   const startup = read("mobile-shell/index.html");
 

@@ -12,6 +12,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const packageJson = read("package.json");
   const buildScript = read("scripts/build-mobile-offline.mjs");
   const source = read("mobile-offline-src/main.tsx");
+  const cloudCache = read("lib/offline-cloud-archive-cache.ts");
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
   const publicAuthConfig = read("app/api/public-auth-config/route.ts");
@@ -40,6 +41,13 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<ConnectivityNotice/);
   assert.match(source, /navigator\.onLine/);
   assert.match(source, /saveCloudArchiveToLocal/);
+  assert.match(source, /listOfflineCloudArchiveCache/);
+  assert.match(source, /replaceOfflineCloudArchiveCache/);
+  assert.match(source, /kind: "cached-cloud-detail"/);
+  assert.match(source, /readOnlyCopy/);
+  assert.match(cloudCache, /archive\.status === "ended"/);
+  assert.match(cloudCache, /OFFLINE_CLOUD_CACHE_MAX_THUMBNAIL_BYTES = 128 \* 1024/);
+  assert.match(cloudCache, /OFFLINE_CLOUD_CACHE_MAX_ARCHIVES = 200/);
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
   assert.match(source, /supabase\.auth\.getSession/);
