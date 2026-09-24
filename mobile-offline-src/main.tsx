@@ -86,6 +86,7 @@ import {
   fetchDiverseDiscoveryProjectBatch,
 } from "@/lib/discover-diverse-project-feed";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
+import { fetchFollowedArchiveProjects } from "@/lib/followed-archive-projects";
 
 const MAX_PHOTOS = 10;
 
@@ -112,6 +113,7 @@ type Screen =
   | { kind: "list" }
   | { kind: "new-project"; guide?: SystemNameCandidate }
   | { kind: "activity" }
+  | { kind: "following" }
   | { kind: "guides" }
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "settings" }
@@ -362,6 +364,9 @@ function App() {
   const [activityItems, setActivityItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState(false);
+  const [followedItems, setFollowedItems] = useState<DiscoveryProjectFeedItem[]>([]);
+  const [followedLoading, setFollowedLoading] = useState(false);
+  const [followedError, setFollowedError] = useState(false);
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -457,6 +462,27 @@ function App() {
     }
   }, []);
 
+  const loadFollowing = useCallback(async (userId?: string | null) => {
+    const resolvedUserId = userId || cloudUserId;
+    if (!navigator.onLine || !resolvedUserId) {
+      setFollowedItems([]);
+      setFollowedError(false);
+      return;
+    }
+    setFollowedLoading(true);
+    setFollowedError(false);
+    try {
+      const result = await fetchFollowedArchiveProjects(resolvedUserId);
+      if (result.error) throw result.error;
+      setFollowedItems(result.items);
+    } catch (error) {
+      console.warn("local shell followed projects", error);
+      setFollowedError(true);
+    } finally {
+      setFollowedLoading(false);
+    }
+  }, [cloudUserId]);
+
   useEffect(() => {
     const updateConnectivity = () => setOnline(navigator.onLine);
     window.addEventListener("online", updateConnectivity);
@@ -531,6 +557,11 @@ function App() {
     if (screen.kind !== "activity" || !online) return;
     void loadActivity();
   }, [screen.kind, online, loadActivity]);
+
+  useEffect(() => {
+    if (screen.kind !== "following" || !online || !cloudUserId) return;
+    void loadFollowing(cloudUserId);
+  }, [screen.kind, online, cloudUserId, loadFollowing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -830,7 +861,8 @@ function App() {
     if (item.id === "following") {
       return {
         ...item,
-        onSelect: () => setScreen({ kind: "cloud" }),
+        active: screen.kind === "following",
+        onSelect: () => setScreen({ kind: "following" }),
       };
     }
     if (item.id === "market") {
@@ -841,7 +873,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "guides", "guide-detail", "cloud"].includes(screen.kind),
+      active: !["activity", "following", "guides", "guide-detail", "cloud"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1191,6 +1223,50 @@ function App() {
           </section>
         )}
       </> : null}
+
+      {screen.kind === "following" ? (
+        !online ? (
+          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+        ) : !cloudUserId ? (
+          <CloudLogin copy={copy} onSuccess={() => void loadFollowing()} />
+        ) : (
+          <>
+            <div className="section-title">
+              <h1>{copy.follow}</h1>
+              <span className="count">{followedItems.length}</span>
+            </div>
+            {followedLoading ? (
+              <section className="panel empty">
+                {language === "zh" ? "正在读取关注项目…" : "Loading followed projects…"}
+              </section>
+            ) : followedError ? (
+              <section className="notice warning">
+                <p>{language === "zh" ? "关注项目读取失败，请稍后重试。" : "Could not load followed projects."}</p>
+                <div className="action-row">
+                  <button type="button" className="secondary-button" onClick={() => void loadFollowing()}>
+                    {language === "zh" ? "重新加载" : "Retry"}
+                  </button>
+                </div>
+              </section>
+            ) : followedItems.length ? (
+              <div className="project-list">
+                {followedItems.map((item) => (
+                  <ArchiveProjectCard
+                    key={item.archive_id}
+                    project={activityProjectView(item)}
+                    mobileMode
+                    mobileShowCategoryBadge
+                  />
+                ))}
+              </div>
+            ) : (
+              <section className="panel empty">
+                {language === "zh" ? "还没有关注的公开项目。" : "No followed public projects yet."}
+              </section>
+            )}
+          </>
+        )
+      ) : null}
 
       {screen.kind === "guides" ? <>
         <HomeSectionTabs
