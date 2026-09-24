@@ -16,6 +16,9 @@ test("cloud offline copies stay lightweight and thumbnail-only", () => {
   assert.doesNotMatch(cache, /downloadMediaStorageObject/);
   assert.match(cache, /archive\.status === "ended"/);
   assert.match(cache, /pruneCloudOfflineCacheForEndedSource/);
+  assert.match(cache, /archive\.last_record_time \|\| archive\.created_at/);
+  assert.match(cache, /JSON\.stringify\(archive\.planting_region \|\| null\)/);
+  assert.doesNotMatch(cache, /archive\.updated_at \|\| ""/);
 });
 
 test("cloud offline copies are distinct from local projects and preserve pending work", () => {
