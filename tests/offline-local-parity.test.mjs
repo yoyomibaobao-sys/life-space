@@ -29,7 +29,9 @@ test("cold-start Android offline shell keeps the online app hierarchy and expose
   assert.match(source, /onClick=\{\(\) => setScreen\(\{ kind: "cloud", section: "discover" \}\)\}/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /localArchiveToProjectView/);
-  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(styles, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\) auto/);
+  assert.match(source, /sourceFilter === "cloud" \? cloudCaches/);
+  assert.match(source, /noCachedProjects: "还没有云项目缓存"/);
   assert.match(styles, /\.offline-space-identity/);
   assert.match(source, /<MobileBottomNavFrame className="bottom-nav" constrained/);
   assert.match(navbar, /<MobileBottomNavFrame ariaLabel=\{labels\.mobile_navigation\}/);

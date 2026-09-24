@@ -106,6 +106,8 @@ const text = {
     pendingUpload: "待上传",
     cloudCacheReadOnly: "云端已有内容离线只读；新记录会先保存在本机，联网后手动上传。",
     noProjects: "还没有本地项目",
+    noCachedProjects: "还没有云项目缓存",
+    noCachedProjectsHint: "请先联网登录并打开 App，云项目会在后台保存轻量副本；离线时已有云记录只读。",
     noProjectsHint: "断网时也可以先创建，内容会保存在这台设备。",
     records: "条记录",
     photos: "张照片",
@@ -167,6 +169,8 @@ const text = {
     pendingUpload: "Pending upload",
     cloudCacheReadOnly: "Existing cloud content is read-only offline. New records stay on this device until you upload them manually online.",
     noProjects: "No local projects yet",
+    noCachedProjects: "No cached cloud projects yet",
+    noCachedProjectsHint: "Sign in while online and leave the app open to save lightweight copies. Existing cloud records are read-only offline.",
     noProjectsHint: "You can create one offline and keep it on this device.",
     records: "records",
     photos: "photos",
@@ -259,6 +263,7 @@ function App() {
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "cloud", section: "discover" });
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "cloud" | "local">("all");
   const [guideQuery, setGuideQuery] = useState("");
   const [directory] = useState(loadOfflineGuideDirectory);
   function setScreen(next: Screen, replace = false) {
@@ -494,7 +499,8 @@ function App() {
     screen.kind === "guide-detail" ||
     (screen.kind === "cloud" &&
       (screen.section === "discover" || screen.section === "experience"));
-  const listedArchives = [...cloudCaches, ...archives];
+  const listedArchives = sourceFilter === "cloud" ? cloudCaches : sourceFilter === "local" ? archives : [...cloudCaches, ...archives];
+  const filteredArchives = listedArchives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter);
   const personalActive = [
     "list",
     "new-project",
@@ -541,7 +547,9 @@ function App() {
       {screen.kind === "list" ? (
         <>
           <div className="source-row">
-            <button type="button" aria-pressed="true">{copy.local} {archives.length + cloudCaches.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "all"} onClick={() => setSourceFilter("all")}>{copy.all} {archives.length + cloudCaches.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "cloud"} onClick={() => setSourceFilter("cloud")}>{copy.cloud} {cloudCaches.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "local"} onClick={() => setSourceFilter("local")}>{copy.local} {archives.length}</button>
             <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
           </div>
           <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
@@ -558,9 +566,9 @@ function App() {
             </section>
           ) : null}
 
-          {listedArchives.length ? (
+          {filteredArchives.length ? (
             <div className="project-list online-project-list">
-              {listedArchives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
+              {filteredArchives.map((archive) => (
                 <ArchiveProjectCard
                   key={archive.id}
                   project={{
@@ -577,8 +585,8 @@ function App() {
             </div>
           ) : (
             <section className="panel empty">
-              <strong>{copy.noProjects}</strong>
-              {copy.noProjectsHint}
+              <strong>{sourceFilter === "cloud" ? copy.noCachedProjects : copy.noProjects}</strong>
+              {sourceFilter === "cloud" ? copy.noCachedProjectsHint : copy.noProjectsHint}
             </section>
           )}
         </>

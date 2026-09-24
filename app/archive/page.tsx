@@ -81,7 +81,6 @@ import {
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
 import { loadRememberedLocalOwnerContext, rememberLocalOwnerContext } from "@/lib/local-owner-context";
-import { refreshCloudOfflineCaches } from "@/lib/cloud-offline-cache";
 import { uploadPendingCloudOfflineRecords } from "@/lib/local-to-cloud-sync";
 
 type LatestArchiveRecord = {
@@ -519,7 +518,6 @@ export default function ArchivePage() {
       });
 
       setArchives(enrichedArchives);
-      void refreshCloudOfflineCaches(enrichedArchives, ownerContext);
       setGroupTags((groupTagsData || []) as GroupTagItem[]);
       setSubTags((subTagsData || []) as SubTagItem[]);
       setSpeciesList(speciesRows);
