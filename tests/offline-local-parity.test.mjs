@@ -30,7 +30,9 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /<ConnectivityNotice/);
   assert.match(navbar, /<MobileBottomNavigationView/);
   assert.match(sharedNavigation, /data-mobile-bottom-nav="true"/);
-  assert.match(source, /<ArchiveSourceSwitcher/);
+  assert.match(source, /<ArchiveWorkspaceTemplate/);
+  assert.match(source, /sourceOptions=\{\[/);
+  assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.doesNotMatch(template, /本地离线模式/);
 });
