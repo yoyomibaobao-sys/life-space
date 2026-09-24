@@ -16,6 +16,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   const sharedNavigation = read("components/mobile/MobileBottomNavigationView.tsx");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
   const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
+  const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /bundledComponentCss/);
@@ -34,6 +35,8 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /<ArchiveWorkspaceTemplate/);
   assert.match(source, /sourceOptions=\{\[/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
+  assert.match(source, /<ArchiveTaxonomyPanel/);
+  assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
   assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.doesNotMatch(template, /本地离线模式/);
 });
