@@ -15,6 +15,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
   const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
   const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
@@ -38,6 +39,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /copy.camera/);
   assert.match(source, /copy.album/);
   assert.match(source, /<MobileBottomNavigationView/);
+  assert.match(source, /<MobilePageHeaderView/);
+  assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
@@ -49,7 +52,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /supabase[\s\S]*?\.from\("archives"\)/);
   assert.match(source, /\.order\("created_at", \{ ascending: false \}\)/);
   assert.doesNotMatch(source, /\.order\("updated_at", \{ ascending: false \}\)/);
-  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.doesNotMatch(source, /className="offline-header"|className="brand-mode"/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
   assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(1\)/);
   assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
