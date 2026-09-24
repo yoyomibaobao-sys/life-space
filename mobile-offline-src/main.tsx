@@ -68,6 +68,7 @@ import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSection
 import DiscoverSearchPage from "@/app/discover/search/page";
 import PlantPage from "@/app/plant/page";
 import { DiscoverProjectCard } from "@/components/discover/DiscoverProjectCard";
+import ReadonlyPublicProjectDetail from "@/components/archive-ui/ReadonlyPublicProjectDetail";
 import MobileMarketFeedCard, { mobileMarketCardStyle, mobileMarketListStyle } from "@/components/market/MobileMarketFeedCard";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
@@ -198,6 +199,7 @@ type Screen =
   | { kind: "new-project"; guide?: SystemNameCandidate }
   | { kind: "activity" }
   | { kind: "discover-search" }
+  | { kind: "public-detail" }
   | { kind: "experience" }
   | { kind: "following" }
   | { kind: "market" }
@@ -458,6 +460,8 @@ function App() {
   const [pendingSync, setPendingSync] = useState<PendingCloudSyncSummary[]>([]);
   const [syncingArchiveId, setSyncingArchiveId] = useState<string | null>(null);
   const [activityItems, setActivityItems] = useState<DiscoveryProjectFeedItem[]>([]);
+  const [publicDetailItem, setPublicDetailItem] = useState<DiscoveryProjectFeedItem | null>(null);
+  const [publicDetailBack, setPublicDetailBack] = useState<"activity" | "discover-search">("activity");
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState(false);
   const [experienceItems, setExperienceItems] = useState<ExperienceCardListItem[]>([]);
@@ -1122,6 +1126,7 @@ function App() {
         active:
           screen.kind === "activity" ||
           screen.kind === "discover-search" ||
+          screen.kind === "public-detail" ||
           screen.kind === "experience" ||
           screen.kind === "guides" ||
           screen.kind === "guide-detail",
@@ -1513,7 +1518,7 @@ function App() {
         ) : activityItems.length ? (
           <div className="android-discover-grid">
             {activityItems.map((item) => (
-              <DiscoverProjectCard key={item.archive_id} item={item} />
+              <DiscoverProjectCard key={item.archive_id} item={item} onOpen={() => { setPublicDetailItem(item); setPublicDetailBack("activity"); setScreen({ kind: "public-detail" }); }} />
             ))}
           </div>
         ) : (
@@ -1523,7 +1528,9 @@ function App() {
         )}
       </> : null}
 
-      {screen.kind === "discover-search" ? <DiscoverSearchPage onBack={() => setScreen({ kind: "activity" })} /> : null}
+      {screen.kind === "public-detail" && publicDetailItem ? <ReadonlyPublicProjectDetail item={publicDetailItem} language={language} onBack={() => setScreen({ kind: publicDetailBack })} /> : null}
+
+      {screen.kind === "discover-search" ? <DiscoverSearchPage onBack={() => setScreen({ kind: "activity" })} onOpenProject={(item) => { setPublicDetailItem(item); setPublicDetailBack("discover-search"); setScreen({ kind: "public-detail" }); }} /> : null}
 
       {screen.kind === "experience" ? <>
         <HomeSectionTabs

@@ -21,10 +21,12 @@ export function DiscoverProjectCard({
   item,
   eager = false,
   showCategoryBadge = true,
+  onOpen,
 }: {
   item: DiscoveryProjectFeedItem;
   eager?: boolean;
   showCategoryBadge?: boolean;
+  onOpen?: () => void;
 }) {
   const { language, t } = useLanguage();
   const [imageFailed, setImageFailed] = useState(false);
@@ -55,6 +57,7 @@ export function DiscoverProjectCard({
   return (
     <Link
       href={`/archive/${item.archive_id}`}
+      onClick={onOpen ? (event) => { event.preventDefault(); onOpen(); } : undefined}
       aria-label={`${t.discover.view_project_prefix}${title}`}
       className={`${styles.card} ${verticalCard.card}`}
     >

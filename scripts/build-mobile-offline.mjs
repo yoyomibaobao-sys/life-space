@@ -59,6 +59,19 @@ const buildResult = await build({
     "process.env.__NEXT_MANUAL_TRAILING_SLASH": "false",
     "process.env.__NEXT_ROUTER_BASEPATH": JSON.stringify(""),
     "process.env.__NEXT_TRAILING_SLASH": "false",
+    "process.env.__NEXT_DEV_SERVER": "false",
+    "process.env.__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS": "false",
+    "process.env.__NEXT_CACHE_COMPONENTS": "false",
+    "process.env.NEXT_DEPLOYMENT_ID": "undefined",
+    "process.env.NEXT_RUNTIME": "undefined",
+    "process.env.NEXT_SUPPORTS_IMMUTABLE_ASSETS": "false",
+    "process.env.__NEXT_IMAGE_OPTS": JSON.stringify({
+      deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+      imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+      path: "/_next/image",
+      loader: "default",
+      unoptimized: true,
+    }),
   },
   plugins: [
     {
