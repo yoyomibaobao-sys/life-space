@@ -100,6 +100,7 @@ import { fetchDiscoverExperienceCardSearchResults } from "@/lib/discover-search-
 import { emptySearchFilters } from "@/lib/discover-search-types";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
 import { fetchFollowedArchiveProjects } from "@/lib/followed-archive-projects";
+import { fetchFollowedPublicProjects } from "@/lib/followed-public-project-feed";
 import {
   fetchMarketFeed,
   type MarketArchiveBrief,
@@ -669,9 +670,18 @@ function App() {
     setFollowedLoading(true);
     setFollowedError(false);
     try {
-      const result = await fetchFollowedArchiveProjects(resolvedUserId);
-      if (result.error) throw result.error;
-      setFollowedItems(result.items);
+      const [archiveResult, usersResult] = await Promise.all([
+        fetchFollowedArchiveProjects(resolvedUserId),
+        fetchFollowedPublicProjects({ limit: 49 }),
+      ]);
+      if (archiveResult.error && usersResult.error) throw archiveResult.error;
+      if (archiveResult.error || usersResult.error) {
+        console.warn("local shell partial followed projects", archiveResult.error || usersResult.error);
+      }
+      const uniqueProjects = new Map(
+        [...archiveResult.items, ...usersResult.items].map((item) => [item.archive_id, item]),
+      );
+      setFollowedItems(Array.from(uniqueProjects.values()));
     } catch (error) {
       console.warn("local shell followed projects", error);
       setFollowedError(true);
