@@ -46,6 +46,7 @@ import ArchiveDetailHeaderView from "@/components/archive-ui/ArchiveDetailHeader
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import MobileBottomNavFrame from "@/components/mobile/MobileBottomNavFrame";
+import MobilePageHeaderFrame from "@/components/mobile/MobilePageHeaderFrame";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
@@ -522,14 +523,15 @@ function App() {
           <button className="offline-space-menu" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={21} strokeWidth={1.8} /></button>
         </section>
       ) : (
-        <header className="offline-header">
-          <span className="header-spacer" aria-hidden="true" />
-          <div className="brand-name">{headerTitle}</div>
-          <div className="header-actions">
+        <MobilePageHeaderFrame
+          className="offline-header"
+          title={headerTitle}
+          titleText={headerTitle}
+          right={<div className="header-actions">
             {!owner ? <button className="icon-button" type="button" onClick={toggleLanguage}>{language === "zh" ? "EN" : "中文"}</button> : null}
             <button className="icon-button" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={20} strokeWidth={1.8} /></button>
-          </div>
-        </header>
+          </div>}
+        />
       )}
 
       {migrationWarning ? (

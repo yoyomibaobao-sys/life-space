@@ -10,6 +10,7 @@
   --card: rgba(255, 255, 255, 0.92);
   --danger: #a0443b;
   --app-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-area-top: env(safe-area-inset-top, 0px);
 }
 
 * { box-sizing: border-box; }
@@ -34,38 +35,7 @@ button { touch-action: manipulation; }
   padding: 0 var(--shell-pad) calc(env(safe-area-inset-bottom, 0px) + 94px);
 }
 
-.offline-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  min-height: calc(50px + env(safe-area-inset-top, 0px));
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) 80px;
-  align-items: end;
-  gap: 4px;
-  margin: 0 calc(-1 * var(--shell-pad)) 14px;
-  padding: calc(5px + env(safe-area-inset-top, 0px)) 8px 5px;
-  border-bottom: 1px solid #e2e9df;
-  background: rgba(250, 252, 248, 0.97);
-  backdrop-filter: blur(10px);
-}
-
-.header-spacer { min-width: 0; min-height: 40px; }
-.brand-name {
-  min-width: 0;
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  color: #213121;
-  font-size: 17px;
-  font-weight: 820;
-  line-height: 1.2;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.offline-header { margin: 0 calc(-1 * var(--shell-pad)) 14px; }
 
 .icon-button, .secondary-button, .primary-button, .danger-button {
   min-height: 44px;

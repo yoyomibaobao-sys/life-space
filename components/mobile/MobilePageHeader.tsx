@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import UiIcon from "@/components/ui/UiIcon";
+import MobilePageHeaderFrame from "@/components/mobile/MobilePageHeaderFrame";
 import {
   getCurrentMobileRoute,
   getMobileSourceRoute,
@@ -27,7 +28,6 @@ export default function MobilePageHeader({
   ariaLabel?: string;
 }) {
   const router = useRouter();
-  const sideWidth = right ? 80 : 44;
 
   function goBack() {
     const currentRoute = getCurrentMobileRoute();
@@ -37,66 +37,20 @@ export default function MobilePageHeader({
   }
 
   return (
-    <header
-      className="mobile-app-grid-only"
-      data-mobile-page-header="true"
-      aria-label={ariaLabel}
-      style={{
-        ...headerStyle,
-        ...(compact ? { minHeight: "calc(44px + var(--app-safe-area-top))", padding: "calc(2px + var(--app-safe-area-top)) 8px 2px" } : {}),
-        gridTemplateColumns: `${sideWidth}px minmax(0, 1fr) ${sideWidth}px`,
-      }}
-    >
-      <div style={leftSlotStyle}>
-        {showBack ? (
-          <button
-            type="button"
-            onClick={goBack}
-            aria-label={ariaLabel}
-            title={ariaLabel}
-            style={backButtonStyle}
-          >
-            <UiIcon name="arrow-left" size={19} strokeWidth={1.8} />
-          </button>
-        ) : null}
-      </div>
-
-      <div title={titleText} style={titleStyle}>
-        {title}
-      </div>
-
-      <div style={rightSlotStyle}>{right}</div>
-    </header>
+    <MobilePageHeaderFrame
+      title={title}
+      titleText={titleText}
+      compact={compact}
+      ariaLabel={ariaLabel}
+      right={right}
+      left={showBack ? (
+        <button type="button" onClick={goBack} aria-label={ariaLabel} title={ariaLabel} style={backButtonStyle}>
+          <UiIcon name="arrow-left" size={19} strokeWidth={1.8} />
+        </button>
+      ) : undefined}
+    />
   );
 }
-
-const headerStyle: CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 100,
-  minHeight: "calc(50px + var(--app-safe-area-top))",
-  alignItems: "end",
-  gap: 4,
-  padding: "calc(5px + var(--app-safe-area-top)) 8px 5px",
-  borderBottom: "1px solid #e2e9df",
-  background: "rgba(250,252,248,0.97)",
-  backdropFilter: "blur(10px)",
-  boxSizing: "border-box",
-};
-
-const leftSlotStyle: CSSProperties = {
-  minWidth: 0,
-  display: "flex",
-  justifyContent: "flex-start",
-  alignItems: "center",
-};
-
-const rightSlotStyle: CSSProperties = {
-  minWidth: 0,
-  display: "flex",
-  justifyContent: "flex-end",
-  alignItems: "center",
-};
 
 const backButtonStyle: CSSProperties = {
   width: 40,
@@ -112,18 +66,3 @@ const backButtonStyle: CSSProperties = {
   touchAction: "manipulation",
 };
 
-const titleStyle: CSSProperties = {
-  minWidth: 0,
-  minHeight: 40,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  overflow: "hidden",
-  color: "#213121",
-  fontSize: 17,
-  fontWeight: 820,
-  lineHeight: 1.2,
-  textAlign: "center",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
