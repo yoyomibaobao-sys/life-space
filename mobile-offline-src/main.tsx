@@ -47,6 +47,7 @@ import type { ArchiveCategory } from "@/lib/archive-categories";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import ArchiveSourceSwitcher from "@/components/archive-ui/ArchiveSourceSwitcher";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
@@ -75,6 +76,7 @@ import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
+type ShellSourceFilter = "all" | "cloud" | "local";
 
 type CloudArchiveSummary = {
   id: string;
@@ -605,6 +607,36 @@ function App() {
     : undefined;
   const listedArchives = sourceFilter === "local" ? archives : [...cloudCaches, ...archives];
   const filteredArchives = listedArchives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter);
+  const cloudSourceCount = online && cloudUserId ? cloudArchives.length : cloudCaches.length;
+
+  function renderSourceSwitcher(activeSource: ShellSourceFilter) {
+    return (
+      <ArchiveSourceSwitcher<ShellSourceFilter>
+        options={[
+          { value: "all", label: copy.all, count: archives.length + cloudSourceCount },
+          { value: "cloud", label: copy.cloud, count: cloudSourceCount },
+          { value: "local", label: copy.local, count: archives.length },
+        ]}
+        activeValue={activeSource}
+        onSelect={(source) => {
+          if (source === "cloud") {
+            setScreen({ kind: "cloud" });
+            return;
+          }
+          setSourceFilter(source);
+          setScreen({ kind: "list" });
+        }}
+        trailingSlot={(
+          <button
+            type="button"
+            onClick={() => setScreen({ kind: "new-project" })}
+          >
+            +{copy.project}
+          </button>
+        )}
+      />
+    );
+  }
   const bottomNavigationItems: [
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
@@ -700,12 +732,7 @@ function App() {
 
       {screen.kind === "list" ? (
         <>
-          <div className="source-row">
-            <button type="button" aria-pressed={sourceFilter === "all"} onClick={() => setSourceFilter("all")}>{copy.all} {archives.length + cloudCaches.length}</button>
-            <button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.cloud} {cloudCaches.length}</button>
-            <button type="button" aria-pressed={sourceFilter === "local"} onClick={() => setSourceFilter("local")}>{copy.local} {archives.length}</button>
-            <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
-          </div>
+          {renderSourceSwitcher(sourceFilter)}
           <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
 
           {ownerContext && unownedCount > 0 ? (
@@ -853,7 +880,9 @@ function App() {
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? (
-        !online ? (
+        <>
+          {renderSourceSwitcher("cloud")}
+          {!online ? (
           <>
             <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
             {cloudCaches.length ? <div className="project-list">{cloudCaches.map((archive) => (
@@ -916,7 +945,8 @@ function App() {
               })}
             </div>
           </>
-        )
+        )}
+        </>
       ) : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
