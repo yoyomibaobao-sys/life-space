@@ -86,6 +86,9 @@ import {
   fetchDiverseDiscoveryProjectBatch,
 } from "@/lib/discover-diverse-project-feed";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
+import { fetchDiscoverExperienceCardSearchResults } from "@/lib/discover-search-data";
+import { emptySearchFilters } from "@/lib/discover-search-types";
+import type { ExperienceCardListItem } from "@/lib/experience-card-types";
 import { fetchFollowedArchiveProjects } from "@/lib/followed-archive-projects";
 import {
   fetchMarketFeed,
@@ -123,6 +126,7 @@ type Screen =
   | { kind: "list" }
   | { kind: "new-project"; guide?: SystemNameCandidate }
   | { kind: "activity" }
+  | { kind: "experience" }
   | { kind: "following" }
   | { kind: "market" }
   | { kind: "guides" }
@@ -375,6 +379,9 @@ function App() {
   const [activityItems, setActivityItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState(false);
+  const [experienceItems, setExperienceItems] = useState<ExperienceCardListItem[]>([]);
+  const [experienceLoading, setExperienceLoading] = useState(false);
+  const [experienceError, setExperienceError] = useState(false);
   const [followedItems, setFollowedItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [followedLoading, setFollowedLoading] = useState(false);
   const [followedError, setFollowedError] = useState(false);
@@ -475,6 +482,27 @@ function App() {
       setActivityError(true);
     } finally {
       setActivityLoading(false);
+    }
+  }, []);
+
+  const loadExperience = useCallback(async () => {
+    if (!navigator.onLine) {
+      setExperienceItems([]);
+      setExperienceError(false);
+      return;
+    }
+    setExperienceLoading(true);
+    setExperienceError(false);
+    try {
+      const items = await fetchDiscoverExperienceCardSearchResults(
+        emptySearchFilters,
+      );
+      setExperienceItems(items);
+    } catch (error) {
+      console.warn("local shell experience feed", error);
+      setExperienceError(true);
+    } finally {
+      setExperienceLoading(false);
     }
   }, []);
 
@@ -594,6 +622,11 @@ function App() {
     if (screen.kind !== "activity" || !online) return;
     void loadActivity();
   }, [screen.kind, online, loadActivity]);
+
+  useEffect(() => {
+    if (screen.kind !== "experience" || !online) return;
+    void loadExperience();
+  }, [screen.kind, online, loadExperience]);
 
   useEffect(() => {
     if (screen.kind !== "following" || !online || !cloudUserId) return;
@@ -895,6 +928,7 @@ function App() {
         ...item,
         active:
           screen.kind === "activity" ||
+          screen.kind === "experience" ||
           screen.kind === "guides" ||
           screen.kind === "guide-detail",
         onSelect: () => setScreen({ kind: "activity" }),
@@ -916,7 +950,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "following", "market", "guides", "guide-detail", "cloud"].includes(screen.kind),
+      active: !["activity", "experience", "following", "market", "guides", "guide-detail", "cloud"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1231,7 +1265,7 @@ function App() {
               setScreen({ kind: "guides" });
               return;
             }
-            setScreen({ kind: "cloud" });
+            setScreen({ kind: "experience" });
           }}
         />
         {!online ? (
@@ -1263,6 +1297,64 @@ function App() {
         ) : (
           <section className="panel empty">
             {language === "zh" ? "暂时没有公开记录。" : "No public activity yet."}
+          </section>
+        )}
+      </> : null}
+
+      {screen.kind === "experience" ? <>
+        <HomeSectionTabs
+          active="experience"
+          showGuestLanguageSwitcher={false}
+          onSearch={() => undefined}
+          onSelect={(section: HomeSection) => {
+            if (section === "experience") return;
+            if (section === "guide") {
+              setScreen({ kind: "guides" });
+              return;
+            }
+            setScreen({ kind: "activity" });
+          }}
+        />
+        {!online ? (
+          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+        ) : experienceLoading ? (
+          <section className="panel empty">
+            {language === "zh" ? "正在读取经验…" : "Loading experience…"}
+          </section>
+        ) : experienceError ? (
+          <section className="notice warning">
+            <p>{language === "zh" ? "经验读取失败，请稍后重试。" : "Could not load experience."}</p>
+            <div className="action-row">
+              <button type="button" className="secondary-button" onClick={() => void loadExperience()}>
+                {language === "zh" ? "重新加载" : "Retry"}
+              </button>
+            </div>
+          </section>
+        ) : experienceItems.length ? (
+          <div className="experience-shell-list">
+            {experienceItems.map((item) => (
+              <article className="experience-shell-card" key={item.id}>
+                {item.coverUrl ? (
+                  <img className="experience-shell-cover" src={item.coverUrl} alt="" loading="lazy" />
+                ) : (
+                  <div className="experience-shell-cover experience-shell-placeholder">
+                    <UiIcon name="sprout" size={24} />
+                  </div>
+                )}
+                <div className="experience-shell-body">
+                  <strong>{item.title}</strong>
+                  <span>{item.authorName}{item.systemName ? ` · ${item.systemName}` : ""}</span>
+                  <small>
+                    {item.archiveTitle}
+                    {item.source_record_count ? ` · ${item.source_record_count} ${copy.records}` : ""}
+                  </small>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <section className="panel empty">
+            {language === "zh" ? "暂时没有公开经验。" : "No public experience yet."}
           </section>
         )}
       </> : null}
@@ -1387,7 +1479,7 @@ function App() {
               setScreen({ kind: "activity" });
               return;
             }
-            setScreen({ kind: "cloud" });
+            setScreen({ kind: "experience" });
           }}
         />
         <div className="field"><input type="search" value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder={copy.guideSearch} aria-label={copy.guideSearch} /></div>
