@@ -60,7 +60,17 @@ function isNativeAndroid() {
 
 function cacheRevision(archive: CloudOfflineCacheArchiveSource) {
   return [
-    archive.updated_at || "",
+    archive.created_at || "",
+    archive.title || "",
+    archive.category || "",
+    archive.system_name || "",
+    archive.species_name_snapshot || "",
+    archive.source || "",
+    archive.archive_summary || "",
+    JSON.stringify(archive.planting_region || null),
+    archive.cycle_enabled ? "1" : "0",
+    archive.next_cycle_name || "",
+    archive.is_public ? "1" : "0",
     archive.record_count || 0,
     archive.last_record_time || "",
     archive.status || "active",
@@ -148,7 +158,7 @@ async function refreshOneCloudOfflineCache(
     await pruneCloudOfflineCacheForEndedSource(
       archive.id,
       ownerContext,
-      archive.updated_at || null
+      archive.last_record_time || archive.created_at || null
     );
     return;
   }
@@ -222,7 +232,7 @@ async function refreshOneCloudOfflineCache(
     cycle_enabled: Boolean(archive.cycle_enabled),
     next_cycle_name: archive.next_cycle_name || null,
     created_at: archive.created_at || null,
-    updated_at: archive.updated_at || null,
+    updated_at: archive.last_record_time || archive.created_at || null,
     is_public: Boolean(archive.is_public),
     cache_revision: revision,
     cycles: ((cycleRows || []) as CloudOfflineCacheCycleInput[]),
