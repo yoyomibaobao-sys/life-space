@@ -34,6 +34,9 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(sharedPrimaryNav, /"home"[\s\S]*"following"[\s\S]*"market"[\s\S]*"me"/);
   assert.match(source, /<MobilePageHeaderView/);
   assert.match(source, /<HomeSectionTabs/);
+  assert.match(source, /fetchDiverseDiscoveryProjectBatch/);
+  assert.match(source, /kind: "activity"/);
+  assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "activity" \}\)/);
   assert.match(sharedHomeTabs, /onSelect\?: \(section: HomeSection\) => void/);
   assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);
