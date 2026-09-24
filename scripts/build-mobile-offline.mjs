@@ -21,6 +21,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 const supabasePublishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+const turnstileSiteKey =
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "";
 
 if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Android local shell requires public Supabase configuration.");
@@ -44,6 +46,8 @@ const buildResult = await build({
     "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY":
       JSON.stringify(supabasePublishableKey),
     "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": "undefined",
+    "process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY":
+      JSON.stringify(turnstileSiteKey),
     // A few shared UI components pull in Next client helpers. In the normal
     // Next build these flags are replaced by the compiler. The standalone
     // Android shell is bundled by esbuild, so leaving them behind causes
