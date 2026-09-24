@@ -60,6 +60,7 @@ import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCar
 import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
+import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
 import RecordLocationField from "@/components/record/RecordLocationField";
@@ -726,38 +727,47 @@ function App() {
       />
     );
   }
+  const baseNavigationItems = getMobilePrimaryNavigationDescriptors({
+    home: copy.home,
+    following: copy.follow,
+    market: copy.market,
+    me: copy.me,
+  });
   const bottomNavigationItems: [
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
-  ] = [
-    {
-      id: "home",
-      label: copy.home,
-      icon: "home",
-      active: screen.kind === "guides" || screen.kind === "guide-detail",
-      onSelect: () => setScreen({ kind: "guides" }),
-    },
-    {
-      id: "following",
-      label: copy.follow,
-      icon: "follow",
-      onSelect: () => setScreen({ kind: "cloud" }),
-    },
-    {
-      id: "market",
-      label: copy.market,
-      icon: "store",
-      onSelect: () => setScreen({ kind: "cloud" }),
-    },
-    {
-      id: "me",
-      label: copy.me,
-      icon: "user",
+  ] = baseNavigationItems.map((item) => {
+    if (item.id === "home") {
+      return {
+        ...item,
+        active: screen.kind === "guides" || screen.kind === "guide-detail",
+        onSelect: () => setScreen({ kind: "guides" }),
+      };
+    }
+    if (item.id === "following") {
+      return {
+        ...item,
+        onSelect: () => setScreen({ kind: "cloud" }),
+      };
+    }
+    if (item.id === "market") {
+      return {
+        ...item,
+        onSelect: () => setScreen({ kind: "cloud" }),
+      };
+    }
+    return {
+      ...item,
       active: !["guides", "guide-detail", "cloud"].includes(screen.kind),
       onSelect: goList,
-    },
+    };
+  }) as [
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
   ];
 
   if (loading) {
