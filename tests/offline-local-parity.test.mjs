@@ -15,18 +15,21 @@ test("cold-start Android offline shell presents the local workspace rather than 
   const navbar = read("components/navbar.tsx");
   const sharedNavigation = read("components/mobile/MobileBottomNavigationView.tsx");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
   const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
   const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /bundledComponentCss/);
   assert.match(buildScript, /`\$\{css\}\\n\$\{localParityCss\}\\n\$\{bundledComponentCss\}`/);
-  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.doesNotMatch(source, /className="offline-header"|className="brand-mode"/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
   assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(1\)/);
   assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
   assert.doesNotMatch(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(source, /<MobileBottomNavigationView/);
+  assert.match(source, /<MobilePageHeaderView/);
+  assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
