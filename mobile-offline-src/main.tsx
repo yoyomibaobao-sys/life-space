@@ -946,13 +946,6 @@ function App() {
     (archive) => categoryFilter === "all" || archive.category === categoryFilter,
   );
   const cloudSourceCount = online && cloudUserId ? cloudArchives.length : cloudCaches.length;
-  const sourceVisibleCount =
-    sourceFilter === "local"
-      ? archives.length
-      : sourceFilter === "cloud"
-        ? cloudSourceCount
-        : archives.length + cloudSourceCount;
-
   function cloudProjectView(archive: CloudArchiveSummary) {
     const ended = archive.status === "ended";
     return {
@@ -1260,17 +1253,6 @@ function App() {
             </section>
           ) : null}
         >
-          <div className="section-title">
-            <h1>{
-              sourceFilter === "cloud"
-                ? copy.cloudProjects
-                : sourceFilter === "local"
-                  ? copy.localProjects
-                  : copy.mySpace
-            }</h1>
-            <span className="count">{sourceVisibleCount}</span>
-          </div>
-
           {sourceFilter !== "local" ? (
             online && cloudUserId ? (
               <>
