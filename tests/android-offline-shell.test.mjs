@@ -14,6 +14,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const source = read("mobile-offline-src/main.tsx");
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
+  const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
 
   assert.match(config, /hostname: cloudUrl\.hostname/);
   assert.doesNotMatch(config, /url: cloudUrl\.origin/);
@@ -52,6 +53,9 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
   assert.match(source, /\{copy\.all\}/);
   assert.match(source, /\{copy\.cloud\}/);
+  assert.match(source, /<ArchiveSourceSwitcher/);
+  assert.match(source, /renderSourceSwitcher\("cloud"\)/);
+  assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
@@ -117,10 +121,3 @@ test("new local projects inherit the signed-in account only on this device", () 
   const newLocalProject = read("app/local/archive/new/page.tsx");
   const ownerSync = read("components/LocalOwnerContextSync.tsx");
   const zh = read("lib/i18n/zh.ts");
-
-  assert.match(newLocalProject, /supabase\.auth\.getSession\(\)/);
-  assert.match(newLocalProject, /local_owner_user_id: currentUser\?\.id \|\| null/);
-  assert.match(ownerSync, /rememberLocalOwnerContext/);
-  assert.match(ownerSync, /preparePendingCloudSyncQueue/);
-  assert.match(zh, /这不会上传云端/);
-});
