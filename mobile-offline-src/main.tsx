@@ -52,6 +52,7 @@ import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
+import ArchiveTaxonomyPanel from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import MobileBottomNavigationView, {
@@ -796,18 +797,22 @@ function App() {
             </button>
           )}
           filtersSlot={(
-            <div className="category-row">
-              {(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => (
-                <button
-                  type="button"
-                  key={category}
-                  aria-pressed={categoryFilter === category}
-                  onClick={() => setCategoryFilter(category)}
-                >
-                  {copy[category]}
-                </button>
-              ))}
-            </div>
+            <ArchiveTaxonomyPanel
+              activeCategory={categoryFilter === "all" ? null : categoryFilter}
+              activeSubcategoryId={null}
+              activeGroupId={null}
+              subcategories={[]}
+              groups={[]}
+              mobileMode
+              showSubcategoryRow={false}
+              showGroupRow={false}
+              onReset={() => setCategoryFilter("all")}
+              onSelectCategory={(category) => setCategoryFilter(category)}
+              onResetSubcategory={() => undefined}
+              onSelectSubcategory={() => undefined}
+              onResetGroup={() => undefined}
+              onSelectGroup={() => undefined}
+            />
           )}
           noticeSlot={ownerContext && unownedCount > 0 ? (
             <section className="notice warning">
