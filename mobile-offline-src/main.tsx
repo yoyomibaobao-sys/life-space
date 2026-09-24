@@ -61,6 +61,7 @@ import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
+import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -1055,7 +1056,15 @@ function App() {
       ) : null}
 
       {screen.kind === "guides" ? <>
-        <div className="top-tabs"><button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.discover}</button><button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.experience}</button><button type="button" aria-pressed="true">{copy.guides}</button></div>
+        <HomeSectionTabs
+          active="guide"
+          showGuestLanguageSwitcher={false}
+          onSearch={() => undefined}
+          onSelect={(section: HomeSection) => {
+            if (section === "guide") return;
+            setScreen({ kind: "cloud" });
+          }}
+        />
         <div className="field"><input type="search" value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder={copy.guideSearch} aria-label={copy.guideSearch} /></div>
         <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
         <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
