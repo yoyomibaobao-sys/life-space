@@ -81,6 +81,7 @@ button:disabled { opacity: 0.55; }
 .count { color: var(--muted); font-size: 14px; }
 
 .project-list { display: grid; gap: 12px; }
+.android-discover-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
 .record-list { display: grid; }
 .panel {
   border: 1px solid var(--line);

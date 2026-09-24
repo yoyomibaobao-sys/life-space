@@ -65,6 +65,9 @@ import MobileBottomNavigationView, {
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
+import DiscoverSearchPage from "@/app/discover/search/page";
+import PlantPage from "@/app/plant/page";
+import { DiscoverProjectCard } from "@/components/discover/DiscoverProjectCard";
 import MobileMarketFeedCard, { mobileMarketCardStyle, mobileMarketListStyle } from "@/components/market/MobileMarketFeedCard";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
@@ -194,6 +197,7 @@ type Screen =
   | { kind: "list" }
   | { kind: "new-project"; guide?: SystemNameCandidate }
   | { kind: "activity" }
+  | { kind: "discover-search" }
   | { kind: "experience" }
   | { kind: "following" }
   | { kind: "market" }
@@ -1117,6 +1121,7 @@ function App() {
         ...item,
         active:
           screen.kind === "activity" ||
+          screen.kind === "discover-search" ||
           screen.kind === "experience" ||
           screen.kind === "guides" ||
           screen.kind === "guide-detail",
@@ -1149,7 +1154,7 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "experience", "guides"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
     0,
@@ -1480,6 +1485,7 @@ function App() {
         <HomeSectionTabs
           active="activity"
           showGuestLanguageSwitcher={false}
+          onSearch={() => setScreen({ kind: "discover-search" })}
           onSelect={(section: HomeSection) => {
             if (section === "activity") return;
             if (section === "guide") {
@@ -1505,14 +1511,9 @@ function App() {
             </div>
           </section>
         ) : activityItems.length ? (
-          <div className="project-list">
+          <div className="android-discover-grid">
             {activityItems.map((item) => (
-              <ArchiveProjectCard
-                key={item.archive_id}
-                project={activityProjectView(item)}
-                mobileMode
-                mobileShowCategoryBadge
-              />
+              <DiscoverProjectCard key={item.archive_id} item={item} />
             ))}
           </div>
         ) : (
@@ -1521,6 +1522,8 @@ function App() {
           </section>
         )}
       </> : null}
+
+      {screen.kind === "discover-search" ? <DiscoverSearchPage onBack={() => setScreen({ kind: "activity" })} /> : null}
 
       {screen.kind === "experience" ? <>
         <HomeSectionTabs
@@ -1679,7 +1682,7 @@ function App() {
         )
       ) : null}
 
-      {screen.kind === "guides" ? <>
+      {screen.kind === "guides" ? (online ? <PlantPage /> : <>
         <HomeSectionTabs
           active="guide"
           showGuestLanguageSwitcher={false}
@@ -1696,7 +1699,7 @@ function App() {
         <div className="field"><input type="search" value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder={copy.guideSearch} aria-label={copy.guideSearch} /></div>
         <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
         <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
-      </> : null}
+      </>) : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => void supabase.auth.signOut({ scope: "local" })}>{copy.logout}</button> : null}</div></section> : null}
