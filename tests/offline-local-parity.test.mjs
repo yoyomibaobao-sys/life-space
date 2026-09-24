@@ -42,6 +42,8 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /kind: "market"/);
   assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "market" \}\)/);
   assert.match(source, /kind: "following"/);
+  assert.doesNotMatch(source, /screen\.kind === "cloud"/);
+  assert.match(source, /function reconnect\(\)/);
   assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "following" \}\)/);
   assert.match(source, /kind: "activity"/);
   assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "activity" \}\)/);
