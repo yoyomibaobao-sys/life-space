@@ -83,6 +83,7 @@ type CloudArchiveSummary = {
   system_name?: string | null;
   species_name_snapshot?: string | null;
   status?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
   is_public?: boolean | null;
 };
@@ -360,7 +361,7 @@ function App() {
         .select("*")
         .eq("user_id", resolvedUserId)
         .is("trashed_at", null)
-        .order("updated_at", { ascending: false });
+        .order("created_at", { ascending: false });
       if (error) throw error;
       setCloudArchives((data || []) as CloudArchiveSummary[]);
       setCloudError("");
@@ -889,7 +890,7 @@ function App() {
                     <h2>{archive.title || copy.project}</h2>
                     <p className="project-meta">
                       {archive.species_name_snapshot || archive.system_name || archive.category || ""}
-                      {archive.updated_at ? ` · ${formatDate(archive.updated_at, language)}` : ""}
+                      {(archive.updated_at || archive.created_at) ? ` · ${formatDate(archive.updated_at || archive.created_at, language)}` : ""}
                     </p>
                     <div className="action-row">
                       {localCopy ? (
