@@ -18,6 +18,8 @@ test("cold-start Android offline shell presents the local workspace rather than 
   const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
   const sharedHomeTabs = read("components/home/HomeSectionTabs.tsx");
   const sharedPrimaryNav = read("components/mobile/mobilePrimaryNavigation.ts");
+  const sharedIdentity = read("components/archive-ui/PersonalSpaceMobileIdentity.tsx");
+  const archivePage = read("app/archive/page.tsx");
   const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
   const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
@@ -34,6 +36,12 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(sharedPrimaryNav, /"home"[\s\S]*"following"[\s\S]*"market"[\s\S]*"me"/);
   assert.match(source, /<MobilePageHeaderView/);
   assert.match(source, /homeSectionOwnsTopNav/);
+  assert.match(source, /<PersonalSpaceMobileIdentity/);
+  assert.match(source, /SHELL_IDENTITY_CACHE_PREFIX/);
+  assert.match(source, /clearShellIdentityCache/);
+  assert.match(source, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
+  assert.match(archivePage, /<PersonalSpaceMobileIdentity/);
+  assert.match(sharedIdentity, /storageUsagePercent/);
   assert.match(source, /<HomeSectionTabs/);
   assert.match(source, /fetchDiverseDiscoveryProjectBatch/);
   assert.match(source, /fetchDiscoverExperienceCardSearchResults/);
