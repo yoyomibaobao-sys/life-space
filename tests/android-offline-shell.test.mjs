@@ -75,8 +75,17 @@ test("offline shell safely recovers one local owner when browser session state i
 
   assert.match(db, /export async function inferSingleLocalArchiveOwnerContext/);
   assert.match(db, /if \(owners\.size > 1\) return null/);
-  assert.match(source, /if \(!nextOwner\)[\s\S]*inferSingleLocalArchiveOwnerContext/);
+  assert.match(source, /if \(!nextOwner && !wasLocalOwnerExplicitlySignedOut\(\)\)[\s\S]*inferSingleLocalArchiveOwnerContext/);
   assert.match(source, /rememberLocalOwnerContext/);
+});
+
+test("explicit sign-out cannot restore another account from local projects", () => {
+  const owner = read("lib/local-owner-context.ts");
+  const source = read("mobile-offline-src/main.tsx");
+  assert.match(owner, /EXPLICIT_LOCAL_SIGN_OUT_KEY/);
+  assert.match(owner, /window\.localStorage\.setItem\(EXPLICIT_LOCAL_SIGN_OUT_KEY, "1"\)/);
+  assert.match(owner, /window\.localStorage\.removeItem\(EXPLICIT_LOCAL_SIGN_OUT_KEY\)/);
+  assert.match(source, /wasLocalOwnerExplicitlySignedOut\(\)/);
 });
 
 test("offline guides expose only the registered-user overview boundary", () => {

@@ -38,6 +38,7 @@ import {
 } from "@/lib/local-offline-db";
 import {
   clearRememberedLocalOwnerContext,
+  wasLocalOwnerExplicitlySignedOut,
   loadRememberedLocalOwnerContext,
   rememberLocalOwnerContext,
   type StoredLocalOwnerContext,
@@ -768,7 +769,7 @@ function App() {
         const migration = await migrateLegacyLocalOrigin();
         if (cancelled) return;
         let nextOwner = loadRememberedLocalOwnerContext();
-        if (!nextOwner) {
+        if (!nextOwner && !wasLocalOwnerExplicitlySignedOut()) {
           const inferredOwner = await inferSingleLocalArchiveOwnerContext();
           if (inferredOwner?.userId) {
             nextOwner = { userId: inferredOwner.userId, email: inferredOwner.email };

@@ -6,6 +6,13 @@ export type StoredLocalOwnerContext = {
 export const LOCAL_OWNER_CONTEXT_STORAGE_KEY =
   "lifespace:last-local-owner-context:v1";
 
+const EXPLICIT_LOCAL_SIGN_OUT_KEY = "lifespace:local-owner-signed-out:v1";
+
+export function wasLocalOwnerExplicitlySignedOut() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(EXPLICIT_LOCAL_SIGN_OUT_KEY) === "1";
+}
+
 function normalizeOwnerContext(
   value?: Partial<StoredLocalOwnerContext> | null,
 ): StoredLocalOwnerContext | null {
@@ -30,6 +37,7 @@ export function rememberLocalOwnerContext(
     LOCAL_OWNER_CONTEXT_STORAGE_KEY,
     JSON.stringify(normalized),
   );
+  window.localStorage.removeItem(EXPLICIT_LOCAL_SIGN_OUT_KEY);
 }
 
 export function loadRememberedLocalOwnerContext(): StoredLocalOwnerContext | null {
@@ -48,4 +56,5 @@ export function loadRememberedLocalOwnerContext(): StoredLocalOwnerContext | nul
 export function clearRememberedLocalOwnerContext() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(LOCAL_OWNER_CONTEXT_STORAGE_KEY);
+  window.localStorage.setItem(EXPLICIT_LOCAL_SIGN_OUT_KEY, "1");
 }
