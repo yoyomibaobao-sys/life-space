@@ -156,6 +156,15 @@ test("explicit Android sign-out hides account-bound offline cache state", () => 
   assert.match(source, /setCloudCaches\(cachedCloud\)/);
 });
 
+test("Android cloud project covers resolve through the shared signed media layer", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const web = read("app/archive/page.tsx");
+  assert.match(source, /resolveMediaDisplayPairs\(supabase/);
+  assert.match(source, /thumb_path: archive\.cover_thumb_path/);
+  assert.match(source, /archive\.display_cover_thumb_url \|\| archive\.display_cover_image_url/);
+  assert.match(web, /resolveMediaDisplayPairs\(supabase/);
+});
+
 test("Android cloud login uses the shared Turnstile challenge", () => {
   const source = read("mobile-offline-src/main.tsx");
   const buildScript = read("scripts/build-mobile-offline.mjs");

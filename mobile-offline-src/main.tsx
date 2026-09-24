@@ -80,6 +80,7 @@ import type { SystemNameCandidate } from "@/lib/system-name-candidates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 import { supabase } from "@/lib/supabase";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
@@ -178,6 +179,10 @@ type CloudArchiveSummary = {
   record_count?: number | null;
   view_count?: number | null;
   cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_path?: string | null;
+  display_cover_image_url?: string | null;
+  display_cover_thumb_url?: string | null;
   is_public?: boolean | null;
 };
 
@@ -548,7 +553,23 @@ function App() {
         .is("trashed_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setCloudArchives((data || []) as CloudArchiveSummary[]);
+      const cloudRows = (data || []) as CloudArchiveSummary[];
+      let displayRows = cloudRows;
+      try {
+        const covers = await resolveMediaDisplayPairs(supabase, cloudRows.map((archive) => ({
+          url: archive.cover_image_url,
+          path: archive.cover_image_path,
+          thumb_path: archive.cover_thumb_path,
+        })));
+        displayRows = cloudRows.map((archive, index) => ({
+          ...archive,
+          display_cover_image_url: covers[index]?.display_url || null,
+          display_cover_thumb_url: covers[index]?.display_thumb_url || null,
+        }));
+      } catch (mediaError) {
+        console.warn("cloud cover resolution", mediaError);
+      }
+      setCloudArchives(displayRows);
       setCloudError("");
       void refreshCloudOfflineCaches(
         (data || []) as CloudOfflineCacheArchiveSource[],
@@ -960,10 +981,10 @@ function App() {
         archive.category === "plant"
           ? archive.species_name_snapshot || ""
           : archive.system_name || "",
-      cover: archive.cover_image_url
+      cover: archive.display_cover_thumb_url || archive.display_cover_image_url || archive.cover_image_url
         ? {
             kind: "url" as const,
-            url: archive.cover_image_url,
+            url: archive.display_cover_thumb_url || archive.display_cover_image_url || archive.cover_image_url || "",
             alt: archive.title || copy.project,
           }
         : null,
