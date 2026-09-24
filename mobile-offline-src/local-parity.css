@@ -9,15 +9,6 @@
   display: none;
 }
 
-/*
- * Keep the same All / Cloud / Local source controls online and offline.
- * When offline, the Cloud screen itself decides what is available and shows
- * cached cloud copies read-only instead of hiding the source switch.
- */
-.source-row .add-project {
-  margin-left: 8px;
-}
-
 /* Online-only destinations remain in the normal navigation, but their fallback
  * screen should be visually quiet rather than styled as a special offline mode. */
 .panel.empty {
