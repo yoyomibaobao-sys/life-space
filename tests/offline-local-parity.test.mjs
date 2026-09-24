@@ -35,6 +35,8 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /<MobilePageHeaderView/);
   assert.match(source, /<HomeSectionTabs/);
   assert.match(source, /fetchDiverseDiscoveryProjectBatch/);
+  assert.match(source, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(source, /kind: "experience"/);
   assert.match(source, /fetchFollowedArchiveProjects/);
   assert.match(source, /fetchMarketFeed/);
   assert.match(source, /kind: "market"/);
