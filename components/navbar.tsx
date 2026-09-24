@@ -648,6 +648,7 @@ function hasPageManagedMobileTopNav(pathname: string) {
     pathname.startsWith("/user/") ||
     pathname.startsWith("/legal") ||
     pathname.startsWith("/plant/") ||
+    pathname.startsWith("/local/archive/") ||
     Boolean(getArchiveDetailPath(pathname)) ||
     pathname === "/archive/interests" ||
     /^\/experience-cards\/[^/]+$/.test(pathname)

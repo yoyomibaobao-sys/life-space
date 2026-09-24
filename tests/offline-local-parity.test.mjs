@@ -104,6 +104,42 @@ test("network-only sections use one quiet offline state", () => {
   assert.match(followLayout, /<NetworkRequiredBoundary>/);
 });
 
+test("local projects reuse the cloud archive card and detail header with device-only status", () => {
+  const archivePage = read("app/archive/page.tsx");
+  const localDetail = read("app/local/archive/[id]/page.tsx");
+  const localView = read("components/archive-ui/localArchiveProjectView.ts");
+  const projectCard = read("components/archive-ui/ArchiveProjectCard.tsx");
+  const cloudCard = read("components/archive/ArchiveCard.tsx");
+  const summaryCard = read("components/project/ProjectSummaryCard.tsx");
+  const zh = read("lib/i18n/zh.ts");
+  const en = read("lib/i18n/en.ts");
+
+  assert.match(cloudCard, /<ArchiveProjectCard/);
+  assert.match(archivePage, /localArchiveToArchiveItem/);
+  assert.match(archivePage, /<ArchiveCard/);
+  assert.match(archivePage, /hidePublicToggle/);
+  assert.match(localView, /archiveCopy\.local_project/);
+  assert.match(localView, /archiveCopy\.saved_on_this_device/);
+  assert.match(localView, /export function localArchiveToArchiveItem/);
+  assert.match(projectCard, /project\.storageLabel/);
+  assert.match(summaryCard, /props\.storageLabel/);
+  assert.match(cloudCard, /storageLabel/);
+  assert.match(archivePage, /t\.archive\.transfer_to_cloud/);
+  assert.match(localDetail, /<ArchiveDetailHeaderView/);
+  assert.match(localDetail, /eyebrow=\{archiveCopy\.project_archive\}/);
+  assert.match(localDetail, /archiveCopy\.local_project/);
+  assert.match(localDetail, /archiveCopy\.saved_on_this_device/);
+  assert.match(localDetail, /archiveCopy\.transfer_to_cloud/);
+  assert.match(localDetail, /profileAlwaysOpen/);
+  assert.match(localDetail, /<MobilePageHeader/);
+  assert.match(localDetail, /archiveCopy\.details/);
+  assert.match(localDetail, /archiveCopy\.dossier/);
+  assert.match(localDetail, /archiveCopy\.experience_cards/);
+  assert.match(localDetail, /showPageChrome=\{false\}/);
+  assert.match(zh, /saved_on_this_device: "仅保存于此设备"/);
+  assert.match(en, /saved_on_this_device: "Saved only on this device"/);
+});
+
 test("temporary single-character startup placeholder is replaced by the product brand", () => {
   const startup = read("mobile-shell/index.html");
 

@@ -23,6 +23,7 @@ import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchiveDetailHeaderView, {
   type ArchiveProfileFieldSave,
 } from "@/components/archive-ui/ArchiveDetailHeaderView";
+import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import { supabase } from "@/lib/supabase";
 import {
@@ -57,6 +58,7 @@ import {
   endLocalArchiveCycle,
   getLocalArchiveDetail,
   listPendingCloudSyncSummaries,
+  listVisibleLocalTaxonomyItems,
   markLocalArchiveForOwner,
   preparePendingCloudSyncQueue,
   restoreLocalArchiveCycle,
@@ -67,6 +69,7 @@ import {
   type LocalArchiveOwnerContext,
   type LocalArchiveDetail,
   type LocalRecordWithImages,
+  type LocalTaxonomyItem,
   type PendingCloudSyncSummary,
 } from "@/lib/local-offline-db";
 import {
@@ -98,6 +101,8 @@ import {
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
+import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 
 function formatDate(value?: string | null) {
   return formatPreciseDateTime(value);
@@ -185,12 +190,17 @@ export default function LocalArchiveDetailPage() {
     useState<PendingCloudSyncProgress | null>(null);
   const [pendingSyncError, setPendingSyncError] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<"records" | "profile" | "experience">(
+    "records",
+  );
   const [ownerContext, setOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [systemNameCandidates, setSystemNameCandidates] = useState<SystemNameCandidate[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(true);
   const [categoryDepths, setCategoryDepths] = useState<ArchiveCategoryDepths>({
     ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   });
+  const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
+  const [ownerSettingsBusy, setOwnerSettingsBusy] = useState(false);
   const localRecordObjectUrlsRef = useRef<string[]>([]);
   const loadedQuickCaptureIdRef = useRef("");
   const cycleTerminology = getArchiveCycleTerminology(detail?.archive.category, language);
@@ -213,11 +223,13 @@ export default function LocalArchiveDetailPage() {
       setOwnerContext(ownerContext);
       setCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId));
       await preparePendingCloudSyncQueue(ownerContext);
-      const [nextDetail, pendingSummaries] = await Promise.all([
+      const [nextDetail, pendingSummaries, taxonomyItems] = await Promise.all([
         getLocalArchiveDetail(archiveId, ownerContext),
         listPendingCloudSyncSummaries(ownerContext),
+        listVisibleLocalTaxonomyItems(ownerContext),
       ]);
       setDetail(nextDetail);
+      setLocalTaxonomyItems(taxonomyItems);
       setPendingSyncSummary(
         pendingSummaries.find((item) => item.local_archive_id === archiveId) ||
           null
@@ -880,6 +892,22 @@ export default function LocalArchiveDetailPage() {
     }
   }
 
+  async function saveLocalOwnerFields(
+    updates: Parameters<typeof updateLocalArchiveFields>[1],
+  ) {
+    if (!archiveId || ownerSettingsBusy) return;
+    setOwnerSettingsBusy(true);
+    try {
+      const nextArchive = await updateLocalArchiveFields(archiveId, updates, ownerContext);
+      setDetail((current) => current ? { ...current, archive: nextArchive } : current);
+      showToast(archiveCopy.saved);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : archiveCopy.local_update_failed);
+    } finally {
+      setOwnerSettingsBusy(false);
+    }
+  }
+
   async function saveLocalArchiveProfileField(change: ArchiveProfileFieldSave) {
     if (!detail) return;
 
@@ -1035,10 +1063,14 @@ export default function LocalArchiveDetailPage() {
     systemName: archive.system_name || archive.species_name || archiveCopy.not_filled,
     subcategoryLabel: categoryDepth >= 2 ? archive.subcategory : null,
     groupLabel: categoryDepth >= 3 ? archive.group_name : null,
-    visibilityLabel: null,
+    visibilityLabel: archive.local_role === "cloud-offline-cache" ? null : archiveCopy.local_project,
     visibilityTone: "neutral",
-    storageLabel: archiveCopy.device,
+    storageLabel: archive.local_role === "cloud-offline-cache" ? archiveCopy.device : archiveCopy.saved_on_this_device,
     storageTone: "device",
+    recordCount: records.length,
+    durationDays: ongoingDays,
+    latestTime: latestUpdate,
+    ended: archive.status === "ended",
   };
   const localProfileRows = [
     {
@@ -1056,6 +1088,23 @@ export default function LocalArchiveDetailPage() {
       value: localCategoryLabel,
       field: "category" as const,
     },
+    ...(archive.category === "plant"
+      ? [{
+          label: archiveCopy.planting_region_required,
+          content: (
+            <PlantingRegionEditor
+              layout="attribute"
+              language={language}
+              value={archive.planting_region}
+              canEdit
+              onSave={async (region) => {
+                const updated = await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
+                setDetail((current) => current ? { ...current, archive: updated } : current);
+              }}
+            />
+          ),
+        }]
+      : []),
     {
       label: archiveCopy.source,
       value: archive.source || archiveCopy.not_filled,
@@ -1117,16 +1166,85 @@ export default function LocalArchiveDetailPage() {
           : null,
       ].filter(Boolean)
     : [];
+  const archiveDisplayName = archive.system_name || archive.species_name || "";
 
   return (
-    <main style={pageStyle}>
-      <section style={headerStyle}>
-        <Link href="/archive?source=local" style={backLinkStyle}>
-          {archiveCopy.back_to_local_projects}
-        </Link>
+    <>
+      <MobilePageHeader
+        title={
+          <span style={mobileProjectHeaderTitleStyle}>
+            <span style={mobileProjectHeaderProjectStyle}>{archive.title}</span>
+          </span>
+        }
+        titleText={archive.title}
+        fallbackHref="/archive?source=local"
+        ariaLabel={t.nav.back}
+      />
+      <main
+        style={{
+          ...pageStyle,
+          padding: isMobileViewport ? "10px 10px 46px" : pageStyle.padding,
+        }}
+      >
+        <header className="mobile-app-desktop-only" style={projectPageHeaderStyle}>
+          <Link href="/archive?source=local" style={projectPageBackLinkStyle}>
+            {archiveCopy.back_to_local_projects}
+          </Link>
+          <h1 style={projectPageTitleStyle}>{archive.title}</h1>
+          <span aria-hidden="true" />
+        </header>
+
+        <div style={projectDetailStatsStyle}>
+          {archiveDisplayName ? (
+            <span style={projectDetailGuideTextStyle}>{archiveDisplayName}</span>
+          ) : null}
+          {archive.local_role === "cloud-offline-cache" ? null : (
+            <span style={localProjectBadgeStyle}>{archiveCopy.local_project}</span>
+          )}
+          <ProjectMetaLine
+            recordCount={records.length}
+            durationDays={ongoingDays}
+            ended={archive.status === "ended"}
+            order={["record", "duration"]}
+            style={{ minWidth: 0, flex: "1 1 auto", gap: "5px 10px", fontSize: 13 }}
+          />
+        </div>
+
+        <div style={localStorageHintStyle}>
+          {archive.source_cloud_archive_id
+            ? archiveCopy.cloud_local_copy_hint
+            : archiveCopy.saved_on_this_device}
+        </div>
+
+        <nav style={archiveDetailTabWrapStyle} aria-label={archiveCopy.detail_navigation}>
+          <button
+            type="button"
+            onClick={() => setActiveDetailTab("records")}
+            style={archiveDetailTabButtonStyle(activeDetailTab === "records")}
+          >
+            {archiveCopy.details}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDetailTab("profile")}
+            style={archiveDetailTabButtonStyle(activeDetailTab === "profile")}
+          >
+            {archiveCopy.dossier}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDetailTab("experience")}
+            style={archiveDetailTabButtonStyle(activeDetailTab === "experience")}
+          >
+            {archiveCopy.experience_cards}
+            {language === "en" ? " (0)" : "（0）"}
+          </button>
+        </nav>
+
+        {activeDetailTab === "profile" ? (
         <ArchiveDetailHeaderView
           project={projectView}
-          eyebrow={archiveCopy.local_archive}
+          eyebrow={archiveCopy.project_archive}
           latestUpdateText={
             `${archiveCopy.latest_update} ${formatDate(latestUpdate) || archiveCopy.none}`
           }
@@ -1135,8 +1253,11 @@ export default function LocalArchiveDetailPage() {
           hint={
             archive.source_cloud_archive_id
               ? archiveCopy.cloud_local_copy_hint
-              : archiveCopy.local_hint
+              : archiveCopy.saved_on_this_device
           }
+          profileAlwaysOpen
+          showPageChrome={false}
+          showSystemNameInTitle={false}
           actionSlot={
             <div style={headerActionSlotStyle}>
               {!archive.local_owner_user_id && ownerContext?.userId ? (
@@ -1219,10 +1340,46 @@ export default function LocalArchiveDetailPage() {
           }
           profileExtra={
             <div style={localCycleProfileExtraStyle}>
-              {archive.category === "plant" ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit onSave={async (region) => {
-                const updated = await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
-                setDetail((current) => current ? { ...current, archive: updated } : current);
-              }} /> : null}
+              <ArchiveOwnerSettingsFields
+                category={archive.category}
+                subTagId={archive.subcategory || null}
+                groupTagId={archive.group_name || null}
+                subTags={localTaxonomyItems
+                  .filter((item) => item.kind === "subcategory" && item.category === archive.category)
+                  .map((item) => ({
+                    id: item.label,
+                    name: item.label,
+                    category: item.category || archive.category,
+                  }))}
+                groupTags={localTaxonomyItems
+                  .filter((item) => item.kind === "group" && item.category === archive.category)
+                  .map((item) => ({
+                    id: item.label,
+                    name: item.label,
+                    sub_tag_id: item.subcategory || "",
+                  }))}
+                maxDepth={getArchiveCategoryDepth(categoryDepths, archive.category)}
+                ended={archive.status === "ended"}
+                isPublic={false}
+                canWrite={archive.local_role !== "cloud-offline-cache"}
+                busy={ownerSettingsBusy}
+                showVisibility={false}
+                onChangeSubcategory={(value) =>
+                  void saveLocalOwnerFields({
+                    subcategory: value || null,
+                    group_name: null,
+                  })
+                }
+                onChangeGroup={(value) =>
+                  void saveLocalOwnerFields({ group_name: value || null })
+                }
+                onToggleEnded={() =>
+                  void saveLocalOwnerFields({
+                    status: archive.status === "ended" ? "active" : "ended",
+                    ended_at: archive.status === "ended" ? null : new Date().toISOString(),
+                  })
+                }
+              />
               <ArchiveCycleSettings
                 key={archive.id}
                 enabled={cycleEnabled}
@@ -1266,7 +1423,7 @@ export default function LocalArchiveDetailPage() {
             </div>
           }
         />
-      </section>
+        ) : null}
 
       {pendingSyncError && !pendingSyncPromptOpen ? (
         <div style={transferErrorStyle}>{pendingSyncError}</div>
@@ -1445,6 +1602,8 @@ export default function LocalArchiveDetailPage() {
         </div>
       ) : null}
 
+      {activeDetailTab === "records" ? (
+      <>
       <ArchiveRecordComposer
         mobileMode={isMobileViewport}
         open={!isMobileViewport || addRecordOpen}
@@ -1672,6 +1831,17 @@ export default function LocalArchiveDetailPage() {
             />
         )}
       />
+      </>
+      ) : null}
+
+      {activeDetailTab === "experience" ? (
+        <div style={localExperienceEmptyStyle}>
+          <div>{t.experience.no_cards}</div>
+          <div style={localExperienceEmptyHintStyle}>
+            {archiveCopy.local_experience_cards_hint}
+          </div>
+        </div>
+      ) : null}
 
       {localLightboxImages.length > 0 ? (
         <ArchiveLightbox
@@ -1685,7 +1855,7 @@ export default function LocalArchiveDetailPage() {
         />
       ) : null}
 
-      {isMobileViewport && !addRecordOpen ? (
+      {isMobileViewport && !addRecordOpen && activeDetailTab === "records" ? (
         <button
           type="button"
           onClick={() => setAddRecordOpen(true)}
@@ -1715,6 +1885,7 @@ export default function LocalArchiveDetailPage() {
         onConfirm={confirmDeleteArchive}
       />
     </main>
+    </>
   );
 }
 
@@ -1726,17 +1897,141 @@ const pageStyle = {
   color: "#263326",
 } satisfies CSSProperties;
 
-const headerStyle = {
-  margin: "0 auto 12px",
-} satisfies CSSProperties;
+const mobileProjectHeaderTitleStyle: CSSProperties = {
+  minWidth: 0,
+  width: "100%",
+  display: "block",
+  overflow: "hidden",
+  whiteSpace: "nowrap",
+};
 
-const backLinkStyle = {
+const mobileProjectHeaderProjectStyle: CSSProperties = {
+  minWidth: 0,
+  width: "100%",
+  display: "block",
+  overflow: "hidden",
+  color: "#243424",
+  fontSize: 16,
+  fontWeight: 850,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const projectPageHeaderStyle: CSSProperties = {
+  minHeight: 48,
+  display: "grid",
+  gridTemplateColumns: "auto minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 8,
+};
+
+const projectPageBackLinkStyle: CSSProperties = {
+  minWidth: 0,
   display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  color: "#52694f",
+  fontSize: 14,
+  fontWeight: 730,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
+
+const projectPageTitleStyle: CSSProperties = {
+  minWidth: 0,
+  margin: 0,
+  overflow: "hidden",
+  color: "#243424",
+  fontSize: "clamp(19px, 4.6vw, 28px)",
+  lineHeight: 1.25,
+  textAlign: "center",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const projectDetailStatsStyle: CSSProperties = {
+  minHeight: 34,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  gap: 16,
+  flexWrap: "wrap",
+  minWidth: 0,
+  margin: "0 0 8px",
+  padding: "5px 8px",
+  borderBottom: "1px solid #edf1e9",
+};
+
+const projectDetailGuideTextStyle: CSSProperties = {
+  minWidth: 0,
+  maxWidth: "38%",
+  flex: "0 1 auto",
+  overflow: "hidden",
+  color: "#52694f",
+  fontSize: 14,
+  fontWeight: 750,
+  lineHeight: 1.35,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const localProjectBadgeStyle: CSSProperties = {
+  flexShrink: 0,
+  border: "1px solid #e2e8dc",
+  borderRadius: 999,
+  background: "#f4f7f1",
+  color: "#5b6b57",
+  fontSize: 12,
+  fontWeight: 750,
+  padding: "3px 8px",
+};
+
+const localStorageHintStyle: CSSProperties = {
+  margin: "0 0 10px",
   color: "#617258",
   fontSize: 13,
-  textDecoration: "none",
-  marginBottom: 10,
-} satisfies CSSProperties;
+  lineHeight: 1.45,
+};
+
+const archiveDetailTabWrapStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 6,
+  marginBottom: 8,
+  padding: 4,
+  border: "1px solid #e2ecd9",
+  borderRadius: 16,
+  background: "#fff",
+};
+
+function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
+  return {
+    minHeight: 42,
+    border: "none",
+    borderRadius: 12,
+    color: active ? "#2f6a31" : "#40583a",
+    background: active ? "#e3f1dd" : "transparent",
+    fontSize: "clamp(14px, 3.6vw, 16px)",
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  };
+}
+
+const localExperienceEmptyStyle: CSSProperties = {
+  border: "1px solid #ebefea",
+  borderRadius: 18,
+  background: "#fff",
+  padding: 18,
+  color: "#7d897a",
+  fontSize: 14,
+};
+
+const localExperienceEmptyHintStyle: CSSProperties = {
+  marginTop: 8,
+  lineHeight: 1.5,
+};
 
 const localProfileDangerButtonStyle = {
   border: "1px solid #efd8d5",

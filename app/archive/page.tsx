@@ -11,16 +11,11 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
-import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
-import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
+import { localArchiveToArchiveItem } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveTaxonomyPanel, {
   type ArchiveTaxonomyChip,
 } from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import ArchiveCard from "@/components/archive/ArchiveCard";
-import MobileArchiveActions from "@/components/archive/MobileArchiveActions";
-import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
-import ArchiveCategoryDropdown from "@/components/archive/ArchiveCategoryDropdown";
-import ArchiveGroupDropdown from "@/components/archive/ArchiveGroupDropdown";
 import {
   archiveCategoryOptions,
   getArchiveCategoryLabel,
@@ -744,15 +739,10 @@ export default function ArchivePage() {
     setSystemSuggestionsOpen(false);
   }
 
-  async function createSubTag(category: ArchiveCategory) {
+  async function createSubTag(category: ArchiveCategory, name: string) {
     if (!requireCloudWriteAccess()) return;
-    const name = prompt(
-      `${t.archive_workspace.add_category_prompt_prefix}${getArchiveCategoryLabel(
-        category,
-        language
-      )}${t.archive_workspace.add_category_prompt_suffix}`
-    );
-    if (!name?.trim()) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
 
     const {
       data: { session },
@@ -762,7 +752,7 @@ export default function ArchivePage() {
 
     const { data, error } = await supabase
       .from("sub_tags")
-      .insert([{ user_id: user.id, name: name.trim(), category }])
+      .insert([{ user_id: user.id, name: trimmed, category }])
       .select()
       .single();
 
@@ -778,8 +768,8 @@ export default function ArchivePage() {
 
   async function renameSubTag(tag: SubTagItem, suppliedName?: string) {
     if (!requireCloudWriteAccess()) return;
-    const name = suppliedName ?? prompt(t.archive_workspace.rename_category_prompt, tag.name);
-    if (!name?.trim() || name.trim() === tag.name) return;
+    const name = suppliedName?.trim();
+    if (!name || name === tag.name) return;
 
     const { error } = await supabase.from("sub_tags").update({ name: name.trim() }).eq("id", tag.id);
     if (error) {
@@ -812,12 +802,11 @@ export default function ArchivePage() {
     }
   }
 
-  async function createGroupTag() {
+  async function createGroupTag(name: string) {
     if (!requireCloudWriteAccess()) return;
     if (!activeSubTag) return;
-
-    const name = prompt(t.archive_workspace.add_group_prompt);
-    if (!name?.trim()) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
 
     const {
       data: { session },
@@ -1400,18 +1389,13 @@ export default function ArchivePage() {
     router.push(`/archive/new?category=${category}`);
   }
 
-  async function createLocalSubcategory(category: ArchiveCategory) {
-    const name = prompt(
-      `${t.archive_workspace.add_local_subcategory_prefix}${getArchiveCategoryLabel(
-        category,
-        language
-      )}${t.archive_workspace.add_local_subcategory_suffix}`
-    );
-    if (!name?.trim()) return;
+  async function createLocalSubcategory(category: ArchiveCategory, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
 
     try {
       await createLocalTaxonomyItem(
-        { kind: "subcategory", category, label: name },
+        { kind: "subcategory", category, label: trimmed },
         currentOwnerContext
       );
       await loadLocalArchives(currentOwnerContext);
@@ -1484,10 +1468,10 @@ export default function ArchivePage() {
     }
   }
 
-  async function createLocalGroup() {
+  async function createLocalGroup(name: string) {
     if (!activeCategory || !activeSubTag) return;
-    const name = prompt(t.archive_workspace.add_local_group);
-    if (!name?.trim()) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
 
     try {
       await createLocalTaxonomyItem(
@@ -1495,7 +1479,7 @@ export default function ArchivePage() {
           kind: "group",
           category: activeCategory,
           subcategory: activeSubTag,
-          label: name,
+          label: trimmed,
         },
         currentOwnerContext
       );
@@ -2162,144 +2146,104 @@ export default function ArchivePage() {
             <div style={emptyPanelStyle}>{t.archive_workspace.no_local_matches}</div>
           ) : (
             filteredLocalArchives.map((archive) => {
-              const project = localArchiveToProjectView(
-                archive,
-                currentOwnerContext,
-                language,
-                getArchiveCategoryDepth(localCategoryDepths, archive.category),
-              );
-              const availableLocalGroups = archive.subcategory
-                ? localGroupTagItems.filter((tag) => tag.sub_tag_id === archive.subcategory)
-                : [];
+              const item = localArchiveToArchiveItem(archive);
+              const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
               const pendingCloudSyncSummary = pendingCloudSyncByArchiveId.get(
                 archive.id
               );
 
               return (
-                <ArchiveProjectCard
+                <ArchiveCard
                   key={archive.id}
-                  project={isMobileViewport ? project : { ...project, href: undefined }}
+                  item={item}
+                  ended={archive.status === "ended"}
                   mobileMode={isMobileViewport}
-                  mobileShowCategoryBadge={false}
-                  systemNameEditorSlot={
-                    editingLocalSystemArchiveId === archive.id ? (
-                      <span
-                        onClick={(event) => event.stopPropagation()}
-                        style={localInlineEditWrapStyle}
-                      >
-                        <ArchiveSystemNameEditor
-                          value={editingLocalSystemSearch}
-                          selectedValue={editingLocalSystemName}
-                          options={getSystemNameCandidateLabels(
-                            getSystemNameCandidateOptions(
-                              archive.category,
-                              editingLocalSystemSearch,
-                              archive.system_name || archive.species_name,
-                              8
-                            )
-                          )}
-                          suggestionsOpen={localSystemSuggestionsOpen}
-                          hasExactMatch={hasExactSystemNameCandidate(
-                            getSystemNameCandidateOptions(
-                              archive.category,
-                              "",
-                              archive.system_name || archive.species_name,
-                              300
-                            ),
-                            editingLocalSystemSearch
-                          )}
-                          onChange={(value) => {
-                            setEditingLocalSystemSearch(value);
-                            setEditingLocalSystemName("");
-                            setLocalSystemSuggestionsOpen(true);
-                          }}
-                          onSelect={(name) => {
-                            setEditingLocalSystemName(name);
-                            setEditingLocalSystemSearch(name);
-                            setLocalSystemSuggestionsOpen(false);
-                          }}
-                          onSave={() => void saveLocalArchiveSystemName(archive)}
-                          onCancel={cancelLocalArchiveSystemNameEditing}
-                        />
-                      </span>
-                    ) : undefined
-                  }
-                  selectControls={
-                    !isMobileViewport ? (
-                      <>
-                        <ArchiveCategoryDropdown
-                          value={archive.subcategory || archive.category}
-                          subTags={localSubTagItems}
-                          compact
-                          onChange={(nextValue) => updateLocalArchiveCategoryValue(archive, nextValue)}
-                        />
-                        {archive.subcategory && availableLocalGroups.length > 0 ? (
-                          <ArchiveGroupDropdown
-                            value={archive.group_name || ""}
-                            groupTags={availableLocalGroups}
-                            compact
-                            onChange={(nextValue) => updateLocalArchiveGroupValue(archive, nextValue)}
-                          />
-                        ) : null}
-                      </>
-                    ) : undefined
-                  }
-                  actionSlot={
-                    isMobileViewport ? (
-                      <MobileArchiveActions
-                        category={archive.category}
-                        subTagId={archive.subcategory}
-                        groupTagId={archive.group_name}
-                        subTags={localSubTagItems}
-                        groupTags={localGroupTagItems}
-                        categoryDepths={localCategoryDepths}
-                        onChangeCategory={(value) => {
-                          void updateLocalArchiveCategoryValue(archive, value);
-                        }}
-                        onChangeGroup={(value) => {
-                          void updateLocalArchiveGroupValue(archive, value);
-                        }}
-                        ended={archive.status === "ended"}
-                        onToggleEnded={() => void toggleLocalArchiveEnded(archive)}
-                        extraActions={[
-                          ...(pendingCloudSyncSummary
-                            ? [
-                                {
-                                  label: t.archive.pending_sync_upload,
-                                  onClick: () =>
-                                    router.push(
-                                      `/local/archive/${archive.id}?sync=1`
-                                    ),
-                                },
-                              ]
-                            : archive.source_cloud_archive_id
-                              ? []
-                              : [
-                                  {
-                                    label: t.archive.transfer_to_cloud,
-                                    onClick: () =>
-                                      router.push(
-                                        `/local/archive/${archive.id}?transfer=1`
-                                      ),
-                                  },
-                                ]),
-                          ...(!archive.local_owner_user_id && currentOwnerContext?.userId
-                            ? [{
-                                label: t.archive_workspace.mark_ownership,
-                                onClick: () => void markSingleLocalArchiveAsMine(archive),
-                              }]
-                            : []),
+                  subTags={localSubTagItems}
+                  groupTags={localGroupTagItems}
+                  categoryDepths={localCategoryDepths}
+                  editingPlantArchiveId={null}
+                  editingSpeciesId=""
+                  editingPendingSpeciesName=""
+                  editingPlantSearch=""
+                  plantSuggestionsOpen={false}
+                  plantSearchResults={[]}
+                  hasExactPlantMatch={false}
+                  editingSystemArchiveId={editingLocalSystemArchiveId}
+                  editingSystemSearch={editingLocalSystemSearch}
+                  editingSystemName={editingLocalSystemName}
+                  systemSuggestionsOpen={localSystemSuggestionsOpen}
+                  systemNameOptions={getSystemNameOptions(
+                    archive.category,
+                    editingLocalSystemSearch
+                  )}
+                  hasExactSystemNameMatch={hasExactSystemNameCandidate(
+                    getSystemNameCandidateOptions(
+                      archive.category,
+                      "",
+                      archive.system_name || archive.species_name,
+                      300
+                    ),
+                    editingLocalSystemSearch
+                  )}
+                  onNavigate={() => router.push(`/local/archive/${archive.id}`)}
+                  shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
+                  onRenameTitle={() => void renameLocalArchiveTitle(archive)}
+                  onBeginEditPlant={() => {}}
+                  onPlantSearchChange={() => {}}
+                  onSelectPlantSpecies={() => {}}
+                  onSubmitPendingSpecies={() => {}}
+                  onSavePlantSelection={() => {}}
+                  onCancelPlantEditing={() => {}}
+                  onBeginEditSystem={() => void renameLocalArchiveSystemName(archive)}
+                  onSystemSearchChange={(value) => {
+                    setEditingLocalSystemSearch(value);
+                    setEditingLocalSystemName("");
+                    setLocalSystemSuggestionsOpen(true);
+                  }}
+                  onSelectSystemName={(name) => {
+                    setEditingLocalSystemName(name);
+                    setEditingLocalSystemSearch(name);
+                    setLocalSystemSuggestionsOpen(false);
+                  }}
+                  onSaveSystemSelection={() => void saveLocalArchiveSystemName(archive)}
+                  onCancelSystemEditing={cancelLocalArchiveSystemNameEditing}
+                  onUpdateArchiveStatus={() => void toggleLocalArchiveEnded(archive)}
+                  onTogglePublic={() => {}}
+                  onUpdateArchiveCategory={(_item, value) => {
+                    void updateLocalArchiveCategoryValue(archive, value);
+                  }}
+                  onUpdateArchiveGroupTag={(_item, value) => {
+                    void updateLocalArchiveGroupValue(archive, value);
+                  }}
+                  onDeleteArchive={() => void deleteLocalArchiveFromList(archive)}
+                  extraStatusPills={
+                    isDeviceLocalProject
+                      ? [
                           {
-                            label: t.archive_workspace.delete_local_project,
-                            onClick: () => void deleteLocalArchiveFromList(archive),
-                            danger: true,
+                            key: "local-project",
+                            label: t.archive.local_project,
+                            style: {
+                              border: "1px solid #d8ddd4",
+                              background: "#f5f8f1",
+                              color: "#607356",
+                            },
                           },
-                        ]}
-                      />
-                    ) : undefined
+                        ]
+                      : []
                   }
-                  actionRailSlot={
-                    !isMobileViewport ? (
+                  storageLabel={
+                    isDeviceLocalProject ? t.archive.saved_on_this_device : null
+                  }
+                  hidePublicToggle
+                  preferSystemNameEditor
+                  coverBlob={archive.cover_image?.blob || null}
+                  href={`/local/archive/${archive.id}`}
+                  visibilityLabel={
+                    isDeviceLocalProject
+                      ? t.archive.local_project
+                      : t.archive_workspace.local
+                  }
+                  extraRail={
                     <>
                       {pendingCloudSyncSummary ? (
                         <button
@@ -2313,7 +2257,19 @@ export default function ArchivePage() {
                         >
                           {t.archive.pending_sync_upload}
                         </button>
-                      ) : null}
+                      ) : archive.source_cloud_archive_id ? null : (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            router.push(`/local/archive/${archive.id}?transfer=1`);
+                          }}
+                          style={localProjectRailButtonStyle}
+                        >
+                          {t.archive.transfer_to_cloud}
+                        </button>
+                      )}
                       {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
                         <button
                           type="button"
@@ -2327,34 +2283,38 @@ export default function ArchivePage() {
                           {t.archive_workspace.mark_ownership}
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          renameLocalArchiveTitle(archive);
-                        }}
-                        style={localProjectRailButtonStyle}
-                      >
-                        {t.archive_workspace.edit}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          deleteLocalArchiveFromList(archive);
-                        }}
-                        style={localProjectRailDangerButtonStyle}
-                      >
-                        {t.archive_workspace.delete}
-                      </button>
                     </>
-                    ) : undefined
                   }
-                  onClick={isMobileViewport ? undefined : () => router.push(`/local/archive/${archive.id}`)}
-                  onEditTitle={() => renameLocalArchiveTitle(archive)}
-                  onEditSystemName={() => renameLocalArchiveSystemName(archive)}
+                  extraMobileActions={[
+                    ...(pendingCloudSyncSummary
+                      ? [
+                          {
+                            label: t.archive.pending_sync_upload,
+                            onClick: () =>
+                              router.push(`/local/archive/${archive.id}?sync=1`),
+                          },
+                        ]
+                      : archive.source_cloud_archive_id
+                        ? []
+                        : [
+                            {
+                              label: t.archive.transfer_to_cloud,
+                              onClick: () =>
+                                router.push(
+                                  `/local/archive/${archive.id}?transfer=1`
+                                ),
+                            },
+                          ]),
+                    ...(!archive.local_owner_user_id && currentOwnerContext?.userId
+                      ? [
+                          {
+                            label: t.archive_workspace.mark_ownership,
+                            onClick: () =>
+                              void markSingleLocalArchiveAsMine(archive),
+                          },
+                        ]
+                      : []),
+                  ]}
                 />
               );
             })
@@ -2839,47 +2799,6 @@ const pendingCloudSyncLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
-const localInlineEditWrapStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  minWidth: 0,
-  maxWidth: 320,
-};
-
-const localInlineEditInputStyle: CSSProperties = {
-  width: 120,
-  height: 28,
-  border: "1px solid #d9e4d3",
-  borderRadius: 8,
-  background: "#fff",
-  color: "#263326",
-  padding: "0 8px",
-  fontSize: 13,
-  outline: "none",
-};
-
-const localInlineEditButtonStyle: CSSProperties = {
-  border: "1px solid #cbdcc4",
-  borderRadius: 999,
-  background: "#f7fbf4",
-  color: "#44633b",
-  fontSize: 12,
-  fontWeight: 800,
-  padding: "5px 8px",
-  cursor: "pointer",
-};
-
-const localInlineEditCancelStyle: CSSProperties = {
-  border: "none",
-  background: "transparent",
-  color: "#7a8376",
-  fontSize: 12,
-  fontWeight: 700,
-  padding: "5px 2px",
-  cursor: "pointer",
-};
-
 const localProjectRailButtonStyle: CSSProperties = {
   border: "none",
   background: "transparent",
@@ -2888,11 +2807,6 @@ const localProjectRailButtonStyle: CSSProperties = {
   fontSize: 12,
   padding: 0,
   whiteSpace: "nowrap",
-};
-
-const localProjectRailDangerButtonStyle: CSSProperties = {
-  ...localProjectRailButtonStyle,
-  color: "#d66",
 };
 
 const localProjectRailSyncButtonStyle: CSSProperties = {

@@ -7,6 +7,7 @@ import type {
   LocalArchiveSummary,
 } from "@/lib/local-offline-db";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import type { ArchiveItem } from "@/lib/archive-page-types";
 import { getTranslations, type Language } from "@/lib/i18n";
 import type { ArchiveCategoryDepth } from "@/lib/archive-category-settings";
 
@@ -43,10 +44,12 @@ export function localArchiveToProjectView(
   maxDepth: ArchiveCategoryDepth = 3,
 ): ArchiveProjectView {
   const copy = getTranslations(language).archive_workspace;
+  const archiveCopy = getTranslations(language).archive;
   const ended = archive.status === "ended";
   const ongoingDays = getOngoingDays(archive.created_at, archive.ended_at);
   const latestTime = archive.latest_record_time || archive.updated_at;
   const latestSummary = archive.latest_record_note || archive.note || "";
+  const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
 
   return {
     id: archive.id,
@@ -73,8 +76,10 @@ export function localArchiveToProjectView(
     latestTime,
     recordCount: archive.record_count || 0,
     durationDays: ongoingDays,
-    visibilityLabel: copy.local,
+    visibilityLabel: isDeviceLocalProject ? archiveCopy.local_project : copy.local,
     visibilityTone: "neutral",
+    storageLabel: isDeviceLocalProject ? archiveCopy.saved_on_this_device : null,
+    storageTone: isDeviceLocalProject ? "device" : undefined,
     statusLabel: ended ? copy.ended : null,
     ended,
     showClassificationRow: maxDepth >= 2,
@@ -83,5 +88,31 @@ export function localArchiveToProjectView(
     activityText: null,
     footerItems: [],
     badges: [],
+  };
+}
+
+export function localArchiveToArchiveItem(archive: LocalArchiveSummary): ArchiveItem {
+  const systemName = archive.system_name || archive.species_name || null;
+
+  return {
+    id: archive.id,
+    title: archive.title,
+    category: archive.category,
+    status: archive.status,
+    system_name: systemName,
+    species_name_snapshot: systemName,
+    species_display_name: systemName,
+    created_at: archive.created_at,
+    last_record_time: archive.record_count > 0 ? archive.latest_record_time || null : null,
+    latest_record_note: archive.record_count > 0 ? archive.latest_record_note || archive.note || "" : "",
+    latest_record_time: archive.record_count > 0 ? archive.latest_record_time || null : null,
+    record_count: archive.record_count,
+    is_public: false,
+    sub_tag_id: archive.subcategory || null,
+    group_tag_id: archive.group_name || null,
+    note: archive.note,
+    help_status: null,
+    view_count: 0,
+    follower_count: 0,
   };
 }

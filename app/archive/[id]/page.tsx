@@ -2,7 +2,8 @@
 import ReportLink from "@/components/support/ReportLink";
 
 import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
-import SegmentedChoice from "@/components/ui/SegmentedChoice";
+import type { PlantingRegion } from "@/lib/planting-region";
+import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import { saveRecentArchiveBrowse } from "@/lib/recent-browse";
 import { use, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
@@ -1137,6 +1138,13 @@ saveRecentArchiveBrowse({
     return true;
   }
 
+  async function saveArchivePlantingRegion(region: PlantingRegion) {
+    const { data, error } = await supabase.from("archives").update({ planting_region: region })
+      .eq("id", activeArchive.id).eq("user_id", activeArchive.user_id).select("id").single();
+    if (error || !data) throw new Error("planting_region_save_failed");
+    setArchive((current) => current ? { ...current, planting_region: region } : current);
+  }
+
   async function saveMobileArchiveTitle() {
     const nextTitle = mobileArchiveTitle.trim();
 
@@ -2221,17 +2229,8 @@ saveRecentArchiveBrowse({
           </button>
         </nav>
 
-        {activeDetailTab === "profile" && activeArchive.category === "plant" ? <PlantingRegionEditor
-          key={activeArchive.id} language={language} value={activeArchive.planting_region} canEdit={isOwner && canWriteCloud}
-          onSave={async (region) => {
-            const { data, error } = await supabase.from("archives").update({ planting_region: region })
-              .eq("id", activeArchive.id).eq("user_id", activeArchive.user_id).select("id").single();
-            if (error || !data) throw new Error("planting_region_save_failed");
-            setArchive((current) => current ? { ...current, planting_region: region } : current);
-          }}
-        /> : null}
-
-        {!isMobileViewport && activeDetailTab === "profile" ? (
+        {activeDetailTab === "profile" ? (
+          <>
           <div id="archive-profile" style={archiveDetailAnchorStyle}>
             <ArchiveDetailHeader
               mode={mode}
@@ -2248,6 +2247,8 @@ saveRecentArchiveBrowse({
               systemNameCandidates={archiveProfileSystemNameCandidateList}
               systemNameCandidatesLoading={archiveCandidatesLoading}
               systemNameMode="candidate"
+              showPageChrome={false}
+              showProfileActions={!isMobileViewport}
               onToggleArchiveVisibility={toggleArchiveVisibility}
               onToggleArchiveStatus={() =>
                 void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
@@ -2280,7 +2281,20 @@ saveRecentArchiveBrowse({
                   { archive_summary: nextSummary || null },
                 );
               }}
-              profileExtra={isOwner ? (
+              onSavePlantingRegion={saveArchivePlantingRegion}
+              profileExtra={isMobileViewport ? (
+                isOwner ? null : (
+                  <Link href={`/user/${activeArchive.user_id}`} style={attributeCreatorLinkStyle}>
+                    {ownerAvatarUrl ? (
+                      <img src={ownerAvatarUrl} alt="" style={attributeCreatorAvatarStyle} />
+                    ) : (
+                      <span style={attributeCreatorAvatarFallbackStyle}><UiIcon name="user" size={16} /></span>
+                    )}
+                    <span>{archiveCopy.enter_user_space_prefix}{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
+                    <UiIcon name="arrow-right" size={15} />
+                  </Link>
+                )
+              ) : isOwner ? (
                 canWriteCloud ? <>
                   <div style={projectManagementRowStyle}>
                     <MobileArchiveActions
@@ -2321,54 +2335,9 @@ saveRecentArchiveBrowse({
               )}
             />
           </div>
-        ) : null}
-
-        {isMobileViewport && activeDetailTab === "profile" ? (
-          <>
-          <MobileArchiveProfile
-            archive={activeArchive}
-            archiveDisplayName={archiveDisplayName}
-            archiveCategoryLabel={archiveCategoryLabel}
-            encyclopediaHref={encyclopediaHref}
-            title={mobileArchiveTitle}
-            category={mobileArchiveCategory}
-            archiveName={mobileArchiveName}
-            source={mobileArchiveSource}
-            note={mobileArchiveNote}
-            archiveSummary={mobileArchiveSummary}
-            editingField={mobileArchiveEditingField}
-            savingField={mobileArchiveSavingField}
-            error={mobileArchiveError}
-            isOwner={isOwner}
-            canWriteCloud={canWriteCloud}
-            guideCandidates={mobileGuideCandidates}
-            guideCandidatesLoading={archiveCandidatesLoading}
-            guideSuggestionsOpen={mobileGuideSuggestionsOpen}
-            onTitleChange={setMobileArchiveTitle}
-            onCategoryChange={setMobileArchiveCategory}
-            onArchiveNameChange={setMobileArchiveName}
-            onSourceChange={setMobileArchiveSource}
-            onNoteChange={setMobileArchiveNote}
-            onArchiveSummaryChange={setMobileArchiveSummary}
-            onBeginEdit={beginMobileArchiveEdit}
-            onSaveTitle={saveMobileArchiveTitle}
-            onSaveCategory={saveMobileArchiveCategory}
-            onSaveNameBlur={handleMobileArchiveNameBlur}
-            onSaveGuide={saveMobileGuideSelection}
-            onSaveSource={saveMobileArchiveSource}
-            onSaveNote={saveMobileArchiveNote}
-            onSaveArchiveSummary={saveMobileArchiveSummary}
-            onGuideSuggestionsOpenChange={setMobileGuideSuggestionsOpen}
-            headerAction={!isOwner ? (
-              <Link href={`/user/${activeArchive.user_id}`} style={mobileAttributeSpaceLinkStyle}>
-                <span>{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
-                <UiIcon name="chevron-right" size={14} />
-              </Link>
-            ) : null}
-          />
-          {isOwner ? (
+          {isMobileViewport && isOwner ? (
             <>
-              <MobileArchiveOwnerFields
+              <ArchiveOwnerSettingsFields
                 category={normalizeArchiveCategory(activeArchive.category)}
                 subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
                 groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
@@ -2377,7 +2346,7 @@ saveRecentArchiveBrowse({
                 maxDepth={categoryDepths[normalizeArchiveCategory(activeArchive.category)] || 3}
                 ended={activeArchive.status === "ended"}
                 isPublic={Boolean(activeArchive.is_public)}
-                canWriteCloud={canWriteCloud}
+                canWrite={canWriteCloud}
                 busy={Boolean(mobileArchiveSavingField)}
                 onChangeSubcategory={(value) =>
                   void updateArchiveTaxonomy(value || normalizeArchiveCategory(activeArchive.category))
@@ -2634,100 +2603,6 @@ saveRecentArchiveBrowse({
   );
 }
 
-function MobileArchiveOwnerFields({
-  category,
-  subTagId,
-  groupTagId,
-  subTags,
-  groupTags,
-  maxDepth,
-  ended,
-  isPublic,
-  canWriteCloud,
-  busy,
-  onChangeSubcategory,
-  onChangeGroup,
-  onToggleEnded,
-  onTogglePublic,
-}: {
-  category: ArchiveCategory;
-  subTagId: string | null;
-  groupTagId: string | null;
-  subTags: SubTagItem[];
-  groupTags: GroupTagItem[];
-  maxDepth: 1 | 2 | 3;
-  ended: boolean;
-  isPublic: boolean;
-  canWriteCloud: boolean;
-  busy: boolean;
-  onChangeSubcategory: (value: string) => void;
-  onChangeGroup: (value: string) => void;
-  onToggleEnded: () => void;
-  onTogglePublic: () => void;
-}) {
-  const { t } = useLanguage();
-  const copy = t.archive;
-  const availableSubTags = subTags.filter((tag) => tag.category === category);
-  const availableGroupTags = subTagId
-    ? groupTags.filter((tag) => String(tag.sub_tag_id) === subTagId)
-    : [];
-
-  if (!canWriteCloud && !isPublic) return null;
-
-  return (
-    <section style={mobileArchiveOwnerFieldsStyle} aria-label={copy.project_settings}>
-      {canWriteCloud && maxDepth >= 2 ? <label style={mobileArchiveOwnerSelectRowStyle}>
-        <span style={mobileArchiveLabelStyle}>{copy.subcategory}</span>
-        <span style={mobileArchiveOwnerSelectWrapStyle}>
-          <select
-            value={subTagId || ""}
-            disabled={busy}
-            onChange={(event) => onChangeSubcategory(event.target.value)}
-            style={mobileArchiveOwnerSelectStyle}
-          >
-            <option value="">{copy.no_subcategory}</option>
-            {availableSubTags.map((tag) => (
-              <option key={tag.id} value={tag.id}>{tag.name}</option>
-            ))}
-          </select>
-          <span aria-hidden="true" style={mobileArchiveOwnerSelectIconStyle}>
-            <UiIcon name="chevron-down" size={14} />
-          </span>
-        </span>
-      </label> : null}
-
-      {canWriteCloud && maxDepth >= 3 ? <label style={mobileArchiveOwnerSelectRowStyle}>
-        <span style={mobileArchiveLabelStyle}>{copy.group}</span>
-        <span style={mobileArchiveOwnerSelectWrapStyle}>
-          <select
-            value={groupTagId || ""}
-            disabled={busy || !subTagId}
-            onChange={(event) => onChangeGroup(event.target.value)}
-            style={mobileArchiveOwnerSelectStyle}
-          >
-            <option value="">{copy.no_group}</option>
-            {availableGroupTags.map((tag) => (
-              <option key={tag.id} value={tag.id}>{tag.name}</option>
-            ))}
-          </select>
-          <span aria-hidden="true" style={mobileArchiveOwnerSelectIconStyle}>
-            <UiIcon name="chevron-down" size={14} />
-          </span>
-        </span>
-      </label> : null}
-
-      {canWriteCloud ? <div style={mobileArchiveOwnerActionRowStyle}>
-        <span style={mobileArchiveLabelStyle}>{copy.project_status}</span>
-        <SegmentedChoice label={copy.project_status} value={ended ? "ended" : "active"} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} disabled={busy} onChange={onToggleEnded} />
-      </div> : null}
-      {canWriteCloud || isPublic ? <div style={mobileArchiveOwnerActionRowStyle}>
-        <span style={mobileArchiveLabelStyle}>{copy.visibility}</span>
-        <SegmentedChoice label={copy.visibility} value={isPublic ? "public" : "private"} options={[{ value: "private", label: copy.private_only }, { value: "public", label: copy.public_discover, disabled: !canWriteCloud }]} disabled={busy} onChange={onTogglePublic} />
-      </div> : null}
-    </section>
-  );
-}
-
 function MobileArchiveProfile({
   archive,
   archiveDisplayName,
@@ -2761,6 +2636,7 @@ function MobileArchiveProfile({
   onSaveSource,
   onSaveNote,
   onSaveArchiveSummary,
+  onSavePlantingRegion,
   onGuideSuggestionsOpenChange,
   headerAction,
 }: {
@@ -2796,10 +2672,11 @@ function MobileArchiveProfile({
   onSaveSource: () => void;
   onSaveNote: () => void;
   onSaveArchiveSummary: () => void;
+  onSavePlantingRegion?: (region: PlantingRegion) => Promise<void>;
   onGuideSuggestionsOpenChange: (open: boolean) => void;
   headerAction?: ReactNode;
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const copy = t.archive;
   const createdAtText = formatDate(archive.created_at) || copy.not_filled;
   const canEdit = isOwner && canWriteCloud && !savingField;
@@ -2912,6 +2789,19 @@ function MobileArchiveProfile({
           ))}
         </select>
       </MobileArchiveEditableField>
+
+      {archive.category === "plant" ? (
+        <div style={mobileArchiveFieldStyle}>
+          <span style={mobileArchiveLabelStyle}>{copy.planting_region_required}</span>
+          <PlantingRegionEditor
+            layout="attribute"
+            language={language}
+            value={archive.planting_region}
+            canEdit={canEdit}
+            onSave={onSavePlantingRegion}
+          />
+        </div>
+      ) : null}
 
       <MobileArchiveEditableField
         label={copy.source}
@@ -3348,85 +3238,6 @@ const mobileArchiveInlineEditStyle: CSSProperties = {
   textDecoration: "underline",
   textUnderlineOffset: 3,
   cursor: "pointer",
-};
-
-const mobileArchiveOwnerFieldsStyle: CSSProperties = {
-  overflow: "hidden",
-  marginBottom: 14,
-  border: "1px solid #e6ece1",
-  borderRadius: 16,
-  background: "#fff",
-  padding: "0 14px",
-};
-
-const mobileArchiveOwnerSelectRowStyle: CSSProperties = {
-  minHeight: 48,
-  display: "grid",
-  gridTemplateColumns: "84px minmax(0, 1fr)",
-  alignItems: "center",
-  gap: 10,
-  borderBottom: "1px solid #f0f3ed",
-  color: "#6f7b6c",
-  fontSize: 13.5,
-};
-
-const mobileArchiveOwnerSelectWrapStyle: CSSProperties = {
-  position: "relative",
-  minWidth: 0,
-};
-
-const mobileArchiveOwnerSelectIconStyle: CSSProperties = {
-  position: "absolute",
-  top: "50%",
-  right: 0,
-  display: "inline-flex",
-  color: "#748171",
-  pointerEvents: "none",
-  transform: "translateY(-50%)",
-};
-
-const mobileArchiveOwnerSelectStyle: CSSProperties = {
-  width: "100%",
-  minWidth: 0,
-  border: 0,
-  outline: 0,
-  background: "transparent",
-  color: "#273327",
-  padding: "8px 20px 8px 0",
-  fontSize: 14,
-  textAlign: "right",
-  cursor: "pointer",
-};
-
-const mobileArchiveOwnerActionRowStyle: CSSProperties = {
-  width: "100%",
-  minHeight: 48,
-  display: "grid",
-  gridTemplateColumns: "84px minmax(0, 1fr)",
-  alignItems: "center",
-  gap: 10,
-  border: 0,
-  borderBottom: "1px solid #f0f3ed",
-  background: "transparent",
-  color: "#6f7b6c",
-  padding: 0,
-  fontSize: 13.5,
-  textAlign: "left",
-  cursor: "pointer",
-};
-
-const mobileArchiveOwnerActionValueStyle: CSSProperties = {
-  minWidth: 0,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  gap: 4,
-  overflow: "hidden",
-  color: "#273327",
-  fontSize: 14,
-  textAlign: "right",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
 const mobileArchiveSaveLocalButtonStyle: CSSProperties = {

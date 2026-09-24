@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import {
   archiveCategoryOptions,
@@ -26,6 +26,7 @@ export type ArchiveProfileRow = {
   label: string;
   value?: ReactNode;
   field?: ArchiveProfileEditableField;
+  content?: ReactNode;
 };
 
 export type ArchiveSystemNameCandidate = SystemNameSelectorCandidate;
@@ -73,6 +74,7 @@ type Props = {
   profileEditor?: ArchiveProfileEditorConfig;
   profileAlwaysOpen?: boolean;
   showSystemNameInTitle?: boolean;
+  showPageChrome?: boolean;
 };
 
 export default function ArchiveDetailHeaderView({
@@ -90,6 +92,7 @@ export default function ArchiveDetailHeaderView({
   profileEditor,
   profileAlwaysOpen = false,
   showSystemNameInTitle = true,
+  showPageChrome = true,
 }: Props) {
   const { language, t } = useLanguage();
   const copy = t.archive;
@@ -101,7 +104,16 @@ export default function ArchiveDetailHeaderView({
     useState<ArchiveSystemNameCandidate | null>(null);
   const [fieldError, setFieldError] = useState("");
   const [savingField, setSavingField] = useState<ArchiveProfileEditableField | null>(null);
+  const [compactProfile, setCompactProfile] = useState(false);
   const cancelEditRef = useRef(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 720px)");
+    const sync = () => setCompactProfile(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   const categoryItems = [
     project.categoryLabel,
@@ -360,6 +372,8 @@ export default function ArchiveDetailHeaderView({
 
   return (
     <section style={headerStyle}>
+      {showPageChrome ? (
+        <>
       <div style={topRowStyle}>
         <div style={titleWrapStyle}>
           {eyebrow ? (
@@ -439,10 +453,17 @@ export default function ArchiveDetailHeaderView({
       </div>
 
       {hint ? <div style={hintStyle}>{hint}</div> : null}
+        </>
+      ) : actionSlot ? (
+        <div style={statusWrapStyle}>{actionSlot}</div>
+      ) : null}
 
       {profileAlwaysOpen || profileOpen ? (
         <>
-          <div style={profilePanelStyle}>
+          <div style={{
+            ...profilePanelStyle,
+            ...(compactProfile ? compactProfilePanelStyle : {}),
+          }}>
             {profileRows.map((row) => {
               const editable = Boolean(profileEditor && row.field);
               const editing = editingField === row.field;
@@ -450,8 +471,9 @@ export default function ArchiveDetailHeaderView({
               const fullWidth =
                 row.field === "source" ||
                 row.field === "note" ||
-                row.field === "archiveSummary";
-              const meta = !row.field;
+                row.field === "archiveSummary" ||
+                Boolean(row.content);
+              const meta = !row.field && !row.content;
 
               return (
                 <div
@@ -473,12 +495,15 @@ export default function ArchiveDetailHeaderView({
                     ...(primary ? profileRowPrimaryStyle : {}),
                     ...(fullWidth ? profileRowFullWidthStyle : {}),
                     ...(meta ? profileRowMetaStyle : {}),
+                    ...(compactProfile ? compactProfileRowStyle : {}),
                     ...(editable ? profileRowEditableStyle : {}),
                     ...(editing ? profileRowEditingStyle : {}),
                   }}
                 >
                   <span style={profileLabelStyle}>{row.label}</span>
-                  {editing && row.field ? (
+                  {row.content ? (
+                    row.content
+                  ) : editing && row.field ? (
                     renderFieldEditor(row.field)
                   ) : (
                     <span
@@ -707,6 +732,20 @@ const profilePanelStyle: CSSProperties = {
   alignItems: "flex-start",
 };
 
+const compactProfilePanelStyle: CSSProperties = {
+  gridTemplateColumns: "minmax(0, 1fr)",
+  columnGap: 0,
+  rowGap: 0,
+};
+
+const compactProfileRowStyle: CSSProperties = {
+  gridColumn: "1 / -1",
+  gridTemplateColumns: "76px minmax(0, 1fr)",
+  width: "100%",
+  padding: "9px 0",
+  borderTop: "1px solid #f1f3ef",
+};
+
 const profileRowStyle: CSSProperties = {
   minWidth: 0,
   maxWidth: "100%",
@@ -760,9 +799,9 @@ const profileValueStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: "23px",
   minHeight: 23,
-  display: "inline-flex",
-  alignItems: "center",
-  wordBreak: "break-word",
+  minWidth: 0,
+  display: "block",
+  overflowWrap: "anywhere",
 };
 
 const profileMetaValueStyle: CSSProperties = {

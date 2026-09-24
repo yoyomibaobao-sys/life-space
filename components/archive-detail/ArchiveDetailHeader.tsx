@@ -14,6 +14,8 @@ import {
 } from "@/lib/archive-categories";
 import type { ArchiveDetailArchive, ArchiveMode } from "@/lib/archive-detail-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
+import type { PlantingRegion } from "@/lib/planting-region";
 
 export default function ArchiveDetailHeader({
   mode,
@@ -42,7 +44,10 @@ export default function ArchiveDetailHeader({
   onSaveSource,
   onSaveNote,
   onSaveArchiveSummary,
+  onSavePlantingRegion,
   profileExtra,
+  showPageChrome = true,
+  showProfileActions = true,
 }: {
   mode: ArchiveMode;
   canWriteCloud?: boolean;
@@ -70,7 +75,10 @@ export default function ArchiveDetailHeader({
   onSaveSource?: (value: string) => Promise<void> | void;
   onSaveNote?: (value: string) => Promise<void> | void;
   onSaveArchiveSummary?: (value: string) => Promise<void> | void;
+  onSavePlantingRegion?: (region: PlantingRegion) => Promise<void>;
   profileExtra?: ReactNode;
+  showPageChrome?: boolean;
+  showProfileActions?: boolean;
 }) {
   const { language, t } = useLanguage();
   const copy = t.archive;
@@ -124,6 +132,20 @@ export default function ArchiveDetailHeader({
       field: "systemName" as const,
     },
     { label: copy.category_required, value: localizedCategoryLabel, field: "category" as const },
+    ...(archiveCategory === "plant"
+      ? [{
+          label: copy.planting_region_required,
+          content: (
+            <PlantingRegionEditor
+              layout="attribute"
+              language={language}
+              value={archive.planting_region}
+              canEdit={mode === "owner" && canWriteCloud}
+              onSave={onSavePlantingRegion}
+            />
+          ),
+        }]
+      : []),
     { label: copy.source, value: archive.source || copy.not_filled, field: "source" as const },
     { label: copy.note, value: archive.note || copy.not_filled, field: "note" as const },
     {
@@ -220,7 +242,7 @@ export default function ArchiveDetailHeader({
           : undefined
       }
       profileActions={
-        mode === "owner" ? (
+        showProfileActions && mode === "owner" ? (
           <>
             {onSaveToLocal && saveToLocalLabel ? (
               <button
@@ -254,6 +276,7 @@ export default function ArchiveDetailHeader({
       }
       profileExtra={profileExtra}
       profileAlwaysOpen
+      showPageChrome={showPageChrome}
       showSystemNameInTitle={false}
     />
   );

@@ -44,7 +44,10 @@ type Props = {
     nextName?: string
   ) => void | Promise<void>;
   onDeleteSubcategory?: (chip: ArchiveTaxonomyChip) => void | Promise<void>;
-  onCreateSubcategory?: (category: ArchiveCategory) => void;
+  onCreateSubcategory?: (
+    category: ArchiveCategory,
+    name: string
+  ) => void | Promise<void>;
   onResetGroup: () => void;
   onSelectGroup: (chip: ArchiveTaxonomyChip) => void;
   onRenameGroup?: (
@@ -52,8 +55,12 @@ type Props = {
     nextName?: string
   ) => void | Promise<void>;
   onDeleteGroup?: (chip: ArchiveTaxonomyChip) => void | Promise<void>;
-  onCreateGroup?: () => void;
-};
+  onCreateGroup?: (name: string) => void | Promise<void>;
+}
+
+type TaxonomyAction =
+  | { mode: "edit"; kind: TaxonomyKind; chip: ArchiveTaxonomyChip }
+  | { mode: "create"; kind: TaxonomyKind; category: ArchiveCategory };
 
 export default function ArchiveTaxonomyPanel({
   activeCategory,
@@ -81,35 +88,63 @@ export default function ArchiveTaxonomyPanel({
   const { language, t } = useLanguage();
   const compact = mobileMode;
   const compactEnglish = compact && language === "en";
-  const [actionTarget, setActionTarget] = useState<{
-    kind: TaxonomyKind;
-    chip: ArchiveTaxonomyChip;
-  } | null>(null);
+  const [actionTarget, setActionTarget] = useState<TaxonomyAction | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
 
+  function canManage(kind: TaxonomyKind) {
+    return kind === "subcategory"
+      ? Boolean(onRenameSubcategory || onDeleteSubcategory)
+      : Boolean(onRenameGroup || onDeleteGroup);
+  }
+
   function openActions(kind: TaxonomyKind, chip: ArchiveTaxonomyChip) {
-    if (!compact) return;
-    setActionTarget({ kind, chip });
+    if (!canManage(kind)) return;
+    setActionTarget({ mode: "edit", kind, chip });
     setRenameDraft(chip.label);
   }
 
-  async function saveRename() {
+  function openCreate(kind: TaxonomyKind) {
+    if (kind === "subcategory") {
+      if (!activeCategory || !onCreateSubcategory) return;
+      setActionTarget({ mode: "create", kind, category: activeCategory });
+    } else {
+      if (!activeCategory || !onCreateGroup) return;
+      setActionTarget({ mode: "create", kind, category: activeCategory });
+    }
+    setRenameDraft("");
+  }
+
+  async function saveAction() {
     if (!actionTarget || actionBusy) return;
     const nextName = renameDraft.trim();
     if (!nextName) return;
-    if (nextName === actionTarget.chip.label) {
-      setActionTarget(null);
+
+    if (actionTarget.mode === "edit") {
+      if (nextName === actionTarget.chip.label) {
+        setActionTarget(null);
+        return;
+      }
+      const handler =
+        actionTarget.kind === "subcategory" ? onRenameSubcategory : onRenameGroup;
+      if (!handler) return;
+      setActionBusy(true);
+      try {
+        await handler(actionTarget.chip, nextName);
+        setActionTarget(null);
+      } finally {
+        setActionBusy(false);
+      }
       return;
     }
 
-    const handler =
-      actionTarget.kind === "subcategory" ? onRenameSubcategory : onRenameGroup;
-    if (!handler) return;
-
     setActionBusy(true);
     try {
-      await handler(actionTarget.chip, nextName);
+      if (actionTarget.kind === "subcategory") {
+        await onCreateSubcategory?.(actionTarget.category, nextName);
+      } else {
+        await onCreateGroup?.(nextName);
+      }
       setActionTarget(null);
     } finally {
       setActionBusy(false);
@@ -117,7 +152,7 @@ export default function ArchiveTaxonomyPanel({
   }
 
   async function deleteTarget() {
-    if (!actionTarget || actionBusy) return;
+    if (!actionTarget || actionTarget.mode !== "edit" || actionBusy) return;
     const handler =
       actionTarget.kind === "subcategory" ? onDeleteSubcategory : onDeleteGroup;
     if (!handler) return;
@@ -178,6 +213,11 @@ export default function ArchiveTaxonomyPanel({
                 compact={compact}
                 onSelect={() => onSelectSubcategory(chip)}
                 onDelete={onDeleteSubcategory ? () => onDeleteSubcategory(chip) : undefined}
+                onRename={
+                  onRenameSubcategory || onDeleteSubcategory
+                    ? () => openActions("subcategory", chip)
+                    : undefined
+                }
                 onLongPress={() => openActions("subcategory", chip)}
               />
             ))}
@@ -185,7 +225,7 @@ export default function ArchiveTaxonomyPanel({
             {onCreateSubcategory ? (
               <button
                 type="button"
-                onClick={() => onCreateSubcategory(activeCategory)}
+                onClick={() => openCreate("subcategory")}
                 style={addButtonStyle(compact)}
                 title={t.archive_workspace.add_subcategory}
                 aria-label={t.archive_workspace.add_subcategory}
@@ -217,6 +257,11 @@ export default function ArchiveTaxonomyPanel({
                   compact={compact}
                   onSelect={() => onSelectGroup(chip)}
                   onDelete={onDeleteGroup ? () => onDeleteGroup(chip) : undefined}
+                  onRename={
+                    onRenameGroup || onDeleteGroup
+                      ? () => openActions("group", chip)
+                      : undefined
+                  }
                   onLongPress={() => openActions("group", chip)}
                 />
               ))}
@@ -224,7 +269,7 @@ export default function ArchiveTaxonomyPanel({
               {onCreateGroup ? (
                 <button
                   type="button"
-                  onClick={onCreateGroup}
+                  onClick={() => openCreate("group")}
                   style={addButtonStyle(compact)}
                   title={t.archive_workspace.add_group}
                   aria-label={t.archive_workspace.add_group}
@@ -237,7 +282,7 @@ export default function ArchiveTaxonomyPanel({
         ) : null}
       </section>
 
-      {compact && actionTarget ? (
+      {actionTarget ? (
         <div
           role="presentation"
           style={dialogBackdropStyle}
@@ -248,19 +293,36 @@ export default function ArchiveTaxonomyPanel({
           <section
             role="dialog"
             aria-modal="true"
-            aria-label={actionTarget.chip.label}
+            aria-label={
+              actionTarget.mode === "edit"
+                ? actionTarget.chip.label
+                : actionTarget.kind === "subcategory"
+                  ? t.archive_workspace.add_subcategory
+                  : t.archive_workspace.add_group
+            }
             style={dialogPanelStyle}
             onClick={(event) => event.stopPropagation()}
           >
-            <div style={dialogTitleStyle}>{actionTarget.chip.label}</div>
-            {(actionTarget.kind === "subcategory"
-              ? onRenameSubcategory
-              : onRenameGroup) ? (
+            <div style={dialogTitleStyle}>
+              {actionTarget.mode === "edit"
+                ? actionTarget.chip.label
+                : actionTarget.kind === "subcategory"
+                  ? t.archive_workspace.add_subcategory
+                  : t.archive_workspace.add_group}
+            </div>
+            {(actionTarget.mode === "create" ||
+              (actionTarget.kind === "subcategory"
+                ? onRenameSubcategory
+                : onRenameGroup)) ? (
               <label style={dialogFieldStyle}>
                 <span>
-                  {actionTarget.kind === "subcategory"
-                    ? t.archive_workspace.rename_category_prompt
-                    : t.archive_workspace.rename_group_prompt}
+                  {actionTarget.mode === "create"
+                    ? actionTarget.kind === "subcategory"
+                      ? t.archive_workspace.add_subcategory
+                      : t.archive_workspace.add_group
+                    : actionTarget.kind === "subcategory"
+                      ? t.archive_workspace.rename_category_prompt
+                      : t.archive_workspace.rename_group_prompt}
                 </span>
                 <input
                   value={renameDraft}
@@ -268,6 +330,12 @@ export default function ArchiveTaxonomyPanel({
                   autoFocus
                   maxLength={80}
                   style={dialogInputStyle}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void saveAction();
+                    }
+                  }}
                 />
               </label>
             ) : null}
@@ -280,7 +348,8 @@ export default function ArchiveTaxonomyPanel({
               >
                 {t.archive_workspace.cancel}
               </button>
-              {(actionTarget.kind === "subcategory"
+              {actionTarget.mode === "edit" &&
+              (actionTarget.kind === "subcategory"
                 ? onDeleteSubcategory
                 : onDeleteGroup) ? (
                 <button
@@ -292,12 +361,13 @@ export default function ArchiveTaxonomyPanel({
                   {t.archive_workspace.delete}
                 </button>
               ) : null}
-              {(actionTarget.kind === "subcategory"
-                ? onRenameSubcategory
-                : onRenameGroup) ? (
+              {(actionTarget.mode === "create" ||
+                (actionTarget.kind === "subcategory"
+                  ? onRenameSubcategory
+                  : onRenameGroup)) ? (
                 <button
                   type="button"
-                  onClick={() => void saveRename()}
+                  onClick={() => void saveAction()}
                   disabled={actionBusy || !renameDraft.trim()}
                   style={dialogPrimaryButtonStyle}
                 >
@@ -318,6 +388,7 @@ function TaxonomyChipButton({
   compact,
   onSelect,
   onDelete,
+  onRename,
   onLongPress,
 }: {
   chip: ArchiveTaxonomyChip;
@@ -325,6 +396,7 @@ function TaxonomyChipButton({
   compact: boolean;
   onSelect: () => void;
   onDelete?: () => void | Promise<void>;
+  onRename?: () => void;
   onLongPress?: () => void;
 }) {
   const { t } = useLanguage();
@@ -373,6 +445,14 @@ function TaxonomyChipButton({
           }
           onSelect();
         }}
+        onDoubleClick={(event) => {
+          if (compact || !onRename) return;
+          event.preventDefault();
+          event.stopPropagation();
+          clearTimer();
+          onRename();
+        }}
+        title={!compact && onRename ? t.archive_workspace.double_click_edit : undefined}
         style={chipButtonStyle(active, compact)}
       >
         {chip.label}

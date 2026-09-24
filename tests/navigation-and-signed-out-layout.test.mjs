@@ -79,6 +79,7 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(sharedNavigation, /transform: "translateZ\(0\)"/);
   assert.match(navbar, /!user \? <LanguageSwitcher compact \/>/);
   assert.match(navbar, /hasPageManagedMobileTopNav\(pathname\)/);
+  assert.match(navbar, /pathname\.startsWith\("\/local\/archive\/"\)/);
   assert.doesNotMatch(mobileNav, /href="\/feedback"/);
   assert.match(zhCopy, /discover: "发现"/);
   assert.match(enCopy, /discover: "Discover"/);

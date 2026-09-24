@@ -1,21 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import type { CSSProperties } from "react";
 import type { Language } from "@/lib/i18n";
 import { formatPlantingRegion, normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-region";
 import PlantingRegionField from "./PlantingRegionField";
 
-export default function PlantingRegionEditor({ value, onSave, canEdit, language }: {
+export default function PlantingRegionEditor({
+  value,
+  onSave,
+  canEdit,
+  language,
+  layout = "card",
+}: {
   value?: PlantingRegion | null;
   onSave?: (region: PlantingRegion) => Promise<void>;
   canEdit: boolean;
   language: Language;
+  layout?: "card" | "attribute";
 }) {
   const en = language === "en";
   const [draft, setDraft] = useState<PlantingRegion | null>(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const display = formatPlantingRegion(value, language) || (en ? "Not filled in" : "未填写");
+
   async function save() {
     const normalized = normalizePlantingRegion(draft);
     if (!normalized) { setError(en ? "Enter a country and city / district." : "请填写国家及城市／区县。"); return; }
@@ -26,22 +36,70 @@ export default function PlantingRegionEditor({ value, onSave, canEdit, language 
     catch { setError(en ? "Could not save. Your changes are still here." : "保存失败，填写内容已保留，请重试。"); }
     finally { setBusy(false); }
   }
+
+  function beginEdit() {
+    if (!canEdit || !onSave) return;
+    setDraft(value || null);
+    setError("");
+    setEditing(true);
+  }
+
+  const editor = editing && canEdit ? (
+    <>
+      <PlantingRegionField value={draft} onChange={setDraft} language={language} disabled={busy} required hideLegend={layout === "attribute"} />
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: layout === "attribute" ? 8 : 12 }}>
+        <button type="button" disabled={busy} onClick={() => { setEditing(false); setError(""); }} style={buttonStyle}>{en ? "Cancel" : "取消"}</button>
+        <button type="button" disabled={busy} onClick={() => void save()} style={{ ...buttonStyle, background: "#527c46", color: "#fff" }}>{busy ? (en ? "Saving…" : "保存中…") : (en ? "Save" : "保存")}</button>
+      </div>
+      {error ? <p role="alert" style={{ color: "#9a492f", fontSize: 13 }}>{error}</p> : null}
+    </>
+  ) : layout === "attribute" ? (
+    <span
+      role={canEdit && onSave ? "button" : undefined}
+      tabIndex={canEdit && onSave ? 0 : undefined}
+      onClick={beginEdit}
+      onKeyDown={(event) => {
+        if (!canEdit || !onSave) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          beginEdit();
+        }
+      }}
+      style={{
+        ...attributeValueStyle,
+        cursor: canEdit && onSave ? "pointer" : "default",
+      }}
+    >
+      {display}
+    </span>
+  ) : (
+    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, fontSize: 14, lineHeight: 1.6 }}>
+      <span style={{ color: "#73816d" }}>{en ? "Planting region" : "种植地区"}</span>
+      <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{display}</span>
+      {canEdit && onSave ? <button type="button" style={buttonStyle} onClick={beginEdit}>{en ? "Edit" : "修改"}</button> : null}
+    </div>
+  );
+
+  if (layout === "attribute") {
+    return <div style={{ minWidth: 0 }}>{editor}</div>;
+  }
+
   return (
     <section style={{ background: "#fff", border: "1px solid #dfe6d9", borderRadius: 18, padding: "16px", margin: "12px 0", minWidth: 0 }}>
-      {editing && canEdit ? <>
-        <PlantingRegionField value={draft} onChange={setDraft} language={language} disabled={busy} required />
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
-          <button type="button" disabled={busy} onClick={() => { setEditing(false); setError(""); }} style={buttonStyle}>{en ? "Cancel" : "取消"}</button>
-          <button type="button" disabled={busy} onClick={() => void save()} style={{ ...buttonStyle, background: "#527c46", color: "#fff" }}>{busy ? (en ? "Saving…" : "保存中…") : (en ? "Save" : "保存")}</button>
-        </div>
-        {error ? <p role="alert" style={{ color: "#9a492f", fontSize: 13 }}>{error}</p> : null}
-      </> : <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, fontSize: 14, lineHeight: 1.6 }}>
-        <span style={{ color: "#73816d" }}>{en ? "Planting region" : "种植地区"}</span>
-        <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{formatPlantingRegion(value, language) || (en ? "Not filled in" : "未填写")}</span>
-        {canEdit && onSave ? <button type="button" style={buttonStyle} onClick={() => { setDraft(value || null); setError(""); setEditing(true); }}>{en ? "Edit" : "修改"}</button> : null}
-      </div>}
+      {editor}
     </section>
   );
 }
 
 const buttonStyle = { padding: "8px 14px", border: "1px solid #dce4d6", borderRadius: 20, background: "#f8faf5", color: "#42663b", fontSize: 14, cursor: "pointer" };
+
+const attributeValueStyle: CSSProperties = {
+  minWidth: 0,
+  display: "block",
+  color: "#273327",
+  fontSize: 14,
+  lineHeight: 1.45,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
