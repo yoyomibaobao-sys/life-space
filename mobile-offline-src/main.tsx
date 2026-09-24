@@ -978,36 +978,46 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
+  const homeSectionOwnsTopNav = ["activity", "experience", "guides"].includes(screen.kind);
+  const shellHeaderTitle =
+    screen.kind === "following"
+      ? copy.follow
+      : screen.kind === "market"
+        ? copy.market
+        : copy.mySpace;
+
   if (loading) {
     return <main className="offline-shell loading">{copy.loading}</main>;
   }
 
   return (
     <main className="offline-shell">
-      <MobilePageHeaderView
-        className="android-shell-header"
-        title={copy.mySpace}
-        titleText={copy.mySpace}
-        showBack={false}
-        ariaLabel={copy.mySpace}
-        right={(
-          <div className="header-actions">
-            {!owner ? (
-              <button className="icon-button" type="button" onClick={toggleLanguage}>
-                {language === "zh" ? "EN" : "中文"}
+      {!homeSectionOwnsTopNav ? (
+        <MobilePageHeaderView
+          className="android-shell-header"
+          title={shellHeaderTitle}
+          titleText={shellHeaderTitle}
+          showBack={false}
+          ariaLabel={shellHeaderTitle}
+          right={(
+            <div className="header-actions">
+              {!owner ? (
+                <button className="icon-button" type="button" onClick={toggleLanguage}>
+                  {language === "zh" ? "EN" : "中文"}
+                </button>
+              ) : null}
+              <button
+                className="icon-button"
+                type="button"
+                aria-label={copy.settings}
+                onClick={() => setScreen({ kind: "settings" })}
+              >
+                <UiIcon name="menu" size={22} />
               </button>
-            ) : null}
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={copy.settings}
-              onClick={() => setScreen({ kind: "settings" })}
-            >
-              <UiIcon name="menu" size={22} />
-            </button>
-          </div>
-        )}
-      />
+            </div>
+          )}
+        />
+      ) : null}
 
       {online && pendingSync.find((item) => item.should_prompt) ? (() => {
         const pending = pendingSync.find((item) => item.should_prompt)!;
