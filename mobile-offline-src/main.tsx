@@ -65,6 +65,7 @@ import MobileBottomNavigationView, {
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
+import MobileMarketFeedCard, { mobileMarketCardStyle, mobileMarketListStyle } from "@/components/market/MobileMarketFeedCard";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -106,8 +107,10 @@ import {
   type MarketProfileBrief,
 } from "@/lib/market-feed";
 import {
-  getMarketItemCategoryLabel,
-  getMarketPostTypeLabel,
+  getMarketItemCategoryOptions,
+  getMarketPostTypeOptions,
+  type MarketItemCategory,
+  type MarketPostType,
 } from "@/lib/market-types";
 
 const MAX_PHOTOS = 10;
@@ -463,6 +466,20 @@ function App() {
   const [marketArchives, setMarketArchives] = useState<Map<string, MarketArchiveBrief>>(new Map());
   const [marketLoading, setMarketLoading] = useState(false);
   const [marketError, setMarketError] = useState(false);
+  const [marketTypeFilter, setMarketTypeFilter] = useState<"all" | MarketPostType>("all");
+  const [marketCategoryFilter, setMarketCategoryFilter] = useState<"all" | MarketItemCategory>("all");
+  const [marketLocationFilter, setMarketLocationFilter] = useState("");
+  const [marketContentFilter, setMarketContentFilter] = useState("");
+  const [marketFiltersOpen, setMarketFiltersOpen] = useState(false);
+  const visibleMarketItems = useMemo(() => marketItems.filter((item) => {
+    if (marketTypeFilter !== "all" && item.post_type !== marketTypeFilter) return false;
+    if (marketCategoryFilter !== "all" && item.item_category !== marketCategoryFilter) return false;
+    const profile = marketProfiles.get(item.user_id);
+    const archive = item.archive_id ? marketArchives.get(item.archive_id) : null;
+    const location = [item.location_text, profile?.country_name, profile?.region_name, profile?.city_name].filter(Boolean).join(" ").toLowerCase();
+    const content = [item.title, item.description, profile?.username, archive?.title, archive?.system_name, archive?.species_name_snapshot].filter(Boolean).join(" ").toLowerCase();
+    return location.includes(marketLocationFilter.trim().toLowerCase()) && content.includes(marketContentFilter.trim().toLowerCase());
+  }), [marketItems, marketProfiles, marketArchives, marketTypeFilter, marketCategoryFilter, marketLocationFilter, marketContentFilter]);
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -1613,52 +1630,42 @@ function App() {
               </button>
             </div>
           </section>
-        ) : marketItems.length ? (
+        ) : (
           <>
+            <div className="category-row" role="group" aria-label={language === "zh" ? "集市类型" : "Market type"}>
+              {[{ value: "all", label: language === "zh" ? "全部" : "All" }, ...getMarketPostTypeOptions(language)].map((option) => (
+                <button type="button" key={option.value} aria-pressed={marketTypeFilter === option.value} onClick={() => setMarketTypeFilter(option.value as "all" | MarketPostType)}>{option.label}</button>
+              ))}
+            </div>
+            <button type="button" className="secondary-button" aria-expanded={marketFiltersOpen} onClick={() => setMarketFiltersOpen((open) => !open)}>
+              {language === "zh" ? "筛选" : "Filters"}
+            </button>
+            {marketFiltersOpen ? <div className="field">
+              <label>{language === "zh" ? "分类" : "Category"}
+                <select value={marketCategoryFilter} onChange={(event) => setMarketCategoryFilter(event.target.value as "all" | MarketItemCategory)}>
+                  <option value="all">{language === "zh" ? "全部分类" : "All categories"}</option>
+                  {getMarketItemCategoryOptions(language).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>{language === "zh" ? "地区" : "Area"}<input value={marketLocationFilter} onChange={(event) => setMarketLocationFilter(event.target.value)} /></label>
+              <label>{language === "zh" ? "内容" : "Content"}<input value={marketContentFilter} onChange={(event) => setMarketContentFilter(event.target.value)} /></label>
+            </div> : null}
             <div className="section-title">
               <h1>{copy.market}</h1>
-              <span className="count">{marketItems.length}</span>
+              <span className="count">{visibleMarketItems.length}</span>
             </div>
-            <div className="market-shell-list">
-              {marketItems.map((item) => {
+            {visibleMarketItems.length ? <div style={mobileMarketListStyle}>
+              {visibleMarketItems.map((item) => {
                 const profile = marketProfiles.get(item.user_id);
                 const archive = item.archive_id ? marketArchives.get(item.archive_id) : null;
                 return (
-                  <article className="market-shell-card" key={item.id}>
-                    {item.display_cover_thumb_url || item.display_cover_image_url ? (
-                      <img
-                        className="market-shell-image"
-                        src={item.display_cover_thumb_url || item.display_cover_image_url || ""}
-                        alt=""
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="market-shell-image market-shell-placeholder">
-                        <UiIcon name="store" size={24} />
-                      </div>
-                    )}
-                    <div className="market-shell-body">
-                      <div className="market-shell-badges">
-                        <span>{getMarketPostTypeLabel(item.post_type, language)}</span>
-                        <span>{getMarketItemCategoryLabel(item.item_category, language)}</span>
-                      </div>
-                      <strong>{item.title}</strong>
-                      {item.description ? <p>{item.description}</p> : null}
-                      <small>
-                        {item.location_text || profile?.city_name || profile?.region_name || profile?.country_name || ""}
-                        {profile?.username ? ` · ${profile.username}` : ""}
-                        {archive?.title ? ` · ${archive.title}` : ""}
-                      </small>
-                    </div>
+                  <article style={mobileMarketCardStyle} key={item.id}>
+                    <MobileMarketFeedCard item={item} profile={profile} archive={archive} language={language} marketName={copy.market} unsetUsername={language === "zh" ? "未设置用户名" : "Unknown user"} notProvided={language === "zh" ? "未提供" : "Not provided"} />
                   </article>
                 );
               })}
-            </div>
+            </div> : <section className="panel empty">{language === "zh" ? "没有符合筛选条件的内容。" : "No matching posts."}</section>}
           </>
-        ) : (
-          <section className="panel empty">
-            {language === "zh" ? "集市暂时没有内容。" : "The market is empty."}
-          </section>
         )
       ) : null}
 

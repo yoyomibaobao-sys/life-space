@@ -20,6 +20,7 @@ import {
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
 import MarketMessageLink from "@/components/market/MarketMessageLink";
+import MobileMarketFeedCard, { mobileMarketCardStyle } from "@/components/market/MobileMarketFeedCard";
 import { getCompactCardLocation } from "@/lib/card-location";
 
 export default function MarketPage() {
@@ -305,7 +306,10 @@ export default function MarketPage() {
               const publisherName = profile?.username || t.market.unset_username;
 
               return (
-                <Link key={item.id} href={`/market/${item.id}`} style={cardStyle}>
+                <Link key={item.id} href={`/market/${item.id}`} style={isMobileViewport ? mobileMarketCardStyle : cardStyle}>
+                  {isMobileViewport ? (
+                    <MobileMarketFeedCard item={item} profile={profile} archive={archive} language={language} marketName={t.market.name} unsetUsername={t.market.unset_username} notProvided={t.market.not_provided} />
+                  ) : (<>
                   {item.display_cover_thumb_url || item.display_cover_image_url ? (
                     <img
                       src={
@@ -376,6 +380,7 @@ export default function MarketPage() {
                       </div>
                     </div>}
                   </div>
+                  </>)}
                 </Link>
               );
             })}
