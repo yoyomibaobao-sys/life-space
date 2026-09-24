@@ -42,7 +42,11 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
-import type { ArchiveCategory } from "@/lib/archive-categories";
+import {
+  getArchiveCategoryIcon,
+  getArchiveCategoryLabel,
+  type ArchiveCategory,
+} from "@/lib/archive-categories";
 
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
@@ -77,18 +81,7 @@ const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
 type ShellSourceFilter = "all" | "cloud" | "local";
-
-type CloudArchiveSummary = {
-  id: string;
-  title?: string | null;
-  category?: string | null;
-  system_name?: string | null;
-  species_name_snapshot?: string | null;
-  status?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  is_public?: boolean | null;
-};
+type CloudArchiveSummary = CloudOfflineCacheArchiveSource;
 
 type Screen =
   | { kind: "list" }
@@ -267,6 +260,24 @@ function toDateTimeLocal(value?: string | null) {
   return toLocalDateTimeInputValue(value || new Date());
 }
 
+function getOngoingDays(createdAt?: string | null, endedAt?: string | null) {
+  if (!createdAt) return null;
+  const startedAt = new Date(createdAt);
+  if (Number.isNaN(startedAt.getTime())) return null;
+  const startDate = new Date(
+    startedAt.getFullYear(),
+    startedAt.getMonth(),
+    startedAt.getDate(),
+  ).getTime();
+  const ended = endedAt ? new Date(endedAt) : new Date();
+  const endDate = new Date(
+    ended.getFullYear(),
+    ended.getMonth(),
+    ended.getDate(),
+  ).getTime();
+  return Math.max(1, Math.floor((endDate - startDate) / 86_400_000) + 1);
+}
+
 function BlobImage({ image, className, alt }: {
   image?: LocalImage | null;
   className?: string;
@@ -308,7 +319,7 @@ function App() {
   );
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
-  const [sourceFilter, setSourceFilter] = useState<"all" | "local">("all");
+  const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -605,9 +616,22 @@ function App() {
   const activeGuide = screen.kind === "guide-detail"
     ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
     : undefined;
-  const listedArchives = sourceFilter === "local" ? archives : [...cloudCaches, ...archives];
-  const filteredArchives = listedArchives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter);
+  const filteredLocalArchives = archives.filter(
+    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
+  );
+  const filteredCloudCaches = cloudCaches.filter(
+    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
+  );
+  const filteredCloudArchives = cloudArchives.filter(
+    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
+  );
   const cloudSourceCount = online && cloudUserId ? cloudArchives.length : cloudCaches.length;
+  const sourceVisibleCount =
+    sourceFilter === "local"
+      ? archives.length
+      : sourceFilter === "cloud"
+        ? cloudSourceCount
+        : archives.length + cloudSourceCount;
 
   function renderSourceSwitcher(activeSource: ShellSourceFilter) {
     return (
@@ -619,10 +643,6 @@ function App() {
         ]}
         activeValue={activeSource}
         onSelect={(source) => {
-          if (source === "cloud") {
-            setScreen({ kind: "cloud" });
-            return;
-          }
           setSourceFilter(source);
           setScreen({ kind: "list" });
         }}
@@ -632,6 +652,73 @@ function App() {
             onClick={() => setScreen({ kind: "new-project" })}
           >
             +{copy.project}
+          </button>
+        )}
+      />
+    );
+  }
+
+  function cloudProjectView(archive: CloudArchiveSummary) {
+    const ended = archive.status === "ended";
+    const coverUrl = archive.display_cover_image_url || archive.cover_image_url || "";
+    return {
+      id: archive.id,
+      mode: "cloud" as const,
+      title: archive.title || copy.project,
+      category: archive.category,
+      categoryLabel: getArchiveCategoryLabel(archive.category, language),
+      categoryIcon: getArchiveCategoryIcon(archive.category),
+      systemName:
+        archive.category === "plant"
+          ? archive.species_display_name || archive.species_name_snapshot || ""
+          : archive.system_name || "",
+      cover: coverUrl
+        ? { kind: "url" as const, url: coverUrl, alt: archive.title || copy.project }
+        : null,
+      latestText: archive.latest_record_note || archive.note || "",
+      latestTime:
+        archive.latest_record_time || archive.last_record_time || archive.created_at || null,
+      recordCount: archive.record_count || 0,
+      durationDays: getOngoingDays(archive.created_at),
+      viewCount: archive.view_count || 0,
+      followerCount: archive.follower_count,
+      visibilityLabel: archive.is_public
+        ? language === "zh" ? "公开" : "Public"
+        : copy.private,
+      visibilityTone: archive.is_public ? "public" as const : "private" as const,
+      statusLabel: ended ? copy.ended : null,
+      ended,
+      showClassificationRow: false,
+    };
+  }
+
+  function renderCloudProjectCard(archive: CloudArchiveSummary) {
+    const localCopy = archives.find(
+      (item) => item.source_cloud_archive_id === archive.id,
+    );
+    const busy = cloudBusyArchiveId === archive.id;
+    return (
+      <ArchiveProjectCard
+        key={archive.id}
+        project={cloudProjectView(archive)}
+        mobileMode
+        mobileShowCategoryBadge={false}
+        onClick={localCopy ? () => openDetail(localCopy.id) : undefined}
+        actionSlot={(
+          <button
+            type="button"
+            className="primary-button"
+            disabled={busy}
+            onClick={(event) => {
+              event.stopPropagation();
+              void saveCloudCopy(archive.id);
+            }}
+          >
+            {busy
+              ? copy.savingCloudCopy
+              : localCopy
+                ? copy.refreshLocalCopy
+                : copy.saveLocalCopy}
           </button>
         )}
       />
@@ -748,30 +835,91 @@ function App() {
           ) : null}
 
           <div className="section-title">
-            <h1>{sourceFilter === "local" ? copy.localProjects : copy.mySpace}</h1>
-            <span className="count">{listedArchives.length}</span>
+            <h1>{
+              sourceFilter === "cloud"
+                ? copy.cloudProjects
+                : sourceFilter === "local"
+                  ? copy.localProjects
+                  : copy.mySpace
+            }</h1>
+            <span className="count">{sourceVisibleCount}</span>
           </div>
-          {filteredArchives.length ? (
-            <div className="project-list">
-              {filteredArchives.map((archive) => (
-                <ArchiveProjectCard
-                  key={archive.id}
-                  project={{
-                    ...localArchiveToProjectView(archive, ownerContext, language),
-                    href: undefined,
-                    visibilityLabel: archive.local_role === "cloud-offline-cache" ? copy.offlineCopies : copy.local,
-                  }}
-                  onClick={() => openDetail(archive.id)}
-                  mobileMode
-                />
-              ))}
-            </div>
-          ) : (
+
+          {sourceFilter !== "local" ? (
+            online && cloudUserId ? (
+              <>
+                {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
+                {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
+                {!cloudLoading && !cloudError && filteredCloudArchives.length ? (
+                  <div className="project-list">
+                    {filteredCloudArchives.map(renderCloudProjectCard)}
+                  </div>
+                ) : null}
+                {!cloudLoading && !cloudError && sourceFilter === "cloud" && filteredCloudArchives.length === 0 ? (
+                  <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {online && !cloudUserId ? (
+                  <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
+                ) : null}
+                {filteredCloudCaches.length ? (
+                  <div className="project-list">
+                    {filteredCloudCaches.map((archive) => (
+                      <ArchiveProjectCard
+                        key={archive.id}
+                        project={{
+                          ...localArchiveToProjectView(archive, ownerContext, language),
+                          href: undefined,
+                          visibilityLabel: copy.offlineCopies,
+                        }}
+                        onClick={() => openDetail(archive.id)}
+                        mobileMode
+                      />
+                    ))}
+                  </div>
+                ) : sourceFilter === "cloud" && !online ? (
+                  <section className="panel empty">{copy.noCachedProjects}</section>
+                ) : null}
+              </>
+            )
+          ) : null}
+
+          {sourceFilter !== "cloud" ? (
+            filteredLocalArchives.length ? (
+              <div className="project-list">
+                {filteredLocalArchives.map((archive) => (
+                  <ArchiveProjectCard
+                    key={archive.id}
+                    project={{
+                      ...localArchiveToProjectView(archive, ownerContext, language),
+                      href: undefined,
+                      visibilityLabel: copy.local,
+                    }}
+                    onClick={() => openDetail(archive.id)}
+                    mobileMode
+                  />
+                ))}
+              </div>
+            ) : sourceFilter === "local" ? (
+              <section className="panel empty">
+                <strong>{copy.noProjects}</strong>
+                {copy.noProjectsHint}
+              </section>
+            ) : null
+          ) : null}
+
+          {sourceFilter === "all" &&
+          filteredLocalArchives.length === 0 &&
+          (online && cloudUserId
+            ? !cloudLoading && !cloudError && filteredCloudArchives.length === 0
+            : filteredCloudCaches.length === 0) ? (
             <section className="panel empty">
               <strong>{copy.noProjects}</strong>
               {copy.noProjectsHint}
             </section>
-          )}
+          ) : null}
         </>
       ) : null}
 
