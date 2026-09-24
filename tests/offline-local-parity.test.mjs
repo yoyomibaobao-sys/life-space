@@ -125,6 +125,13 @@ test("local projects reuse the cloud archive card and detail header with device-
   assert.match(summaryCard, /props\.storageLabel/);
   assert.match(cloudCard, /storageLabel/);
   assert.match(archivePage, /t\.archive\.transfer_to_cloud/);
+  assert.match(archivePage, /activeLocalArchives\.map\(\(archive\) => renderLocalArchiveCard\(archive\)\)/);
+  assert.match(archivePage, /showCloudEndedList \|\| showLocalEndedList/);
+  assert.match(archivePage, /endedLocalArchives\.map\(\(archive\) => renderLocalArchiveCard\(archive\)\)/);
+  assert.match(localView, /help_status: null,\s*view_count: 0,\s*};/);
+  assert.doesNotMatch(localView, /follower_count: 0/);
+  assert.match(cloudCard, /followerCount: href \? undefined : item\.follower_count/);
+  assert.match(cloudCard, /followerCount=\{href \? undefined : item\.follower_count\}/);
   assert.match(localDetail, /<ArchiveDetailHeaderView/);
   assert.match(localDetail, /eyebrow=\{archiveCopy\.project_archive\}/);
   assert.match(localDetail, /archiveCopy\.local_project/);

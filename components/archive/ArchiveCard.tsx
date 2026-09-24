@@ -588,7 +588,7 @@ export default function ArchiveCard({
           durationDays={ongoingDays}
           ended={ended}
           viewCount={item.view_count || 0}
-          followerCount={item.follower_count}
+          followerCount={href ? undefined : item.follower_count}
           style={{ marginTop: "auto", paddingTop: 5 }}
         />
       </div>
@@ -724,7 +724,7 @@ function MobileArchiveCard({
     latestTime: latestRecordTime,
     recordCount: item.record_count || 0,
     durationDays: ongoingDays,
-    followerCount: item.follower_count,
+    followerCount: href ? undefined : item.follower_count,
     helpLabel: item.help_status === "open" ? t.archive_workspace.help_open : null,
     visibilityLabel: visibilityText,
     visibilityTone: href ? "neutral" : item.is_public ? "public" : "private",

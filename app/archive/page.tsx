@@ -1306,8 +1306,17 @@ export default function ArchivePage() {
 
   const activeArchives = filteredArchives.filter((item) => item.status !== "ended");
   const endedArchives = filteredArchives.filter((item) => item.status === "ended");
+  const activeLocalArchives = filteredLocalArchives.filter((item) => item.status !== "ended");
+  const endedLocalArchives = filteredLocalArchives.filter((item) => item.status === "ended");
   const showCloudArchives = activeSource !== "local";
   const showLocalArchives = activeSource !== "cloud";
+  const showCloudEndedList =
+    showCloudArchives && Boolean(currentOwnerContext?.userId) && endedArchives.length > 0;
+  const showLocalEndedList =
+    showLocalArchives && !localLoading && !localError && endedLocalArchives.length > 0;
+  const hasVisibleActiveProjects =
+    (showCloudArchives && Boolean(currentOwnerContext?.userId) && activeArchives.length > 0) ||
+    (showLocalArchives && !localLoading && !localError && activeLocalArchives.length > 0);
   const localSubTags = useMemo<ArchiveTaxonomyChip[]>(() => {
     if (!activeCategory || activeLocalDepth < 2) return [];
 
@@ -2027,6 +2036,178 @@ export default function ArchivePage() {
     );
   }
 
+  function renderLocalArchiveCard(archive: LocalArchiveSummary) {
+    const item = localArchiveToArchiveItem(archive);
+    const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
+    const pendingCloudSyncSummary = pendingCloudSyncByArchiveId.get(archive.id);
+
+    return (
+      <ArchiveCard
+        key={archive.id}
+        item={item}
+        ended={archive.status === "ended"}
+        mobileMode={isMobileViewport}
+        subTags={localSubTagItems}
+        groupTags={localGroupTagItems}
+        categoryDepths={localCategoryDepths}
+        editingPlantArchiveId={null}
+        editingSpeciesId=""
+        editingPendingSpeciesName=""
+        editingPlantSearch=""
+        plantSuggestionsOpen={false}
+        plantSearchResults={[]}
+        hasExactPlantMatch={false}
+        editingSystemArchiveId={editingLocalSystemArchiveId}
+        editingSystemSearch={editingLocalSystemSearch}
+        editingSystemName={editingLocalSystemName}
+        systemSuggestionsOpen={localSystemSuggestionsOpen}
+        systemNameOptions={getSystemNameOptions(
+          archive.category,
+          editingLocalSystemSearch
+        )}
+        hasExactSystemNameMatch={hasExactSystemNameCandidate(
+          getSystemNameCandidateOptions(
+            archive.category,
+            "",
+            archive.system_name || archive.species_name,
+            300
+          ),
+          editingLocalSystemSearch
+        )}
+        onNavigate={() => router.push(`/local/archive/${archive.id}`)}
+        shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
+        onRenameTitle={() => void renameLocalArchiveTitle(archive)}
+        onBeginEditPlant={() => {}}
+        onPlantSearchChange={() => {}}
+        onSelectPlantSpecies={() => {}}
+        onSubmitPendingSpecies={() => {}}
+        onSavePlantSelection={() => {}}
+        onCancelPlantEditing={() => {}}
+        onBeginEditSystem={() => void renameLocalArchiveSystemName(archive)}
+        onSystemSearchChange={(value) => {
+          setEditingLocalSystemSearch(value);
+          setEditingLocalSystemName("");
+          setLocalSystemSuggestionsOpen(true);
+        }}
+        onSelectSystemName={(name) => {
+          setEditingLocalSystemName(name);
+          setEditingLocalSystemSearch(name);
+          setLocalSystemSuggestionsOpen(false);
+        }}
+        onSaveSystemSelection={() => void saveLocalArchiveSystemName(archive)}
+        onCancelSystemEditing={cancelLocalArchiveSystemNameEditing}
+        onUpdateArchiveStatus={() => void toggleLocalArchiveEnded(archive)}
+        onTogglePublic={() => {}}
+        onUpdateArchiveCategory={(_item, value) => {
+          void updateLocalArchiveCategoryValue(archive, value);
+        }}
+        onUpdateArchiveGroupTag={(_item, value) => {
+          void updateLocalArchiveGroupValue(archive, value);
+        }}
+        onDeleteArchive={() => void deleteLocalArchiveFromList(archive)}
+        extraStatusPills={
+          isDeviceLocalProject
+            ? [
+                {
+                  key: "local-project",
+                  label: t.archive.local_project,
+                  style: {
+                    border: "1px solid #d8ddd4",
+                    background: "#f5f8f1",
+                    color: "#607356",
+                  },
+                },
+              ]
+            : []
+        }
+        storageLabel={
+          isDeviceLocalProject ? t.archive.saved_on_this_device : null
+        }
+        hidePublicToggle
+        preferSystemNameEditor
+        coverBlob={archive.cover_image?.blob || null}
+        href={`/local/archive/${archive.id}`}
+        visibilityLabel={
+          isDeviceLocalProject
+            ? t.archive.local_project
+            : t.archive_workspace.local
+        }
+        extraRail={
+          <>
+            {pendingCloudSyncSummary ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  router.push(`/local/archive/${archive.id}?sync=1`);
+                }}
+                style={localProjectRailSyncButtonStyle}
+              >
+                {t.archive.pending_sync_upload}
+              </button>
+            ) : archive.source_cloud_archive_id ? null : (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  router.push(`/local/archive/${archive.id}?transfer=1`);
+                }}
+                style={localProjectRailButtonStyle}
+              >
+                {t.archive.transfer_to_cloud}
+              </button>
+            )}
+            {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void markSingleLocalArchiveAsMine(archive);
+                }}
+                style={localProjectRailButtonStyle}
+              >
+                {t.archive_workspace.mark_ownership}
+              </button>
+            ) : null}
+          </>
+        }
+        extraMobileActions={[
+          ...(pendingCloudSyncSummary
+            ? [
+                {
+                  label: t.archive.pending_sync_upload,
+                  onClick: () =>
+                    router.push(`/local/archive/${archive.id}?sync=1`),
+                },
+              ]
+            : archive.source_cloud_archive_id
+              ? []
+              : [
+                  {
+                    label: t.archive.transfer_to_cloud,
+                    onClick: () =>
+                      router.push(
+                        `/local/archive/${archive.id}?transfer=1`
+                      ),
+                  },
+                ]),
+          ...(!archive.local_owner_user_id && currentOwnerContext?.userId
+            ? [
+                {
+                  label: t.archive_workspace.mark_ownership,
+                  onClick: () =>
+                    void markSingleLocalArchiveAsMine(archive),
+                },
+              ]
+            : []),
+        ]}
+      />
+    );
+  }
+
   if (!ready) return null;
 
   return (
@@ -2118,18 +2299,7 @@ export default function ArchivePage() {
                 : t.archive_workspace.no_cloud_matches}
             </div>
           ) : (
-            <>
-              {activeArchives.map((item) => renderCloudArchiveCard(item, false))}
-              {endedArchives.length > 0 ? (
-                <section style={{ marginTop: activeArchives.length > 0 ? 26 : 0 }}>
-                  <div style={endedSectionHeaderStyle}>
-                    <h2 style={endedSectionTitleStyle}>{t.archive_workspace.ended}</h2>
-                    <span style={endedSectionTextStyle}>{t.archive_workspace.ended_hint}</span>
-                  </div>
-                  {endedArchives.map((item) => renderCloudArchiveCard(item, true))}
-                </section>
-              ) : null}
-            </>
+            activeArchives.map((item) => renderCloudArchiveCard(item, false))
           )
         ) : null}
 
@@ -2145,180 +2315,23 @@ export default function ArchivePage() {
           ) : filteredLocalArchives.length === 0 ? (
             <div style={emptyPanelStyle}>{t.archive_workspace.no_local_matches}</div>
           ) : (
-            filteredLocalArchives.map((archive) => {
-              const item = localArchiveToArchiveItem(archive);
-              const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
-              const pendingCloudSyncSummary = pendingCloudSyncByArchiveId.get(
-                archive.id
-              );
-
-              return (
-                <ArchiveCard
-                  key={archive.id}
-                  item={item}
-                  ended={archive.status === "ended"}
-                  mobileMode={isMobileViewport}
-                  subTags={localSubTagItems}
-                  groupTags={localGroupTagItems}
-                  categoryDepths={localCategoryDepths}
-                  editingPlantArchiveId={null}
-                  editingSpeciesId=""
-                  editingPendingSpeciesName=""
-                  editingPlantSearch=""
-                  plantSuggestionsOpen={false}
-                  plantSearchResults={[]}
-                  hasExactPlantMatch={false}
-                  editingSystemArchiveId={editingLocalSystemArchiveId}
-                  editingSystemSearch={editingLocalSystemSearch}
-                  editingSystemName={editingLocalSystemName}
-                  systemSuggestionsOpen={localSystemSuggestionsOpen}
-                  systemNameOptions={getSystemNameOptions(
-                    archive.category,
-                    editingLocalSystemSearch
-                  )}
-                  hasExactSystemNameMatch={hasExactSystemNameCandidate(
-                    getSystemNameCandidateOptions(
-                      archive.category,
-                      "",
-                      archive.system_name || archive.species_name,
-                      300
-                    ),
-                    editingLocalSystemSearch
-                  )}
-                  onNavigate={() => router.push(`/local/archive/${archive.id}`)}
-                  shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
-                  onRenameTitle={() => void renameLocalArchiveTitle(archive)}
-                  onBeginEditPlant={() => {}}
-                  onPlantSearchChange={() => {}}
-                  onSelectPlantSpecies={() => {}}
-                  onSubmitPendingSpecies={() => {}}
-                  onSavePlantSelection={() => {}}
-                  onCancelPlantEditing={() => {}}
-                  onBeginEditSystem={() => void renameLocalArchiveSystemName(archive)}
-                  onSystemSearchChange={(value) => {
-                    setEditingLocalSystemSearch(value);
-                    setEditingLocalSystemName("");
-                    setLocalSystemSuggestionsOpen(true);
-                  }}
-                  onSelectSystemName={(name) => {
-                    setEditingLocalSystemName(name);
-                    setEditingLocalSystemSearch(name);
-                    setLocalSystemSuggestionsOpen(false);
-                  }}
-                  onSaveSystemSelection={() => void saveLocalArchiveSystemName(archive)}
-                  onCancelSystemEditing={cancelLocalArchiveSystemNameEditing}
-                  onUpdateArchiveStatus={() => void toggleLocalArchiveEnded(archive)}
-                  onTogglePublic={() => {}}
-                  onUpdateArchiveCategory={(_item, value) => {
-                    void updateLocalArchiveCategoryValue(archive, value);
-                  }}
-                  onUpdateArchiveGroupTag={(_item, value) => {
-                    void updateLocalArchiveGroupValue(archive, value);
-                  }}
-                  onDeleteArchive={() => void deleteLocalArchiveFromList(archive)}
-                  extraStatusPills={
-                    isDeviceLocalProject
-                      ? [
-                          {
-                            key: "local-project",
-                            label: t.archive.local_project,
-                            style: {
-                              border: "1px solid #d8ddd4",
-                              background: "#f5f8f1",
-                              color: "#607356",
-                            },
-                          },
-                        ]
-                      : []
-                  }
-                  storageLabel={
-                    isDeviceLocalProject ? t.archive.saved_on_this_device : null
-                  }
-                  hidePublicToggle
-                  preferSystemNameEditor
-                  coverBlob={archive.cover_image?.blob || null}
-                  href={`/local/archive/${archive.id}`}
-                  visibilityLabel={
-                    isDeviceLocalProject
-                      ? t.archive.local_project
-                      : t.archive_workspace.local
-                  }
-                  extraRail={
-                    <>
-                      {pendingCloudSyncSummary ? (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            router.push(`/local/archive/${archive.id}?sync=1`);
-                          }}
-                          style={localProjectRailSyncButtonStyle}
-                        >
-                          {t.archive.pending_sync_upload}
-                        </button>
-                      ) : archive.source_cloud_archive_id ? null : (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            router.push(`/local/archive/${archive.id}?transfer=1`);
-                          }}
-                          style={localProjectRailButtonStyle}
-                        >
-                          {t.archive.transfer_to_cloud}
-                        </button>
-                      )}
-                      {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void markSingleLocalArchiveAsMine(archive);
-                          }}
-                          style={localProjectRailButtonStyle}
-                        >
-                          {t.archive_workspace.mark_ownership}
-                        </button>
-                      ) : null}
-                    </>
-                  }
-                  extraMobileActions={[
-                    ...(pendingCloudSyncSummary
-                      ? [
-                          {
-                            label: t.archive.pending_sync_upload,
-                            onClick: () =>
-                              router.push(`/local/archive/${archive.id}?sync=1`),
-                          },
-                        ]
-                      : archive.source_cloud_archive_id
-                        ? []
-                        : [
-                            {
-                              label: t.archive.transfer_to_cloud,
-                              onClick: () =>
-                                router.push(
-                                  `/local/archive/${archive.id}?transfer=1`
-                                ),
-                            },
-                          ]),
-                    ...(!archive.local_owner_user_id && currentOwnerContext?.userId
-                      ? [
-                          {
-                            label: t.archive_workspace.mark_ownership,
-                            onClick: () =>
-                              void markSingleLocalArchiveAsMine(archive),
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
-              );
-            })
+            activeLocalArchives.map((archive) => renderLocalArchiveCard(archive))
           )
+        ) : null}
+
+        {showCloudEndedList || showLocalEndedList ? (
+          <section style={{ marginTop: hasVisibleActiveProjects ? 26 : 0 }}>
+            <div style={endedSectionHeaderStyle}>
+              <h2 style={endedSectionTitleStyle}>{t.archive_workspace.ended}</h2>
+              <span style={endedSectionTextStyle}>{t.archive_workspace.ended_hint}</span>
+            </div>
+            {showCloudEndedList
+              ? endedArchives.map((item) => renderCloudArchiveCard(item, true))
+              : null}
+            {showLocalEndedList
+              ? endedLocalArchives.map((archive) => renderLocalArchiveCard(archive))
+              : null}
+          </section>
         ) : null}
       </ArchiveWorkspaceTemplate>
       <ConfirmDialog

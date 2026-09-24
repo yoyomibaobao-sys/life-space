@@ -113,6 +113,5 @@ export function localArchiveToArchiveItem(archive: LocalArchiveSummary): Archive
     note: archive.note,
     help_status: null,
     view_count: 0,
-    follower_count: 0,
   };
 }
