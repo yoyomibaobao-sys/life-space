@@ -9,7 +9,7 @@
   --line: #dce5d8;
   --card: rgba(255, 255, 255, 0.92);
   --danger: #a0443b;
-  --shell-pad-x: 16px;
+  --shell-pad-x: 8px;
 }
 
 * { box-sizing: border-box; }
@@ -34,11 +34,12 @@ button { touch-action: manipulation; }
 }
 
 .offline-shell {
-  width: min(760px, 100%);
+  width: 100%;
+  max-width: 1080px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 0 var(--shell-pad-x)
-    calc(env(safe-area-inset-bottom, 0px) + 36px);
+  padding: 8px var(--shell-pad-x)
+    calc(env(safe-area-inset-bottom, 0px) + 94px);
 }
 
 .icon-button, .secondary-button, .primary-button, .danger-button {
@@ -149,7 +150,7 @@ button:disabled { opacity: 0.55; }
 .loading { display: grid; place-items: center; min-height: 50vh; color: var(--muted); }
 
 @media (max-width: 420px) {
-  :root { --shell-pad-x: 12px; }
+  :root { --shell-pad-x: 8px; }
   .offline-shell { padding-left: var(--shell-pad-x); padding-right: var(--shell-pad-x); }
   .photo-grid { grid-template-columns: repeat(2, 1fr); }
 }
