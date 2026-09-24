@@ -133,3 +133,13 @@ test("new local projects inherit the signed-in account only on this device", () 
   assert.match(ownerSync, /preparePendingCloudSyncQueue/);
   assert.match(zh, /这不会上传云端/);
 });
+
+test("explicit Android sign-out hides account-bound offline cache state", () => {
+  const source = read("mobile-offline-src/main.tsx");
+
+  assert.match(source, /event === "SIGNED_OUT"/);
+  assert.match(source, /clearRememberedLocalOwnerContext\(\)/);
+  assert.match(source, /setCloudArchives\(\[\]\)/);
+  assert.match(source, /listVisibleCloudOfflineArchiveSummaries\(null\)/);
+  assert.match(source, /setCloudCaches\(cachedCloud\)/);
+});
