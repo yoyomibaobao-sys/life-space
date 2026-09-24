@@ -91,6 +91,10 @@ type CloudArchiveSummary = {
   status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  last_record_time?: string | null;
+  record_count?: number | null;
+  view_count?: number | null;
+  cover_image_url?: string | null;
   is_public?: boolean | null;
 };
 
@@ -646,11 +650,18 @@ function App() {
         archive.category === "plant"
           ? archive.species_name_snapshot || ""
           : archive.system_name || "",
-      cover: null,
+      cover: archive.cover_image_url
+        ? {
+            kind: "url" as const,
+            url: archive.cover_image_url,
+            alt: archive.title || copy.project,
+          }
+        : null,
       latestText: "",
-      latestTime: archive.created_at || null,
-      recordCount: 0,
+      latestTime: archive.last_record_time || archive.created_at || null,
+      recordCount: Number(archive.record_count || 0),
       durationDays: getOngoingDays(archive.created_at),
+      viewCount: Number(archive.view_count || 0),
       visibilityLabel: archive.is_public
         ? language === "zh" ? "公开" : "Public"
         : copy.private,
