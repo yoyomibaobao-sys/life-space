@@ -49,6 +49,7 @@ import {
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 
+import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
@@ -123,7 +124,7 @@ const text = {
     savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
     pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
     uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
-    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败",
+    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败", captchaRequired: "请先完成人机验证",
     camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
     guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
     guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
@@ -190,7 +191,7 @@ const text = {
     savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
     pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
     uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
-    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed",
+    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed", captchaRequired: "Complete the verification first",
     camera: "Camera", album: "Gallery", chooseProject: "Choose project",
     guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
     guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
@@ -1152,11 +1153,17 @@ function CloudLogin({
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) return;
+    if (AUTH_CAPTCHA_ENABLED && !captchaToken) {
+      setMessage(copy.captchaRequired);
+      return;
+    }
 
     setSubmitting(true);
     setMessage("");
@@ -1164,6 +1171,7 @@ function CloudLogin({
       const { error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
+        options: { captchaToken: captchaToken || undefined },
       });
       if (error) {
         setMessage(`${copy.loginFailed}: ${error.message}`);
@@ -1175,6 +1183,7 @@ function CloudLogin({
         `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
       );
     } finally {
+      setCaptchaResetKey((value) => value + 1);
       setSubmitting(false);
     }
   }
@@ -1203,6 +1212,11 @@ function CloudLogin({
             required
           />
         </div>
+        <AuthCaptcha
+          action="auth"
+          onTokenChange={setCaptchaToken}
+          resetKey={captchaResetKey}
+        />
         {message ? <p className="project-meta">{message}</p> : null}
         <div className="submit-row">
           <button type="submit" className="primary-button" disabled={submitting}>
