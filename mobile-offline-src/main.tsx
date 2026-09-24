@@ -45,6 +45,7 @@ import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveDetailHeaderView from "@/components/archive-ui/ArchiveDetailHeaderView";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
+import MobileBottomNavFrame from "@/components/mobile/MobileBottomNavFrame";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
@@ -619,13 +620,13 @@ function App() {
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? <section className="network-offline" role="status" aria-live="polite">{copy.cloudUnavailable}</section> : null}
-      <nav className="bottom-nav" aria-label={language === "zh" ? "主导航" : "Main navigation"}>
+      <MobileBottomNavFrame className="bottom-nav" constrained ariaLabel={language === "zh" ? "主导航" : "Main navigation"}>
         <button type="button" aria-current={homeActive ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "discover" })}><UiIcon name="home" size={17} strokeWidth={1.7} /><span>{copy.home}</span></button>
         <button type="button" aria-current={screen.kind === "cloud" && screen.section === "follow" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "follow" })}><UiIcon name="follow" size={17} strokeWidth={1.7} /><span>{copy.follow}</span></button>
         <button type="button" className="quick-add" aria-label={copy.addRecord} onClick={() => setScreen(screen.kind === "detail" && detail && detail.archive.status === "active" ? { kind: "new-record", archiveId: detail.archive.id } : { kind: "choose-project" })}><UiIcon name="plus" size={25} strokeWidth={2.2} /></button>
         <button type="button" aria-current={screen.kind === "cloud" && screen.section === "market" ? "page" : undefined} onClick={() => setScreen({ kind: "cloud", section: "market" })}><UiIcon name="store" size={17} strokeWidth={1.7} /><span>{copy.market}</span></button>
         <button type="button" aria-current={personalActive ? "page" : undefined} onClick={goList}><UiIcon name="user" size={17} strokeWidth={1.7} /><span>{copy.me}</span></button>
-      </nav>
+      </MobileBottomNavFrame>
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </main>
   );

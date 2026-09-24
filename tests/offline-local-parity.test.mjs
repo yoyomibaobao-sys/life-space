@@ -13,6 +13,8 @@ test("cold-start Android offline shell keeps the online app hierarchy and expose
   const source = read("mobile-offline-src/main.tsx");
   const styles = read("mobile-offline-src/offline.css");
   const template = read("mobile-offline-src/offline.template.html");
+  const navbar = read("components/navbar.tsx");
+  const bottomNav = read("components/mobile/MobileBottomNavFrame.tsx");
 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /sharedCss\?\.text/);
@@ -29,7 +31,9 @@ test("cold-start Android offline shell keeps the online app hierarchy and expose
   assert.match(source, /localArchiveToProjectView/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(styles, /\.offline-space-identity/);
-  assert.match(styles, /height: calc\(env\(safe-area-inset-bottom, 0px\) \+ 58px\)/);
+  assert.match(source, /<MobileBottomNavFrame className="bottom-nav" constrained/);
+  assert.match(navbar, /<MobileBottomNavFrame ariaLabel=\{labels\.mobile_navigation\}/);
+  assert.match(bottomNav, /height: "calc\(58px \+ var\(--app-safe-area-bottom\)\)"/);
   assert.match(styles, /width: 48px; height: 48px; margin-top: -16px/);
   assert.match(parityStyles, /\.network-offline[\s\S]*min-height: 46vh/);
   assert.doesNotMatch(template, /本地离线模式/);

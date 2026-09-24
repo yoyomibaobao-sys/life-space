@@ -14,6 +14,7 @@ import { buildLoginHref } from "@/lib/auth-return";
 import QuickCaptureNavAction from "@/components/quick-record/QuickCaptureNavAction";
 import BrandMark from "@/components/BrandMark";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobileBottomNavFrame from "@/components/mobile/MobileBottomNavFrame";
 import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
 
 type MobileArchiveTitleInfo = {
@@ -549,11 +550,7 @@ function MobileBottomNav({
       : null;
 
   return (
-    <nav
-      data-mobile-bottom-nav="true"
-      style={mobileBottomNavStyle}
-      aria-label={labels.mobile_navigation}
-    >
+    <MobileBottomNavFrame ariaLabel={labels.mobile_navigation}>
       <MobileBottomNavItem {...items[0]}>{items[0].label}</MobileBottomNavItem>
       <MobileBottomNavItem {...items[1]}>{items[1].label}</MobileBottomNavItem>
       <QuickCaptureNavAction
@@ -563,7 +560,7 @@ function MobileBottomNav({
       />
       <MobileBottomNavItem {...items[2]}>{items[2].label}</MobileBottomNavItem>
       <MobileBottomNavItem {...items[3]}>{items[3].label}</MobileBottomNavItem>
-    </nav>
+    </MobileBottomNavFrame>
   );
 }
 
@@ -858,29 +855,6 @@ const mobileLoginActionStyle: CSSProperties = {
   padding: "0 12px",
   whiteSpace: "nowrap",
   flexShrink: 0,
-};
-
-const mobileBottomNavStyle: CSSProperties = {
-  position: "fixed",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  zIndex: 1100,
-  height: "calc(58px + var(--app-safe-area-bottom))",
-  padding: "5px 8px calc(5px + var(--app-safe-area-bottom))",
-  display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-  gap: 4,
-  borderTop: "1px solid #dfe8da",
-  background: "rgba(255,255,255,0.98)",
-  boxShadow: "0 -8px 22px rgba(40, 62, 34, 0.08)",
-  boxSizing: "border-box",
-  transform: "translateZ(0)",
-  backfaceVisibility: "hidden",
-  WebkitBackfaceVisibility: "hidden",
-  willChange: "transform",
-  touchAction: "manipulation",
-  overflow: "visible",
 };
 
 function mobileBottomNavItemStyle(active: boolean): CSSProperties {
