@@ -8,10 +8,10 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        WebView.setWebContentsDebuggingEnabled(true);
         registerPlugin(NativeAppUpdatePlugin.class);
         registerPlugin(NativeSystemUiPlugin.class);
         super.onCreate(savedInstanceState);
+        WebView.setWebContentsDebuggingEnabled(true);
         if (bridge != null) {
             bridge.getWebView().setWebViewClient(
                 new LifeSpaceWebViewClient(bridge, getAssets())
