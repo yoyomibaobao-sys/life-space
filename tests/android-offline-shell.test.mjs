@@ -143,3 +143,19 @@ test("explicit Android sign-out hides account-bound offline cache state", () => 
   assert.match(source, /listVisibleCloudOfflineArchiveSummaries\(null\)/);
   assert.match(source, /setCloudCaches\(cachedCloud\)/);
 });
+
+test("Android cloud login uses the shared Turnstile challenge", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const buildScript = read("scripts/build-mobile-offline.mjs");
+  const workflow = read(".github/workflows/android-apk.yml");
+  const authCaptcha = read("components/AuthCaptcha.tsx");
+  const turnstileView = read("components/auth/TurnstileChallengeView.tsx");
+
+  assert.match(source, /<AuthCaptcha/);
+  assert.match(source, /AUTH_CAPTCHA_ENABLED/);
+  assert.match(source, /options: \{ captchaToken: captchaToken \|\| undefined \}/);
+  assert.match(buildScript, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
+  assert.match(workflow, /vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
+  assert.match(authCaptcha, /TurnstileChallengeView/);
+  assert.match(turnstileView, /challenges\.cloudflare\.com\/turnstile/);
+});
