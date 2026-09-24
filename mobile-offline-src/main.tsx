@@ -19,7 +19,9 @@ import {
   deleteLocalArchive,
   deleteLocalRecord,
   getLocalArchiveDetail,
+  inferSingleLocalArchiveOwnerContext,
   listVisibleLocalArchiveSummaries,
+  listVisibleCloudOfflineArchiveSummaries,
   listPendingCloudSyncSummaries,
   deferPendingCloudSyncPrompt,
   markUnownedLocalArchivesForOwner,
@@ -67,6 +69,7 @@ import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 import { supabase } from "@/lib/supabase";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
+import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 
 const MAX_PHOTOS = 10;
@@ -104,6 +107,7 @@ const text = {
     cloudUnavailable: "当前未联网，云端内容暂不可用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
     cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
     saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
+    offlineCopies: "云端缓存副本", cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，需手动上传。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。", 
     savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
     pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
     uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
@@ -170,6 +174,7 @@ const text = {
     cloudUnavailable: "Cloud content is unavailable while offline", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
     cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
     saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
+    offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device until you upload them manually.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
     savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
     pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
     uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
@@ -299,6 +304,8 @@ function App() {
     loadRememberedLocalOwnerContext(),
   );
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
+  const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "local">("all");
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -327,11 +334,13 @@ function App() {
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
     const resolvedContext = context === undefined ? ownerContext : context;
-    const [result, pending] = await Promise.all([
+    const [result, cachedCloud, pending] = await Promise.all([
       listVisibleLocalArchiveSummaries(resolvedContext),
+      listVisibleCloudOfflineArchiveSummaries(resolvedContext),
       listPendingCloudSyncSummaries(resolvedContext),
     ]);
     setArchives(result.archives);
+    setCloudCaches(cachedCloud);
     setUnownedCount(result.unownedCount);
     setPendingSync(pending);
   }, [ownerContext]);
@@ -348,20 +357,25 @@ function App() {
     try {
       const { data, error } = await supabase
         .from("archives")
-        .select("id,title,category,system_name,species_name_snapshot,status,updated_at,is_public")
+        .select("*")
         .eq("user_id", resolvedUserId)
         .is("trashed_at", null)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       setCloudArchives((data || []) as CloudArchiveSummary[]);
       setCloudError("");
+      void refreshCloudOfflineCaches(
+        (data || []) as CloudOfflineCacheArchiveSource[],
+        { userId: resolvedUserId },
+      ).then(() => loadList({ userId: resolvedUserId }))
+        .catch((cacheError) => console.warn("cloud cache refresh", cacheError));
     } catch (error) {
       console.warn("local shell cloud list", error);
       setCloudError(copy.cloudLoadFailed);
     } finally {
       setCloudLoading(false);
     }
-  }, [cloudUserId, copy.cloudLoadFailed]);
+  }, [cloudUserId, copy.cloudLoadFailed, loadList]);
 
   const loadDetail = useCallback(async (
     archiveId: string,
@@ -433,7 +447,14 @@ function App() {
         assertLocalOfflineAvailable();
         const migration = await migrateLegacyLocalOrigin();
         if (cancelled) return;
-        const nextOwner = loadRememberedLocalOwnerContext();
+        let nextOwner = loadRememberedLocalOwnerContext();
+        if (!nextOwner) {
+          const inferredOwner = await inferSingleLocalArchiveOwnerContext();
+          if (inferredOwner?.userId) {
+            nextOwner = { userId: inferredOwner.userId, email: inferredOwner.email };
+            rememberLocalOwnerContext(nextOwner);
+          }
+        }
         setOwner(nextOwner);
         await preparePendingCloudSyncQueue(
           nextOwner ? { userId: nextOwner.userId, email: nextOwner.email } : null,
@@ -581,6 +602,8 @@ function App() {
   const activeGuide = screen.kind === "guide-detail"
     ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
     : undefined;
+  const listedArchives = sourceFilter === "local" ? archives : [...cloudCaches, ...archives];
+  const filteredArchives = listedArchives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter);
   const bottomNavigationItems: [
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
@@ -677,9 +700,9 @@ function App() {
       {screen.kind === "list" ? (
         <>
           <div className="source-row">
-            <button type="button" aria-pressed={false} onClick={() => setCategoryFilter("all")}>{copy.all} {archives.length}</button>
-            <button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.cloud}</button>
-            <button type="button" aria-pressed="true" onClick={() => setCategoryFilter("all")}>{copy.local} {archives.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "all"} onClick={() => setSourceFilter("all")}>{copy.all} {archives.length + cloudCaches.length}</button>
+            <button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.cloud} {cloudCaches.length}</button>
+            <button type="button" aria-pressed={sourceFilter === "local"} onClick={() => setSourceFilter("local")}>{copy.local} {archives.length}</button>
             <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
           </div>
           <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
@@ -697,17 +720,18 @@ function App() {
           ) : null}
 
           <div className="section-title">
-            <h1>{copy.localProjects}</h1>
-            <span className="count">{archives.length}</span>
+            <h1>{sourceFilter === "local" ? copy.localProjects : copy.mySpace}</h1>
+            <span className="count">{listedArchives.length}</span>
           </div>
-          {archives.length ? (
+          {filteredArchives.length ? (
             <div className="project-list">
-              {archives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
+              {filteredArchives.map((archive) => (
                 <ArchiveProjectCard
                   key={archive.id}
                   project={{
                     ...localArchiveToProjectView(archive, ownerContext, language),
                     href: undefined,
+                    visibilityLabel: archive.local_role === "cloud-offline-cache" ? copy.offlineCopies : copy.local,
                   }}
                   onClick={() => openDetail(archive.id)}
                   mobileMode
@@ -825,11 +849,16 @@ function App() {
         <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
       </> : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
+      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? (
         !online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+          <>
+            <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+            {cloudCaches.length ? <div className="project-list">{cloudCaches.map((archive) => (
+              <ArchiveProjectCard key={archive.id} project={{ ...localArchiveToProjectView(archive, ownerContext, language), href: undefined, visibilityLabel: copy.offlineCopies }} mobileMode onClick={() => openDetail(archive.id)} />
+            ))}</div> : <section className="panel empty">{copy.noCachedProjects}</section>}
+          </>
         ) : !cloudUserId ? (
           <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
         ) : (
@@ -1188,6 +1217,7 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   const [filter, setFilter] = useState("all");
   const [lightbox, setLightbox] = useState<LocalImage | null>(null);
   const archive = detail.archive;
+  const isCloudCache = archive.local_role === "cloud-offline-cache";
   const periods = getArchiveCycleTerminology(archive.category, language);
   async function change(work: () => Promise<unknown>) {
     if (busy) return;
@@ -1198,8 +1228,9 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
     <div className="detail-heading"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{archive.title}</h1><span /></div>
     <div className="top-tabs"><button type="button" aria-pressed={tab === "details"} onClick={() => setTab("details")}>{copy.details}</button><button type="button" aria-pressed={tab === "properties"} onClick={() => setTab("properties")}>{copy.properties}</button></div>
     {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
+    {isCloudCache ? <section className="notice"><p>{copy.cloudCacheReadOnly}</p></section> : null}
     {tab === "properties" ? <>
-      {archive.category === "plant" ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy} onSave={async (region) => {
+      {archive.category === "plant" && !isCloudCache ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy} onSave={async (region) => {
         await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
         await onChanged();
       }} /> : null}
@@ -1209,26 +1240,26 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
         <div className="property-row"><span>{copy.category}</span><span>{copy[archive.category]}</span></div>
         <div className="property-row"><span>{copy.source}</span><span>{archive.source || "—"}</span></div>
         <div className="property-row"><span>{copy.note}</span><span>{archive.note || "—"}</span></div>
-        <div className="property-row"><span>{copy.status}</span><SegmentedChoice label={copy.status} value={archive.status} disabled={busy} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} /></div>
+        <div className="property-row"><span>{copy.status}</span><SegmentedChoice label={copy.status} value={archive.status} disabled={busy || isCloudCache} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} /></div>
         <div className="property-row"><span>{copy.visibility}</span><span>{copy.private}</span></div>
-        <button type="button" className="secondary-button" onClick={onEdit}>{copy.edit}</button>
+        {!isCloudCache ? <button type="button" className="secondary-button" onClick={onEdit}>{copy.edit}</button> : null}
       </section>
-      <section className="panel"><h2>{copy.period}</h2><label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
+      {!isCloudCache ? <section className="panel"><h2>{copy.period}</h2><label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
         {archive.cycle_enabled ? <div className="form">
           {(archive.cycles || []).map((cycle) => <div className="property-row" key={cycle.id}><div><strong>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</strong><small className="project-meta">{formatDate(cycle.started_at, language)}</small></div>{cycle.status === "active" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { if (window.confirm(periods.endDialogMessage)) void change(() => endLocalArchiveCycle(archive.id, cycle.id, new Date().toISOString(), ownerContext)); }}>{periods.endAction}</button> : <span>{copy.ended}</span>}</div>)}
           <label className="field">{copy.periodDate}<input type="date" value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} /></label>
           <button type="button" className="primary-button" disabled={busy || !periodDate || archive.status === "ended"} onClick={() => void change(() => createLocalArchiveCycle(archive.id, new Date(`${periodDate}T00:00:00`).toISOString(), ownerContext))}>{periods.newAction}</button>
         </div> : null}
-      </section>
-      <button className="danger-button" type="button" disabled={busy} onClick={onDelete}>{copy.remove}</button>
+      </section> : null}
+      {!isCloudCache ? <button className="danger-button" type="button" disabled={busy} onClick={onDelete}>{copy.remove}</button> : null}
     </> : <>
-      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {copy.local}</span><button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button></div>
+      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {isCloudCache ? copy.offlineCopies : copy.local}</span>{archive.status === "active" ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
       {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
       <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <ArchiveRecordCardShell key={record.id} metaText={formatDate(record.record_time, language)} mobileMode>
         {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={language === "zh" ? "查看照片" : "View photo"} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
         {record.note ? <p className="record-note">{record.note}</p> : null}
         {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
-        <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div>
+        {record.sync?.status === "pending-cloud-sync" ? <div className="record-actions"><span className="project-meta">{copy.pendingUpload}</span><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
       </ArchiveRecordCardShell>)}</div>
       {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
     </>}

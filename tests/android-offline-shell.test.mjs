@@ -22,6 +22,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
   assert.match(source, /listVisibleLocalArchiveSummaries/);
+  assert.match(source, /inferSingleLocalArchiveOwnerContext/);
+  assert.match(source, /rememberLocalOwnerContext/);
   assert.match(source, /createLocalArchive/);
   assert.match(source, /createLocalRecord/);
   assert.match(source, /updateLocalArchiveFields/);
@@ -49,6 +51,16 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
+});
+
+test("offline shell safely recovers one local owner when browser session state is unavailable", () => {
+  const db = read("lib/local-offline-db.ts");
+  const source = read("mobile-offline-src/main.tsx");
+
+  assert.match(db, /export async function inferSingleLocalArchiveOwnerContext/);
+  assert.match(db, /if \(owners\.size > 1\) return null/);
+  assert.match(source, /if \(!nextOwner\)[\s\S]*inferSingleLocalArchiveOwnerContext/);
+  assert.match(source, /rememberLocalOwnerContext/);
 });
 
 test("offline guides expose only the registered-user overview boundary", () => {
