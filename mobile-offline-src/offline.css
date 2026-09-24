@@ -9,6 +9,7 @@
   --line: #dce5d8;
   --card: rgba(255, 255, 255, 0.92);
   --danger: #a0443b;
+  --shell-pad-x: 16px;
 }
 
 * { box-sizing: border-box; }
@@ -25,11 +26,18 @@ body {
 button, input, select, textarea { font: inherit; }
 button { touch-action: manipulation; }
 
+.android-shell-header {
+  width: calc(100% + (var(--shell-pad-x) * 2));
+  margin-left: calc(var(--shell-pad-x) * -1);
+  margin-right: calc(var(--shell-pad-x) * -1);
+  margin-bottom: 14px;
+}
+
 .offline-shell {
   width: min(760px, 100%);
   min-height: 100vh;
   margin: 0 auto;
-  padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px
+  padding: 0 var(--shell-pad-x)
     calc(env(safe-area-inset-bottom, 0px) + 36px);
 }
 
@@ -141,7 +149,8 @@ button:disabled { opacity: 0.55; }
 .loading { display: grid; place-items: center; min-height: 50vh; color: var(--muted); }
 
 @media (max-width: 420px) {
-  .offline-shell { padding-left: 12px; padding-right: 12px; }
+  :root { --shell-pad-x: 12px; }
+  .offline-shell { padding-left: var(--shell-pad-x); padding-right: var(--shell-pad-x); }
   .photo-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
