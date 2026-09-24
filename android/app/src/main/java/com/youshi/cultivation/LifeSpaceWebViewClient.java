@@ -39,23 +39,21 @@ public final class LifeSpaceWebViewClient extends BridgeWebViewClient {
     public void onPageFinished(WebView view, String url) {
         super.onPageFinished(view, url);
         Uri uri = Uri.parse(url);
+        android.util.Log.i("LifeSpaceShell", "Loaded host: " + uri.getHost());
         if (checkedLegacyServiceWorkers || !"life-space.uk".equalsIgnoreCase(uri.getHost())) {
             return;
         }
         checkedLegacyServiceWorkers = true;
         // A service worker from the former remote shell can serve an old index.html
         // even after an APK update. Unregister it without touching IndexedDB or auth.
+        view.clearCache(true);
         view.evaluateJavascript(
-            "(async()=>{if(!('serviceWorker' in navigator))return false;"
+            "(async()=>{if(!('serviceWorker' in navigator))return;"
                 + "const registrations=await navigator.serviceWorker.getRegistrations();"
                 + "await Promise.all(registrations.map(registration=>registration.unregister()));"
-                + "return registrations.length>0})().catch(()=>false)",
-            result -> {
-                if ("true".equals(result)) {
-                    view.clearCache(true);
-                    view.reload();
-                }
-            }
+                + "if(registrations.length)window.location.replace(window.location.href)"
+                + "})().catch(()=>{})",
+            ignored -> { }
         );
     }
 
