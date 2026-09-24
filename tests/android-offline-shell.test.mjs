@@ -44,10 +44,14 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /listPendingCloudSyncSummaries/);
   assert.match(source, /supabase\.auth\.getSession/);
   assert.match(source, /supabase[\s\S]*?\.from\("archives"\)/);
+  assert.match(source, /\.order\("created_at", \{ ascending: false \}\)/);
+  assert.doesNotMatch(source, /\.order\("updated_at", \{ ascending: false \}\)/);
   assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(1\)/);
+  assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.match(source, /\{copy\.all\}/);
+  assert.match(source, /\{copy\.cloud\}/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
