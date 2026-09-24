@@ -194,16 +194,19 @@ export default function LocalArchiveDetailPage() {
     setLoading(true);
     try {
       let ownerContext: LocalArchiveOwnerContext | null = null;
+      let authNetworkFailed = false;
       try {
-        const { data } = await supabase.auth.getUser();
+        const { data, error } = await supabase.auth.getUser();
         if (data.user) {
           ownerContext = { userId: data.user.id, email: data.user.email || null };
           rememberLocalOwnerContext({ userId: data.user.id, email: data.user.email || null });
+        } else if (error) {
+          authNetworkFailed = /failed to fetch|fetch failed|networkerror|load failed|network request failed/i.test(error.message);
         }
-      } catch {
-        // A previously identified owner can still read their device cache offline.
+      } catch (error) {
+        authNetworkFailed = error instanceof Error && /failed to fetch|fetch failed|networkerror|load failed|network request failed/i.test(error.message);
       }
-      if (!ownerContext && !navigator.onLine) {
+      if (!ownerContext && (!navigator.onLine || authNetworkFailed)) {
         ownerContext = loadRememberedLocalOwnerContext();
       }
       setOwnerContext(ownerContext);

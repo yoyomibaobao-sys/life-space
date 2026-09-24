@@ -278,7 +278,10 @@ export default function ArchivePage() {
     return !navigator.onLine || Boolean(error?.message && /failed to fetch|fetch failed|networkerror|load failed|network request failed/i.test(error.message));
   }
 
-  async function loadData() {
+  async function loadData(
+    ownerHint: LocalArchiveOwnerContext | null = null,
+    authNetworkFailed = false,
+  ) {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setMembershipLoading(true);
@@ -292,7 +295,9 @@ export default function ArchivePage() {
       const user = session?.user;
       const ownerContext = user
         ? { userId: user.id, email: user.email || null }
-        : (!navigator.onLine || isOffline) ? loadRememberedLocalOwnerContext() : null;
+        : (!navigator.onLine || isOffline || authNetworkFailed)
+          ? ownerHint || loadRememberedLocalOwnerContext()
+          : null;
       setCurrentOwnerContext(ownerContext);
       setLocalCategoryDepths(getLocalArchiveCategoryDepths(ownerContext?.userId || undefined));
 
@@ -304,7 +309,7 @@ export default function ArchivePage() {
         setMembership(null);
         setExperienceCardCount(0);
         setSpaceProfile(null);
-        setIsOffline(!navigator.onLine || Boolean(isOffline && ownerContext));
+        setIsOffline(!navigator.onLine || Boolean((isOffline || authNetworkFailed) && ownerContext));
         return;
       }
 
@@ -1131,16 +1136,19 @@ export default function ArchivePage() {
     async function safeLoad() {
       try {
         let ownerContext: LocalArchiveOwnerContext | null = null;
+        let authNetworkFailed = false;
         try {
-          const { data } = await supabase.auth.getUser();
+          const { data, error } = await supabase.auth.getUser();
           if (data.user) {
             ownerContext = { userId: data.user.id, email: data.user.email || null };
             rememberLocalOwnerContext({ userId: data.user.id, email: data.user.email || null });
+          } else if (isNetworkRequestError(error)) {
+            authNetworkFailed = true;
           }
-        } catch {
-          // The device cache remains available if auth cannot reach the network.
+        } catch (error) {
+          authNetworkFailed = isNetworkRequestError(error instanceof Error ? error : null);
         }
-        if (!ownerContext && !navigator.onLine) {
+        if (!ownerContext && (!navigator.onLine || authNetworkFailed)) {
           ownerContext = loadRememberedLocalOwnerContext();
         }
         const sourceParam = new URLSearchParams(window.location.search).get("source");
@@ -1151,7 +1159,10 @@ export default function ArchivePage() {
 
         if (!isMounted) return;
         setCurrentOwnerContext(ownerContext);
-        await Promise.all([loadData(), loadLocalArchives(ownerContext)]);
+        await Promise.all([
+          loadData(ownerContext, authNetworkFailed),
+          loadLocalArchives(ownerContext),
+        ]);
       } catch (error) {
         console.error("loadData error:", error);
       } finally {
