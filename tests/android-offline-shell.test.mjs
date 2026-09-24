@@ -15,6 +15,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const parityStyles = read("mobile-offline-src/local-parity.css");
   const generated = read("mobile-shell/offline.html");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
 
   assert.match(config, /hostname: cloudUrl\.hostname/);
   assert.doesNotMatch(config, /url: cloudUrl\.origin/);
@@ -38,7 +39,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<MobileBottomNavigationView/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
-  assert.match(source, /<ConnectivityNotice/);
+  assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(source, /navigator\.onLine/);
   assert.match(source, /saveCloudArchiveToLocal/);
   assert.match(source, /syncPendingCloudArchive/);
