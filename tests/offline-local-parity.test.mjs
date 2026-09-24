@@ -17,6 +17,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
   const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
   const sharedHomeTabs = read("components/home/HomeSectionTabs.tsx");
+  const sharedPrimaryNav = read("components/mobile/mobilePrimaryNavigation.ts");
   const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
   const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
@@ -29,6 +30,8 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
   assert.doesNotMatch(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(source, /<MobileBottomNavigationView/);
+  assert.match(source, /getMobilePrimaryNavigationDescriptors/);
+  assert.match(sharedPrimaryNav, /"home"[\s\S]*"following"[\s\S]*"market"[\s\S]*"me"/);
   assert.match(source, /<MobilePageHeaderView/);
   assert.match(source, /<HomeSectionTabs/);
   assert.match(sharedHomeTabs, /onSelect\?: \(section: HomeSection\) => void/);
