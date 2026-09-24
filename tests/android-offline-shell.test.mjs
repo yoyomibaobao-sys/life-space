@@ -53,7 +53,9 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
   assert.match(source, /label: copy\.all/);
   assert.match(source, /label: copy\.cloud/);
-  assert.match(source, /<ArchiveSourceSwitcher/);
+  assert.match(source, /<ArchiveWorkspaceTemplate/);
+  assert.match(source, /sourceOptions=\{\[/);
+  assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
