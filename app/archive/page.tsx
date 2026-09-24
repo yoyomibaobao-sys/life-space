@@ -10,6 +10,7 @@ import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
+import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveTaxonomyPanel, {
@@ -2053,80 +2054,46 @@ export default function ArchivePage() {
         margin: "0 auto",
       }}
     >
-      <section style={personalSpaceIdentityStyle(isMobileViewport)}>
-        {isMobileViewport ? (
-          <>
-            <div style={personalSpaceIdentityLinkStyle}>
-              <Link href="/profile" style={personalSpaceAvatarLinkStyle}>
-              {spaceProfile?.avatar_url ? (
-                <img
-                  src={spaceProfile.avatar_url}
-                  alt={spaceProfile.username || t.archive_workspace.personal_info}
-                  style={{ ...personalSpaceAvatarStyle, width: 34, height: 34 }}
-                />
-              ) : (
-                <span style={{ ...personalSpaceAvatarFallbackStyle, width: 34, height: 34 }}>
-                  <UiIcon name="user" size={17} />
-                </span>
-              )}
-              </Link>
-              <span style={personalSpaceMobileIdentityTextStyle}>
-                <span style={language === "en" ? { ...personalSpaceMobileNameRowStyle, flexDirection: "column", alignItems: "stretch", gap: 2 } : personalSpaceMobileNameRowStyle}>
-                  <Link href="/profile" style={personalSpaceMobileUsernameStyle}>
-                    {spaceProfile?.username || t.nav.username_unset}
-                  </Link>
-                  <span style={language === "en" ? { ...personalSpaceMobileMembershipStyle, whiteSpace: "normal", overflowWrap: "break-word", lineHeight: 1.2 } : personalSpaceMobileMembershipStyle}>{membershipLabel}</span>
-                </span>
-                <span
-                  style={personalSpaceStorageRowStyle}
-                  aria-label={`${language === "en" ? "Storage total" : "总空间"} ${storageTotalLabel}`}
-                >
-                  <span style={personalSpaceStorageTrackStyle}>
-                    <span
-                      style={{
-                        ...personalSpaceStorageFillStyle,
-                        width: `${storageUsagePercent}%`,
-                      }}
-                    />
-                  </span>
-                  <span style={personalSpaceStorageTotalStyle}>{storageTotalLabel}</span>
-                </span>
+      {isMobileViewport ? (
+        <PersonalSpaceMobileIdentity
+          avatarUrl={spaceProfile?.avatar_url}
+          username={spaceProfile?.username || t.nav.username_unset}
+          membershipLabel={membershipLabel}
+          storageUsagePercent={storageUsagePercent}
+          storageTotalLabel={storageTotalLabel}
+          experienceLabel={t.archive_workspace.experience_cards}
+          experienceCardCount={experienceCardCount}
+          profileHref="/profile"
+          experienceHref="/experience-cards"
+          notificationSlot={<MobileNotificationLink />}
+          language={language}
+        />
+      ) : (
+        <section style={personalSpaceIdentityStyle(false)}>
+          <div style={personalSpaceIdentityMainStyle}>
+            {spaceProfile?.avatar_url ? (
+              <img
+                src={spaceProfile.avatar_url}
+                alt={spaceProfile.username || t.archive_workspace.my_space}
+                style={personalSpaceAvatarStyle}
+              />
+            ) : (
+              <span style={personalSpaceAvatarFallbackStyle}>
+                <UiIcon name="user" size={20} />
               </span>
-            </div>
-            <div style={personalSpaceMobileActionsStyle}>
-              <Link href="/experience-cards" style={personalSpaceInlineEntryStyle} aria-label={`${t.archive_workspace.my_experience_cards} (${experienceCardCount})`}>
-                {t.archive_workspace.experience_cards} {experienceCardCount}
-              </Link>
-              <MobileNotificationLink />
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={personalSpaceIdentityMainStyle}>
-              {spaceProfile?.avatar_url ? (
-                <img
-                  src={spaceProfile.avatar_url}
-                  alt={spaceProfile.username || t.archive_workspace.my_space}
-                  style={personalSpaceAvatarStyle}
-                />
-              ) : (
-                <span style={personalSpaceAvatarFallbackStyle}>
-                  <UiIcon name="user" size={20} />
-                </span>
-              )}
-              <div style={{ minWidth: 0 }}>
-                <h1 style={personalSpaceTitleStyle}>{t.archive_workspace.my_space}</h1>
-                <div style={personalSpaceUsernameStyle}>
-                  {spaceProfile?.username || t.nav.username_unset}
-                </div>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <h1 style={personalSpaceTitleStyle}>{t.archive_workspace.my_space}</h1>
+              <div style={personalSpaceUsernameStyle}>
+                {spaceProfile?.username || t.nav.username_unset}
               </div>
             </div>
-            <Link href="/experience-cards" style={personalInfoLinkStyle}>
-              {t.archive_workspace.experience_cards} {experienceCardCount}
-            </Link>
-          </>
-        )}
-      </section>
+          </div>
+          <Link href="/experience-cards" style={personalInfoLinkStyle}>
+            {t.archive_workspace.experience_cards} {experienceCardCount}
+          </Link>
+        </section>
+      )}
 
       {currentOwnerContext && !membershipLoading && !membershipFailed && !membership ? <CloudTrialEntry /> : null}
 
