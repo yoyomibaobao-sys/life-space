@@ -81,7 +81,18 @@ const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
 type ShellSourceFilter = "all" | "cloud" | "local";
-type CloudArchiveSummary = CloudOfflineCacheArchiveSource;
+
+type CloudArchiveSummary = {
+  id: string;
+  title?: string | null;
+  category?: string | null;
+  system_name?: string | null;
+  species_name_snapshot?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_public?: boolean | null;
+};
 
 type Screen =
   | { kind: "list" }
@@ -661,28 +672,22 @@ function App() {
 
   function cloudProjectView(archive: CloudArchiveSummary) {
     const ended = archive.status === "ended";
-    const coverUrl = archive.display_cover_image_url || archive.cover_image_url || "";
     return {
       id: archive.id,
       mode: "cloud" as const,
       title: archive.title || copy.project,
-      category: archive.category,
-      categoryLabel: getArchiveCategoryLabel(archive.category, language),
-      categoryIcon: getArchiveCategoryIcon(archive.category),
+      category: archive.category as ArchiveCategory,
+      categoryLabel: getArchiveCategoryLabel(archive.category as ArchiveCategory, language),
+      categoryIcon: getArchiveCategoryIcon(archive.category as ArchiveCategory),
       systemName:
         archive.category === "plant"
-          ? archive.species_display_name || archive.species_name_snapshot || ""
+          ? archive.species_name_snapshot || ""
           : archive.system_name || "",
-      cover: coverUrl
-        ? { kind: "url" as const, url: coverUrl, alt: archive.title || copy.project }
-        : null,
-      latestText: archive.latest_record_note || archive.note || "",
-      latestTime:
-        archive.latest_record_time || archive.last_record_time || archive.created_at || null,
-      recordCount: archive.record_count || 0,
+      cover: null,
+      latestText: "",
+      latestTime: archive.created_at || null,
+      recordCount: 0,
       durationDays: getOngoingDays(archive.created_at),
-      viewCount: archive.view_count || 0,
-      followerCount: archive.follower_count,
       visibilityLabel: archive.is_public
         ? language === "zh" ? "公开" : "Public"
         : copy.private,
@@ -1029,9 +1034,7 @@ function App() {
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? (
-        <>
-          {renderSourceSwitcher("cloud")}
-          {!online ? (
+        !online ? (
           <>
             <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
             {cloudCaches.length ? <div className="project-list">{cloudCaches.map((archive) => (
@@ -1094,8 +1097,7 @@ function App() {
               })}
             </div>
           </>
-        )}
-        </>
+        )
       ) : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
@@ -1199,3 +1201,312 @@ function OfflineGuideDetail({
   guide,
   owner,
   language,
+  copy,
+  onBack,
+  onReconnect,
+  onCreate,
+}: {
+  guide?: OfflineGuideDirectoryEntry;
+  owner: StoredLocalOwnerContext | null;
+  language: Language;
+  copy: OfflineCopy;
+  onBack: () => void;
+  onReconnect: () => void;
+  onCreate: (guide: OfflineGuideDirectoryEntry) => void;
+}) {
+  if (!guide) {
+    return (
+      <>
+        <div className="back-row"><button className="back-button" type="button" onClick={onBack}>← {copy.back}</button></div>
+        <section className="panel empty"><strong>{copy.guideUnavailable}</strong></section>
+      </>
+    );
+  }
+
+  const name = getOfflineGuideName(guide, language);
+  const parameters = owner ? getOfflineGuideParameters(guide, language) : [];
+
+  return (
+    <>
+      <div className="detail-heading">
+        <button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button>
+        <h1>{name}</h1>
+        <span />
+      </div>
+      <section className="panel guide-hero">
+        <span className="guide-category">{guide.category ? copy[guide.category] : copy.other}</span>
+        <h1>{name}</h1>
+        <button type="button" className="primary-button" onClick={() => onCreate(guide)}>{copy.createFromGuide}</button>
+      </section>
+      {!owner ? (
+        <section className="notice guide-access-notice">
+          <strong>{copy.guideSignInRequired}</strong>
+          <div className="action-row"><button type="button" className="secondary-button" onClick={onReconnect}>{copy.reconnect}</button></div>
+        </section>
+      ) : (
+        <>
+          <section className="panel guide-overview">
+            <h2>{copy.guideOverview}</h2>
+            <p>{getOfflineGuideOverview(guide, language)}</p>
+          </section>
+          {parameters.length ? (
+            <section className="panel">
+              <h2>{copy.basicReferences}</h2>
+              <div className="guide-parameter-grid">
+                {parameters.map((parameter) => (
+                  <article className="guide-parameter" key={`${parameter.label}:${parameter.value}`}>
+                    <small>{parameter.label}</small>
+                    <strong>{parameter.value}</strong>
+                    {parameter.note ? <p>{parameter.note}</p> : null}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <section className="notice guide-access-notice"><p>{copy.guideOfflineNotice}</p></section>
+        </>
+      )}
+    </>
+  );
+}
+
+function ProjectForm({
+  language,
+  copy,
+  owner,
+  archive,
+  guide,
+  onCancel,
+  onSaved,
+}: {
+  language: Language;
+  copy: OfflineCopy;
+  owner: StoredLocalOwnerContext | null;
+  archive?: LocalArchive;
+  guide?: SystemNameCandidate;
+  onCancel: () => void;
+  onSaved: (archive: LocalArchive) => void | Promise<void>;
+}) {
+  const [title, setTitle] = useState(archive?.title || guide?.label || "");
+  const [category, setCategory] = useState<ArchiveCategory>(archive?.category || guide?.category || "plant");
+  const [systemName, setSystemName] = useState(archive?.system_name || archive?.species_name || guide?.label || "");
+  const [directory] = useState(loadOfflineGuideDirectory);
+  const [selectedGuide, setSelectedGuide] = useState<SystemNameCandidate | undefined>(guide);
+  const [source, setSource] = useState(archive?.source || "");
+  const [plantingRegion, setPlantingRegion] = useState<PlantingRegion | null>(archive ? archive.planting_region || null : loadDefaultPlantingRegion(owner?.userId));
+  const [note, setNote] = useState(archive?.note || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!title.trim() || !systemName.trim()) {
+      setError(copy.requiredProject);
+      return;
+    }
+    const normalizedRegion = normalizePlantingRegion(plantingRegion);
+    const hasRegionDraft = plantingRegion && Object.values(plantingRegion).some((value) => value.trim());
+    if (category === "plant" && (!archive || archive.planting_region || hasRegionDraft) && !normalizedRegion) {
+      setError(language === "en" ? "Enter the planting country and city / district." : "请填写项目实际种植的国家及城市／区县。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      if (archive) {
+        const updated = await updateLocalArchiveFields(
+          archive.id,
+          {
+            title,
+            category,
+            system_name: systemName,
+            species_name: category === "plant" ? systemName : null,
+            plant_id: selectedGuide?.plantId || (systemName === (archive.system_name || archive.species_name) ? archive.plant_id : null),
+            plant_slug: selectedGuide?.plantSlug || (systemName === (archive.system_name || archive.species_name) ? archive.plant_slug : null),
+            source,
+            planting_region: normalizedRegion,
+            note,
+          },
+          owner ? { userId: owner.userId, email: owner.email } : null,
+        );
+        await onSaved(updated);
+      } else {
+        const created = await createLocalArchive({
+          title,
+          category,
+          system_name: systemName,
+          species_name: category === "plant" ? systemName : null,
+          plant_id: selectedGuide?.plantId || null,
+          plant_slug: selectedGuide?.plantSlug || null,
+          source,
+          planting_region: normalizedRegion,
+          note,
+          local_owner_user_id: owner?.userId || null,
+          local_owner_email: owner?.email || null,
+          local_owner_marked_at: owner ? new Date().toISOString() : null,
+        });
+        await onSaved(created);
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : copy.readFailed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="back-row"><button className="back-button" type="button" onClick={onCancel}>← {copy.back}</button></div>
+      <section className="panel">
+        <div className="section-title"><h1>{archive ? copy.edit : copy.newProject}</h1></div>
+        <form className="form" onSubmit={submit}>
+          <div className="field"><label>{copy.title}</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></div>
+          <div className="field">
+            <label>{copy.category}</label>
+            <select value={category} onChange={(event) => setCategory(event.target.value as ArchiveCategory)}>
+              <option value="plant">{copy.plant}</option>
+              <option value="system">{copy.system}</option>
+              <option value="insect_fish">{copy.insect_fish}</option>
+              <option value="other">{copy.other}</option>
+            </select>
+          </div>
+          <div className="field"><label>{copy.systemName}</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
+            <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div>
+          </div>
+          {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
+          <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
+          <div className="field"><label>{copy.note}</label><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>
+          {error ? <section className="notice warning"><p>{error}</p></section> : null}
+          <div className="submit-row">
+            <button className="secondary-button" type="button" onClick={onCancel}>{copy.cancel}</button>
+            <button className="primary-button" type="submit" disabled={busy}>{busy ? copy.saving : copy.save}</button>
+          </div>
+        </form>
+      </section>
+    </>
+  );
+}
+
+function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack, onEdit, onAddRecord, onEditRecord, onDelete, onDeleteRecord }: {
+  detail: LocalArchiveDetail; language: Language; copy: OfflineCopy; ownerContext: LocalArchiveOwnerContext | null;
+  onChanged: () => Promise<void>; onBack: () => void; onEdit: () => void; onAddRecord: () => void;
+  onEditRecord: (recordId: string) => void; onDelete: () => void; onDeleteRecord: (recordId: string) => void;
+}) {
+  const [tab, setTab] = useState("details");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [periodDate, setPeriodDate] = useState(toDateTimeLocal().slice(0, 10));
+  const [filter, setFilter] = useState("all");
+  const [lightbox, setLightbox] = useState<LocalImage | null>(null);
+  const archive = detail.archive;
+  const isCloudCache = archive.local_role === "cloud-offline-cache";
+  const periods = getArchiveCycleTerminology(archive.category, language);
+  async function change(work: () => Promise<unknown>) {
+    if (busy) return;
+    setBusy(true); setError("");
+    try { await work(); await onChanged(); } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
+  }
+  return <>
+    <div className="detail-heading"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{archive.title}</h1><span /></div>
+    <div className="top-tabs"><button type="button" aria-pressed={tab === "details"} onClick={() => setTab("details")}>{copy.details}</button><button type="button" aria-pressed={tab === "properties"} onClick={() => setTab("properties")}>{copy.properties}</button></div>
+    {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
+    {isCloudCache ? <section className="notice"><p>{copy.cloudCacheReadOnly}</p></section> : null}
+    {tab === "properties" ? <>
+      {archive.category === "plant" && !isCloudCache ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy} onSave={async (region) => {
+        await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
+        await onChanged();
+      }} /> : null}
+      <section className="panel property-list">
+        <div className="property-row"><span>{copy.title}</span><strong>{archive.title}</strong></div>
+        <div className="property-row"><span>{copy.systemName}</span><strong>{archive.system_name || archive.species_name || "—"}</strong></div>
+        <div className="property-row"><span>{copy.category}</span><span>{copy[archive.category]}</span></div>
+        <div className="property-row"><span>{copy.source}</span><span>{archive.source || "—"}</span></div>
+        <div className="property-row"><span>{copy.note}</span><span>{archive.note || "—"}</span></div>
+        <div className="property-row"><span>{copy.status}</span><SegmentedChoice label={copy.status} value={archive.status} disabled={busy || isCloudCache} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} /></div>
+        <div className="property-row"><span>{copy.visibility}</span><span>{copy.private}</span></div>
+        {!isCloudCache ? <button type="button" className="secondary-button" onClick={onEdit}>{copy.edit}</button> : null}
+      </section>
+      {!isCloudCache ? <section className="panel"><h2>{copy.period}</h2><label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
+        {archive.cycle_enabled ? <div className="form">
+          {(archive.cycles || []).map((cycle) => <div className="property-row" key={cycle.id}><div><strong>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</strong><small className="project-meta">{formatDate(cycle.started_at, language)}</small></div>{cycle.status === "active" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { if (window.confirm(periods.endDialogMessage)) void change(() => endLocalArchiveCycle(archive.id, cycle.id, new Date().toISOString(), ownerContext)); }}>{periods.endAction}</button> : <span>{copy.ended}</span>}</div>)}
+          <label className="field">{copy.periodDate}<input type="date" value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} /></label>
+          <button type="button" className="primary-button" disabled={busy || !periodDate || archive.status === "ended"} onClick={() => void change(() => createLocalArchiveCycle(archive.id, new Date(`${periodDate}T00:00:00`).toISOString(), ownerContext))}>{periods.newAction}</button>
+        </div> : null}
+      </section> : null}
+      {!isCloudCache ? <button className="danger-button" type="button" disabled={busy} onClick={onDelete}>{copy.remove}</button> : null}
+    </> : <>
+      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {isCloudCache ? copy.offlineCopies : copy.local}</span>{archive.status === "active" ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
+      {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
+      <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <ArchiveRecordCardShell key={record.id} metaText={formatDate(record.record_time, language)} mobileMode>
+        {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={language === "zh" ? "查看照片" : "View photo"} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
+        {record.note ? <p className="record-note">{record.note}</p> : null}
+        {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
+        {record.sync?.status === "pending-cloud-sync" ? <div className="record-actions"><span className="project-meta">{copy.pendingUpload}</span><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
+      </ArchiveRecordCardShell>)}</div>
+      {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
+    </>}
+    {lightbox ? <dialog className="photo-lightbox" open aria-label={language === "zh" ? "照片" : "Photo"} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}
+  </>;
+}
+
+function FilePreview({ file }: { file: File }) {
+  const [url] = useState(() => URL.createObjectURL(file));
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return <img src={url} alt="" />;
+}
+
+function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
+  copy: OfflineCopy; archive: LocalArchive; language: Language; record?: LocalRecordWithImages;
+  onCancel: () => void; onSaved: () => void | Promise<void>;
+}) {
+  const [note, setNote] = useState(record?.note || "");
+  const [recordTime, setRecordTime] = useState(toDateTimeLocal(record?.record_time));
+  const [location, setLocation] = useState<RecordLocation | null>(() => record ? record.location || null : loadDefaultRecordLocation());
+  const [cycleId, setCycleId] = useState(record?.cycle_id || (archive.cycle_enabled ? archive.cycles?.find((cycle) => cycle.status === "active")?.id : null) || "");
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const camera = useRef<HTMLInputElement>(null);
+  const album = useRef<HTMLInputElement>(null);
+  const periods = getArchiveCycleTerminology(archive.category, language);
+  function addFiles(incoming: FileList | null) {
+    const images = Array.from(incoming || []).filter((file) => file.type.startsWith("image/"));
+    if (files.length + images.length > MAX_PHOTOS) { setError(copy.photoLimit); return; }
+    setError(""); setFiles((previous) => [...previous, ...images]);
+  }
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!note.trim() && !files.length && !record?.images.length) { setError(copy.requiredRecord); return; }
+    if (busy) return;
+    setBusy(true); setError("");
+    try {
+      const isoTime = localDateTimeInputToIso(recordTime, record?.record_time);
+      if (!isoTime) throw new Error(language === "en" ? "Enter a valid local date and time." : "请输入有效的本地日期和时间。");
+      const imageCapturedAt = await Promise.all(files.map(readImageCapturedAt));
+      if (record) await updateLocalRecordFields(record.id, { note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
+      else await createLocalRecord({ archive_id: archive.id, note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
+      await onSaved();
+    } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
+  }
+  return <>
+    <div className="detail-heading"><button type="button" className="back-button" onClick={onCancel} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{record ? copy.edit : copy.addRecord}</h1><span /></div>
+    <section className="panel"><form className="form" onSubmit={submit}>
+      <div className="project-meta">{archive.title} · {copy.local}</div>
+      <label className="field">{copy.recordTime}<input type="datetime-local" value={recordTime} onChange={(e) => setRecordTime(e.target.value)} required disabled={busy} /></label>
+      {archive.cycle_enabled ? <label className="field">{periods.assignLabel}<select value={cycleId} disabled={busy} onChange={(e) => setCycleId(e.target.value)}><option value="">{periods.unassignedOption}</option>{(archive.cycles || []).filter((cycle) => record || cycle.status === "active").map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
+      <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={8000} disabled={busy} /></label>
+      <div className="field"><label>{copy.selectPhotos}</label><small>{(record?.images.length || 0) + files.length} {copy.photos}</small>
+        {record?.images.length ? <div className="photo-grid">{record.images.map((image) => <BlobImage key={image.id} image={image} alt="" />)}</div> : null}
+        {files.length ? <div className="photo-grid">{files.map((file, index) => <div className="photo-preview" key={`${file.name}-${file.lastModified}-${index}`}><FilePreview file={file} /><button type="button" disabled={busy} aria-label={copy.removePhoto} onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}>×</button></div>)}</div> : null}
+        <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+        <input ref={album} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+        <div className="submit-row"><button className="secondary-button" type="button" disabled={busy} onClick={() => camera.current?.click()}>{copy.camera}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => album.current?.click()}>{copy.album}</button></div>
+      </div>
+      <RecordLocationField value={location} onChange={setLocation} files={files} language={language} disabled={busy} />
+      {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
+      <div className="submit-row"><button className="secondary-button" type="button" onClick={onCancel} disabled={busy}>{copy.cancel}</button><button className="primary-button" type="submit" disabled={busy}>{busy ? copy.saving : copy.save}</button></div>
+    </form></section>
+  </>;
+}
+
+createRoot(document.getElementById("root")!).render(<App />);
