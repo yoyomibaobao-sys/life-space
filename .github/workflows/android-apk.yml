@@ -79,6 +79,7 @@ jobs:
       CAPACITOR_SERVER_URL: ${{ inputs.server_url || 'https://life-space.uk' }}
       NEXT_PUBLIC_SUPABASE_URL: https://eidltoikfpnrzxruvawf.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_2cw-3WJnyD6x_CnPiDEiqQ_04violBa
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
       ANDROID_VERSION_CODE: ${{ inputs.version_code || '16' }}
       ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.4-rc12' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -121,8 +122,10 @@ jobs:
       - name: Verify bundled Android shell is browser-safe
         run: |
           test -s mobile-shell/index.html
-          grep -q 'id="root"' mobile-shell/index.html
-          if grep -q 'process\.env\.' mobile-shell/index.html; then
+          test -s mobile-shell/offline.html
+          grep -q 'LifeSpace·自然' mobile-shell/index.html
+          grep -q 'id="root"' mobile-shell/offline.html
+          if grep -q 'process\.env\.' mobile-shell/offline.html; then
             echo "Bundled Android shell still contains unresolved process.env references."
             exit 1
           fi

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import UiIcon from "@/components/ui/UiIcon";
 import type { ActivitySearchScope } from "@/components/discover-search/DiscoverSearchTabs";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -8,16 +9,15 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 export default function DiscoverSearchHeader({
   searchKind,
   onSearchKindChange,
+  onBack,
 }: {
   searchKind: ActivitySearchScope;
   onSearchKindChange: (kind: ActivitySearchScope) => void;
+  onBack?: () => void;
 }) {
   const { t } = useLanguage();
 
-  return (
-    <>
-      <MobilePageHeader
-        title={
+  const title = (
           <nav aria-label={t.discover.search_ui.search_type} style={mobileTabsStyle}>
             <button
               type="button"
@@ -36,11 +36,14 @@ export default function DiscoverSearchHeader({
               {t.discover.search_ui.records}
             </button>
           </nav>
-        }
-        titleText={`${t.discover.search_ui.projects} · ${t.discover.search_ui.records}`}
-        fallbackHref="/discover"
-        ariaLabel={t.nav.back}
-      />
+  );
+  return (
+    <>
+      {onBack ? (
+        <MobilePageHeaderView title={title} titleText={`${t.discover.search_ui.projects} · ${t.discover.search_ui.records}`} onBack={onBack} ariaLabel={t.nav.back} />
+      ) : (
+        <MobilePageHeader title={title} titleText={`${t.discover.search_ui.projects} · ${t.discover.search_ui.records}`} fallbackHref="/discover" ariaLabel={t.nav.back} />
+      )}
 
       <header className="mobile-app-desktop-only" style={desktopHeaderStyle}>
         <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>

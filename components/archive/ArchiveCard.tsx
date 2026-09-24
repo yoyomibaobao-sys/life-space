@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -18,6 +19,7 @@ import ArchivePlantNameEditor from "@/components/archive/ArchivePlantNameEditor"
 import ArchiveSystemNameEditor from "@/components/archive/ArchiveSystemNameEditor";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import LocalBlobImage from "@/components/local/LocalBlobImage";
 import CompactActivityTime from "@/components/ui/CompactActivityTime";
 import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
 import { getTranslations, type Language } from "@/lib/i18n";
@@ -64,6 +66,19 @@ type Props = {
   onDeleteArchive: (item: ArchiveItem) => void;
   mobileMode?: boolean;
   readOnly?: boolean;
+  extraStatusPills?: StatusPill[];
+  storageLabel?: string | null;
+  hidePublicToggle?: boolean;
+  preferSystemNameEditor?: boolean;
+  extraRail?: ReactNode;
+  extraMobileActions?: Array<{
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+  }>;
+  coverBlob?: Blob | null;
+  href?: string;
+  visibilityLabel?: string | null;
 };
 
 type StatusPill = {
@@ -188,8 +203,18 @@ export default function ArchiveCard({
   onDeleteArchive,
   mobileMode = false,
   readOnly = false,
+  extraStatusPills = [],
+  storageLabel = null,
+  hidePublicToggle = false,
+  preferSystemNameEditor = false,
+  extraRail = null,
+  extraMobileActions = [],
+  coverBlob = null,
+  href,
+  visibilityLabel = null,
 }: Props) {
   const { language, t } = useLanguage();
+  const usePlantNameEditor = item.category === "plant" && !preferSystemNameEditor;
   const hasLatestRecord = Boolean(
     item.latest_record_time ||
       item.latest_record_note ||
@@ -208,7 +233,7 @@ export default function ArchiveCard({
   const latestRecordPreview = getLatestRecordPreview(item, language);
   const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
   const ongoingDays = getOngoingDays(item.created_at);
-  const statusPills = buildStatusPills(item, ended, language);
+  const statusPills = [...buildStatusPills(item, ended, language), ...extraStatusPills];
   const availableGroupTags = item.sub_tag_id
     ? groupTags.filter((tag) => String(tag.sub_tag_id) === String(item.sub_tag_id))
     : [];
@@ -219,16 +244,21 @@ export default function ArchiveCard({
         ended={ended}
         imageUrl={cardImageUrl}
         imageAlt={cardImageAlt}
+        coverBlob={coverBlob}
         systemName={mobileSystemName}
         subTags={subTags}
         groupTags={groupTags}
         categoryDepths={categoryDepths}
-        onTogglePublic={onTogglePublic}
+        onTogglePublic={hidePublicToggle ? undefined : onTogglePublic}
         onUpdateArchiveStatus={onUpdateArchiveStatus}
         onUpdateArchiveCategory={onUpdateArchiveCategory}
         onUpdateArchiveGroupTag={onUpdateArchiveGroupTag}
         onDeleteArchive={onDeleteArchive}
         readOnly={readOnly}
+        href={href}
+        visibilityLabel={visibilityLabel}
+        storageLabel={storageLabel}
+        extraActions={extraMobileActions}
       />
     );
   }
@@ -262,7 +292,20 @@ export default function ArchiveCard({
           position: "relative",
         }}
       >
-        {cardImageUrl ? (
+        {coverBlob ? (
+          <LocalBlobImage
+            blob={coverBlob}
+            alt={cardImageAlt}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              borderRadius: 11,
+            }}
+          />
+        ) : cardImageUrl ? (
           <img
             src={cardImageUrl}
             alt={cardImageAlt}
@@ -373,7 +416,7 @@ export default function ArchiveCard({
 
             <span style={{ color: "#9a9a9a", fontWeight: 400, flexShrink: 0 }}>·</span>
 
-            {editingPlantArchiveId === item.id && item.category === "plant" ? (
+            {usePlantNameEditor && editingPlantArchiveId === item.id ? (
               <ArchivePlantNameEditor
                 value={editingPlantSearch}
                 pendingName={editingPendingSpeciesName}
@@ -387,7 +430,7 @@ export default function ArchiveCard({
                 onSave={() => onSavePlantSelection(item)}
                 onCancel={onCancelPlantEditing}
               />
-            ) : item.category === "plant" ? (
+            ) : usePlantNameEditor ? (
               <span
                 onClick={(e) => {
                   e.stopPropagation();
@@ -470,7 +513,13 @@ export default function ArchiveCard({
             alignItems: "center",
           }}
         >
-          {!readOnly || item.is_public ? (
+          {hidePublicToggle ? (
+            storageLabel ? (
+              <span style={{ color: "#888" }}>{storageLabel}</span>
+            ) : visibilityLabel ? (
+              <span style={{ color: "#888" }}>{visibilityLabel}</span>
+            ) : null
+          ) : !readOnly || item.is_public ? (
             <button
               type="button"
               title={item.is_public ? t.archive.set_private : t.archive_workspace.publish}
@@ -539,7 +588,7 @@ export default function ArchiveCard({
           durationDays={ongoingDays}
           ended={ended}
           viewCount={item.view_count || 0}
-          followerCount={item.follower_count}
+          followerCount={href ? undefined : item.follower_count}
           style={{ marginTop: "auto", paddingTop: 5 }}
         />
       </div>
@@ -559,6 +608,7 @@ export default function ArchiveCard({
     gap: 8,
   }}
 >
+  {extraRail}
   {!readOnly ? (
     <button
       type="button"
@@ -602,6 +652,7 @@ function MobileArchiveCard({
   ended,
   imageUrl,
   imageAlt,
+  coverBlob,
   systemName,
   subTags,
   groupTags,
@@ -612,26 +663,39 @@ function MobileArchiveCard({
   onUpdateArchiveGroupTag,
   onDeleteArchive,
   readOnly,
+  href,
+  visibilityLabel,
+  storageLabel,
+  extraActions = [],
 }: {
   item: ArchiveItem;
   ended: boolean;
   imageUrl: string;
   imageAlt: string;
+  coverBlob?: Blob | null;
   systemName: string;
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
   categoryDepths: ArchiveCategoryDepths;
-  onTogglePublic: (item: ArchiveItem) => void;
+  onTogglePublic?: (item: ArchiveItem) => void;
   onUpdateArchiveStatus: (item: ArchiveItem, nextStatus: "active" | "ended") => void;
   onUpdateArchiveCategory: (item: ArchiveItem, value: string) => void;
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
   onDeleteArchive: (item: ArchiveItem) => void;
   readOnly: boolean;
+  href?: string;
+  visibilityLabel?: string | null;
+  storageLabel?: string | null;
+  extraActions?: Array<{
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+  }>;
 }) {
   const { language, t } = useLanguage();
   const ongoingDays = getOngoingDays(item.created_at);
   const latestRecordTime = item.latest_record_time || item.last_record_time || item.created_at;
-  const visibilityText = item.is_public ? t.experience.public : t.experience.private;
+  const visibilityText = visibilityLabel || (item.is_public ? t.experience.public : t.experience.private);
   const mobileEndedText = ended ? t.archive_workspace.ended : "";
   const maxDepth = categoryDepths[item.category] || 3;
   const selectedSubcategory = maxDepth >= 2 && item.sub_tag_id
@@ -642,7 +706,7 @@ function MobileArchiveCard({
     : null;
   const projectView: ArchiveProjectView = {
     id: item.id,
-    mode: "cloud",
+    mode: href ? "local" : "cloud",
     title: item.title || t.archive_workspace.unnamed_project,
     category: item.category,
     plantId: item.species_id,
@@ -651,22 +715,27 @@ function MobileArchiveCard({
     systemName,
     subcategoryLabel: selectedSubcategory?.name || null,
     groupLabel: selectedGroup?.name || null,
-    cover: imageUrl ? { kind: "url", url: imageUrl, alt: imageAlt } : null,
+    cover: coverBlob
+      ? { kind: "blob", blob: coverBlob, alt: imageAlt }
+      : imageUrl
+        ? { kind: "url", url: imageUrl, alt: imageAlt }
+        : null,
     latestText: item.latest_record_note?.trim() || "",
     latestTime: latestRecordTime,
     recordCount: item.record_count || 0,
     durationDays: ongoingDays,
-    followerCount: item.follower_count,
+    followerCount: href ? undefined : item.follower_count,
     helpLabel: item.help_status === "open" ? t.archive_workspace.help_open : null,
     visibilityLabel: visibilityText,
-    visibilityTone: item.is_public ? "public" : "private",
+    visibilityTone: href ? "neutral" : item.is_public ? "public" : "private",
+    storageLabel: storageLabel || null,
     activityText: null,
     mobilePrimaryStatsText: null,
     mobileSecondaryStatsText: null,
     statusLabel: mobileEndedText,
     ended,
     showClassificationRow: maxDepth >= 2,
-    href: `/archive/${item.id}`,
+    href: href || `/archive/${item.id}`,
   };
   const actionSlot = (
     <MobileArchiveActions
@@ -682,8 +751,13 @@ function MobileArchiveCard({
       onChangeCategory={(value) => onUpdateArchiveCategory(item, value)}
       onChangeGroup={(value) => onUpdateArchiveGroupTag(item, value)}
       onToggleEnded={readOnly ? undefined : () => onUpdateArchiveStatus(item, ended ? "active" : "ended")}
-      onTogglePublic={readOnly && !item.is_public ? undefined : () => onTogglePublic(item)}
+      onTogglePublic={
+        !onTogglePublic || (readOnly && !item.is_public)
+          ? undefined
+          : () => onTogglePublic(item)
+      }
       onMoveToTrash={() => onDeleteArchive(item)}
+      extraActions={extraActions}
     />
   );
 

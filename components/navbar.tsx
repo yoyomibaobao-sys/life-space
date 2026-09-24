@@ -17,6 +17,7 @@ import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
+import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
 
 type MobileArchiveTitleInfo = {
@@ -511,47 +512,56 @@ function MobileBottomNav({
     (isPathActive(pathname, "/archive") && !isOtherUsersArchive) ||
     isPersonalExperiencePath;
 
+  const baseItems = getMobilePrimaryNavigationDescriptors({
+    home: labels.home,
+    following: labels.following,
+    market: labels.market,
+    me: labels.me,
+  });
   const items: [
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
-  ] = [
-    {
-      id: "home",
-      label: labels.home,
-      icon: "home",
-      href: "/discover",
-      active:
-        (pathname === "/discover" && discoverTab === "feed") ||
-        isHomeSection,
-      onSelect: () => {
-        window.dispatchEvent(
-          new CustomEvent("discover-tab-change", { detail: "feed" }),
-        );
-      },
-    },
-    {
-      id: "following",
-      label: labels.following,
-      icon: "follow",
-      href: user ? "/follow" : buildLoginHref("/follow"),
-      active: pathname.startsWith("/follow"),
-    },
-    {
-      id: "market",
-      label: labels.market,
-      icon: "store",
-      href: "/market",
-      active: isPathActive(pathname, "/market"),
-    },
-    {
-      id: "me",
-      label: labels.me,
-      icon: "user",
+  ] = baseItems.map((item) => {
+    if (item.id === "home") {
+      return {
+        ...item,
+        href: "/discover",
+        active:
+          (pathname === "/discover" && discoverTab === "feed") ||
+          isHomeSection,
+        onSelect: () => {
+          window.dispatchEvent(
+            new CustomEvent("discover-tab-change", { detail: "feed" }),
+          );
+        },
+      };
+    }
+    if (item.id === "following") {
+      return {
+        ...item,
+        href: user ? "/follow" : buildLoginHref("/follow"),
+        active: pathname.startsWith("/follow"),
+      };
+    }
+    if (item.id === "market") {
+      return {
+        ...item,
+        href: "/market",
+        active: isPathActive(pathname, "/market"),
+      };
+    }
+    return {
+      ...item,
       href: user ? "/archive" : buildLoginHref("/archive"),
       active: isPersonalSection,
-    },
+    };
+  }) as [
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
+    MobileBottomNavigationItem,
   ];
   const currentLocalArchiveId =
     pathname.match(/^\/local\/archive\/([^/]+)$/)?.[1] || null;
@@ -638,6 +648,7 @@ function hasPageManagedMobileTopNav(pathname: string) {
     pathname.startsWith("/user/") ||
     pathname.startsWith("/legal") ||
     pathname.startsWith("/plant/") ||
+    pathname.startsWith("/local/archive/") ||
     Boolean(getArchiveDetailPath(pathname)) ||
     pathname === "/archive/interests" ||
     /^\/experience-cards\/[^/]+$/.test(pathname)

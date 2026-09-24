@@ -14,33 +14,73 @@ test("cold-start Android offline shell presents the local workspace rather than 
   const source = read("mobile-offline-src/main.tsx");
   const navbar = read("components/navbar.tsx");
   const sharedNavigation = read("components/mobile/MobileBottomNavigationView.tsx");
+  const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
+  const sharedHomeTabs = read("components/home/HomeSectionTabs.tsx");
+  const sharedPrimaryNav = read("components/mobile/mobilePrimaryNavigation.ts");
+  const sharedIdentity = read("components/archive-ui/PersonalSpaceMobileIdentity.tsx");
+  const archivePage = read("app/archive/page.tsx");
+  const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
+  const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /bundledComponentCss/);
   assert.match(buildScript, /`\$\{css\}\\n\$\{localParityCss\}\\n\$\{bundledComponentCss\}`/);
-  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.doesNotMatch(source, /className="offline-header"|className="brand-mode"/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
-  assert.match(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(1\)/);
+  assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.doesNotMatch(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(source, /<MobileBottomNavigationView/);
+  assert.match(source, /getMobilePrimaryNavigationDescriptors/);
+  assert.match(sharedPrimaryNav, /"home"[\s\S]*"following"[\s\S]*"market"[\s\S]*"me"/);
+  assert.match(source, /<MobilePageHeaderView/);
+  assert.match(source, /homeSectionOwnsTopNav/);
+  assert.match(source, /<PersonalSpaceMobileIdentity/);
+  assert.match(source, /SHELL_IDENTITY_CACHE_PREFIX/);
+  assert.match(source, /clearShellIdentityCache/);
+  assert.match(source, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
+  assert.match(archivePage, /<PersonalSpaceMobileIdentity/);
+  assert.match(sharedIdentity, /storageUsagePercent/);
+  assert.match(source, /<HomeSectionTabs/);
+  assert.match(source, /fetchDiverseDiscoveryProjectBatch/);
+  assert.match(source, /fetchDiscoverExperienceCardSearchResults/);
+  assert.match(source, /kind: "experience"/);
+  assert.match(source, /fetchFollowedArchiveProjects/);
+  assert.match(source, /fetchMarketFeed/);
+  assert.match(source, /kind: "market"/);
+  assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "market" \}\)/);
+  assert.match(source, /kind: "following"/);
+  assert.doesNotMatch(source, /screen\.kind === "cloud"/);
+  assert.match(source, /function reconnect\(\)/);
+  assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "following" \}\)/);
+  assert.match(source, /kind: "activity"/);
+  assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "activity" \}\)/);
+  assert.match(sharedHomeTabs, /onSelect\?: \(section: HomeSection\) => void/);
+  assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
-  assert.match(source, /<ConnectivityNotice/);
+  assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(navbar, /<MobileBottomNavigationView/);
   assert.match(sharedNavigation, /data-mobile-bottom-nav="true"/);
+  assert.match(source, /<ArchiveWorkspaceTemplate/);
+  assert.match(source, /sourceOptions=\{\[/);
+  assert.match(source, /activeSource=\{sourceFilter\}/);
+  assert.match(source, /<ArchiveTaxonomyPanel/);
+  assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
+  assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.doesNotMatch(template, /本地离线模式/);
 });
 
-test("normal app workspace automatically exposes local projects while offline without changing data identity", () => {
+test("normal app workspace keeps the same source controls while offline without changing data identity", () => {
   const workspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
   const cloudTrial = read("components/CloudTrialEntry.tsx");
 
   assert.match(workspace, /navigator\.onLine/);
-  assert.match(workspace, /sourceBeforeOfflineRef/);
-  assert.match(workspace, /item\.value === "local"/);
-  assert.match(workspace, /onSelectSource\(localOption\.value\)/);
-  assert.match(workspace, /onSelectSource\(previousSource\)/);
+  assert.match(workspace, /<ArchiveSourceSwitcher/);
+  assert.match(workspace, /options=\{sourceOptions\}/);
+  assert.match(workspace, /activeValue=\{activeSource\}/);
+  assert.doesNotMatch(workspace, /sourceBeforeOfflineRef|localOption|visibleSourceOptions/);
   assert.doesNotMatch(workspace, /updateLocalArchiveFields|syncLocalArchiveToCloud|createLocalArchive/);
 
   assert.match(cloudTrial, /navigator\.onLine/);
@@ -62,6 +102,49 @@ test("network-only sections use one quiet offline state", () => {
   assert.match(discoverLayout, /<NetworkRequiredBoundary>/);
   assert.match(marketLayout, /<NetworkRequiredBoundary>/);
   assert.match(followLayout, /<NetworkRequiredBoundary>/);
+});
+
+test("local projects reuse the cloud archive card and detail header with device-only status", () => {
+  const archivePage = read("app/archive/page.tsx");
+  const localDetail = read("app/local/archive/[id]/page.tsx");
+  const localView = read("components/archive-ui/localArchiveProjectView.ts");
+  const projectCard = read("components/archive-ui/ArchiveProjectCard.tsx");
+  const cloudCard = read("components/archive/ArchiveCard.tsx");
+  const summaryCard = read("components/project/ProjectSummaryCard.tsx");
+  const zh = read("lib/i18n/zh.ts");
+  const en = read("lib/i18n/en.ts");
+
+  assert.match(cloudCard, /<ArchiveProjectCard/);
+  assert.match(archivePage, /localArchiveToArchiveItem/);
+  assert.match(archivePage, /<ArchiveCard/);
+  assert.match(archivePage, /hidePublicToggle/);
+  assert.match(localView, /archiveCopy\.local_project/);
+  assert.match(localView, /archiveCopy\.saved_on_this_device/);
+  assert.match(localView, /export function localArchiveToArchiveItem/);
+  assert.match(projectCard, /project\.storageLabel/);
+  assert.match(summaryCard, /props\.storageLabel/);
+  assert.match(cloudCard, /storageLabel/);
+  assert.match(archivePage, /t\.archive\.transfer_to_cloud/);
+  assert.match(archivePage, /activeLocalArchives\.map\(\(archive\) => renderLocalArchiveCard\(archive\)\)/);
+  assert.match(archivePage, /showCloudEndedList \|\| showLocalEndedList/);
+  assert.match(archivePage, /endedLocalArchives\.map\(\(archive\) => renderLocalArchiveCard\(archive\)\)/);
+  assert.match(localView, /help_status: null,\s*view_count: 0,\s*};/);
+  assert.doesNotMatch(localView, /follower_count: 0/);
+  assert.match(cloudCard, /followerCount: href \? undefined : item\.follower_count/);
+  assert.match(cloudCard, /followerCount=\{href \? undefined : item\.follower_count\}/);
+  assert.match(localDetail, /<ArchiveDetailHeaderView/);
+  assert.match(localDetail, /eyebrow=\{archiveCopy\.project_archive\}/);
+  assert.match(localDetail, /archiveCopy\.local_project/);
+  assert.match(localDetail, /archiveCopy\.saved_on_this_device/);
+  assert.match(localDetail, /archiveCopy\.transfer_to_cloud/);
+  assert.match(localDetail, /profileAlwaysOpen/);
+  assert.match(localDetail, /<MobilePageHeader/);
+  assert.match(localDetail, /archiveCopy\.details/);
+  assert.match(localDetail, /archiveCopy\.dossier/);
+  assert.match(localDetail, /archiveCopy\.experience_cards/);
+  assert.match(localDetail, /showPageChrome=\{false\}/);
+  assert.match(zh, /saved_on_this_device: "仅保存于此设备"/);
+  assert.match(en, /saved_on_this_device: "Saved only on this device"/);
 });
 
 test("temporary single-character startup placeholder is replaced by the product brand", () => {

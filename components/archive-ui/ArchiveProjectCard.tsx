@@ -121,6 +121,7 @@ export default function ArchiveProjectCard({
         latestText={project.latestText}
         latestTime={project.latestTime}
         visibilityLabel={mobileClassificationSlot ? undefined : project.visibilityLabel}
+        storageLabel={mobileClassificationSlot ? undefined : project.storageLabel}
         classificationText={mobileClassificationSlot ? undefined : classificationText}
         classificationSlot={mobileClassificationSlot}
         showClassification={Boolean(mobileClassificationSlot) || project.showClassificationRow}
@@ -149,6 +150,9 @@ export default function ArchiveProjectCard({
               <span style={visibilityBadgeStyle(project.visibilityTone)}>
                 {project.visibilityLabel}
               </span>
+            ) : null}
+            {project.storageLabel ? (
+              <span style={storageLabelStyle}>{project.storageLabel}</span>
             ) : null}
             {project.badges?.map((badge) => (
               <span key={badge} style={badgeStyle}>
@@ -452,6 +456,14 @@ function visibilityBadgeStyle(tone?: "public" | "private" | "neutral"): CSSPrope
     whiteSpace: "nowrap",
   };
 }
+
+const storageLabelStyle: CSSProperties = {
+  color: "#7a8578",
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: 1.3,
+  whiteSpace: "nowrap",
+};
 
 const badgeStyle: CSSProperties = {
   borderRadius: 999,

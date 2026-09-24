@@ -1,30 +1,22 @@
 "use client";
 
 import {
-  cloneElement,
-  isValidElement,
   useEffect,
-  useMemo,
-  useRef,
   useState,
   type CSSProperties,
-  type ReactElement,
   type ReactNode,
 } from "react";
 import ArchiveToolbar from "@/components/archive/ArchiveToolbar";
+import ArchiveSourceSwitcher, {
+  type ArchiveSourceOption,
+} from "@/components/archive-ui/ArchiveSourceSwitcher";
 import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
-type SourceOption<T extends string> = {
-  value: T;
-  label: string;
-  count: number;
-};
-
 type Props<T extends string> = {
   statsText?: ReactNode;
-  sourceOptions: Array<SourceOption<T>>;
+  sourceOptions: Array<ArchiveSourceOption<T>>;
   activeSource: T;
   onSelectSource: (source: T) => void;
   onCreateArchive: (category: ArchiveCategory) => void;
@@ -55,11 +47,6 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
 }: Props<T>) {
   const { t } = useLanguage();
   const [online, setOnline] = useState(true);
-  const sourceBeforeOfflineRef = useRef<T | null>(null);
-  const localOption = useMemo(
-    () => sourceOptions.find((item) => item.value === "local"),
-    [sourceOptions],
-  );
 
   useEffect(() => {
     const refresh = () => setOnline(navigator.onLine);
@@ -72,67 +59,16 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
     };
   }, []);
 
-  useEffect(() => {
-    if (!localOption) return;
-
-    if (!online) {
-      if (activeSource !== localOption.value) {
-        if (sourceBeforeOfflineRef.current === null) {
-          sourceBeforeOfflineRef.current = activeSource;
-        }
-        onSelectSource(localOption.value);
-      }
-      return;
-    }
-
-    const previousSource = sourceBeforeOfflineRef.current;
-    if (previousSource !== null) {
-      sourceBeforeOfflineRef.current = null;
-      if (activeSource === localOption.value && previousSource !== activeSource) {
-        onSelectSource(previousSource);
-      }
-    }
-  }, [activeSource, localOption, online, onSelectSource]);
-
-  const visibleSourceOptions = !online && localOption ? [localOption] : sourceOptions;
-  const trailingSlot = isValidElement(sourceTrailingSlot)
-    ? cloneElement(
-        sourceTrailingSlot as ReactElement<{ style?: CSSProperties }>,
-        {
-          style: {
-            ...(sourceTrailingSlot.props as { style?: CSSProperties }).style,
-            border: "1px solid #4f844b",
-            background: "#4f844b",
-            color: "#fff",
-            fontWeight: 600,
-            fontSize: 14,
-            marginLeft: 8,
-            padding: "0 8px",
-            minWidth: 0,
-            whiteSpace: "nowrap",
-            boxShadow: "0 3px 9px rgba(79,132,75,0.16)",
-          },
-        },
-      )
-    : sourceTrailingSlot;
-
   return (
     <>
       {statsText ? <div style={statsStyle}>{statsText}</div> : null}
 
-      <section style={sourceSwitchStyle(Boolean(sourceTrailingSlot), visibleSourceOptions.length)}>
-        {visibleSourceOptions.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => onSelectSource(item.value)}
-            style={sourceButtonStyle(activeSource === item.value, Boolean(sourceTrailingSlot))}
-          >
-            {item.label} {item.count}
-          </button>
-        ))}
-        {trailingSlot}
-      </section>
+      <ArchiveSourceSwitcher
+        options={sourceOptions}
+        activeValue={activeSource}
+        onSelect={onSelectSource}
+        trailingSlot={sourceTrailingSlot}
+      />
 
       {showCreateToolbar ? (
         <ArchiveToolbar
@@ -159,37 +95,6 @@ const statsStyle: CSSProperties = {
   color: "#6f7b6a",
   marginBottom: 18,
 };
-
-function sourceSwitchStyle(singleLine: boolean, optionCount: number): CSSProperties {
-  const compactColumns = Math.max(1, Math.min(optionCount, 3));
-  return {
-    margin: "0 0 12px",
-    display: singleLine ? "grid" : "flex",
-    gridTemplateColumns: singleLine
-      ? `repeat(${compactColumns}, minmax(0, 1fr)) auto`
-      : undefined,
-    alignItems: "center",
-    gap: singleLine ? 6 : 8,
-    flexWrap: singleLine ? "nowrap" : "wrap",
-  };
-}
-
-function sourceButtonStyle(active: boolean, compact: boolean): CSSProperties {
-  return {
-    minHeight: 34,
-    padding: compact ? "0 4px" : "0 12px",
-    minWidth: 0,
-    borderRadius: 999,
-    border: active ? "1px solid #9fc796" : "1px solid #dfe7d9",
-    background: active ? "#eef7e8" : "#fff",
-    color: active ? "#2f6a2c" : "#5d6957",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    flexShrink: 0,
-  };
-}
 
 const projectListStyle: CSSProperties = {
   marginTop: 0,

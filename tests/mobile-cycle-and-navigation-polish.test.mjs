@@ -81,7 +81,8 @@ test("mobile My Space is single-line and taxonomy actions move to long press", a
   assert.match(taxonomy, /fontSize: 16/);
   assert.match(taxonomy, /overflowX: compact \? "auto"/);
   assert.match(taxonomy, /compact[\s\S]*?t\.archive_workspace\.subcategory[\s\S]*?t\.archive_workspace\.subcategory_prefix/);
-  assert.doesNotMatch(taxonomy, /onDoubleClick=/);
+  assert.match(taxonomy, /onDoubleClick=/);
+  assert.match(taxonomy, /if \(compact \|\| !onRename\) return/);
   assert.match(taxonomy, /!compact && onDelete/);
 });
 
@@ -272,15 +273,17 @@ test("mobile discovery filters, search fields, cards, and project menus follow t
 test("mobile owner attributes expose direct project actions without a management menu", async () => {
   const projectDetail = await source("app/archive/[id]/page.tsx");
 
-  assert.match(projectDetail, /isMobileViewport && activeDetailTab === "profile"/);
-  assert.match(projectDetail, /<MobileArchiveOwnerFields/);
+  assert.match(projectDetail, /<ArchiveDetailHeader/);
+  assert.match(projectDetail, /showPageChrome=\{false\}/);
+  assert.match(projectDetail, /isMobileViewport && isOwner/);
+  assert.match(projectDetail, /<ArchiveOwnerSettingsFields/);
   assert.match(projectDetail, /onChangeSubcategory=/);
   assert.match(projectDetail, /onChangeGroup=/);
   assert.match(projectDetail, /onToggleEnded=/);
   assert.match(projectDetail, /onTogglePublic=/);
   assert.match(projectDetail, /<ArchiveCycleSettings[\s\S]*?mobileArchiveTrashButtonStyle/);
   assert.doesNotMatch(
-    projectDetail.match(/\{isMobileViewport && activeDetailTab === "profile" \? \([\s\S]*?\n        \) : null\}/)?.[0] || "",
+    projectDetail.match(/\{isMobileViewport && isOwner \? \([\s\S]*?\n          \) : null\}/)?.[0] || "",
     /MobileArchiveActions|project_management/
   );
 });
