@@ -38,14 +38,14 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: true,
   },
   server: {
-    // Android now boots the APK-bundled app shell first. Network availability
-    // only controls cloud data; it must never decide whether the UI can start.
+    // Online: load the production Next.js mobile app. Offline/start failure:
+    // Capacitor falls back to the bundled local-first shell.
+    url: cloudUrl.origin,
     hostname: cloudUrl.hostname,
     androidScheme: "https",
     cleartext: false,
-    // Keep the bundled shell on the production origin. This preserves the
-    // existing WebView IndexedDB and Supabase auth session while removing the
-    // network dependency that the old server.url introduced.
+    // Keep the WebView origin on the production host so IndexedDB, auth, local
+    // projects, cloud caches, and pending sync stay on the same device database.
     allowNavigation: [cloudUrl.hostname, LEGACY_LOCAL_STORAGE_HOST],
     errorPath: "offline.html",
   },

@@ -93,7 +93,8 @@ if (!javascript) throw new Error("Offline bundle did not emit JavaScript.");
 const bundledComponentCss =
   buildResult.outputFiles.find((file) => file.path.endsWith(".css"))?.text || "";
 
-const [template, css, localParityCss, bridgeTemplate] = await Promise.all([
+const [indexTemplate, template, css, localParityCss, bridgeTemplate] = await Promise.all([
+  fs.readFile(path.join(sourceRoot, "index.template.html"), "utf8"),
   fs.readFile(path.join(sourceRoot, "offline.template.html"), "utf8"),
   fs.readFile(path.join(sourceRoot, "offline.css"), "utf8"),
   fs.readFile(path.join(sourceRoot, "local-parity.css"), "utf8"),
@@ -116,9 +117,9 @@ const bridgeHtml = bridgeTemplate.replace(
 
 await fs.mkdir(outputRoot, { recursive: true });
 await Promise.all([
-  // The same self-contained shell is the normal Android entry point and the
-  // fallback document. Android therefore starts with or without a network.
-  fs.writeFile(path.join(outputRoot, "index.html"), offlineHtml),
+  // Online startup uses Capacitor server.url. This placeholder is only the
+  // bundled default document; the local-first shell lives in offline.html.
+  fs.writeFile(path.join(outputRoot, "index.html"), indexTemplate),
   fs.writeFile(path.join(outputRoot, "offline.html"), offlineHtml),
   fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml),
 ]);

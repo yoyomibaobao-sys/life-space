@@ -122,8 +122,10 @@ jobs:
       - name: Verify bundled Android shell is browser-safe
         run: |
           test -s mobile-shell/index.html
-          grep -q 'id="root"' mobile-shell/index.html
-          if grep -q 'process\.env\.' mobile-shell/index.html; then
+          test -s mobile-shell/offline.html
+          grep -q 'LifeSpace·自然' mobile-shell/index.html
+          grep -q 'id="root"' mobile-shell/offline.html
+          if grep -q 'process\.env\.' mobile-shell/offline.html; then
             echo "Bundled Android shell still contains unresolved process.env references."
             exit 1
           fi

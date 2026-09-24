@@ -20,8 +20,11 @@ test("Android packages a same-origin standalone local project surface", () => {
   const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
   assert.match(config, /hostname: cloudUrl\.hostname/);
-  assert.doesNotMatch(config, /url: cloudUrl\.origin/);
+  assert.match(config, /url: cloudUrl\.origin/);
+  assert.match(config, /errorPath: "offline\.html"/);
   assert.match(read("scripts/build-mobile-offline.mjs"), /"index\.html"/);
+  assert.match(read("scripts/build-mobile-offline.mjs"), /index\.template\.html/);
+  assert.doesNotMatch(read("mobile-shell/index.html"), /id="root"/);
   assert.match(packageJson, /"android:sync": "npm run android:offline && cap sync android"/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
