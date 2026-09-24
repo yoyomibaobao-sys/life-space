@@ -16,6 +16,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const generated = read("mobile-shell/offline.html");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
   const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
+  const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
   assert.match(config, /hostname: cloudUrl\.hostname/);
   assert.doesNotMatch(config, /url: cloudUrl\.origin/);
@@ -57,6 +58,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<ArchiveWorkspaceTemplate/);
   assert.match(source, /sourceOptions=\{\[/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
+  assert.match(source, /<ArchiveTaxonomyPanel/);
+  assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
   assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
