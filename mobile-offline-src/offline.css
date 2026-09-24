@@ -161,9 +161,6 @@ button:disabled { opacity: 0.55; }
 .section-title h1, .section-title h2, .panel h1, .panel h2 { font-size: 18px; line-height: 1.35; margin-block: 8px 12px; }
 .detail-heading { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; gap: 8px; }
 .detail-heading h1 { font-size: 20px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
-.top-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
-.top-tabs button { flex: 1; min-height: 44px; padding: 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 16px; font-weight: 600; }
-.top-tabs button[aria-pressed="true"] { color: var(--green-dark); border-bottom-color: var(--green); }
 .guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .guide-item { border: 1px solid var(--line); border-radius: 16px; background: #fff; padding: 14px; text-align: left; color: #314131; }
 .guide-item strong, .guide-item small { display: block; }
