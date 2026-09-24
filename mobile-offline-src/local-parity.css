@@ -4,11 +4,6 @@
  * Keep connectivity as runtime state only; never rewrite cloud/local identity.
  */
 
-/* The local workspace header is enough context. Avoid a second "offline mode" label. */
-.brand-mode {
-  display: none;
-}
-
 /* Online-only destinations remain in the normal navigation, but their fallback
  * screen should be visually quiet rather than styled as a special offline mode. */
 .panel.empty {
