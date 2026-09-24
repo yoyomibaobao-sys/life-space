@@ -9,18 +9,11 @@
   display: none;
 }
 
-/* Offline can only operate on device-local projects. Present the same local source
- * directly instead of offering inactive All / Cloud source switches. */
-.source-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-}
-
-.source-row > button:nth-child(1),
-.source-row > button:nth-child(2) {
-  display: none;
-}
-
+/*
+ * Keep the same All / Cloud / Local source controls online and offline.
+ * When offline, the Cloud screen itself decides what is available and shows
+ * cached cloud copies read-only instead of hiding the source switch.
+ */
 .source-row .add-project {
   margin-left: 8px;
 }
