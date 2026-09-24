@@ -54,6 +54,7 @@ import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
+import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
 import ArchiveTaxonomyPanel from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
@@ -81,6 +82,12 @@ import { supabase } from "@/lib/supabase";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
+import { formatStorage } from "@/lib/user-profile-shared";
+import {
+  getUserTypeLabel,
+  normalizeMembershipRpcResult,
+  type MyMembership,
+} from "@/lib/membership";
 import {
   createInitialDiscoveryDiversityState,
   fetchDiverseDiscoveryProjectBatch,
@@ -105,6 +112,57 @@ const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
 type ShellSourceFilter = "all" | "cloud" | "local";
+
+type ShellSpaceProfile = {
+  username: string | null;
+  avatar_url: string | null;
+  storage_used: number | null;
+  storage_limit: number | null;
+};
+
+type ShellIdentityCache = {
+  profile: ShellSpaceProfile | null;
+  membership: MyMembership | null;
+  experienceCardCount: number;
+};
+
+const SHELL_IDENTITY_CACHE_PREFIX = "lifespace_shell_identity_v1:";
+
+function readShellIdentityCache(userId?: string | null): ShellIdentityCache | null {
+  if (!userId) return null;
+  try {
+    const raw = window.localStorage.getItem(`${SHELL_IDENTITY_CACHE_PREFIX}${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ShellIdentityCache>;
+    return {
+      profile: (parsed.profile || null) as ShellSpaceProfile | null,
+      membership: (parsed.membership || null) as MyMembership | null,
+      experienceCardCount: Math.max(0, Number(parsed.experienceCardCount || 0)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeShellIdentityCache(userId: string, value: ShellIdentityCache) {
+  try {
+    window.localStorage.setItem(
+      `${SHELL_IDENTITY_CACHE_PREFIX}${userId}`,
+      JSON.stringify(value),
+    );
+  } catch {
+    // Identity cache is optional; local projects and cloud caches stay usable.
+  }
+}
+
+function clearShellIdentityCache(userId?: string | null) {
+  if (!userId) return;
+  try {
+    window.localStorage.removeItem(`${SHELL_IDENTITY_CACHE_PREFIX}${userId}`);
+  } catch {
+    // Explicit sign-out still clears in-memory identity even if storage is unavailable.
+  }
+}
 
 type CloudArchiveSummary = {
   id: string;
@@ -359,6 +417,16 @@ function App() {
   const [owner, setOwner] = useState<StoredLocalOwnerContext | null>(() =>
     loadRememberedLocalOwnerContext(),
   );
+  const initialIdentityCache = readShellIdentityCache(owner?.userId);
+  const [spaceProfile, setSpaceProfile] = useState<ShellSpaceProfile | null>(
+    initialIdentityCache?.profile || null,
+  );
+  const [membership, setMembership] = useState<MyMembership | null>(
+    initialIdentityCache?.membership || null,
+  );
+  const [experienceCardCount, setExperienceCardCount] = useState(
+    initialIdentityCache?.experienceCardCount || 0,
+  );
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
@@ -400,6 +468,53 @@ function App() {
   const showToast = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
+  }, []);
+
+  const loadShellIdentity = useCallback(async (userId: string) => {
+    const cached = readShellIdentityCache(userId);
+    if (cached) {
+      setSpaceProfile(cached.profile);
+      setMembership(cached.membership);
+      setExperienceCardCount(cached.experienceCardCount);
+    }
+
+    if (!navigator.onLine) return;
+
+    try {
+      const [profileResult, membershipResult, experienceResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("username, avatar_url, storage_used, storage_limit")
+          .eq("id", userId)
+          .maybeSingle(),
+        supabase.rpc("get_my_membership"),
+        supabase
+          .from("experience_cards")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId),
+      ]);
+
+      const nextProfile = profileResult.error
+        ? cached?.profile || null
+        : (profileResult.data as ShellSpaceProfile | null);
+      const nextMembership = membershipResult.error
+        ? cached?.membership || null
+        : normalizeMembershipRpcResult(membershipResult.data);
+      const nextExperienceCardCount = experienceResult.error
+        ? cached?.experienceCardCount || 0
+        : Math.max(0, Number(experienceResult.count || 0));
+
+      setSpaceProfile(nextProfile);
+      setMembership(nextMembership);
+      setExperienceCardCount(nextExperienceCardCount);
+      writeShellIdentityCache(userId, {
+        profile: nextProfile,
+        membership: nextMembership,
+        experienceCardCount: nextExperienceCardCount,
+      });
+    } catch (error) {
+      console.warn("local shell identity", error);
+    }
   }, []);
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
@@ -559,6 +674,7 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let activeSessionUserId: string | null = null;
 
     function applySession(user?: { id?: string; email?: string | null } | null) {
       if (cancelled) return;
@@ -568,9 +684,11 @@ function App() {
       }
 
       const nextOwner = { userId: user.id, email: user.email || null };
+      activeSessionUserId = user.id;
       rememberLocalOwnerContext(nextOwner);
       setOwner(nextOwner);
       setCloudUserId(user.id);
+      void loadShellIdentity(user.id);
     }
 
     void supabase.auth.getSession()
@@ -582,9 +700,14 @@ function App() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
         clearRememberedLocalOwnerContext();
+        clearShellIdentityCache(activeSessionUserId);
+        activeSessionUserId = null;
         setOwner(null);
         setCloudUserId(null);
         setCloudArchives([]);
+        setSpaceProfile(null);
+        setMembership(null);
+        setExperienceCardCount(0);
         void Promise.all([
           listVisibleLocalArchiveSummaries(null),
           listVisibleCloudOfflineArchiveSummaries(null),
@@ -606,7 +729,7 @@ function App() {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [loadShellIdentity]);
 
   useEffect(() => {
     if (!online || !cloudUserId || !ownerContext) return;
@@ -653,6 +776,12 @@ function App() {
           }
         }
         setOwner(nextOwner);
+        if (nextOwner?.userId) {
+          const cachedIdentity = readShellIdentityCache(nextOwner.userId);
+          setSpaceProfile(cachedIdentity?.profile || null);
+          setMembership(cachedIdentity?.membership || null);
+          setExperienceCardCount(cachedIdentity?.experienceCardCount || 0);
+        }
         await preparePendingCloudSyncQueue(
           nextOwner ? { userId: nextOwner.userId, email: nextOwner.email } : null,
         ).catch((error) => console.warn("pending sync queue preparation", error));
@@ -978,7 +1107,22 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["activity", "experience", "guides"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "experience", "guides"].includes(screen.kind);
+  const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
+  const storageLimitBytes = Math.max(
+    0,
+    Number(membership?.storage_limit_bytes || spaceProfile?.storage_limit || 0),
+  );
+  const storageUsagePercent = storageLimitBytes > 0
+    ? Math.min(100, (storageUsedBytes / storageLimitBytes) * 100)
+    : 0;
+  const storageTotalLabel = storageLimitBytes > 0
+    ? formatStorage(storageLimitBytes)
+    : "—";
+  const membershipLabel = getUserTypeLabel(
+    { signedIn: Boolean(owner), membership },
+    language,
+  );
   const shellHeaderTitle =
     screen.kind === "following"
       ? copy.follow
@@ -1016,6 +1160,23 @@ function App() {
               </button>
             </div>
           )}
+        />
+      ) : null}
+
+      {screen.kind === "list" ? (
+        <PersonalSpaceMobileIdentity
+          avatarUrl={spaceProfile?.avatar_url}
+          username={
+            spaceProfile?.username ||
+            owner?.email ||
+            (language === "zh" ? "我的空间" : "My space")
+          }
+          membershipLabel={membershipLabel}
+          storageUsagePercent={storageUsagePercent}
+          storageTotalLabel={storageTotalLabel}
+          experienceLabel={language === "zh" ? "经验卡" : "Experience"}
+          experienceCardCount={experienceCardCount}
+          language={language}
         />
       ) : null}
 
@@ -1516,7 +1677,7 @@ function App() {
       </> : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
-      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
+      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => void supabase.auth.signOut({ scope: "local" })}>{copy.logout}</button> : null}</div></section> : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
