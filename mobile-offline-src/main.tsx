@@ -376,6 +376,57 @@ function App() {
     return () => { canceled = true; };
   }, [screen, ownerContext, showToast, copy.readFailed]);
 
+  useEffect(() => {
+    if (loading || screen.kind !== "cloud") return;
+    const section = screen.section;
+    const destination = section === "follow" ? "/follow" : section === "market" ? "/market" : section === "experience" ? "/experience" : "/discover";
+    let cancelled = false;
+    let checking = false;
+    let activeController: AbortController | null = null;
+
+    async function checkCloud() {
+      if (cancelled || checking || !navigator.onLine) return;
+      checking = true;
+      const controller = new AbortController();
+      activeController = controller;
+      const timeout = window.setTimeout(() => controller.abort(), 8000);
+      try {
+        // Verify both the hosted document and one of its scripts before
+        // leaving the local shell. The bundled fallback has no Next assets.
+        const response = await fetch(`${CLOUD_ORIGIN}${destination}?offline_probe=${Date.now()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return;
+        if (new URL(response.url).origin !== CLOUD_ORIGIN) return;
+        const html = await response.text();
+        const scriptPath = html.match(/<script[^>]+src="(\/_next\/[^" ]+\.js[^" ]*)"/)?.[1];
+        if (!scriptPath) return;
+        const assetUrl = new URL(scriptPath.replaceAll("&amp;", "&"), CLOUD_ORIGIN);
+        const asset = await fetch(assetUrl, { method: "HEAD", cache: "no-store", signal: controller.signal });
+        if (!cancelled && asset.ok && asset.headers.get("content-type")?.includes("javascript")) {
+          window.location.assign(`${CLOUD_ORIGIN}${destination}`);
+        }
+      } catch {
+        // Keep showing local data until the hosted app responds again.
+      } finally {
+        window.clearTimeout(timeout);
+        if (activeController === controller) activeController = null;
+        checking = false;
+      }
+    }
+
+    void checkCloud();
+    window.addEventListener("online", checkCloud);
+    const retry = window.setInterval(() => void checkCloud(), 30000);
+    return () => {
+      cancelled = true;
+      activeController?.abort();
+      window.clearInterval(retry);
+      window.removeEventListener("online", checkCloud);
+    };
+  }, [loading, screen]);
+
   function goList() {
     setScreen({ kind: "list" });
     setDetail(null);
