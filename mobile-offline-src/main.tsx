@@ -37,6 +37,7 @@ import {
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import {
+  clearRememberedLocalOwnerContext,
   loadRememberedLocalOwnerContext,
   rememberLocalOwnerContext,
   type StoredLocalOwnerContext,
@@ -450,7 +451,26 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        clearRememberedLocalOwnerContext();
+        setOwner(null);
+        setCloudUserId(null);
+        setCloudArchives([]);
+        void Promise.all([
+          listVisibleLocalArchiveSummaries(null),
+          listVisibleCloudOfflineArchiveSummaries(null),
+          listPendingCloudSyncSummaries(null),
+        ]).then(([result, cachedCloud, pending]) => {
+          if (cancelled) return;
+          setArchives(result.archives);
+          setCloudCaches(cachedCloud);
+          setUnownedCount(result.unownedCount);
+          setPendingSync(pending);
+        }).catch(() => undefined);
+        return;
+      }
+
       applySession(session?.user);
     });
 
