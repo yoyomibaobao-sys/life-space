@@ -28,10 +28,35 @@ public final class LifeSpaceWebViewClient extends BridgeWebViewClient {
         "/__lifespace_local_bridge_v1__.html";
 
     private final AssetManager assets;
+    private boolean checkedLegacyServiceWorkers = false;
 
     public LifeSpaceWebViewClient(Bridge bridge, AssetManager assets) {
         super(bridge);
         this.assets = assets;
+    }
+
+    @Override
+    public void onPageFinished(WebView view, String url) {
+        super.onPageFinished(view, url);
+        Uri uri = Uri.parse(url);
+        if (checkedLegacyServiceWorkers || !"life-space.uk".equalsIgnoreCase(uri.getHost())) {
+            return;
+        }
+        checkedLegacyServiceWorkers = true;
+        // A service worker from the former remote shell can serve an old index.html
+        // even after an APK update. Unregister it without touching IndexedDB or auth.
+        view.evaluateJavascript(
+            "(async()=>{if(!('serviceWorker' in navigator))return false;"
+                + "const registrations=await navigator.serviceWorker.getRegistrations();"
+                + "await Promise.all(registrations.map(registration=>registration.unregister()));"
+                + "return registrations.length>0})().catch(()=>false)",
+            result -> {
+                if ("true".equals(result)) {
+                    view.clearCache(true);
+                    view.reload();
+                }
+            }
+        );
     }
 
     @Override
