@@ -81,6 +81,11 @@ import { supabase } from "@/lib/supabase";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
+import {
+  createInitialDiscoveryDiversityState,
+  fetchDiverseDiscoveryProjectBatch,
+} from "@/lib/discover-diverse-project-feed";
+import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 
 const MAX_PHOTOS = 10;
 
@@ -106,6 +111,7 @@ type CloudArchiveSummary = {
 type Screen =
   | { kind: "list" }
   | { kind: "new-project"; guide?: SystemNameCandidate }
+  | { kind: "activity" }
   | { kind: "guides" }
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "settings" }
@@ -353,6 +359,9 @@ function App() {
   const [cloudBusyArchiveId, setCloudBusyArchiveId] = useState<string | null>(null);
   const [pendingSync, setPendingSync] = useState<PendingCloudSyncSummary[]>([]);
   const [syncingArchiveId, setSyncingArchiveId] = useState<string | null>(null);
+  const [activityItems, setActivityItems] = useState<DiscoveryProjectFeedItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState(false);
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -423,6 +432,31 @@ function App() {
     return next;
   }, [ownerContext]);
 
+  const loadActivity = useCallback(async () => {
+    if (!navigator.onLine) {
+      setActivityItems([]);
+      setActivityError(false);
+      return;
+    }
+    setActivityLoading(true);
+    setActivityError(false);
+    try {
+      const result = await fetchDiverseDiscoveryProjectBatch({
+        state: createInitialDiscoveryDiversityState(),
+        category: null,
+        helpOnly: false,
+        limit: 24,
+      });
+      if (result.error) throw result.error;
+      setActivityItems(result.items);
+    } catch (error) {
+      console.warn("local shell discovery feed", error);
+      setActivityError(true);
+    } finally {
+      setActivityLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const updateConnectivity = () => setOnline(navigator.onLine);
     window.addEventListener("online", updateConnectivity);
@@ -492,6 +526,11 @@ function App() {
       .then(() => loadList(ownerContext))
       .catch(() => undefined);
   }, [online, cloudUserId, ownerContext, loadCloudList, loadList]);
+
+  useEffect(() => {
+    if (screen.kind !== "activity" || !online) return;
+    void loadActivity();
+  }, [screen.kind, online, loadActivity]);
 
   useEffect(() => {
     let cancelled = false;
@@ -695,6 +734,45 @@ function App() {
       showClassificationRow: false,
     };
   }
+  function activityProjectView(item: DiscoveryProjectFeedItem) {
+    const category = (item.category || "other") as ArchiveCategory;
+    const title = item.archive_title || copy.project;
+    return {
+      id: item.archive_id,
+      mode: "cloud" as const,
+      title,
+      category,
+      categoryLabel: getArchiveCategoryLabel(category, language),
+      categoryIcon: getArchiveCategoryIcon(category),
+      systemName:
+        category === "plant"
+          ? item.species_name_snapshot || ""
+          : item.system_name || "",
+      cover: item.display_image_url
+        ? {
+            kind: "url" as const,
+            url: item.display_image_url,
+            alt: title,
+          }
+        : null,
+      latestText: item.card_summary || item.latest_public_record_note || "",
+      latestTime: item.public_activity_at || item.latest_public_record_time || null,
+      recordCount: item.public_record_count,
+      durationDays: getOngoingDays(
+        item.archive_created_at,
+        item.archive_ended_at,
+      ),
+      viewCount: item.view_count,
+      followerCount: item.follower_count,
+      commentCount: item.public_comment_count,
+      visibilityLabel: language === "zh" ? "公开" : "Public",
+      visibilityTone: "public" as const,
+      statusLabel: item.archive_ended_at ? copy.ended : null,
+      ended: Boolean(item.archive_ended_at),
+      showClassificationRow: false,
+    };
+  }
+
   function renderCloudProjectCard(archive: CloudArchiveSummary) {
     const localCopy = archives.find(
       (item) => item.source_cloud_archive_id === archive.id,
@@ -742,8 +820,11 @@ function App() {
     if (item.id === "home") {
       return {
         ...item,
-        active: screen.kind === "guides" || screen.kind === "guide-detail",
-        onSelect: () => setScreen({ kind: "guides" }),
+        active:
+          screen.kind === "activity" ||
+          screen.kind === "guides" ||
+          screen.kind === "guide-detail",
+        onSelect: () => setScreen({ kind: "activity" }),
       };
     }
     if (item.id === "following") {
@@ -760,7 +841,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["guides", "guide-detail", "cloud"].includes(screen.kind),
+      active: !["activity", "guides", "guide-detail", "cloud"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1065,6 +1146,52 @@ function App() {
         />
       ) : null}
 
+      {screen.kind === "activity" ? <>
+        <HomeSectionTabs
+          active="activity"
+          showGuestLanguageSwitcher={false}
+          onSelect={(section: HomeSection) => {
+            if (section === "activity") return;
+            if (section === "guide") {
+              setScreen({ kind: "guides" });
+              return;
+            }
+            setScreen({ kind: "cloud" });
+          }}
+        />
+        {!online ? (
+          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+        ) : activityLoading ? (
+          <section className="panel empty">
+            {language === "zh" ? "正在读取公开记录…" : "Loading public activity…"}
+          </section>
+        ) : activityError ? (
+          <section className="notice warning">
+            <p>{language === "zh" ? "公开记录读取失败，请稍后重试。" : "Could not load public activity."}</p>
+            <div className="action-row">
+              <button type="button" className="secondary-button" onClick={() => void loadActivity()}>
+                {language === "zh" ? "重新加载" : "Retry"}
+              </button>
+            </div>
+          </section>
+        ) : activityItems.length ? (
+          <div className="project-list">
+            {activityItems.map((item) => (
+              <ArchiveProjectCard
+                key={item.archive_id}
+                project={activityProjectView(item)}
+                mobileMode
+                mobileShowCategoryBadge
+              />
+            ))}
+          </div>
+        ) : (
+          <section className="panel empty">
+            {language === "zh" ? "暂时没有公开记录。" : "No public activity yet."}
+          </section>
+        )}
+      </> : null}
+
       {screen.kind === "guides" ? <>
         <HomeSectionTabs
           active="guide"
@@ -1072,6 +1199,10 @@ function App() {
           onSearch={() => undefined}
           onSelect={(section: HomeSection) => {
             if (section === "guide") return;
+            if (section === "activity") {
+              setScreen({ kind: "activity" });
+              return;
+            }
             setScreen({ kind: "cloud" });
           }}
         />
