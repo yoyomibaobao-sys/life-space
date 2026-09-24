@@ -33,6 +33,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /getMobilePrimaryNavigationDescriptors/);
   assert.match(sharedPrimaryNav, /"home"[\s\S]*"following"[\s\S]*"market"[\s\S]*"me"/);
   assert.match(source, /<MobilePageHeaderView/);
+  assert.match(source, /homeSectionOwnsTopNav/);
   assert.match(source, /<HomeSectionTabs/);
   assert.match(source, /fetchDiverseDiscoveryProjectBatch/);
   assert.match(source, /fetchDiscoverExperienceCardSearchResults/);
