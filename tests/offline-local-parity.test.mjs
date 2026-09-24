@@ -15,6 +15,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   const navbar = read("components/navbar.tsx");
   const sharedNavigation = read("components/mobile/MobileBottomNavigationView.tsx");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /bundledComponentCss/);
@@ -27,7 +28,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /<MobileBottomNavigationView/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
-  assert.match(source, /<ConnectivityNotice/);
+  assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(navbar, /<MobileBottomNavigationView/);
   assert.match(sharedNavigation, /data-mobile-bottom-nav="true"/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
