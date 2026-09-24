@@ -133,7 +133,6 @@ type Screen =
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "settings" }
   | { kind: "choose-project" }
-  | { kind: "cloud" }
   | { kind: "detail"; archiveId: string }
   | { kind: "edit-project"; archiveId: string }
   | { kind: "new-record"; archiveId: string }
@@ -700,6 +699,25 @@ function App() {
     void loadList();
   }
 
+  function reconnect() {
+    const nextOnline = navigator.onLine;
+    setOnline(nextOnline);
+    if (!nextOnline) {
+      showToast(copy.offlineTitle);
+      return;
+    }
+
+    void loadList(ownerContext);
+    if (cloudUserId) {
+      void loadCloudList(cloudUserId);
+    }
+
+    if (screen.kind === "activity") void loadActivity();
+    if (screen.kind === "experience") void loadExperience();
+    if (screen.kind === "following") void loadFollowing(cloudUserId);
+    if (screen.kind === "market") void loadMarket();
+  }
+
   function openDetail(archiveId: string) {
     setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record"].includes(screen.kind));
   }
@@ -950,7 +968,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "experience", "following", "market", "guides", "guide-detail", "cloud"].includes(screen.kind),
+      active: !["activity", "experience", "following", "market", "guides", "guide-detail"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1489,72 +1507,6 @@ function App() {
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
-      {screen.kind === "cloud" ? (
-        !online ? (
-          <>
-            <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
-            {cloudCaches.length ? <div className="project-list">{cloudCaches.map((archive) => (
-              <ArchiveProjectCard key={archive.id} project={{ ...localArchiveToProjectView(archive, ownerContext, language), href: undefined, visibilityLabel: copy.offlineCopies }} mobileMode onClick={() => openDetail(archive.id)} />
-            ))}</div> : <section className="panel empty">{copy.noCachedProjects}</section>}
-          </>
-        ) : !cloudUserId ? (
-          <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
-        ) : (
-          <>
-            <div className="section-title">
-              <h1>{copy.cloudProjects}</h1>
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => void supabase.auth.signOut()}
-              >
-                {copy.logout}
-              </button>
-            </div>
-            {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
-            {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
-            {!cloudLoading && !cloudError && cloudArchives.length === 0 ? (
-              <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
-            ) : null}
-            <div className="project-list">
-              {cloudArchives.map((archive) => {
-                const localCopy = archives.find(
-                  (item) => item.source_cloud_archive_id === archive.id,
-                );
-                const busy = cloudBusyArchiveId === archive.id;
-                return (
-                  <section className="panel" key={archive.id}>
-                    <h2>{archive.title || copy.project}</h2>
-                    <p className="project-meta">
-                      {archive.species_name_snapshot || archive.system_name || archive.category || ""}
-                      {(archive.updated_at || archive.created_at) ? ` · ${formatDate(archive.updated_at || archive.created_at, language)}` : ""}
-                    </p>
-                    <div className="action-row">
-                      {localCopy ? (
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => openDetail(localCopy.id)}
-                        >
-                          {copy.openLocalCopy}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="primary-button"
-                        disabled={busy}
-                        onClick={() => void saveCloudCopy(archive.id)}
-                      >
-                        {busy ? copy.savingCloudCopy : localCopy ? copy.refreshLocalCopy : copy.saveLocalCopy}
-                      </button>
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-          </>
-        )
-      ) : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
