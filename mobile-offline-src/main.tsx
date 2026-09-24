@@ -967,7 +967,7 @@ function App() {
   const filteredCloudArchives = cloudArchives.filter(
     (archive) => categoryFilter === "all" || archive.category === categoryFilter,
   );
-  const cloudSourceCount = online && cloudUserId ? cloudArchives.length : cloudCaches.length;
+  const cloudSourceCount = online && cloudUserId && !cloudError ? cloudArchives.length : cloudCaches.length;
   function cloudProjectView(archive: CloudArchiveSummary) {
     const ended = archive.status === "ended";
     return {
@@ -1276,7 +1276,7 @@ function App() {
           ) : null}
         >
           {sourceFilter !== "local" ? (
-            online && cloudUserId ? (
+            online && cloudUserId && !cloudError ? (
               <>
                 {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
                 {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
@@ -1294,6 +1294,7 @@ function App() {
                 {online && !cloudUserId ? (
                   <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
                 ) : null}
+                {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
                 {filteredCloudCaches.length ? (
                   <div className="project-list">
                     {filteredCloudCaches.map((archive) => (
@@ -1309,7 +1310,7 @@ function App() {
                       />
                     ))}
                   </div>
-                ) : sourceFilter === "cloud" && !online ? (
+                ) : sourceFilter === "cloud" && (!online || Boolean(cloudError)) ? (
                   <section className="panel empty">{copy.noCachedProjects}</section>
                 ) : null}
               </>
@@ -1342,8 +1343,8 @@ function App() {
 
           {sourceFilter === "all" &&
           filteredLocalArchives.length === 0 &&
-          (online && cloudUserId
-            ? !cloudLoading && !cloudError && filteredCloudArchives.length === 0
+          (online && cloudUserId && !cloudError
+            ? !cloudLoading && filteredCloudArchives.length === 0
             : filteredCloudCaches.length === 0) ? (
             <section className="panel empty">
               <strong>{copy.noProjects}</strong>
