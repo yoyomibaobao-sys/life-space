@@ -35,7 +35,7 @@ const config: CapacitorConfig = {
   android: {
     backgroundColor: "#f6f8f3ff",
     minWebViewVersion: 120,
-    webContentsDebuggingEnabled: false,
+    webContentsDebuggingEnabled: true,
   },
   server: {
     // Android now boots the APK-bundled app shell first. Network availability
