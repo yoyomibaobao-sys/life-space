@@ -87,6 +87,16 @@ import {
 } from "@/lib/discover-diverse-project-feed";
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import { fetchFollowedArchiveProjects } from "@/lib/followed-archive-projects";
+import {
+  fetchMarketFeed,
+  type MarketArchiveBrief,
+  type MarketPostDisplayRow,
+  type MarketProfileBrief,
+} from "@/lib/market-feed";
+import {
+  getMarketItemCategoryLabel,
+  getMarketPostTypeLabel,
+} from "@/lib/market-types";
 
 const MAX_PHOTOS = 10;
 
@@ -114,6 +124,7 @@ type Screen =
   | { kind: "new-project"; guide?: SystemNameCandidate }
   | { kind: "activity" }
   | { kind: "following" }
+  | { kind: "market" }
   | { kind: "guides" }
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "settings" }
@@ -367,6 +378,11 @@ function App() {
   const [followedItems, setFollowedItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [followedLoading, setFollowedLoading] = useState(false);
   const [followedError, setFollowedError] = useState(false);
+  const [marketItems, setMarketItems] = useState<MarketPostDisplayRow[]>([]);
+  const [marketProfiles, setMarketProfiles] = useState<Map<string, MarketProfileBrief>>(new Map());
+  const [marketArchives, setMarketArchives] = useState<Map<string, MarketArchiveBrief>>(new Map());
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [marketError, setMarketError] = useState(false);
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -483,6 +499,27 @@ function App() {
     }
   }, [cloudUserId]);
 
+  const loadMarket = useCallback(async () => {
+    if (!navigator.onLine) {
+      setMarketItems([]);
+      setMarketProfiles(new Map());
+      setMarketArchives(new Map());
+      setMarketError(false);
+      return;
+    }
+    setMarketLoading(true);
+    setMarketError(false);
+    const result = await fetchMarketFeed();
+    if (result.error) {
+      console.warn("local shell market feed", result.error);
+      setMarketError(true);
+    }
+    setMarketItems(result.items);
+    setMarketProfiles(result.profiles);
+    setMarketArchives(result.archives);
+    setMarketLoading(false);
+  }, []);
+
   useEffect(() => {
     const updateConnectivity = () => setOnline(navigator.onLine);
     window.addEventListener("online", updateConnectivity);
@@ -562,6 +599,11 @@ function App() {
     if (screen.kind !== "following" || !online || !cloudUserId) return;
     void loadFollowing(cloudUserId);
   }, [screen.kind, online, cloudUserId, loadFollowing]);
+
+  useEffect(() => {
+    if (screen.kind !== "market" || !online) return;
+    void loadMarket();
+  }, [screen.kind, online, loadMarket]);
 
   useEffect(() => {
     let cancelled = false;
@@ -868,12 +910,13 @@ function App() {
     if (item.id === "market") {
       return {
         ...item,
-        onSelect: () => setScreen({ kind: "cloud" }),
+        active: screen.kind === "market",
+        onSelect: () => setScreen({ kind: "market" }),
       };
     }
     return {
       ...item,
-      active: !["activity", "following", "guides", "guide-detail", "cloud"].includes(screen.kind),
+      active: !["activity", "following", "market", "guides", "guide-detail", "cloud"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1265,6 +1308,71 @@ function App() {
               </section>
             )}
           </>
+        )
+      ) : null}
+
+      {screen.kind === "market" ? (
+        !online ? (
+          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+        ) : marketLoading ? (
+          <section className="panel empty">
+            {language === "zh" ? "正在读取集市…" : "Loading market…"}
+          </section>
+        ) : marketError ? (
+          <section className="notice warning">
+            <p>{language === "zh" ? "集市读取失败，请稍后重试。" : "Could not load the market."}</p>
+            <div className="action-row">
+              <button type="button" className="secondary-button" onClick={() => void loadMarket()}>
+                {language === "zh" ? "重新加载" : "Retry"}
+              </button>
+            </div>
+          </section>
+        ) : marketItems.length ? (
+          <>
+            <div className="section-title">
+              <h1>{copy.market}</h1>
+              <span className="count">{marketItems.length}</span>
+            </div>
+            <div className="market-shell-list">
+              {marketItems.map((item) => {
+                const profile = marketProfiles.get(item.user_id);
+                const archive = item.archive_id ? marketArchives.get(item.archive_id) : null;
+                return (
+                  <article className="market-shell-card" key={item.id}>
+                    {item.display_cover_thumb_url || item.display_cover_image_url ? (
+                      <img
+                        className="market-shell-image"
+                        src={item.display_cover_thumb_url || item.display_cover_image_url || ""}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="market-shell-image market-shell-placeholder">
+                        <UiIcon name="store" size={24} />
+                      </div>
+                    )}
+                    <div className="market-shell-body">
+                      <div className="market-shell-badges">
+                        <span>{getMarketPostTypeLabel(item.post_type, language)}</span>
+                        <span>{getMarketItemCategoryLabel(item.item_category, language)}</span>
+                      </div>
+                      <strong>{item.title}</strong>
+                      {item.description ? <p>{item.description}</p> : null}
+                      <small>
+                        {item.location_text || profile?.city_name || profile?.region_name || profile?.country_name || ""}
+                        {profile?.username ? ` · ${profile.username}` : ""}
+                        {archive?.title ? ` · ${archive.title}` : ""}
+                      </small>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <section className="panel empty">
+            {language === "zh" ? "集市暂时没有内容。" : "The market is empty."}
+          </section>
         )
       ) : null}
 
