@@ -60,6 +60,7 @@ import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCar
 import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -764,19 +765,30 @@ function App() {
 
   return (
     <main className="offline-shell">
-      <header className="offline-header">
-        <div className="brand">
-          <div className="brand-mark"><UiIcon name="sprout" size={25} /></div>
-          <div>
-            <div className="brand-name">{copy.mySpace}</div>
-            <div className="brand-mode">{copy.offlineMode}</div>
+      <MobilePageHeaderView
+        className="android-shell-header"
+        title={copy.mySpace}
+        titleText={copy.mySpace}
+        showBack={false}
+        ariaLabel={copy.mySpace}
+        right={(
+          <div className="header-actions">
+            {!owner ? (
+              <button className="icon-button" type="button" onClick={toggleLanguage}>
+                {language === "zh" ? "EN" : "中文"}
+              </button>
+            ) : null}
+            <button
+              className="icon-button"
+              type="button"
+              aria-label={copy.settings}
+              onClick={() => setScreen({ kind: "settings" })}
+            >
+              <UiIcon name="menu" size={22} />
+            </button>
           </div>
-        </div>
-        <div className="header-actions">
-          {!owner ? <button className="icon-button" type="button" onClick={toggleLanguage}>{language === "zh" ? "EN" : "中文"}</button> : null}
-          <button className="icon-button" type="button" aria-label={copy.settings} onClick={() => setScreen({ kind: "settings" })}><UiIcon name="menu" size={22} /></button>
-        </div>
-      </header>
+        )}
+      />
 
       {online && pendingSync.find((item) => item.should_prompt) ? (() => {
         const pending = pendingSync.find((item) => item.should_prompt)!;
