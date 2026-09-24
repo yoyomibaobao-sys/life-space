@@ -33,28 +33,6 @@ button { touch-action: manipulation; }
     calc(env(safe-area-inset-bottom, 0px) + 36px);
 }
 
-.offline-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.brand-mark {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: var(--green);
-  color: #fff;
-  font-weight: 800;
-}
-.brand-name { font-size: 18px; font-weight: 780; }
-.brand-mode { color: var(--muted); font-size: 12px; margin-top: 2px; }
-
 .icon-button, .secondary-button, .primary-button, .danger-button {
   min-height: 44px;
   border-radius: 999px;
