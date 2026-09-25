@@ -36,6 +36,8 @@ import {
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref } from "@/lib/auth-return";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
+import { useCloudAvailability } from "@/lib/use-cloud-availability";
 
 type MobileDiscoverTab = "feed" | "following";
 type FollowingContentTab = "projects" | "users";
@@ -54,6 +56,7 @@ function dedupeDiscoveryProjects(items: DiscoveryProjectFeedItem[]) {
 
 export default function DiscoverPage() {
   const { language, t } = useLanguage();
+  const { cloudUnavailable } = useCloudAvailability();
   const [items, setItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [helpOnly, setHelpOnly] = useState(false);
@@ -286,6 +289,13 @@ export default function DiscoverPage() {
       nextDiversityState: DiscoveryDiverseProjectFeedState;
       replace: boolean;
     }) => {
+      if (cloudUnavailable) {
+        setInitialLoading(false);
+        setLoadingMore(false);
+        setInitialError(false);
+        setItems([]);
+        return;
+      }
       if (!replace && loadingMoreRef.current) return;
 
       const requestSequence = ++requestSequenceRef.current;
@@ -350,7 +360,7 @@ export default function DiscoverPage() {
         }
       }
     },
-    []
+    [cloudUnavailable]
   );
 
   function changeFilter(mode: FilterMode) {
@@ -649,7 +659,9 @@ export default function DiscoverPage() {
             onChange={setFollowingContentTab}
           />
 
-          {followingContentTab === "projects" ? (
+          {cloudUnavailable ? (
+            <ConnectivityNotice message={t.archive_workspace.offline_notice} />
+          ) : followingContentTab === "projects" ? (
             <FollowedProjectList
               items={followedArchiveProjects}
               mode="followed-project"
@@ -757,6 +769,9 @@ export default function DiscoverPage() {
             compactMobile={isMobileViewport}
           />
 
+          {cloudUnavailable ? (
+            <ConnectivityNotice message={t.archive_workspace.offline_notice} />
+          ) : (
           <DiscoverProjectGrid
             items={items}
             helpOnly={helpOnly}
@@ -784,6 +799,7 @@ export default function DiscoverPage() {
               });
             }}
           />
+          )}
         </>
       )}
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { Capacitor } from "@capacitor/core";
 import type { ArchiveItem } from "@/lib/archive-page-types";
 import type { MediaItem } from "@/lib/domain-types";
 import type { PlantingRegion } from "@/lib/planting-region";
@@ -19,6 +18,7 @@ import {
 const CLOUD_CACHE_PAGE_SIZE = 500;
 const CLOUD_CACHE_MEDIA_BATCH_SIZE = 100;
 const THUMBNAIL_TIMEOUT_MS = 12_000;
+const MAX_CLOUD_CACHE_THUMB_BYTES = 220 * 1024;
 
 export type CloudOfflineCacheArchiveSource = ArchiveItem & {
   updated_at?: string | null;
@@ -53,10 +53,6 @@ type CloudCacheMediaRow = MediaItem & {
   sort_order?: number | null;
   created_at?: string | null;
 };
-
-function isNativeAndroid() {
-  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
-}
 
 function cacheRevision(archive: CloudOfflineCacheArchiveSource) {
   return [
@@ -130,7 +126,7 @@ async function downloadThumbnail(
     });
     if (!response.ok) return null;
     const blob = await response.blob();
-    if (!blob.size) return null;
+    if (!blob.size || blob.size > MAX_CLOUD_CACHE_THUMB_BYTES) return null;
     return {
       id: media.id,
       record_id: media.record_id,
@@ -140,7 +136,6 @@ async function downloadThumbnail(
       captured_at: media.captured_at || null,
       sort_order: media.sort_order ?? 0,
       created_at: media.created_at || null,
-      cloud_media_url: media.url || null,
     };
   } catch {
     return null;
@@ -245,7 +240,7 @@ export async function refreshCloudOfflineCaches(
   archives: CloudOfflineCacheArchiveSource[],
   ownerContext: LocalArchiveOwnerContext | null
 ) {
-  if (!isNativeAndroid() || !ownerContext?.userId) return;
+  if (!ownerContext?.userId) return;
 
   for (const archive of archives) {
     try {

@@ -37,7 +37,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /<MobilePageHeaderView/);
   assert.match(source, /homeSectionOwnsTopNav/);
   assert.match(source, /<PersonalSpaceMobileIdentity/);
-  assert.match(source, /SHELL_IDENTITY_CACHE_PREFIX/);
+  assert.match(source, /from "@\/lib\/local-identity-cache"/);
   assert.match(source, /clearShellIdentityCache/);
   assert.match(source, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
   assert.match(archivePage, /<PersonalSpaceMobileIdentity/);
@@ -52,7 +52,9 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "market" \}\)/);
   assert.match(source, /kind: "following"/);
   assert.doesNotMatch(source, /screen\.kind === "cloud"/);
-  assert.match(source, /function reconnect\(\)/);
+  assert.match(source, /async function reconnect\(\)/);
+  assert.match(source, /probeCloudReachable/);
+  assert.match(source, /replaceWithOfficialSite/);
   assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "following" \}\)/);
   assert.match(source, /kind: "activity"/);
   assert.match(source, /onSelect: \(\) => setScreen\(\{ kind: "activity" \}\)/);
@@ -76,7 +78,7 @@ test("normal app workspace keeps the same source controls while offline without 
   const workspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
   const cloudTrial = read("components/CloudTrialEntry.tsx");
 
-  assert.match(workspace, /navigator\.onLine/);
+  assert.match(workspace, /useCloudAvailability/);
   assert.match(workspace, /<ArchiveSourceSwitcher/);
   assert.match(workspace, /options=\{sourceOptions\}/);
   assert.match(workspace, /activeValue=\{activeSource\}/);
@@ -94,10 +96,7 @@ test("network-only sections use one quiet offline state", () => {
   const marketLayout = read("app/market/layout.tsx");
   const followLayout = read("app/follow/layout.tsx");
 
-  assert.match(boundary, /navigator\.onLine/);
-  assert.match(boundary, /"未联网"/);
-  assert.match(boundary, /"Offline"/);
-  assert.match(boundary, /<ConnectivityNotice/);
+  assert.match(boundary, /return children/);
   assert.match(notice, /data-connectivity-notice/);
   assert.match(discoverLayout, /<NetworkRequiredBoundary>/);
   assert.match(marketLayout, /<NetworkRequiredBoundary>/);
@@ -143,8 +142,91 @@ test("local projects reuse the cloud archive card and detail header with device-
   assert.match(localDetail, /archiveCopy\.dossier/);
   assert.match(localDetail, /archiveCopy\.experience_cards/);
   assert.match(localDetail, /showPageChrome=\{false\}/);
-  assert.match(zh, /saved_on_this_device: "仅保存于此设备"/);
+  assert.match(zh, /saved_on_this_device: "仅保存于当前设备"/);
   assert.match(en, /saved_on_this_device: "Saved only on this device"/);
+  assert.match(archivePage, /t\.archive\.cloud_offline_cache/);
+  assert.match(archivePage, /t\.archive\.cloud_offline_cache_readonly/);
+  assert.match(archivePage, /t\.archive_workspace\.cloud_space/);
+  assert.match(localDetail, /archiveCopy\.cloud_offline_cache/);
+  assert.match(localDetail, /mode=\{isCloudOfflineCache \? "viewer" : "owner"\}/);
+  assert.match(localDetail, /isCloudOfflineCache \? null : \(/);
+});
+
+test("local projects stay fully usable when cloud is unreachable and identity is cached", () => {
+  const archivePage = read("app/archive/page.tsx");
+  const identity = read("lib/local-identity-cache.ts");
+  const shell = read("mobile-offline-src/main.tsx");
+
+  assert.match(archivePage, /deviceLocalArchives\.length/);
+  assert.match(archivePage, /isCloudUnavailableError/);
+  assert.match(archivePage, /useCloudAvailability/);
+  assert.match(archivePage, /useCloudCacheSource && activeSource !== "cloud"/);
+  assert.match(archivePage, /readLocalIdentityCache\(user\.id\)/);
+  assert.match(archivePage, /persistLocalIdentityFromLiveProfile/);
+  assert.match(archivePage, /displayAvatarUrl\(spaceProfile\)/);
+  assert.doesNotMatch(archivePage, /activeSource !== "local" &&\s+Boolean\(currentOwnerContext\?\.userId\) &&\s+contentBlocked/);
+
+  assert.match(identity, /lifespace_shell_identity_v1:/);
+  assert.match(identity, /userId/);
+  assert.match(identity, /username/);
+  assert.match(identity, /avatar_data_url/);
+  assert.match(identity, /export async function persistLocalIdentityFromLiveProfile/);
+  assert.match(shell, /from "@\/lib\/local-identity-cache"/);
+  assert.match(shell, /persistLocalIdentityFromLiveProfile/);
+});
+
+test("offline my-space groups local projects, live cloud, and caches without mixing them", () => {
+  const archivePage = read("app/archive/page.tsx");
+  const db = read("lib/local-offline-db.ts");
+  const localDetail = read("app/local/archive/[id]/page.tsx");
+  const quickCapture = read("components/quick-record/QuickCaptureNavAction.tsx");
+  const taxonomy = read("components/archive/MobileArchiveTaxonomyInline.tsx");
+  const summaryCard = read("components/project/ProjectSummaryCard.tsx");
+  const headerView = read("components/archive-ui/ArchiveDetailHeaderView.tsx");
+  const shell = read("mobile-offline-src/main.tsx");
+
+  assert.match(db, /function isUserLocalArchive/);
+  assert.match(db, /normalizeLocalArchiveRole\(archive\) !== "cloud-offline-cache"/);
+  assert.match(db, /listVisibleLocalArchiveSummaries/);
+  assert.match(db, /listVisibleCloudOfflineArchiveSummaries/);
+  assert.match(archivePage, /deviceLocalArchives\.filter/);
+  assert.match(archivePage, /if \(item\.local_role !== "cloud-offline-cache"\) return false;/);
+  assert.match(archivePage, /cloudUnavailable \|\| cloudLiveAvailable === false/);
+  assert.match(
+    archivePage,
+    /useCloudCacheSource \? \(\s*activeCloudCaches\.length === 0/
+  );
+  assert.match(archivePage, /renderLocalArchiveCard\(archive, \{ cloudCache: true \}\)/);
+  assert.match(
+    archivePage,
+    /activeLocalArchives\.map\(\(archive\) => renderLocalArchiveCard\(archive\)\)/
+  );
+  assert.doesNotMatch(
+    archivePage,
+    /useCloudCacheSource \?[\s\S]{0,200}activeArchives\.map/
+  );
+  assert.match(archivePage, /t\.archive\.cloud_offline_cache_readonly/);
+  assert.match(archivePage, /isCloudCache \? null : \(/);
+  assert.match(localDetail, /isCloudOfflineCache \? null : \(/);
+  assert.match(localDetail, /canWrite=\{archive\.local_role !== "cloud-offline-cache"\}/);
+  assert.match(localDetail, /mode=\{isCloudOfflineCache \? "viewer" : "owner"\}/);
+  assert.match(localDetail, /canManage=\{cycleEnabled && !isCloudOfflineCache\}/);
+  assert.doesNotMatch(
+    localDetail,
+    /isCloudOfflineCache \?[\s\S]{0,80}archiveCopy\.transfer_to_cloud/
+  );
+  assert.match(archivePage, /const hideCloudCreate = useCloudCacheSource && activeSource === "cloud"/);
+  assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport && !hideCloudCreate\}/);
+  assert.match(archivePage, /isMobileViewport && !hideCloudCreate \?/);
+  assert.match(archivePage, /if \(hideCloudCreate\) return;/);
+  assert.match(quickCapture, /isCloudOfflineCacheArchiveId\(localArchiveId\)/);
+  assert.match(quickCapture, /return null;/);
+  assert.match(taxonomy, /readOnly=\{readOnly\}/);
+  assert.match(summaryCard, /readOnly=\{taxonomyAction\.allowTaxonomyEdit === false\}/);
+  assert.match(localDetail, /archiveCopy\.cloud_offline_cache_readonly/);
+  assert.match(headerView, /project\.storageTone !== "device"/);
+  assert.match(shell, /const hideCloudCreate = useCloudCacheSource && sourceFilter === "cloud"/);
+  assert.match(shell, /viewingCloudCache \? null/);
 });
 
 test("temporary single-character startup placeholder is replaced by the product brand", () => {

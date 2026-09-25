@@ -49,11 +49,11 @@ export function localArchiveToProjectView(
   const ongoingDays = getOngoingDays(archive.created_at, archive.ended_at);
   const latestTime = archive.latest_record_time || archive.updated_at;
   const latestSummary = archive.latest_record_note || archive.note || "";
-  const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
+  const isCloudOfflineCache = archive.local_role === "cloud-offline-cache";
 
   return {
     id: archive.id,
-    mode: "local",
+    mode: isCloudOfflineCache ? "cloud" : "local",
     href: `/local/archive/${archive.id}`,
     title: archive.title || copy.unnamed_project,
     category: archive.category,
@@ -76,10 +76,14 @@ export function localArchiveToProjectView(
     latestTime,
     recordCount: archive.record_count || 0,
     durationDays: ongoingDays,
-    visibilityLabel: isDeviceLocalProject ? archiveCopy.local_project : copy.local,
+    visibilityLabel: isCloudOfflineCache
+      ? archiveCopy.cloud_offline_cache
+      : archiveCopy.local_project,
     visibilityTone: "neutral",
-    storageLabel: isDeviceLocalProject ? archiveCopy.saved_on_this_device : null,
-    storageTone: isDeviceLocalProject ? "device" : undefined,
+    storageLabel: isCloudOfflineCache
+      ? archiveCopy.cloud_offline_cache_readonly
+      : archiveCopy.saved_on_this_device,
+    storageTone: isCloudOfflineCache ? undefined : "device",
     statusLabel: ended ? copy.ended : null,
     ended,
     showClassificationRow: maxDepth >= 2,

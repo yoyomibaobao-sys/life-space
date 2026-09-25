@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  useEffect,
-  useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -13,6 +11,7 @@ import ArchiveSourceSwitcher, {
 import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { useCloudAvailability } from "@/lib/use-cloud-availability";
 
 type Props<T extends string> = {
   statsText?: ReactNode;
@@ -46,18 +45,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   children,
 }: Props<T>) {
   const { t } = useLanguage();
-  const [online, setOnline] = useState(true);
-
-  useEffect(() => {
-    const refresh = () => setOnline(navigator.onLine);
-    refresh();
-    window.addEventListener("online", refresh);
-    window.addEventListener("offline", refresh);
-    return () => {
-      window.removeEventListener("online", refresh);
-      window.removeEventListener("offline", refresh);
-    };
-  }, []);
+  const { cloudUnavailable } = useCloudAvailability();
 
   return (
     <>
@@ -80,7 +68,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
       ) : null}
 
       {filtersSlot}
-      {!online ? (
+      {cloudUnavailable ? (
         <ConnectivityNotice message={t.archive_workspace.offline_notice} />
       ) : null}
       {noticeSlot}

@@ -22,9 +22,12 @@ import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
 import MarketMessageLink from "@/components/market/MarketMessageLink";
 import MobileMarketFeedCard, { mobileMarketCardStyle } from "@/components/market/MobileMarketFeedCard";
 import { getCompactCardLocation } from "@/lib/card-location";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
+import { useCloudAvailability } from "@/lib/use-cloud-availability";
 
 export default function MarketPage() {
   const { language, t } = useLanguage();
+  const { cloudUnavailable } = useCloudAvailability();
   const [items, setItems] = useState<MarketPostDisplayRow[]>([]);
   const [profiles, setProfiles] = useState<Map<string, ProfileBrief>>(new Map());
   const [archives, setArchives] = useState<Map<string, ArchiveBrief>>(new Map());
@@ -54,6 +57,11 @@ export default function MarketPage() {
     let cancelled = false;
 
     async function loadMarketPosts() {
+      if (cloudUnavailable) {
+        setLoading(false);
+        setItems([]);
+        return;
+      }
       setLoading(true);
       const result = await fetchMarketFeed({
         typeFilter,
@@ -77,7 +85,7 @@ export default function MarketPage() {
     return () => {
       cancelled = true;
     };
-  }, [typeFilter, categoryFilter]);
+  }, [typeFilter, categoryFilter, cloudUnavailable]);
 
   const hasFilter =
     typeFilter !== "all" ||
@@ -285,7 +293,9 @@ export default function MarketPage() {
           </section>
         )}
 
-        {loading ? (
+        {cloudUnavailable ? (
+          <ConnectivityNotice message={t.archive_workspace.offline_notice} />
+        ) : loading ? (
           <section style={emptyStyle}>{t.market.loading}</section>
         ) : visibleItems.length === 0 ? (
           <section style={emptyStyle}>

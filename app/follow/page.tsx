@@ -37,6 +37,8 @@ import type {
 } from "@/lib/discover-project-types";
 import ProjectSummaryCard from "@/components/project/ProjectSummaryCard";
 import { rememberMobileRouteSource } from "@/lib/mobile-navigation";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
+import { useCloudAvailability } from "@/lib/use-cloud-availability";
 
 type TabKey = "projects" | "experience" | "users";
 type ProjectStatusFilter = "all" | "open" | "resolved" | "ended";
@@ -144,6 +146,7 @@ type FollowUserCard = {
 export default function FollowPage() {
   const router = useRouter();
   const { language, t } = useLanguage();
+  const { cloudUnavailable } = useCloudAvailability();
   const followT = t.follow;
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -199,6 +202,17 @@ export default function FollowPage() {
   }, []);
 
   useEffect(() => {
+    if (cloudUnavailable) {
+      setLoading(false);
+      setProjectLoadError(false);
+      setUserProjectsError(false);
+      setExperienceLoadError(false);
+      setProjectCards([]);
+      setUserCards([]);
+      setSavedExperienceCards([]);
+      return;
+    }
+
     async function load() {
       setLoading(true);
       setProjectLoadError(false);
@@ -557,7 +571,7 @@ export default function FollowPage() {
     }
 
     load();
-  }, [followT, language, loadVersion, router]);
+  }, [followT, language, loadVersion, router, cloudUnavailable]);
 
   const filteredProjectCards = useMemo(() => {
     const search = keyword.trim().toLowerCase();
@@ -818,7 +832,9 @@ export default function FollowPage() {
           ) : null}
         </div> : null}
 
-        {loading ? (
+        {cloudUnavailable ? (
+          <ConnectivityNotice message={t.archive_workspace.offline_notice} />
+        ) : loading ? (
           <div style={emptyWrapStyle}>{followT.loading}</div>
         ) : isMobileViewport ? (
           activeTab === "projects" ? (

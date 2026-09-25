@@ -315,6 +315,10 @@ function createId(prefix: string) {
   return `${prefix}_${random}`;
 }
 
+export function isCloudOfflineCacheArchiveId(archiveId?: string | null) {
+  return Boolean(archiveId && archiveId.startsWith("cloud_cache_archive_"));
+}
+
 function createOperationId() {
   const cryptoApi =
     typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
@@ -441,18 +445,60 @@ function normalizeLocalSyncMeta(sync?: Partial<LocalSyncMeta> | null): LocalSync
   };
 }
 
-function normalizeLocalArchiveRole(archive: LocalArchive): LocalArchiveRole {
-  if (
-    archive.local_role === "local-project" ||
-    archive.local_role === "saved-local-copy" ||
-    archive.local_role === "cloud-offline-cache"
-  ) {
+export function resolveLocalArchiveRole(
+  archive: Pick<
+    LocalArchive,
+    "id" | "local_role" | "source_cloud_archive_id" | "source_cloud_cache_revision"
+  >
+): LocalArchiveRole {
+  if (isCloudOfflineCacheArchiveId(archive.id) || archive.local_role === "cloud-offline-cache") {
+    return "cloud-offline-cache";
+  }
+
+  if (normalizeOptionalText(archive.source_cloud_cache_revision)) {
+    return "cloud-offline-cache";
+  }
+
+  if (archive.local_role === "local-project" || archive.local_role === "saved-local-copy") {
     return archive.local_role;
   }
 
   return normalizeOptionalText(archive.source_cloud_archive_id)
     ? "saved-local-copy"
     : "local-project";
+}
+
+function normalizeLocalArchiveRole(archive: LocalArchive): LocalArchiveRole {
+  return resolveLocalArchiveRole(archive);
+}
+
+async function persistRepairedLocalArchiveRoles(
+  rawArchives: LocalArchive[],
+  normalizedArchives: LocalArchive[]
+) {
+  const repairs = normalizedArchives.filter((archive, index) => {
+    const raw = rawArchives[index];
+    return raw && raw.local_role !== archive.local_role;
+  });
+  if (repairs.length === 0) return;
+
+  try {
+    const db = await openLocalDb();
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const store = transaction.objectStore(ARCHIVE_STORE);
+    const done = transactionDone(transaction);
+    for (const archive of repairs) {
+      const current = await requestToPromise<LocalArchive | undefined>(store.get(archive.id));
+      if (!current) continue;
+      store.put({
+        ...current,
+        local_role: archive.local_role,
+      });
+    }
+    await done;
+  } catch {
+    // Identity repair is best-effort; listing still uses the inferred role.
+  }
 }
 
 function isUserLocalArchive(archive: LocalArchive) {
@@ -1059,6 +1105,7 @@ export async function listVisibleLocalArchiveSummaries(
   const currentUserId = getOwnerUserId(ownerContext);
 
   const normalizedArchives = archives.map(normalizeLocalArchive);
+  await persistRepairedLocalArchiveRoles(archives, normalizedArchives);
   updateLocalUsageHints(
     normalizedArchives.length,
     normalizedArchives.reduce(
@@ -1107,6 +1154,7 @@ export async function listPendingCloudSyncSummaries(
     .filter(
       (archive) =>
         Boolean(archive.source_cloud_archive_id) &&
+        isUserLocalArchive(archive) &&
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     )
     .map((archive) => {
@@ -1361,17 +1409,16 @@ export async function listVisibleCloudOfflineArchiveSummaries(
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
 
-  return archives
-    .map(normalizeLocalArchive)
+  const normalizedArchives = archives.map(normalizeLocalArchive);
+  await persistRepairedLocalArchiveRoles(archives, normalizedArchives);
+
+  return normalizedArchives
     .filter(
       (archive) =>
         archive.local_role === "cloud-offline-cache" &&
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     )
     .map((archive) => buildSummary(archive, records, images))
-    .filter(
-      (archive) => archive.status === "active" || archive.pending_record_count > 0
-    )
     .sort(
       (a, b) =>
         new Date(b.updated_at || b.created_at).getTime() -
@@ -3178,7 +3225,6 @@ export async function replaceCloudOfflineCache(input: {
         cloud_archive_id: cloudArchiveId,
         cloud_record_id: image.record_id,
         cloud_media_id: image.id,
-        cloud_media_url: normalizeOptionalText(image.cloud_media_url),
         last_sync_at: timestamp,
       }),
     });
@@ -3903,10 +3949,10 @@ export async function createLocalRecord(input: {
 
     const normalizedArchive = normalizeLocalArchive(archive);
     const isCloudOfflineCache = normalizedArchive.local_role === "cloud-offline-cache";
-    if (isCloudOfflineCache && normalizedArchive.status !== "active") {
+    if (isCloudOfflineCache) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个云项目已经结束，不能继续新增离线记录。");
+      throw new Error("云项目离线缓存只读，不能新增记录。");
     }
     const cloudArchiveId = normalizeOptionalText(normalizedArchive.source_cloud_archive_id);
     if (cloudArchiveId) {

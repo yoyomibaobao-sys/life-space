@@ -33,6 +33,7 @@ const searchIndexingEnabled = process.env.SEARCH_INDEXING_ENABLED === "true";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  allowedDevOrigins: ["192.168.1.13", "127.0.0.1"],
   async headers() {
     const headers = [
       { key: "X-Content-Type-Options", value: "nosniff" },
