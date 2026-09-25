@@ -68,6 +68,26 @@ export function clearLocalIdentityCache(userId?: string | null) {
   }
 }
 
+export function recoverStoredOwnerFromIdentityCache(): { userId: string; email: string | null } | null {
+  if (typeof window === "undefined") return null;
+
+  const owners: { userId: string; email: string | null }[] = [];
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith(LOCAL_IDENTITY_CACHE_PREFIX)) continue;
+      const userId = key.slice(LOCAL_IDENTITY_CACHE_PREFIX.length).trim();
+      if (!userId) continue;
+      owners.push({ userId, email: null });
+      if (owners.length > 1) return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return owners.length === 1 ? owners[0] : null;
+}
+
 export function displayAvatarUrl(profile?: CachedSpaceProfile | null) {
   return profile?.avatar_data_url || profile?.avatar_url || null;
 }

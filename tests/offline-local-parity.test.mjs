@@ -171,8 +171,10 @@ test("local projects stay fully usable when cloud is unreachable and identity is
   assert.match(identity, /username/);
   assert.match(identity, /avatar_data_url/);
   assert.match(identity, /export async function persistLocalIdentityFromLiveProfile/);
+  assert.match(identity, /export function recoverStoredOwnerFromIdentityCache/);
   assert.match(shell, /from "@\/lib\/local-identity-cache"/);
   assert.match(shell, /persistLocalIdentityFromLiveProfile/);
+  assert.match(shell, /recoverStoredOwnerFromIdentityCache/);
 });
 
 test("offline my-space groups local projects, live cloud, and caches without mixing them", () => {
@@ -189,6 +191,10 @@ test("offline my-space groups local projects, live cloud, and caches without mix
   assert.match(db, /normalizeLocalArchiveRole\(archive\) !== "cloud-offline-cache"/);
   assert.match(db, /listVisibleLocalArchiveSummaries/);
   assert.match(db, /listVisibleCloudOfflineArchiveSummaries/);
+  assert.match(db, /function ownerContextForVisibleCaches/);
+  assert.match(shell, /<DiscoverFilterBar/);
+  assert.match(shell, /<MobileContentTopBar/);
+  assert.match(shell, /<ArchiveDetailHeaderView/);
   assert.match(archivePage, /deviceLocalArchives\.filter/);
   assert.match(archivePage, /if \(item\.local_role !== "cloud-offline-cache"\) return false;/);
   assert.match(archivePage, /cloudUnavailable \|\| cloudLiveAvailable === false/);

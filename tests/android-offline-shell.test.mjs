@@ -84,7 +84,8 @@ test("offline shell safely recovers one local owner when browser session state i
 
   assert.match(db, /export async function inferSingleLocalArchiveOwnerContext/);
   assert.match(db, /if \(owners\.size > 1\) return null/);
-  assert.match(source, /if \(!nextOwner && !wasLocalOwnerExplicitlySignedOut\(\)\)[\s\S]*inferSingleLocalArchiveOwnerContext/);
+  assert.match(source, /recoverStoredOwnerFromIdentityCache/);
+  assert.match(source, /if \(!nextOwner\)[\s\S]*inferSingleLocalArchiveOwnerContext/);
   assert.match(source, /rememberLocalOwnerContext/);
 });
 
@@ -160,6 +161,8 @@ test("explicit Android sign-out hides account-bound offline cache state", () => 
   const source = read("mobile-offline-src/main.tsx");
 
   assert.match(source, /event === "SIGNED_OUT"/);
+  assert.match(source, /explicitSignOutRef/);
+  assert.match(source, /wasLocalOwnerExplicitlySignedOut\(\)/);
   assert.match(source, /clearRememberedLocalOwnerContext\(\)/);
   assert.match(source, /setCloudArchives\(\[\]\)/);
   assert.match(source, /listVisibleCloudOfflineArchiveSummaries\(null\)/);

@@ -3,6 +3,10 @@ import { loadDefaultRecordLocation, normalizeRecordLocation, type RecordLocation
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
+import {
+  loadRememberedLocalOwnerContext,
+  wasLocalOwnerExplicitlySignedOut,
+} from "@/lib/local-owner-context";
 
 const DB_NAME = "life-space-local-offline";
 const DB_VERSION = 6;
@@ -624,6 +628,20 @@ function normalizeLocalTaxonomyItem(item: LocalTaxonomyItem): LocalTaxonomyItem 
 
 function getOwnerUserId(ownerContext?: LocalArchiveOwnerContext | null) {
   return normalizeOptionalText(ownerContext?.userId);
+}
+
+function ownerContextForVisibleCaches(
+  ownerContext?: LocalArchiveOwnerContext | null
+): LocalArchiveOwnerContext | null {
+  if (getOwnerUserId(ownerContext)) return ownerContext || null;
+  const remembered = loadRememberedLocalOwnerContext();
+  if (remembered?.userId) {
+    return { userId: remembered.userId, email: remembered.email || null };
+  }
+  if (wasLocalOwnerExplicitlySignedOut()) {
+    return ownerContext ?? null;
+  }
+  return ownerContext ?? null;
 }
 
 export function isLocalArchiveVisibleToOwner(
@@ -1403,6 +1421,7 @@ function localTaxonomyKey(item: Pick<LocalTaxonomyItem, "kind" | "label"> & {
 export async function listVisibleCloudOfflineArchiveSummaries(
   ownerContext?: LocalArchiveOwnerContext | null
 ): Promise<LocalArchiveSummary[]> {
+  const visibleOwner = ownerContextForVisibleCaches(ownerContext);
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
@@ -1416,7 +1435,7 @@ export async function listVisibleCloudOfflineArchiveSummaries(
     .filter(
       (archive) =>
         archive.local_role === "cloud-offline-cache" &&
-        isLocalArchiveVisibleToOwner(archive, ownerContext)
+        isLocalArchiveVisibleToOwner(archive, visibleOwner)
     )
     .map((archive) => buildSummary(archive, records, images))
     .sort(
