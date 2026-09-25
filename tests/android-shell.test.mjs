@@ -34,8 +34,9 @@ test("Android shell keeps its identity, HTTPS host, and offline fallback explici
   assert.match(offlineBuild, /process\.env\.__NEXT_MANUAL_TRAILING_SLASH/);
   assert.match(offlineBuild, /process\.env\.__NEXT_ROUTER_BASEPATH/);
   assert.match(offlineBuild, /process\.env\.__NEXT_TRAILING_SLASH/);
-  assert.match(offline, /本地离线模式/);
-  assert.match(offlineSource, /当前离线，本地记录可用/);
+  assert.match(offline, /本地离线/);
+  assert.match(offlineSource, /offlineMode: "Local offline mode"/);
+  assert.match(offlineSource, /getTranslations\(language\)/);
 });
 
 test("Android system bars use modern edge-to-edge insets and page-aware contrast", () => {
