@@ -18,6 +18,7 @@ type Props = {
   subTags: SubTagItem[];
   groupTags: GroupTagItem[];
   maxDepth: number;
+  readOnly?: boolean;
   onChangeCategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
 };
@@ -29,6 +30,7 @@ export default function MobileArchiveTaxonomyInline({
   subTags,
   groupTags,
   maxDepth,
+  readOnly = false,
   onChangeCategory,
   onChangeGroup,
 }: Props) {
@@ -44,6 +46,7 @@ export default function MobileArchiveTaxonomyInline({
     <span style={language === "en" ? { ...rowStyle, flexWrap: "wrap", gap: "2px 6px" } : rowStyle} data-no-card-nav="true">
       <InlineSelect
         naturalWordWrap={language === "en"}
+        readOnly={readOnly}
         label={getArchiveCategoryLabel(category, language)}
         ariaLabel={t.archive_workspace.main_category}
         value={category}
@@ -57,6 +60,7 @@ export default function MobileArchiveTaxonomyInline({
       {maxDepth >= 2 && availableSubTags.length > 0 ? (
         <InlineSelect
           naturalWordWrap={language === "en"}
+          readOnly={readOnly}
           label={selectedSubTag?.name || t.archive_workspace.subcategory}
           ariaLabel={t.archive_workspace.subcategory}
           sectionLabel={t.archive_workspace.subcategory}
@@ -71,6 +75,7 @@ export default function MobileArchiveTaxonomyInline({
       {maxDepth >= 3 && selectedSubTag && availableGroups.length > 0 ? (
         <InlineSelect
           naturalWordWrap={language === "en"}
+          readOnly={readOnly}
           label={selectedGroup?.name || t.archive_workspace.group}
           ariaLabel={t.archive_workspace.group}
           sectionLabel={t.archive_workspace.group}
@@ -94,6 +99,7 @@ function InlineSelect({
   onChange,
   sectionLabel,
   naturalWordWrap = false,
+  readOnly = false,
 }: {
   label: string;
   ariaLabel: string;
@@ -102,6 +108,7 @@ function InlineSelect({
   onChange: (value: string) => void;
   naturalWordWrap?: boolean;
   sectionLabel?: string;
+  readOnly?: boolean;
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -160,6 +167,17 @@ function InlineSelect({
   function stopCardNavigation(event: MouseEvent<HTMLElement>) {
     event.preventDefault();
     event.stopPropagation();
+  }
+
+  if (readOnly) {
+    return (
+      <span
+        aria-label={ariaLabel}
+        style={naturalWordWrap ? { ...readOnlyChipStyle, maxWidth: "100%" } : readOnlyChipStyle}
+      >
+        <span style={naturalWordWrap ? { ...selectLabelStyle, overflowWrap: "break-word" } : selectLabelStyle}>{label}</span>
+      </span>
+    );
   }
 
   return (
@@ -262,6 +280,13 @@ const selectWrapStyle: CSSProperties = {
   lineHeight: 1.3,
   cursor: "pointer",
   touchAction: "manipulation",
+};
+
+const readOnlyChipStyle: CSSProperties = {
+  ...selectWrapStyle,
+  cursor: "default",
+  touchAction: "auto",
+  color: "#617258",
 };
 
 const selectLabelStyle: CSSProperties = {

@@ -105,8 +105,16 @@ export default function MobileArchiveActions({
     action();
   }
 
+  const hasMenu =
+    allowTaxonomyEdit ||
+    Boolean(onTogglePublic) ||
+    Boolean(onToggleEnded) ||
+    extraActions.length > 0 ||
+    Boolean(onMoveToTrash);
+
   return (
     <div data-no-card-nav="true" onClick={(event) => event.stopPropagation()}>
+      {hasMenu ? (
       <button
         ref={buttonRef}
         type="button"
@@ -118,6 +126,7 @@ export default function MobileArchiveActions({
       >
         <UiIcon name="more" size={19} />
       </button>
+      ) : null}
 
       {panelMode ? (
         <AnchoredPanel

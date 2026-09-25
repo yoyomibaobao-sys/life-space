@@ -39,7 +39,13 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /deleteLocalRecord/);
   assert.match(source, /accept="image\/\*"/);
   assert.match(source, /capture="environment"/);
-  assert.match(source, /copy.camera/);
+  assert.match(source, /getOfflineShellCopy/);
+  assert.match(source, /listVisibleLocalTaxonomyItems/);
+  assert.match(source, /showSubcategoryRow=\{sourceFilter === "local" && activeLocalDepth >= 2\}/);
+  assert.match(source, /showGroupRow=\{sourceFilter === "local" && activeLocalDepth >= 3\}/);
+  assert.doesNotMatch(source, /const text = \{/);
+  assert.doesNotMatch(source, /"[?]{2,}"/);
+  assert.match(source, /copy\.camera/);
   assert.match(source, /copy.album/);
   assert.match(source, /<MobileBottomNavigationView/);
   assert.match(source, /<MobilePageHeaderView/);
@@ -95,13 +101,14 @@ test("offline guides expose only the registered-user overview boundary", () => {
   const source = read("mobile-offline-src/main.tsx");
   const guideCache = read("lib/offline-guide-directory.ts");
   const plantIndex = read("app/plant/page.tsx");
+  const en = read("lib/i18n/en.ts");
 
   assert.match(source, /kind: "guide-detail"/);
   assert.match(source, /!owner[\s\S]*guideSignInRequired/);
   assert.match(source, /getOfflineGuideOverview\(guide, language\)/);
   assert.match(source, /getOfflineGuideParameters\(guide, language\)/);
   assert.match(source, /owner && guide\.description/);
-  assert.match(source, /full practice guidance, experience cards, and related projects/);
+  assert.match(en, /full practice guidance, experience cards, and related projects/);
   assert.match(guideCache, /PUBLIC_SOURCES/);
   assert.match(guideCache, /plantCoreParameters/);
   assert.match(guideCache, /\["light", "scene", "indoor"\]/);
@@ -157,6 +164,24 @@ test("explicit Android sign-out hides account-bound offline cache state", () => 
   assert.match(source, /setCloudArchives\(\[\]\)/);
   assert.match(source, /listVisibleCloudOfflineArchiveSummaries\(null\)/);
   assert.match(source, /setCloudCaches\(cachedCloud\)/);
+});
+
+test("Android bundled offline shell matches accepted local-first cache rules", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const zh = read("lib/i18n/zh.ts");
+
+  assert.match(source, /const useCloudCacheSource = !online/);
+  assert.match(source, /const hideCloudCreate = useCloudCacheSource && sourceFilter === "cloud"/);
+  assert.match(source, /hideCloudCreate \? null/);
+  assert.match(source, /viewingCloudCache \? null/);
+  assert.match(source, /archive\.status === "active" && !isCloudCache/);
+  assert.match(source, /detail\.archive\.local_role !== "cloud-offline-cache"/);
+  assert.match(source, /archives\.filter\(\(archive\) => archive\.status === "active"\)/);
+  assert.match(source, /readShellIdentityCache\(nextOwner\.userId\)/);
+  assert.match(source, /if \(!navigator\.onLine\) return;/);
+  assert.match(source, /displayAvatarUrl\(spaceProfile\)/);
+  assert.match(zh, /cloud_offline_cache: "云项目·离线缓存"/);
+  assert.match(zh, /cloud_offline_cache_readonly: "只读查看"/);
 });
 
 test("Android cloud project covers resolve through the shared signed media layer", () => {

@@ -1,6 +1,5 @@
 "use client";
 
-import { Capacitor } from "@capacitor/core";
 import type { ArchiveItem } from "@/lib/archive-page-types";
 import type { MediaItem } from "@/lib/domain-types";
 import type { PlantingRegion } from "@/lib/planting-region";
@@ -53,10 +52,6 @@ type CloudCacheMediaRow = MediaItem & {
   sort_order?: number | null;
   created_at?: string | null;
 };
-
-function isNativeAndroid() {
-  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
-}
 
 function cacheRevision(archive: CloudOfflineCacheArchiveSource) {
   return [
@@ -245,7 +240,7 @@ export async function refreshCloudOfflineCaches(
   archives: CloudOfflineCacheArchiveSource[],
   ownerContext: LocalArchiveOwnerContext | null
 ) {
-  if (!isNativeAndroid() || !ownerContext?.userId) return;
+  if (!ownerContext?.userId) return;
 
   for (const archive of archives) {
     try {

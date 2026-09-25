@@ -23,6 +23,7 @@ import {
   listVisibleLocalArchiveSummaries,
   listVisibleCloudOfflineArchiveSummaries,
   listPendingCloudSyncSummaries,
+  listVisibleLocalTaxonomyItems,
   deferPendingCloudSyncPrompt,
   markUnownedLocalArchivesForOwner,
   preparePendingCloudSyncQueue,
@@ -32,6 +33,7 @@ import {
   type LocalArchiveDetail,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
+  type LocalTaxonomyItem,
   type PendingCloudSyncSummary,
   type LocalImage,
   type LocalRecordWithImages,
@@ -56,8 +58,13 @@ import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
-import ArchiveTaxonomyPanel from "@/components/archive-ui/ArchiveTaxonomyPanel";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
+import ArchiveTaxonomyPanel, { type ArchiveTaxonomyChip } from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
+import {
+  getArchiveCategoryDepth,
+  getLocalArchiveCategoryDepths,
+} from "@/lib/archive-category-settings";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
@@ -88,8 +95,16 @@ import { supabase } from "@/lib/supabase";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
+import {
+  clearShellIdentityCache,
+  displayAvatarUrl,
+  persistLocalIdentityFromLiveProfile,
+  readShellIdentityCache,
+} from "@/lib/local-identity-cache";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 import { formatStorage } from "@/lib/user-profile-shared";
+import { getTranslations, type Language } from "@/lib/i18n";
+import { getOfflineShellCopy, type OfflineCopy } from "@/lib/offline-shell-copy";
 import {
   getUserTypeLabel,
   normalizeMembershipRpcResult,
@@ -120,59 +135,15 @@ import {
 
 const MAX_PHOTOS = 10;
 
-type Language = "zh" | "en";
 type ShellSourceFilter = "all" | "cloud" | "local";
 
 type ShellSpaceProfile = {
   username: string | null;
   avatar_url: string | null;
+  avatar_data_url?: string | null;
   storage_used: number | null;
   storage_limit: number | null;
 };
-
-type ShellIdentityCache = {
-  profile: ShellSpaceProfile | null;
-  membership: MyMembership | null;
-  experienceCardCount: number;
-};
-
-const SHELL_IDENTITY_CACHE_PREFIX = "lifespace_shell_identity_v1:";
-
-function readShellIdentityCache(userId?: string | null): ShellIdentityCache | null {
-  if (!userId) return null;
-  try {
-    const raw = window.localStorage.getItem(`${SHELL_IDENTITY_CACHE_PREFIX}${userId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ShellIdentityCache>;
-    return {
-      profile: (parsed.profile || null) as ShellSpaceProfile | null,
-      membership: (parsed.membership || null) as MyMembership | null,
-      experienceCardCount: Math.max(0, Number(parsed.experienceCardCount || 0)),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeShellIdentityCache(userId: string, value: ShellIdentityCache) {
-  try {
-    window.localStorage.setItem(
-      `${SHELL_IDENTITY_CACHE_PREFIX}${userId}`,
-      JSON.stringify(value),
-    );
-  } catch {
-    // Identity cache is optional; local projects and cloud caches stay usable.
-  }
-}
-
-function clearShellIdentityCache(userId?: string | null) {
-  if (!userId) return;
-  try {
-    window.localStorage.removeItem(`${SHELL_IDENTITY_CACHE_PREFIX}${userId}`);
-  } catch {
-    // Explicit sign-out still clears in-memory identity even if storage is unavailable.
-  }
-}
 
 type CloudArchiveSummary = {
   id: string;
@@ -211,143 +182,6 @@ type Screen =
   | { kind: "edit-project"; archiveId: string }
   | { kind: "new-record"; archiveId: string }
   | { kind: "edit-record"; archiveId: string; recordId: string };
-
-const text = {
-  zh: {
-    mySpace: "我的空间", settings: "设置", language: "语言", all: "全部", cloud: "云空间", local: "本地", project: "项目",
-    home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
-    cloudUnavailable: "当前未联网，云端内容暂不可用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
-    cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
-    saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
-    offlineCopies: "云端缓存副本", cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，需手动上传。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。", 
-    savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
-    pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
-    uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
-    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败", captchaRequired: "请先完成人机验证",
-    camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
-    guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
-    guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
-    guideOfflineNotice: "离线可查看基础概要；完整实操、经验卡和关联项目请联网后查看。",
-    guideSignInRequired: "联网登录／注册后可查看基础概要。", guideUnavailable: "这条离线指引暂时不可用。",
-    ongoing: "进行中", ended: "已结束", period: "项目分期", enablePeriod: "开启分期", periodDate: "期次开始日期", status: "项目状态", visibility: "可见范围", private: "仅自己可见",
-    photoLimit: "每次最多选择10张，可分多次添加", removePhoto: "移除照片",
-    brand: "有时·耕作",
-    offlineMode: "本地离线模式",
-    offlineTitle: "当前离线，本地记录可用",
-    offlineBody: "项目、记录和照片只保存在本机。重新联网后不会自动上传，也不会覆盖云端资料。",
-    migrationWarning: "旧版本地资料暂未完成迁移。现有资料不会被删除，请稍后重新打开 App 再试。",
-    reconnect: "重新连接云端",
-    newProject: "新建项目",
-    localProjects: "本地项目",
-    noProjects: "还没有本地项目",
-    noProjectsHint: "断网时也可以先创建，内容会保存在这台设备。",
-    records: "条记录",
-    photos: "张照片",
-    unownedTitle: "发现登录前创建的本地项目",
-    unownedBody: "可以归入当前账号在本机的项目列表；这不会上传云端。",
-    claim: "归入我的本地项目",
-    back: "返回",
-    edit: "编辑",
-    remove: "删除",
-    addRecord: "新建记录",
-    noRecords: "暂无记录",
-    projectInfo: "项目信息",
-    title: "项目名称",
-    category: "项目类型",
-    systemName: "关联指引",
-    source: "来源（选填）",
-    note: "备注（选填）",
-    recordNote: "记录内容",
-    recordTime: "记录时间",
-    selectPhotos: "照片（最多 10 张）",
-    photoHint: "点击后可选择相机或相册；照片会压缩后保存在本机。",
-    save: "保存",
-    cancel: "取消",
-    saving: "保存中…",
-    loading: "正在读取本地资料…",
-    requiredProject: "请填写项目名称和对象名称。",
-    requiredRecord: "请填写记录内容，或至少选择一张照片。",
-    createSuccess: "本地项目已创建",
-    updateSuccess: "已保存",
-    recordSuccess: "记录已保存到本机",
-    deleteProjectConfirm: "确定删除这个本地项目及其全部记录和照片吗？此操作无法撤销。",
-    deleteRecordConfirm: "确定删除这条本地记录及其照片吗？此操作无法撤销。",
-    deleted: "已删除",
-    migrated: "升级前的本地资料已保留",
-    readFailed: "无法读取本地资料。",
-    plant: "种植",
-    system: "农设",
-    insect_fish: "虫鱼",
-    other: "其他",
-  },
-  en: {
-    mySpace: "My space", settings: "Settings", language: "Language", all: "All", cloud: "Cloud", local: "Local", project: "Project",
-    home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
-    cloudUnavailable: "Cloud content is unavailable while offline", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
-    cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
-    saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
-    offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device until you upload them manually.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
-    savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
-    pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
-    uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
-    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed", captchaRequired: "Complete the verification first",
-    camera: "Camera", album: "Gallery", chooseProject: "Choose project",
-    guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
-    guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
-    guideOfflineNotice: "The basic overview is available offline. Reconnect for full practice guidance, experience cards, and related projects.",
-    guideSignInRequired: "Reconnect and log in or register to view the basic overview.", guideUnavailable: "This offline guide is temporarily unavailable.",
-    ongoing: "Ongoing", ended: "Ended", period: "Project periods", enablePeriod: "Enable periods", periodDate: "Period start date", status: "Project status", visibility: "Visibility", private: "Only me",
-    photoLimit: "Select up to 10 at a time; add more later", removePhoto: "Remove photo",
-    brand: "LifeSpace",
-    offlineMode: "Local offline mode",
-    offlineTitle: "Cloud is temporarily unavailable. Local records still work.",
-    offlineBody: "Projects, records and photos stay on this device. Reconnecting will not upload them or overwrite cloud data.",
-    migrationWarning: "Previous local data has not finished migrating. Nothing was deleted; reopen the app later to retry.",
-    reconnect: "Reconnect to cloud",
-    newProject: "New local project",
-    localProjects: "Local projects",
-    noProjects: "No local projects yet",
-    noProjectsHint: "You can create one offline and keep it on this device.",
-    records: "records",
-    photos: "photos",
-    unownedTitle: "Projects created before sign-in found",
-    unownedBody: "Add them to this account's local list. Nothing will be uploaded.",
-    claim: "Add to my local projects",
-    back: "Back",
-    edit: "Edit",
-    remove: "Delete",
-    addRecord: "New record",
-    noRecords: "No records yet",
-    projectInfo: "Project details",
-    title: "Project name",
-    category: "Project type",
-    systemName: "Variety / subject / method",
-    source: "Source (optional)",
-    note: "Notes (optional)",
-    recordNote: "Record notes",
-    recordTime: "Record time",
-    selectPhotos: "Photos (up to 10)",
-    photoHint: "Choose Camera or Gallery. Photos are compressed and stored on this device.",
-    save: "Save",
-    cancel: "Cancel",
-    saving: "Saving…",
-    loading: "Reading local data…",
-    requiredProject: "Enter a project name and subject name.",
-    requiredRecord: "Enter notes or select at least one photo.",
-    createSuccess: "Local project created",
-    updateSuccess: "Saved",
-    recordSuccess: "Record saved on this device",
-    deleteProjectConfirm: "Delete this local project and all of its records and photos? This cannot be undone.",
-    deleteRecordConfirm: "Delete this local record and its photos? This cannot be undone.",
-    deleted: "Deleted",
-    migrated: "Local data from the previous version was preserved",
-    readFailed: "Could not read local data.",
-    plant: "Plants",
-    system: "Methods",
-    insect_fish: "Ecology",
-    other: "Other",
-  },
-} as const;
 
 function getLanguage(): Language {
   try {
@@ -414,9 +248,12 @@ function BlobImage({ image, className, alt }: {
 
 function App() {
   const [language, setLanguage] = useState<Language>(getLanguage);
-  const copy = text[language];
+  const copy = getOfflineShellCopy(language);
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
+  const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
+  const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
+  const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
   const [guideQuery, setGuideQuery] = useState("");
   const [directory] = useState(loadOfflineGuideDirectory);
   function setScreen(next: Screen, replace = false) {
@@ -539,11 +376,12 @@ function App() {
       setSpaceProfile(nextProfile);
       setMembership(nextMembership);
       setExperienceCardCount(nextExperienceCardCount);
-      writeShellIdentityCache(userId, {
+      const persistedProfile = await persistLocalIdentityFromLiveProfile(userId, {
         profile: nextProfile,
         membership: nextMembership,
         experienceCardCount: nextExperienceCardCount,
       });
+      setSpaceProfile(persistedProfile || nextProfile);
     } catch (error) {
       console.warn("local shell identity", error);
     }
@@ -551,15 +389,17 @@ function App() {
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
     const resolvedContext = context === undefined ? ownerContext : context;
-    const [result, cachedCloud, pending] = await Promise.all([
+    const [result, cachedCloud, pending, taxonomy] = await Promise.all([
       listVisibleLocalArchiveSummaries(resolvedContext),
       listVisibleCloudOfflineArchiveSummaries(resolvedContext),
       listPendingCloudSyncSummaries(resolvedContext),
+      listVisibleLocalTaxonomyItems(resolvedContext),
     ]);
     setArchives(result.archives);
     setCloudCaches(cachedCloud);
     setUnownedCount(result.unownedCount);
     setPendingSync(pending);
+    setLocalTaxonomyItems(taxonomy);
   }, [ownerContext]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
@@ -875,7 +715,18 @@ function App() {
         screen.kind !== "new-record" && screen.kind !== "edit-record") return;
     let canceled = false;
     setDetail(null);
-    void getLocalArchiveDetail(screen.archiveId, ownerContext).then((next) => { if (!canceled) setDetail(next); }).catch(() => showToast(copy.readFailed));
+    void getLocalArchiveDetail(screen.archiveId, ownerContext).then((next) => {
+      if (canceled) return;
+      setDetail(next);
+      if (
+        next?.archive.local_role === "cloud-offline-cache" &&
+        (screen.kind === "new-record" ||
+          screen.kind === "edit-record" ||
+          screen.kind === "edit-project")
+      ) {
+        setScreen({ kind: "detail", archiveId: next.archive.id }, true);
+      }
+    }).catch(() => showToast(copy.readFailed));
     return () => { canceled = true; };
   }, [screen, ownerContext, showToast, copy.readFailed]);
 
@@ -993,16 +844,63 @@ function App() {
   const activeGuide = screen.kind === "guide-detail"
     ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
     : undefined;
-  const filteredLocalArchives = archives.filter(
-    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
-  );
+  const activeLocalCategory = categoryFilter === "all" ? null : categoryFilter;
+  const localCategoryDepths = getLocalArchiveCategoryDepths(ownerContext?.userId);
+  const activeLocalDepth = getArchiveCategoryDepth(localCategoryDepths, activeLocalCategory);
+  const localSubTags = useMemo<ArchiveTaxonomyChip[]>(() => {
+    if (sourceFilter !== "local" || !activeLocalCategory || activeLocalDepth < 2) return [];
+    return localTaxonomyItems
+      .filter(
+        (item) =>
+          item.kind === "subcategory" &&
+          item.category === activeLocalCategory &&
+          item.label,
+      )
+      .map((item) => ({ id: item.label, label: item.label }))
+      .filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index)
+      .sort((a, b) => a.label.localeCompare(b.label, language === "en" ? "en" : "zh-CN"));
+  }, [activeLocalCategory, activeLocalDepth, language, localTaxonomyItems, sourceFilter]);
+  const localGroupTags = useMemo<ArchiveTaxonomyChip[]>(() => {
+    if (sourceFilter !== "local" || !activeLocalCategory || !activeSubTag || activeLocalDepth < 3) return [];
+    return localTaxonomyItems
+      .filter(
+        (item) =>
+          item.kind === "group" &&
+          item.category === activeLocalCategory &&
+          item.subcategory === activeSubTag &&
+          item.label,
+      )
+      .map((item) => ({ id: item.label, label: item.label }))
+      .filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index)
+      .sort((a, b) => a.label.localeCompare(b.label, language === "en" ? "en" : "zh-CN"));
+  }, [activeLocalCategory, activeLocalDepth, activeSubTag, language, localTaxonomyItems, sourceFilter]);
+  const filteredLocalArchives = archives.filter((archive) => {
+    if (categoryFilter !== "all" && archive.category !== categoryFilter) return false;
+    if (sourceFilter === "local") {
+      if (activeSubTag && archive.subcategory !== activeSubTag) return false;
+      if (activeGroupTag && archive.group_name !== activeGroupTag) return false;
+    }
+    return true;
+  });
   const filteredCloudCaches = cloudCaches.filter(
     (archive) => categoryFilter === "all" || archive.category === categoryFilter,
   );
   const filteredCloudArchives = cloudArchives.filter(
     (archive) => categoryFilter === "all" || archive.category === categoryFilter,
   );
-  const cloudSourceCount = online && cloudUserId && !cloudError ? cloudArchives.length : cloudCaches.length;
+  const useCloudCacheSource = !online;
+  const hideCloudCreate = useCloudCacheSource && sourceFilter === "cloud";
+  const viewingCloudCache =
+    (screen.kind === "detail" ||
+      screen.kind === "new-record" ||
+      screen.kind === "edit-record" ||
+      screen.kind === "edit-project") &&
+    detail?.archive.local_role === "cloud-offline-cache";
+  const cloudSourceCount = useCloudCacheSource
+    ? cloudCaches.length
+    : online && cloudUserId && !cloudError
+      ? cloudArchives.length
+      : cloudCaches.length;
   function cloudProjectView(archive: CloudArchiveSummary) {
     const ended = archive.status === "ended";
     return {
@@ -1029,7 +927,7 @@ function App() {
       durationDays: getOngoingDays(archive.created_at),
       viewCount: Number(archive.view_count || 0),
       visibilityLabel: archive.is_public
-        ? language === "zh" ? "公开" : "Public"
+        ? copy.publicLabel
         : copy.private,
       visibilityTone: archive.is_public ? "public" as const : "private" as const,
       statusLabel: ended ? copy.ended : null,
@@ -1068,7 +966,7 @@ function App() {
       viewCount: item.view_count,
       followerCount: item.follower_count,
       commentCount: item.public_comment_count,
-      visibilityLabel: language === "zh" ? "公开" : "Public",
+      visibilityLabel: copy.publicLabel,
       visibilityTone: "public" as const,
       statusLabel: item.archive_ended_at ? copy.ended : null,
       ended: Boolean(item.archive_ended_at),
@@ -1170,7 +1068,7 @@ function App() {
     : 0;
   const storageTotalLabel = storageLimitBytes > 0
     ? formatStorage(storageLimitBytes)
-    : "—";
+    : "?";
   const membershipLabel = getUserTypeLabel(
     { signedIn: Boolean(owner), membership },
     language,
@@ -1199,7 +1097,7 @@ function App() {
             <div className="header-actions">
               {!owner ? (
                 <button className="icon-button" type="button" onClick={toggleLanguage}>
-                  {language === "zh" ? "EN" : "中文"}
+                  {language === "zh" ? "EN" : copy.languageChinese}
                 </button>
               ) : null}
               <button
@@ -1217,16 +1115,15 @@ function App() {
 
       {screen.kind === "list" ? (
         <PersonalSpaceMobileIdentity
-          avatarUrl={spaceProfile?.avatar_url}
+          avatarUrl={displayAvatarUrl(spaceProfile)}
           username={
             spaceProfile?.username ||
-            owner?.email ||
-            (language === "zh" ? "我的空间" : "My space")
+            getTranslations(language).nav.username_unset
           }
           membershipLabel={membershipLabel}
           storageUsagePercent={storageUsagePercent}
           storageTotalLabel={storageTotalLabel}
-          experienceLabel={language === "zh" ? "经验卡" : "Experience"}
+          experienceLabel={copy.experience}
           experienceCardCount={experienceCardCount}
           language={language}
         />
@@ -1273,31 +1170,54 @@ function App() {
           activeSource={sourceFilter}
           onSelectSource={(source) => {
             setSourceFilter(source);
+            setActiveSubTag(null);
+            setActiveGroupTag(null);
             setScreen({ kind: "list" });
           }}
-          onCreateArchive={() => setScreen({ kind: "new-project" })}
+          onCreateArchive={() => {
+            if (hideCloudCreate) return;
+            setScreen({ kind: "new-project" });
+          }}
           showCreateToolbar={false}
-          sourceTrailingSlot={(
+          sourceTrailingSlot={
+            hideCloudCreate ? null : (
             <button type="button" onClick={() => setScreen({ kind: "new-project" })}>
               +{copy.project}
             </button>
-          )}
+          )
+          }
           filtersSlot={(
             <ArchiveTaxonomyPanel
-              activeCategory={categoryFilter === "all" ? null : categoryFilter}
-              activeSubcategoryId={null}
-              activeGroupId={null}
-              subcategories={[]}
-              groups={[]}
+              activeCategory={activeLocalCategory}
+              activeSubcategoryId={sourceFilter === "local" ? activeSubTag : null}
+              activeGroupId={sourceFilter === "local" ? activeGroupTag : null}
+              subcategories={sourceFilter === "local" ? localSubTags : []}
+              groups={sourceFilter === "local" ? localGroupTags : []}
               mobileMode
-              showSubcategoryRow={false}
-              showGroupRow={false}
-              onReset={() => setCategoryFilter("all")}
-              onSelectCategory={(category) => setCategoryFilter(category)}
-              onResetSubcategory={() => undefined}
-              onSelectSubcategory={() => undefined}
-              onResetGroup={() => undefined}
-              onSelectGroup={() => undefined}
+              showSubcategoryRow={sourceFilter === "local" && activeLocalDepth >= 2}
+              showGroupRow={sourceFilter === "local" && activeLocalDepth >= 3}
+              onReset={() => {
+                setCategoryFilter("all");
+                setActiveSubTag(null);
+                setActiveGroupTag(null);
+              }}
+              onSelectCategory={(category) => {
+                setCategoryFilter(category);
+                setActiveSubTag(null);
+                setActiveGroupTag(null);
+              }}
+              onResetSubcategory={() => {
+                setActiveSubTag(null);
+                setActiveGroupTag(null);
+              }}
+              onSelectSubcategory={(chip) => {
+                setActiveSubTag(chip.id);
+                setActiveGroupTag(null);
+              }}
+              onResetGroup={() => setActiveGroupTag(null)}
+              onSelectGroup={(chip) => {
+                setActiveGroupTag(activeGroupTag === chip.id ? null : chip.id);
+              }}
             />
           )}
           noticeSlot={ownerContext && unownedCount > 0 ? (
@@ -1313,7 +1233,7 @@ function App() {
           ) : null}
         >
           {sourceFilter !== "local" ? (
-            online && cloudUserId && !cloudError ? (
+            !useCloudCacheSource && online && cloudUserId && !cloudError ? (
               <>
                 {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
                 {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
@@ -1340,14 +1260,13 @@ function App() {
                         project={{
                           ...localArchiveToProjectView(archive, ownerContext, language),
                           href: undefined,
-                          visibilityLabel: copy.offlineCopies,
                         }}
                         onClick={() => openDetail(archive.id)}
                         mobileMode
                       />
                     ))}
                   </div>
-                ) : sourceFilter === "cloud" && (!online || Boolean(cloudError)) ? (
+                ) : sourceFilter === "cloud" && (useCloudCacheSource || !online || Boolean(cloudError)) ? (
                   <section className="panel empty">{copy.noCachedProjects}</section>
                 ) : null}
               </>
@@ -1363,7 +1282,6 @@ function App() {
                     project={{
                       ...localArchiveToProjectView(archive, ownerContext, language),
                       href: undefined,
-                      visibilityLabel: copy.local,
                     }}
                     onClick={() => openDetail(archive.id)}
                     mobileMode
@@ -1380,7 +1298,7 @@ function App() {
 
           {sourceFilter === "all" &&
           filteredLocalArchives.length === 0 &&
-          (online && cloudUserId && !cloudError
+          (!useCloudCacheSource && online && cloudUserId && !cloudError
             ? !cloudLoading && filteredCloudArchives.length === 0
             : filteredCloudCaches.length === 0) ? (
             <section className="panel empty">
@@ -1439,7 +1357,7 @@ function App() {
         </>
       ) : null}
 
-      {screen.kind === "edit-project" && detail ? (
+      {screen.kind === "edit-project" && detail && detail.archive.local_role !== "cloud-offline-cache" ? (
         <ProjectForm
           language={language}
           copy={copy}
@@ -1455,7 +1373,7 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "new-record" && detail ? (
+      {screen.kind === "new-record" && detail && detail.archive.local_role !== "cloud-offline-cache" ? (
         <RecordForm
           copy={copy}
           archive={detail.archive}
@@ -1470,7 +1388,7 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "edit-record" && detail ? (
+      {screen.kind === "edit-record" && detail && detail.archive.local_role !== "cloud-offline-cache" ? (
         <RecordForm
           copy={copy}
           archive={detail.archive}
@@ -1501,17 +1419,20 @@ function App() {
           }}
         />
         {!online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+          <>
+            <ConnectivityNotice message={copy.offlineNotice} />
+            <section className="panel empty"><strong>{copy.offlineNotice}</strong></section>
+          </>
         ) : activityLoading ? (
           <section className="panel empty">
-            {language === "zh" ? "正在读取公开记录…" : "Loading public activity…"}
+            {copy.loadingActivity}
           </section>
         ) : activityError ? (
           <section className="notice warning">
-            <p>{language === "zh" ? "公开记录读取失败，请稍后重试。" : "Could not load public activity."}</p>
+            <p>{copy.activityFailed}</p>
             <div className="action-row">
               <button type="button" className="secondary-button" onClick={() => void loadActivity()}>
-                {language === "zh" ? "重新加载" : "Retry"}
+                {copy.retry}
               </button>
             </div>
           </section>
@@ -1523,7 +1444,7 @@ function App() {
           </div>
         ) : (
           <section className="panel empty">
-            {language === "zh" ? "暂时没有公开记录。" : "No public activity yet."}
+            {copy.noActivity}
           </section>
         )}
       </> : null}
@@ -1547,17 +1468,20 @@ function App() {
           }}
         />
         {!online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+          <>
+            <ConnectivityNotice message={copy.offlineNotice} />
+            <section className="panel empty"><strong>{copy.offlineNotice}</strong></section>
+          </>
         ) : experienceLoading ? (
           <section className="panel empty">
-            {language === "zh" ? "正在读取经验…" : "Loading experience…"}
+            {copy.loadingExperience}
           </section>
         ) : experienceError ? (
           <section className="notice warning">
-            <p>{language === "zh" ? "经验读取失败，请稍后重试。" : "Could not load experience."}</p>
+            <p>{copy.experienceFailed}</p>
             <div className="action-row">
               <button type="button" className="secondary-button" onClick={() => void loadExperience()}>
-                {language === "zh" ? "重新加载" : "Retry"}
+                {copy.retry}
               </button>
             </div>
           </section>
@@ -1585,14 +1509,17 @@ function App() {
           </div>
         ) : (
           <section className="panel empty">
-            {language === "zh" ? "暂时没有公开经验。" : "No public experience yet."}
+            {copy.noExperience}
           </section>
         )}
       </> : null}
 
       {screen.kind === "following" ? (
         !online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+          <>
+            <ConnectivityNotice message={copy.offlineNotice} />
+            <section className="panel empty"><strong>{copy.offlineNotice}</strong></section>
+          </>
         ) : !cloudUserId ? (
           <CloudLogin copy={copy} onSuccess={() => void loadFollowing()} />
         ) : (
@@ -1603,14 +1530,14 @@ function App() {
             </div>
             {followedLoading ? (
               <section className="panel empty">
-                {language === "zh" ? "正在读取关注项目…" : "Loading followed projects…"}
+                {copy.loadingFollowing}
               </section>
             ) : followedError ? (
               <section className="notice warning">
-                <p>{language === "zh" ? "关注项目读取失败，请稍后重试。" : "Could not load followed projects."}</p>
+                <p>{copy.followingFailed}</p>
                 <div className="action-row">
                   <button type="button" className="secondary-button" onClick={() => void loadFollowing()}>
-                    {language === "zh" ? "重新加载" : "Retry"}
+                    {copy.retry}
                   </button>
                 </div>
               </section>
@@ -1627,7 +1554,7 @@ function App() {
               </div>
             ) : (
               <section className="panel empty">
-                {language === "zh" ? "还没有关注的公开项目。" : "No followed public projects yet."}
+                {copy.noFollowing}
               </section>
             )}
           </>
@@ -1636,39 +1563,42 @@ function App() {
 
       {screen.kind === "market" ? (
         !online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+          <>
+            <ConnectivityNotice message={copy.offlineNotice} />
+            <section className="panel empty"><strong>{copy.offlineNotice}</strong></section>
+          </>
         ) : marketLoading ? (
           <section className="panel empty">
-            {language === "zh" ? "正在读取集市…" : "Loading market…"}
+            {copy.loadingMarket}
           </section>
         ) : marketError ? (
           <section className="notice warning">
-            <p>{language === "zh" ? "集市读取失败，请稍后重试。" : "Could not load the market."}</p>
+            <p>{copy.marketFailed}</p>
             <div className="action-row">
               <button type="button" className="secondary-button" onClick={() => void loadMarket()}>
-                {language === "zh" ? "重新加载" : "Retry"}
+                {copy.retry}
               </button>
             </div>
           </section>
         ) : (
           <>
-            <div className="category-row" role="group" aria-label={language === "zh" ? "集市类型" : "Market type"}>
-              {[{ value: "all", label: language === "zh" ? "全部" : "All" }, ...getMarketPostTypeOptions(language)].map((option) => (
+            <div className="category-row" role="group" aria-label={copy.marketType}>
+              {[{ value: "all", label: copy.marketAll }, ...getMarketPostTypeOptions(language)].map((option) => (
                 <button type="button" key={option.value} aria-pressed={marketTypeFilter === option.value} onClick={() => setMarketTypeFilter(option.value as "all" | MarketPostType)}>{option.label}</button>
               ))}
             </div>
             <button type="button" className="secondary-button" aria-expanded={marketFiltersOpen} onClick={() => setMarketFiltersOpen((open) => !open)}>
-              {language === "zh" ? "筛选" : "Filters"}
+              {copy.marketFilters}
             </button>
             {marketFiltersOpen ? <div className="field">
-              <label>{language === "zh" ? "分类" : "Category"}
+              <label>{copy.marketCategory}
                 <select value={marketCategoryFilter} onChange={(event) => setMarketCategoryFilter(event.target.value as "all" | MarketItemCategory)}>
-                  <option value="all">{language === "zh" ? "全部分类" : "All categories"}</option>
+                  <option value="all">{copy.allCategories}</option>
                   {getMarketItemCategoryOptions(language).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
-              <label>{language === "zh" ? "地区" : "Area"}<input value={marketLocationFilter} onChange={(event) => setMarketLocationFilter(event.target.value)} /></label>
-              <label>{language === "zh" ? "内容" : "Content"}<input value={marketContentFilter} onChange={(event) => setMarketContentFilter(event.target.value)} /></label>
+              <label>{copy.marketArea}<input value={marketLocationFilter} onChange={(event) => setMarketLocationFilter(event.target.value)} /></label>
+              <label>{copy.marketContent}<input value={marketContentFilter} onChange={(event) => setMarketContentFilter(event.target.value)} /></label>
             </div> : null}
             <div className="section-title">
               <h1>{copy.market}</h1>
@@ -1680,11 +1610,11 @@ function App() {
                 const archive = item.archive_id ? marketArchives.get(item.archive_id) : null;
                 return (
                   <article style={mobileMarketCardStyle} key={item.id}>
-                    <MobileMarketFeedCard item={item} profile={profile} archive={archive} language={language} marketName={copy.market} unsetUsername={language === "zh" ? "未设置用户名" : "Unknown user"} notProvided={language === "zh" ? "未提供" : "Not provided"} />
+                    <MobileMarketFeedCard item={item} profile={profile} archive={archive} language={language} marketName={copy.market} unsetUsername={copy.unsetUsername} notProvided={copy.notProvided} />
                   </article>
                 );
               })}
-            </div> : <section className="panel empty">{language === "zh" ? "没有符合筛选条件的内容。" : "No matching posts."}</section>}
+            </div> : <section className="panel empty">{copy.noMatchingPosts}</section>}
           </>
         )
       ) : null}
@@ -1708,32 +1638,32 @@ function App() {
         <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
       </>) : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
-      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => void supabase.auth.signOut({ scope: "local" })}>{copy.logout}</button> : null}</div></section> : null}
+      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
+      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: copy.languageChinese }, { value: "en", label: copy.languageEnglish }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => void supabase.auth.signOut({ scope: "local" })}>{copy.logout}</button> : null}</div></section> : null}
       <MobileBottomNavigationView
-        ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
+        ariaLabel={copy.mainNavigation}
         items={bottomNavigationItems}
-        centerAction={(
+        centerAction={
+          viewingCloudCache ? null : (
           <button
             type="button"
             className="quick-add"
             aria-label={copy.addRecord}
             onClick={() => setScreen(
-              screen.kind === "detail" && detail
+              screen.kind === "detail" && detail && detail.archive.local_role !== "cloud-offline-cache"
                 ? { kind: "new-record", archiveId: detail.archive.id }
                 : { kind: "choose-project" },
             )}
           >
             <UiIcon name="plus" size={25} strokeWidth={2.2} />
           </button>
-        )}
+        )
+        }
       />
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </main>
   );
 }
-
-type OfflineCopy = typeof text.zh | typeof text.en;
 
 function CloudLogin({
   copy,
@@ -1841,7 +1771,7 @@ function OfflineGuideDetail({
   if (!guide) {
     return (
       <>
-        <div className="back-row"><button className="back-button" type="button" onClick={onBack}>← {copy.back}</button></div>
+        <div className="back-row"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button></div>
         <section className="panel empty"><strong>{copy.guideUnavailable}</strong></section>
       </>
     );
@@ -1931,7 +1861,7 @@ function ProjectForm({
     const normalizedRegion = normalizePlantingRegion(plantingRegion);
     const hasRegionDraft = plantingRegion && Object.values(plantingRegion).some((value) => value.trim());
     if (category === "plant" && (!archive || archive.planting_region || hasRegionDraft) && !normalizedRegion) {
-      setError(language === "en" ? "Enter the planting country and city / district." : "请填写项目实际种植的国家及城市／区县。");
+      setError(copy.plantingCountryCity);
       return;
     }
     setBusy(true);
@@ -1980,7 +1910,7 @@ function ProjectForm({
 
   return (
     <>
-      <div className="back-row"><button className="back-button" type="button" onClick={onCancel}>← {copy.back}</button></div>
+      <div className="back-row"><button className="back-button" type="button" onClick={onCancel} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button></div>
       <section className="panel">
         <div className="section-title"><h1>{archive ? copy.edit : copy.newProject}</h1></div>
         <form className="form" onSubmit={submit}>
@@ -2024,6 +1954,7 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   const [lightbox, setLightbox] = useState<LocalImage | null>(null);
   const archive = detail.archive;
   const isCloudCache = archive.local_role === "cloud-offline-cache";
+  const archiveCopy = getTranslations(language).archive;
   const periods = getArchiveCycleTerminology(archive.category, language);
   async function change(work: () => Promise<unknown>) {
     if (busy) return;
@@ -2032,9 +1963,14 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   }
   return <>
     <div className="detail-heading"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{archive.title}</h1><span /></div>
+    {isCloudCache ? (
+      <p className="project-meta">
+        {archiveCopy.cloud_offline_cache} / {archiveCopy.cloud_offline_cache_readonly}
+      </p>
+    ) : null}
     <div className="top-tabs"><button type="button" aria-pressed={tab === "details"} onClick={() => setTab("details")}>{copy.details}</button><button type="button" aria-pressed={tab === "properties"} onClick={() => setTab("properties")}>{copy.properties}</button></div>
     {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
-    {isCloudCache ? <section className="notice"><p>{copy.cloudCacheReadOnly}</p></section> : null}
+    {isCloudCache ? <section className="notice"><p>{archiveCopy.cloud_offline_cache_hint}</p></section> : null}
     {tab === "properties" ? <>
       {archive.category === "plant" && !isCloudCache ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy} onSave={async (region) => {
         await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
@@ -2042,12 +1978,12 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
       }} /> : null}
       <section className="panel property-list">
         <div className="property-row"><span>{copy.title}</span><strong>{archive.title}</strong></div>
-        <div className="property-row"><span>{copy.systemName}</span><strong>{archive.system_name || archive.species_name || "—"}</strong></div>
+        <div className="property-row"><span>{copy.systemName}</span><strong>{archive.system_name || archive.species_name || "?"}</strong></div>
         <div className="property-row"><span>{copy.category}</span><span>{copy[archive.category]}</span></div>
-        <div className="property-row"><span>{copy.source}</span><span>{archive.source || "—"}</span></div>
-        <div className="property-row"><span>{copy.note}</span><span>{archive.note || "—"}</span></div>
-        <div className="property-row"><span>{copy.status}</span><SegmentedChoice label={copy.status} value={archive.status} disabled={busy || isCloudCache} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} /></div>
-        <div className="property-row"><span>{copy.visibility}</span><span>{copy.private}</span></div>
+        <div className="property-row"><span>{copy.source}</span><span>{archive.source || "?"}</span></div>
+        <div className="property-row"><span>{copy.note}</span><span>{archive.note || "?"}</span></div>
+        <div className="property-row"><span>{copy.status}</span>{isCloudCache ? <span>{archive.status === "ended" ? copy.ended : copy.ongoing}</span> : <SegmentedChoice label={copy.status} value={archive.status} disabled={busy} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} />}</div>
+        <div className="property-row"><span>{copy.visibility}</span><span>{isCloudCache ? archiveCopy.cloud_offline_cache_readonly : copy.private}</span></div>
         {!isCloudCache ? <button type="button" className="secondary-button" onClick={onEdit}>{copy.edit}</button> : null}
       </section>
       {!isCloudCache ? <section className="panel"><h2>{copy.period}</h2><label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
@@ -2059,17 +1995,17 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
       </section> : null}
       {!isCloudCache ? <button className="danger-button" type="button" disabled={busy} onClick={onDelete}>{copy.remove}</button> : null}
     </> : <>
-      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {isCloudCache ? copy.offlineCopies : copy.local}</span>{archive.status === "active" ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
+      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} / {isCloudCache ? `${archiveCopy.cloud_offline_cache} / ${archiveCopy.cloud_offline_cache_readonly}` : copy.local}</span>{archive.status === "active" && !isCloudCache ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
       {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
       <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <ArchiveRecordCardShell key={record.id} metaText={formatDate(record.record_time, language)} mobileMode>
-        {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={language === "zh" ? "查看照片" : "View photo"} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
+        {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={copy.viewPhoto} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
         {record.note ? <p className="record-note">{record.note}</p> : null}
         {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
         {record.sync?.status === "pending-cloud-sync" ? <div className="record-actions"><span className="project-meta">{copy.pendingUpload}</span><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
       </ArchiveRecordCardShell>)}</div>
       {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
     </>}
-    {lightbox ? <dialog className="photo-lightbox" open aria-label={language === "zh" ? "照片" : "Photo"} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}
+    {lightbox ? <dialog className="photo-lightbox" open aria-label={copy.photo} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}
   </>;
 }
 
@@ -2105,7 +2041,7 @@ function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
     setBusy(true); setError("");
     try {
       const isoTime = localDateTimeInputToIso(recordTime, record?.record_time);
-      if (!isoTime) throw new Error(language === "en" ? "Enter a valid local date and time." : "请输入有效的本地日期和时间。");
+      if (!isoTime) throw new Error(copy.validDatetime);
       const imageCapturedAt = await Promise.all(files.map(readImageCapturedAt));
       if (record) await updateLocalRecordFields(record.id, { note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
       else await createLocalRecord({ archive_id: archive.id, note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });

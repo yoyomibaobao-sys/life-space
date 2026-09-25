@@ -34,8 +34,11 @@ test("Android shell keeps its identity, HTTPS host, and offline fallback explici
   assert.match(offlineBuild, /process\.env\.__NEXT_MANUAL_TRAILING_SLASH/);
   assert.match(offlineBuild, /process\.env\.__NEXT_ROUTER_BASEPATH/);
   assert.match(offlineBuild, /process\.env\.__NEXT_TRAILING_SLASH/);
-  assert.match(offline, /本地离线模式/);
-  assert.match(offlineSource, /当前离线，本地记录可用/);
+  assert.match(offline, /本地离线/);
+  assert.match(read("lib/i18n/en.ts"), /local_offline_mode: "Local offline mode"/);
+  assert.match(read("lib/i18n/zh.ts"), /local_offline_mode: "本地离线模式"/);
+  assert.match(offlineSource, /getOfflineShellCopy/);
+  assert.match(offlineSource, /getTranslations\(language\)/);
 });
 
 test("Android system bars use modern edge-to-edge insets and page-aware contrast", () => {
@@ -163,10 +166,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '16'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc12'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '16' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc12' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '21'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc14'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '21' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc14' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);

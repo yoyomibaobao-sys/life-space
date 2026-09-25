@@ -61,6 +61,7 @@ import {
   listPendingCloudSyncSummaries,
   listVisibleLocalTaxonomyItems,
   listVisibleLocalArchiveSummaries,
+  listVisibleCloudOfflineArchiveSummaries,
   markUnownedLocalArchivesForOwner,
   type LocalArchiveOwnerContext,
   type LocalArchiveSummary,
@@ -78,6 +79,15 @@ import {
 } from "@/lib/archive-category-settings";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
 import { PENDING_CLOUD_SYNC_UPDATED_EVENT } from "@/lib/pending-cloud-sync";
+import {
+  refreshCloudOfflineCaches,
+  type CloudOfflineCacheArchiveSource,
+} from "@/lib/cloud-offline-cache";
+import {
+  displayAvatarUrl,
+  persistLocalIdentityFromLiveProfile,
+  readLocalIdentityCache,
+} from "@/lib/local-identity-cache";
 
 type LatestArchiveRecord = {
   id: string;
@@ -102,6 +112,7 @@ type ArchiveMediaRow = {
 type SpaceProfile = {
   username: string | null;
   avatar_url: string | null;
+  avatar_data_url?: string | null;
   storage_used: number | null;
   storage_limit: number | null;
 };
@@ -158,6 +169,11 @@ export default function ArchivePage() {
   const [currentOwnerContext, setCurrentOwnerContext] = useState<LocalArchiveOwnerContext | null>(null);
   const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
   const [localArchives, setLocalArchives] = useState<LocalArchiveSummary[]>([]);
+  const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
+  const [cloudLiveAvailable, setCloudLiveAvailable] = useState<boolean | null>(null);
+  const [networkOnline, setNetworkOnline] = useState(
+    () => (typeof navigator === "undefined" ? true : navigator.onLine)
+  );
   const [pendingCloudSyncSummaries, setPendingCloudSyncSummaries] = useState<
     PendingCloudSyncSummary[]
   >([]);
@@ -205,12 +221,14 @@ export default function ArchivePage() {
   async function loadLocalArchives(ownerContext: LocalArchiveOwnerContext | null = currentOwnerContext) {
     setLocalLoading(true);
     try {
-      const [result, taxonomyItems, pendingSummaries] = await Promise.all([
+      const [result, taxonomyItems, pendingSummaries, cacheSummaries] = await Promise.all([
         listVisibleLocalArchiveSummaries(ownerContext),
         listVisibleLocalTaxonomyItems(ownerContext),
         listPendingCloudSyncSummaries(ownerContext),
+        listVisibleCloudOfflineArchiveSummaries(ownerContext),
       ]);
       setLocalArchives(result.archives);
+      setCloudCaches(cacheSummaries);
       setLocalTaxonomyItems(taxonomyItems);
       setPendingCloudSyncSummaries(pendingSummaries);
       setLocalUnownedCount(result.unownedCount);
@@ -253,12 +271,15 @@ export default function ArchivePage() {
     setMembershipLoading(true);
     setMembershipFailed(false);
 
+    let user: { id: string; email?: string | null } | null = null;
+    let cachedIdentity: ReturnType<typeof readLocalIdentityCache> = null;
+
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const user = session?.user;
+      user = session?.user ?? null;
       const ownerContext = user
         ? { userId: user.id, email: user.email || null }
         : null;
@@ -267,6 +288,7 @@ export default function ArchivePage() {
 
       if (!user) {
         setArchives([]);
+        setCloudLiveAvailable(false);
         setGroupTags([]);
         setSubTags([]);
         setSpeciesList([]);
@@ -276,6 +298,11 @@ export default function ArchivePage() {
         return;
       }
 
+      cachedIdentity = readLocalIdentityCache(user.id);
+      if (cachedIdentity?.profile) setSpaceProfile(cachedIdentity.profile);
+      if (cachedIdentity?.membership) setMembership(cachedIdentity.membership);
+      if (cachedIdentity) setExperienceCardCount(cachedIdentity.experienceCardCount);
+
       try {
         setCloudCategoryDepths(await getCloudArchiveCategoryDepths(user.id));
       } catch (settingsError) {
@@ -284,7 +311,7 @@ export default function ArchivePage() {
       }
 
       const [
-        { data: archivesData },
+        archivesResult,
         { data: groupTagsData },
         { data: subTagsData },
         { data: speciesData },
@@ -318,6 +345,11 @@ export default function ArchivePage() {
           .eq("id", user.id)
           .maybeSingle(),
       ]);
+
+      if (archivesResult.error) {
+        throw archivesResult.error;
+      }
+      const archivesData = archivesResult.data;
 
       const aliasesBySpecies = new Map<string, string[]>();
       ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {
@@ -470,27 +502,60 @@ export default function ArchivePage() {
       });
 
       setArchives(enrichedArchives);
+      setCloudLiveAvailable(true);
+      void refreshCloudOfflineCaches(
+        enrichedArchives as CloudOfflineCacheArchiveSource[],
+        ownerContext
+      ).catch((error) => {
+        console.warn("refresh cloud offline cache failed", error);
+      });
       setGroupTags((groupTagsData || []) as GroupTagItem[]);
       setSubTags((subTagsData || []) as SubTagItem[]);
       setSpeciesList(speciesRows);
+      const nextMembership = membershipResult.error
+        ? cachedIdentity?.membership || null
+        : normalizeMembershipRpcResult(membershipResult.data);
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
-        setMembershipFailed(true);
-        setMembership(null);
+        setMembershipFailed(!nextMembership);
       } else {
-        setMembership(normalizeMembershipRpcResult(membershipResult.data));
+        setMembershipFailed(false);
       }
+      setMembership(nextMembership);
+
+      const nextExperienceCardCount = experienceCardCountResult.error
+        ? cachedIdentity?.experienceCardCount || 0
+        : Number(experienceCardCountResult.count || 0);
       if (experienceCardCountResult.error) {
         console.error(
           "load my experience card count error:",
           experienceCardCountResult.error
         );
-      } else {
-        setExperienceCardCount(Number(experienceCardCountResult.count || 0));
       }
-      setSpaceProfile((profileResult.data as SpaceProfile | null) || null);
-    } catch {
-      setMembershipFailed(true);
+      setExperienceCardCount(nextExperienceCardCount);
+
+      const nextProfile = profileResult.error
+        ? cachedIdentity?.profile || null
+        : ((profileResult.data as SpaceProfile | null) || null);
+      const persistedProfile = await persistLocalIdentityFromLiveProfile(user.id, {
+        profile: nextProfile,
+        membership: nextMembership,
+        experienceCardCount: nextExperienceCardCount,
+      });
+      setSpaceProfile(persistedProfile || nextProfile);
+    } catch (error) {
+      console.warn("load cloud archives failed", error);
+      setArchives([]);
+      setCloudLiveAvailable(false);
+      const cached = user ? readLocalIdentityCache(user.id) : null;
+      if (cached?.profile) setSpaceProfile(cached.profile);
+      if (cached?.membership) {
+        setMembership(cached.membership);
+        setMembershipFailed(false);
+      } else if (!cachedIdentity?.membership) {
+        setMembershipFailed(true);
+      }
+      if (cached) setExperienceCardCount(cached.experienceCardCount);
     } finally {
       setMembershipLoading(false);
       loadingRef.current = false;
@@ -1041,6 +1106,19 @@ export default function ArchivePage() {
   }
 
   useEffect(() => {
+    function refreshNetwork() {
+      setNetworkOnline(navigator.onLine);
+    }
+    refreshNetwork();
+    window.addEventListener("online", refreshNetwork);
+    window.addEventListener("offline", refreshNetwork);
+    return () => {
+      window.removeEventListener("online", refreshNetwork);
+      window.removeEventListener("offline", refreshNetwork);
+    };
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
 
     async function safeLoad() {
@@ -1115,6 +1193,10 @@ export default function ArchivePage() {
   }, [archives, currentOwnerContext?.userId, localArchives, speciesList]);
 
   const archiveCount = archives.length;
+  const useCloudCacheSource =
+    Boolean(currentOwnerContext?.userId) &&
+    (!networkOnline || cloudLiveAvailable === false);
+  const displayedCloudCount = useCloudCacheSource ? cloudCaches.length : archiveCount;
   const archiveCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1123,7 +1205,8 @@ export default function ArchivePage() {
       other: 0,
     };
 
-    archives.forEach((item) => {
+    const sourceItems = useCloudCacheSource ? cloudCaches : archives;
+    sourceItems.forEach((item) => {
       const category =
         item.category === "plant" ||
         item.category === "system" ||
@@ -1135,7 +1218,7 @@ export default function ArchivePage() {
     });
 
     return counts;
-  }, [archives]);
+  }, [archives, cloudCaches, useCloudCacheSource]);
   const localArchiveCategoryCounts = useMemo(() => {
     const counts: Record<ArchiveCategory, number> = {
       plant: 0,
@@ -1145,6 +1228,7 @@ export default function ArchivePage() {
     };
 
     localArchives.forEach((item) => {
+      if (item.local_role === "cloud-offline-cache") return;
       counts[item.category] += 1;
     });
 
@@ -1178,7 +1262,7 @@ export default function ArchivePage() {
     return counts;
   }, [activeSource, archiveCategoryCounts, localArchiveCategoryCounts]);
   const sourceTotalCount =
-    (activeSource === "local" ? 0 : archiveCount) +
+    (activeSource === "local" ? 0 : displayedCloudCount) +
     (activeSource === "cloud" ? 0 : localArchives.length);
   const contentBlocked = !canCreateMembershipContent(membership);
   const membershipLabel = getUserTypeLabel({ signedIn: !!currentOwnerContext, membership, loading: membershipLoading, failed: membershipFailed }, language);
@@ -1257,6 +1341,7 @@ export default function ArchivePage() {
   const filteredLocalArchives = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
     const filtered = localArchives.filter((item) => {
+      if (item.local_role === "cloud-offline-cache") return false;
       if (activeCategory && item.category !== activeCategory) return false;
       if (activeSubTag && item.subcategory !== activeSubTag) return false;
       if (activeGroupTag && item.group_name !== activeGroupTag) return false;
@@ -1304,18 +1389,75 @@ export default function ArchivePage() {
     sortMode,
   ]);
 
+  const filteredCloudCaches = useMemo(() => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    const filtered = cloudCaches.filter((item) => {
+      if (item.local_role !== "cloud-offline-cache") return false;
+      if (activeCategory && item.category !== activeCategory) return false;
+      if (activeSubTag && item.subcategory !== activeSubTag) return false;
+      if (activeGroupTag && item.group_name !== activeGroupTag) return false;
+      if (!keyword) return true;
+
+      return [
+        item.title,
+        item.system_name,
+        item.species_name,
+        item.subcategory,
+        item.group_name,
+        item.note,
+        item.latest_record_note,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword);
+    });
+    const sorted = [...filtered];
+
+    if (sortMode === "name") {
+      const collator = new Intl.Collator("zh-CN");
+      return sorted.sort((a, b) => collator.compare(a.title || "", b.title || ""));
+    }
+
+    if (sortMode === "updated") {
+      return sorted.sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at).getTime() -
+          new Date(a.updated_at || a.created_at).getTime()
+      );
+    }
+
+    return sorted.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [
+    cloudCaches,
+    activeCategory,
+    activeSubTag,
+    activeGroupTag,
+    searchKeyword,
+    sortMode,
+  ]);
+
   const activeArchives = filteredArchives.filter((item) => item.status !== "ended");
   const endedArchives = filteredArchives.filter((item) => item.status === "ended");
   const activeLocalArchives = filteredLocalArchives.filter((item) => item.status !== "ended");
   const endedLocalArchives = filteredLocalArchives.filter((item) => item.status === "ended");
+  const activeCloudCaches = filteredCloudCaches.filter((item) => item.status !== "ended");
+  const endedCloudCaches = filteredCloudCaches.filter((item) => item.status === "ended");
   const showCloudArchives = activeSource !== "local";
   const showLocalArchives = activeSource !== "cloud";
   const showCloudEndedList =
-    showCloudArchives && Boolean(currentOwnerContext?.userId) && endedArchives.length > 0;
+    showCloudArchives &&
+    Boolean(currentOwnerContext?.userId) &&
+    (useCloudCacheSource ? endedCloudCaches.length > 0 : endedArchives.length > 0);
   const showLocalEndedList =
     showLocalArchives && !localLoading && !localError && endedLocalArchives.length > 0;
   const hasVisibleActiveProjects =
-    (showCloudArchives && Boolean(currentOwnerContext?.userId) && activeArchives.length > 0) ||
+    (showCloudArchives &&
+      Boolean(currentOwnerContext?.userId) &&
+      (useCloudCacheSource ? activeCloudCaches.length > 0 : activeArchives.length > 0)) ||
     (showLocalArchives && !localLoading && !localError && activeLocalArchives.length > 0);
   const localSubTags = useMemo<ArchiveTaxonomyChip[]>(() => {
     if (!activeCategory || activeLocalDepth < 2) return [];
@@ -1379,8 +1521,15 @@ export default function ArchivePage() {
     });
   }
 
+  const prefersLocalCreate =
+    activeSource === "local" ||
+    (!currentOwnerContext?.userId && activeSource !== "cloud") ||
+    (useCloudCacheSource && activeSource !== "cloud");
+  const hideCloudCreate = useCloudCacheSource && activeSource === "cloud";
+
   function handleCreateFromWorkspace(category: ArchiveCategory) {
-    if (activeSource === "local" || (!currentOwnerContext?.userId && activeSource !== "cloud")) {
+    if (hideCloudCreate) return;
+    if (prefersLocalCreate) {
       router.push(`/local/archive/new?category=${category}`);
       return;
     }
@@ -1723,17 +1872,21 @@ export default function ArchivePage() {
   }
 
   const createDisabled =
-    activeSource !== "local" &&
-    Boolean(currentOwnerContext?.userId) &&
-    contentBlocked;
+    hideCloudCreate ||
+    (!prefersLocalCreate &&
+      Boolean(currentOwnerContext?.userId) &&
+      contentBlocked);
 
-  const createDisabledText = createDisabled
-    ? getCreateContentBlockedText(membership, language)
-    : undefined;
+  const createDisabledText = hideCloudCreate
+    ? t.archive_workspace.cloud_offline_source_hint
+    : createDisabled
+      ? getCreateContentBlockedText(membership, language)
+      : undefined;
 
   const mobileCreateHref =
-    activeSource === "local" ||
-    (!currentOwnerContext?.userId && activeSource !== "cloud")
+    hideCloudCreate
+      ? ""
+      : prefersLocalCreate
       ? "/local/archive/new"
       : !currentOwnerContext?.userId
         ? buildLoginHref("/archive")
@@ -1895,6 +2048,11 @@ export default function ArchivePage() {
 
   const workspaceNoticeSlot = (
     <>
+      {useCloudCacheSource && showCloudArchives ? (
+        <div style={localOtherOwnerNoticeStyle}>
+          {t.archive_workspace.cloud_offline_source_hint}
+        </div>
+      ) : null}
       {showCloudArchives && archiveCount > 0 && currentOwnerContext?.userId && contentBlocked ? (
         <div style={localOtherOwnerNoticeStyle}>
           <span>
@@ -2032,14 +2190,22 @@ export default function ArchivePage() {
         onUpdateArchiveGroupTag={updateArchiveGroupTag}
         onDeleteArchive={deleteArchive}
         readOnly={contentBlocked}
+        storageLabel={t.archive_workspace.cloud_space}
       />
     );
   }
 
-  function renderLocalArchiveCard(archive: LocalArchiveSummary) {
+  function renderLocalArchiveCard(
+    archive: LocalArchiveSummary,
+    options?: { cloudCache?: boolean }
+  ) {
     const item = localArchiveToArchiveItem(archive);
-    const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
-    const pendingCloudSyncSummary = pendingCloudSyncByArchiveId.get(archive.id);
+    const isCloudCache =
+      Boolean(options?.cloudCache) || archive.local_role === "cloud-offline-cache";
+    const isDeviceLocalProject = !isCloudCache;
+    const pendingCloudSyncSummary = isCloudCache
+      ? undefined
+      : pendingCloudSyncByArchiveId.get(archive.id);
 
     return (
       <ArchiveCard
@@ -2076,35 +2242,48 @@ export default function ArchivePage() {
         )}
         onNavigate={() => router.push(`/local/archive/${archive.id}`)}
         shouldIgnoreCardNavigation={shouldIgnoreCardNavigation}
-        onRenameTitle={() => void renameLocalArchiveTitle(archive)}
+        onRenameTitle={() => {
+          if (!isCloudCache) void renameLocalArchiveTitle(archive);
+        }}
         onBeginEditPlant={() => {}}
         onPlantSearchChange={() => {}}
         onSelectPlantSpecies={() => {}}
         onSubmitPendingSpecies={() => {}}
         onSavePlantSelection={() => {}}
         onCancelPlantEditing={() => {}}
-        onBeginEditSystem={() => void renameLocalArchiveSystemName(archive)}
+        onBeginEditSystem={() => {
+          if (!isCloudCache) void renameLocalArchiveSystemName(archive);
+        }}
         onSystemSearchChange={(value) => {
+          if (isCloudCache) return;
           setEditingLocalSystemSearch(value);
           setEditingLocalSystemName("");
           setLocalSystemSuggestionsOpen(true);
         }}
         onSelectSystemName={(name) => {
+          if (isCloudCache) return;
           setEditingLocalSystemName(name);
           setEditingLocalSystemSearch(name);
           setLocalSystemSuggestionsOpen(false);
         }}
-        onSaveSystemSelection={() => void saveLocalArchiveSystemName(archive)}
+        onSaveSystemSelection={() => {
+          if (!isCloudCache) void saveLocalArchiveSystemName(archive);
+        }}
         onCancelSystemEditing={cancelLocalArchiveSystemNameEditing}
-        onUpdateArchiveStatus={() => void toggleLocalArchiveEnded(archive)}
+        onUpdateArchiveStatus={() => {
+          if (!isCloudCache) void toggleLocalArchiveEnded(archive);
+        }}
         onTogglePublic={() => {}}
         onUpdateArchiveCategory={(_item, value) => {
-          void updateLocalArchiveCategoryValue(archive, value);
+          if (!isCloudCache) void updateLocalArchiveCategoryValue(archive, value);
         }}
         onUpdateArchiveGroupTag={(_item, value) => {
-          void updateLocalArchiveGroupValue(archive, value);
+          if (!isCloudCache) void updateLocalArchiveGroupValue(archive, value);
         }}
-        onDeleteArchive={() => void deleteLocalArchiveFromList(archive)}
+        onDeleteArchive={() => {
+          if (!isCloudCache) void deleteLocalArchiveFromList(archive);
+        }}
+        readOnly={isCloudCache}
         extraStatusPills={
           isDeviceLocalProject
             ? [
@@ -2118,10 +2297,20 @@ export default function ArchivePage() {
                   },
                 },
               ]
-            : []
+            : [
+                {
+                  key: "cloud-offline-cache",
+                  label: t.archive.cloud_offline_cache,
+                  style: {
+                    border: "1px solid #d8ddd4",
+                    background: "#f7f4ee",
+                    color: "#6b6458",
+                  },
+                },
+              ]
         }
         storageLabel={
-          isDeviceLocalProject ? t.archive.saved_on_this_device : null
+          isDeviceLocalProject ? t.archive.saved_on_this_device : t.archive.cloud_offline_cache_readonly
         }
         hidePublicToggle
         preferSystemNameEditor
@@ -2130,9 +2319,10 @@ export default function ArchivePage() {
         visibilityLabel={
           isDeviceLocalProject
             ? t.archive.local_project
-            : t.archive_workspace.local
+            : t.archive.cloud_offline_cache
         }
         extraRail={
+          isCloudCache ? null : (
           <>
             {pendingCloudSyncSummary ? (
               <button
@@ -2173,8 +2363,12 @@ export default function ArchivePage() {
               </button>
             ) : null}
           </>
+          )
         }
-        extraMobileActions={[
+        extraMobileActions={
+          isCloudCache
+            ? []
+            : [
           ...(pendingCloudSyncSummary
             ? [
                 {
@@ -2203,7 +2397,8 @@ export default function ArchivePage() {
                 },
               ]
             : []),
-        ]}
+        ]
+        }
       />
     );
   }
@@ -2221,7 +2416,7 @@ export default function ArchivePage() {
     >
       {isMobileViewport ? (
         <PersonalSpaceMobileIdentity
-          avatarUrl={spaceProfile?.avatar_url}
+          avatarUrl={displayAvatarUrl(spaceProfile)}
           username={spaceProfile?.username || t.nav.username_unset}
           membershipLabel={membershipLabel}
           storageUsagePercent={storageUsagePercent}
@@ -2236,10 +2431,10 @@ export default function ArchivePage() {
       ) : (
         <section style={personalSpaceIdentityStyle(false)}>
           <div style={personalSpaceIdentityMainStyle}>
-            {spaceProfile?.avatar_url ? (
+            {displayAvatarUrl(spaceProfile) ? (
               <img
-                src={spaceProfile.avatar_url}
-                alt={spaceProfile.username || t.archive_workspace.my_space}
+                src={displayAvatarUrl(spaceProfile) || ""}
+                alt={spaceProfile?.username || t.archive_workspace.my_space}
                 style={personalSpaceAvatarStyle}
               />
             ) : (
@@ -2267,9 +2462,9 @@ export default function ArchivePage() {
           {
             value: "all",
             label: t.archive_workspace.all,
-            count: archiveCount + localArchives.length,
+            count: displayedCloudCount + localArchives.length,
           },
-          { value: "cloud", label: t.archive_workspace.cloud_space, count: archiveCount },
+          { value: "cloud", label: t.archive_workspace.cloud_space, count: displayedCloudCount },
           { value: "local", label: t.archive_workspace.local, count: localArchives.length },
         ]}
         activeSource={activeSource}
@@ -2277,13 +2472,17 @@ export default function ArchivePage() {
         onCreateArchive={handleCreateFromWorkspace}
         createDisabled={createDisabled}
         createDisabledTitle={createDisabledText}
-        createDisabledHref={createDisabled ? "/membership" : undefined}
-        showCreateToolbar={!isMobileViewport}
-        sourceTrailingSlot={isMobileViewport ? (
+        createDisabledHref={
+          hideCloudCreate ? undefined : createDisabled ? "/membership" : undefined
+        }
+        showCreateToolbar={!isMobileViewport && !hideCloudCreate}
+        sourceTrailingSlot={
+          isMobileViewport && !hideCloudCreate ? (
           <Link href={mobileCreateHref} style={personalSpaceCreateProjectStyle}>
             +{t.nav.project}
           </Link>
-        ) : null}
+        ) : null
+        }
         filtersSlot={workspaceFiltersSlot}
         noticeSlot={workspaceNoticeSlot}
       >
@@ -2292,6 +2491,18 @@ export default function ArchivePage() {
             <div style={emptyPanelStyle}>
               {t.archive_workspace.login_cloud_hint}
             </div>
+          ) : useCloudCacheSource ? (
+            activeCloudCaches.length === 0 && endedCloudCaches.length === 0 ? (
+              <div style={emptyPanelStyle}>
+                {cloudCaches.length === 0
+                  ? t.archive_workspace.no_cloud_offline_cache
+                  : t.archive_workspace.no_cloud_matches}
+              </div>
+            ) : (
+              activeCloudCaches.map((archive) =>
+                renderLocalArchiveCard(archive, { cloudCache: true })
+              )
+            )
           ) : activeArchives.length === 0 && endedArchives.length === 0 ? (
             <div style={emptyPanelStyle}>
               {archiveCount === 0
@@ -2326,7 +2537,11 @@ export default function ArchivePage() {
               <span style={endedSectionTextStyle}>{t.archive_workspace.ended_hint}</span>
             </div>
             {showCloudEndedList
-              ? endedArchives.map((item) => renderCloudArchiveCard(item, true))
+              ? useCloudCacheSource
+                ? endedCloudCaches.map((archive) =>
+                    renderLocalArchiveCard(archive, { cloudCache: true })
+                  )
+                : endedArchives.map((item) => renderCloudArchiveCard(item, true))
               : null}
             {showLocalEndedList
               ? endedLocalArchives.map((archive) => renderLocalArchiveCard(archive))
