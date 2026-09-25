@@ -423,6 +423,9 @@ export default function ArchiveDetailHeaderView({
           {project.visibilityLabel ? (
             <span style={visibilityBadgeStyle(project.visibilityTone)}>{project.visibilityLabel}</span>
           ) : null}
+          {project.storageLabel && project.storageTone !== "device" ? (
+            <span style={visibilityBadgeStyle("neutral")}>{project.storageLabel}</span>
+          ) : null}
           {actionSlot}
         </div>
       </div>

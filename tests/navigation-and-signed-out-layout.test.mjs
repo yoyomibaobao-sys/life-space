@@ -213,7 +213,7 @@ test("mobile archive creation and project controls stay compact without clipping
   ]);
 
   assert.match(workspace, /showCreateToolbar = true/);
-  assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport\}/);
+  assert.match(archivePage, /showCreateToolbar=\{!isMobileViewport && !hideCloudCreate\}/);
   assert.match(archiveCard, /<ProjectSummaryCard/);
   assert.match(archiveCard, /actionSlot=/);
   assert.match(projectCard, /className=\{styles\.titleRow\}/);

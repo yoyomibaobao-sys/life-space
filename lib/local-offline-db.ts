@@ -315,6 +315,10 @@ function createId(prefix: string) {
   return `${prefix}_${random}`;
 }
 
+export function isCloudOfflineCacheArchiveId(archiveId?: string | null) {
+  return Boolean(archiveId && archiveId.startsWith("cloud_cache_archive_"));
+}
+
 function createOperationId() {
   const cryptoApi =
     typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
@@ -1107,6 +1111,7 @@ export async function listPendingCloudSyncSummaries(
     .filter(
       (archive) =>
         Boolean(archive.source_cloud_archive_id) &&
+        isUserLocalArchive(archive) &&
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     )
     .map((archive) => {
@@ -1369,9 +1374,6 @@ export async function listVisibleCloudOfflineArchiveSummaries(
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     )
     .map((archive) => buildSummary(archive, records, images))
-    .filter(
-      (archive) => archive.status === "active" || archive.pending_record_count > 0
-    )
     .sort(
       (a, b) =>
         new Date(b.updated_at || b.created_at).getTime() -
@@ -3903,10 +3905,10 @@ export async function createLocalRecord(input: {
 
     const normalizedArchive = normalizeLocalArchive(archive);
     const isCloudOfflineCache = normalizedArchive.local_role === "cloud-offline-cache";
-    if (isCloudOfflineCache && normalizedArchive.status !== "active") {
+    if (isCloudOfflineCache) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("这个云项目已经结束，不能继续新增离线记录。");
+      throw new Error("云项目离线缓存只读，不能新增记录。");
     }
     const cloudArchiveId = normalizeOptionalText(normalizedArchive.source_cloud_archive_id);
     if (cloudArchiveId) {

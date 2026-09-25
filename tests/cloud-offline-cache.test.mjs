@@ -10,7 +10,9 @@ const read = (relativePath) =>
 test("cloud offline copies stay lightweight and thumbnail-only", () => {
   const cache = read("lib/cloud-offline-cache.ts");
 
-  assert.match(cache, /Capacitor\.isNativePlatform\(\)/);
+  assert.doesNotMatch(cache, /Capacitor\.isNativePlatform\(\)/);
+  assert.doesNotMatch(cache, /isNativeAndroid/);
+  assert.match(cache, /if \(!ownerContext\?\.userId\) return;/);
   assert.match(cache, /media\.display_thumb_url \|\| media\.thumb_url/);
   assert.doesNotMatch(cache, /display_url \|\|/);
   assert.doesNotMatch(cache, /downloadMediaStorageObject/);
@@ -32,6 +34,7 @@ test("cloud offline copies are distinct from local projects and preserve pending
   assert.match(db, /const hasPending = pendingRecords\.length > 0 \|\| pendingImages\.length > 0/);
   assert.match(db, /云端已有记录离线时只读/);
   assert.match(db, /云端期次离线时只读/);
+  assert.match(db, /云项目离线缓存只读，不能新增记录。/);
 });
 
 test("pending cloud records upload only from an explicit user action", () => {
@@ -44,8 +47,9 @@ test("pending cloud records upload only from an explicit user action", () => {
   assert.match(sync, /原云端项目已不存在/);
   assert.match(sync, /原云端项目已结束/);
   assert.match(offline, /onClick=\{\(\) => void uploadPending\(pending\.local_archive_id\)\}/);
-  assert.doesNotMatch(page, /addEventListener\(["']online["']/);
+  assert.doesNotMatch(page, /uploadPendingCloudOfflineRecords|uploadPending\(/);
   assert.doesNotMatch(sync, /addEventListener\(["']online["']/);
+  assert.match(page, /void refreshCloudOfflineCaches\(/);
   assert.match(offline, /pendingUpload/);
 });
 
@@ -56,9 +60,12 @@ test("offline shell separates true local projects from cloud offline copies", ()
   assert.match(offline, /type ShellSourceFilter = "all" \| "cloud" \| "local"/);
   assert.match(offline, /filteredCloudCaches\.map/);
   assert.match(offline, /filteredCloudArchives\.map\(renderCloudProjectCard\)/);
-  assert.match(offline, /online && cloudUserId && !cloudError \? \(/);
-  assert.match(offline, /online && cloudUserId && !cloudError \? cloudArchives\.length : cloudCaches\.length/);
-  assert.match(offline, /visibilityLabel: copy\.offlineCopies/);
+  assert.match(offline, /!useCloudCacheSource && online && cloudUserId && !cloudError \? \(/);
+  assert.match(offline, /const useCloudCacheSource = !online/);
+  assert.match(offline, /const hideCloudCreate = useCloudCacheSource && sourceFilter === "cloud"/);
+  assert.match(offline, /archiveCopy\.cloud_offline_cache/);
+  assert.match(offline, /archiveCopy\.cloud_offline_cache_readonly/);
   assert.match(offline, /record\.sync\?\.status === "pending-cloud-sync"/);
-  assert.match(offline, /cloudCacheReadOnly/);
+  assert.doesNotMatch(offline, /visibilityLabel: copy\.offlineCopies/);
+  assert.doesNotMatch(offline, /cloudCaches\]\.filter/);
 });

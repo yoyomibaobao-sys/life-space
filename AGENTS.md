@@ -1719,3 +1719,13 @@ LifeSpace 当前不提供：
 * 用户空间中的“用户资料”直接打开资料页，不再使用“名片”名称或弹出小窗口；公开用户资料页保持紧凑，头像、身份、统计和操作集中在首屏。
 * 浏览其他用户的项目时，项目标题右侧使用清晰的“进入用户名的空间”按钮式入口，不只显示容易被忽略的用户名。
 * 页面标题下不重复展示只是在复述标题或控件用途的副标题；权限、隐私、离线存储、数据风险、失败原因和必要操作指引仍须保留。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

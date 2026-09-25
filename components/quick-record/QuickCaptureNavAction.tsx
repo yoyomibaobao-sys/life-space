@@ -9,6 +9,7 @@ import { saveQuickCapture, type QuickCaptureTarget } from "@/lib/quick-capture";
 import { MAX_RECORD_PHOTOS_PER_ADD } from "@/lib/record-photo-batches";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
+import { isCloudOfflineCacheArchiveId } from "@/lib/local-offline-db";
 
 export default function QuickCaptureNavAction({
   pathname,
@@ -25,6 +26,9 @@ export default function QuickCaptureNavAction({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const isMarketPath = pathname === "/market" || pathname.startsWith("/market/");
+  if (isCloudOfflineCacheArchiveId(localArchiveId)) {
+    return null;
+  }
 
   if (isMarketPath) {
     const publishLabel = language === "en" ? "Post" : "发布";

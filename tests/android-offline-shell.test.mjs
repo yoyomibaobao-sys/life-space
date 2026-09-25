@@ -159,6 +159,24 @@ test("explicit Android sign-out hides account-bound offline cache state", () => 
   assert.match(source, /setCloudCaches\(cachedCloud\)/);
 });
 
+test("Android bundled offline shell matches accepted local-first cache rules", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const zh = read("lib/i18n/zh.ts");
+
+  assert.match(source, /const useCloudCacheSource = !online/);
+  assert.match(source, /const hideCloudCreate = useCloudCacheSource && sourceFilter === "cloud"/);
+  assert.match(source, /hideCloudCreate \? null/);
+  assert.match(source, /viewingCloudCache \? null/);
+  assert.match(source, /archive\.status === "active" && !isCloudCache/);
+  assert.match(source, /detail\.archive\.local_role !== "cloud-offline-cache"/);
+  assert.match(source, /archives\.filter\(\(archive\) => archive\.status === "active"\)/);
+  assert.match(source, /readShellIdentityCache\(nextOwner\.userId\)/);
+  assert.match(source, /if \(!navigator\.onLine\) return;/);
+  assert.match(source, /displayAvatarUrl\(spaceProfile\)/);
+  assert.match(zh, /cloud_offline_cache: "云项目·离线缓存"/);
+  assert.match(zh, /cloud_offline_cache_readonly: "只读查看"/);
+});
+
 test("Android cloud project covers resolve through the shared signed media layer", () => {
   const source = read("mobile-offline-src/main.tsx");
   const web = read("app/archive/page.tsx");

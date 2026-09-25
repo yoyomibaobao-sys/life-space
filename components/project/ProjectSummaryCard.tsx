@@ -85,6 +85,7 @@ export default function ProjectSummaryCard(props: Props) {
         subTags={taxonomyAction.subTags}
         groupTags={taxonomyAction.groupTags}
         maxDepth={taxonomyAction.categoryDepths?.[taxonomyAction.category] || 3}
+        readOnly={taxonomyAction.allowTaxonomyEdit === false}
         onChangeCategory={taxonomyAction.onChangeCategory}
         onChangeGroup={taxonomyAction.onChangeGroup}
       />

@@ -287,12 +287,14 @@ export default function LocalArchiveDetailPage() {
     if (
       transferRequested &&
       detail &&
-      !detail.archive.source_cloud_archive_id
+      !detail.archive.source_cloud_archive_id &&
+      detail.archive.local_role !== "cloud-offline-cache"
     ) {
       setTransferPromptOpen(true);
     }
     if (
       syncRequested &&
+      detail?.archive.local_role !== "cloud-offline-cache" &&
       detail?.archive.source_cloud_archive_id &&
       pendingSyncSummary
     ) {
@@ -311,6 +313,7 @@ export default function LocalArchiveDetailPage() {
         const capture = await getQuickCapture(quickCaptureId);
         if (!capture || cancelled) return;
         loadedQuickCaptureIdRef.current = quickCaptureId;
+        if (detail?.archive.local_role === "cloud-offline-cache") return;
         setSelectedFiles((current) => [...quickCaptureToFiles(capture), ...current]);
         setAddRecordOpen(true);
       } catch {
@@ -452,6 +455,7 @@ export default function LocalArchiveDetailPage() {
   async function handleAddRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!archiveId || saving) return;
+    if (detail?.archive.local_role === "cloud-offline-cache") return;
 
     const nowISO = new Date().toISOString();
     const customRecordTime =
@@ -1009,6 +1013,7 @@ export default function LocalArchiveDetailPage() {
   }
 
   const { archive, records } = detail;
+  const isCloudOfflineCache = archive.local_role === "cloud-offline-cache";
   const cycles = archive.cycles || [];
   const cycleEnabled = typeof archive.cycle_enabled === "boolean"
     ? archive.cycle_enabled
@@ -1053,7 +1058,7 @@ export default function LocalArchiveDetailPage() {
     : archiveCopy.none;
   const projectView: ArchiveProjectView = {
     id: archive.id,
-    mode: "local",
+    mode: isCloudOfflineCache ? "cloud" : "local",
     title: archive.title || archiveCopy.unnamed_project,
     category: archive.category,
     plantId: archive.plant_id,
@@ -1063,10 +1068,14 @@ export default function LocalArchiveDetailPage() {
     systemName: archive.system_name || archive.species_name || archiveCopy.not_filled,
     subcategoryLabel: categoryDepth >= 2 ? archive.subcategory : null,
     groupLabel: categoryDepth >= 3 ? archive.group_name : null,
-    visibilityLabel: archive.local_role === "cloud-offline-cache" ? null : archiveCopy.local_project,
+    visibilityLabel: isCloudOfflineCache
+      ? archiveCopy.cloud_offline_cache
+      : archiveCopy.local_project,
     visibilityTone: "neutral",
-    storageLabel: archive.local_role === "cloud-offline-cache" ? archiveCopy.device : archiveCopy.saved_on_this_device,
-    storageTone: "device",
+    storageLabel: isCloudOfflineCache
+      ? archiveCopy.cloud_offline_cache_readonly
+      : archiveCopy.saved_on_this_device,
+    storageTone: isCloudOfflineCache ? undefined : "device",
     recordCount: records.length,
     durationDays: ongoingDays,
     latestTime: latestUpdate,
@@ -1096,7 +1105,7 @@ export default function LocalArchiveDetailPage() {
               layout="attribute"
               language={language}
               value={archive.planting_region}
-              canEdit
+              canEdit={!isCloudOfflineCache}
               onSave={async (region) => {
                 const updated = await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
                 setDetail((current) => current ? { ...current, archive: updated } : current);
@@ -1198,7 +1207,12 @@ export default function LocalArchiveDetailPage() {
           {archiveDisplayName ? (
             <span style={projectDetailGuideTextStyle}>{archiveDisplayName}</span>
           ) : null}
-          {archive.local_role === "cloud-offline-cache" ? null : (
+          {isCloudOfflineCache ? (
+            <>
+              <span style={localProjectBadgeStyle}>{archiveCopy.cloud_offline_cache}</span>
+              <span style={localProjectBadgeStyle}>{archiveCopy.cloud_offline_cache_readonly}</span>
+            </>
+          ) : (
             <span style={localProjectBadgeStyle}>{archiveCopy.local_project}</span>
           )}
           <ProjectMetaLine
@@ -1211,8 +1225,8 @@ export default function LocalArchiveDetailPage() {
         </div>
 
         <div style={localStorageHintStyle}>
-          {archive.source_cloud_archive_id
-            ? archiveCopy.cloud_local_copy_hint
+          {isCloudOfflineCache
+            ? archiveCopy.cloud_offline_cache_hint
             : archiveCopy.saved_on_this_device}
         </div>
 
@@ -1251,8 +1265,8 @@ export default function LocalArchiveDetailPage() {
           recordCountText={`${archiveCopy.records} ${records.length}`}
           durationText={ongoingDays ? durationText : undefined}
           hint={
-            archive.source_cloud_archive_id
-              ? archiveCopy.cloud_local_copy_hint
+            isCloudOfflineCache
+              ? archiveCopy.cloud_offline_cache_hint
               : archiveCopy.saved_on_this_device
           }
           profileAlwaysOpen
@@ -1260,6 +1274,8 @@ export default function LocalArchiveDetailPage() {
           showSystemNameInTitle={false}
           actionSlot={
             <div style={headerActionSlotStyle}>
+              {isCloudOfflineCache ? null : (
+                <>
               {!archive.local_owner_user_id && ownerContext?.userId ? (
                 <button
                   type="button"
@@ -1313,10 +1329,15 @@ export default function LocalArchiveDetailPage() {
                   {archiveCopy.transfer_to_cloud}
                 </button>
               )}
+                </>
+              )}
             </div>
           }
           profileRows={localProfileRows}
-          profileEditor={{
+          profileEditor={
+            isCloudOfflineCache
+              ? undefined
+              : {
             values: {
               title: archive.title || "",
               category: archive.category,
@@ -1330,13 +1351,16 @@ export default function LocalArchiveDetailPage() {
             systemNameCandidates,
             systemNameCandidatesLoading: candidatesLoading,
             systemNameHint: archiveCopy.system_name_helper,
-          }}
+          }
+          }
           profileActions={
+            isCloudOfflineCache ? undefined : (
             <div style={localProfileActionsStyle}>
               <button type="button" onClick={() => setDeleteArchiveOpen(true)} style={localProfileDangerButtonStyle}>
                 {archiveCopy.delete_local_project}
               </button>
             </div>
+            )
           }
           profileExtra={
             <div style={localCycleProfileExtraStyle}>
@@ -1380,6 +1404,8 @@ export default function LocalArchiveDetailPage() {
                   })
                 }
               />
+              {isCloudOfflineCache ? null : (
+                <>
               <ArchiveCycleSettings
                 key={archive.id}
                 enabled={cycleEnabled}
@@ -1420,6 +1446,8 @@ export default function LocalArchiveDetailPage() {
                   </div>
                 </section>
               ) : null}
+                </>
+              )}
             </div>
           }
         />
@@ -1604,6 +1632,7 @@ export default function LocalArchiveDetailPage() {
 
       {activeDetailTab === "records" ? (
       <>
+      {!isCloudOfflineCache ? (
       <ArchiveRecordComposer
         mobileMode={isMobileViewport}
         open={!isMobileViewport || addRecordOpen}
@@ -1756,19 +1785,20 @@ export default function LocalArchiveDetailPage() {
             </div>
           </form>
       </ArchiveRecordComposer>
+      ) : null}
 
       <ArchiveCycleTimeline
         cycles={cycleEnabled ? cycles : []}
         records={localRecordItems}
         category={archive.category}
         mobileMode={isMobileViewport}
-        canManage={cycleEnabled}
+        canManage={cycleEnabled && !isCloudOfflineCache}
         busy={cycleBusy}
-        onStartCycle={cycleEnabled ? startLocalCycle : undefined}
-        onEndCycle={cycleEnabled ? endLocalCycle : undefined}
-        onUpdateCycleDates={cycleEnabled ? updateLocalCycleDates : undefined}
-        onRenameCycle={cycleEnabled ? renameLocalCycle : undefined}
-        onDeleteCycle={cycleEnabled ? deleteLocalCycle : undefined}
+        onStartCycle={cycleEnabled && !isCloudOfflineCache ? startLocalCycle : undefined}
+        onEndCycle={cycleEnabled && !isCloudOfflineCache ? endLocalCycle : undefined}
+        onUpdateCycleDates={cycleEnabled && !isCloudOfflineCache ? updateLocalCycleDates : undefined}
+        onRenameCycle={cycleEnabled && !isCloudOfflineCache ? renameLocalCycle : undefined}
+        onDeleteCycle={cycleEnabled && !isCloudOfflineCache ? deleteLocalCycle : undefined}
         emptyState={
           <div style={emptyRecordsStyle}>
             <div>{recordCopy.no_local_records}</div>
@@ -1781,7 +1811,7 @@ export default function LocalArchiveDetailPage() {
               archive={localArchiveRecordShell}
               item={record}
               index={index}
-              mode="owner"
+              mode={isCloudOfflineCache ? "viewer" : "owner"}
               startTime={startTime}
               isHighlighted={false}
               sameTagLinks={[]}
@@ -1793,7 +1823,10 @@ export default function LocalArchiveDetailPage() {
               onSetHelpStatus={async () => undefined}
               onRemoveTag={() => undefined}
               onAddTag={async () => undefined}
-              onRecordUpdated={async (recordId, patch) => {
+              onRecordUpdated={
+                isCloudOfflineCache
+                  ? async () => undefined
+                  : async (recordId, patch) => {
                 await updateLocalRecordFields(recordId, {
                   location: patch.location,
                   note: typeof patch.note === "string" ? patch.note : undefined,
@@ -1803,14 +1836,19 @@ export default function LocalArchiveDetailPage() {
                       : undefined,
                 });
                 await loadDetail();
-              }}
+              }
+              }
               onNoteSaved={async () => undefined}
               onRecordDeleted={(recordId) => {
+                if (isCloudOfflineCache) return;
                 const target = records.find((item) => item.id === recordId);
                 if (target) setRecordToDelete(target);
               }}
-              cycleOptions={cycleOptions}
-              onCycleChange={async (recordId, cycleId) => {
+              cycleOptions={isCloudOfflineCache ? [] : cycleOptions}
+              onCycleChange={
+                isCloudOfflineCache
+                  ? undefined
+                  : async (recordId, cycleId) => {
                 try {
                   await updateLocalRecordFields(recordId, { cycle_id: cycleId });
                   showToast(
@@ -1855,7 +1893,7 @@ export default function LocalArchiveDetailPage() {
         />
       ) : null}
 
-      {isMobileViewport && !addRecordOpen && activeDetailTab === "records" ? (
+      {isMobileViewport && !isCloudOfflineCache && !addRecordOpen && activeDetailTab === "records" ? (
         <button
           type="button"
           onClick={() => setAddRecordOpen(true)}

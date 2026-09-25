@@ -549,7 +549,17 @@ export default function ArchiveCard({
               subTags={subTags}
               onChange={(nextValue) => onUpdateArchiveCategory(item, nextValue)}
             />
-          ) : null}
+          ) : (
+            <span style={{ color: "#617258" }}>
+              {[
+                getArchiveCategoryLabel(item.category, language),
+                subTags.find((tag) => tag.id === item.sub_tag_id)?.name,
+                availableGroupTags.find((tag) => tag.id === item.group_tag_id)?.name,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          )}
 
           {!readOnly && item.sub_tag_id && availableGroupTags.length > 0 ? (
             <ArchiveGroupDropdown
@@ -756,7 +766,7 @@ function MobileArchiveCard({
           ? undefined
           : () => onTogglePublic(item)
       }
-      onMoveToTrash={() => onDeleteArchive(item)}
+      onMoveToTrash={readOnly ? undefined : () => onDeleteArchive(item)}
       extraActions={extraActions}
     />
   );
