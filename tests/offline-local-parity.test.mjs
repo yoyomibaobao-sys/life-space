@@ -275,28 +275,42 @@ test("offline shell reuses online discover follow market and guide chrome withou
   assert.match(source, /isCloudCache \? <span className="photo-view"/);
 });
 
-test("offline identity opens the shared profile settings and local category depths persist on device", () => {
+test("offline identity opens shared settings without mounting the Next profile route", () => {
   const source = read("mobile-offline-src/main.tsx");
   const identity = read("components/archive-ui/PersonalSpaceMobileIdentity.tsx");
-  const profile = read("app/profile/page.tsx");
-  const categories = read("app/profile/project-categories/page.tsx");
+  const settingsView = read("components/profile/ProfileSettingsView.tsx");
   const settings = read("lib/archive-category-settings.ts");
   const homeTabs = read("components/home/HomeSectionTabs.tsx");
   const discoverSearch = read("app/discover/search/page.tsx");
   const zh = read("lib/i18n/zh.ts");
+  const db = read("lib/local-offline-db.ts");
+  const cache = read("lib/cloud-offline-cache.ts");
+  const archivePage = read("app/archive/page.tsx");
+  const card = read("components/archive/ArchiveCard.tsx");
 
   assert.match(identity, /onProfileClick\?: \(\) => void/);
   assert.match(source, /onProfileClick=\{\(\) => setScreen\(\{ kind: "settings" \}\)\}/);
-  assert.match(source, /<ProfilePage/);
-  assert.match(source, /<ProjectCategorySettingsPage/);
-  assert.match(source, /kind: "project-categories"/);
-  assert.match(profile, /stayInCurrentShell/);
-  assert.match(profile, /onOpenProjectCategories/);
-  assert.match(profile, /cloud_setting_requires_network/);
-  assert.match(categories, /saveLocalArchiveCategoryDepths\(next/);
-  assert.match(settings, /LOCAL_SETTINGS_PREFIX/);
+  assert.match(source, /<ProfileSettingsView/);
+  assert.match(source, /<LocalProjectCategorySettingsView/);
+  assert.doesNotMatch(source, /from "@\/app\/profile\/page"/);
+  assert.doesNotMatch(source, /from "@\/app\/profile\/project-categories\/page"/);
+  assert.doesNotMatch(settingsView, /useRouter|from "next\/link"|supabase\.auth\.getUser/);
+  assert.match(settingsView, /cloud_setting_requires_network/);
+  assert.match(settingsView, /onLogout/);
+  assert.match(source, /onCreateSubcategory=\{createLocalSubcategory\}/);
+  assert.match(source, /renameLocalTaxonomyItem/);
+  assert.match(db, /transaction\(\[TAXONOMY_STORE, ARCHIVE_STORE\], "readwrite"\)/);
+  assert.match(db, /archive\.subcategory === oldLabel/);
+  assert.match(db, /archive\.group_name === oldLabel/);
+  assert.match(source, /skip-reload-same-archive/);
+  assert.match(source, /getArchiveCategoryDepth\(localCategoryDepths, archive\.category\)/);
+  assert.match(source, /if \(!replace\) window.scrollTo/);
+  assert.doesNotMatch(source, /if \(shouldClear\) setDetail\(null\)/);
+  assert.match(card, /subcategoryLabel:/);
+  assert.match(archivePage, /userData\.user/);
+  assert.match(cache, /logLifespaceStorageDiagnostic/);
+  assert.match(source, /logLifespaceStorageDiagnostic/);
   assert.match(settings, /LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT/);
-  assert.match(source, /LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT/);
   assert.match(zh, /当前未联网，此设置需要连接云端后才能修改。/);
   assert.match(homeTabs, /searchEnabled && !onSearch/);
   assert.match(discoverSearch, /stayInCurrentShell/);

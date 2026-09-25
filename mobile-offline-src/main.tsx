@@ -25,6 +25,9 @@ import {
   listVisibleCloudOfflineArchiveSummaries,
   listPendingCloudSyncSummaries,
   listVisibleLocalTaxonomyItems,
+  createLocalTaxonomyItem,
+  deleteLocalTaxonomyItem,
+  renameLocalTaxonomyItem,
   deferPendingCloudSyncPrompt,
   markUnownedLocalArchivesForOwner,
   preparePendingCloudSyncQueue,
@@ -52,6 +55,7 @@ import {
   probeCloudReachable,
   replaceWithOfficialSite,
 } from "@/lib/cloud-reachability";
+import { logLifespaceStorageDiagnostic } from "@/lib/local-storage-diagnostic";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -91,8 +95,9 @@ import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobil
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
 import DiscoverSearchPage from "@/app/discover/search/page";
-import ProfilePage from "@/app/profile/page";
-import ProjectCategorySettingsPage from "@/app/profile/project-categories/page";
+import ProfileSettingsView from "@/components/profile/ProfileSettingsView";
+import ProfileSettingsErrorBoundary from "@/components/profile/ProfileSettingsErrorBoundary";
+import LocalProjectCategorySettingsView from "@/components/profile/LocalProjectCategorySettingsView";
 import { DiscoverProjectCard } from "@/components/discover/DiscoverProjectCard";
 import ReadonlyPublicProjectDetail from "@/components/archive-ui/ReadonlyPublicProjectDetail";
 import MobileMarketFeedCard, { mobileMarketCardStyle, mobileMarketListStyle } from "@/components/market/MobileMarketFeedCard";
@@ -343,6 +348,17 @@ const localExperienceEmptyHintStyle: CSSProperties = {
   lineHeight: 1.5,
 };
 
+const detailDebug = {
+  mount: 0,
+  load: 0,
+  setDetail: 0,
+  depthEvent: 0,
+};
+
+function logDetailDebug(event: string, extra?: Record<string, unknown>) {
+  console.info("[lifespace-detail]", event, extra || {});
+}
+
 function BlobImage({ image, className, alt }: {
   image?: LocalImage | null;
   className?: string;
@@ -374,7 +390,7 @@ function App() {
   function setScreen(next: Screen, replace = false) {
     window.history[replace ? "replaceState" : "pushState"]({ offlineScreen: next }, "", `#${next.kind}`);
     setScreenState(next);
-    window.scrollTo({ top: 0 });
+    if (!replace) window.scrollTo({ top: 0 });
   }
   useEffect(() => {
     window.history.replaceState({ offlineScreen: { kind: "list" } }, "", "#list");
@@ -383,7 +399,11 @@ function App() {
     return () => window.removeEventListener("popstate", back);
   }, []);
   useEffect(() => {
-    const refresh = () => setLocalDepthsTick((current) => current + 1);
+    const refresh = () => {
+      detailDebug.depthEvent += 1;
+      logDetailDebug("category-depth-event", { count: detailDebug.depthEvent });
+      setLocalDepthsTick((current) => current + 1);
+    };
     window.addEventListener(LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT, refresh);
   }, []);
@@ -536,6 +556,9 @@ function App() {
     setUnownedCount(result.unownedCount);
     setPendingSync(pending);
     setLocalTaxonomyItems(taxonomy);
+    void logLifespaceStorageDiagnostic(resolvedContext).catch((error) =>
+      console.warn("storage diagnostic", error),
+    );
   }, [ownerContext]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
@@ -590,10 +613,14 @@ function App() {
     archiveId: string,
     context?: LocalArchiveOwnerContext | null,
   ) => {
+    detailDebug.load += 1;
+    logDetailDebug("loadDetail", { archiveId, count: detailDebug.load });
     const next = await getLocalArchiveDetail(
       archiveId,
       context === undefined ? ownerContext : context,
     );
+    detailDebug.setDetail += 1;
+    logDetailDebug("setDetail", { archiveId: next?.archive.id, count: detailDebug.setDetail });
     setDetail(next);
     return next;
   }, [ownerContext]);
@@ -743,7 +770,12 @@ function App() {
       const nextOwner = { userId: user.id, email: user.email || null };
       activeSessionUserId = user.id;
       rememberLocalOwnerContext(nextOwner);
-      setOwner(nextOwner);
+      setOwner((current) => {
+        if (current?.userId === nextOwner.userId && (current.email || null) === nextOwner.email) {
+          return current;
+        }
+        return nextOwner;
+      });
       setCloudUserId(user.id);
       void loadShellIdentity(user.id);
     }
@@ -885,25 +917,48 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const detailScreenId =
+    screen.kind === "detail" ||
+    screen.kind === "edit-project" ||
+    screen.kind === "new-record" ||
+    screen.kind === "edit-record"
+      ? screen.archiveId
+      : null;
+  const detailScreenKind = screen.kind;
+  const loadedDetailKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (screen.kind !== "detail" && screen.kind !== "edit-project" &&
-        screen.kind !== "new-record" && screen.kind !== "edit-record") return;
+    if (!detailScreenId) {
+      loadedDetailKeyRef.current = null;
+      return;
+    }
+    const loadKey = `${detailScreenId}:${ownerContext?.userId || ""}`;
+    if (loadedDetailKeyRef.current === loadKey) {
+      logDetailDebug("skip-reload-same-archive", { loadKey, count: detailDebug.load });
+      return;
+    }
+    loadedDetailKeyRef.current = loadKey;
     let canceled = false;
-    setDetail(null);
-    void getLocalArchiveDetail(screen.archiveId, ownerContext).then((next) => {
+    logDetailDebug("effect-load", { loadKey, screenKind: detailScreenKind });
+    detailDebug.load += 1;
+    void getLocalArchiveDetail(detailScreenId, ownerContext).then((next) => {
       if (canceled) return;
+      detailDebug.setDetail += 1;
+      logDetailDebug("effect-setDetail", { archiveId: next?.archive.id, count: detailDebug.setDetail });
       setDetail(next);
       if (
         next?.archive.local_role === "cloud-offline-cache" &&
-        (screen.kind === "new-record" ||
-          screen.kind === "edit-record" ||
-          screen.kind === "edit-project")
+        (detailScreenKind === "new-record" ||
+          detailScreenKind === "edit-record" ||
+          detailScreenKind === "edit-project")
       ) {
         setScreen({ kind: "detail", archiveId: next.archive.id }, true);
       }
     }).catch(() => showToast(copy.readFailed));
     return () => { canceled = true; };
-  }, [screen, ownerContext, showToast, copy.readFailed]);
+    // Intentionally omit copy/showToast so identical archiveId does not reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailScreenKind, detailScreenId, ownerContext?.userId]);
 
   function goList() {
     setScreen({ kind: "list" });
@@ -994,9 +1049,112 @@ function App() {
   async function handleDeleteRecord(recordId: string, archiveId: string) {
     if (!window.confirm(copy.deleteRecordConfirm)) return;
     await deleteLocalRecord(recordId);
+    loadedDetailKeyRef.current = null;
     await loadDetail(archiveId);
     await loadList();
     showToast(copy.deleted);
+  }
+
+  async function createLocalSubcategory(category: ArchiveCategory, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await createLocalTaxonomyItem({ kind: "subcategory", category, label: trimmed }, ownerContext);
+      await loadList();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
+  }
+
+  async function renameLocalSubcategory(chip: ArchiveTaxonomyChip, suppliedName?: string) {
+    if (!activeLocalCategory) return;
+    const name = suppliedName ?? window.prompt(getTranslations(language).archive_workspace.local_subcategory_rename_prompt, chip.label);
+    const cleanName = name?.trim();
+    if (!cleanName || cleanName === chip.label) return;
+    try {
+      await renameLocalTaxonomyItem(
+        { kind: "subcategory", category: activeLocalCategory, oldLabel: chip.label, newLabel: cleanName },
+        ownerContext,
+      );
+      if (activeSubTag === chip.id) {
+        setActiveSubTag(cleanName);
+        setActiveGroupTag(null);
+      }
+      await loadList();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
+  }
+
+  async function deleteLocalSubcategory(chip: ArchiveTaxonomyChip) {
+    if (!activeLocalCategory) return;
+    if (!window.confirm(getTranslations(language).archive_workspace.local_subcategory_delete_confirm)) return;
+    try {
+      await deleteLocalTaxonomyItem(
+        { kind: "subcategory", category: activeLocalCategory, label: chip.label },
+        ownerContext,
+      );
+      if (activeSubTag === chip.id) {
+        setActiveSubTag(null);
+        setActiveGroupTag(null);
+      }
+      await loadList();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
+  }
+
+  async function createLocalGroup(name: string) {
+    if (!activeLocalCategory || !activeSubTag) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await createLocalTaxonomyItem(
+        { kind: "group", category: activeLocalCategory, subcategory: activeSubTag, label: trimmed },
+        ownerContext,
+      );
+      await loadList();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
+  }
+
+  async function renameLocalGroup(chip: ArchiveTaxonomyChip, suppliedName?: string) {
+    if (!activeLocalCategory || !activeSubTag) return;
+    const name = suppliedName ?? window.prompt(getTranslations(language).archive_workspace.local_group_rename_prompt, chip.label);
+    const cleanName = name?.trim();
+    if (!cleanName || cleanName === chip.label) return;
+    try {
+      await renameLocalTaxonomyItem(
+        {
+          kind: "group",
+          category: activeLocalCategory,
+          subcategory: activeSubTag,
+          oldLabel: chip.label,
+          newLabel: cleanName,
+        },
+        ownerContext,
+      );
+      if (activeGroupTag === chip.id) setActiveGroupTag(cleanName);
+      await loadList();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
+  }
+
+  async function deleteLocalGroup(chip: ArchiveTaxonomyChip) {
+    if (!activeLocalCategory || !activeSubTag) return;
+    if (!window.confirm(getTranslations(language).archive_workspace.local_group_delete_confirm)) return;
+    try {
+      await deleteLocalTaxonomyItem(
+        { kind: "group", category: activeLocalCategory, subcategory: activeSubTag, label: chip.label },
+        ownerContext,
+      );
+      if (activeGroupTag === chip.id) setActiveGroupTag(null);
+      await loadList();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.readFailed);
+    }
   }
 
   function toggleLanguage() {
@@ -1400,6 +1558,12 @@ function App() {
               onSelectGroup={(chip) => {
                 setActiveGroupTag(activeGroupTag === chip.id ? null : chip.id);
               }}
+              onCreateSubcategory={createLocalSubcategory}
+              onRenameSubcategory={renameLocalSubcategory}
+              onDeleteSubcategory={deleteLocalSubcategory}
+              onCreateGroup={createLocalGroup}
+              onRenameGroup={renameLocalGroup}
+              onDeleteGroup={deleteLocalGroup}
             />
           )}
           noticeSlot={ownerContext && unownedCount > 0 ? (
@@ -1440,7 +1604,12 @@ function App() {
                       <ArchiveProjectCard
                         key={archive.id}
                         project={{
-                          ...localArchiveToProjectView(archive, ownerContext, language),
+                          ...localArchiveToProjectView(
+                            archive,
+                            ownerContext,
+                            language,
+                            getArchiveCategoryDepth(localCategoryDepths, archive.category),
+                          ),
                           href: undefined,
                         }}
                         onClick={() => openDetail(archive.id)}
@@ -1462,7 +1631,12 @@ function App() {
                   <ArchiveProjectCard
                     key={archive.id}
                     project={{
-                      ...localArchiveToProjectView(archive, ownerContext, language),
+                      ...localArchiveToProjectView(
+                        archive,
+                        ownerContext,
+                        language,
+                        getArchiveCategoryDepth(localCategoryDepths, archive.category),
+                      ),
                       href: undefined,
                     }}
                     onClick={() => openDetail(archive.id)}
@@ -1511,7 +1685,11 @@ function App() {
           <ProjectDetail
             detail={detail}
             ownerContext={ownerContext}
-            onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
+            onChanged={async () => {
+              loadedDetailKeyRef.current = null;
+              await loadDetail(detail.archive.id);
+              await loadList();
+            }}
             language={language}
             copy={copy}
             onBack={goList}
@@ -1719,22 +1897,30 @@ function App() {
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? (
-        <ProfilePage
-          onBack={() => setScreen({ kind: "list" })}
-          onOpenProjectCategories={() => setScreen({ kind: "project-categories" })}
-          onLogout={() => {
-            explicitSignOutRef.current = true;
-            clearRememberedLocalOwnerContext();
-            void supabase.auth.signOut({ scope: "local" });
-            setScreen({ kind: "list" });
-          }}
-        />
+        <ProfileSettingsErrorBoundary onBack={() => setScreen({ kind: "list" })}>
+          <ProfileSettingsView
+            identity={{
+              username: spaceProfile?.username || getTranslations(language).nav.username_unset,
+              membershipLabel,
+              storageLabel: `${formatStorage(storageUsedBytes)} / ${storageTotalLabel}`,
+              avatarUrl: displayAvatarUrl(spaceProfile),
+            }}
+            cloudLocked
+            onBack={() => setScreen({ kind: "list" })}
+            onOpenProjectCategories={() => setScreen({ kind: "project-categories" })}
+            onLogout={() => {
+              explicitSignOutRef.current = true;
+              clearRememberedLocalOwnerContext();
+              void supabase.auth.signOut({ scope: "local" });
+              setScreen({ kind: "list" });
+            }}
+          />
+        </ProfileSettingsErrorBoundary>
       ) : null}
       {screen.kind === "project-categories" ? (
-        <ProjectCategorySettingsPage
+        <LocalProjectCategorySettingsView
           onBack={() => setScreen({ kind: "settings" })}
           localOwnerId={ownerContext?.userId || owner?.userId || null}
-          cloudUnavailable
         />
       ) : null}
       <MobileBottomNavigationView
@@ -2219,12 +2405,20 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   onChanged: () => Promise<void>; onBack: () => void; onEdit: () => void; onAddRecord: () => void;
   onEditRecord: (recordId: string) => void; onDelete: () => void; onDeleteRecord: (recordId: string) => void;
 }) {
+  useEffect(() => {
+    detailDebug.mount += 1;
+    logDetailDebug("ProjectDetail-mount", {
+      archiveId: detail.archive.id,
+      count: detailDebug.mount,
+    });
+  }, [detail.archive.id]);
   const [tab, setTab] = useState<ArchiveDetailTabKey>("records");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [lightbox, setLightbox] = useState<LocalImage | null>(null);
   const archive = detail.archive;
   const isCloudCache = archive.local_role === "cloud-offline-cache";
+  const hasPendingCloudRecords = detail.records.some((record) => record.sync?.status === "pending-cloud-sync");
   const archiveCopy = getTranslations(language).archive;
   const experienceCopy = getTranslations(language).experience;
   const cycles = (archive.cycles || []) as ArchiveCycle[];
@@ -2248,7 +2442,12 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   const durationText = ongoingDays
     ? `${archiveCopy.ongoing_days_prefix} ${ongoingDays} ${archiveCopy.days_suffix}`
     : archiveCopy.none;
-  const projectView = localArchiveToProjectView(archive, ownerContext, language);
+  const projectView = localArchiveToProjectView(
+    archive,
+    ownerContext,
+    language,
+    getArchiveCategoryDepth(getLocalArchiveCategoryDepths(ownerContext?.userId), archive.category),
+  );
   const archiveDisplayName = archive.system_name || archive.species_name || "";
   async function change(work: () => Promise<unknown>) {
     if (busy) return;
@@ -2317,6 +2516,7 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
         ariaLabel={archiveCopy.detail_navigation}
         onChange={setTab}
       />
+    {hasPendingCloudRecords ? <section className="notice warning"><p>{copy.pendingUpload}</p></section> : null}
     {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
     {tab === "profile" ? (
       <ArchiveDetailHeaderView
@@ -2410,6 +2610,7 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
           return (
             <ArchiveRecordCardShell key={record.id} metaText={formatDate(source.record_time, language)} mobileMode>
               {source.images.length ? <div className={`photo-grid ${source.images.length === 1 ? "single-photo" : ""}`}>{source.images.map((image) => isCloudCache ? <span className="photo-view" key={image.id}><BlobImage image={image} alt="" /></span> : <button type="button" className="photo-view" key={image.id} aria-label={copy.viewPhoto} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
+              {source.sync?.status === "pending-cloud-sync" ? <p className="project-meta">{copy.pendingUpload}</p> : null}
               {source.note ? <p className="record-note">{source.note}</p> : null}
               {source.location ? <p className="project-meta">{source.location.label || `${source.location.latitude?.toFixed(4)}, ${source.location.longitude?.toFixed(4)}`}</p> : null}
               {!isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(source.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(source.id)}>{copy.remove}</button></div> : null}
@@ -2484,4 +2685,5 @@ function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
 }
 
 markBundledOfflineShell();
+void logLifespaceStorageDiagnostic();
 createRoot(document.getElementById("root")!).render(<App />);

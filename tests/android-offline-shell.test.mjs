@@ -54,6 +54,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<ArchiveRecordCardShell/);
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(source, /navigator\.onLine/);
+  assert.match(source, /logLifespaceStorageDiagnostic/);
   assert.match(source, /saveCloudArchiveToLocal/);
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
@@ -74,6 +75,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
   assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.match(generated, /life-space-local-offline/);
+  assert.match(generated, /lifespace-storage-diagnostic/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
 });

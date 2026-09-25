@@ -14,6 +14,7 @@ import {
   type CloudOfflineCacheRecordInput,
   type LocalArchiveOwnerContext,
 } from "@/lib/local-offline-db";
+import { logLifespaceStorageDiagnostic } from "@/lib/local-storage-diagnostic";
 
 const CLOUD_CACHE_PAGE_SIZE = 500;
 const CLOUD_CACHE_MEDIA_BATCH_SIZE = 100;
@@ -240,13 +241,49 @@ export async function refreshCloudOfflineCaches(
   archives: CloudOfflineCacheArchiveSource[],
   ownerContext: LocalArchiveOwnerContext | null
 ) {
+  const endedArchives = archives.filter((archive) => archive.status === "ended").length;
+  const activeArchives = archives.length - endedArchives;
+  const userId = ownerContext?.userId || null;
+
+  console.info("[lifespace-cloud-cache]", "refresh start", {
+    userId,
+    cloudArchives: archives.length,
+    activeArchives,
+    endedArchives,
+  });
+  await logLifespaceStorageDiagnostic(ownerContext);
+
   if (!ownerContext?.userId) return;
 
+  let successCount = 0;
+  let failedCount = 0;
   for (const archive of archives) {
     try {
       await refreshOneCloudOfflineCache(archive, ownerContext);
+      successCount += 1;
+      console.info("[lifespace-cloud-cache]", "archive success", {
+        id: archive.id,
+        status: archive.status || null,
+      });
     } catch (error) {
-      console.warn("refresh cloud offline cache failed", archive.id, error);
+      failedCount += 1;
+      console.warn("[lifespace-cloud-cache]", "archive failed", {
+        id: archive.id,
+        status: archive.status || null,
+        error,
+      });
     }
   }
+
+  const diagnosis = await logLifespaceStorageDiagnostic(ownerContext);
+  console.info("[lifespace-cloud-cache]", "refresh done", {
+    userId,
+    cloudArchives: archives.length,
+    activeArchives,
+    endedArchives,
+    successCount,
+    failedCount,
+    cloudOfflineCacheCount: diagnosis.counts.cloudOfflineCache,
+    visibleCloudCacheCount: diagnosis.counts.visibleCloudCache,
+  });
 }

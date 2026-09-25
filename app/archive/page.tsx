@@ -83,6 +83,7 @@ import {
   refreshCloudOfflineCaches,
   type CloudOfflineCacheArchiveSource,
 } from "@/lib/cloud-offline-cache";
+import { logLifespaceStorageDiagnostic } from "@/lib/local-storage-diagnostic";
 import { isCloudUnavailableError } from "@/lib/cloud-reachability";
 import { useCloudAvailability } from "@/lib/use-cloud-availability";
 import {
@@ -202,6 +203,10 @@ export default function ArchivePage() {
     return () => window.removeEventListener("resize", updateViewportMode);
   }, []);
 
+  useEffect(() => {
+    void logLifespaceStorageDiagnostic();
+  }, []);
+
   function shouldIgnoreCardNavigation(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
 
@@ -280,11 +285,16 @@ export default function ArchivePage() {
       } = await supabase.auth.getSession();
 
       user = session?.user ?? null;
+      if (!user) {
+        const { data: userData } = await supabase.auth.getUser();
+        user = userData.user ?? null;
+      }
       const ownerContext = user
         ? { userId: user.id, email: user.email || null }
         : null;
       setCurrentOwnerContext(ownerContext);
       setLocalCategoryDepths(getLocalArchiveCategoryDepths(user?.id));
+      void logLifespaceStorageDiagnostic(ownerContext);
 
       if (!user) {
         setArchives([]);
@@ -353,6 +363,14 @@ export default function ArchivePage() {
         console.error("load archives error:", archivesResult.error);
       }
       const archivesData = archivesResult.data;
+      void refreshCloudOfflineCaches(
+        (archivesData || []) as CloudOfflineCacheArchiveSource[],
+        ownerContext
+      )
+        .then(() => loadLocalArchives(ownerContext))
+        .catch((error) => {
+          console.warn("refresh cloud offline cache failed", error);
+        });
 
       const aliasesBySpecies = new Map<string, string[]>();
       ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {

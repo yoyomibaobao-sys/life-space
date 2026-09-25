@@ -56,6 +56,45 @@ test("pending cloud records upload only from an explicit user action", () => {
   assert.match(offline, /pendingUpload/);
 });
 
+test("cloud cache refresh logs start success fail and done counts", () => {
+  const cache = read("lib/cloud-offline-cache.ts");
+  const diagnostic = read("lib/local-storage-diagnostic.ts");
+  const page = read("app/archive/page.tsx");
+  const offline = read("mobile-offline-src/main.tsx");
+
+  assert.match(diagnostic, /\[lifespace-storage-diagnostic\]/);
+  assert.match(diagnostic, /indexedDB\.databases/);
+  assert.match(diagnostic, /life-space-local-offline/);
+  assert.match(diagnostic, /transaction\(storeName, "readonly"\)/);
+  assert.doesNotMatch(diagnostic, /persistRepairedLocalArchiveRoles|readwrite/);
+  assert.match(cache, /\[lifespace-cloud-cache\]", "refresh start"/);
+  assert.match(cache, /activeArchives/);
+  assert.match(cache, /endedArchives/);
+  assert.match(cache, /archive success/);
+  assert.match(cache, /archive failed/);
+  assert.match(cache, /\[lifespace-cloud-cache\]", "refresh done"/);
+  assert.match(cache, /cloudOfflineCacheCount/);
+  assert.match(page, /logLifespaceStorageDiagnostic/);
+  assert.match(offline, /logLifespaceStorageDiagnostic/);
+});
+
+test("online my-space writes cloud caches independently of offline shell", () => {
+  const page = read("app/archive/page.tsx");
+  const db = read("lib/local-offline-db.ts");
+  const diagnose = db.slice(
+    db.indexOf("export async function diagnoseLocalArchiveStores"),
+    db.indexOf("export async function listVisibleCloudOfflineArchiveSummaries"),
+  );
+
+  assert.match(page, /const \{ data: userData \} = await supabase.auth.getUser\(\);/);
+  assert.match(page, /user = userData.user \?\? null;/);
+  assert.match(page, /void refreshCloudOfflineCaches\(/);
+  assert.match(page, /archivesData \|\| \[\]\) as CloudOfflineCacheArchiveSource\[\]/);
+  assert.match(diagnose, /cloudOfflineCache/);
+  assert.match(diagnose, /visibleCacheCount/);
+  assert.doesNotMatch(diagnose, /persistRepairedLocalArchiveRoles/);
+});
+
 test("offline shell separates true local projects from cloud offline copies", () => {
   const offline = read("mobile-offline-src/main.tsx");
 

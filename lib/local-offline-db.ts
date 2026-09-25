@@ -1418,6 +1418,51 @@ function localTaxonomyKey(item: Pick<LocalTaxonomyItem, "kind" | "label"> & {
   ].join("::");
 }
 
+export async function diagnoseLocalArchiveStores(
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const [archives, records, images] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const remembered = loadRememberedLocalOwnerContext();
+  const visibleOwner = ownerContextForVisibleCaches(ownerContext);
+  const counts = {
+    localProject: 0,
+    savedLocalCopy: 0,
+    cloudOfflineCache: 0,
+    other: 0,
+  };
+  const caches = archives.map(normalizeLocalArchive).filter((archive) => {
+    if (archive.local_role === "local-project") counts.localProject += 1;
+    else if (archive.local_role === "saved-local-copy") counts.savedLocalCopy += 1;
+    else if (archive.local_role === "cloud-offline-cache") counts.cloudOfflineCache += 1;
+    else counts.other += 1;
+    return archive.local_role === "cloud-offline-cache";
+  }).map((archive) => ({
+    id: archive.id,
+    source_cloud_archive_id: archive.source_cloud_archive_id || null,
+    local_role: archive.local_role,
+    local_owner_user_id: archive.local_owner_user_id || null,
+    source_cloud_cache_revision: archive.source_cloud_cache_revision || null,
+    updated_at: archive.updated_at,
+    visible: isLocalArchiveVisibleToOwner(archive, visibleOwner),
+  }));
+  const visibleCacheCount = caches.filter((item) => item.visible).length;
+  return {
+    origin: typeof location !== "undefined" ? location.origin : "",
+    ownerContextUserId: ownerContext?.userId || null,
+    rememberedUserId: remembered?.userId || null,
+    visibleOwnerUserId: visibleOwner?.userId || null,
+    counts,
+    recordCount: records.length,
+    imageCount: images.length,
+    caches,
+    visibleCacheCount,
+  };
+}
+
 export async function listVisibleCloudOfflineArchiveSummaries(
   ownerContext?: LocalArchiveOwnerContext | null
 ): Promise<LocalArchiveSummary[]> {

@@ -723,8 +723,10 @@ function MobileArchiveCard({
     categoryLabel: getArchiveCategoryLabel(item.category, language),
     categoryIcon: getArchiveCategoryIcon(item.category),
     systemName,
-    subcategoryLabel: selectedSubcategory?.name || null,
-    groupLabel: selectedGroup?.name || null,
+    subcategoryLabel:
+      selectedSubcategory?.name || (href && maxDepth >= 2 ? item.sub_tag_id : null),
+    groupLabel:
+      selectedGroup?.name || (href && maxDepth >= 3 ? item.group_tag_id : null),
     cover: coverBlob
       ? { kind: "blob", blob: coverBlob, alt: imageAlt }
       : imageUrl

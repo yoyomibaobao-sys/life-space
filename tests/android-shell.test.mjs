@@ -166,10 +166,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '24'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc17'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '24' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc17' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '25'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc18'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '25' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc18' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
