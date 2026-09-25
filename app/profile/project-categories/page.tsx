@@ -24,10 +24,22 @@ import {
 import { buildLoginHref } from "@/lib/auth-return";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
+import { isBundledOfflineShell } from "@/lib/cloud-reachability";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
+import { loadRememberedLocalOwnerContext } from "@/lib/local-owner-context";
 
-export default function ProjectCategorySettingsPage() {
+export default function ProjectCategorySettingsPage({
+  onBack,
+  localOwnerId,
+  cloudUnavailable = false,
+}: {
+  onBack?: () => void;
+  localOwnerId?: string | null;
+  cloudUnavailable?: boolean;
+} = {}) {
   const router = useRouter();
   const { language, t } = useLanguage();
+  const stayInCurrentShell = Boolean(onBack) || isBundledOfflineShell();
   const isEnglish = language === "en";
   const [userId, setUserId] = useState("");
   const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>("cloud");
@@ -48,17 +60,23 @@ export default function ProjectCategorySettingsPage() {
       setLoading(true);
       const { data } = await supabase.auth.getUser();
       const user = data.user;
-      if (!user) {
+      if (!user && !stayInCurrentShell) {
         router.replace(buildLoginHref("/profile/project-categories"));
         return;
       }
 
-      setUserId(user.id);
-      setLocalDepths(getLocalArchiveCategoryDepths(user.id));
+      const ownerId = user?.id || localOwnerId || loadRememberedLocalOwnerContext()?.userId || null;
+      setUserId(ownerId || "");
+      setLocalDepths(getLocalArchiveCategoryDepths(ownerId));
+      if (stayInCurrentShell || cloudUnavailable) {
+        setActiveSpace("local");
+      }
 
       try {
-        const depths = await getCloudArchiveCategoryDepths(user.id);
-        if (!cancelled) setCloudDepths(depths);
+        if (user && !cloudUnavailable) {
+          const depths = await getCloudArchiveCategoryDepths(user.id);
+          if (!cancelled) setCloudDepths(depths);
+        }
       } catch (loadError) {
         console.error("load archive category settings error:", loadError);
         if (!cancelled) {
@@ -73,25 +91,42 @@ export default function ProjectCategorySettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isEnglish, router]);
+  }, [isEnglish, router, stayInCurrentShell, localOwnerId, cloudUnavailable]);
 
   const activeDepths = activeSpace === "cloud" ? cloudDepths : localDepths;
+  const cloudLocked = cloudUnavailable || stayInCurrentShell;
 
   function updateDepth(category: ArchiveCategory, depth: ArchiveCategoryDepth) {
-    const setter = activeSpace === "cloud" ? setCloudDepths : setLocalDepths;
-    setter((current) => ({ ...current, [category]: depth }));
+    if (activeSpace === "cloud" && cloudLocked) {
+      showToast(t.archive_workspace.cloud_setting_requires_network);
+      return;
+    }
+    if (activeSpace === "local") {
+      setLocalDepths((current) => {
+        const next = { ...current, [category]: depth };
+        saveLocalArchiveCategoryDepths(next, userId || localOwnerId || null);
+        return next;
+      });
+      setError("");
+      return;
+    }
+    setCloudDepths((current) => ({ ...current, [category]: depth }));
     setError("");
   }
 
   async function save() {
-    if (!userId) return;
+    if (activeSpace === "cloud" && cloudLocked) {
+      showToast(t.archive_workspace.cloud_setting_requires_network);
+      return;
+    }
+    if (!userId && activeSpace === "cloud") return;
     setSaving(true);
     setError("");
     try {
       if (activeSpace === "cloud") {
         await saveCloudArchiveCategoryDepths(userId, cloudDepths);
       } else {
-        saveLocalArchiveCategoryDepths(localDepths, userId);
+        saveLocalArchiveCategoryDepths(localDepths, userId || localOwnerId || null);
       }
       showToast(isEnglish ? "Group settings saved" : "项目分组设置已保存");
     } catch (saveError) {
@@ -111,6 +146,7 @@ export default function ProjectCategorySettingsPage() {
         titleText={pageTitle}
         fallbackHref="/profile"
         ariaLabel={isEnglish ? "Back to profile" : "返回个人资料"}
+        onBack={onBack}
       />
 
       <div style={shellStyle}>
@@ -127,12 +163,22 @@ export default function ProjectCategorySettingsPage() {
           </p>
         </header>
 
+        {cloudLocked ? (
+          <div style={{ marginBottom: 12 }}>
+            <ConnectivityNotice message={t.archive_workspace.cloud_setting_requires_network} />
+          </div>
+        ) : null}
+
         <nav style={spaceTabsStyle} aria-label={isEnglish ? "Project space" : "项目空间"}>
           {(["cloud", "local"] as const).map((space) => (
             <button
               key={space}
               type="button"
               onClick={() => {
+                if (space === "cloud" && cloudLocked) {
+                  showToast(t.archive_workspace.cloud_setting_requires_network);
+                  return;
+                }
                 setActiveSpace(space);
                 setError("");
               }}

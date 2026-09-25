@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useState,
   useRef,
+  type CSSProperties,
   type FormEvent,
 } from "react";
 import { createRoot } from "react-dom/client";
@@ -65,6 +66,12 @@ import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTe
 import ArchiveDetailHeaderView, {
   type ArchiveProfileFieldSave,
 } from "@/components/archive-ui/ArchiveDetailHeaderView";
+import ArchiveDetailTabBar, { type ArchiveDetailTabKey } from "@/components/archive-ui/ArchiveDetailTabBar";
+import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
+import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
+import OfflineGuideDirectoryView from "@/components/plant/OfflineGuideDirectoryView";
+import { publicGuideCopy } from "@/lib/public-guide-library";
+import type { ArchiveCycle, RecordItem } from "@/lib/archive-detail-types";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
 import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
@@ -74,6 +81,7 @@ import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveP
 import {
   getArchiveCategoryDepth,
   getLocalArchiveCategoryDepths,
+  LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT,
 } from "@/lib/archive-category-settings";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import MobileBottomNavigationView, {
@@ -83,7 +91,8 @@ import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobil
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
 import DiscoverSearchPage from "@/app/discover/search/page";
-import PlantPage from "@/app/plant/page";
+import ProfilePage from "@/app/profile/page";
+import ProjectCategorySettingsPage from "@/app/profile/project-categories/page";
 import { DiscoverProjectCard } from "@/components/discover/DiscoverProjectCard";
 import ReadonlyPublicProjectDetail from "@/components/archive-ui/ReadonlyPublicProjectDetail";
 import MobileMarketFeedCard, { mobileMarketCardStyle, mobileMarketListStyle } from "@/components/market/MobileMarketFeedCard";
@@ -189,6 +198,7 @@ type Screen =
   | { kind: "guides" }
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "settings" }
+  | { kind: "project-categories" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
   | { kind: "edit-project"; archiveId: string }
@@ -240,6 +250,99 @@ function getOngoingDays(createdAt?: string | null, endedAt?: string | null) {
   return Math.max(1, Math.floor((endDate - startDate) / 86_400_000) + 1);
 }
 
+const offlineNetworkPageStyle: CSSProperties = {
+  maxWidth: 1120,
+  margin: "0 auto",
+  padding: "8px 10px 28px",
+};
+
+const offlineMarketHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  margin: "8px 0",
+};
+
+const offlineMarketFilterToggleStyle: CSSProperties = {
+  minHeight: 34,
+  border: "1px solid #d7e2d2",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#40583a",
+  padding: "6px 11px",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const offlineMarketFilterPanelStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4ece0",
+  borderRadius: 14,
+  padding: 8,
+  display: "grid",
+  gap: 8,
+  marginBottom: 10,
+};
+
+function OfflineNetworkBody({ message }: { message: string }) {
+  return (
+    <div style={offlineNetworkPageStyle}>
+      <ConnectivityNotice message={message} />
+    </div>
+  );
+}
+
+const projectDetailStatsStyle: CSSProperties = {
+  minHeight: 34,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  gap: 16,
+  flexWrap: "wrap",
+  minWidth: 0,
+  margin: "0 0 8px",
+  padding: "5px 8px",
+  borderBottom: "1px solid #edf1e9",
+};
+
+const projectDetailGuideTextStyle: CSSProperties = {
+  minWidth: 0,
+  maxWidth: "38%",
+  flex: "0 1 auto",
+  overflow: "hidden",
+  color: "#52694f",
+  fontSize: 14,
+  fontWeight: 750,
+  lineHeight: 1.35,
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const localStorageHintStyle: CSSProperties = {
+  margin: "0 0 10px",
+  padding: "0 8px",
+  color: "#617258",
+  fontSize: 13,
+  lineHeight: 1.45,
+};
+
+const localExperienceEmptyStyle: CSSProperties = {
+  border: "1px solid #ebefea",
+  borderRadius: 18,
+  background: "#fff",
+  padding: 18,
+  color: "#7d897a",
+  fontSize: 14,
+};
+
+const localExperienceEmptyHintStyle: CSSProperties = {
+  marginTop: 8,
+  lineHeight: 1.5,
+};
+
 function BlobImage({ image, className, alt }: {
   image?: LocalImage | null;
   className?: string;
@@ -266,7 +369,7 @@ function App() {
   const [activeSubTag, setActiveSubTag] = useState<string | null>(null);
   const [activeGroupTag, setActiveGroupTag] = useState<string | null>(null);
   const [localTaxonomyItems, setLocalTaxonomyItems] = useState<LocalTaxonomyItem[]>([]);
-  const [guideQuery, setGuideQuery] = useState("");
+  const [localDepthsTick, setLocalDepthsTick] = useState(0);
   const [directory] = useState(loadOfflineGuideDirectory);
   function setScreen(next: Screen, replace = false) {
     window.history[replace ? "replaceState" : "pushState"]({ offlineScreen: next }, "", `#${next.kind}`);
@@ -278,6 +381,16 @@ function App() {
     const back = (event: PopStateEvent) => setScreenState(event.state?.offlineScreen || { kind: "list" });
     window.addEventListener("popstate", back);
     return () => window.removeEventListener("popstate", back);
+  }, []);
+  useEffect(() => {
+    const refresh = () => setLocalDepthsTick((current) => current + 1);
+    window.addEventListener(LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT, refresh);
+  }, []);
+  useEffect(() => {
+    const syncLanguage = () => setLanguage(getLanguage());
+    window.addEventListener("lifespace-language-change", syncLanguage);
+    return () => window.removeEventListener("lifespace-language-change", syncLanguage);
   }, []);
   const [owner, setOwner] = useState<StoredLocalOwnerContext | null>(() =>
     loadRememberedLocalOwnerContext(),
@@ -897,7 +1010,10 @@ function App() {
     ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
     : undefined;
   const activeLocalCategory = categoryFilter === "all" ? null : categoryFilter;
-  const localCategoryDepths = getLocalArchiveCategoryDepths(ownerContext?.userId);
+  const localCategoryDepths = useMemo(
+    () => getLocalArchiveCategoryDepths(ownerContext?.userId),
+    [ownerContext?.userId, localDepthsTick],
+  );
   const activeLocalDepth = getArchiveCategoryDepth(localCategoryDepths, activeLocalCategory);
   const localSubTags = useMemo<ArchiveTaxonomyChip[]>(() => {
     if (sourceFilter !== "local" || !activeLocalCategory || activeLocalDepth < 2) return [];
@@ -1099,7 +1215,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "experience", "following", "market", "guides", "guide-detail"].includes(screen.kind),
+      active: !["activity", "discover-search", "public-detail", "experience", "following", "market", "guides", "guide-detail"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1109,7 +1225,20 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides"].includes(screen.kind);
+  const homeSectionOwnsTopNav = [
+    "list",
+    "activity",
+    "discover-search",
+    "experience",
+    "guides",
+    "guide-detail",
+    "following",
+    "market",
+    "detail",
+    "public-detail",
+    "settings",
+    "project-categories",
+  ].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
     0,
@@ -1178,6 +1307,7 @@ function App() {
           experienceLabel={copy.experience}
           experienceCardCount={experienceCardCount}
           language={language}
+          onProfileClick={() => setScreen({ kind: "settings" })}
         />
       ) : null}
 
@@ -1477,7 +1607,7 @@ function App() {
           onChange={setDiscoverFilterMode}
           compactMobile
         />
-        <ConnectivityNotice message={copy.offlineNotice} />
+        <OfflineNetworkBody message={copy.offlineNotice} />
       </> : null}
 
       {screen.kind === "public-detail" && publicDetailItem ? <ReadonlyPublicProjectDetail item={publicDetailItem} language={language} onBack={() => setScreen({ kind: publicDetailBack })} /> : null}
@@ -1498,7 +1628,7 @@ function App() {
             setScreen({ kind: "activity" });
           }}
         />
-        <ConnectivityNotice message={copy.offlineNotice} />
+        <OfflineNetworkBody message={copy.offlineNotice} />
       </> : null}
 
       {screen.kind === "following" ? (
@@ -1526,12 +1656,14 @@ function App() {
               },
             ]}
           />
-          <ConnectivityNotice message={copy.offlineNotice} />
+          <div style={offlineNetworkPageStyle}>
+            <ConnectivityNotice message={copy.offlineNotice} />
+          </div>
         </>
       ) : null}
 
       {screen.kind === "market" ? (
-        <>
+        <div style={offlineNetworkPageStyle}>
           <MobileContentTopBar
             ariaLabel={copy.marketType}
             items={[
@@ -1544,30 +1676,38 @@ function App() {
               })),
             ]}
           />
-          <button type="button" className="secondary-button" aria-expanded={marketFiltersOpen} onClick={() => setMarketFiltersOpen((open) => !open)}>
-            {copy.marketFilters}
-          </button>
-          {marketFiltersOpen ? <div className="field">
-            <label>{copy.marketCategory}
-              <select value={marketCategoryFilter} onChange={(event) => setMarketCategoryFilter(event.target.value as "all" | MarketItemCategory)}>
-                <option value="all">{copy.allCategories}</option>
-                {getMarketItemCategoryOptions(language).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>{copy.marketArea}<input value={marketLocationFilter} onChange={(event) => setMarketLocationFilter(event.target.value)} /></label>
-            <label>{copy.marketContent}<input value={marketContentFilter} onChange={(event) => setMarketContentFilter(event.target.value)} /></label>
-          </div> : null}
+          <header style={offlineMarketHeaderStyle}>
+            <button
+              type="button"
+              aria-expanded={marketFiltersOpen}
+              onClick={() => setMarketFiltersOpen((open) => !open)}
+              style={offlineMarketFilterToggleStyle}
+            >
+              {marketFiltersOpen ? getTranslations(language).market.hide_filters : copy.marketFilters}
+            </button>
+          </header>
+          {marketFiltersOpen ? (
+            <div style={offlineMarketFilterPanelStyle}>
+              <label>{copy.marketCategory}
+                <select value={marketCategoryFilter} onChange={(event) => setMarketCategoryFilter(event.target.value as "all" | MarketItemCategory)}>
+                  <option value="all">{copy.allCategories}</option>
+                  {getMarketItemCategoryOptions(language).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>{copy.marketArea}<input value={marketLocationFilter} onChange={(event) => setMarketLocationFilter(event.target.value)} /></label>
+              <label>{copy.marketContent}<input value={marketContentFilter} onChange={(event) => setMarketContentFilter(event.target.value)} /></label>
+            </div>
+          ) : null}
           <ConnectivityNotice message={copy.offlineNotice} />
-        </>
+        </div>
       ) : null}
 
-      {screen.kind === "guides" ? (online ? <PlantPage /> : <>
-        <HomeSectionTabs
-          active="guide"
-          showGuestLanguageSwitcher={false}
-          onSearch={() => undefined}
-          onSelect={(section: HomeSection) => {
-            if (section === "guide") return;
+      {screen.kind === "guides" ? (
+        <OfflineGuideDirectoryView
+          directory={directory}
+          signedIn={Boolean(owner)}
+          onSelectGuide={(guide) => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}
+          onSelectHomeSection={(section) => {
             if (section === "activity") {
               setScreen({ kind: "activity" });
               return;
@@ -1575,13 +1715,28 @@ function App() {
             setScreen({ kind: "experience" });
           }}
         />
-        <div className="field"><input type="search" value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder={copy.guideSearch} aria-label={copy.guideSearch} /></div>
-        <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
-        <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
-      </>) : null}
+      ) : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
-      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: copy.languageChinese }, { value: "en", label: copy.languageEnglish }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => { explicitSignOutRef.current = true; clearRememberedLocalOwnerContext(); void supabase.auth.signOut({ scope: "local" }); }}>{copy.logout}</button> : null}</div></section> : null}
+      {screen.kind === "settings" ? (
+        <ProfilePage
+          onBack={() => setScreen({ kind: "list" })}
+          onOpenProjectCategories={() => setScreen({ kind: "project-categories" })}
+          onLogout={() => {
+            explicitSignOutRef.current = true;
+            clearRememberedLocalOwnerContext();
+            void supabase.auth.signOut({ scope: "local" });
+            setScreen({ kind: "list" });
+          }}
+        />
+      ) : null}
+      {screen.kind === "project-categories" ? (
+        <ProjectCategorySettingsPage
+          onBack={() => setScreen({ kind: "settings" })}
+          localOwnerId={ownerContext?.userId || owner?.userId || null}
+          cloudUnavailable
+        />
+      ) : null}
       <MobileBottomNavigationView
         ariaLabel={copy.mainNavigation}
         items={bottomNavigationItems}
@@ -1710,61 +1865,237 @@ function OfflineGuideDetail({
   onReconnect: () => void;
   onCreate: (guide: OfflineGuideDirectoryEntry) => void;
 }) {
-  if (!guide) {
-    return (
-      <>
-        <div className="back-row"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button></div>
-        <section className="panel empty"><strong>{copy.guideUnavailable}</strong></section>
-      </>
-    );
-  }
-
-  const name = getOfflineGuideName(guide, language);
-  const parameters = owner ? getOfflineGuideParameters(guide, language) : [];
+  const [tab, setTab] = useState<"guide" | "experience" | "projects">("guide");
+  const guideCopy = publicGuideCopy[language];
+  const name = guide ? getOfflineGuideName(guide, language) : copy.guideUnavailable;
+  const parameters = guide && owner ? getOfflineGuideParameters(guide, language) : [];
+  const overview = guide && owner
+    ? getOfflineGuideOverview(guide, language)
+    : guideCopy.registerForOverview;
 
   return (
     <>
-      <div className="detail-heading">
-        <button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button>
-        <h1>{name}</h1>
-        <span />
-      </div>
-      <section className="panel guide-hero">
-        <span className="guide-category">{guide.category ? copy[guide.category] : copy.other}</span>
-        <h1>{name}</h1>
-        <button type="button" className="primary-button" onClick={() => onCreate(guide)}>{copy.createFromGuide}</button>
-      </section>
-      {!owner ? (
-        <section className="notice guide-access-notice">
-          <strong>{copy.guideSignInRequired}</strong>
-          <div className="action-row"><button type="button" className="secondary-button" onClick={onReconnect}>{copy.reconnect}</button></div>
-        </section>
+      <MobilePageHeaderView
+        title={name}
+        onBack={onBack}
+        ariaLabel={copy.back}
+        right={guide ? (
+          <button type="button" style={offlineGuideNewProjectStyle} onClick={() => onCreate(guide)}>
+            {guideCopy.newProject}
+          </button>
+        ) : null}
+      />
+      {!guide ? (
+        <main style={offlineGuidePageStyle}>
+          <div style={offlineGuideStateCardStyle}>{copy.guideUnavailable}</div>
+        </main>
       ) : (
-        <>
-          <section className="panel guide-overview">
-            <h2>{copy.guideOverview}</h2>
-            <p>{getOfflineGuideOverview(guide, language)}</p>
-          </section>
-          {parameters.length ? (
-            <section className="panel">
-              <h2>{copy.basicReferences}</h2>
-              <div className="guide-parameter-grid">
-                {parameters.map((parameter) => (
-                  <article className="guide-parameter" key={`${parameter.label}:${parameter.value}`}>
-                    <small>{parameter.label}</small>
-                    <strong>{parameter.value}</strong>
-                    {parameter.note ? <p>{parameter.note}</p> : null}
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
-          <section className="notice guide-access-notice"><p>{copy.guideOfflineNotice}</p></section>
-        </>
+        <main style={offlineGuidePageStyle}>
+          <article style={offlineGuideHeroStyle}>
+            <div style={offlineGuideBreadcrumbStyle}>
+              <span style={offlineGuideCategoryBadgeStyle}>
+                <UiIcon name={getArchiveCategoryIcon(guide.category)} size={15} />
+                {getArchiveCategoryLabel(guide.category, language)}
+              </span>
+            </div>
+            <div style={offlineGuideTitleRowStyle}>
+              <h1 style={offlineGuideTitleStyle}>{name}</h1>
+            </div>
+            <p style={offlineGuideSummaryStyle}>{overview || guideCopy.contentPending}</p>
+          </article>
+          <nav style={offlineGuideDetailTabWrapStyle} aria-label={guideCopy.publicLibrary}>
+            {([
+              { key: "guide" as const, label: guideCopy.overviewPractice },
+              { key: "experience" as const, label: guideCopy.experienceCards },
+              { key: "projects" as const, label: guideCopy.relatedProjects },
+            ]).map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                aria-current={tab === item.key ? "page" : undefined}
+                onClick={() => setTab(item.key)}
+                style={offlineGuideDetailTabButtonStyle(tab === item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          {tab === "guide" ? (
+            <>
+              {!owner ? (
+                <section style={offlineGuideAccessStyle}>
+                  <strong>{copy.guideSignInRequired}</strong>
+                  <button type="button" className="secondary-button" onClick={onReconnect}>{copy.reconnect}</button>
+                </section>
+              ) : parameters.length ? (
+                <section style={offlineGuideSectionCardStyle}>
+                  <h2 style={offlineGuideSectionTitleStyle}>{guideCopy.keyParameters}</h2>
+                  <div style={offlineGuideParameterGridStyle}>
+                    {parameters.map((parameter) => (
+                      <div key={`${parameter.label}:${parameter.value}`} style={offlineGuideParameterCardStyle}>
+                        <span>{parameter.label}</span>
+                        <strong>{parameter.value}</strong>
+                        {parameter.note ? <small>{parameter.note}</small> : null}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+              <ConnectivityNotice message={copy.guideOfflineNotice} />
+            </>
+          ) : (
+            <ConnectivityNotice message={copy.offlineNotice} />
+          )}
+        </main>
       )}
     </>
   );
 }
+
+const offlineGuidePageStyle: CSSProperties = {
+  width: "min(100%, 960px)",
+  margin: "0 auto",
+  padding: "18px 16px 42px",
+  boxSizing: "border-box",
+};
+
+const offlineGuideHeroStyle: CSSProperties = {
+  padding: 24,
+  border: "1px solid #dfe8dc",
+  borderRadius: 20,
+  background: "#fff",
+  boxShadow: "0 8px 24px rgba(40, 66, 37, 0.04)",
+};
+
+const offlineGuideStateCardStyle: CSSProperties = {
+  ...offlineGuideHeroStyle,
+  color: "#687565",
+};
+
+const offlineGuideBreadcrumbStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#748270",
+  fontSize: 13,
+  flexWrap: "wrap",
+};
+
+const offlineGuideCategoryBadgeStyle: CSSProperties = {
+  minHeight: 30,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#edf6e9",
+  color: "#477143",
+  fontWeight: 800,
+};
+
+const offlineGuideTitleRowStyle: CSSProperties = {
+  marginTop: 18,
+};
+
+const offlineGuideTitleStyle: CSSProperties = {
+  margin: 0,
+  color: "#223521",
+  fontSize: "clamp(28px, 4.4vw, 42px)",
+  lineHeight: 1.15,
+};
+
+const offlineGuideSummaryStyle: CSSProperties = {
+  margin: "18px 0 0",
+  color: "#465b43",
+  fontSize: 16,
+  lineHeight: 1.85,
+};
+
+const offlineGuideNewProjectStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 34,
+  padding: "0 11px",
+  border: "1px solid #bfd6b9",
+  borderRadius: 999,
+  background: "#f2f8ef",
+  color: "#396a37",
+  fontWeight: 800,
+  fontSize: 12,
+  whiteSpace: "nowrap",
+};
+
+const offlineGuideDetailTabWrapStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 6,
+  marginTop: 14,
+  padding: 5,
+  border: "1px solid #dfe8dc",
+  borderRadius: 16,
+  background: "#fff",
+};
+
+function offlineGuideDetailTabButtonStyle(active: boolean): CSSProperties {
+  return {
+    minWidth: 0,
+    minHeight: 42,
+    padding: "7px 8px",
+    border: 0,
+    borderRadius: 12,
+    background: active ? "#eaf5e6" : "transparent",
+    color: active ? "#315f30" : "#667361",
+    fontSize: 13,
+    fontWeight: active ? 850 : 750,
+    lineHeight: 1.25,
+    cursor: "pointer",
+  };
+}
+
+const offlineGuideSectionCardStyle: CSSProperties = {
+  marginTop: 14,
+  padding: 18,
+  border: "1px solid #dfe8dc",
+  borderRadius: 20,
+  background: "#fff",
+};
+
+const offlineGuideSectionTitleStyle: CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: 16,
+  color: "#223521",
+};
+
+const offlineGuideParameterGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  gap: 10,
+};
+
+const offlineGuideParameterCardStyle: CSSProperties = {
+  display: "grid",
+  gap: 4,
+  padding: 12,
+  border: "1px solid #e5eee0",
+  borderRadius: 14,
+  background: "#f7fbf5",
+};
+
+const offlineGuideAccessStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  marginTop: 14,
+  padding: 16,
+  border: "1px solid #e0e8dc",
+  borderRadius: 16,
+  background: "#fff",
+  color: "#687565",
+  fontSize: 13,
+  lineHeight: 1.65,
+};
 
 function ProjectForm({
   language,
@@ -1888,22 +2219,37 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
   onChanged: () => Promise<void>; onBack: () => void; onEdit: () => void; onAddRecord: () => void;
   onEditRecord: (recordId: string) => void; onDelete: () => void; onDeleteRecord: (recordId: string) => void;
 }) {
-  const [tab, setTab] = useState<"records" | "profile" | "experience">("records");
+  const [tab, setTab] = useState<ArchiveDetailTabKey>("records");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [periodDate, setPeriodDate] = useState(toDateTimeLocal().slice(0, 10));
-  const [filter, setFilter] = useState("all");
   const [lightbox, setLightbox] = useState<LocalImage | null>(null);
   const archive = detail.archive;
   const isCloudCache = archive.local_role === "cloud-offline-cache";
   const archiveCopy = getTranslations(language).archive;
-  const periods = getArchiveCycleTerminology(archive.category, language);
+  const experienceCopy = getTranslations(language).experience;
+  const cycles = (archive.cycles || []) as ArchiveCycle[];
+  const cycleEnabled = typeof archive.cycle_enabled === "boolean"
+    ? archive.cycle_enabled
+    : cycles.length > 0;
+  const recordsById = new Map(detail.records.map((record) => [record.id, record]));
+  const recordItems: RecordItem[] = detail.records.map((record) => ({
+    id: record.id,
+    location: record.location || null,
+    cycle_id: record.cycle_id || null,
+    note: record.note,
+    record_time: record.record_time,
+    visibility: "private",
+    status_tag: null,
+    comment_count: 0,
+    media: [],
+  }));
   const latestUpdate = detail.records[0]?.record_time || archive.updated_at;
   const ongoingDays = getOngoingDays(archive.created_at, archive.ended_at);
   const durationText = ongoingDays
     ? `${archiveCopy.ongoing_days_prefix} ${ongoingDays} ${archiveCopy.days_suffix}`
     : archiveCopy.none;
   const projectView = localArchiveToProjectView(archive, ownerContext, language);
+  const archiveDisplayName = archive.system_name || archive.species_name || "";
   async function change(work: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true); setError("");
@@ -1941,11 +2287,36 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
       onBack={onBack}
       ariaLabel={copy.back}
     />
-    <div className="top-tabs" role="tablist" aria-label={archiveCopy.detail_navigation}>
-      <button type="button" aria-pressed={tab === "records"} onClick={() => setTab("records")}>{archiveCopy.details}</button>
-      <button type="button" aria-pressed={tab === "profile"} onClick={() => setTab("profile")}>{archiveCopy.dossier}</button>
-      <button type="button" aria-pressed={tab === "experience"} onClick={() => setTab("experience")}>{archiveCopy.experience_cards}{language === "en" ? " (0)" : "（0）"}</button>
-    </div>
+    <div style={{ padding: "10px 10px 46px" }}>
+      <div style={projectDetailStatsStyle}>
+        {archiveDisplayName ? (
+          <span style={projectDetailGuideTextStyle}>{archiveDisplayName}</span>
+        ) : null}
+        <ProjectMetaLine
+          recordCount={detail.records.length}
+          durationDays={ongoingDays}
+          ended={archive.status === "ended"}
+          order={["record", "duration"]}
+          style={{ minWidth: 0, flex: "1 1 auto", gap: "5px 10px", fontSize: 13 }}
+        />
+      </div>
+      <div style={localStorageHintStyle}>
+        {isCloudCache
+          ? `${archiveCopy.cloud_offline_cache_hint} ${archiveCopy.cloud_offline_cache_media_hint}`
+          : archiveCopy.saved_on_this_device}
+      </div>
+      <ArchiveDetailTabBar
+        active={tab}
+        labels={{
+          records: archiveCopy.details,
+          profile: archiveCopy.dossier,
+          experience: archiveCopy.experience_cards,
+        }}
+        experienceCount={0}
+        language={language}
+        ariaLabel={archiveCopy.detail_navigation}
+        onChange={setTab}
+      />
     {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
     {tab === "profile" ? (
       <ArchiveDetailHeaderView
@@ -2011,32 +2382,44 @@ function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack
               onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))}
             />
           </div>
-          <section className="panel">
-            <h2>{copy.period}</h2>
-            <label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
-            {archive.cycle_enabled ? <div className="form">
-              {(archive.cycles || []).map((cycle) => <div className="property-row" key={cycle.id}><div><strong>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</strong><small className="project-meta">{formatDate(cycle.started_at, language)}</small></div>{cycle.status === "active" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { if (window.confirm(periods.endDialogMessage)) void change(() => endLocalArchiveCycle(archive.id, cycle.id, new Date().toISOString(), ownerContext)); }}>{periods.endAction}</button> : <span>{copy.ended}</span>}</div>)}
-              <label className="field">{copy.periodDate}<input type="date" value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} /></label>
-              <button type="button" className="primary-button" disabled={busy || !periodDate || archive.status === "ended"} onClick={() => void change(() => createLocalArchiveCycle(archive.id, new Date(`${periodDate}T00:00:00`).toISOString(), ownerContext))}>{periods.newAction}</button>
-            </div> : null}
-          </section>
+          <label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
           </>
         )}
       />
     ) : tab === "experience" ? (
-      <section className="panel empty">{archiveCopy.experience_cards}</section>
-    ) : <>
-      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} / {isCloudCache ? `${archiveCopy.cloud_offline_cache} / ${archiveCopy.cloud_offline_cache_readonly}` : copy.local}</span>{archive.status === "active" && !isCloudCache ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
-      {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
-      <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <ArchiveRecordCardShell key={record.id} metaText={formatDate(record.record_time, language)} mobileMode>
-        {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => isCloudCache ? <span className="photo-view" key={image.id}><BlobImage image={image} alt="" /></span> : <button type="button" className="photo-view" key={image.id} aria-label={copy.viewPhoto} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
-        {record.note ? <p className="record-note">{record.note}</p> : null}
-        {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
-        {record.sync?.status === "pending-cloud-sync" ? <div className="record-actions"><span className="project-meta">{copy.pendingUpload}</span><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
-      </ArchiveRecordCardShell>)}</div>
-      {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
-    </>}
-    {lightbox ? <dialog className="photo-lightbox" open aria-label={copy.photo} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}
+      <div style={localExperienceEmptyStyle}>
+        <div>{experienceCopy.no_cards}</div>
+        <div style={localExperienceEmptyHintStyle}>
+          {isCloudCache ? archiveCopy.cloud_offline_cache_readonly : archiveCopy.local_experience_cards_hint}
+        </div>
+      </div>
+    ) : (
+      <ArchiveCycleTimeline
+        cycles={cycleEnabled ? cycles : []}
+        records={recordItems}
+        category={archive.category}
+        mobileMode
+        canManage={cycleEnabled && !isCloudCache}
+        busy={busy}
+        onStartCycle={cycleEnabled && !isCloudCache ? (startedAt) => void change(() => createLocalArchiveCycle(archive.id, startedAt, ownerContext)) : undefined}
+        onEndCycle={cycleEnabled && !isCloudCache ? (cycle, endedAt) => void change(() => endLocalArchiveCycle(archive.id, cycle.id, endedAt, ownerContext)) : undefined}
+        emptyState={<div className="panel empty">{copy.noRecords}</div>}
+        renderRecord={(record) => {
+          const source = recordsById.get(record.id);
+          if (!source) return null;
+          return (
+            <ArchiveRecordCardShell key={record.id} metaText={formatDate(source.record_time, language)} mobileMode>
+              {source.images.length ? <div className={`photo-grid ${source.images.length === 1 ? "single-photo" : ""}`}>{source.images.map((image) => isCloudCache ? <span className="photo-view" key={image.id}><BlobImage image={image} alt="" /></span> : <button type="button" className="photo-view" key={image.id} aria-label={copy.viewPhoto} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
+              {source.note ? <p className="record-note">{source.note}</p> : null}
+              {source.location ? <p className="project-meta">{source.location.label || `${source.location.latitude?.toFixed(4)}, ${source.location.longitude?.toFixed(4)}`}</p> : null}
+              {!isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(source.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(source.id)}>{copy.remove}</button></div> : null}
+            </ArchiveRecordCardShell>
+          );
+        }}
+      />
+    )}
+    </div>
+    {lightbox && !isCloudCache ? <dialog className="photo-lightbox" open aria-label={copy.photo} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}
   </>;
 }
 

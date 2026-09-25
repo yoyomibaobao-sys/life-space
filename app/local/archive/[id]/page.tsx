@@ -23,6 +23,7 @@ import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchiveDetailHeaderView, {
   type ArchiveProfileFieldSave,
 } from "@/components/archive-ui/ArchiveDetailHeaderView";
+import ArchiveDetailTabBar from "@/components/archive-ui/ArchiveDetailTabBar";
 import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import { supabase } from "@/lib/supabase";
@@ -1223,30 +1224,18 @@ export default function LocalArchiveDetailPage() {
             : archiveCopy.saved_on_this_device}
         </div>
 
-        <nav style={archiveDetailTabWrapStyle} aria-label={archiveCopy.detail_navigation}>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("records")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "records")}
-          >
-            {archiveCopy.details}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("profile")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "profile")}
-          >
-            {archiveCopy.dossier}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("experience")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "experience")}
-          >
-            {archiveCopy.experience_cards}
-            {language === "en" ? " (0)" : "（0）"}
-          </button>
-        </nav>
+        <ArchiveDetailTabBar
+          active={activeDetailTab}
+          labels={{
+            records: archiveCopy.details,
+            profile: archiveCopy.dossier,
+            experience: archiveCopy.experience_cards,
+          }}
+          experienceCount={0}
+          language={language}
+          ariaLabel={archiveCopy.detail_navigation}
+          onChange={setActiveDetailTab}
+        />
 
         {activeDetailTab === "profile" ? (
         <ArchiveDetailHeaderView
@@ -2024,31 +2013,6 @@ const localStorageHintStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.45,
 };
-
-const archiveDetailTabWrapStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: 6,
-  marginBottom: 8,
-  padding: 4,
-  border: "1px solid #e2ecd9",
-  borderRadius: 16,
-  background: "#fff",
-};
-
-function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
-  return {
-    minHeight: 42,
-    border: "none",
-    borderRadius: 12,
-    color: active ? "#2f6a31" : "#40583a",
-    background: active ? "#e3f1dd" : "transparent",
-    fontSize: "clamp(14px, 3.6vw, 16px)",
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-  };
-}
 
 const localExperienceEmptyStyle: CSSProperties = {
   border: "1px solid #ebefea",

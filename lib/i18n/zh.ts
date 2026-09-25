@@ -1851,6 +1851,7 @@ const zh = {
     cloud_space: "云空间",
     local: "本地",
     offline_notice: "当前未联网，部分在线内容暂不可用。",
+    cloud_setting_requires_network: "当前未联网，此设置需要连接云端后才能修改。",
     login_cloud_hint: "登录后可查看云空间项目；本地项目仍可在当前设备查看。",
     no_cloud_projects: "还没有云空间项目，请先新建项目",
     no_cloud_matches: "没有找到云空间项目",

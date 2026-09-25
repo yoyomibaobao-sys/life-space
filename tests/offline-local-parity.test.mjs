@@ -43,6 +43,9 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(archivePage, /<PersonalSpaceMobileIdentity/);
   assert.match(sharedIdentity, /storageUsagePercent/);
   assert.match(source, /<HomeSectionTabs/);
+  assert.match(source, /onSearch=\{\(\) => setScreen\(\{ kind: "discover-search" \}\)\}/);
+  assert.match(sharedHomeTabs, /searchEnabled && !onSearch/);
+  assert.match(read("app/discover/search/page.tsx"), /stayInCurrentShell/);
   assert.match(source, /fetchDiverseDiscoveryProjectBatch/);
   assert.match(source, /fetchDiscoverExperienceCardSearchResults/);
   assert.match(source, /kind: "experience"/);
@@ -233,6 +236,72 @@ test("offline my-space groups local projects, live cloud, and caches without mix
   assert.match(headerView, /project\.storageTone !== "device"/);
   assert.match(shell, /const hideCloudCreate = useCloudCacheSource && sourceFilter === "cloud"/);
   assert.match(shell, /viewingCloudCache \? null/);
+});
+
+test("offline shell reuses online discover follow market and guide chrome without duplicate headers", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const directoryView = read("components/plant/OfflineGuideDirectoryView.tsx");
+  const publicCard = read("components/plant/PublicGuideCard.tsx");
+  const plantPage = read("app/plant/page.tsx");
+  const tabBar = read("components/archive-ui/ArchiveDetailTabBar.tsx");
+  const localDetail = read("app/local/archive/[id]/page.tsx");
+
+  assert.match(source, /homeSectionOwnsTopNav = \[[\s\S]*"following"[\s\S]*"market"[\s\S]*"detail"/);
+  assert.match(source, /<OfflineGuideDirectoryView/);
+  assert.doesNotMatch(source, /from "@\/app\/plant\/page"/);
+  assert.doesNotMatch(source, /className="guide-item"/);
+  assert.match(directoryView, /<HomeSectionTabs/);
+  assert.match(directoryView, /<GuideCategoryTabs/);
+  assert.match(directoryView, /<MobileSearchField/);
+  assert.match(directoryView, /<PublicGuideCard/);
+  assert.match(directoryView, /getOfflineGuideOverview/);
+  assert.match(source, /loadOfflineGuideDirectory/);
+  assert.match(plantPage, /PublicGuideCardBody/);
+  assert.match(publicCard, /publicGuideCardStyle/);
+  assert.match(source, /onSearch=\{\(\) => setScreen\(\{ kind: "discover-search" \}\)\}/);
+  assert.match(source, /<DiscoverFilterBar/);
+  assert.match(source, /followChromeTab === "projects"/);
+  assert.match(source, /followChromeTab === "experience"/);
+  assert.match(source, /followChromeTab === "users"/);
+  assert.match(source, /copy\.marketAll/);
+  assert.match(source, /offlineMarketFilterToggleStyle/);
+  assert.match(source, /<ArchiveDetailTabBar/);
+  assert.match(source, /<ProjectMetaLine/);
+  assert.match(source, /<ArchiveCycleTimeline/);
+  assert.match(source, /<ArchiveDetailHeaderView/);
+  assert.match(tabBar, /gridTemplateColumns: "repeat\(3, minmax\(0, 1fr\)\)"/);
+  assert.match(localDetail, /<ArchiveDetailTabBar/);
+  assert.match(source, /canManage=\{cycleEnabled && !isCloudCache\}/);
+  assert.match(source, /isCloudCache \? <span className="photo-view"/);
+});
+
+test("offline identity opens the shared profile settings and local category depths persist on device", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const identity = read("components/archive-ui/PersonalSpaceMobileIdentity.tsx");
+  const profile = read("app/profile/page.tsx");
+  const categories = read("app/profile/project-categories/page.tsx");
+  const settings = read("lib/archive-category-settings.ts");
+  const homeTabs = read("components/home/HomeSectionTabs.tsx");
+  const discoverSearch = read("app/discover/search/page.tsx");
+  const zh = read("lib/i18n/zh.ts");
+
+  assert.match(identity, /onProfileClick\?: \(\) => void/);
+  assert.match(source, /onProfileClick=\{\(\) => setScreen\(\{ kind: "settings" \}\)\}/);
+  assert.match(source, /<ProfilePage/);
+  assert.match(source, /<ProjectCategorySettingsPage/);
+  assert.match(source, /kind: "project-categories"/);
+  assert.match(profile, /stayInCurrentShell/);
+  assert.match(profile, /onOpenProjectCategories/);
+  assert.match(profile, /cloud_setting_requires_network/);
+  assert.match(categories, /saveLocalArchiveCategoryDepths\(next/);
+  assert.match(settings, /LOCAL_SETTINGS_PREFIX/);
+  assert.match(settings, /LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT/);
+  assert.match(source, /LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT/);
+  assert.match(zh, /当前未联网，此设置需要连接云端后才能修改。/);
+  assert.match(homeTabs, /searchEnabled && !onSearch/);
+  assert.match(discoverSearch, /stayInCurrentShell/);
+  assert.doesNotMatch(source, /createExperienceCard|local experience card|experience_card_draft/i);
+  assert.match(source, /if \(!explicitSignOutRef\.current && !wasLocalOwnerExplicitlySignedOut\(\)\)/);
 });
 
 test("temporary single-character startup placeholder is replaced by the product brand", () => {

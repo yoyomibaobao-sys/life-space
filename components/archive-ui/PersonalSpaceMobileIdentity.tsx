@@ -13,6 +13,7 @@ export default function PersonalSpaceMobileIdentity({
   experienceLabel,
   experienceCardCount,
   profileHref,
+  onProfileClick,
   experienceHref,
   notificationSlot,
   language = "zh",
@@ -25,6 +26,7 @@ export default function PersonalSpaceMobileIdentity({
   experienceLabel?: string | null;
   experienceCardCount?: number | null;
   profileHref?: string | null;
+  onProfileClick?: () => void;
   experienceHref?: string | null;
   notificationSlot?: ReactNode;
   language?: "zh" | "en";
@@ -44,11 +46,16 @@ export default function PersonalSpaceMobileIdentity({
   const profileName = (
     <span style={usernameStyle}>{username}</span>
   );
+  const openProfile = onProfileClick || null;
 
   return (
     <section style={identityStyle}>
       <div style={identityLinkStyle}>
-        {profileHref ? (
+        {openProfile ? (
+          <button type="button" onClick={openProfile} style={avatarButtonStyle} aria-label={username}>
+            {avatar}
+          </button>
+        ) : profileHref ? (
           <Link href={profileHref} style={avatarLinkStyle}>
             {avatar}
           </Link>
@@ -69,7 +76,11 @@ export default function PersonalSpaceMobileIdentity({
                 : nameRowStyle
             }
           >
-            {profileHref ? (
+            {openProfile ? (
+              <button type="button" onClick={openProfile} style={usernameButtonStyle}>
+                {username}
+              </button>
+            ) : profileHref ? (
               <Link href={profileHref} style={usernameLinkStyle}>
                 {username}
               </Link>
@@ -167,6 +178,14 @@ const avatarLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
+const avatarButtonStyle: CSSProperties = {
+  ...avatarLinkStyle,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  cursor: "pointer",
+};
+
 const avatarStyle: CSSProperties = {
   width: 34,
   height: 34,
@@ -216,6 +235,15 @@ const usernameStyle: CSSProperties = {
 const usernameLinkStyle: CSSProperties = {
   ...usernameStyle,
   textDecoration: "none",
+};
+
+const usernameButtonStyle: CSSProperties = {
+  ...usernameLinkStyle,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  cursor: "pointer",
+  textAlign: "left",
 };
 
 const membershipStyle: CSSProperties = {

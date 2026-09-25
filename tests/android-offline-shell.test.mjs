@@ -108,7 +108,7 @@ test("offline guides expose only the registered-user overview boundary", () => {
   assert.match(source, /!owner[\s\S]*guideSignInRequired/);
   assert.match(source, /getOfflineGuideOverview\(guide, language\)/);
   assert.match(source, /getOfflineGuideParameters\(guide, language\)/);
-  assert.match(source, /owner && guide\.description/);
+  assert.match(read("components/plant/OfflineGuideDirectoryView.tsx"), /signedIn \? getOfflineGuideOverview/);
   assert.match(en, /full practice guidance, experience cards, and related projects/);
   assert.match(guideCache, /PUBLIC_SOURCES/);
   assert.match(guideCache, /plantCoreParameters/);
@@ -177,7 +177,7 @@ test("Android bundled offline shell matches accepted local-first cache rules", (
   assert.match(source, /const hideCloudCreate = useCloudCacheSource && sourceFilter === "cloud"/);
   assert.match(source, /hideCloudCreate \? null/);
   assert.match(source, /viewingCloudCache \? null/);
-  assert.match(source, /archive\.status === "active" && !isCloudCache/);
+  assert.match(source, /canManage=\{cycleEnabled && !isCloudCache\}/);
   assert.match(source, /detail\.archive\.local_role !== "cloud-offline-cache"/);
   assert.match(source, /archives\.filter\(\(archive\) => archive\.status === "active"\)/);
   assert.match(source, /readShellIdentityCache\(nextOwner\.userId\)/);

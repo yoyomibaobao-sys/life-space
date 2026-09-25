@@ -27,6 +27,7 @@ test("cloud and local project category depths remain independent", async () => {
   assert.match(page, /activeSpace === "cloud"/);
   assert.match(page, /\(\["cloud", "local"\] as const\)\.map/);
   assert.match(page, /saveLocalArchiveCategoryDepths/);
+  assert.match(page, /saveLocalArchiveCategoryDepths\(next/);
   assert.match(page, /depth >= 2/);
   assert.match(page, /depth >= 3/);
 });

@@ -48,9 +48,12 @@ import {
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
-import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
+import { clearRememberedLocalOwnerContext, loadRememberedLocalOwnerContext } from "@/lib/local-owner-context";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import AndroidAppVersionEntry from "@/components/AndroidAppVersionEntry";
+import { isBundledOfflineShell } from "@/lib/cloud-reachability";
+import { displayAvatarUrl, readLocalIdentityCache } from "@/lib/local-identity-cache";
+import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
 
 
 type MembershipPaymentRow = {
@@ -133,9 +136,18 @@ function fillExportTemplate(
   );
 }
 
-export default function ProfilePage() {
+export default function ProfilePage({
+  onBack,
+  onOpenProjectCategories,
+  onLogout,
+}: {
+  onBack?: () => void;
+  onOpenProjectCategories?: () => void;
+  onLogout?: () => void;
+} = {}) {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
+  const stayInCurrentShell = Boolean(onBack) || isBundledOfflineShell();
   const isNativeApp = useIsNativeApp();
   const baseMobileProfileModules: MobileProfileNavItem[] = [
     ...(isNativeApp === true
@@ -266,6 +278,26 @@ export default function ProfilePage() {
       } = await supabase.auth.getUser();
 
       if (error || !user) {
+        if (stayInCurrentShell) {
+          const remembered = loadRememberedLocalOwnerContext();
+          const cached = readLocalIdentityCache(remembered?.userId);
+          const cachedUserId = remembered?.userId || "local";
+          setUser({
+            id: cachedUserId,
+            email: remembered?.email || "",
+          } as SupabaseUser);
+          setProfile({
+            id: cachedUserId,
+            username: cached?.profile?.username || null,
+            avatar_url: displayAvatarUrl(cached?.profile),
+            storage_used: cached?.profile?.storage_used ?? null,
+            storage_limit: cached?.profile?.storage_limit ?? null,
+          });
+          setMembership(cached?.membership || null);
+          setUsername(cached?.profile?.username || "");
+          setInitLoading(false);
+          return;
+        }
         router.push(buildLoginHref("/profile"));
         return;
       }
@@ -350,7 +382,7 @@ export default function ProfilePage() {
     }
 
     void init();
-  }, [router]);
+  }, [router, stayInCurrentShell]);
 
   const regionOptions = useMemo<RegionOption[]>(
     () => getRegionOptions(countryCode, language),
@@ -455,7 +487,14 @@ export default function ProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPaymentModule, user?.id]);
 
+  function blockCloudSetting() {
+    if (!stayInCurrentShell) return false;
+    showToast(t.archive_workspace.cloud_setting_requires_network);
+    return true;
+  }
+
   async function handleSave() {
+    if (blockCloudSetting()) return;
     if (!user) return;
 
     const safeUsername = username.trim();
@@ -516,6 +555,7 @@ export default function ProfilePage() {
   }
 
   function beginProfileEdit() {
+    if (blockCloudSetting()) return;
     setUsername(String(profile?.username || ""));
     const legacy = parseLegacyLocation(profile?.location);
     setCountryCode(String(profile?.country_code || legacy.countryCode || ""));
@@ -550,6 +590,7 @@ export default function ProfilePage() {
 
 
   async function handleExport() {
+    if (blockCloudSetting()) return;
     if (!user || exporting) return;
 
     setExporting(true);
@@ -647,12 +688,17 @@ export default function ProfilePage() {
   }
 
   async function handleProfileLogout() {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
     clearRememberedLocalOwnerContext();
     await supabase.auth.signOut({ scope: "local" });
     router.replace("/login");
   }
 
   function openDeleteDialog() {
+    if (blockCloudSetting()) return;
     setDeleteConfirmed(false);
     setDeleteAccountError("");
     setDeleteDialogOpen(true);
@@ -720,6 +766,11 @@ export default function ProfilePage() {
   }
 
   async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
+    if (stayInCurrentShell) {
+      e.target.value = "";
+      showToast(t.archive_workspace.cloud_setting_requires_network);
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
@@ -784,9 +835,22 @@ export default function ProfilePage() {
       titleText={t.profile.settings_title}
       fallbackHref="/archive"
       ariaLabel={t.nav.back}
+      onBack={onBack}
     />
     <main style={pageStyle}>
-      <section style={shellStyle} onClickCapture={rememberProfileReturnPosition}>
+      <section style={shellStyle} onClickCapture={(event) => {
+        rememberProfileReturnPosition(event);
+        if (!stayInCurrentShell) return;
+        const link = (event.target as HTMLElement | null)?.closest("a[href]");
+        if (!link) return;
+        event.preventDefault();
+        showToast(t.archive_workspace.cloud_setting_requires_network);
+      }}>
+        {stayInCurrentShell ? (
+          <div style={{ marginBottom: 12 }}>
+            <ConnectivityNotice message={t.archive_workspace.offline_notice} />
+          </div>
+        ) : null}
         {!isMobileViewport ? (
           <h1 style={{ margin: 0, fontSize: 24, color: "#1f2a1f" }}>{t.profile.title}</h1>
         ) : null}
@@ -972,6 +1036,20 @@ export default function ProfilePage() {
           </button>
         </section>
 
+        {onOpenProjectCategories ? (
+          <button
+            type="button"
+            onClick={onOpenProjectCategories}
+            style={{ ...projectCategorySettingsLinkStyle, ...(isMobileViewport ? mobileGroupedRowStyle : {}), width: "100%", textAlign: "left", cursor: "pointer" }}
+          >
+            <span style={{ minWidth: 0 }}>
+              <strong style={projectCategorySettingsTitleStyle}>
+                {t.archive_workspace.group_settings_title}
+              </strong>
+            </span>
+            <UiIcon name="arrow-right" size={17} />
+          </button>
+        ) : (
         <Link href="/profile/project-categories" style={{ ...projectCategorySettingsLinkStyle, ...(isMobileViewport ? mobileGroupedRowStyle : {}) }}>
           <span style={{ minWidth: 0 }}>
             <strong style={projectCategorySettingsTitleStyle}>
@@ -980,6 +1058,7 @@ export default function ProfilePage() {
           </span>
           <UiIcon name="arrow-right" size={17} />
         </Link>
+        )}
         </section>
 
         <MobileProfileModuleTabs

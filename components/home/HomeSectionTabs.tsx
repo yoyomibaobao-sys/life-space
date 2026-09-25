@@ -35,10 +35,10 @@ export default function HomeSectionTabs({
     <MobileContentTopBar
       ariaLabel={t.nav.home_sections}
       searchHref={
-        searchEnabled
+        searchEnabled && !onSearch
           ? active === "activity"
             ? "/discover/search"
-            : active === "experience" && !onSearch
+            : active === "experience"
               ? "/experience/search"
               : undefined
           : undefined

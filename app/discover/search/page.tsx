@@ -22,9 +22,11 @@ import {
 import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import type { FeedItem } from "@/lib/discover-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { isBundledOfflineShell } from "@/lib/cloud-reachability";
 
 export default function DiscoverSearchPage({ onBack, onOpenProject }: { onBack?: () => void; onOpenProject?: (item: DiscoveryProjectFeedItem) => void } = {}) {
   const { t } = useLanguage();
+  const stayInCurrentShell = Boolean(onBack) || isBundledOfflineShell();
   const [filters, setFilters] = useState<SearchFilters>(emptySearchFilters);
   const [searchKind, setSearchKind] = useState<ActivitySearchScope>("all");
   const [projectResults, setProjectResults] =
@@ -43,7 +45,7 @@ async function performSearch(
   nextKind: ActivitySearchScope,
   options?: { syncUrl?: boolean }
 ) {
-  if (options?.syncUrl) {
+  if (options?.syncUrl && !stayInCurrentShell) {
     const extraParams: Record<string, string> = {};
 
     if (fromArchiveId) extraParams.fromArchive = fromArchiveId;
@@ -135,7 +137,9 @@ const hasFilters = Object.entries(filters).some(([key, value]) =>
     }
   }
 
-  window.addEventListener("popstate", loadFromUrl);
+  if (!stayInCurrentShell) {
+    window.addEventListener("popstate", loadFromUrl);
+  }
   window.addEventListener("resize", updateViewportMode);
 
   return () => {

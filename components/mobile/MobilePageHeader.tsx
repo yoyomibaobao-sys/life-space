@@ -17,6 +17,7 @@ export default function MobilePageHeader({
   showBack = true,
   compact = false,
   ariaLabel,
+  onBack,
 }: {
   title: ReactNode;
   titleText?: string;
@@ -25,10 +26,15 @@ export default function MobilePageHeader({
   showBack?: boolean;
   compact?: boolean;
   ariaLabel?: string;
+  onBack?: () => void;
 }) {
   const router = useRouter();
 
   function goBack() {
+    if (onBack) {
+      onBack();
+      return;
+    }
     const currentRoute = getCurrentMobileRoute();
     const destination = getMobileSourceRoute(currentRoute, fallbackHref);
     prepareMobileSourceReturn(currentRoute, destination);

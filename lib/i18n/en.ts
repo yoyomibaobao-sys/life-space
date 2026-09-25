@@ -1851,6 +1851,7 @@ const en = {
     cloud_space: "Cloud",
     local: "Local",
     offline_notice: "You’re offline. Some online content is temporarily unavailable.",
+    cloud_setting_requires_network: "You're offline. This setting can only be changed after connecting to the cloud.",
     login_cloud_hint: "Sign in to view cloud projects. Local projects remain available on this device.",
     no_cloud_projects: "No cloud projects yet. Create your first project.",
     no_cloud_matches: "No cloud projects match these filters",

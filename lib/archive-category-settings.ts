@@ -13,6 +13,8 @@ export const DEFAULT_ARCHIVE_CATEGORY_DEPTHS: ArchiveCategoryDepths = {
 };
 
 const LOCAL_SETTINGS_PREFIX = "lifespace:archive-category-depths:local:v1";
+export const LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT =
+  "lifespace:local-archive-category-depths-changed";
 const ARCHIVE_CATEGORIES: ArchiveCategory[] = [
   "plant",
   "system",
@@ -66,6 +68,11 @@ export function saveLocalArchiveCategoryDepths(
   window.localStorage.setItem(
     getLocalSettingsKey(ownerId),
     JSON.stringify(normalizeDepths(depths)),
+  );
+  window.dispatchEvent(
+    new CustomEvent(LOCAL_ARCHIVE_CATEGORY_DEPTHS_CHANGED_EVENT, {
+      detail: { ownerId: ownerId || "device" },
+    }),
   );
 }
 
