@@ -80,8 +80,14 @@ import {
   getLocalArchiveCategoryDepths,
   type ArchiveCategoryDepths,
 } from "@/lib/archive-category-settings";
+import { Capacitor } from "@capacitor/core";
 import { LOCAL_ORIGIN_MIGRATED_EVENT } from "@/lib/local-origin-migration";
 import { PENDING_CLOUD_SYNC_UPDATED_EVENT } from "@/lib/pending-cloud-sync";
+import {
+  refreshCloudOfflineCaches,
+  type CloudOfflineCacheArchiveSource,
+} from "@/lib/cloud-offline-cache";
+import { logLifespaceStorageDiagnostic } from "@/lib/local-storage-diagnostic";
 
 type LatestArchiveRecord = {
   id: string;
@@ -117,6 +123,9 @@ const emptySystemNameCandidateMap: Record<ArchiveCategory, SystemNameCandidate[]
   other: [],
 };
 
+function isCapacitorAndroid() {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+}
 
 export default function ArchivePage() {
   const router = useRouter();
@@ -288,7 +297,7 @@ export default function ArchivePage() {
       }
 
       const [
-        { data: archivesData },
+        archivesResult,
         { data: groupTagsData },
         { data: subTagsData },
         { data: speciesData },
@@ -322,6 +331,19 @@ export default function ArchivePage() {
           .eq("id", user.id)
           .maybeSingle(),
       ]);
+
+      const archivesData = archivesResult.error ? null : archivesResult.data;
+      if (archivesResult.error) {
+        console.error("load archives error:", archivesResult.error);
+      } else if (isCapacitorAndroid() && ownerContext?.userId) {
+        void logLifespaceStorageDiagnostic(ownerContext);
+        void refreshCloudOfflineCaches(
+          (archivesData || []) as CloudOfflineCacheArchiveSource[],
+          ownerContext
+        ).catch((error) => {
+          console.warn("[lifespace-cloud-cache]", error);
+        });
+      }
 
       const aliasesBySpecies = new Map<string, string[]>();
       ((aliasData || []) as PlantSpeciesAliasSearchRow[]).forEach((alias) => {

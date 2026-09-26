@@ -48,7 +48,7 @@ import {
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
-import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
+import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
 import AndroidAppVersionEntry from "@/components/AndroidAppVersionEntry";
 
@@ -647,7 +647,7 @@ export default function ProfilePage() {
   }
 
   async function handleProfileLogout() {
-    clearRememberedLocalOwnerContext();
+    await clearCloudOfflineCacheOnExplicitLogout(user);
     await supabase.auth.signOut({ scope: "local" });
     router.replace("/login");
   }
@@ -706,7 +706,7 @@ export default function ProfilePage() {
         return;
       }
 
-      clearRememberedLocalOwnerContext();
+      await clearCloudOfflineCacheOnExplicitLogout(user);
       await supabase.auth.signOut();
       showToast(t.profile.deleted);
       router.replace("/");
