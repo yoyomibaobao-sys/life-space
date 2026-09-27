@@ -2878,10 +2878,10 @@ async function deleteCloudOfflineCacheRows(
     const recordStore = transaction.objectStore(RECORD_STORE);
     const imageStore = transaction.objectStore(IMAGE_STORE);
     for (const record of records.filter((item) => item.archive_id === cache.id)) {
-      await requestToPromise(recordStore.delete(item.id));
+      await requestToPromise(recordStore.delete(record.id));
     }
     for (const image of images.filter((item) => item.archive_id === cache.id)) {
-      await requestToPromise(imageStore.delete(item.id));
+      await requestToPromise(imageStore.delete(image.id));
     }
     await requestToPromise(archiveStore.delete(cache.id));
     await done;
