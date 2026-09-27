@@ -1,6 +1,5 @@
 "use client";
 
-import { Capacitor } from "@capacitor/core";
 import type { ArchiveItem } from "@/lib/archive-page-types";
 import type { MediaItem } from "@/lib/domain-types";
 import type { PlantingRegion } from "@/lib/planting-region";
@@ -15,10 +14,12 @@ import {
   type CloudOfflineCacheRecordInput,
   type LocalArchiveOwnerContext,
 } from "@/lib/local-offline-db";
+import { logLifespaceStorageDiagnostic } from "@/lib/local-storage-diagnostic";
 
 const CLOUD_CACHE_PAGE_SIZE = 500;
 const CLOUD_CACHE_MEDIA_BATCH_SIZE = 100;
 const THUMBNAIL_TIMEOUT_MS = 12_000;
+const MAX_CLOUD_CACHE_THUMB_BYTES = 220 * 1024;
 
 export type CloudOfflineCacheArchiveSource = ArchiveItem & {
   updated_at?: string | null;
@@ -53,10 +54,6 @@ type CloudCacheMediaRow = MediaItem & {
   sort_order?: number | null;
   created_at?: string | null;
 };
-
-function isNativeAndroid() {
-  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
-}
 
 function cacheRevision(archive: CloudOfflineCacheArchiveSource) {
   return [
@@ -130,7 +127,7 @@ async function downloadThumbnail(
     });
     if (!response.ok) return null;
     const blob = await response.blob();
-    if (!blob.size) return null;
+    if (!blob.size || blob.size > MAX_CLOUD_CACHE_THUMB_BYTES) return null;
     return {
       id: media.id,
       record_id: media.record_id,
@@ -140,7 +137,6 @@ async function downloadThumbnail(
       captured_at: media.captured_at || null,
       sort_order: media.sort_order ?? 0,
       created_at: media.created_at || null,
-      cloud_media_url: media.url || null,
     };
   } catch {
     return null;
@@ -235,7 +231,7 @@ async function refreshOneCloudOfflineCache(
     updated_at: archive.last_record_time || archive.created_at || null,
     is_public: Boolean(archive.is_public),
     cache_revision: revision,
-    cycles: ((cycleRows || []) as CloudOfflineCacheCycleInput[]),
+    cycles: (cycleRows || []) as CloudOfflineCacheCycleInput[],
     records: cacheRecords,
     images,
   });
@@ -245,13 +241,49 @@ export async function refreshCloudOfflineCaches(
   archives: CloudOfflineCacheArchiveSource[],
   ownerContext: LocalArchiveOwnerContext | null
 ) {
-  if (!isNativeAndroid() || !ownerContext?.userId) return;
+  const endedArchives = archives.filter((archive) => archive.status === "ended").length;
+  const activeArchives = archives.length - endedArchives;
+  const userId = ownerContext?.userId || null;
 
+  console.info("[lifespace-cloud-cache]", "refresh start", {
+    userId,
+    cloudArchives: archives.length,
+    activeArchives,
+    endedArchives,
+  });
+  await logLifespaceStorageDiagnostic(ownerContext);
+
+  if (!ownerContext?.userId) return;
+
+  let successCount = 0;
+  let failedCount = 0;
   for (const archive of archives) {
     try {
       await refreshOneCloudOfflineCache(archive, ownerContext);
+      successCount += 1;
+      console.info("[lifespace-cloud-cache]", "archive success", {
+        id: archive.id,
+        status: archive.status || null,
+      });
     } catch (error) {
-      console.warn("refresh cloud offline cache failed", archive.id, error);
+      failedCount += 1;
+      console.warn("[lifespace-cloud-cache]", "archive failed", {
+        id: archive.id,
+        status: archive.status || null,
+        error,
+      });
     }
   }
+
+  const diagnosis = await logLifespaceStorageDiagnostic(ownerContext);
+  console.info("[lifespace-cloud-cache]", "refresh done", {
+    userId,
+    cloudArchives: archives.length,
+    activeArchives,
+    endedArchives,
+    successCount,
+    failedCount,
+    cloudOfflineCacheCount: diagnosis.counts.cloudOfflineCache,
+    visibleCloudCacheCount: diagnosis.counts.visibleCloudCache,
+  });
 }

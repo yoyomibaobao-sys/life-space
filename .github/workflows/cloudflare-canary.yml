@@ -20,8 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Publishable Supabase browser configuration is intentionally public and
-      # remains subject to the signed-in user's JWT and Row Level Security.
+      # These NEXT_PUBLIC_* values must exist in the vinext *build* process so
+      # the browser supabase chunk is inlined. Worker runtime vars cannot fix
+      # client hydration. Publishable browser configuration is intentionally
+      # public and remains subject to the signed-in user's JWT and RLS.
       NEXT_PUBLIC_SUPABASE_URL: https://eidltoikfpnrzxruvawf.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_2cw-3WJnyD6x_CnPiDEiqQ_04violBa
 

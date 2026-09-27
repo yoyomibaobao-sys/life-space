@@ -57,6 +57,7 @@ export type LocalPendingSyncPromptMode = "ask" | "manual";
 
 export type LocalCloudMigrationStatus = "migrating" | "failed" | "migrated";
 
+
 export type LocalArchiveCycle = {
   id: string;
   archive_id: string;
@@ -280,6 +281,7 @@ export type LocalCloudSyncOperationUpdate = {
   last_error?: string | null;
 };
 
+
 export type CloudArchiveLocalCycleInput = {
   cloud_cycle_id: string;
   cycle_no: number;
@@ -397,6 +399,58 @@ function normalizeOptionalText(value?: string | null) {
   return trimmed || null;
 }
 
+export function isCloudOfflineCacheArchiveId(archiveId?: string | null) {
+  return Boolean(archiveId && archiveId.startsWith("cloud_cache_archive_"));
+}
+
+export function resolveLocalArchiveRole(
+  archive: Pick<
+    LocalArchive,
+    "id" | "local_role" | "source_cloud_archive_id" | "source_cloud_cache_revision"
+  >
+): LocalArchiveRole {
+  if (isCloudOfflineCacheArchiveId(archive.id) || archive.local_role === "cloud-offline-cache") {
+    return "cloud-offline-cache";
+  }
+
+  if (normalizeOptionalText(archive.source_cloud_cache_revision)) {
+    return "cloud-offline-cache";
+  }
+
+  if (archive.local_role === "local-project" || archive.local_role === "saved-local-copy") {
+    return archive.local_role;
+  }
+
+  return normalizeOptionalText(archive.source_cloud_archive_id)
+    ? "saved-local-copy"
+    : "local-project";
+}
+
+function isUserLocalArchive(archive: LocalArchive) {
+  return resolveLocalArchiveRole(archive) !== "cloud-offline-cache";
+}
+
+function assertWritableUserArchive(archive: LocalArchive, message: string) {
+  if (resolveLocalArchiveRole(archive) === "cloud-offline-cache") {
+    throw new Error(message);
+  }
+}
+
+async function abortIfCloudOfflineCacheWrite(
+  transaction: IDBTransaction,
+  archive: LocalArchive,
+  done: Promise<void>,
+  message = "云项目离线缓存只读，不能修改。"
+) {
+  try {
+    assertWritableUserArchive(archive, message);
+  } catch (error) {
+    transaction.abort();
+    await done.catch(() => undefined);
+    throw error;
+  }
+}
+
 function normalizeLocalSyncMeta(sync?: Partial<LocalSyncMeta> | null): LocalSyncMeta {
   const validStatuses: LocalSyncStatus[] = [
     "local-only",
@@ -455,9 +509,6 @@ function normalizeLocalArchiveRole(archive: LocalArchive): LocalArchiveRole {
     : "local-project";
 }
 
-function isUserLocalArchive(archive: LocalArchive) {
-  return normalizeLocalArchiveRole(archive) !== "cloud-offline-cache";
-}
 
 function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
   const category = normalizeLocalArchiveCategory(
@@ -481,7 +532,7 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
 
   return {
     ...archive,
-    local_role: normalizeLocalArchiveRole(archive),
+    local_role: resolveLocalArchiveRole(archive),
     category,
     main_category: normalizeLocalArchiveCategory(
       archive.main_category || category
@@ -1033,7 +1084,7 @@ export async function listLocalArchiveCycleTrash(
 
   return archives
     .map(normalizeLocalArchive)
-    .filter((archive) => isLocalArchiveVisibleToOwner(archive, ownerContext))
+    .filter((archive) => isUserLocalArchive(archive) && isLocalArchiveVisibleToOwner(archive, ownerContext))
     .flatMap((archive) =>
       (archive.trashed_cycles || []).map((trash) => ({
         archive_id: archive.id,
@@ -1106,6 +1157,7 @@ export async function listPendingCloudSyncSummaries(
     .map(normalizeLocalArchive)
     .filter(
       (archive) =>
+        isUserLocalArchive(archive) &&
         Boolean(archive.source_cloud_archive_id) &&
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     )
@@ -1196,6 +1248,7 @@ export async function preparePendingCloudSyncQueue(
       );
       if (
         !cloudArchiveId ||
+        !isUserLocalArchive(archive) ||
         !isLocalArchiveVisibleToOwner(archive, ownerContext)
       ) {
         continue;
@@ -1288,6 +1341,7 @@ export async function deferPendingCloudSyncPrompt(
     }
 
     const normalizedArchive = normalizeLocalArchive(archive);
+    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
     if (
       !normalizedArchive.source_cloud_archive_id ||
       !isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)
@@ -1525,6 +1579,7 @@ export async function deleteLocalTaxonomyItem(
   const matchingArchives = archiveRows
     .map(normalizeLocalArchive)
     .filter((archive) => {
+      if (!isUserLocalArchive(archive)) return false;
       if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) return false;
       if (category && archive.category !== category) return false;
       if (input.kind === "subcategory") return archive.subcategory === label;
@@ -1616,6 +1671,7 @@ export async function renameLocalTaxonomyItem(
 
     for (const rawArchive of archiveRows) {
       const archive = normalizeLocalArchive(rawArchive);
+      if (!isUserLocalArchive(archive)) continue;
       if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) continue;
       if (category && archive.category !== category) continue;
 
@@ -1688,10 +1744,12 @@ export async function updateLocalArchiveFields(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
-    if (normalizedArchive.local_role === "cloud-offline-cache") {
+    try {
+      assertWritableUserArchive(normalizedArchive, "云项目离线缓存只读，不能修改。");
+    } catch (error) {
       transaction.abort();
       await done.catch(() => undefined);
-      throw new Error("云端离线副本为只读，请联网后修改项目资料。");
+      throw error;
     }
 
     let nextArchive: LocalArchive = {
@@ -1840,6 +1898,7 @@ export async function updateLocalArchiveMigrationState(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
+    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
 
     const nextArchive: LocalArchive = {
       ...normalizedArchive,
@@ -1911,6 +1970,7 @@ export async function updateLocalArchiveCloudSyncOperation(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
+    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
 
     const nextArchive: LocalArchive = {
       ...normalizedArchive,
@@ -1953,7 +2013,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
     const normalizedArchive = normalizeLocalArchive(archive);
     const nextCycleId = updates.cycle_id === undefined ? record.cycle_id || null : normalizeOptionalText(updates.cycle_id);
     if (
-      normalizedArchive.local_role === "cloud-offline-cache" &&
+      resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache" &&
       record.sync?.status !== "pending-cloud-sync"
     ) {
       throw new Error("云端已有记录离线时只读，请联网后修改。");
@@ -2046,7 +2106,7 @@ export async function updateLocalRecordSyncMeta(
   const db = await openLocalDb();
 
   try {
-    const transaction = db.transaction(RECORD_STORE, "readwrite");
+    const transaction = db.transaction([RECORD_STORE, ARCHIVE_STORE], "readwrite");
     const done = transactionDone(transaction);
     const recordStore = transaction.objectStore(RECORD_STORE);
     const record = await requestToPromise<LocalRecord | undefined>(
@@ -2057,6 +2117,15 @@ export async function updateLocalRecordSyncMeta(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("本地记录不存在。");
+    }
+
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      transaction.objectStore(ARCHIVE_STORE).get(record.archive_id)
+    );
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
     }
 
     const nextRecord: LocalRecord = {
@@ -2080,7 +2149,7 @@ export async function updateLocalImageSyncMeta(
   const db = await openLocalDb();
 
   try {
-    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    const transaction = db.transaction([IMAGE_STORE, ARCHIVE_STORE], "readwrite");
     const done = transactionDone(transaction);
     const imageStore = transaction.objectStore(IMAGE_STORE);
     const image = await requestToPromise<LocalImage | undefined>(
@@ -2091,6 +2160,15 @@ export async function updateLocalImageSyncMeta(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("本地图片缓存不存在。");
+    }
+
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      transaction.objectStore(ARCHIVE_STORE).get(image.archive_id)
+    );
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
     }
 
     const nextImage: LocalImage = {
@@ -2115,7 +2193,7 @@ export async function updateLocalRecordCloudSyncOperation(
   const timestamp = nowIso();
 
   try {
-    const transaction = db.transaction(RECORD_STORE, "readwrite");
+    const transaction = db.transaction([RECORD_STORE, ARCHIVE_STORE], "readwrite");
     const done = transactionDone(transaction);
     const recordStore = transaction.objectStore(RECORD_STORE);
     const record = await requestToPromise<LocalRecord | undefined>(
@@ -2126,6 +2204,15 @@ export async function updateLocalRecordCloudSyncOperation(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("本地记录不存在。");
+    }
+
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      transaction.objectStore(ARCHIVE_STORE).get(record.archive_id)
+    );
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
     }
 
     const nextRecord: LocalRecord = {
@@ -2155,7 +2242,7 @@ export async function updateLocalImageCloudSyncOperation(
   const timestamp = nowIso();
 
   try {
-    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    const transaction = db.transaction([IMAGE_STORE, ARCHIVE_STORE], "readwrite");
     const done = transactionDone(transaction);
     const imageStore = transaction.objectStore(IMAGE_STORE);
     const image = await requestToPromise<LocalImage | undefined>(
@@ -2166,6 +2253,15 @@ export async function updateLocalImageCloudSyncOperation(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("本地图片缓存不存在。");
+    }
+
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      transaction.objectStore(ARCHIVE_STORE).get(image.archive_id)
+    );
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
     }
 
     const nextImage: LocalImage = {
@@ -2214,6 +2310,7 @@ export async function clearPendingCloudSyncPromptIfComplete(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
+    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
 
     const [records, images] = await Promise.all([
       requestToPromise<LocalRecord[]>(
@@ -2293,6 +2390,7 @@ export async function completeLocalArchiveCloudTransfer(
       await done.catch(() => undefined);
       throw new Error("没有权限移除这个本地项目。");
     }
+    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
 
     for (const image of images.filter((item) => item.archive_id === archiveId)) {
       await requestToPromise(
@@ -2347,7 +2445,7 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
         }
 
         const archive = normalizeLocalArchive(cursor.value as LocalArchive);
-        if (!archive.local_owner_user_id) {
+        if (!archive.local_owner_user_id && isUserLocalArchive(archive)) {
           markedCount += 1;
           const updateRequest = cursor.update({
             ...archive,
@@ -2429,6 +2527,7 @@ export async function markLocalArchiveForOwner(
     }
 
     const normalizedArchive = normalizeLocalArchive(archive);
+    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
     if (
       normalizedArchive.local_owner_user_id &&
       normalizedArchive.local_owner_user_id !== userId
@@ -2581,7 +2680,7 @@ export async function getLocalArchiveByCloudSource(
       .find(
         (archive) =>
           archive.source_cloud_archive_id === sourceId &&
-          archive.local_role !== "cloud-offline-cache" &&
+          resolveLocalArchiveRole(archive) !== "cloud-offline-cache" &&
           isLocalArchiveVisibleToOwner(archive, ownerContext)
       ) || null
   );
@@ -2601,10 +2700,64 @@ export async function getCloudOfflineCacheByCloudSource(
       .find(
         (archive) =>
           archive.source_cloud_archive_id === sourceId &&
-          archive.local_role === "cloud-offline-cache" &&
+          resolveLocalArchiveRole(archive) === "cloud-offline-cache" &&
           isLocalArchiveVisibleToOwner(archive, ownerContext)
       ) || null
   );
+}
+
+
+async function deleteCloudOfflineCacheRows(
+  cache: LocalArchive,
+  records: LocalRecord[],
+  images: LocalImage[]
+) {
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(
+      [ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE],
+      "readwrite"
+    );
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    for (const record of records.filter((item) => item.archive_id === cache.id)) {
+      await requestToPromise(recordStore.delete(record.id));
+    }
+    for (const image of images.filter((item) => item.archive_id === cache.id)) {
+      await requestToPromise(imageStore.delete(image.id));
+    }
+    await requestToPromise(archiveStore.delete(cache.id));
+    await done;
+  } finally {
+    db.close();
+  }
+}
+
+
+export async function clearCloudOfflineCachesForOwner(
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const ownerUserId = getOwnerUserId(ownerContext);
+  if (!ownerUserId) return { removed: 0 };
+
+  const [archives, records, images] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const caches = archives
+    .map(normalizeLocalArchive)
+    .filter(
+      (archive) =>
+        resolveLocalArchiveRole(archive) === "cloud-offline-cache" &&
+        isLocalArchiveVisibleToOwner(archive, ownerContext)
+    );
+  for (const cache of caches) {
+    await deleteCloudOfflineCacheRows(cache, records, images);
+  }
+  return { removed: caches.length };
 }
 
 async function removeAbandonedCloudArchiveLocalImportRows(
@@ -2949,6 +3102,7 @@ export async function completeCloudArchiveLocalImport(input: {
       (archive) =>
         archive.id === input.session.previous_local_archive_id &&
         archive.source_cloud_archive_id === cloudArchiveId &&
+        isUserLocalArchive(archive) &&
         isLocalArchiveVisibleToOwner(archive, input.owner_context)
     );
   const category = normalizeLocalArchiveCategory(input.category);
@@ -3096,7 +3250,7 @@ export async function replaceCloudOfflineCache(input: {
     .map(normalizeLocalArchive)
     .find(
       (archive) =>
-        archive.local_role === "cloud-offline-cache" &&
+        resolveLocalArchiveRole(archive) === "cloud-offline-cache" &&
         archive.source_cloud_archive_id === cloudArchiveId &&
         isLocalArchiveVisibleToOwner(archive, input.owner_context)
     );
@@ -3418,6 +3572,13 @@ export async function createLocalArchiveCycle(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
+    try {
+      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
 
     if (normalizedArchive.local_role === "cloud-offline-cache") {
       transaction.abort();
@@ -3489,6 +3650,13 @@ export async function endLocalArchiveCycle(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
+    }
+    try {
+      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
     }
 
     const cycles = normalizedArchive.cycles || [];
@@ -3566,6 +3734,13 @@ export async function updateLocalArchiveCycleDates(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
+    }
+    try {
+      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
     }
 
     const cycles = normalizedArchive.cycles || [];
@@ -3646,6 +3821,13 @@ export async function updateLocalArchiveCycleName(
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
     }
+    try {
+      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
+    }
 
     const cycles = normalizedArchive.cycles || [];
     if (!cycles.some((cycle) => cycle.id === cycleId)) {
@@ -3703,6 +3885,13 @@ export async function deleteLocalArchiveCycle(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
+    }
+    try {
+      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
     }
 
     const cycles = normalizedArchive.cycles || [];
@@ -3774,6 +3963,13 @@ export async function restoreLocalArchiveCycle(
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("没有权限修改这个本地项目。");
+    }
+    try {
+      assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw error;
     }
 
     const trashedCycles = normalizedArchive.trashed_cycles || [];
@@ -3902,13 +4098,16 @@ export async function createLocalRecord(input: {
     }
 
     const normalizedArchive = normalizeLocalArchive(archive);
-    const isCloudOfflineCache = normalizedArchive.local_role === "cloud-offline-cache";
+    const isCloudOfflineCache =
+      resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache";
     if (isCloudOfflineCache && normalizedArchive.status !== "active") {
       transaction.abort();
       await done.catch(() => undefined);
       throw new Error("这个云项目已经结束，不能继续新增离线记录。");
     }
-    const cloudArchiveId = normalizeOptionalText(normalizedArchive.source_cloud_archive_id);
+    const cloudArchiveId = normalizeOptionalText(
+      normalizedArchive.source_cloud_archive_id
+    );
     if (cloudArchiveId) {
       record.sync = queueCloudSyncOperation(record.sync, {
         cloudArchiveId,
@@ -3983,7 +4182,6 @@ export async function createLocalRecord(input: {
 export async function deleteLocalRecord(recordId: string) {
   const record = await getRowById<LocalRecord>(RECORD_STORE, recordId);
   if (!record) return;
-
   const images = await getAllRows<LocalImage>(IMAGE_STORE);
   const db = await openLocalDb();
 
@@ -4002,7 +4200,7 @@ export async function deleteLocalRecord(recordId: string) {
     if (archive) {
       const normalizedArchive = normalizeLocalArchive(archive);
       if (
-        normalizedArchive.local_role === "cloud-offline-cache" &&
+        resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache" &&
         record.sync?.status !== "pending-cloud-sync"
       ) {
         transaction.abort();
@@ -4030,6 +4228,13 @@ export async function deleteLocalRecord(recordId: string) {
 }
 
 export async function deleteLocalArchive(archiveId: string) {
+  const existing = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  if (existing) {
+    assertWritableUserArchive(
+      normalizeLocalArchive(existing),
+      "云项目离线缓存只读，不能删除。"
+    );
+  }
   const [records, images] = await Promise.all([
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
@@ -4100,17 +4305,29 @@ export async function mergeLocalOriginBaseSnapshot(
     const recordStore = transaction.objectStore(RECORD_STORE);
     const taxonomyStore = transaction.objectStore(TAXONOMY_STORE);
 
+    const skippedCacheArchiveIds = new Set<string>();
     for (const archive of Array.isArray(snapshot.archives)
       ? snapshot.archives
       : []) {
       if (!archive?.id) continue;
-      await putNewerMigrationRow(archiveStore, normalizeLocalArchive(archive));
+      const normalized = normalizeLocalArchive(archive);
+      if (resolveLocalArchiveRole(normalized) === "cloud-offline-cache") {
+        skippedCacheArchiveIds.add(normalized.id);
+        continue;
+      }
+      await putNewerMigrationRow(archiveStore, normalized);
     }
 
     for (const record of Array.isArray(snapshot.records)
       ? snapshot.records
       : []) {
       if (!record?.id || !record.archive_id) continue;
+      if (
+        skippedCacheArchiveIds.has(record.archive_id) ||
+        isCloudOfflineCacheArchiveId(record.archive_id)
+      ) {
+        continue;
+      }
       await putNewerMigrationRow(recordStore, {
         ...record,
         note: normalizeOptionalText(record.note) || "",
@@ -4138,12 +4355,23 @@ export async function mergeLocalOriginBaseSnapshot(
 /** Images are streamed one at a time to avoid holding every photo in memory. */
 export async function mergeLocalOriginImage(image: LocalImage) {
   if (!image?.id || !image.archive_id || !image.record_id || !image.blob) return;
+  if (isCloudOfflineCacheArchiveId(image.archive_id)) return;
 
   const db = await openLocalDb();
   try {
-    const transaction = db.transaction(IMAGE_STORE, "readwrite");
+    const transaction = db.transaction([IMAGE_STORE, ARCHIVE_STORE], "readwrite");
     const done = transactionDone(transaction);
     const store = transaction.objectStore(IMAGE_STORE);
+    const parent = await requestToPromise<LocalArchive | undefined>(
+      transaction.objectStore(ARCHIVE_STORE).get(image.archive_id),
+    );
+    if (
+      parent &&
+      resolveLocalArchiveRole(normalizeLocalArchive(parent)) === "cloud-offline-cache"
+    ) {
+      await done;
+      return;
+    }
     const existing = await requestToPromise<LocalImage | undefined>(
       store.get(image.id),
     );

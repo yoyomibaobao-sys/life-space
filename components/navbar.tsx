@@ -18,7 +18,7 @@ import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
-import { clearRememberedLocalOwnerContext } from "@/lib/local-owner-context";
+import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
 
 type MobileArchiveTitleInfo = {
   archiveId: string;
@@ -236,7 +236,7 @@ export default function Navbar() {
   }, [pathname, t, user?.id]);
 
   async function handleLogout() {
-    clearRememberedLocalOwnerContext();
+    await clearCloudOfflineCacheOnExplicitLogout(user);
     await supabase.auth.signOut({ scope: "local" });
     router.push("/login");
   }
