@@ -179,6 +179,7 @@ test("Cloudflare deployment uses low-privilege public auth config and encrypted 
     /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_[A-Za-z0-9_-]+/
   );
   assert.doesNotMatch(workflow, /cloudflare-canary\.invalid|cloudflare-canary-placeholder/);
+  assert.match(read("package.json"), /"build:vinext": "node scripts\/build-vinext.mjs"/);
   assert.match(workflow, /npm run build:vinext/);
   assert.match(workflow, /ensure-cloudflare-r2-canary-bucket\.mjs/);
   assert.match(workflow, /cloudflare\/wrangler-action@v4/);
