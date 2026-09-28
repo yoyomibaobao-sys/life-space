@@ -184,7 +184,12 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
   assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen\(\(open\) => !open\)\}/);
   assert.match(plantPage, /<HomeSectionTabs\s+active="guide"[\s\S]*?searchEnabled=\{false\}/);
   assert.match(plantPage, /<MobileSearchField/);
-  assert.match(archivePage, /<Link href="\/profile" style=\{personalSpaceAvatarLinkStyle\}>/);
+  assert.match(archivePage, /<PersonalSpaceMobileIdentity/);
+  assert.match(archivePage, /profileHref="\/profile"/);
+  assert.doesNotMatch(
+    archivePage,
+    /<Link href="\/profile" style=\{personalSpaceAvatarLinkStyle\}>/,
+  );
   assert.match(archivePage, /<MobileNotificationLink \/>/);
   assert.doesNotMatch(followPage, /showNotification/);
   assert.doesNotMatch(marketPage, /showNotification/);
@@ -388,12 +393,17 @@ test("plant guide renders a small batch and restores the list position", async (
 });
 
 test("following stays an independent bottom destination and returns there after login", async () => {
-  const [navbar, follow] = await Promise.all([
+  const [navbar, follow, primaryNav] = await Promise.all([
     source("components/navbar.tsx"),
     source("app/follow/page.tsx"),
+    source("components/mobile/mobilePrimaryNavigation.ts"),
   ]);
 
-  assert.match(navbar, /label: labels\.following/);
+  assert.match(
+    primaryNav,
+    /\{ id: "following", label: labels\.following, icon: "follow" \}/,
+  );
+  assert.match(navbar, /getMobilePrimaryNavigationDescriptors/);
   assert.match(navbar, /href: user \? "\/follow" : buildLoginHref\("\/follow"\)/);
   assert.match(navbar, /active: pathname\.startsWith\("\/follow"\)/);
   assert.match(follow, /buildLoginHref\(getCurrentInternalPath\(\)\)/);
