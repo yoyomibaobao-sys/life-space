@@ -11,6 +11,8 @@ import React, {
 import { createRoot } from "react-dom/client";
 import {
   assertLocalOfflineAvailable,
+  getCloudOfflineCacheByCloudSource,
+  getLocalArchiveByCloudSource,
   createLocalArchive,
   createLocalRecord,
   deleteLocalArchive,
@@ -112,9 +114,14 @@ import CategoryLabel from "@/components/ui/CategoryLabel";
 import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 import FollowPage from "@/app/follow/page";
 import MarketPage from "@/app/market/page";
-import ProfilePage from "@/app/profile/page";
+import OfflineAndroidProfilePage from "@/components/profile/OfflineAndroidProfilePage";
 import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
-import { parseAndroidShellPath } from "@/lib/android-shell-app-routes";
+import { buildOfflineProfileSnapshot } from "@/lib/android-offline-profile";
+import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
+import {
+  parseAndroidShellPath,
+  resolveOwnedShellArchiveId,
+} from "@/lib/android-shell-app-routes";
 
 const MAX_PHOTOS = 10;
 
@@ -215,7 +222,7 @@ const text = {
   zh: {
     mySpace: "我的空间", settings: "设置", language: "语言", all: "全部", cloud: "云空间", local: "本地", project: "项目",
     home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
-    cloudUnavailable: "当前未联网，云端内容暂不可用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
+    cloudUnavailable: "当前未联网，云端内容暂不可用", needNetwork: "需要联网", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
     cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
     saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
     offlineCopies: "云端缓存副本",     cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，恢复网络后自动同步。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。", 
@@ -286,7 +293,7 @@ const text = {
   en: {
     mySpace: "My space", settings: "Settings", language: "Language", all: "All", cloud: "Cloud", local: "Local", project: "Project",
     home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
-    cloudUnavailable: "Cloud content is unavailable while offline", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
+    cloudUnavailable: "Cloud content is unavailable while offline", needNetwork: "A network connection is required", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
     cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
     saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
     offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device and sync automatically when you reconnect.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
@@ -847,86 +854,101 @@ function App() {
     setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record"].includes(screen.kind));
   }
 
-  useEffect(() => {
-    function applyShellPath(pathname: string, search = "") {
-      const routed = parseAndroidShellPath(pathname, search);
-      if (!routed) return false;
-      if (routed.kind === "network-required") {
-        if (navigator.onLine) {
-          window.location.href = `${pathname}${search}`;
-          return true;
-        }
-        showToast(copy.cloudUnavailable);
+  function applyShellPath(pathname: string, search = "") {
+    const routed = parseAndroidShellPath(pathname, search);
+    if (!routed) return false;
+    if (routed.kind === "network-required") {
+      if (navigator.onLine) {
+        window.location.href = `${pathname}${search}`;
         return true;
       }
-      if (routed.kind === "list") {
-        setScreen({ kind: "list" });
+      showToast(copy.needNetwork);
+      return true;
+    }
+    if (routed.kind === "list") {
+      setScreen({ kind: "list" });
+      return true;
+    }
+    if (routed.kind === "profile") {
+      setScreen({ kind: "profile" });
+      return true;
+    }
+    if (routed.kind === "activity") {
+      setScreen({ kind: "activity" });
+      return true;
+    }
+    if (routed.kind === "discover-search") {
+      setScreen({ kind: "discover-search" });
+      return true;
+    }
+    if (routed.kind === "experience") {
+      setScreen({ kind: "experience" });
+      return true;
+    }
+    if (routed.kind === "following") {
+      setScreen({ kind: "following" });
+      return true;
+    }
+    if (routed.kind === "market") {
+      setScreen({ kind: "market" });
+      return true;
+    }
+    if (routed.kind === "guides") {
+      setScreen({ kind: "guides" });
+      return true;
+    }
+    if (routed.kind === "guide-detail" && routed.id) {
+      const match = directory.find((guide) =>
+        getOfflineGuideKey(guide) === routed.id ||
+        guide.id === routed.id ||
+        guide.plantId === routed.id ||
+        guide.plantSlug === routed.id ||
+        guide.label === routed.id
+      );
+      setScreen({
+        kind: "guide-detail",
+        guideKey: match ? getOfflineGuideKey(match) : routed.id,
+      });
+      return true;
+    }
+    if (routed.kind === "local-archive" && routed.id) {
+      openDetail(routed.id);
+      return true;
+    }
+    if (routed.kind === "archive" && routed.id) {
+      const ownedId = resolveOwnedShellArchiveId(routed.id, [...archives, ...cloudCaches]);
+      if (ownedId) {
+        openDetail(ownedId);
         return true;
       }
-      if (routed.kind === "profile") {
-        setScreen({ kind: "profile" });
+      const publicItem = activityItems.find((row) => row.archive_id === routed.id);
+      if (publicItem) {
+        setPublicDetailItem(publicItem);
+        setPublicDetailBack("activity");
+        setScreen({ kind: "public-detail" });
         return true;
       }
-      if (routed.kind === "activity") {
-        setScreen({ kind: "activity" });
-        return true;
-      }
-      if (routed.kind === "discover-search") {
-        setScreen({ kind: "discover-search" });
-        return true;
-      }
-      if (routed.kind === "experience") {
-        setScreen({ kind: "experience" });
-        return true;
-      }
-      if (routed.kind === "following") {
-        setScreen({ kind: "following" });
-        return true;
-      }
-      if (routed.kind === "market") {
-        setScreen({ kind: "market" });
-        return true;
-      }
-      if (routed.kind === "guides") {
-        setScreen({ kind: "guides" });
-        return true;
-      }
-      if (routed.kind === "guide-detail" && routed.id) {
-        const match = directory.find((guide) =>
-          getOfflineGuideKey(guide) === routed.id ||
-          guide.id === routed.id ||
-          guide.plantId === routed.id ||
-          guide.plantSlug === routed.id ||
-          guide.label === routed.id
-        );
-        setScreen({
-          kind: "guide-detail",
-          guideKey: match ? getOfflineGuideKey(match) : routed.id,
-        });
-        return true;
-      }
-      if (routed.kind === "local-archive" && routed.id) {
-        openDetail(routed.id);
-        return true;
-      }
-      if (routed.kind === "public-archive" && routed.id) {
-        const item = activityItems.find((row) => row.archive_id === routed.id);
-        if (item) {
-          setPublicDetailItem(item);
-          setPublicDetailBack("activity");
-          setScreen({ kind: "public-detail" });
-          return true;
+      void Promise.all([
+        getCloudOfflineCacheByCloudSource(routed.id, ownerContext),
+        getLocalArchiveByCloudSource(routed.id, ownerContext),
+      ]).then(([cache, localCopy]) => {
+        const mapped = cache || localCopy;
+        if (mapped) {
+          openDetail(mapped.id);
+          return;
         }
         if (navigator.onLine) {
           window.location.href = `/archive/${routed.id}`;
-          return true;
+          return;
         }
-        showToast(copy.cloudUnavailable);
-        return true;
-      }
-      return false;
+        showToast(copy.needNetwork);
+      }).catch(() => showToast(copy.needNetwork));
+      return true;
     }
+    return false;
+  }
 
+  useEffect(() => {
     function onClick(event: MouseEvent) {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
@@ -943,12 +965,32 @@ function App() {
       if (applyShellPath(url.pathname, url.search)) {
         event.preventDefault();
         event.stopPropagation();
+        return;
+      }
+      if (!navigator.onLine) {
+        event.preventDefault();
+        event.stopPropagation();
+        showToast(copy.needNetwork);
       }
     }
 
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
-  }, [activityItems, copy.cloudUnavailable, directory, showToast]);
+  }, [
+    activityItems,
+    archives,
+    cloudCaches,
+    copy.needNetwork,
+    directory,
+    ownerContext,
+    showToast,
+  ]);
+
+  async function logoutFromProfile() {
+    await clearCloudOfflineCacheOnExplicitLogout(owner);
+    await supabase.auth.signOut({ scope: "local" });
+    setScreen({ kind: "list" });
+  }
 
   async function saveCloudCopy(cloudArchiveId: string) {
     if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
@@ -1683,8 +1725,15 @@ function App() {
       ) : null}
       {screen.kind === "profile" ? (
         <div data-android-shell-page="profile">
-          {!online ? <MobileNetworkUnavailableState onReconnect={reconnect} /> : null}
-          <ProfilePage />
+          <OfflineAndroidProfilePage
+            snapshot={buildOfflineProfileSnapshot({
+              owner,
+              profile: spaceProfile,
+              membership,
+            })}
+            onBack={() => setScreen({ kind: "list" })}
+            onLogout={() => void logoutFromProfile()}
+          />
         </div>
       ) : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}

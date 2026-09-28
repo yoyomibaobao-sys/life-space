@@ -87,8 +87,14 @@ export default function DeviceOwnedProjectDetail({
 }) {
   const { language, t } = useLanguage();
   const archiveCopy = t.archive;
+  const workspaceCopy = t.archive_workspace;
   const recordCopy = t.record;
   const archive = detail.archive;
+  const encyclopediaHref = archive.plant_id
+    ? `/plant/${encodeURIComponent(archive.plant_id)}`
+    : archive.plant_slug
+      ? `/plant/${encodeURIComponent(archive.plant_slug)}`
+      : null;
   const isCloudCache = isCloudOfflineCacheArchive(archive);
   const canEditArchive = canEditLocalArchiveFields(archive);
   const canAddRecord = canAddLocalArchiveRecord(archive);
@@ -142,7 +148,7 @@ export default function DeviceOwnedProjectDetail({
     categoryLabel: localCategoryLabel,
     categoryIcon: getArchiveCategoryIcon(archive.category),
     systemName: archive.system_name || archive.species_name || archiveCopy.not_filled,
-    visibilityLabel: isCloudCache ? null : archiveCopy.local_project,
+    visibilityLabel: isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project,
     visibilityTone: "neutral",
     storageLabel: isCloudCache ? archiveCopy.device : archiveCopy.saved_on_this_device,
     storageTone: "device",
@@ -154,6 +160,7 @@ export default function DeviceOwnedProjectDetail({
     archive,
     archiveCopy.device,
     archiveCopy.local_project,
+    workspaceCopy.cloud_cache_copy,
     archiveCopy.not_filled,
     archiveCopy.saved_on_this_device,
     archiveCopy.unnamed_project,
@@ -317,11 +324,17 @@ export default function DeviceOwnedProjectDetail({
       <main style={archiveProjectDetailMainStyle(true)}>
         <div style={archiveProjectDetailStatsStyle}>
           {archiveDisplayName ? (
-            <span style={archiveProjectDetailGuideTextStyle}>{archiveDisplayName}</span>
+            encyclopediaHref ? (
+              <a href={encyclopediaHref} style={archiveProjectDetailGuideTextStyle}>
+                {archiveDisplayName}
+              </a>
+            ) : (
+              <span style={archiveProjectDetailGuideTextStyle}>{archiveDisplayName}</span>
+            )
           ) : null}
-          {isCloudCache ? null : (
-            <span style={archiveProjectDetailBadgeStyle}>{archiveCopy.local_project}</span>
-          )}
+          <span style={archiveProjectDetailBadgeStyle}>
+            {isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
+          </span>
           <ProjectMetaLine
             recordCount={detail.records.length}
             durationDays={ongoingDays}
@@ -370,6 +383,7 @@ export default function DeviceOwnedProjectDetail({
             profileAlwaysOpen
             showPageChrome={false}
             showSystemNameInTitle={false}
+            encyclopediaHref={encyclopediaHref}
             profileRows={profileRows}
             profileEditor={canEditArchive ? {
               values: {

@@ -8,7 +8,7 @@ export type AndroidShellRouteKind =
   | "market"
   | "guides"
   | "guide-detail"
-  | "public-archive"
+  | "archive"
   | "local-archive"
   | "network-required";
 
@@ -16,6 +16,59 @@ export type AndroidShellRoute = {
   kind: AndroidShellRouteKind;
   id?: string;
 };
+
+export type AndroidShellOwnedArchive = {
+  id: string;
+  local_role?: string | null;
+  source_cloud_archive_id?: string | null;
+};
+
+const NETWORK_REQUIRED_PREFIXES = [
+  "/membership",
+  "/admin",
+  "/market/",
+  "/experience-cards",
+  "/profile/",
+  "/user/",
+  "/legal",
+  "/feedback",
+  "/login",
+  "/register",
+  "/download",
+  "/app-update",
+  "/notifications",
+  "/report",
+];
+
+export function isAndroidShellNetworkRequiredPath(pathname: string) {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return NETWORK_REQUIRED_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(prefix),
+  );
+}
+
+export function resolveOwnedShellArchiveId(
+  requestedId: string,
+  ownedArchives: AndroidShellOwnedArchive[],
+) {
+  const id = String(requestedId || "").trim();
+  if (!id) return null;
+
+  const exact = ownedArchives.find((archive) => archive.id === id);
+  if (exact) return exact.id;
+
+  const cache = ownedArchives.find(
+    (archive) =>
+      archive.source_cloud_archive_id === id &&
+      archive.local_role === "cloud-offline-cache",
+  );
+  if (cache) return cache.id;
+
+  const mapped = ownedArchives.find(
+    (archive) => archive.source_cloud_archive_id === id,
+  );
+  return mapped?.id || null;
+}
 
 export function parseAndroidShellPath(
   pathname: string,
@@ -37,18 +90,12 @@ export function parseAndroidShellPath(
   if (localArchive) return { kind: "local-archive", id: localArchive[1] };
 
   const cloudArchive = path.match(/^\/archive\/([^/]+)$/);
-  if (cloudArchive) return { kind: "public-archive", id: cloudArchive[1] };
+  if (cloudArchive) return { kind: "archive", id: cloudArchive[1] };
 
   const plantGuide = path.match(/^\/plant\/(?:guide\/)?([^/]+)$/);
   if (plantGuide) return { kind: "guide-detail", id: decodeURIComponent(plantGuide[1]) };
 
-  if (
-    path.startsWith("/membership") ||
-    path.startsWith("/admin") ||
-    path.startsWith("/market/") ||
-    path.startsWith("/experience-cards") ||
-    path.startsWith("/profile/")
-  ) {
+  if (isAndroidShellNetworkRequiredPath(path)) {
     return { kind: "network-required" };
   }
 

@@ -80,14 +80,15 @@ test("personal space local, cloud, cache, and pending share ArchiveProjectCard",
 
 test("profile page remains available offline in the Android shell", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  const profile = read("app/profile/page.tsx");
+  const offlineProfile = read("components/profile/OfflineAndroidProfilePage.tsx");
   const identity = read("components/archive-ui/PersonalSpaceMobileIdentity.tsx");
 
   assert.match(shell, /kind: "profile"/);
-  assert.match(shell, /<ProfilePage/);
+  assert.match(shell, /<OfflineAndroidProfilePage/);
+  assert.doesNotMatch(shell, /<ProfilePage/);
   assert.match(shell, /profileHref="\/profile"/);
-  assert.match(profile, /开通云会员|Cloud Membership/);
-  assert.match(profile, /订单进度查询|Order progress/);
+  assert.match(offlineProfile, /开通云会员|Cloud Membership/);
+  assert.match(offlineProfile, /订单进度查询|Order progress|备份与导出|Backup & export/);
   assert.match(identity, /profileHref/);
   assert.match(shell, /data-android-shell-page="profile"/);
 });
