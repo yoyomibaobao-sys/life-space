@@ -97,11 +97,11 @@ test("offline guides expose only the registered-user overview boundary", () => {
   const guideCache = read("lib/offline-guide-directory.ts");
   const plantIndex = read("app/plant/page.tsx");
 
+  assert.match(source, /<PlantPage/);
   assert.match(source, /kind: "guide-detail"/);
   assert.match(source, /!owner[\s\S]*guideSignInRequired/);
   assert.match(source, /getOfflineGuideOverview\(guide, language\)/);
   assert.match(source, /getOfflineGuideParameters\(guide, language\)/);
-  assert.match(source, /owner && guide\.description/);
   assert.match(source, /full practice guidance, experience cards, and related projects/);
   assert.match(guideCache, /PUBLIC_SOURCES/);
   assert.match(guideCache, /plantCoreParameters/);

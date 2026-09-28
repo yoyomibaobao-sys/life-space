@@ -19,6 +19,7 @@ import {
 } from "@/lib/market-feed";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
+import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
 import MarketMessageLink from "@/components/market/MarketMessageLink";
 import MobileMarketFeedCard, { mobileMarketCardStyle } from "@/components/market/MobileMarketFeedCard";
 import { getCompactCardLocation } from "@/lib/card-location";
@@ -38,6 +39,9 @@ export default function MarketPage() {
   const [contentFilter, setContentFilter] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [online, setOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine,
+  );
 
   useEffect(() => {
     function updateViewportMode() {
@@ -51,9 +55,27 @@ export default function MarketPage() {
   }, []);
 
   useEffect(() => {
+    function syncOnline() {
+      setOnline(navigator.onLine);
+    }
+    window.addEventListener("online", syncOnline);
+    window.addEventListener("offline", syncOnline);
+    return () => {
+      window.removeEventListener("online", syncOnline);
+      window.removeEventListener("offline", syncOnline);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadMarketPosts() {
+      if (!navigator.onLine) {
+        if (cancelled) return;
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       const result = await fetchMarketFeed({
         typeFilter,
@@ -77,7 +99,7 @@ export default function MarketPage() {
     return () => {
       cancelled = true;
     };
-  }, [typeFilter, categoryFilter]);
+  }, [typeFilter, categoryFilter, online]);
 
   const hasFilter =
     typeFilter !== "all" ||
@@ -287,6 +309,8 @@ export default function MarketPage() {
 
         {loading ? (
           <section style={emptyStyle}>{t.market.loading}</section>
+        ) : !online && items.length === 0 ? (
+          <MobileNetworkUnavailableState />
         ) : visibleItems.length === 0 ? (
           <section style={emptyStyle}>
             {hasFilter ? t.market.empty_filtered : t.market.empty}

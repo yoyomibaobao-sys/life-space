@@ -2,9 +2,11 @@ import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
-import type {
-  LocalArchiveOwnerContext,
-  LocalArchiveSummary,
+import {
+  isPendingCloudCreateArchive,
+  isPendingCloudSyncStatus,
+  type LocalArchiveOwnerContext,
+  type LocalArchiveSummary,
 } from "@/lib/local-offline-db";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import type { ArchiveItem } from "@/lib/archive-page-types";
@@ -50,6 +52,16 @@ export function localArchiveToProjectView(
   const latestTime = archive.latest_record_time || archive.updated_at;
   const latestSummary = archive.latest_record_note || archive.note || "";
   const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
+  const pendingCloud =
+    isPendingCloudCreateArchive(archive) ||
+    isPendingCloudSyncStatus(archive.sync?.status);
+  const visibilityLabel = pendingCloud
+    ? copy.pending_sync_badge
+    : archive.local_role === "cloud-offline-cache"
+      ? copy.cloud_cache_copy
+      : isDeviceLocalProject
+        ? archiveCopy.local_project
+        : copy.local;
 
   return {
     id: archive.id,
@@ -76,7 +88,7 @@ export function localArchiveToProjectView(
     latestTime,
     recordCount: archive.record_count || 0,
     durationDays: ongoingDays,
-    visibilityLabel: isDeviceLocalProject ? archiveCopy.local_project : copy.local,
+    visibilityLabel,
     visibilityTone: "neutral",
     storageLabel: isDeviceLocalProject ? archiveCopy.saved_on_this_device : null,
     storageTone: isDeviceLocalProject ? "device" : undefined,

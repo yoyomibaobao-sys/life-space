@@ -213,13 +213,15 @@ test("offline shell separates true local projects from cloud offline copies", ()
   const adapters = read("lib/local-archive-detail-adapters.ts");
   const deviceDetail = read("components/archive-ui/DeviceOwnedProjectDetail.tsx");
 
+  const view = read("components/archive-ui/localArchiveProjectView.ts");
+
   assert.match(offline, /listVisibleCloudOfflineArchiveSummaries/);
   assert.match(offline, /type ShellSourceFilter = "all" \| "cloud" \| "local"/);
   assert.match(offline, /filteredCloudCaches\.map/);
   assert.match(offline, /filteredCloudArchives\.map\(renderCloudProjectCard\)/);
   assert.match(offline, /online && cloudUserId && !cloudError \? \(/);
   assert.match(offline, /online && cloudUserId && !cloudError \? cloudArchives\.length : cloudCaches\.length/);
-  assert.match(offline, /visibilityLabel: copy\.offlineCopies/);
+  assert.match(view, /cloud_cache_copy/);
   assert.match(offline, /cloudCacheReadOnly/);
   assert.match(adapters, /isPendingCloudSyncStatus\(record\.sync\?\.status\)/);
   assert.match(deviceDetail, /canEditLocalArchiveRecord\(archive, source\)/);

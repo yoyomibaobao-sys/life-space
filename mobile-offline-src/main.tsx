@@ -44,6 +44,7 @@ import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
+  archiveCategoryOptions,
   type ArchiveCategory,
 } from "@/lib/archive-categories";
 
@@ -64,9 +65,7 @@ import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
 import DiscoverSearchPage from "@/app/discover/search/page";
 import PlantPage from "@/app/plant/page";
-import { DiscoverProjectCard } from "@/components/discover/DiscoverProjectCard";
 import ReadonlyPublicProjectDetail from "@/components/archive-ui/ReadonlyPublicProjectDetail";
-import MobileMarketFeedCard, { mobileMarketCardStyle, mobileMarketListStyle } from "@/components/market/MobileMarketFeedCard";
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -101,20 +100,21 @@ import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
 import { fetchDiscoverExperienceCardSearchResults } from "@/lib/discover-search-data";
 import { emptySearchFilters } from "@/lib/discover-search-types";
 import type { ExperienceCardListItem } from "@/lib/experience-card-types";
-import { fetchFollowedArchiveProjects } from "@/lib/followed-archive-projects";
-import { fetchFollowedPublicProjects } from "@/lib/followed-public-project-feed";
+import { DiscoverFilterBar } from "@/components/discover/DiscoverFilterBar";
+import { DiscoverProjectGrid } from "@/components/discover/DiscoverProjectGrid";
 import {
-  fetchMarketFeed,
-  type MarketArchiveBrief,
-  type MarketPostDisplayRow,
-  type MarketProfileBrief,
-} from "@/lib/market-feed";
-import {
-  getMarketItemCategoryOptions,
-  getMarketPostTypeOptions,
-  type MarketItemCategory,
-  type MarketPostType,
-} from "@/lib/market-types";
+  type FilterMode,
+  getDiscoverFilterOptions,
+} from "@/lib/discover-types";
+import PublicExperienceGallery from "@/components/experience-card/PublicExperienceGallery";
+import MobileSearchField from "@/components/search/MobileSearchField";
+import CategoryLabel from "@/components/ui/CategoryLabel";
+import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
+import FollowPage from "@/app/follow/page";
+import MarketPage from "@/app/market/page";
+import ProfilePage from "@/app/profile/page";
+import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
+import { parseAndroidShellPath } from "@/lib/android-shell-app-routes";
 
 const MAX_PHOTOS = 10;
 
@@ -203,6 +203,7 @@ type Screen =
   | { kind: "market" }
   | { kind: "guides" }
   | { kind: "guide-detail"; guideKey: string }
+  | { kind: "profile" }
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
@@ -423,7 +424,6 @@ function App() {
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
-  const [guideQuery, setGuideQuery] = useState("");
   const [directory] = useState(loadOfflineGuideDirectory);
   function setScreen(next: Screen, replace = false) {
     window.history[replace ? "replaceState" : "pushState"]({ offlineScreen: next }, "", `#${next.kind}`);
@@ -473,28 +473,14 @@ function App() {
   const [experienceItems, setExperienceItems] = useState<ExperienceCardListItem[]>([]);
   const [experienceLoading, setExperienceLoading] = useState(false);
   const [experienceError, setExperienceError] = useState(false);
-  const [followedItems, setFollowedItems] = useState<DiscoveryProjectFeedItem[]>([]);
-  const [followedLoading, setFollowedLoading] = useState(false);
-  const [followedError, setFollowedError] = useState(false);
-  const [marketItems, setMarketItems] = useState<MarketPostDisplayRow[]>([]);
-  const [marketProfiles, setMarketProfiles] = useState<Map<string, MarketProfileBrief>>(new Map());
-  const [marketArchives, setMarketArchives] = useState<Map<string, MarketArchiveBrief>>(new Map());
-  const [marketLoading, setMarketLoading] = useState(false);
-  const [marketError, setMarketError] = useState(false);
-  const [marketTypeFilter, setMarketTypeFilter] = useState<"all" | MarketPostType>("all");
-  const [marketCategoryFilter, setMarketCategoryFilter] = useState<"all" | MarketItemCategory>("all");
-  const [marketLocationFilter, setMarketLocationFilter] = useState("");
-  const [marketContentFilter, setMarketContentFilter] = useState("");
-  const [marketFiltersOpen, setMarketFiltersOpen] = useState(false);
-  const visibleMarketItems = useMemo(() => marketItems.filter((item) => {
-    if (marketTypeFilter !== "all" && item.post_type !== marketTypeFilter) return false;
-    if (marketCategoryFilter !== "all" && item.item_category !== marketCategoryFilter) return false;
-    const profile = marketProfiles.get(item.user_id);
-    const archive = item.archive_id ? marketArchives.get(item.archive_id) : null;
-    const location = [item.location_text, profile?.country_name, profile?.region_name, profile?.city_name].filter(Boolean).join(" ").toLowerCase();
-    const content = [item.title, item.description, profile?.username, archive?.title, archive?.system_name, archive?.species_name_snapshot].filter(Boolean).join(" ").toLowerCase();
-    return location.includes(marketLocationFilter.trim().toLowerCase()) && content.includes(marketContentFilter.trim().toLowerCase());
-  }), [marketItems, marketProfiles, marketArchives, marketTypeFilter, marketCategoryFilter, marketLocationFilter, marketContentFilter]);
+  const [activityFilterMode, setActivityFilterMode] = useState<FilterMode>("all");
+  const [activityHelpOnly, setActivityHelpOnly] = useState(false);
+  const activityLoaderRef = useRef<HTMLDivElement | null>(null);
+  const [experienceSearchOpen, setExperienceSearchOpen] = useState(false);
+  const [experienceQuery, setExperienceQuery] = useState("");
+  const [experienceCategoryFilter, setExperienceCategoryFilter] = useState<
+    "all" | ArchiveCategory
+  >("all");
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -639,8 +625,8 @@ function App() {
     try {
       const result = await fetchDiverseDiscoveryProjectBatch({
         state: createInitialDiscoveryDiversityState(),
-        category: null,
-        helpOnly: false,
+        category: activityFilterMode === "all" || activityFilterMode === "help" ? null : activityFilterMode,
+        helpOnly: activityHelpOnly,
         limit: 24,
       });
       if (result.error) throw result.error;
@@ -651,7 +637,7 @@ function App() {
     } finally {
       setActivityLoading(false);
     }
-  }, []);
+  }, [activityFilterMode, activityHelpOnly]);
 
   const loadExperience = useCallback(async () => {
     if (!navigator.onLine) {
@@ -672,57 +658,6 @@ function App() {
     } finally {
       setExperienceLoading(false);
     }
-  }, []);
-
-  const loadFollowing = useCallback(async (userId?: string | null) => {
-    const resolvedUserId = userId || cloudUserId;
-    if (!navigator.onLine || !resolvedUserId) {
-      setFollowedItems([]);
-      setFollowedError(false);
-      return;
-    }
-    setFollowedLoading(true);
-    setFollowedError(false);
-    try {
-      const [archiveResult, usersResult] = await Promise.all([
-        fetchFollowedArchiveProjects(resolvedUserId),
-        fetchFollowedPublicProjects({ limit: 49 }),
-      ]);
-      if (archiveResult.error && usersResult.error) throw archiveResult.error;
-      if (archiveResult.error || usersResult.error) {
-        console.warn("local shell partial followed projects", archiveResult.error || usersResult.error);
-      }
-      const uniqueProjects = new Map(
-        [...archiveResult.items, ...usersResult.items].map((item) => [item.archive_id, item]),
-      );
-      setFollowedItems(Array.from(uniqueProjects.values()));
-    } catch (error) {
-      console.warn("local shell followed projects", error);
-      setFollowedError(true);
-    } finally {
-      setFollowedLoading(false);
-    }
-  }, [cloudUserId]);
-
-  const loadMarket = useCallback(async () => {
-    if (!navigator.onLine) {
-      setMarketItems([]);
-      setMarketProfiles(new Map());
-      setMarketArchives(new Map());
-      setMarketError(false);
-      return;
-    }
-    setMarketLoading(true);
-    setMarketError(false);
-    const result = await fetchMarketFeed();
-    if (result.error) {
-      console.warn("local shell market feed", result.error);
-      setMarketError(true);
-    }
-    setMarketItems(result.items);
-    setMarketProfiles(result.profiles);
-    setMarketArchives(result.archives);
-    setMarketLoading(false);
   }, []);
 
   useEffect(() => {
@@ -819,16 +754,6 @@ function App() {
   }, [screen.kind, online, loadExperience]);
 
   useEffect(() => {
-    if (screen.kind !== "following" || !online || !cloudUserId) return;
-    void loadFollowing(cloudUserId);
-  }, [screen.kind, online, cloudUserId, loadFollowing]);
-
-  useEffect(() => {
-    if (screen.kind !== "market" || !online) return;
-    void loadMarket();
-  }, [screen.kind, online, loadMarket]);
-
-  useEffect(() => {
     let cancelled = false;
     async function initialize() {
       try {
@@ -916,13 +841,114 @@ function App() {
 
     if (screen.kind === "activity") void loadActivity();
     if (screen.kind === "experience") void loadExperience();
-    if (screen.kind === "following") void loadFollowing(cloudUserId);
-    if (screen.kind === "market") void loadMarket();
   }
 
   function openDetail(archiveId: string) {
     setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record"].includes(screen.kind));
   }
+
+  useEffect(() => {
+    function applyShellPath(pathname: string, search = "") {
+      const routed = parseAndroidShellPath(pathname, search);
+      if (!routed) return false;
+      if (routed.kind === "network-required") {
+        if (navigator.onLine) {
+          window.location.href = `${pathname}${search}`;
+          return true;
+        }
+        showToast(copy.cloudUnavailable);
+        return true;
+      }
+      if (routed.kind === "list") {
+        setScreen({ kind: "list" });
+        return true;
+      }
+      if (routed.kind === "profile") {
+        setScreen({ kind: "profile" });
+        return true;
+      }
+      if (routed.kind === "activity") {
+        setScreen({ kind: "activity" });
+        return true;
+      }
+      if (routed.kind === "discover-search") {
+        setScreen({ kind: "discover-search" });
+        return true;
+      }
+      if (routed.kind === "experience") {
+        setScreen({ kind: "experience" });
+        return true;
+      }
+      if (routed.kind === "following") {
+        setScreen({ kind: "following" });
+        return true;
+      }
+      if (routed.kind === "market") {
+        setScreen({ kind: "market" });
+        return true;
+      }
+      if (routed.kind === "guides") {
+        setScreen({ kind: "guides" });
+        return true;
+      }
+      if (routed.kind === "guide-detail" && routed.id) {
+        const match = directory.find((guide) =>
+          getOfflineGuideKey(guide) === routed.id ||
+          guide.id === routed.id ||
+          guide.plantId === routed.id ||
+          guide.plantSlug === routed.id ||
+          guide.label === routed.id
+        );
+        setScreen({
+          kind: "guide-detail",
+          guideKey: match ? getOfflineGuideKey(match) : routed.id,
+        });
+        return true;
+      }
+      if (routed.kind === "local-archive" && routed.id) {
+        openDetail(routed.id);
+        return true;
+      }
+      if (routed.kind === "public-archive" && routed.id) {
+        const item = activityItems.find((row) => row.archive_id === routed.id);
+        if (item) {
+          setPublicDetailItem(item);
+          setPublicDetailBack("activity");
+          setScreen({ kind: "public-detail" });
+          return true;
+        }
+        if (navigator.onLine) {
+          window.location.href = `/archive/${routed.id}`;
+          return true;
+        }
+        showToast(copy.cloudUnavailable);
+        return true;
+      }
+      return false;
+    }
+
+    function onClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || anchor.target === "_blank") return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+      let url: URL;
+      try {
+        url = new URL(href, window.location.origin);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      if (applyShellPath(url.pathname, url.search)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [activityItems, copy.cloudUnavailable, directory, showToast]);
 
   async function saveCloudCopy(cloudArchiveId: string) {
     if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
@@ -1026,6 +1052,26 @@ function App() {
       !mappedCloudIds.has(archive.id),
   );
   const cloudSourceCount = online && cloudUserId && !cloudError ? cloudArchives.length : cloudCaches.length;
+  const visibleExperienceItems = experienceItems.filter((item) => {
+    if (experienceCategoryFilter !== "all" && item.archiveCategory !== experienceCategoryFilter) {
+      return false;
+    }
+    const query = experienceQuery.trim().toLowerCase();
+    if (!query) return true;
+    return [item.title, item.authorName, item.systemName, item.archiveTitle]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+  function changeActivityFilter(mode: FilterMode) {
+    if (mode === "help") {
+      setActivityHelpOnly((current) => !current);
+      return;
+    }
+    setActivityFilterMode(mode);
+    setActivityHelpOnly(false);
+  }
   function cloudProjectView(archive: CloudArchiveSummary) {
     const ended = archive.status === "ended";
     return {
@@ -1057,44 +1103,6 @@ function App() {
       visibilityTone: archive.is_public ? "public" as const : "private" as const,
       statusLabel: ended ? copy.ended : null,
       ended,
-      showClassificationRow: false,
-    };
-  }
-  function activityProjectView(item: DiscoveryProjectFeedItem) {
-    const category = (item.category || "other") as ArchiveCategory;
-    const title = item.archive_title || copy.project;
-    return {
-      id: item.archive_id,
-      mode: "cloud" as const,
-      title,
-      category,
-      categoryLabel: getArchiveCategoryLabel(category, language),
-      categoryIcon: getArchiveCategoryIcon(category),
-      systemName:
-        category === "plant"
-          ? item.species_name_snapshot || ""
-          : item.system_name || "",
-      cover: item.display_image_url
-        ? {
-            kind: "url" as const,
-            url: item.display_image_url,
-            alt: title,
-          }
-        : null,
-      latestText: item.card_summary || item.latest_public_record_note || "",
-      latestTime: item.public_activity_at || item.latest_public_record_time || null,
-      recordCount: item.public_record_count,
-      durationDays: getOngoingDays(
-        item.archive_created_at,
-        item.archive_ended_at,
-      ),
-      viewCount: item.view_count,
-      followerCount: item.follower_count,
-      commentCount: item.public_comment_count,
-      visibilityLabel: language === "zh" ? "公开" : "Public",
-      visibilityTone: "public" as const,
-      statusLabel: item.archive_ended_at ? copy.ended : null,
-      ended: Boolean(item.archive_ended_at),
       showClassificationRow: false,
     };
   }
@@ -1172,7 +1180,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "experience", "following", "market", "guides", "guide-detail"].includes(screen.kind),
+      active: !["activity", "experience", "following", "market", "guides", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1182,7 +1190,7 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides", "following", "market", "profile", "guide-detail", "public-detail"].includes(screen.kind);
   const detailOwnsTopNav = ["detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
@@ -1230,7 +1238,7 @@ function App() {
                 className="icon-button"
                 type="button"
                 aria-label={copy.settings}
-                onClick={() => setScreen({ kind: "settings" })}
+                onClick={() => setScreen({ kind: "profile" })}
               >
                 <UiIcon name="menu" size={22} />
               </button>
@@ -1253,6 +1261,7 @@ function App() {
           experienceLabel={language === "zh" ? "经验卡" : "Experience"}
           experienceCardCount={experienceCardCount}
           language={language}
+          profileHref="/profile"
         />
       ) : null}
 
@@ -1288,6 +1297,7 @@ function App() {
       ) : null}
 
       {screen.kind === "list" ? (
+        <div data-android-shell-page="personal-space">
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
           sourceOptions={[
             { value: "all", label: copy.all, count: archives.length + cloudSourceCount },
@@ -1356,7 +1366,6 @@ function App() {
                           project={{
                             ...localArchiveToProjectView(archive, ownerContext, language),
                             href: undefined,
-                            visibilityLabel: copy.offlineCopies,
                           }}
                           onClick={() => openDetail(archive.id)}
                           mobileMode
@@ -1382,7 +1391,6 @@ function App() {
                         project={{
                           ...localArchiveToProjectView(archive, ownerContext, language),
                           href: undefined,
-                          visibilityLabel: copy.offlineCopies,
                         }}
                         onClick={() => openDetail(archive.id)}
                         mobileMode
@@ -1405,7 +1413,6 @@ function App() {
                     project={{
                       ...localArchiveToProjectView(archive, ownerContext, language),
                       href: undefined,
-                      visibilityLabel: copy.local,
                     }}
                     onClick={() => openDetail(archive.id)}
                     mobileMode
@@ -1431,6 +1438,7 @@ function App() {
             </section>
           ) : null}
         </ArchiveWorkspaceTemplate>
+        </div>
       ) : null}
 
       {screen.kind === "new-project" ? (
@@ -1542,32 +1550,37 @@ function App() {
             setScreen({ kind: "experience" });
           }}
         />
-        {!online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
-        ) : activityLoading ? (
-          <section className="panel empty">
-            {language === "zh" ? "正在读取公开记录…" : "Loading public activity…"}
-          </section>
-        ) : activityError ? (
-          <section className="notice warning">
-            <p>{language === "zh" ? "公开记录读取失败，请稍后重试。" : "Could not load public activity."}</p>
-            <div className="action-row">
-              <button type="button" className="secondary-button" onClick={() => void loadActivity()}>
-                {language === "zh" ? "重新加载" : "Retry"}
-              </button>
-            </div>
-          </section>
-        ) : activityItems.length ? (
-          <div className="android-discover-grid">
-            {activityItems.map((item) => (
-              <DiscoverProjectCard key={item.archive_id} item={item} onOpen={() => { setPublicDetailItem(item); setPublicDetailBack("activity"); setScreen({ kind: "public-detail" }); }} />
-            ))}
-          </div>
-        ) : (
-          <section className="panel empty">
-            {language === "zh" ? "暂时没有公开记录。" : "No public activity yet."}
-          </section>
-        )}
+        <div data-android-shell-page="discover">
+          <DiscoverFilterBar
+            options={getDiscoverFilterOptions(language)}
+            activeMode={activityFilterMode}
+            helpOnly={activityHelpOnly}
+            onChange={changeActivityFilter}
+            compactMobile
+          />
+          {!online ? (
+            <MobileNetworkUnavailableState onReconnect={reconnect} />
+          ) : (
+            <DiscoverProjectGrid
+              items={activityItems}
+              helpOnly={activityHelpOnly}
+              showCategoryBadge={activityFilterMode === "all"}
+              initialLoading={activityLoading}
+              loadingMore={false}
+              initialError={activityError}
+              loadMoreError={false}
+              hasMore={false}
+              loaderRef={activityLoaderRef}
+              onRetryInitial={() => void loadActivity()}
+              onRetryMore={() => undefined}
+              onOpenProject={(item) => {
+                setPublicDetailItem(item);
+                setPublicDetailBack("activity");
+                setScreen({ kind: "public-detail" });
+              }}
+            />
+          )}
+        </div>
       </> : null}
 
       {screen.kind === "public-detail" && publicDetailItem ? <ReadonlyPublicProjectDetail item={publicDetailItem} language={language} onBack={() => setScreen({ kind: publicDetailBack })} /> : null}
@@ -1578,7 +1591,7 @@ function App() {
         <HomeSectionTabs
           active="experience"
           showGuestLanguageSwitcher={false}
-          onSearch={() => undefined}
+          onSearch={() => setExperienceSearchOpen((open) => !open)}
           onSelect={(section: HomeSection) => {
             if (section === "experience") return;
             if (section === "guide") {
@@ -1588,8 +1601,40 @@ function App() {
             setScreen({ kind: "activity" });
           }}
         />
+        <section className={`${filterStyles.row} ${filterStyles.experience}`} lang={language} aria-label={language === "en" ? "Category" : "分类"}>
+          <button
+            type="button"
+            onClick={() => setExperienceCategoryFilter("all")}
+            className={filterStyles.button}
+            aria-pressed={experienceCategoryFilter === "all"}
+          >
+            {language === "en" ? "All" : "全部"}
+          </button>
+          {archiveCategoryOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setExperienceCategoryFilter(option.value)}
+              className={filterStyles.button}
+              aria-pressed={experienceCategoryFilter === option.value}
+            >
+              <CategoryLabel label={getArchiveCategoryLabel(option.value, language)} />
+            </button>
+          ))}
+        </section>
+        {experienceSearchOpen ? (
+          <MobileSearchField
+            autoFocus
+            value={experienceQuery}
+            onChange={setExperienceQuery}
+            placeholder={language === "zh" ? "搜索经验" : "Search experience"}
+            ariaLabel={language === "zh" ? "搜索经验" : "Search experience"}
+            clearAriaLabel={language === "zh" ? "清除" : "Clear"}
+            onClear={() => setExperienceQuery("")}
+          />
+        ) : null}
         {!online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
+          <MobileNetworkUnavailableState onReconnect={reconnect} />
         ) : experienceLoading ? (
           <section className="panel empty">
             {language === "zh" ? "正在读取经验…" : "Loading experience…"}
@@ -1603,28 +1648,11 @@ function App() {
               </button>
             </div>
           </section>
-        ) : experienceItems.length ? (
-          <div className="experience-shell-list">
-            {experienceItems.map((item) => (
-              <article className="experience-shell-card" key={item.id}>
-                {item.coverUrl ? (
-                  <img className="experience-shell-cover" src={item.coverUrl} alt="" loading="lazy" />
-                ) : (
-                  <div className="experience-shell-cover experience-shell-placeholder">
-                    <UiIcon name="sprout" size={24} />
-                  </div>
-                )}
-                <div className="experience-shell-body">
-                  <strong>{item.title}</strong>
-                  <span>{item.authorName}{item.systemName ? ` · ${item.systemName}` : ""}</span>
-                  <small>
-                    {item.archiveTitle}
-                    {item.source_record_count ? ` · ${item.source_record_count} ${copy.records}` : ""}
-                  </small>
-                </div>
-              </article>
-            ))}
-          </div>
+        ) : visibleExperienceItems.length ? (
+          <PublicExperienceGallery
+            items={visibleExperienceItems}
+            showCategoryBadge={experienceCategoryFilter === "all"}
+          />
         ) : (
           <section className="panel empty">
             {language === "zh" ? "暂时没有公开经验。" : "No public experience yet."}
@@ -1633,122 +1661,32 @@ function App() {
       </> : null}
 
       {screen.kind === "following" ? (
-        !online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
-        ) : !cloudUserId ? (
-          <CloudLogin copy={copy} onSuccess={() => void loadFollowing()} />
-        ) : (
-          <>
-            <div className="section-title">
-              <h1>{copy.follow}</h1>
-              <span className="count">{followedItems.length}</span>
-            </div>
-            {followedLoading ? (
-              <section className="panel empty">
-                {language === "zh" ? "正在读取关注项目…" : "Loading followed projects…"}
-              </section>
-            ) : followedError ? (
-              <section className="notice warning">
-                <p>{language === "zh" ? "关注项目读取失败，请稍后重试。" : "Could not load followed projects."}</p>
-                <div className="action-row">
-                  <button type="button" className="secondary-button" onClick={() => void loadFollowing()}>
-                    {language === "zh" ? "重新加载" : "Retry"}
-                  </button>
-                </div>
-              </section>
-            ) : followedItems.length ? (
-              <div className="project-list">
-                {followedItems.map((item) => (
-                  <ArchiveProjectCard
-                    key={item.archive_id}
-                    project={activityProjectView(item)}
-                    mobileMode
-                    mobileShowCategoryBadge
-                  />
-                ))}
-              </div>
-            ) : (
-              <section className="panel empty">
-                {language === "zh" ? "还没有关注的公开项目。" : "No followed public projects yet."}
-              </section>
-            )}
-          </>
-        )
+        <div data-android-shell-page="following">
+          {!cloudUserId ? (
+            <CloudLogin copy={copy} onSuccess={() => setScreen({ kind: "following" })} />
+          ) : (
+            <FollowPage />
+          )}
+        </div>
       ) : null}
 
       {screen.kind === "market" ? (
-        !online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
-        ) : marketLoading ? (
-          <section className="panel empty">
-            {language === "zh" ? "正在读取集市…" : "Loading market…"}
-          </section>
-        ) : marketError ? (
-          <section className="notice warning">
-            <p>{language === "zh" ? "集市读取失败，请稍后重试。" : "Could not load the market."}</p>
-            <div className="action-row">
-              <button type="button" className="secondary-button" onClick={() => void loadMarket()}>
-                {language === "zh" ? "重新加载" : "Retry"}
-              </button>
-            </div>
-          </section>
-        ) : (
-          <>
-            <div className="category-row" role="group" aria-label={language === "zh" ? "集市类型" : "Market type"}>
-              {[{ value: "all", label: language === "zh" ? "全部" : "All" }, ...getMarketPostTypeOptions(language)].map((option) => (
-                <button type="button" key={option.value} aria-pressed={marketTypeFilter === option.value} onClick={() => setMarketTypeFilter(option.value as "all" | MarketPostType)}>{option.label}</button>
-              ))}
-            </div>
-            <button type="button" className="secondary-button" aria-expanded={marketFiltersOpen} onClick={() => setMarketFiltersOpen((open) => !open)}>
-              {language === "zh" ? "筛选" : "Filters"}
-            </button>
-            {marketFiltersOpen ? <div className="field">
-              <label>{language === "zh" ? "分类" : "Category"}
-                <select value={marketCategoryFilter} onChange={(event) => setMarketCategoryFilter(event.target.value as "all" | MarketItemCategory)}>
-                  <option value="all">{language === "zh" ? "全部分类" : "All categories"}</option>
-                  {getMarketItemCategoryOptions(language).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </label>
-              <label>{language === "zh" ? "地区" : "Area"}<input value={marketLocationFilter} onChange={(event) => setMarketLocationFilter(event.target.value)} /></label>
-              <label>{language === "zh" ? "内容" : "Content"}<input value={marketContentFilter} onChange={(event) => setMarketContentFilter(event.target.value)} /></label>
-            </div> : null}
-            <div className="section-title">
-              <h1>{copy.market}</h1>
-              <span className="count">{visibleMarketItems.length}</span>
-            </div>
-            {visibleMarketItems.length ? <div style={mobileMarketListStyle}>
-              {visibleMarketItems.map((item) => {
-                const profile = marketProfiles.get(item.user_id);
-                const archive = item.archive_id ? marketArchives.get(item.archive_id) : null;
-                return (
-                  <article style={mobileMarketCardStyle} key={item.id}>
-                    <MobileMarketFeedCard item={item} profile={profile} archive={archive} language={language} marketName={copy.market} unsetUsername={language === "zh" ? "未设置用户名" : "Unknown user"} notProvided={language === "zh" ? "未提供" : "Not provided"} />
-                  </article>
-                );
-              })}
-            </div> : <section className="panel empty">{language === "zh" ? "没有符合筛选条件的内容。" : "No matching posts."}</section>}
-          </>
-        )
+        <div data-android-shell-page="market">
+          <MarketPage />
+        </div>
       ) : null}
 
-      {screen.kind === "guides" ? (online ? <PlantPage /> : <>
-        <HomeSectionTabs
-          active="guide"
-          showGuestLanguageSwitcher={false}
-          onSearch={() => undefined}
-          onSelect={(section: HomeSection) => {
-            if (section === "guide") return;
-            if (section === "activity") {
-              setScreen({ kind: "activity" });
-              return;
-            }
-            setScreen({ kind: "experience" });
-          }}
-        />
-        <div className="field"><input type="search" value={guideQuery} onChange={(e) => setGuideQuery(e.target.value)} placeholder={copy.guideSearch} aria-label={copy.guideSearch} /></div>
-        <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
-        <div className="guide-grid">{directory.filter((row) => (categoryFilter === "all" || row.category === categoryFilter) && `${row.label} ${row.nameEn || ""} ${(row.aliases || []).join(" ")} ${row.searchText || ""}`.toLowerCase().includes(guideQuery.toLowerCase())).map((guide) => <button type="button" className="guide-item" key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}><strong>{getOfflineGuideName(guide, language)}</strong><small>{guide.category ? copy[guide.category] : ""}</small>{owner && guide.description ? <p>{guide.description}</p> : null}</button>)}</div>
-      </>) : null}
+      {screen.kind === "guides" ? (
+        <div data-android-shell-page="guides">
+          <PlantPage />
+        </div>
+      ) : null}
+      {screen.kind === "profile" ? (
+        <div data-android-shell-page="profile">
+          {!online ? <MobileNetworkUnavailableState onReconnect={reconnect} /> : null}
+          <ProfilePage />
+        </div>
+      ) : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => void supabase.auth.signOut({ scope: "local" })}>{copy.logout}</button> : null}</div></section> : null}

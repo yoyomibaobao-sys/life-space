@@ -16,6 +16,7 @@ type Props = {
   loaderRef: RefObject<HTMLDivElement | null>;
   onRetryInitial: () => void;
   onRetryMore: () => void;
+  onOpenProject?: (item: DiscoveryProjectFeedItem) => void;
 };
 
 function ProjectCardSkeleton() {
@@ -54,6 +55,7 @@ export function DiscoverProjectGrid({
   loaderRef,
   onRetryInitial,
   onRetryMore,
+  onOpenProject,
 }: Props) {
   const { t } = useLanguage();
 
@@ -97,6 +99,7 @@ export function DiscoverProjectGrid({
             item={item}
             eager={index < 4}
             showCategoryBadge={showCategoryBadge}
+            onOpen={onOpenProject ? () => onOpenProject(item) : undefined}
           />
         ))}
       </div>

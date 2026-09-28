@@ -25,6 +25,7 @@ import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
+import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
 import { fetchFollowedPublicProjects } from "@/lib/followed-public-project-feed";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import type {
@@ -171,6 +172,9 @@ export default function FollowPage() {
   const [projectSubmitting, setProjectSubmitting] = useState(false);
   const [userSubmitting, setUserSubmitting] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [online, setOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine,
+  );
   const activeTab = !isMobileViewport && tab === "experience" ? "projects" : tab;
   const [userMenuTargetId, setUserMenuTargetId] = useState<string | null>(null);
   const [pinnedUserIds, setPinnedUserIds] = useState<string[]>(() => {
@@ -199,11 +203,28 @@ export default function FollowPage() {
   }, []);
 
   useEffect(() => {
+    function syncOnline() {
+      setOnline(navigator.onLine);
+    }
+    window.addEventListener("online", syncOnline);
+    window.addEventListener("offline", syncOnline);
+    return () => {
+      window.removeEventListener("online", syncOnline);
+      window.removeEventListener("offline", syncOnline);
+    };
+  }, []);
+
+  useEffect(() => {
     async function load() {
       setLoading(true);
       setProjectLoadError(false);
       setUserProjectsError(false);
       setExperienceLoadError(false);
+
+      if (!navigator.onLine) {
+        setLoading(false);
+        return;
+      }
 
       const {
         data: { user },
@@ -557,7 +578,7 @@ export default function FollowPage() {
     }
 
     load();
-  }, [followT, language, loadVersion, router]);
+  }, [followT, language, loadVersion, online, router]);
 
   const filteredProjectCards = useMemo(() => {
     const search = keyword.trim().toLowerCase();
@@ -820,6 +841,11 @@ export default function FollowPage() {
 
         {loading ? (
           <div style={emptyWrapStyle}>{followT.loading}</div>
+        ) : !online &&
+          projectCards.length === 0 &&
+          userCards.length === 0 &&
+          savedExperienceCards.length === 0 ? (
+          <MobileNetworkUnavailableState />
         ) : isMobileViewport ? (
           activeTab === "projects" ? (
             projectLoadError ? (
