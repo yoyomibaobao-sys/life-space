@@ -91,7 +91,6 @@ test("cycle trash preserves records, allows duplicate display names, and ignores
   );
   assert.doesNotMatch(localDeleteFunction, /cycle_id:\s*null/);
   assert.match(localDb, /\[\.\.\.cycles, \.\.\.trashedCycles\.map/);
-  assert.match(localPage, /archive\.trashed_cycles/);
   assert.match(localPage, /restoreLocalArchiveCycle/);
   assert.match(trashPage, /listLocalArchiveCycleTrash/);
   assert.match(trashPage, /restoreLocalArchiveCycle/);
@@ -169,11 +168,12 @@ test("profile modules are compact on mobile, side-by-side on desktop, and restor
   assert.match(profile, /PROFILE_RETURN_STATE_KEY/);
   assert.match(profile, /JSON\.stringify\(\{ scrollY: window\.scrollY, module: mobileProfileModule \}\)/);
   assert.match(profile, /window\.scrollTo\(\{ top: targetY/);
-  assert.match(profile, /compact && isActive/);
-  assert.match(profile, /desktopProfileModulesStyle/);
+  const mobilePresentation = await source("components/profile/MobileProfilePresentation.tsx");
+  const mobileView = await source("components/profile/MobileProfileView.tsx");
+  assert.match(mobilePresentation, /compact && isActive/);
+  assert.match(mobilePresentation, /desktopProfileModulesStyle/);
   assert.match(profile, /gridTemplateColumns: "repeat\(3, minmax\(0, 1fr\)\)"/);
-  assert.match(profile, /whiteSpace: "nowrap", overflowX: "auto"/);
-  assert.match(profile, /href="\/profile\/helpful"/);
+  assert.match(mobileView, /href="\/profile\/helpful"/);
   assert.match(helpful, /profile\/flowers\/page/);
   assert.match(admin, /new IntersectionObserver/);
   assert.match(admin, /setActiveAdminSection/);

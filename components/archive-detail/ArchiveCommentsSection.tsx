@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/Toast";
 import {
@@ -388,9 +388,9 @@ export default function ArchiveCommentsSection({
           <span style={{ fontSize: 12, color: "#9a6232" }}>
             {getCreateContentBlockedText(membership, language)}
             {t.archive_comments.membership_link_prefix}
-            <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
+            <InternalLink href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
               {t.archive_comments.learn_membership}
-            </Link>
+            </InternalLink>
             {t.archive_comments.membership_link_suffix}
           </span>
         ) : !compactMobile ? (
@@ -482,7 +482,7 @@ export default function ArchiveCommentsSection({
                         whiteSpace: "nowrap",
                       }}
                     >
-                      <Link
+                      <InternalLink
                         href={`/user/${comment.user_id}/profile`}
                         style={{
                           color: "#7d8a78",
@@ -491,7 +491,7 @@ export default function ArchiveCommentsSection({
                         }}
                       >
                         {username}
-                      </Link>
+                      </InternalLink>
                       <span>·</span>
                       <span>{formatDateTime(comment.created_at)}</span>
                     </span>
@@ -583,12 +583,12 @@ export default function ArchiveCommentsSection({
                   >
                     <div style={{ fontSize: 11, color: "#7b8776" }}>
                       {t.archive_comments.trace_prefix}{" "}
-                      <Link
+                      <InternalLink
                         href="/profile/helpful"
                         style={{ color: "#4c7b3f" }}
                       >
                         {t.archive_comments.trace_link}
-                      </Link>{" "}
+                      </InternalLink>{" "}
                       {t.archive_comments.trace_suffix}
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -632,9 +632,9 @@ export default function ArchiveCommentsSection({
                 <div style={{ fontSize: 12, color: "#7b8776", lineHeight: 1.7 }}>
                   {getCreateContentBlockedText(membership, language)}
                   {t.archive_comments.membership_link_prefix}{" "}
-                  <Link href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
+                  <InternalLink href="/membership" style={{ color: "#4c7b3f", fontWeight: 700 }}>
                     {t.archive_comments.learn_membership}
-                  </Link>
+                  </InternalLink>
                   {t.archive_comments.membership_link_suffix}
                 </div>
               ) : (

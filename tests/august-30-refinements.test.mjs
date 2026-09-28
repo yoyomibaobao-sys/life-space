@@ -532,7 +532,7 @@ test("detail views use readable 浏览 text and mobile list view counts are hidd
   assert.doesNotMatch(detail, /data-icon="view"|mobile-app-desktop-only/);
   const list = renderToStaticMarkup(React.createElement(ProjectMetaLine, { viewCount: 12 }));
   assert.match(list, /class="mobile-app-desktop-only"/);
-  assert.match(source("app/archive/[id]/page.tsx"), /textViewCount/);
+  assert.match(source("components/archive-ui/ArchiveProjectDetailView.tsx"), /textViewCount/);
 });
 
 function interestFixture(results) {

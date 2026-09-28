@@ -1,5 +1,7 @@
 # Android 单运行时切换审计（2026-09-28）
 
+第二阶段实现及剩余真机门槛见 [android-single-runtime-stage2.md](android-single-runtime-stage2.md)。
+
 基线：`integrate-android-local-first-after-cache`，`a64379145ea6daa0fb71cadc7dda8f787549b6bd`，Capacitor Android `8.5.0`。本审计不改变运行时入口、App 身份、生产站或发行版本。
 
 ## 已核实的启动路径

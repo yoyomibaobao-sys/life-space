@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   formatMarketTime,
@@ -219,12 +219,12 @@ export default function MarketPage() {
 
           {currentUserId ? (
             <div style={headerActionStyle}>
-              <Link
+              <InternalLink
                 href="/market/mine"
                 style={isMobileViewport ? mobileMineButtonStyle : mineButtonStyle}
               >
                 {t.market.my_posts}
-              </Link>
+              </InternalLink>
               <MarketMessageLink compact={isMobileViewport} />
             </div>
           ) : null}
@@ -330,7 +330,7 @@ export default function MarketPage() {
               const publisherName = profile?.username || t.market.unset_username;
 
               return (
-                <Link key={item.id} href={`/market/${item.id}`} style={isMobileViewport ? mobileMarketCardStyle : cardStyle}>
+                <InternalLink key={item.id} href={`/market/${item.id}`} style={isMobileViewport ? mobileMarketCardStyle : cardStyle}>
                   {isMobileViewport ? (
                     <MobileMarketFeedCard item={item} profile={profile} archive={archive} language={language} marketName={t.market.name} unsetUsername={t.market.unset_username} notProvided={t.market.not_provided} />
                   ) : (<>
@@ -405,7 +405,7 @@ export default function MarketPage() {
                     </div>}
                   </div>
                   </>)}
-                </Link>
+                </InternalLink>
               );
             })}
           </section>

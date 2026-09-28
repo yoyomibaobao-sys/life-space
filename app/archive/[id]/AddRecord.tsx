@@ -3,10 +3,8 @@ import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, rememberDefaultRecordLocation, normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
@@ -114,9 +112,7 @@ export default function AddRecord({
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const filePreviewsRef = useRef<SelectedPreview[]>([]);
   const loadedQuickCaptureIdRef = useRef("");
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const quickCaptureId = searchParams.get("quickCapture") || "";
+  const quickCaptureId = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("quickCapture") || "";
   const sortedActiveCycles = [...activeCycles].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
   );
@@ -758,7 +754,6 @@ export default function AddRecord({
         await deleteQuickCapture(quickCaptureId).catch(() => undefined);
         loadedQuickCaptureIdRef.current = "";
       }
-      router.refresh();
       if (cycleEndFailed) {
         showToast(terminology.endAfterSaveFailureMessage);
       }
@@ -786,9 +781,9 @@ export default function AddRecord({
           }}
         >
           <span>{getCreateContentBlockedText(membership, language)}</span>{" "}
-          <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+          <InternalLink href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
             {t.archive.learn_cloud_membership}
-          </Link>
+          </InternalLink>
         </div>
       ) : null}
 
@@ -806,9 +801,9 @@ export default function AddRecord({
           }}
         >
           <span>{membershipNotice}</span>{" "}
-          <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+          <InternalLink href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
             {t.archive.learn_cloud_membership}
-          </Link>
+          </InternalLink>
         </div>
       ) : null}
 
@@ -1007,13 +1002,14 @@ export default function AddRecord({
                 key={preview.key}
                 style={{ position: "relative", aspectRatio: "1 / 1" }}
               >
-                <Image
+                <img
                   src={preview.url}
                   alt={preview.name || `${copy.pending_photo_alt} ${index + 1}`}
-                  fill
-                  unoptimized
-                  sizes="(max-width: 760px) 25vw, 120px"
                   style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
                     objectFit: "cover",
                     borderRadius: 12,
                     border: "1px solid #edf1ea",
@@ -1063,9 +1059,9 @@ export default function AddRecord({
               <>
                 <br />
                 {copy.no_storage}{" "}
-                <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+                <InternalLink href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
                   {t.archive.learn_cloud_membership}
-                </Link>
+                </InternalLink>
                 {language === "zh" ? "。" : "."}
               </>
             ) : null}

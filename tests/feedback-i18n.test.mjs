@@ -29,8 +29,9 @@ test("feedback stays in navigation and the profile list without a duplicate bann
   assert.match(navbar, /href="\/feedback"/);
   assert.match(navbar, /!user \? <LanguageSwitcher compact \/>/);
   assert.doesNotMatch(footer, /LanguageSwitcher/);
-  assert.match(profile, /role="switch"/);
-  assert.match(profile, /setLanguage\(language === "zh" \? "en" : "zh"\)/);
+  const mobilePresentation = read("components/profile/MobileProfilePresentation.tsx");
+  assert.match(mobilePresentation, /role="switch"/);
+  assert.match(mobilePresentation, /setLanguage\(language === "zh" \? "en" : "zh"\)/);
   assert.match(navbar, /desktopUtilityDividerStyle/);
   assert.doesNotMatch(navbar, /\{user\.email\}/);
   assert.match(footer, /href="\/feedback"/);

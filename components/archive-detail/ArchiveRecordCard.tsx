@@ -6,7 +6,7 @@ import { readRecordLocations } from "@/lib/record-location-cloud";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
 import TagList from "@/components/TagList";
@@ -692,7 +692,7 @@ function DesktopAndMobileRecordActions({
           >
             {copy.take_photo}
           </button>
-          <Link
+          <InternalLink
             href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
             style={{
               ...smallActionButtonStyle("#fffaf0", "#7a6636", "#f1e3c7"),
@@ -700,7 +700,7 @@ function DesktopAndMobileRecordActions({
             }}
           >
             {copy.publish_to_market}
-          </Link>
+          </InternalLink>
         </>
       ) : null}
 
@@ -1066,12 +1066,12 @@ function MobileRecordMoreMenu({
           <button type="button" onClick={onAlbum} style={mobileRecordMenuItemStyle}>
             {copy.add_from_album}
           </button>
-          <Link
+          <InternalLink
             href={`/market/new?archiveId=${archive.id}&recordId=${item.id}`}
             style={mobileRecordMenuLinkStyle}
           >
             {copy.forward_to_market}
-          </Link>
+          </InternalLink>
           <button type="button" onClick={() => onSetHelpStatus(nextHelp.value)} style={mobileRecordMenuItemStyle}>{nextHelp.label}</button>
         </>
       ) : null}

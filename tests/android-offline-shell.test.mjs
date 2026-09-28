@@ -52,7 +52,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /syncAllPendingCloudArchives/);
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
-  assert.match(source, /supabase\.auth\.getSession/);
+  assert.match(source, /restoreBundledSession/);
+  assert.match(read("lib/android-auth-session.ts"), /auth\.getSession/);
   assert.match(source, /supabase[\s\S]*?\.from\("archives"\)/);
   assert.match(source, /\.order\("created_at", \{ ascending: false \}\)/);
   assert.doesNotMatch(source, /\.order\("updated_at", \{ ascending: false \}\)/);
@@ -178,7 +179,8 @@ test("Android cloud login uses the shared Turnstile challenge", () => {
 
   assert.match(source, /<AuthCaptcha/);
   assert.match(source, /AUTH_CAPTCHA_ENABLED/);
-  assert.match(source, /options: \{ captchaToken: captchaToken \|\| undefined \}/);
+  assert.match(source, /loginBundledWithTurnstile/);
+  assert.match(read("lib/android-auth-session.ts"), /options: \{ captchaToken: input\.captchaToken \}/);
   assert.match(buildScript, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(workflow, /vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(authCaptcha, /TurnstileChallengeView/);

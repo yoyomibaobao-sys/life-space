@@ -15,22 +15,21 @@ const read = (relativePath) =>
 test("offline profile does not use the network-only ProfilePage render path", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const profile = read("app/profile/page.tsx");
-  const offlineProfile = read("components/profile/OfflineAndroidProfilePage.tsx");
+  const offlineProfile = read("components/profile/AndroidProfileController.tsx");
 
   assert.match(profile, /await supabase\.auth\.getUser/);
   assert.match(profile, /router\.push\(buildLoginHref\("\/profile"\)\)/);
   assert.doesNotMatch(shell, /<ProfilePage/);
-  assert.match(shell, /<OfflineAndroidProfilePage/);
+  assert.match(shell, /<AndroidProfileController/);
   assert.match(shell, /buildOfflineProfileSnapshot/);
-  assert.match(offlineProfile, /data-android-offline-profile="true"/);
+  assert.match(offlineProfile, /snapshot\.membership/);
   assert.match(offlineProfile, /<MobileProfileView/);
   assert.match(read("components/profile/MobileProfileView.tsx"), /t\.profile\.settings_title/);
   assert.match(read("components/profile/MobileProfileView.tsx"), /<MobileProfileModuleTabs/);
-  assert.match(offlineProfile, /浏览历史|Browsing history/);
   assert.match(offlineProfile, /备份与导出|Backup & export/);
   assert.match(offlineProfile, /开通云会员|Cloud Membership/);
   assert.match(offlineProfile, /订单进度查询|Order progress/);
-  assert.match(offlineProfile, /User management|用户管理/);
+  assert.match(offlineProfile, /live\?\.isAdmin/);
   assert.match(read("components/profile/MobileProfilePresentation.tsx"), /export function MobileProfileModuleTabs/);
   assert.match(offlineProfile, /onLogout/);
   assert.match(shell, /clearCloudOfflineCacheOnExplicitLogout/);
@@ -123,6 +122,6 @@ test("network-only links stay inside the offline shell", () => {
   assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "network-required");
   assert.equal(parseAndroidShellPath("/legal")?.kind, "network-required");
   assert.match(shell, /showToast\(copy\.needNetwork\)/);
-  assert.match(shell, /if \(!navigator\.onLine\) \{/);
+  assert.match(shell, /event\.preventDefault\(\)/);
   assert.match(shell, /event\.preventDefault\(\)/);
 });

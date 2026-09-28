@@ -61,7 +61,6 @@ import type {
   LightboxImage,
   PlantSpeciesLite,
   RecordItem,
-  RecordQueryRow,
   RecordTagRow,
   RelatedTagCountRow,
 } from "@/lib/archive-detail-types";
@@ -94,6 +93,7 @@ import {
   isStorageUploadMaintenance,
 } from "@/lib/storage-upload-maintenance";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { loadCloudArchiveTimeline } from "@/lib/cloud-archive-detail";
 import { requestCloudTrash } from "@/lib/cloud-trash";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
 import {
@@ -400,92 +400,9 @@ saveRecentArchiveBrowse({
         setIsProjectFollowed(false);
       }
 
-      const { data: cycleRows, error: cycleError } = await supabase
-        .from("archive_cycles")
-        .select("id, archive_id, cycle_no, display_name, status, started_at, ended_at, created_at, updated_at")
-        .eq("archive_id", archiveData.id)
-        .order("cycle_no", { ascending: false });
-
-      if (cycleError) {
-        console.warn("load archive cycles failed", cycleError);
-        setCycles([]);
-      } else {
-        setCycles((cycleRows || []) as ArchiveCycle[]);
-      }
-
-      let recordsQuery = supabase
-        .from("records")
-        .select(
-          `
-          *,
-          record_tags (
-            tag,
-            tag_type,
-            source,
-            is_active
-          )
-        `
-        )
-        .eq("archive_id", archiveData.id)
-        .order("record_time", { ascending: false });
-
-      if (!isOwnerView) {
-        recordsQuery = recordsQuery.eq("visibility", "public");
-      }
-
-      const { data: recordsData } = await recordsQuery;
-      const recs = (recordsData ?? []) as RecordQueryRow[];
-      const recordIds = recs.map((item) => item.id);
-      const mediaMap: Record<string, MediaItem[]> = {};
-
-      if (recordIds.length > 0) {
-        const { data: mediaRaw } = await supabase.from("media").select("*").in("record_id", recordIds);
-        const mediaRows = await attachMediaDisplayUrls(
-          supabase,
-          ((mediaRaw || []) as MediaItem[])
-        );
-
-        mediaRows.forEach((media) => {
-          const recordId = media.record_id;
-          if (!recordId) return;
-          if (!mediaMap[recordId]) mediaMap[recordId] = [];
-          mediaMap[recordId].push(media);
-        });
-      }
-
-      const finalRecords: RecordItem[] = recs.map((record) => {
-        const behaviorTags =
-          record.record_tags
-            ?.filter(
-              (tag): tag is RecordTagRow & { tag: string } =>
-                tag.tag_type === "behavior" &&
-                tag.is_active !== false &&
-                typeof tag.tag === "string"
-            )
-            .map((tag) => tag.tag) || [];
-
-        const displayTags = Array.from(new Set(behaviorTags));
-        const userBehaviorTags =
-          record.record_tags
-            ?.filter(
-              (tag): tag is RecordTagRow & { tag: string } =>
-                tag.tag_type === "behavior" &&
-                tag.source === "user" &&
-                tag.is_active !== false &&
-                typeof tag.tag === "string"
-            )
-            .map((tag) => tag.tag) || [];
-
-        return {
-          ...record,
-          media: mediaMap[record.id] || [],
-          parsed_actions: displayTags,
-          user_behavior_tags: userBehaviorTags,
-          display_tags: displayTags,
-        };
-      });
-
-      setRecords(finalRecords);
+      const timeline = await loadCloudArchiveTimeline(archiveData.id, isOwnerView);
+      setCycles(timeline.cycles);
+      setRecords(timeline.records);
     }
 
     load();

@@ -7,8 +7,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import InternalLink, { useInternalNavigate } from "@/components/navigation/InternalLink";
 import { supabase } from "@/lib/supabase";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { showToast } from "@/components/Toast";
@@ -143,7 +142,8 @@ type FollowUserCard = {
 };
 
 export default function FollowPage() {
-  const router = useRouter();
+  const shellNavigate = useInternalNavigate();
+  const navigate = (href: string) => { if (!shellNavigate?.(href)) window.location.assign(href); };
   const { language, t } = useLanguage();
   const followT = t.follow;
   const [loading, setLoading] = useState(true);
@@ -231,7 +231,7 @@ export default function FollowPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push(buildLoginHref(getCurrentInternalPath()));
+        navigate(buildLoginHref(getCurrentInternalPath()));
         return;
       }
 
@@ -578,7 +578,7 @@ export default function FollowPage() {
     }
 
     load();
-  }, [followT, language, loadVersion, online, router]);
+  }, [followT, language, loadVersion, online, shellNavigate]);
 
   const filteredProjectCards = useMemo(() => {
     const search = keyword.trim().toLowerCase();
@@ -1050,12 +1050,12 @@ export default function FollowPage() {
                     onClick={() => {
                       if (isMobileViewport) {
                         markRead(`project:${item.id}`, item.latestRecordTime);
-                        router.push(`/archive/${item.id}`);
+                        navigate(`/archive/${item.id}`);
                       }
                     }}
                     onKeyDown={(event) => {
                       if (isMobileViewport && (event.key === "Enter" || event.key === " ")) {
-                        router.push(`/archive/${item.id}`);
+                        navigate(`/archive/${item.id}`);
                       }
                     }}
                     style={{ ...cardStyle, cursor: isMobileViewport ? "pointer" : undefined }}
@@ -1106,7 +1106,7 @@ export default function FollowPage() {
                           type="button"
                           onClick={() => {
                             markRead(`project:${item.id}`, item.latestRecordTime);
-                            router.push(`/archive/${item.id}`);
+                            navigate(`/archive/${item.id}`);
                           }}
                           style={primaryButtonStyle}
                         >
@@ -1119,9 +1119,9 @@ export default function FollowPage() {
                         >
                           {followT.unfollow}
                         </button>
-                        <Link href={`/user/${item.ownerId}`} style={textLinkStyle}>
+                        <InternalLink href={`/user/${item.ownerId}`} style={textLinkStyle}>
                           {followT.enter_space}
-                        </Link>
+                        </InternalLink>
                       </div> : null}
                     </div>
                   </article>
@@ -1187,14 +1187,14 @@ export default function FollowPage() {
                       <span style={railUsernameStyle}>{item.username}</span>
                     </button>
                     {!isMobileViewport ? (
-                      <Link
+                      <InternalLink
                         href={`/user/${item.id}`}
                         aria-label={`${followT.enter_space}: ${item.username}`}
                         title={followT.enter_space}
                         style={followedUserSpaceShortcutStyle}
                       >
                         <UiIcon name="arrow-right" size={12} strokeWidth={2} />
-                      </Link>
+                      </InternalLink>
                     ) : null}
                   </div>
                 );
@@ -1203,7 +1203,7 @@ export default function FollowPage() {
 
             {!isMobileViewport && selectedUserId !== "all" ? (
               <div style={selectedUserActionStyle}>
-                <Link href={`/user/${selectedUserId}`} style={textLinkStyle}>{followT.enter_space}</Link>
+                <InternalLink href={`/user/${selectedUserId}`} style={textLinkStyle}>{followT.enter_space}</InternalLink>
                 <button type="button" onClick={() => setUserConfirmId(selectedUserId)} style={ghostButtonStyle}>
                   {followT.unfollow}
                 </button>
@@ -1227,7 +1227,7 @@ export default function FollowPage() {
                   <article key={`${item.ownerId}-${item.id}`} style={cardStyle}>
                     <button
                       type="button"
-                      onClick={() => router.push(`/archive/${item.id}`)}
+                      onClick={() => navigate(`/archive/${item.id}`)}
                       style={projectCoverButtonStyle}
                     >
                       <span style={coverStyle}>
@@ -1237,7 +1237,7 @@ export default function FollowPage() {
                     <div style={cardBodyStyle}>
                       <div style={cardInlineTitleRowStyle}>
                         <span style={language === "en" ? projectInlineMetaEnglishStyle : projectInlineMetaStyle}>{item.categoryLabel} ·</span>
-                        <button type="button" onClick={() => router.push(`/archive/${item.id}`)} style={projectTitleButtonStyle}>
+                        <button type="button" onClick={() => navigate(`/archive/${item.id}`)} style={projectTitleButtonStyle}>
                           {item.title}
                         </button>
                       </div>
@@ -1288,7 +1288,7 @@ export default function FollowPage() {
               type="button"
               onClick={() => {
                 rememberMobileRouteSource();
-                router.push(`/user/${userMenuTargetId}`);
+                navigate(`/user/${userMenuTargetId}`);
               }}
               style={userActionButtonStyle}
             >
@@ -1370,9 +1370,9 @@ function EmptyState({
       {description ? (
         <div style={{ marginTop: 8, color: "#7b8578", fontSize: 14 }}>{description}</div>
       ) : null}
-      <Link href={href} style={emptyActionStyle}>
+      <InternalLink href={href} style={emptyActionStyle}>
         {actionLabel}
-      </Link>
+      </InternalLink>
     </div>
   );
 }

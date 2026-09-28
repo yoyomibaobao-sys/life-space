@@ -43,6 +43,7 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
+import { retireBundledLegacyServiceWorkers } from "@/lib/android-service-worker";
 import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import {
   getArchiveCategoryIcon,
@@ -52,11 +53,13 @@ import {
 } from "@/lib/archive-categories";
 
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
+import { loginBundledWithTurnstile, restoreBundledSession } from "@/lib/android-auth-session";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import DeviceOwnedProjectDetail from "@/components/archive-ui/DeviceOwnedProjectDetail";
+import CloudArchiveDetailController from "@/components/archive-ui/CloudArchiveDetailController";
 import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
 import ArchiveProjectDetailStatus, {
   ArchiveProjectDetailLoading,
@@ -122,10 +125,12 @@ import CategoryLabel from "@/components/ui/CategoryLabel";
 import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 import FollowPage from "@/app/follow/page";
 import MarketPage from "@/app/market/page";
-import OfflineAndroidProfilePage from "@/components/profile/OfflineAndroidProfilePage";
+import AndroidProfileController from "@/components/profile/AndroidProfileController";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  getCloudArchiveCategoryDepths,
   getLocalArchiveCategoryDepths,
+  saveCloudArchiveCategoryDepths,
   saveLocalArchiveCategoryDepths,
   type ArchiveCategoryDepth,
   type ArchiveCategoryDepths,
@@ -231,6 +236,7 @@ type Screen =
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
+  | { kind: "cloud-detail"; archiveId: string }
   | { kind: "edit-project"; archiveId: string }
   | { kind: "new-record"; archiveId: string }
   | { kind: "edit-record"; archiveId: string; recordId: string };
@@ -239,7 +245,7 @@ const text = {
   zh: {
     mySpace: "我的空间", settings: "设置", language: "语言", all: "全部", cloud: "云空间", local: "本地", project: "项目",
     home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
-    cloudUnavailable: "当前未联网，云端内容暂不可用", needNetwork: "需要联网", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
+    cloudUnavailable: "当前未联网，云端内容暂不可用", needNetwork: "需要联网", webOnly: "此功能暂需在网页中使用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
     cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
     saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
     offlineCopies: "云端缓存副本",     cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，恢复网络后自动同步。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。", 
@@ -310,7 +316,7 @@ const text = {
   en: {
     mySpace: "My space", settings: "Settings", language: "Language", all: "All", cloud: "Cloud", local: "Local", project: "Project",
     home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
-    cloudUnavailable: "Cloud content is unavailable while offline", needNetwork: "A network connection is required", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
+    cloudUnavailable: "Cloud content is unavailable while offline", needNetwork: "A network connection is required", webOnly: "This feature is currently available on the website", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
     cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
     saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
     offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device and sync automatically when you reconnect.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
@@ -431,34 +437,37 @@ function BlobImage({ image, className, alt }: {
   alt: string;
 }) {
   const [url, setUrl] = useState("");
+  const validBlob = normalizeLocalImageBlob(image?.blob, image?.mime_type);
 
   useEffect(() => {
     const blob = normalizeLocalImageBlob(image?.blob, image?.mime_type);
-    if (!blob) {
-      setUrl("");
-      return;
-    }
+    if (!blob) return;
     let nextUrl: string;
     try {
       nextUrl = URL.createObjectURL(blob);
     } catch {
-      setUrl("");
       return;
     }
-    setUrl(nextUrl);
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) setUrl(nextUrl); });
     return () => {
+      cancelled = true;
       URL.revokeObjectURL(nextUrl);
     };
   }, [image]);
 
-  return url ? <img src={url} alt={alt} className={className} /> : null;
+  return validBlob && url ? <img src={url} alt={alt} className={className} /> : null;
 }
 
 function OfflineProjectCategorySettings({
   ownerUserId,
+  online,
+  cloudUserId,
   onBack,
 }: {
   ownerUserId: string;
+  online: boolean;
+  cloudUserId: string | null;
   onBack: () => void;
 }) {
   const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>("local");
@@ -466,16 +475,38 @@ function OfflineProjectCategorySettings({
     getLocalArchiveCategoryDepths(ownerUserId),
   );
   const [saving, setSaving] = useState(false);
+  const [cloudDepths, setCloudDepths] = useState<ArchiveCategoryDepths>({ ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS });
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [error, setError] = useState("");
+  const cloudAvailable = online && cloudUserId === ownerUserId;
+
+  useEffect(() => {
+    if (!cloudAvailable || activeSpace !== "cloud") return;
+    let active = true;
+    setCloudLoading(true);
+    setError("");
+    void getCloudArchiveCategoryDepths(ownerUserId).then((depths) => {
+      if (active) setCloudDepths(depths);
+    }).catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : String(cause));
+    }).finally(() => { if (active) setCloudLoading(false); });
+    return () => { active = false; };
+  }, [activeSpace, cloudAvailable, ownerUserId]);
 
   function updateDepth(category: ArchiveCategory, depth: ArchiveCategoryDepth) {
-    setLocalDepths((current) => ({ ...current, [category]: depth }));
+    if (activeSpace === "cloud") setCloudDepths((current) => ({ ...current, [category]: depth }));
+    else setLocalDepths((current) => ({ ...current, [category]: depth }));
   }
 
-  function save() {
-    if (activeSpace === "cloud") return;
+  async function save() {
+    if (activeSpace === "cloud" && (!cloudAvailable || cloudLoading || error)) return;
     setSaving(true);
+    setError("");
     try {
-      saveLocalArchiveCategoryDepths(localDepths, ownerUserId);
+      if (activeSpace === "cloud") await saveCloudArchiveCategoryDepths(ownerUserId, cloudDepths);
+      else saveLocalArchiveCategoryDepths(localDepths, ownerUserId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSaving(false);
     }
@@ -485,11 +516,13 @@ function OfflineProjectCategorySettings({
     <ProjectCategorySettingsView
       activeSpace={activeSpace}
       onSpaceChange={setActiveSpace}
-      depths={activeSpace === "local" ? localDepths : { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS }}
+      depths={activeSpace === "local" ? localDepths : cloudDepths}
       saving={saving}
-      cloudRequiresNetwork
+      loading={activeSpace === "cloud" && cloudLoading}
+      error={error}
+      cloudRequiresNetwork={!cloudAvailable}
       onToggleDepth={updateDepth}
-      onSave={save}
+      onSave={() => void save()}
       onBack={onBack}
     />
   );
@@ -767,8 +800,8 @@ function App() {
       void loadShellIdentity(user.id);
     }
 
-    void supabase.auth.getSession()
-      .then(({ data }) => applySession(data.session?.user))
+    void restoreBundledSession()
+      .then((user) => applySession(user))
       .catch(() => undefined);
 
     const {
@@ -814,9 +847,10 @@ function App() {
     void preparePendingCloudSyncQueue(ownerContext)
       .then(() => loadList(ownerContext))
       .then(() =>
-        syncAllPendingCloudArchives({ ownerContext }).then(() =>
-          loadList(ownerContext),
-        ),
+        syncAllPendingCloudArchives({ ownerContext }).then(async () => {
+          await loadList(ownerContext);
+          window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
+        }),
       )
       .catch(() => undefined);
   }, [online, cloudUserId, ownerContext, loadCloudList, loadList]);
@@ -859,6 +893,8 @@ function App() {
         await loadList(
           nextOwner ? { userId: nextOwner.userId, email: nextOwner.email } : null,
         );
+        void retireBundledLegacyServiceWorkers().catch((error) =>
+          console.warn("bundled service worker retirement", error));
         if (
           migration.status === "migrated" &&
           migration.archiveCount + migration.recordCount + migration.imageCount > 0
@@ -924,7 +960,7 @@ function App() {
     }
     if (ownerContext && cloudUserId && ownerContext.userId === cloudUserId) {
       void syncAllPendingCloudArchives({ ownerContext })
-        .then(() => loadList(ownerContext))
+        .then(async () => { await loadList(ownerContext); window.dispatchEvent(new Event("lifespace-cloud-sync-complete")); })
         .catch(() => undefined);
     }
 
@@ -940,7 +976,7 @@ function App() {
     const routed = parseAndroidShellPath(pathname, search);
     if (!routed) return false;
     if (routed.kind === "network-required") {
-      showToast(copy.needNetwork);
+      showToast(online ? copy.webOnly : copy.needNetwork);
       return true;
     }
     if (routed.kind === "list") {
@@ -998,12 +1034,18 @@ function App() {
       return true;
     }
     if (routed.kind === "archive" && routed.id) {
+      const publicItem = activityItems.find((row) => row.archive_id === routed.id);
+      if (online && cloudUserId &&
+          (cloudArchives.some((item) => item.id === routed.id) ||
+            publicItem?.owner_user_id === cloudUserId || !publicItem)) {
+        setScreen({ kind: "cloud-detail", archiveId: routed.id });
+        return true;
+      }
       const ownedId = resolveOwnedShellArchiveId(routed.id, [...archives, ...cloudCaches]);
       if (ownedId) {
         openDetail(ownedId);
         return true;
       }
-      const publicItem = activityItems.find((row) => row.archive_id === routed.id);
       if (publicItem) {
         setPublicDetailItem(publicItem);
         setPublicDetailBack("activity");
@@ -1045,11 +1087,11 @@ function App() {
         event.stopPropagation();
         return;
       }
-      if (!navigator.onLine) {
-        event.preventDefault();
-        event.stopPropagation();
-        showToast(copy.needNetwork);
-      }
+      // A same-origin website document would replace the bundled React tree.
+      // Unsupported routes remain in this document until their controller exists.
+      event.preventDefault();
+      event.stopPropagation();
+      showToast(online ? copy.webOnly : copy.needNetwork);
     }
 
     document.addEventListener("click", onClick, true);
@@ -1057,10 +1099,13 @@ function App() {
   }, [
     activityItems,
     archives,
+    cloudArchives,
+    cloudUserId,
     cloudCaches,
     copy.needNetwork,
     directory,
     ownerContext,
+    online,
     showToast,
   ]);
 
@@ -1106,6 +1151,7 @@ function App() {
         ownerContext,
       });
       await loadList(ownerContext);
+      window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
       showToast(
         result.success ? copy.uploadSuccess : result.error || copy.uploadFailed,
       );
@@ -1238,7 +1284,7 @@ function App() {
         project={cloudProjectView(archive)}
         mobileMode
         mobileShowCategoryBadge={false}
-        onClick={localCopy ? () => openDetail(localCopy.id) : undefined}
+        onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}
         actionSlot={(
           <button
             type="button"
@@ -1311,7 +1357,7 @@ function App() {
   ];
 
   const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides", "following", "market", "profile", "project-categories", "guide-detail", "public-detail"].includes(screen.kind);
-  const detailOwnsTopNav = ["detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
+  const detailOwnsTopNav = ["detail", "cloud-detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
     0,
@@ -1343,7 +1389,10 @@ function App() {
       onNavigate={(href) => {
         try {
           const url = new URL(href, window.location.origin);
-          return applyShellPath(url.pathname, url.search);
+          if (url.origin !== window.location.origin) return false;
+          if (applyShellPath(url.pathname, url.search)) return true;
+          showToast(online ? copy.webOnly : copy.needNetwork);
+          return true;
         } catch {
           return false;
         }
@@ -1657,6 +1706,23 @@ function App() {
         </MobileShellErrorBoundary>
       ) : null}
 
+      {screen.kind === "cloud-detail" ? (
+        <MobileShellErrorBoundary routeKind="cloud-detail" archiveId={screen.archiveId}
+          title={language === "zh" ? "无法打开云项目" : "Could not open cloud project"}
+          message={language === "zh" ? "项目详情加载失败。" : "The project failed to render."}
+          backLabel={copy.mySpace} onBack={goList}>
+          <CloudProjectRuntime
+            key={`${screen.archiveId}:${online && cloudUserId === ownerContext?.userId}:${ownerContext?.userId || ""}`}
+            archiveId={screen.archiveId} online={online && cloudUserId === ownerContext?.userId}
+            ownerContext={ownerContext} onBack={goList}
+            onCacheChanged={() => loadList(ownerContext)}
+            onAddRecord={(id) => setScreen({ kind: "new-record", archiveId: id })}
+            onDeleteArchive={(id) => void handleDeleteArchive(id)}
+            onDeleteRecord={(recordId, id) => void handleDeleteRecord(recordId, id)}
+          />
+        </MobileShellErrorBoundary>
+      ) : null}
+
       {screen.kind === "edit-project" && detail ? (
         <ProjectForm
           language={language}
@@ -1858,12 +1924,13 @@ function App() {
             backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
             onBack={goList}
           >
-            <OfflineAndroidProfilePage
+            <AndroidProfileController
               snapshot={buildOfflineProfileSnapshot({
                 owner,
                 profile: spaceProfile,
                 membership,
               })}
+              online={online && cloudUserId === owner?.userId}
               onBack={() => setScreen({ kind: "list" })}
               onLogout={() => void logoutFromProfile()}
             />
@@ -1882,6 +1949,8 @@ function App() {
           >
             <OfflineProjectCategorySettings
               ownerUserId={ownerContext?.userId || owner?.userId || ""}
+              online={online}
+              cloudUserId={cloudUserId}
               onBack={() => setScreen({ kind: "profile" })}
             />
           </MobileShellErrorBoundary>
@@ -1916,6 +1985,49 @@ function App() {
 
 type OfflineCopy = typeof text.zh | typeof text.en;
 
+function CloudProjectRuntime({ archiveId, online, ownerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord }: {
+  archiveId: string;
+  online: boolean;
+  ownerContext: LocalArchiveOwnerContext | null;
+  onBack: () => void;
+  onCacheChanged: () => Promise<void>;
+  onAddRecord: (localId: string) => void;
+  onDeleteArchive: (localId: string) => void;
+  onDeleteRecord: (recordId: string, localId: string) => void;
+}) {
+  const [cached, setCached] = useState<LocalArchiveDetail | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
+  useEffect(() => {
+    if (online) return;
+    let active = true;
+    void getCloudOfflineCacheByCloudSource(archiveId, ownerContext)
+      .then((archive) => archive ? resolveLocalArchiveDetail(archive.id, ownerContext) : null)
+      .then((result) => {
+        if (!active) return;
+        setCached(result?.detail || null);
+        setStatus(result?.status === "ready" ? "ready" : "missing");
+      }).catch(() => { if (active) setStatus("error"); });
+    return () => { active = false; };
+  }, [archiveId, online, ownerContext]);
+
+  if (online && ownerContext?.userId) return <CloudArchiveDetailController
+    archiveId={archiveId} userId={ownerContext.userId} onBack={onBack} onCacheChanged={onCacheChanged} />;
+  if (status === "loading") return <ArchiveProjectDetailLoading>正在读取本机缓存…</ArchiveProjectDetailLoading>;
+  if (status === "ready" && cached) return <DeviceOwnedProjectDetail
+    detail={cached} ownerContext={ownerContext} onBack={onBack}
+    onChanged={async () => {
+      const result = await resolveLocalArchiveDetail(cached.archive.id, ownerContext);
+      setCached(result.detail);
+      await onCacheChanged();
+    }}
+    onAddRecord={() => onAddRecord(cached.archive.id)}
+    onDeleteArchive={() => onDeleteArchive(cached.archive.id)}
+    onDeleteRecord={(recordId) => onDeleteRecord(recordId, cached.archive.id)} />;
+  return <ArchiveProjectDetailStatus status={status === "error" ? "error" : "not-found"}
+    title="本机尚无这个云项目的缓存" message="请联网打开项目并准备缓存。"
+    backLabel="返回我的空间" onBack={onBack} />;
+}
+
 function CloudLogin({
   copy,
   onSuccess,
@@ -1934,23 +2046,18 @@ function CloudLogin({
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) return;
-    if (AUTH_CAPTCHA_ENABLED && !captchaToken) {
-      setMessage(copy.captchaRequired);
+    if (!AUTH_CAPTCHA_ENABLED || !captchaToken) {
+      setMessage(!AUTH_CAPTCHA_ENABLED
+        ? "人机验证配置不可用，请稍后重试。"
+        : copy.captchaRequired);
       return;
     }
 
     setSubmitting(true);
     setMessage("");
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
-        options: { captchaToken: captchaToken || undefined },
-      });
-      if (error) {
-        setMessage(`${copy.loginFailed}: ${error.message}`);
-        return;
-      }
+      await loginBundledWithTurnstile({ email: normalizedEmail, password,
+        captchaToken, siteKeyConfigured: AUTH_CAPTCHA_ENABLED });
       onSuccess();
     } catch (error) {
       setMessage(
