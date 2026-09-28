@@ -59,20 +59,23 @@ test("crop cycles stay opt-in and support concurrent rename, trash, and restore"
 });
 
 test("mobile My Space is single-line and taxonomy actions move to long press", async () => {
-  const [archivePage, workspace, taxonomy] = await Promise.all([
+  const [archivePage, identity, workspace, sourceSwitcher, taxonomy] = await Promise.all([
     source("app/archive/page.tsx"),
+    source("components/archive-ui/PersonalSpaceMobileIdentity.tsx"),
     source("components/archive-ui/ArchiveWorkspaceTemplate.tsx"),
+    source("components/archive-ui/ArchiveSourceSwitcher.tsx"),
     source("components/archive-ui/ArchiveTaxonomyPanel.tsx"),
   ]);
 
-  assert.match(archivePage, /personalSpaceMobileNameRowStyle[\s\S]*?membershipLabel/);
+  assert.match(archivePage, /personalSpaceMobileNameRowStyle/);
+  assert.match(identity, /membershipLabel/);
   assert.match(archivePage, /personalSpaceStorageTrackStyle/);
   assert.match(archivePage, /personalSpaceStorageTotalStyle/);
   assert.doesNotMatch(archivePage, /storageUsageLabel/);
   assert.match(archivePage, /sourceTrailingSlot=\{isMobileViewport \? \([\s\S]*?\+\{t\.nav\.project\}/);
-  assert.match(workspace, /flexWrap: singleLine \? "nowrap" : "wrap"/);
-  assert.match(workspace, /const compactColumns = Math\.max\(1, Math\.min\(optionCount, 3\)\)/);
-  assert.match(workspace, /`repeat\(\$\{compactColumns\}, minmax\(0, 1fr\)\) auto`/);
+  assert.match(sourceSwitcher, /flexWrap: singleLine \? "nowrap" : "wrap"/);
+  assert.match(sourceSwitcher, /const compactColumns = Math\.max\(1, Math\.min\(optionCount, 3\)\)/);
+  assert.match(sourceSwitcher, /`repeat\(\$\{compactColumns\}, minmax\(0, 1fr\)\) auto`/);
   assert.doesNotMatch(workspace, /overflowX:/);
 
   assert.match(taxonomy, /setTimeout\(\(\) => \{[\s\S]*?onLongPress\(\)[\s\S]*?\}, 520\)/);
@@ -108,6 +111,7 @@ test("followed users use stable follow order with optional pinning and a long-pr
 test("User Information edits in place and dedicated pages return consistently", async () => {
   const [
     profile,
+    presentation,
     payment,
     benefits,
     feedback,
@@ -115,9 +119,11 @@ test("User Information edits in place and dedicated pages return consistently", 
     followers,
     trash,
     backNavigation,
+    supportCenter,
     zhCopy,
   ] = await Promise.all([
     source("app/profile/page.tsx"),
+    source("components/profile/MobileProfilePresentation.tsx"),
     source("app/membership/payment/page.tsx"),
     source("app/membership/benefits/page.tsx"),
     source("app/feedback/page.tsx"),
@@ -125,18 +131,20 @@ test("User Information edits in place and dedicated pages return consistently", 
     source("app/profile/followers/page.tsx"),
     source("app/profile/trash/page.tsx"),
     source("components/MobileBackNavigation.tsx"),
+    source("components/support/SupportCenter.tsx"),
     source("lib/i18n/zh.ts"),
   ]);
 
   assert.match(profile, /value=\{username\}[\s\S]*?setUsername/);
   assert.match(profile, /type="file"[\s\S]*?handleUpload/);
   assert.doesNotMatch(profile, /identityEditButtonStyle|mobileProfileModule === "settings"/);
-  assert.match(profile, /role="switch"/);
-  assert.match(profile, /languageSwitchThumbStyle/);
+  assert.match(profile, /role="switch"|<ProfileLanguageSwitch/);
+  assert.match(presentation, /languageSwitchThumbStyle/);
   assert.match(profile, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
-  for (const page of [payment, benefits, feedback, recent, followers, trash]) {
+  for (const page of [payment, benefits, recent, followers, trash]) {
     assert.match(page, /href="\/profile"/);
   }
+  assert.match(supportCenter, /href="\/profile"/);
   assert.ok(
     backNavigation.includes(
       'if (/^\\/membership\\/(payment|benefits)/.test(pathname)) return "/profile";'
@@ -181,6 +189,7 @@ test("mobile Guide exposes four guide sections and Experience uses the shared su
 test("mobile secondary and deeper pages share a source-aware left back arrow", async () => {
   const [
     sharedHeader,
+    headerView,
     navbar,
     mySpace,
     userSpace,
@@ -189,6 +198,7 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
     experienceDetail,
   ] = await Promise.all([
     source("components/mobile/MobilePageHeader.tsx"),
+    source("components/mobile/MobilePageHeaderView.tsx"),
     source("components/navbar.tsx"),
     source("app/archive/page.tsx"),
     source("components/user-space/UserSpaceHeader.tsx"),
@@ -197,9 +207,9 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
     source("app/experience-cards/[id]/page.tsx"),
   ]);
 
-  assert.match(sharedHeader, /const sideWidth = right \? 80 : 44/);
-  assert.match(sharedHeader, /gridTemplateColumns: `\$\{sideWidth\}px minmax\(0, 1fr\) \$\{sideWidth\}px`/);
-  assert.match(sharedHeader, /name="arrow-left"/);
+  assert.match(headerView, /const sideWidth = right \? 80 : 44/);
+  assert.match(headerView, /gridTemplateColumns: `\$\{sideWidth\}px minmax\(0, 1fr\) \$\{sideWidth\}px`/);
+  assert.match(headerView, /name="arrow-left"/);
   assert.match(sharedHeader, /getMobileSourceRoute/);
   assert.match(sharedHeader, /prepareMobileSourceReturn/);
   assert.match(sharedHeader, /router\.push\(destination/);
@@ -214,7 +224,7 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
   assert.match(navbar, /"\/admin\/guides"/);
   assert.match(projectDetail, /titleText=\{activeArchive\.title\}/);
   assert.doesNotMatch(projectDetail, /mobileProjectHeaderSystem/);
-  assert.match(projectDetail, /projectDetailStatsStyle[\s\S]*?projectDetailGuideLinkStyle/);
+  assert.match(projectDetail, /archiveProjectDetailStatsStyle[\s\S]*?archiveProjectDetailGuideLinkStyle/);
   assert.match(projectDetail, /order=\{\["view", "follow", "record", "duration"\]\}/);
   assert.match(projectDetail, /right=\{[\s\S]*?toggleProjectFollow/);
 });

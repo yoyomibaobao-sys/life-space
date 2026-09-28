@@ -8,11 +8,13 @@ async function source(path) {
 }
 
 test("profile uses an editable identity card and explicit account entries", async () => {
-  const [profile, zhCopy, enCopy] = await Promise.all([
+  const [profile, presentation, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
+    source("components/profile/MobileProfilePresentation.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
+  const profileSurface = `${profile}\n${presentation}`;
 
   assert.match(profile, /profileIdentityCardStyle/);
   assert.match(profile, /会员编号/);
@@ -26,7 +28,7 @@ test("profile uses an editable identity card and explicit account entries", asyn
   assert.match(profile, /账号管理/);
   assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
   assert.match(profile, /<input[\s\S]*?value=\{username\}[\s\S]*?onChange=\{\(event\) => setUsername/);
-  assert.match(profile, /role="switch"/);
+  assert.match(profileSurface, /role="switch"/);
   assert.doesNotMatch(profile, /identityEditButtonStyle/);
   assert.match(profile, /t\.profile\.language_setting/);
   assert.match(profile, /t\.profile\.country_region/);
@@ -264,8 +266,9 @@ test("mobile plant guides use compact parameters, actions, cards, and sticky tab
 });
 
 test("account navigation exposes the confirmed independent menu entries", async () => {
-  const [profile, navbar, membership, login, home, zhCopy, enCopy] = await Promise.all([
+  const [profile, presentation, navbar, membership, login, home, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
+    source("components/profile/MobileProfilePresentation.tsx"),
     source("components/navbar.tsx"),
     source("app/membership/page.tsx"),
     source("app/login/page.tsx"),
@@ -273,9 +276,10 @@ test("account navigation exposes the confirmed independent menu entries", async 
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
+  const profileSurface = `${profile}\n${presentation}`;
 
   assert.match(profile, /id="language-settings"/);
-  assert.match(profile, /role="switch"/);
+  assert.match(profileSurface, /role="switch"/);
   assert.match(profile, /"Cloud Membership" : "开通云会员"/);
   assert.match(profile, /"Order progress" : "订单进度查询"/);
   assert.match(profile, /"Membership types" : "会员类别说明"/);
@@ -285,12 +289,12 @@ test("account navigation exposes the confirmed independent menu entries", async 
   assert.match(profile, /<MobileProfileModuleTabs/);
   assert.match(profile, /href: "\/admin\/memberships"/);
   assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
-  assert.match(profile, /display: "grid"/);
-  assert.match(profile, /overflowX: "visible"/);
-  assert.match(profile, /gridTemplateColumns: "1fr"/);
-  assert.match(profile, /compact && isActive/);
-  assert.match(profile, /desktopProfileModulesStyle/);
-  assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 46/);
+  assert.match(profileSurface, /display: "grid"/);
+  assert.match(profileSurface, /overflowX: "visible"/);
+  assert.match(profileSurface, /gridTemplateColumns: "1fr"/);
+  assert.match(profileSurface, /compact && isActive/);
+  assert.match(profileSurface, /desktopProfileModulesStyle/);
+  assert.match(profileSurface, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 46/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
   assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
   assert.match(profile, /admin_get_membership_payment_queue_count/);
@@ -333,9 +337,10 @@ test("account navigation exposes the confirmed independent menu entries", async 
 });
 
 test("mobile account actions, membership copy, and plant names stay compact", async () => {
-  const [navbar, profile, membership, payment, benefits, zhCopy, enCopy] = await Promise.all([
+  const [navbar, profile, presentation, membership, payment, benefits, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
     source("app/profile/page.tsx"),
+    source("components/profile/MobileProfilePresentation.tsx"),
     source("app/membership/page.tsx"),
     source("app/membership/payment/page.tsx"),
     source("app/membership/benefits/page.tsx"),
@@ -346,6 +351,7 @@ test("mobile account actions, membership copy, and plant names stay compact", as
   assert.match(navbar, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
   assert.doesNotMatch(navbar, /mobileLogoutButtonStyle/);
   assert.match(profile, /onClick=\{\(\) => void handleProfileLogout\(\)\}[\s\S]*?style=\{accountLogoutButtonStyle\}[\s\S]*?t\.nav\.logout_full/);
+  assert.match(presentation, /export const accountLogoutButtonStyle/);
   assert.doesNotMatch(navbar, /mobileMeMenuOpen|mobileMeMoreButtonStyle|mobileMeMenuStyle/);
 
   assert.doesNotMatch(membership, /t\.membership_page\.business_/);

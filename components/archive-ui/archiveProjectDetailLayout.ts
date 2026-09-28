@@ -56,6 +56,20 @@ export const archiveProjectDetailGuideTextStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+export const archiveProjectDetailGuideLinkStyle: CSSProperties = {
+  ...archiveProjectDetailGuideTextStyle,
+  color: "#356f39",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+};
+
+export const archiveProjectDetailLocalHintStyle: CSSProperties = {
+  margin: "0 0 10px",
+  color: "#617258",
+  fontSize: 13,
+  lineHeight: 1.45,
+};
+
 export const archiveProjectDetailBadgeStyle: CSSProperties = {
   flexShrink: 0,
   border: "1px solid #e2e8dc",

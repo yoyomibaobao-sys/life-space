@@ -24,10 +24,13 @@ test("offline profile does not use the network-only ProfilePage render path", ()
   assert.match(shell, /buildOfflineProfileSnapshot/);
   assert.match(offlineProfile, /data-android-offline-profile="true"/);
   assert.match(offlineProfile, /t\.profile\.settings_title/);
+  assert.match(offlineProfile, /<MobileProfileModuleTabs/);
   assert.match(offlineProfile, /浏览历史|Browsing history/);
   assert.match(offlineProfile, /备份与导出|Backup & export/);
   assert.match(offlineProfile, /开通云会员|Cloud Membership/);
+  assert.match(offlineProfile, /订单进度查询|Order progress/);
   assert.match(offlineProfile, /User management|用户管理/);
+  assert.match(read("components/profile/MobileProfilePresentation.tsx"), /export function MobileProfileModuleTabs/);
   assert.match(offlineProfile, /t\.nav\.logout_full/);
   assert.match(shell, /clearCloudOfflineCacheOnExplicitLogout/);
 });

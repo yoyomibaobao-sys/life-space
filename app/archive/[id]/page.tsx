@@ -27,6 +27,7 @@ import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import ArchiveProjectDetailTabs from "@/components/archive-ui/ArchiveProjectDetailTabs";
 import {
   archiveProjectDetailEmptyStateStyle,
+  archiveProjectDetailGuideLinkStyle,
   archiveProjectDetailGuideTextStyle,
   archiveProjectDetailHeaderProjectStyle,
   archiveProjectDetailHeaderTitleStyle,
@@ -2177,7 +2178,7 @@ saveRecentArchiveBrowse({
           {!isOwner && <ReportLink targetUrl={`/archive/${activeArchive.id}`} />}
           {archiveDisplayName ? (
             encyclopediaHref ? (
-              <Link href={encyclopediaHref} style={projectDetailGuideLinkStyle}>
+              <Link href={encyclopediaHref} style={archiveProjectDetailGuideLinkStyle}>
                 {archiveDisplayName}
               </Link>
             ) : (
@@ -2959,13 +2960,6 @@ function normalizeArchiveCategory(value?: string | null): ArchiveCategory {
 
   return "other";
 }
-
-const projectDetailGuideLinkStyle: CSSProperties = {
-  ...archiveProjectDetailGuideTextStyle,
-  color: "#356f39",
-  textDecoration: "underline",
-  textUnderlineOffset: 3,
-};
 
 function mobileProjectFollowStyle(followed: boolean): CSSProperties {
   return {

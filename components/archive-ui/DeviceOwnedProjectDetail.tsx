@@ -17,7 +17,9 @@ import {
   archiveProjectDetailEmptyStateStyle,
   archiveProjectDetailExperienceHintStyle,
   archiveProjectDetailFloatingAddStyle,
+  archiveProjectDetailGuideLinkStyle,
   archiveProjectDetailGuideTextStyle,
+  archiveProjectDetailLocalHintStyle,
   archiveProjectDetailHeaderProjectStyle,
   archiveProjectDetailHeaderTitleStyle,
   archiveProjectDetailMainStyle,
@@ -325,7 +327,7 @@ export default function DeviceOwnedProjectDetail({
         <div style={archiveProjectDetailStatsStyle}>
           {archiveDisplayName ? (
             encyclopediaHref ? (
-              <a href={encyclopediaHref} style={archiveProjectDetailGuideTextStyle}>
+              <a href={encyclopediaHref} style={archiveProjectDetailGuideLinkStyle}>
                 {archiveDisplayName}
               </a>
             ) : (
@@ -349,7 +351,7 @@ export default function DeviceOwnedProjectDetail({
             <span>{archiveCopy.cloud_read_only_notice}</span>
           </div>
         ) : (
-          <div style={{ margin: "0 0 10px", color: "#617258", fontSize: 13, lineHeight: 1.45 }}>
+          <div style={archiveProjectDetailLocalHintStyle}>
             {archiveCopy.saved_on_this_device}
           </div>
         )}

@@ -30,6 +30,7 @@ import {
   archiveProjectDetailExperienceHintStyle,
   archiveProjectDetailFloatingAddStyle,
   archiveProjectDetailGuideTextStyle,
+  archiveProjectDetailLocalHintStyle,
   archiveProjectDetailHeaderProjectStyle,
   archiveProjectDetailHeaderTitleStyle,
   archiveProjectDetailMainStyle,
@@ -1223,7 +1224,7 @@ export default function LocalArchiveDetailPage() {
           />
         </div>
 
-        <div style={localStorageHintStyle}>
+        <div style={archiveProjectDetailLocalHintStyle}>
           {archive.source_cloud_archive_id
             ? archiveCopy.cloud_local_copy_hint
             : archiveCopy.saved_on_this_device}
@@ -1927,13 +1928,6 @@ const projectPageTitleStyle: CSSProperties = {
   textAlign: "center",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-};
-
-const localStorageHintStyle: CSSProperties = {
-  margin: "0 0 10px",
-  color: "#617258",
-  fontSize: 13,
-  lineHeight: 1.45,
 };
 
 const localProfileDangerButtonStyle = {

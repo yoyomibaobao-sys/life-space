@@ -52,6 +52,8 @@ test("Android project details share one presentation across cloud, local, and of
   assert.match(deviceDetail, /isCloudCache \? archiveCopy\.cloud_read_only_notice/);
   assert.match(deviceDetail, /isCloudCache \? workspaceCopy\.cloud_cache_copy/);
   assert.match(deviceDetail, /encyclopediaHref/);
+  assert.match(deviceDetail, /archiveProjectDetailGuideLinkStyle/);
+  assert.match(layout, /archiveProjectDetailGuideLinkStyle/);
   assert.match(deviceDetail, /archiveCopy\.pending_sync_workspace_notice/);
 });
 
