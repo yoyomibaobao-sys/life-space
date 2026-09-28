@@ -208,6 +208,8 @@ test("pending cloud records upload only from an explicit user action", () => {
 
 test("offline shell separates true local projects from cloud offline copies", () => {
   const offline = read("mobile-offline-src/main.tsx");
+  const adapters = read("lib/local-archive-detail-adapters.ts");
+  const deviceDetail = read("components/archive-ui/DeviceOwnedProjectDetail.tsx");
 
   assert.match(offline, /listVisibleCloudOfflineArchiveSummaries/);
   assert.match(offline, /type ShellSourceFilter = "all" \| "cloud" \| "local"/);
@@ -216,6 +218,8 @@ test("offline shell separates true local projects from cloud offline copies", ()
   assert.match(offline, /online && cloudUserId && !cloudError \? \(/);
   assert.match(offline, /online && cloudUserId && !cloudError \? cloudArchives\.length : cloudCaches\.length/);
   assert.match(offline, /visibilityLabel: copy\.offlineCopies/);
-  assert.match(offline, /record\.sync\?\.status === "pending-cloud-sync"/);
   assert.match(offline, /cloudCacheReadOnly/);
+  assert.match(adapters, /isPendingCloudSyncStatus\(record\.sync\?\.status\)/);
+  assert.match(deviceDetail, /canEditLocalArchiveRecord\(archive, source\)/);
+  assert.match(deviceDetail, /mode=\{editable \? "owner" : "viewer"\}/);
 });

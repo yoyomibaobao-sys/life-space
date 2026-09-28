@@ -45,7 +45,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<MobilePageHeaderView/);
   assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);
-  assert.match(source, /<ArchiveRecordCardShell/);
+  assert.match(source, /<DeviceOwnedProjectDetail/);
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(source, /navigator\.onLine/);
   assert.match(source, /saveCloudArchiveToLocal/);

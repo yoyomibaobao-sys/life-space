@@ -23,6 +23,19 @@ import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchiveDetailHeaderView, {
   type ArchiveProfileFieldSave,
 } from "@/components/archive-ui/ArchiveDetailHeaderView";
+import ArchiveProjectDetailTabs from "@/components/archive-ui/ArchiveProjectDetailTabs";
+import {
+  archiveProjectDetailBadgeStyle,
+  archiveProjectDetailEmptyStateStyle,
+  archiveProjectDetailExperienceHintStyle,
+  archiveProjectDetailFloatingAddStyle,
+  archiveProjectDetailGuideTextStyle,
+  archiveProjectDetailHeaderProjectStyle,
+  archiveProjectDetailHeaderTitleStyle,
+  archiveProjectDetailMainStyle,
+  archiveProjectDetailMetaLineStyle,
+  archiveProjectDetailStatsStyle,
+} from "@/components/archive-ui/archiveProjectDetailLayout";
 import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import { supabase } from "@/lib/supabase";
@@ -1172,8 +1185,8 @@ export default function LocalArchiveDetailPage() {
     <>
       <MobilePageHeader
         title={
-          <span style={mobileProjectHeaderTitleStyle}>
-            <span style={mobileProjectHeaderProjectStyle}>{archive.title}</span>
+          <span style={archiveProjectDetailHeaderTitleStyle}>
+            <span style={archiveProjectDetailHeaderProjectStyle}>{archive.title}</span>
           </span>
         }
         titleText={archive.title}
@@ -1183,7 +1196,7 @@ export default function LocalArchiveDetailPage() {
       <main
         style={{
           ...pageStyle,
-          padding: isMobileViewport ? "10px 10px 46px" : pageStyle.padding,
+          ...archiveProjectDetailMainStyle(isMobileViewport),
         }}
       >
         <header className="mobile-app-desktop-only" style={projectPageHeaderStyle}>
@@ -1194,19 +1207,19 @@ export default function LocalArchiveDetailPage() {
           <span aria-hidden="true" />
         </header>
 
-        <div style={projectDetailStatsStyle}>
+        <div style={archiveProjectDetailStatsStyle}>
           {archiveDisplayName ? (
-            <span style={projectDetailGuideTextStyle}>{archiveDisplayName}</span>
+            <span style={archiveProjectDetailGuideTextStyle}>{archiveDisplayName}</span>
           ) : null}
           {archive.local_role === "cloud-offline-cache" ? null : (
-            <span style={localProjectBadgeStyle}>{archiveCopy.local_project}</span>
+            <span style={archiveProjectDetailBadgeStyle}>{archiveCopy.local_project}</span>
           )}
           <ProjectMetaLine
             recordCount={records.length}
             durationDays={ongoingDays}
             ended={archive.status === "ended"}
             order={["record", "duration"]}
-            style={{ minWidth: 0, flex: "1 1 auto", gap: "5px 10px", fontSize: 13 }}
+            style={archiveProjectDetailMetaLineStyle}
           />
         </div>
 
@@ -1216,30 +1229,16 @@ export default function LocalArchiveDetailPage() {
             : archiveCopy.saved_on_this_device}
         </div>
 
-        <nav style={archiveDetailTabWrapStyle} aria-label={archiveCopy.detail_navigation}>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("records")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "records")}
-          >
-            {archiveCopy.details}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("profile")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "profile")}
-          >
-            {archiveCopy.dossier}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("experience")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "experience")}
-          >
-            {archiveCopy.experience_cards}
-            {language === "en" ? " (0)" : "（0）"}
-          </button>
-        </nav>
+        <ArchiveProjectDetailTabs
+          ariaLabel={archiveCopy.detail_navigation}
+          active={activeDetailTab}
+          onChange={setActiveDetailTab}
+          labels={{
+            records: archiveCopy.details,
+            profile: archiveCopy.dossier,
+            experience: language === "en" ? `${archiveCopy.experience_cards} (0)` : `${archiveCopy.experience_cards}（0）`,
+          }}
+        />
 
         {activeDetailTab === "profile" ? (
         <ArchiveDetailHeaderView
@@ -1770,7 +1769,7 @@ export default function LocalArchiveDetailPage() {
         onRenameCycle={cycleEnabled ? renameLocalCycle : undefined}
         onDeleteCycle={cycleEnabled ? deleteLocalCycle : undefined}
         emptyState={
-          <div style={emptyRecordsStyle}>
+          <div style={archiveProjectDetailEmptyStateStyle}>
             <div>{recordCopy.no_local_records}</div>
           </div>
         }
@@ -1835,9 +1834,9 @@ export default function LocalArchiveDetailPage() {
       ) : null}
 
       {activeDetailTab === "experience" ? (
-        <div style={localExperienceEmptyStyle}>
+        <div style={archiveProjectDetailEmptyStateStyle}>
           <div>{t.experience.no_cards}</div>
-          <div style={localExperienceEmptyHintStyle}>
+          <div style={archiveProjectDetailExperienceHintStyle}>
             {archiveCopy.local_experience_cards_hint}
           </div>
         </div>
@@ -1859,7 +1858,7 @@ export default function LocalArchiveDetailPage() {
         <button
           type="button"
           onClick={() => setAddRecordOpen(true)}
-          style={mobileFloatingAddButtonStyle}
+          style={archiveProjectDetailFloatingAddStyle}
         >
           {recordCopy.add_record_short}
         </button>
@@ -1897,26 +1896,6 @@ const pageStyle = {
   color: "#263326",
 } satisfies CSSProperties;
 
-const mobileProjectHeaderTitleStyle: CSSProperties = {
-  minWidth: 0,
-  width: "100%",
-  display: "block",
-  overflow: "hidden",
-  whiteSpace: "nowrap",
-};
-
-const mobileProjectHeaderProjectStyle: CSSProperties = {
-  minWidth: 0,
-  width: "100%",
-  display: "block",
-  overflow: "hidden",
-  color: "#243424",
-  fontSize: 16,
-  fontWeight: 850,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const projectPageHeaderStyle: CSSProperties = {
   minHeight: 48,
   display: "grid",
@@ -1950,87 +1929,11 @@ const projectPageTitleStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const projectDetailStatsStyle: CSSProperties = {
-  minHeight: 34,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-start",
-  gap: 16,
-  flexWrap: "wrap",
-  minWidth: 0,
-  margin: "0 0 8px",
-  padding: "5px 8px",
-  borderBottom: "1px solid #edf1e9",
-};
-
-const projectDetailGuideTextStyle: CSSProperties = {
-  minWidth: 0,
-  maxWidth: "38%",
-  flex: "0 1 auto",
-  overflow: "hidden",
-  color: "#52694f",
-  fontSize: 14,
-  fontWeight: 750,
-  lineHeight: 1.35,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const localProjectBadgeStyle: CSSProperties = {
-  flexShrink: 0,
-  border: "1px solid #e2e8dc",
-  borderRadius: 999,
-  background: "#f4f7f1",
-  color: "#5b6b57",
-  fontSize: 12,
-  fontWeight: 750,
-  padding: "3px 8px",
-};
-
 const localStorageHintStyle: CSSProperties = {
   margin: "0 0 10px",
   color: "#617258",
   fontSize: 13,
   lineHeight: 1.45,
-};
-
-const archiveDetailTabWrapStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: 6,
-  marginBottom: 8,
-  padding: 4,
-  border: "1px solid #e2ecd9",
-  borderRadius: 16,
-  background: "#fff",
-};
-
-function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
-  return {
-    minHeight: 42,
-    border: "none",
-    borderRadius: 12,
-    color: active ? "#2f6a31" : "#40583a",
-    background: active ? "#e3f1dd" : "transparent",
-    fontSize: "clamp(14px, 3.6vw, 16px)",
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-  };
-}
-
-const localExperienceEmptyStyle: CSSProperties = {
-  border: "1px solid #ebefea",
-  borderRadius: 18,
-  background: "#fff",
-  padding: 18,
-  color: "#7d897a",
-  fontSize: 14,
-};
-
-const localExperienceEmptyHintStyle: CSSProperties = {
-  marginTop: 8,
-  lineHeight: 1.5,
 };
 
 const localProfileDangerButtonStyle = {
@@ -2651,30 +2554,6 @@ const countTextStyle = {
   fontSize: 13,
 } satisfies CSSProperties;
 
-const emptyRecordsStyle = {
-  padding: 18,
-  borderRadius: 14,
-  background: "#f8fbf4",
-  color: "#697663",
-  fontSize: 14,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  flexWrap: "wrap",
-} satisfies CSSProperties;
-
-const emptyAddButtonStyle = {
-  height: 34,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid #cfe0c8",
-  background: "#fff",
-  color: "#2f5d2b",
-  fontSize: 13,
-  fontWeight: 700,
-} satisfies CSSProperties;
-
 const timelineListStyle = {
   display: "grid",
   gap: 12,
@@ -2803,22 +2682,6 @@ const recordFooterStyle = {
   flexWrap: "wrap",
   color: "#8a9584",
   fontSize: 12,
-} satisfies CSSProperties;
-
-const mobileFloatingAddButtonStyle = {
-  position: "fixed",
-  right: 16,
-  bottom: "calc(78px + var(--app-safe-area-bottom))",
-  zIndex: 60,
-  height: 42,
-  padding: "0 16px",
-  borderRadius: 999,
-  border: "1px solid #bcd8b5",
-  background: "#3f7d3d",
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: 800,
-  boxShadow: "0 12px 28px rgba(49, 90, 45, 0.22)",
 } satisfies CSSProperties;
 
 const dangerPanelStyle = {

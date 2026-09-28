@@ -803,24 +803,25 @@ test("guidance counts and public navigation use compact non-duplicated entries",
 });
 
 test("project details hide the unfinished growth line and keep the three complete peer tabs", async () => {
-  const [archiveDetail, archiveHeader, headerView] = await Promise.all([
+  const [archiveDetail, archiveHeader, headerView, detailTabs] = await Promise.all([
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveDetailHeader.tsx"),
     source("components/archive-ui/ArchiveDetailHeaderView.tsx"),
+    source("components/archive-ui/archiveProjectDetailLayout.ts"),
   ]);
 
   assert.match(
     archiveDetail,
     /type ArchiveDetailTab = "profile" \| "records" \| "experience"/
   );
-  assert.match(archiveDetail, /\{archiveCopy\.details\}/);
-  assert.match(archiveDetail, /\{archiveCopy\.dossier\}/);
-  assert.match(archiveDetail, /\{archiveCopy\.experience_cards\}/);
+  assert.match(archiveDetail, /records: archiveCopy\.details/);
+  assert.match(archiveDetail, /profile: archiveCopy\.dossier/);
+  assert.match(archiveDetail, /archiveCopy\.experience_cards/);
   assert.doesNotMatch(archiveDetail, /\{archiveCopy\.growth_line\}/);
   assert.match(archiveDetail, /experienceCardCount/);
   assert.match(archiveDetail, /activeDetailTab === "experience"/);
   assert.doesNotMatch(archiveDetail, /activeDetailTab === "growth"/);
-  assert.match(archiveDetail, /repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(detailTabs, /repeat\(3, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(archiveDetail, /className="mobile-app-grid-only"/);
   assert.match(archiveDetail, /onCountChange=\{setExperienceCardCount\}/);
   assert.match(archiveHeader, /profileAlwaysOpen/);

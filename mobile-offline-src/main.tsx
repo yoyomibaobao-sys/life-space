@@ -1,4 +1,3 @@
-import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
 import PlantingRegionField from "@/components/archive/PlantingRegionField";
 import { loadDefaultPlantingRegion, normalizePlantingRegion, type PlantingRegion } from "@/lib/planting-region";
 import React, {
@@ -14,8 +13,6 @@ import {
   assertLocalOfflineAvailable,
   createLocalArchive,
   createLocalRecord,
-  createLocalArchiveCycle,
-  endLocalArchiveCycle,
   deleteLocalArchive,
   deleteLocalRecord,
   getLocalArchiveDetail,
@@ -55,10 +52,10 @@ import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
+import DeviceOwnedProjectDetail from "@/components/archive-ui/DeviceOwnedProjectDetail";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
 import ArchiveTaxonomyPanel from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
-import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
@@ -82,6 +79,7 @@ import {
   type OfflineGuideDirectoryEntry,
 } from "@/lib/offline-guide-directory";
 import type { SystemNameCandidate } from "@/lib/system-name-candidates";
+import { setStoredLanguage } from "@/lib/i18n";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 import { supabase } from "@/lib/supabase";
@@ -983,11 +981,11 @@ function App() {
     showToast(copy.deleted);
   }
 
-  function toggleLanguage() {
-    const next = language === "zh" ? "en" : "zh";
-    setLanguage(next);
-    try { window.localStorage.setItem("lang", next); } catch { /* no-op */ }
-    document.documentElement.lang = next === "zh" ? "zh-CN" : "en";
+  function toggleLanguage(next?: Language) {
+    const resolved = next === "zh" || next === "en" ? next : (language === "zh" ? "en" : "zh");
+    setLanguage(resolved);
+    setStoredLanguage(resolved);
+    window.dispatchEvent(new CustomEvent("lifespace-language-change", { detail: resolved }));
   }
 
   const activeGuide = screen.kind === "guide-detail"
@@ -1160,6 +1158,7 @@ function App() {
   ];
 
   const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides"].includes(screen.kind);
+  const detailOwnsTopNav = ["detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
     0,
@@ -1188,7 +1187,7 @@ function App() {
 
   return (
     <main className="offline-shell">
-      {!homeSectionOwnsTopNav ? (
+      {!homeSectionOwnsTopNav && !detailOwnsTopNav ? (
         <MobilePageHeaderView
           className="android-shell-header"
           title={shellHeaderTitle}
@@ -1198,7 +1197,7 @@ function App() {
           right={(
             <div className="header-actions">
               {!owner ? (
-                <button className="icon-button" type="button" onClick={toggleLanguage}>
+                <button className="icon-button" type="button" onClick={() => toggleLanguage()}>
                   {language === "zh" ? "EN" : "中文"}
                 </button>
               ) : null}
@@ -1408,17 +1407,13 @@ function App() {
 
       {screen.kind === "detail" && detail ? (
         <>
-          <ProjectDetail
+          <DeviceOwnedProjectDetail
             detail={detail}
             ownerContext={ownerContext}
             onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
-            language={language}
-            copy={copy}
             onBack={goList}
-            onEdit={() => setScreen({ kind: "edit-project", archiveId: detail.archive.id })}
             onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
-            onEditRecord={(recordId) => setScreen({ kind: "edit-record", archiveId: detail.archive.id, recordId })}
-            onDelete={() => void handleDeleteArchive(detail.archive.id)}
+            onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
             onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
           />
           {online && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
@@ -1980,7 +1975,13 @@ function ProjectForm({
 
   return (
     <>
-      <div className="back-row"><button className="back-button" type="button" onClick={onCancel}>← {copy.back}</button></div>
+      <MobilePageHeaderView
+        title={archive ? copy.edit : copy.newProject}
+        titleText={archive ? copy.edit : copy.newProject}
+        showBack
+        ariaLabel={copy.back}
+        onBack={onCancel}
+      />
       <section className="panel">
         <div className="section-title"><h1>{archive ? copy.edit : copy.newProject}</h1></div>
         <form className="form" onSubmit={submit}>
@@ -2009,68 +2010,6 @@ function ProjectForm({
       </section>
     </>
   );
-}
-
-function ProjectDetail({ detail, language, copy, ownerContext, onChanged, onBack, onEdit, onAddRecord, onEditRecord, onDelete, onDeleteRecord }: {
-  detail: LocalArchiveDetail; language: Language; copy: OfflineCopy; ownerContext: LocalArchiveOwnerContext | null;
-  onChanged: () => Promise<void>; onBack: () => void; onEdit: () => void; onAddRecord: () => void;
-  onEditRecord: (recordId: string) => void; onDelete: () => void; onDeleteRecord: (recordId: string) => void;
-}) {
-  const [tab, setTab] = useState("details");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [periodDate, setPeriodDate] = useState(toDateTimeLocal().slice(0, 10));
-  const [filter, setFilter] = useState("all");
-  const [lightbox, setLightbox] = useState<LocalImage | null>(null);
-  const archive = detail.archive;
-  const isCloudCache = archive.local_role === "cloud-offline-cache";
-  const periods = getArchiveCycleTerminology(archive.category, language);
-  async function change(work: () => Promise<unknown>) {
-    if (busy) return;
-    setBusy(true); setError("");
-    try { await work(); await onChanged(); } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
-  }
-  return <>
-    <div className="detail-heading"><button className="back-button" type="button" onClick={onBack} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{archive.title}</h1><span /></div>
-    <div className="top-tabs"><button type="button" aria-pressed={tab === "details"} onClick={() => setTab("details")}>{copy.details}</button><button type="button" aria-pressed={tab === "properties"} onClick={() => setTab("properties")}>{copy.properties}</button></div>
-    {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
-    {isCloudCache ? <section className="notice"><p>{copy.cloudCacheReadOnly}</p></section> : null}
-    {tab === "properties" ? <>
-      {archive.category === "plant" && !isCloudCache ? <PlantingRegionEditor key={archive.id} language={language} value={archive.planting_region} canEdit={!busy} onSave={async (region) => {
-        await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
-        await onChanged();
-      }} /> : null}
-      <section className="panel property-list">
-        <div className="property-row"><span>{copy.title}</span><strong>{archive.title}</strong></div>
-        <div className="property-row"><span>{copy.systemName}</span><strong>{archive.system_name || archive.species_name || "—"}</strong></div>
-        <div className="property-row"><span>{copy.category}</span><span>{copy[archive.category]}</span></div>
-        <div className="property-row"><span>{copy.source}</span><span>{archive.source || "—"}</span></div>
-        <div className="property-row"><span>{copy.note}</span><span>{archive.note || "—"}</span></div>
-        <div className="property-row"><span>{copy.status}</span><SegmentedChoice label={copy.status} value={archive.status} disabled={busy || isCloudCache} options={[{ value: "active", label: copy.ongoing }, { value: "ended", label: copy.ended }]} onChange={(status) => void change(() => updateLocalArchiveFields(archive.id, { status, ended_at: status === "ended" ? new Date().toISOString() : null }, ownerContext))} /></div>
-        <div className="property-row"><span>{copy.visibility}</span><span>{copy.private}</span></div>
-        {!isCloudCache ? <button type="button" className="secondary-button" onClick={onEdit}>{copy.edit}</button> : null}
-      </section>
-      {!isCloudCache ? <section className="panel"><h2>{copy.period}</h2><label className="property-row"><span>{copy.enablePeriod}</span><input type="checkbox" role="switch" checked={Boolean(archive.cycle_enabled)} disabled={busy} onChange={(e) => void change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: e.target.checked }, ownerContext))} /></label>
-        {archive.cycle_enabled ? <div className="form">
-          {(archive.cycles || []).map((cycle) => <div className="property-row" key={cycle.id}><div><strong>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</strong><small className="project-meta">{formatDate(cycle.started_at, language)}</small></div>{cycle.status === "active" ? <button type="button" className="secondary-button" disabled={busy} onClick={() => { if (window.confirm(periods.endDialogMessage)) void change(() => endLocalArchiveCycle(archive.id, cycle.id, new Date().toISOString(), ownerContext)); }}>{periods.endAction}</button> : <span>{copy.ended}</span>}</div>)}
-          <label className="field">{copy.periodDate}<input type="date" value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} /></label>
-          <button type="button" className="primary-button" disabled={busy || !periodDate || archive.status === "ended"} onClick={() => void change(() => createLocalArchiveCycle(archive.id, new Date(`${periodDate}T00:00:00`).toISOString(), ownerContext))}>{periods.newAction}</button>
-        </div> : null}
-      </section> : null}
-      {!isCloudCache ? <button className="danger-button" type="button" disabled={busy} onClick={onDelete}>{copy.remove}</button> : null}
-    </> : <>
-      <div className="record-toolbar"><span className="project-meta">{copy[archive.category]} · {isCloudCache ? copy.offlineCopies : copy.local}</span>{archive.status === "active" ? <button type="button" className="primary-button" onClick={onAddRecord}>{copy.addRecord}</button> : null}</div>
-      {archive.cycle_enabled ? <label className="field period-filter"><select aria-label={periods.assignLabel} value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">{copy.all}</option><option value="none">{periods.unassignedOption}</option>{(archive.cycles || []).map((cycle) => <option value={cycle.id} key={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
-      <div className="record-list">{detail.records.filter((record) => !archive.cycle_enabled || filter === "all" || (filter === "none" ? !record.cycle_id : record.cycle_id === filter)).map((record) => <ArchiveRecordCardShell key={record.id} metaText={formatDate(record.record_time, language)} mobileMode>
-        {record.images.length ? <div className={`photo-grid ${record.images.length === 1 ? "single-photo" : ""}`}>{record.images.map((image) => <button type="button" className="photo-view" key={image.id} aria-label={language === "zh" ? "查看照片" : "View photo"} onClick={() => setLightbox(image)}><BlobImage image={image} alt="" /></button>)}</div> : null}
-        {record.note ? <p className="record-note">{record.note}</p> : null}
-        {record.location ? <p className="project-meta">{record.location.label || `${record.location.latitude?.toFixed(4)}, ${record.location.longitude?.toFixed(4)}`}</p> : null}
-        {record.sync?.status === "pending-cloud-sync" ? <div className="record-actions"><span className="project-meta">{copy.pendingUpload}</span><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : !isCloudCache ? <div className="record-actions"><button className="link-button" type="button" onClick={() => onEditRecord(record.id)}>{copy.edit}</button><button className="link-button danger" type="button" onClick={() => onDeleteRecord(record.id)}>{copy.remove}</button></div> : null}
-      </ArchiveRecordCardShell>)}</div>
-      {!detail.records.length ? <section className="panel empty">{copy.noRecords}</section> : null}
-    </>}
-    {lightbox ? <dialog className="photo-lightbox" open aria-label={language === "zh" ? "照片" : "Photo"} onCancel={() => setLightbox(null)}><button type="button" className="icon-button" autoFocus onClick={() => setLightbox(null)}>{copy.back}</button><BlobImage image={lightbox} alt="" /></dialog> : null}
-  </>;
 }
 
 function FilePreview({ file }: { file: File }) {
@@ -2113,7 +2052,13 @@ function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
     } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
   }
   return <>
-    <div className="detail-heading"><button type="button" className="back-button" onClick={onCancel} aria-label={copy.back}><UiIcon name="arrow-left" size={22} /></button><h1>{record ? copy.edit : copy.addRecord}</h1><span /></div>
+    <MobilePageHeaderView
+      title={record ? copy.edit : copy.addRecord}
+      titleText={record ? copy.edit : copy.addRecord}
+      showBack
+      ariaLabel={copy.back}
+      onBack={onCancel}
+    />
     <section className="panel"><form className="form" onSubmit={submit}>
       <div className="project-meta">{archive.title} · {copy.local}</div>
       <label className="field">{copy.recordTime}<input type="datetime-local" value={recordTime} onChange={(e) => setRecordTime(e.target.value)} required disabled={busy} /></label>

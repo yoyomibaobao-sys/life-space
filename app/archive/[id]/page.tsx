@@ -24,6 +24,16 @@ import ArchiveExperienceCards from "@/components/archive-detail/ArchiveExperienc
 import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
+import ArchiveProjectDetailTabs from "@/components/archive-ui/ArchiveProjectDetailTabs";
+import {
+  archiveProjectDetailEmptyStateStyle,
+  archiveProjectDetailGuideTextStyle,
+  archiveProjectDetailHeaderProjectStyle,
+  archiveProjectDetailHeaderTitleStyle,
+  archiveProjectDetailMainStyle,
+  archiveProjectDetailReadOnlyNoticeStyle,
+  archiveProjectDetailStatsStyle,
+} from "@/components/archive-ui/archiveProjectDetailLayout";
 import SystemNameSelector from "@/components/archive/SystemNameSelector";
 import MobileArchiveActions from "@/components/archive/MobileArchiveActions";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -2118,8 +2128,8 @@ saveRecentArchiveBrowse({
     <>
       <MobilePageHeader
         title={
-          <span style={mobileProjectHeaderTitleStyle}>
-            <span style={mobileProjectHeaderProjectStyle}>{activeArchive.title}</span>
+          <span style={archiveProjectDetailHeaderTitleStyle}>
+            <span style={archiveProjectDetailHeaderProjectStyle}>{activeArchive.title}</span>
           </span>
         }
         titleText={activeArchive.title}
@@ -2137,7 +2147,7 @@ saveRecentArchiveBrowse({
           ) : null
         }
       />
-      <main style={{ padding: isMobileViewport ? "10px 10px 46px" : "18px 16px 46px", maxWidth: 760, margin: "0 auto" }}>
+      <main style={archiveProjectDetailMainStyle(isMobileViewport)}>
         <header className="mobile-app-desktop-only" style={projectPageHeaderStyle}>
           <Link
             href={isOwner ? "/archive" : `/user/${activeArchive.user_id}`}
@@ -2163,7 +2173,7 @@ saveRecentArchiveBrowse({
           ) : <span aria-hidden="true" />}
         </header>
 
-        <div style={projectDetailStatsStyle}>
+        <div style={archiveProjectDetailStatsStyle}>
           {!isOwner && <ReportLink targetUrl={`/archive/${activeArchive.id}`} />}
           {archiveDisplayName ? (
             encyclopediaHref ? (
@@ -2171,7 +2181,7 @@ saveRecentArchiveBrowse({
                 {archiveDisplayName}
               </Link>
             ) : (
-              <span style={projectDetailGuideTextStyle}>{archiveDisplayName}</span>
+              <span style={archiveProjectDetailGuideTextStyle}>{archiveDisplayName}</span>
             )
           ) : null}
           <ProjectMetaLine
@@ -2190,7 +2200,7 @@ saveRecentArchiveBrowse({
         </div>
 
         {isOwner && !canWriteCloud ? (
-          <div style={cloudReadOnlyNoticeStyle}>
+          <div style={archiveProjectDetailReadOnlyNoticeStyle}>
             <span>
               {ownerMembership?.plan === "trial"
                 ? archiveCopy.cloud_trial_read_only_notice
@@ -2204,30 +2214,19 @@ saveRecentArchiveBrowse({
           </div>
         ) : null}
 
-        <nav style={archiveDetailTabWrapStyle} aria-label={archiveCopy.detail_navigation}>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("records")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "records")}
-          >
-            {archiveCopy.details}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("profile")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "profile")}
-          >
-            {archiveCopy.dossier}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveDetailTab("experience")}
-            style={archiveDetailTabButtonStyle(activeDetailTab === "experience")}
-          >
-            {archiveCopy.experience_cards}
-            {language === "en" ? ` (${experienceCardCount})` : `（${experienceCardCount}）`}
-          </button>
-        </nav>
+        <ArchiveProjectDetailTabs
+          ariaLabel={archiveCopy.detail_navigation}
+          active={activeDetailTab}
+          onChange={setActiveDetailTab}
+          labels={{
+            records: archiveCopy.details,
+            profile: archiveCopy.dossier,
+            experience:
+              language === "en"
+                ? `${archiveCopy.experience_cards} (${experienceCardCount})`
+                : `${archiveCopy.experience_cards}（${experienceCardCount}）`,
+          }}
+        />
 
         {activeDetailTab === "profile" ? (
           <>
@@ -2428,16 +2427,7 @@ saveRecentArchiveBrowse({
           onRenameCycle={cycleEnabled ? renameArchiveCycle : undefined}
           onDeleteCycle={cycleEnabled ? deleteArchiveCycle : undefined}
           emptyState={
-            <div
-              style={{
-                border: "1px solid #ebefea",
-                borderRadius: 18,
-                background: "#fff",
-                padding: 18,
-                color: "#7d897a",
-                fontSize: 14,
-              }}
-            >
+            <div style={archiveProjectDetailEmptyStateStyle}>
               {mode === "owner" ? archiveCopy.no_records_owner : archiveCopy.no_public_records}
             </div>
           }
@@ -2970,24 +2960,11 @@ function normalizeArchiveCategory(value?: string | null): ArchiveCategory {
   return "other";
 }
 
-const mobileProjectHeaderTitleStyle: CSSProperties = {
-  minWidth: 0,
-  width: "100%",
-  display: "block",
-  overflow: "hidden",
-  whiteSpace: "nowrap",
-};
-
-const mobileProjectHeaderProjectStyle: CSSProperties = {
-  minWidth: 0,
-  width: "100%",
-  display: "block",
-  overflow: "hidden",
-  color: "#243424",
-  fontSize: 16,
-  fontWeight: 850,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+const projectDetailGuideLinkStyle: CSSProperties = {
+  ...archiveProjectDetailGuideTextStyle,
+  color: "#356f39",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
 };
 
 function mobileProjectFollowStyle(followed: boolean): CSSProperties {
@@ -3070,66 +3047,8 @@ function projectPageFollowStyle(followed: boolean): CSSProperties {
   };
 }
 
-const archiveDetailTabWrapStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: 6,
-  marginBottom: 8,
-  padding: 4,
-  border: "1px solid #e2ecd9",
-  borderRadius: 16,
-  background: "#fff",
-};
-
-function archiveDetailTabButtonStyle(active: boolean): CSSProperties {
-  return {
-    minHeight: 42,
-    border: "none",
-    borderRadius: 12,
-    color: active ? "#2f6a31" : "#40583a",
-    background: active ? "#e3f1dd" : "transparent",
-    fontSize: "clamp(14px, 3.6vw, 16px)",
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-  };
-}
-
 const archiveDetailAnchorStyle: CSSProperties = {
   scrollMarginTop: 76,
-};
-
-const projectDetailStatsStyle: CSSProperties = {
-  minHeight: 34,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-start",
-  gap: 16,
-  flexWrap: "wrap",
-  minWidth: 0,
-  margin: "0 0 8px",
-  padding: "5px 8px",
-  borderBottom: "1px solid #edf1e9",
-};
-
-const projectDetailGuideTextStyle: CSSProperties = {
-  minWidth: 0,
-  maxWidth: "38%",
-  flex: "0 1 auto",
-  overflow: "hidden",
-  color: "#52694f",
-  fontSize: 14,
-  fontWeight: 750,
-  lineHeight: 1.35,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const projectDetailGuideLinkStyle: CSSProperties = {
-  ...projectDetailGuideTextStyle,
-  color: "#356f39",
-  textDecoration: "underline",
-  textUnderlineOffset: 3,
 };
 
 const mobileArchiveProfileStyle: CSSProperties = {
@@ -3396,21 +3315,6 @@ const mobileArchiveErrorStyle: CSSProperties = {
   marginTop: 8,
   color: "#b94a48",
   fontSize: 13,
-};
-
-const cloudReadOnlyNoticeStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  margin: "10px 0",
-  border: "1px solid #dfe8d9",
-  borderRadius: 13,
-  background: "#f8fbf6",
-  color: "#52624f",
-  padding: "10px 12px",
-  fontSize: 13,
-  lineHeight: 1.5,
 };
 
 const cloudReadOnlyNoticeLinkStyle: CSSProperties = {

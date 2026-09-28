@@ -59,7 +59,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(sharedHomeTabs, /onSelect\?: \(section: HomeSection\) => void/);
   assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);
-  assert.match(source, /<ArchiveRecordCardShell/);
+  assert.match(source, /<DeviceOwnedProjectDetail/);
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(navbar, /<MobileBottomNavigationView/);
   assert.match(sharedNavigation, /data-mobile-bottom-nav="true"/);
@@ -132,6 +132,7 @@ test("local projects reuse the cloud archive card and detail header with device-
   assert.doesNotMatch(localView, /follower_count: 0/);
   assert.match(cloudCard, /followerCount: href \? undefined : item\.follower_count/);
   assert.match(cloudCard, /followerCount=\{href \? undefined : item\.follower_count\}/);
+  assert.match(localDetail, /<ArchiveProjectDetailTabs/);
   assert.match(localDetail, /<ArchiveDetailHeaderView/);
   assert.match(localDetail, /eyebrow=\{archiveCopy\.project_archive\}/);
   assert.match(localDetail, /archiveCopy\.local_project/);
