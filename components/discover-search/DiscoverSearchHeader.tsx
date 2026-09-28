@@ -45,7 +45,7 @@ export default function DiscoverSearchHeader({
         <MobilePageHeader title={title} titleText={`${t.discover.search_ui.projects} · ${t.discover.search_ui.records}`} fallbackHref="/discover" ariaLabel={t.nav.back} />
       )}
 
-      <header className="mobile-app-desktop-only" style={desktopHeaderStyle}>
+      {!onBack ? <header className="mobile-app-desktop-only" style={desktopHeaderStyle}>
         <div style={{ fontSize: 22, fontWeight: 700, color: "#1f2d1f" }}>
           {t.discover.search_ui.title}
         </div>
@@ -53,7 +53,7 @@ export default function DiscoverSearchHeader({
         <Link href="/discover" style={desktopBackStyle}>
           <UiIcon name="arrow-left" size={14} /> {t.discover.search_ui.back_to_discover}
         </Link>
-      </header>
+      </header> : null}
     </>
   );
 }

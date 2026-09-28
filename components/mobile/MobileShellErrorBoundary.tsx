@@ -1,6 +1,8 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { App } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 
 type Props = {
   routeKind: string;
@@ -16,22 +18,42 @@ type Props = {
 
 type State = {
   error: Error | null;
+  rcDiagnostics: boolean;
+  diagnosticCopied: boolean;
 };
 
 export default class MobileShellErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, rcDiagnostics: false, diagnosticCopied: false };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
+  componentDidMount() {
+    if (!Capacitor.isNativePlatform()) return;
+    void App.getInfo().then(({ version }) => {
+      if (/-rc\d+$/i.test(version)) this.setState({ rcDiagnostics: true });
+    }).catch(() => undefined);
+  }
+
   componentDidCatch(error: Error, _info: ErrorInfo) {
-    console.error("mobile-shell-render", {
+    console.error("mobile-shell-render", this.diagnostic(error));
+  }
+
+  private diagnostic(error: Error) {
+    return {
       routeKind: this.props.routeKind,
       archiveId: this.props.archiveId || null,
       name: error.name,
       message: error.message,
-    });
+    };
+  }
+
+  private copyDiagnostic = () => {
+    if (!this.state.error || !this.state.rcDiagnostics) return;
+    void navigator.clipboard?.writeText(
+      JSON.stringify(this.diagnostic(this.state.error)),
+    ).then(() => this.setState({ diagnosticCopied: true })).catch(() => undefined);
   }
 
   render() {
@@ -51,12 +73,17 @@ export default class MobileShellErrorBoundary extends Component<Props, State> {
             <button
               type="button"
               onClick={() => {
-                this.setState({ error: null });
+                this.setState({ error: null, diagnosticCopied: false });
                 this.props.onRetry?.();
               }}
               style={actionStyle}
             >
               {this.props.retryLabel || "Retry"}
+            </button>
+          ) : null}
+          {this.state.rcDiagnostics && typeof navigator.clipboard?.writeText === "function" ? (
+            <button type="button" onClick={this.copyDiagnostic} style={actionStyle}>
+              {this.state.diagnosticCopied ? "已复制 / Copied" : "复制诊断信息 / Copy diagnostic"}
             </button>
           ) : null}
         </div>

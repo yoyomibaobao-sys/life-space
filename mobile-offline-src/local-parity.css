@@ -11,3 +11,10 @@
   background: transparent;
   border-color: transparent;
 }
+
+/* Shared mobile components must also receive these display rules when the
+ * bundled document is served without the Next.js global stylesheet. */
+.mobile-app-desktop-only { display: none !important; }
+.mobile-app-flex-only { display: flex !important; }
+.mobile-app-grid-only { display: grid !important; }
+.mobile-app-block-only { display: block !important; }

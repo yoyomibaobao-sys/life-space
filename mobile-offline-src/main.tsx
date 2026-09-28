@@ -43,6 +43,7 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
+import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
@@ -429,15 +430,26 @@ function BlobImage({ image, className, alt }: {
   className?: string;
   alt: string;
 }) {
-  const [url] = useState(() =>
-    image?.blob ? URL.createObjectURL(image.blob) : "",
-  );
+  const [url, setUrl] = useState("");
 
   useEffect(() => {
+    const blob = normalizeLocalImageBlob(image?.blob, image?.mime_type);
+    if (!blob) {
+      setUrl("");
+      return;
+    }
+    let nextUrl: string;
+    try {
+      nextUrl = URL.createObjectURL(blob);
+    } catch {
+      setUrl("");
+      return;
+    }
+    setUrl(nextUrl);
     return () => {
-      if (url) URL.revokeObjectURL(url);
+      URL.revokeObjectURL(nextUrl);
     };
-  }, [url]);
+  }, [image]);
 
   return url ? <img src={url} alt={alt} className={className} /> : null;
 }

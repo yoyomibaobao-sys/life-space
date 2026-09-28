@@ -3,6 +3,7 @@ import { loadDefaultRecordLocation, normalizeRecordLocation, type RecordLocation
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
+import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 
 const DB_NAME = "life-space-local-offline";
 const DB_VERSION = 6;
@@ -4628,8 +4629,14 @@ export async function mergeLocalOriginBaseSnapshot(
 
 /** Images are streamed one at a time to avoid holding every photo in memory. */
 export async function mergeLocalOriginImage(image: LocalImage) {
-  if (!image?.id || !image.archive_id || !image.record_id || !image.blob) return;
+  if (!image?.id || !image.archive_id || !image.record_id) {
+    throw new Error("Legacy image migration is missing its archive or record identity.");
+  }
   if (isCloudOfflineCacheArchiveId(image.archive_id)) return;
+  const blob = normalizeLocalImageBlob(image.blob, image.mime_type);
+  if (!blob) {
+    throw new Error("Legacy image migration could not decode image bytes.");
+  }
 
   const db = await openLocalDb();
   try {
@@ -4653,6 +4660,7 @@ export async function mergeLocalOriginImage(image: LocalImage) {
       await requestToPromise(
         store.put({
           ...image,
+          blob,
           local_only: true,
           sync: normalizeLocalSyncMeta(image.sync),
         } satisfies LocalImage),

@@ -18,6 +18,7 @@ import { formatLocalCycleDate } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import type { MediaItem } from "@/lib/domain-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 import {
   canAddLocalArchiveRecord,
   canEditLocalArchiveFields,
@@ -100,9 +101,15 @@ export default function DeviceOwnedProjectDetail({
     const urls: string[] = [];
     const items = detail.records.map((record) => {
       const imageUrls = record.images.map((image) => {
-        const url = URL.createObjectURL(image.blob);
-        urls.push(url);
-        return url;
+        const blob = normalizeLocalImageBlob(image.blob, image.mime_type);
+        if (!blob) return "";
+        try {
+          const url = URL.createObjectURL(blob);
+          urls.push(url);
+          return url;
+        } catch {
+          return "";
+        }
       });
       return localRecordToRecordItem(record, imageUrls);
     });

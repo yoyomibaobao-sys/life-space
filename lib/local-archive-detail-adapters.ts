@@ -72,9 +72,10 @@ export function localRecordToRecordItem(
         ? record.source_cloud_status_tag
         : null,
     comment_count: 0,
-    media: record.images.map((image, index) => {
+    media: record.images.flatMap((image, index) => {
       const url = imageUrls[index] || "";
-      return {
+      if (!url) return [];
+      return [{
         id: image.id,
         record_id: record.id,
         type: "image",
@@ -89,7 +90,7 @@ export function localRecordToRecordItem(
         height: image.height || null,
         sort_order: image.sort_order,
         created_at: image.created_at,
-      } satisfies MediaItem;
+      } satisfies MediaItem];
     }),
   };
 }

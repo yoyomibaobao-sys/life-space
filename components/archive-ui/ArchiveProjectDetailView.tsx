@@ -252,7 +252,7 @@ export default function ArchiveProjectDetailView({
         data-archive-project-detail-view="true"
         style={archiveProjectDetailMainStyle(isMobileViewport)}
       >
-        <header className="mobile-app-desktop-only" style={projectPageHeaderStyle}>
+        {!isMobileViewport ? <header style={projectPageHeaderStyle}>
           <InternalLink
             href={headerFallbackHref}
             style={projectPageBackLinkStyle}
@@ -273,7 +273,7 @@ export default function ArchiveProjectDetailView({
           ) : (
             <span aria-hidden="true" />
           ))}
-        </header>
+        </header> : null}
 
         <div style={archiveProjectDetailStatsStyle}>
           {reportSlot}

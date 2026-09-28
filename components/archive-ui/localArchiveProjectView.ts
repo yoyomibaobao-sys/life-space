@@ -12,6 +12,7 @@ import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import type { ArchiveItem } from "@/lib/archive-page-types";
 import { getTranslations, type Language } from "@/lib/i18n";
 import type { ArchiveCategoryDepth } from "@/lib/archive-category-settings";
+import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 
 function getOngoingDays(createdAt?: string | null, endedAt?: string | null) {
   if (!createdAt) return null;
@@ -62,6 +63,9 @@ export function localArchiveToProjectView(
       : isDeviceLocalProject
         ? archiveCopy.local_project
         : copy.local;
+  const coverBlob = archive.cover_image
+    ? normalizeLocalImageBlob(archive.cover_image.blob, archive.cover_image.mime_type)
+    : null;
 
   return {
     id: archive.id,
@@ -77,10 +81,10 @@ export function localArchiveToProjectView(
     // Local labels come from IndexedDB only and are not Supabase sub_tags/group_tags.
     subcategoryLabel: maxDepth >= 2 ? archive.subcategory : null,
     groupLabel: maxDepth >= 3 ? archive.group_name : null,
-    cover: archive.cover_image
+    cover: coverBlob
       ? {
           kind: "blob",
-          blob: archive.cover_image.blob,
+          blob: coverBlob,
           alt: archive.title || copy.local_project_cover,
         }
       : null,

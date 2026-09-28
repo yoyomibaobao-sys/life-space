@@ -67,11 +67,11 @@ export default function ProjectCategorySettingsView({
 
       <div style={shellStyle}>
         <header style={desktopHeaderStyle}>
-          <InternalLink href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
+          {!onBack ? <InternalLink href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={17} />
             {isEnglish ? "Back to profile" : "返回个人资料"}
-          </InternalLink>
-          <h1 className="mobile-app-desktop-only" style={desktopTitleStyle}>{pageTitle}</h1>
+          </InternalLink> : null}
+          {!onBack ? <h1 className="mobile-app-desktop-only" style={desktopTitleStyle}>{pageTitle}</h1> : null}
           <p style={introStyle}>
             {isEnglish
               ? "Cloud and local groups are configured independently. Hiding a level does not delete existing groups."
