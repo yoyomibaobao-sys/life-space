@@ -86,7 +86,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
-import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
+import { syncAllPendingCloudArchives, syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 import { formatStorage } from "@/lib/user-profile-shared";
 import {
   getUserTypeLabel,
@@ -217,7 +217,7 @@ const text = {
     cloudUnavailable: "当前未联网，云端内容暂不可用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
     cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
     saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
-    offlineCopies: "云端缓存副本", cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，需手动上传。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。", 
+    offlineCopies: "云端缓存副本",     cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，恢复网络后自动同步。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。", 
     savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
     pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
     uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
@@ -232,7 +232,7 @@ const text = {
     brand: "有时·耕作",
     offlineMode: "本地离线模式",
     offlineTitle: "当前离线，本地记录可用",
-    offlineBody: "项目、记录和照片只保存在本机。重新联网后不会自动上传，也不会覆盖云端资料。",
+    offlineBody: "项目、记录和照片先保存在本机。恢复网络后会自动同步待上传的云端内容；明确选择本地免费使用的项目不会自动上传。",
     migrationWarning: "旧版本地资料暂未完成迁移。现有资料不会被删除，请稍后重新打开 App 再试。",
     reconnect: "重新连接云端",
     newProject: "新建项目",
@@ -265,7 +265,11 @@ const text = {
     loading: "正在读取本地资料…",
     requiredProject: "请填写项目名称和对象名称。",
     requiredRecord: "请填写记录内容，或至少选择一张照片。",
-    createSuccess: "本地项目已创建",
+    createSuccess: "项目已创建",
+    createPendingCloudSuccess: "待同步云端项目已保存在本机",
+    destinationPendingCloud: "待同步云端项目",
+    destinationLocalOnly: "本地免费使用",
+    destinationHint: "待同步项目恢复网络后会自动创建云端项目；本地免费项目不会自动上传。",
     updateSuccess: "已保存",
     recordSuccess: "记录已保存到本机",
     deleteProjectConfirm: "确定删除这个本地项目及其全部记录和照片吗？此操作无法撤销。",
@@ -284,7 +288,7 @@ const text = {
     cloudUnavailable: "Cloud content is unavailable while offline", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
     cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
     saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
-    offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device until you upload them manually.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
+    offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device and sync automatically when you reconnect.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
     savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
     pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
     uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
@@ -299,7 +303,7 @@ const text = {
     brand: "LifeSpace",
     offlineMode: "Local offline mode",
     offlineTitle: "Cloud is temporarily unavailable. Local records still work.",
-    offlineBody: "Projects, records and photos stay on this device. Reconnecting will not upload them or overwrite cloud data.",
+    offlineBody: "Projects, records and photos are saved on this device first. Pending cloud changes sync automatically when you reconnect. Projects you mark as local-only stay local.",
     migrationWarning: "Previous local data has not finished migrating. Nothing was deleted; reopen the app later to retry.",
     reconnect: "Reconnect to cloud",
     newProject: "New local project",
@@ -332,7 +336,11 @@ const text = {
     loading: "Reading local data…",
     requiredProject: "Enter a project name and subject name.",
     requiredRecord: "Enter notes or select at least one photo.",
-    createSuccess: "Local project created",
+    createSuccess: "Project created",
+    createPendingCloudSuccess: "Pending cloud project saved on this device",
+    destinationPendingCloud: "Pending cloud project",
+    destinationLocalOnly: "Local free use",
+    destinationHint: "Pending cloud projects create a cloud archive after reconnect. Local-only projects are never uploaded automatically.",
     updateSuccess: "Saved",
     recordSuccess: "Record saved on this device",
     deleteProjectConfirm: "Delete this local project and all of its records and photos? This cannot be undone.",
@@ -792,6 +800,11 @@ function App() {
     void loadCloudList(cloudUserId);
     void preparePendingCloudSyncQueue(ownerContext)
       .then(() => loadList(ownerContext))
+      .then(() =>
+        syncAllPendingCloudArchives({ ownerContext }).then(() =>
+          loadList(ownerContext),
+        ),
+      )
       .catch(() => undefined);
   }, [online, cloudUserId, ownerContext, loadCloudList, loadList]);
 
@@ -895,6 +908,11 @@ function App() {
     if (cloudUserId) {
       void loadCloudList(cloudUserId);
     }
+    if (ownerContext && cloudUserId && ownerContext.userId === cloudUserId) {
+      void syncAllPendingCloudArchives({ ownerContext })
+        .then(() => loadList(ownerContext))
+        .catch(() => undefined);
+    }
 
     if (screen.kind === "activity") void loadActivity();
     if (screen.kind === "experience") void loadExperience();
@@ -997,8 +1015,15 @@ function App() {
   const filteredCloudCaches = cloudCaches.filter(
     (archive) => categoryFilter === "all" || archive.category === categoryFilter,
   );
+  const mappedCloudIds = new Set(
+    [...archives, ...cloudCaches]
+      .map((archive) => archive.source_cloud_archive_id)
+      .filter((value): value is string => Boolean(value)),
+  );
   const filteredCloudArchives = cloudArchives.filter(
-    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
+    (archive) =>
+      (categoryFilter === "all" || archive.category === categoryFilter) &&
+      !mappedCloudIds.has(archive.id),
   );
   const cloudSourceCount = online && cloudUserId && !cloudError ? cloudArchives.length : cloudCaches.length;
   function cloudProjectView(archive: CloudArchiveSummary) {
@@ -1321,7 +1346,25 @@ function App() {
                     {filteredCloudArchives.map(renderCloudProjectCard)}
                   </div>
                 ) : null}
-                {!cloudLoading && !cloudError && sourceFilter === "cloud" && filteredCloudArchives.length === 0 ? (
+                {!cloudLoading && !cloudError && filteredCloudCaches.filter((archive) => mappedCloudIds.has(archive.source_cloud_archive_id || "")).length ? (
+                  <div className="project-list">
+                    {filteredCloudCaches
+                      .filter((archive) => mappedCloudIds.has(archive.source_cloud_archive_id || ""))
+                      .map((archive) => (
+                        <ArchiveProjectCard
+                          key={archive.id}
+                          project={{
+                            ...localArchiveToProjectView(archive, ownerContext, language),
+                            href: undefined,
+                            visibilityLabel: copy.offlineCopies,
+                          }}
+                          onClick={() => openDetail(archive.id)}
+                          mobileMode
+                        />
+                      ))}
+                  </div>
+                ) : null}
+                {!cloudLoading && !cloudError && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && !filteredCloudCaches.some((archive) => mappedCloudIds.has(archive.source_cloud_archive_id || "")) ? (
                   <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
                 ) : null}
               </>
@@ -1399,7 +1442,11 @@ function App() {
           onCancel={goList}
           onSaved={async (archive) => {
             await loadList();
-            showToast(copy.createSuccess);
+            showToast(
+              archive.sync?.operation_kind === "create-archive"
+                ? copy.createPendingCloudSuccess
+                : copy.createSuccess,
+            );
             openDetail(archive.id);
           }}
         />
@@ -1906,6 +1953,9 @@ function ProjectForm({
   onCancel: () => void;
   onSaved: (archive: LocalArchive) => void | Promise<void>;
 }) {
+  const [destination, setDestination] = useState<"pending-cloud" | "local-only">(
+    owner?.userId ? "pending-cloud" : "local-only",
+  );
   const [title, setTitle] = useState(archive?.title || guide?.label || "");
   const [category, setCategory] = useState<ArchiveCategory>(archive?.category || guide?.category || "plant");
   const [systemName, setSystemName] = useState(archive?.system_name || archive?.species_name || guide?.label || "");
@@ -1963,6 +2013,10 @@ function ProjectForm({
           local_owner_user_id: owner?.userId || null,
           local_owner_email: owner?.email || null,
           local_owner_marked_at: owner ? new Date().toISOString() : null,
+          sync_destination:
+            owner?.userId && destination === "pending-cloud"
+              ? "pending-cloud"
+              : "local-only",
         });
         await onSaved(created);
       }
@@ -1999,6 +2053,16 @@ function ProjectForm({
             <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div>
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
+          {!archive && owner?.userId ? (
+            <div className="field">
+              <label>{copy.destinationPendingCloud}</label>
+              <select value={destination} onChange={(event) => setDestination(event.target.value as "pending-cloud" | "local-only")}>
+                <option value="pending-cloud">{copy.destinationPendingCloud}</option>
+                <option value="local-only">{copy.destinationLocalOnly}</option>
+              </select>
+              <small>{copy.destinationHint}</small>
+            </div>
+          ) : null}
           <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
           <div className="field"><label>{copy.note}</label><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>
           {error ? <section className="notice warning"><p>{error}</p></section> : null}

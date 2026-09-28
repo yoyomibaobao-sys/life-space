@@ -27,6 +27,7 @@ export type LocalSyncStatus =
   | "synced";
 
 export type LocalSyncOperationKind =
+  | "create-archive"
   | "create-record"
   | "update-record"
   | "upload-image"
@@ -258,7 +259,7 @@ export type LocalArchiveVisibilityResult = {
 
 export type PendingCloudSyncSummary = {
   local_archive_id: string;
-  cloud_archive_id: string;
+  cloud_archive_id: string | null;
   title: string;
   record_count: number;
   image_count: number;
@@ -460,6 +461,7 @@ function normalizeLocalSyncMeta(sync?: Partial<LocalSyncMeta> | null): LocalSync
     "synced",
   ];
   const validOperationKinds: LocalSyncOperationKind[] = [
+    "create-archive",
     "create-record",
     "update-record",
     "upload-image",
@@ -678,10 +680,35 @@ export function isPendingCloudSyncStatus(status?: LocalSyncStatus | null) {
   );
 }
 
+export function isPendingCloudCreateArchive(archive: LocalArchive) {
+  return (
+    resolveLocalArchiveRole(archive) !== "cloud-offline-cache" &&
+    archive.sync.operation_kind === "create-archive" &&
+    isPendingCloudSyncStatus(archive.sync.status)
+  );
+}
+
+export function resolveIntendedCloudArchiveId(archive: LocalArchive) {
+  return (
+    normalizeOptionalText(archive.source_cloud_archive_id) ||
+    normalizeOptionalText(archive.sync.cloud_archive_id) ||
+    (archive.sync.operation_kind === "create-archive"
+      ? normalizeOptionalText(archive.sync.client_operation_id)
+      : null)
+  );
+}
+
+function archiveParticipatesInPendingCloudSync(archive: LocalArchive) {
+  return Boolean(
+    normalizeOptionalText(archive.source_cloud_archive_id) ||
+      isPendingCloudCreateArchive(archive)
+  );
+}
+
 function queueCloudSyncOperation(
   current: Partial<LocalSyncMeta> | null | undefined,
   input: {
-    cloudArchiveId: string;
+    cloudArchiveId?: string | null;
     operationKind: LocalSyncOperationKind;
     timestamp: string;
     cloudRecordId?: string | null;
@@ -712,7 +739,10 @@ function queueCloudSyncOperation(
   return normalizeLocalSyncMeta({
     ...base,
     status: "pending-cloud-sync",
-    cloud_archive_id: input.cloudArchiveId,
+    cloud_archive_id:
+      input.cloudArchiveId === undefined
+        ? base.cloud_archive_id
+        : normalizeOptionalText(input.cloudArchiveId),
     cloud_record_id:
       input.cloudRecordId === undefined
         ? base.cloud_record_id
@@ -1157,8 +1187,7 @@ export async function listPendingCloudSyncSummaries(
     .map(normalizeLocalArchive)
     .filter(
       (archive) =>
-        isUserLocalArchive(archive) &&
-        Boolean(archive.source_cloud_archive_id) &&
+        archiveParticipatesInPendingCloudSync(archive) &&
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     )
     .map((archive) => {
@@ -1191,7 +1220,9 @@ export async function listPendingCloudSyncSummaries(
       const promptMode = archive.pending_sync_prompt_mode || "ask";
       return {
         local_archive_id: archive.id,
-        cloud_archive_id: archive.source_cloud_archive_id!,
+        cloud_archive_id:
+          archive.source_cloud_archive_id ||
+          resolveIntendedCloudArchiveId(archive),
         title: archive.title,
         record_count: pendingRecords.length,
         image_count: pendingImages.length,
@@ -1243,12 +1274,9 @@ export async function preparePendingCloudSyncQueue(
 
     for (const rawArchive of archives) {
       const archive = normalizeLocalArchive(rawArchive);
-      const cloudArchiveId = normalizeOptionalText(
-        archive.source_cloud_archive_id
-      );
+      const cloudArchiveId = resolveIntendedCloudArchiveId(archive);
       if (
-        !cloudArchiveId ||
-        !isUserLocalArchive(archive) ||
+        !archiveParticipatesInPendingCloudSync(archive) ||
         !isLocalArchiveVisibleToOwner(archive, ownerContext)
       ) {
         continue;
@@ -1264,7 +1292,7 @@ export async function preparePendingCloudSyncQueue(
         let sync = normalizeLocalSyncMeta(record.sync);
         if (sync.status === "local-only" && !sync.cloud_record_id) {
           sync = queueCloudSyncOperation(sync, {
-            cloudArchiveId,
+            cloudArchiveId: cloudArchiveId || null,
             operationKind: "create-record",
             timestamp,
           });
@@ -1289,7 +1317,7 @@ export async function preparePendingCloudSyncQueue(
         const parentSync = recordSyncById.get(image.record_id);
         if (!parentSync) continue;
         const sync = queueCloudSyncOperation(currentSync, {
-          cloudArchiveId,
+          cloudArchiveId: cloudArchiveId || null,
           operationKind: "upload-image",
           timestamp,
           cloudRecordId: parentSync.cloud_record_id,
@@ -1341,9 +1369,8 @@ export async function deferPendingCloudSyncPrompt(
     }
 
     const normalizedArchive = normalizeLocalArchive(archive);
-    await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
     if (
-      !normalizedArchive.source_cloud_archive_id ||
+      !archiveParticipatesInPendingCloudSync(normalizedArchive) ||
       !isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)
     ) {
       transaction.abort();
@@ -1990,6 +2017,159 @@ export async function updateLocalArchiveCloudSyncOperation(
   }
 }
 
+export async function persistLocalCloudArchiveMapping(
+  localArchiveId: string,
+  cloudArchiveId: string,
+  operationId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const mappedCloudId = normalizeOptionalText(cloudArchiveId);
+  if (!mappedCloudId) {
+    throw new Error("云端项目标识无效，本机内容已保留。");
+  }
+
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+
+  try {
+    const transaction = db.transaction(
+      [ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE],
+      "readwrite"
+    );
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(localArchiveId)
+    );
+
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+
+    const nextArchive: LocalArchive = markArchivePendingPrompt(
+      {
+        ...normalizedArchive,
+        source_cloud_archive_id: mappedCloudId,
+        migration_cloud_archive_id: mappedCloudId,
+        migration_status: normalizedArchive.migration_status || "migrating",
+        migration_error: null,
+        sync: applyCloudSyncOperationUpdate(
+          {
+            ...normalizedArchive.sync,
+            client_operation_id:
+              normalizedArchive.sync.client_operation_id || operationId,
+            operation_kind:
+              normalizedArchive.sync.operation_kind || "create-archive",
+          },
+          operationId,
+          {
+            status: "synced",
+            cloud_archive_id: mappedCloudId,
+          },
+          timestamp
+        ),
+        updated_at: timestamp,
+      },
+      timestamp
+    );
+    await requestToPromise(archiveStore.put(nextArchive));
+
+    const [records, images] = await Promise.all([
+      requestToPromise<LocalRecord[]>(recordStore.getAll()),
+      requestToPromise<LocalImage[]>(imageStore.getAll()),
+    ]);
+    for (const record of records.filter((item) => item.archive_id === localArchiveId)) {
+      const sync = normalizeLocalSyncMeta(record.sync);
+      await requestToPromise(
+        recordStore.put({
+          ...record,
+          sync: {
+            ...sync,
+            cloud_archive_id: mappedCloudId,
+          },
+        })
+      );
+    }
+    for (const image of images.filter((item) => item.archive_id === localArchiveId)) {
+      const sync = normalizeLocalSyncMeta(image.sync);
+      await requestToPromise(
+        imageStore.put({
+          ...image,
+          sync: {
+            ...sync,
+            cloud_archive_id: mappedCloudId,
+          },
+        })
+      );
+    }
+
+    await done;
+    return nextArchive;
+  } finally {
+    db.close();
+  }
+}
+
+export async function convertPendingCloudProjectToOfflineCache(
+  localArchiveId: string,
+  cloudArchiveId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const mappedCloudId = normalizeOptionalText(cloudArchiveId);
+  const db = await openLocalDb();
+  const timestamp = nowIso();
+
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(
+      archiveStore.get(localArchiveId)
+    );
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+    if (resolveLocalArchiveRole(normalizedArchive) === "cloud-offline-cache") {
+      await done;
+      return normalizedArchive;
+    }
+    const nextArchive: LocalArchive = {
+      ...normalizedArchive,
+      local_role: "cloud-offline-cache",
+      source_cloud_archive_id:
+        mappedCloudId || normalizedArchive.source_cloud_archive_id,
+      migration_status: "migrated",
+      migrated_at: timestamp,
+      migration_error: null,
+      updated_at: timestamp,
+    };
+    await requestToPromise(archiveStore.put(nextArchive));
+    await done;
+    return nextArchive;
+  } finally {
+    db.close();
+  }
+}
+
 export async function updateLocalRecordFields(recordId: string, updates: {
   note?: string | null; record_time?: string | null; cycle_id?: string | null;
   location?: RecordLocation | null; image_files?: File[]; image_captured_at?: Array<string | null>;
@@ -2037,20 +2217,18 @@ export async function updateLocalRecordFields(recordId: string, updates: {
     const changedRecordFields = recordFieldChecks
       .filter((item) => item[1])
       .map((item) => item[0]);
-    const cloudArchiveId = normalizeOptionalText(
-      normalizedArchive.source_cloud_archive_id
-    );
+    const cloudArchiveId = resolveIntendedCloudArchiveId(normalizedArchive);
 
-    if (cloudArchiveId && !nextRecord.sync.cloud_record_id) {
+    if (archiveParticipatesInPendingCloudSync(normalizedArchive) && !nextRecord.sync.cloud_record_id) {
       nextRecord.sync = queueCloudSyncOperation(nextRecord.sync, {
-        cloudArchiveId,
+        cloudArchiveId: cloudArchiveId || null,
         operationKind: "create-record",
         timestamp,
         pendingFields: changedRecordFields,
       });
-    } else if (cloudArchiveId && changedRecordFields.length > 0) {
+    } else if (archiveParticipatesInPendingCloudSync(normalizedArchive) && changedRecordFields.length > 0) {
       nextRecord.sync = queueCloudSyncOperation(nextRecord.sync, {
-        cloudArchiveId,
+        cloudArchiveId: cloudArchiveId || null,
         operationKind: "update-record",
         timestamp,
         cloudRecordId: nextRecord.sync.cloud_record_id,
@@ -2065,9 +2243,9 @@ export async function updateLocalRecordFields(recordId: string, updates: {
         await requestToPromise(imageStore.add({ ...prepared[index], id: createId("local_image"), archive_id: record.archive_id, record_id: recordId,
           sort_order: order + index, created_at: timestamp, captured_at: capturedAt && !Number.isNaN(new Date(capturedAt).getTime()) ? new Date(capturedAt).toISOString() : null,
           local_only: true,
-          sync: cloudArchiveId
+          sync: archiveParticipatesInPendingCloudSync(normalizedArchive)
             ? queueCloudSyncOperation(null, {
-                cloudArchiveId,
+                cloudArchiveId: cloudArchiveId || null,
                 operationKind: "upload-image",
                 timestamp,
                 cloudRecordId: nextRecord.sync.cloud_record_id,
@@ -2081,7 +2259,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
     }
     await requestToPromise(recordStore.put(nextRecord));
     const nextArchive =
-      cloudArchiveId &&
+      archiveParticipatesInPendingCloudSync(normalizedArchive) &&
       (prepared.length > 0 || isPendingCloudSyncStatus(nextRecord.sync.status))
         ? markArchivePendingPrompt(
             { ...normalizedArchive, updated_at: timestamp },
@@ -2572,12 +2750,18 @@ export async function createLocalArchive(input: {
   archive_summary?: string | null;
   cycle_enabled?: boolean;
   next_cycle_name?: string | null;
+  sync_destination?: "local-only" | "pending-cloud";
+  migration_visibility?: "private" | "public" | null;
 }) {
   const timestamp = nowIso();
   const category = normalizeLocalArchiveCategory(input.category);
   if (category === "plant" && !normalizePlantingRegion(input.planting_region)) {
     throw new Error("请填写项目种植地区 / Enter the planting region.");
   }
+  const ownerUserId = normalizeOptionalText(input.local_owner_user_id);
+  const wantsPendingCloud =
+    input.sync_destination === "pending-cloud" && Boolean(ownerUserId);
+  const createArchiveOperationId = wantsPendingCloud ? createOperationId() : null;
   const archive: LocalArchive = {
     id: createId("local_archive"),
     local_role: "local-project",
@@ -2592,14 +2776,16 @@ export async function createLocalArchive(input: {
     species_name: normalizeOptionalText(input.species_name),
     source: normalizeOptionalText(input.source),
     planting_region: normalizePlantingRegion(input.planting_region),
-    local_owner_user_id: normalizeOptionalText(input.local_owner_user_id),
+    local_owner_user_id: ownerUserId,
     local_owner_email: normalizeOptionalText(input.local_owner_email),
     local_owner_marked_at: normalizeOptionalText(input.local_owner_marked_at),
-    migration_status: null,
-    migration_cloud_archive_id: null,
-    migration_started_at: null,
+    migration_status: wantsPendingCloud ? "migrating" : null,
+    migration_cloud_archive_id: createArchiveOperationId,
+    migration_started_at: wantsPendingCloud ? timestamp : null,
     migration_error: null,
-    migration_visibility: null,
+    migration_visibility: wantsPendingCloud
+      ? input.migration_visibility || "public"
+      : null,
     migrated_at: null,
     note: normalizeOptionalText(input.note),
     archive_summary: normalizeOptionalText(input.archive_summary),
@@ -2610,17 +2796,28 @@ export async function createLocalArchive(input: {
     created_at: timestamp,
     updated_at: timestamp,
     local_only: true,
-    sync: localSyncMeta(),
+    sync: wantsPendingCloud
+      ? localSyncMeta({
+          status: "pending-cloud-sync",
+          cloud_archive_id: createArchiveOperationId,
+          client_operation_id: createArchiveOperationId,
+          operation_kind: "create-archive",
+          queued_at: timestamp,
+        })
+      : localSyncMeta(),
   };
+  const storedArchive = wantsPendingCloud
+    ? markArchivePendingPrompt(archive, timestamp)
+    : archive;
   const db = await openLocalDb();
 
   try {
     const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
     const done = transactionDone(transaction);
-    await requestToPromise(transaction.objectStore(ARCHIVE_STORE).add(archive));
+    await requestToPromise(transaction.objectStore(ARCHIVE_STORE).add(storedArchive));
     await done;
     await refreshLocalUsageHints();
-    return archive;
+    return storedArchive;
   } finally {
     db.close();
   }
@@ -2755,9 +2952,75 @@ export async function clearCloudOfflineCachesForOwner(
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     );
   for (const cache of caches) {
+    const archiveRecords = records.filter((item) => item.archive_id === cache.id);
+    const pendingRecords = archiveRecords.filter((record) =>
+      isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)
+    );
+    const pendingRecordIds = new Set(pendingRecords.map((record) => record.id));
+    const archiveImages = images.filter((item) => item.archive_id === cache.id);
+    const pendingImages = archiveImages.filter(
+      (image) =>
+        isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status) ||
+        pendingRecordIds.has(image.record_id)
+    );
+    const keepUserCreated =
+      pendingRecords.length > 0 ||
+      pendingImages.length > 0 ||
+      isPendingCloudSyncStatus(cache.sync.status) ||
+      isPendingCloudCreateArchive(cache);
+    if (keepUserCreated) {
+      await stripSyncedCloudOfflineCacheRows(
+        cache,
+        archiveRecords,
+        archiveImages,
+        pendingRecordIds
+      );
+      continue;
+    }
     await deleteCloudOfflineCacheRows(cache, records, images);
   }
   return { removed: caches.length };
+}
+
+async function stripSyncedCloudOfflineCacheRows(
+  cache: LocalArchive,
+  archiveRecords: LocalRecord[],
+  archiveImages: LocalImage[],
+  pendingRecordIds: Set<string>
+) {
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(
+      [ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE],
+      "readwrite"
+    );
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    for (const record of archiveRecords) {
+      if (!isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)) {
+        await requestToPromise(recordStore.delete(record.id));
+      }
+    }
+    for (const image of archiveImages) {
+      if (
+        !isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status) &&
+        !pendingRecordIds.has(image.record_id)
+      ) {
+        await requestToPromise(imageStore.delete(image.id));
+      }
+    }
+    await requestToPromise(
+      archiveStore.put({
+        ...cache,
+        updated_at: nowIso(),
+      } satisfies LocalArchive)
+    );
+    await done;
+  } finally {
+    db.close();
+  }
 }
 
 async function removeAbandonedCloudArchiveLocalImportRows(
@@ -4105,18 +4368,16 @@ export async function createLocalRecord(input: {
       await done.catch(() => undefined);
       throw new Error("这个云项目已经结束，不能继续新增离线记录。");
     }
-    const cloudArchiveId = normalizeOptionalText(
-      normalizedArchive.source_cloud_archive_id
-    );
-    if (cloudArchiveId) {
+    const cloudArchiveId = resolveIntendedCloudArchiveId(normalizedArchive);
+    if (archiveParticipatesInPendingCloudSync(normalizedArchive)) {
       record.sync = queueCloudSyncOperation(record.sync, {
-        cloudArchiveId,
+        cloudArchiveId: cloudArchiveId || null,
         operationKind: "create-record",
         timestamp,
       });
       for (const image of images) {
         image.sync = queueCloudSyncOperation(image.sync, {
-          cloudArchiveId,
+          cloudArchiveId: cloudArchiveId || null,
           operationKind: "upload-image",
           timestamp,
           dependsOnOperationId: record.sync.client_operation_id,
@@ -4163,7 +4424,7 @@ export async function createLocalRecord(input: {
       await requestToPromise(imageStore.add(image));
     }
 
-    const nextArchive = cloudArchiveId
+    const nextArchive = archiveParticipatesInPendingCloudSync(normalizedArchive)
       ? markArchivePendingPrompt(
           { ...normalizedArchive, updated_at: timestamp },
           timestamp,

@@ -302,7 +302,7 @@ async function ensureCloudRecord(params: {
   return data.id as string;
 }
 
-async function ensureCloudCycles(params: {
+export async function ensureCloudCycles(params: {
   archiveId: string;
   cycles: LocalArchiveCycle[];
 }) {

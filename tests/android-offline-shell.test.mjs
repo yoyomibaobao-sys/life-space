@@ -49,6 +49,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(source, /navigator\.onLine/);
   assert.match(source, /saveCloudArchiveToLocal/);
+  assert.match(source, /syncAllPendingCloudArchives/);
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
   assert.match(source, /supabase\.auth\.getSession/);

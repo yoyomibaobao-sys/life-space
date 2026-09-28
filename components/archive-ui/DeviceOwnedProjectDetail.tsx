@@ -48,6 +48,7 @@ import {
   createLocalArchiveCycle,
   deleteLocalArchiveCycle,
   endLocalArchiveCycle,
+  isPendingCloudSyncStatus,
   updateLocalArchiveCycleDates,
   updateLocalArchiveCycleName,
   updateLocalArchiveFields,
@@ -240,6 +241,12 @@ export default function DeviceOwnedProjectDetail({
     setLightboxRecord(record);
   }
 
+  const pendingRecordCount = detail.records.filter((record) =>
+    isPendingCloudSyncStatus(record.sync.status)
+  ).length;
+  const archivePending = isPendingCloudSyncStatus(archive.sync.status);
+  const showPendingNotice = archivePending || pendingRecordCount > 0;
+
   const profileRows = [
     {
       label: archiveCopy.project_name_required,
@@ -333,6 +340,11 @@ export default function DeviceOwnedProjectDetail({
             {archiveCopy.saved_on_this_device}
           </div>
         )}
+        {showPendingNotice ? (
+          <div style={{ margin: "0 0 10px", color: "#8a5a36", fontSize: 12, lineHeight: 1.4 }}>
+            {archiveCopy.pending_sync_workspace_notice}
+          </div>
+        ) : null}
 
         <ArchiveProjectDetailTabs
           ariaLabel={archiveCopy.detail_navigation}

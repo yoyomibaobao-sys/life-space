@@ -50,6 +50,7 @@ test("Android project details share one presentation across cloud, local, and of
   assert.match(deviceDetail, /canEditLocalArchiveRecord\(archive, source\)/);
   assert.match(deviceDetail, /mode=\{editable \? "owner" : "viewer"\}/);
   assert.match(deviceDetail, /isCloudCache \? archiveCopy\.cloud_read_only_notice/);
+  assert.match(deviceDetail, /archiveCopy\.pending_sync_workspace_notice/);
 });
 
 test("offline language toggle notifies the shared i18n hook", () => {

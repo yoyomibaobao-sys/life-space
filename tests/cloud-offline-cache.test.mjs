@@ -64,9 +64,8 @@ test("cloud offline cache is read-only for existing cloud content", () => {
   const rejectWrite = [
     ["updateLocalArchiveFields", "updateLocalArchiveMigrationState"],
     ["updateLocalArchiveMigrationState", "updateLocalArchiveCloudSyncOperation"],
-    ["updateLocalArchiveCloudSyncOperation", "updateLocalRecordFields"],
+    ["updateLocalArchiveCloudSyncOperation", "persistLocalCloudArchiveMapping"],
     ["markLocalArchiveForOwner", "createLocalArchive"],
-    ["deferPendingCloudSyncPrompt", "listVisibleLocalTaxonomyItems"],
     ["deleteLocalArchive", "mergeLocalOriginBaseSnapshot"],
   ];
   for (const [name, nextName] of rejectWrite) {
@@ -95,7 +94,6 @@ test("cloud offline cache is read-only for existing cloud content", () => {
   assert.match(deleteRecord, /record\.sync\?\.status !== "pending-cloud-sync"/);
 
   const skipCache = [
-    ["preparePendingCloudSyncQueue", "deferPendingCloudSyncPrompt"],
     ["deleteLocalTaxonomyItem", "renameLocalTaxonomyItem"],
     ["renameLocalTaxonomyItem", "updateLocalArchiveFields"],
     ["markUnownedLocalArchivesForOwner", "markLocalArchiveForOwner"],
@@ -191,16 +189,20 @@ test("cloud offline copies are distinct from local projects and preserve pending
   assert.match(db, /云端期次离线时只读/);
 });
 
-test("pending cloud records upload only from an explicit user action", () => {
+test("pending cloud records sync from the reconnect queue without deleting local originals", () => {
   const sync = read("lib/local-to-cloud-sync.ts");
   const page = read("app/archive/page.tsx");
   const offline = read("mobile-offline-src/main.tsx");
+  const db = read("lib/local-offline-db.ts");
 
   assert.match(sync, /export async function uploadPendingCloudOfflineRecords/);
   assert.match(sync, /record\.sync\?\.status === "pending-cloud-sync"/);
   assert.match(sync, /原云端项目已不存在/);
   assert.match(sync, /原云端项目已结束/);
+  assert.match(offline, /syncAllPendingCloudArchives/);
   assert.match(offline, /onClick=\{\(\) => void uploadPending\(pending\.local_archive_id\)\}/);
+  assert.match(db, /stripSyncedCloudOfflineCacheRows/);
+  assert.match(db, /keepUserCreated/);
   assert.doesNotMatch(page, /addEventListener\(["']online["']/);
   assert.doesNotMatch(sync, /addEventListener\(["']online["']/);
   assert.match(offline, /pendingUpload/);
