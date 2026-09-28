@@ -1,6 +1,7 @@
 export type AndroidShellRouteKind =
   | "list"
   | "profile"
+  | "project-categories"
   | "activity"
   | "discover-search"
   | "experience"
@@ -42,6 +43,7 @@ const NETWORK_REQUIRED_PREFIXES = [
 
 export function isAndroidShellNetworkRequiredPath(pathname: string) {
   const path = pathname.replace(/\/+$/, "") || "/";
+  if (path === "/profile/project-categories") return false;
   return NETWORK_REQUIRED_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(prefix),
   );
@@ -79,6 +81,7 @@ export function parseAndroidShellPath(
 
   if (path === "/archive" || path === "/local/archive") return { kind: "list" };
   if (path === "/profile") return { kind: "profile" };
+  if (path === "/profile/project-categories") return { kind: "project-categories" };
   if (path === "/discover") return { kind: "activity" };
   if (path === "/discover/search") return { kind: "discover-search" };
   if (path === "/experience") return { kind: "experience" };

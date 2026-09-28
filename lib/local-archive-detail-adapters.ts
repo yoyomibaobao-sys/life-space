@@ -49,6 +49,7 @@ export function localArchiveToDetailArchive(
     source: archive.source || "local",
     note: archive.note,
     archive_summary: archive.archive_summary,
+    planting_region: archive.planting_region,
     cycle_enabled: archive.cycle_enabled,
     next_cycle_name: archive.next_cycle_name,
     help_status: null,

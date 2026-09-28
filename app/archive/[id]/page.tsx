@@ -25,6 +25,8 @@ import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchivePrivateState from "@/components/archive-detail/ArchivePrivateState";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import ArchiveProjectDetailTabs from "@/components/archive-ui/ArchiveProjectDetailTabs";
+import ArchiveProjectDetailView, { archiveProjectDetailNoticeLinkStyle } from "@/components/archive-ui/ArchiveProjectDetailView";
+import InternalLink from "@/components/navigation/InternalLink";
 import {
   archiveProjectDetailEmptyStateStyle,
   archiveProjectDetailGuideLinkStyle,
@@ -2126,471 +2128,380 @@ saveRecentArchiveBrowse({
   }
 
   return (
-    <>
-      <MobilePageHeader
-        title={
-          <span style={archiveProjectDetailHeaderTitleStyle}>
-            <span style={archiveProjectDetailHeaderProjectStyle}>{activeArchive.title}</span>
+    <ArchiveProjectDetailView
+      archive={activeArchive}
+      records={records}
+      cycles={cycles}
+      cycleEnabled={cycleEnabled}
+      mode={mode}
+      capabilities={{
+        canFollow: !isOwner,
+        canWriteArchive: canWriteCloud,
+        canAddRecord: mode === "owner" && canWriteCloud,
+        canManageCycle: mode === "owner" && canWriteCloud && cycleEnabled,
+        canSaveToLocal: isOwner,
+        canDeleteArchive: isOwner,
+        canToggleVisibility: isOwner && canWriteCloud,
+      }}
+      isMobileViewport={isMobileViewport}
+      language={language}
+      copy={archiveCopy}
+      username={displayUsername}
+      archiveDisplayName={archiveDisplayName}
+      archiveCategoryLabel={archiveCategoryLabel}
+      archiveSubcategoryLabel={categoryDepths[normalizeArchiveCategory(activeArchive.category)] >= 2 ? archiveSubcategoryLabel : null}
+      archiveGroupLabel={categoryDepths[normalizeArchiveCategory(activeArchive.category)] >= 3 ? archiveGroupLabel : null}
+      encyclopediaHref={encyclopediaHref}
+      systemNameCandidates={archiveProfileSystemNameCandidateList}
+      systemNameCandidatesLoading={archiveCandidatesLoading}
+      systemNameMode="candidate"
+      latestUpdate={latestUpdate}
+      recordCount={activeArchive.record_count || records.length || 0}
+      viewCount={Number(activeArchive.view_count || 0)}
+      followerCount={projectFollowerCount}
+      durationDays={getDurationDays(
+        activeArchive.created_at,
+        activeArchive.status === "ended" ? activeArchive.ended_at : null,
+      )}
+      isProjectFollowed={isProjectFollowed}
+      onToggleFollow={() => void toggleProjectFollow()}
+      reportSlot={!isOwner ? <ReportLink targetUrl={"/archive/" + activeArchive.id} /> : null}
+      statusNotice={isOwner && !canWriteCloud ? (
+        <div style={archiveProjectDetailReadOnlyNoticeStyle}>
+          <span>
+            {ownerMembership?.plan === "trial"
+              ? archiveCopy.cloud_trial_read_only_notice
+              : ownerMembership
+                ? archiveCopy.cloud_paid_read_only_notice
+                : archiveCopy.cloud_read_only_notice}
           </span>
-        }
-        titleText={activeArchive.title}
-        fallbackHref={isOwner ? "/archive" : `/user/${activeArchive.user_id}`}
-        ariaLabel={t.nav.back}
-        right={
-          !isOwner ? (
-            <button
-              type="button"
-              onClick={() => void toggleProjectFollow()}
-              style={mobileProjectFollowStyle(isProjectFollowed)}
-            >
-              {isProjectFollowed ? archiveCopy.followed_project : archiveCopy.follow_project}
-            </button>
-          ) : null
-        }
-      />
-      <main style={archiveProjectDetailMainStyle(isMobileViewport)}>
-        <header className="mobile-app-desktop-only" style={projectPageHeaderStyle}>
-          <Link
-            href={isOwner ? "/archive" : `/user/${activeArchive.user_id}`}
-            style={projectPageBackLinkStyle}
-            aria-label={
-              isOwner
-                ? archiveCopy.back_to_my_projects
-                : `${archiveCopy.enter_user_space_prefix}${displayUsername}${archiveCopy.enter_user_space_suffix}`
-            }
-          >
-            <UiIcon name="arrow-left" size={16} />
-            <span>{isOwner ? t.nav.my_space : displayUsername}</span>
-          </Link>
-          <h1 style={projectPageTitleStyle}>{activeArchive.title}</h1>
-          {!isOwner ? (
-            <button
-              type="button"
-              onClick={() => void toggleProjectFollow()}
-              style={projectPageFollowStyle(isProjectFollowed)}
-            >
-              {isProjectFollowed ? archiveCopy.followed_project : archiveCopy.follow_project}
-            </button>
-          ) : <span aria-hidden="true" />}
-        </header>
-
-        <div style={archiveProjectDetailStatsStyle}>
-          {!isOwner && <ReportLink targetUrl={`/archive/${activeArchive.id}`} />}
-          {archiveDisplayName ? (
-            encyclopediaHref ? (
-              <Link href={encyclopediaHref} style={archiveProjectDetailGuideLinkStyle}>
-                {archiveDisplayName}
-              </Link>
-            ) : (
-              <span style={archiveProjectDetailGuideTextStyle}>{archiveDisplayName}</span>
-            )
-          ) : null}
-          <ProjectMetaLine
-            followerCount={projectFollowerCount}
-            viewCount={Number(activeArchive.view_count || 0)}
-            textViewCount
-            recordCount={Number(activeArchive.record_count ?? records.length)}
-            durationDays={getDurationDays(
-              activeArchive.created_at,
-              activeArchive.status === "ended" ? activeArchive.ended_at : null,
-            )}
-            ended={activeArchive.status === "ended"}
-            order={["view", "follow", "record", "duration"]}
-            style={{ minWidth: 0, flex: "1 1 auto", gap: "5px 10px", fontSize: 13 }}
-          />
+          <InternalLink href="/membership" style={archiveProjectDetailNoticeLinkStyle}>
+            {archiveCopy.view_cloud_membership}
+          </InternalLink>
         </div>
-
-        {isOwner && !canWriteCloud ? (
-          <div style={archiveProjectDetailReadOnlyNoticeStyle}>
-            <span>
-              {ownerMembership?.plan === "trial"
-                ? archiveCopy.cloud_trial_read_only_notice
-                : ownerMembership
-                  ? archiveCopy.cloud_paid_read_only_notice
-                  : archiveCopy.cloud_read_only_notice}
-            </span>
-            <Link href="/membership" style={cloudReadOnlyNoticeLinkStyle}>
-              {archiveCopy.view_cloud_membership}
-            </Link>
-          </div>
-        ) : null}
-
-        <ArchiveProjectDetailTabs
-          ariaLabel={archiveCopy.detail_navigation}
-          active={activeDetailTab}
-          onChange={setActiveDetailTab}
-          labels={{
-            records: archiveCopy.details,
-            profile: archiveCopy.dossier,
-            experience:
-              language === "en"
-                ? `${archiveCopy.experience_cards} (${experienceCardCount})`
-                : `${archiveCopy.experience_cards}（${experienceCardCount}）`,
-          }}
+      ) : null}
+      activeTab={activeDetailTab}
+      onTabChange={setActiveDetailTab}
+      experienceTabLabel={
+        language === "en"
+          ? archiveCopy.experience_cards + " (" + experienceCardCount + ")"
+          : archiveCopy.experience_cards + "（" + experienceCardCount + "）"
+      }
+      experienceContent={
+        <ArchiveExperienceCards
+          archiveId={activeArchive.id}
+          isOwner={isOwner}
+          canCreate={canWriteCloud}
+          onCountChange={setExperienceCardCount}
         />
-
-        {activeDetailTab === "profile" ? (
-          <>
-          <div id="archive-profile" style={archiveDetailAnchorStyle}>
-            <ArchiveDetailHeader
-              mode={mode}
-              canWriteCloud={canWriteCloud}
-              archive={activeArchive}
-              username={displayUsername}
-              archiveDisplayName={archiveDisplayName}
-              archiveCategoryLabel={archiveCategoryLabel}
-              archiveSubcategoryLabel={categoryDepths[normalizeArchiveCategory(activeArchive.category)] >= 2 ? archiveSubcategoryLabel : null}
-              archiveGroupLabel={categoryDepths[normalizeArchiveCategory(activeArchive.category)] >= 3 ? archiveGroupLabel : null}
-              latestUpdate={latestUpdate}
-              recordCount={activeArchive.record_count || records.length || 0}
-              encyclopediaHref={encyclopediaHref}
-              systemNameCandidates={archiveProfileSystemNameCandidateList}
-              systemNameCandidatesLoading={archiveCandidatesLoading}
-              systemNameMode="candidate"
-              showPageChrome={false}
-              showProfileActions={!isMobileViewport}
-              onToggleArchiveVisibility={toggleArchiveVisibility}
-              onToggleArchiveStatus={() =>
+      }
+      headerFallbackHref={isOwner ? "/archive" : "/user/" + activeArchive.user_id}
+      headerBackLabel={isOwner ? t.nav.my_space : displayUsername}
+      onToggleArchiveVisibility={toggleArchiveVisibility}
+      onToggleArchiveStatus={() =>
+        void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
+      }
+      onSaveToLocal={openSaveToLocalPrompt}
+      saveToLocalLabel={saveToLocalActionLabel}
+      saveToLocalDisabled={saveToLocalRunning}
+      onDeleteArchive={() => setDeleteArchiveDialogOpen(true)}
+      onSaveTitle={async (nextTitle) => {
+        setMobileArchiveTitle(nextTitle);
+        await saveMobileArchivePatch("title", { title: nextTitle });
+      }}
+      onSaveCategory={async (nextCategory) => {
+        setMobileArchiveCategory(nextCategory);
+        await saveMobileArchiveCategory(nextCategory);
+      }}
+      onSaveSystemName={saveArchiveSystemNameSelection}
+      onSaveSource={async (nextSource) => {
+        setMobileArchiveSource(nextSource);
+        await saveMobileArchivePatch("source", { source: nextSource || null });
+      }}
+      onSaveNote={async (nextNote) => {
+        setMobileArchiveNote(nextNote);
+        await saveMobileArchivePatch("note", { note: nextNote || null });
+      }}
+      onSaveArchiveSummary={async (nextSummary) => {
+        setMobileArchiveSummary(nextSummary);
+        await saveMobileArchivePatch("archiveSummary", { archive_summary: nextSummary || null });
+      }}
+      onSavePlantingRegion={saveArchivePlantingRegion}
+      profileExtra={isMobileViewport ? (
+        isOwner ? null : (
+          <InternalLink href={"/user/" + activeArchive.user_id} style={attributeCreatorLinkStyle}>
+            {ownerAvatarUrl ? (
+              <img src={ownerAvatarUrl} alt="" style={attributeCreatorAvatarStyle} />
+            ) : (
+              <span style={attributeCreatorAvatarFallbackStyle}><UiIcon name="user" size={16} /></span>
+            )}
+            <span>{archiveCopy.enter_user_space_prefix}{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
+            <UiIcon name="arrow-right" size={15} />
+          </InternalLink>
+        )
+      ) : isOwner ? (
+        canWriteCloud ? <>
+          <div style={projectManagementRowStyle}>
+            <MobileArchiveActions
+              category={normalizeArchiveCategory(activeArchive.category)}
+              subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
+              groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
+              subTags={ownerSubTags}
+              groupTags={ownerGroupTags}
+              categoryDepths={categoryDepths}
+              ended={activeArchive.status === "ended"}
+              isPublic={Boolean(activeArchive.is_public)}
+              onChangeCategory={(value) => void updateArchiveTaxonomy(value)}
+              onChangeGroup={(value) => void updateArchiveGroup(value)}
+              onToggleEnded={() =>
                 void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
               }
-              onSaveToLocal={openSaveToLocalPrompt}
-              saveToLocalLabel={saveToLocalActionLabel}
-              saveToLocalDisabled={saveToLocalRunning}
-              onDeleteArchive={() => setDeleteArchiveDialogOpen(true)}
-              onSaveTitle={async (nextTitle) => {
-                setMobileArchiveTitle(nextTitle);
-                await saveMobileArchivePatch("title", { title: nextTitle });
-              }}
-              onSaveCategory={async (nextCategory) => {
-                setMobileArchiveCategory(nextCategory);
-                await saveMobileArchiveCategory(nextCategory);
-              }}
-              onSaveSystemName={saveArchiveSystemNameSelection}
-              onSaveSource={async (nextSource) => {
-                setMobileArchiveSource(nextSource);
-                await saveMobileArchivePatch("source", { source: nextSource || null });
-              }}
-              onSaveNote={async (nextNote) => {
-                setMobileArchiveNote(nextNote);
-                await saveMobileArchivePatch("note", { note: nextNote || null });
-              }}
-              onSaveArchiveSummary={async (nextSummary) => {
-                setMobileArchiveSummary(nextSummary);
-                await saveMobileArchivePatch(
-                  "archiveSummary",
-                  { archive_summary: nextSummary || null },
-                );
-              }}
-              onSavePlantingRegion={saveArchivePlantingRegion}
-              profileExtra={isMobileViewport ? (
-                isOwner ? null : (
-                  <Link href={`/user/${activeArchive.user_id}`} style={attributeCreatorLinkStyle}>
-                    {ownerAvatarUrl ? (
-                      <img src={ownerAvatarUrl} alt="" style={attributeCreatorAvatarStyle} />
-                    ) : (
-                      <span style={attributeCreatorAvatarFallbackStyle}><UiIcon name="user" size={16} /></span>
-                    )}
-                    <span>{archiveCopy.enter_user_space_prefix}{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
-                    <UiIcon name="arrow-right" size={15} />
-                  </Link>
-                )
-              ) : isOwner ? (
-                canWriteCloud ? <>
-                  <div style={projectManagementRowStyle}>
-                    <MobileArchiveActions
-                      category={normalizeArchiveCategory(activeArchive.category)}
-                      subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
-                      groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
-                      subTags={ownerSubTags}
-                      groupTags={ownerGroupTags}
-                      categoryDepths={categoryDepths}
-                      ended={activeArchive.status === "ended"}
-                      isPublic={Boolean(activeArchive.is_public)}
-                      onChangeCategory={(value) => void updateArchiveTaxonomy(value)}
-                      onChangeGroup={(value) => void updateArchiveGroup(value)}
-                      onToggleEnded={() =>
-                        void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
-                      }
-                      onTogglePublic={() => void toggleArchiveVisibility()}
-                      onMoveToTrash={() => setDeleteArchiveDialogOpen(true)}
-                    />
-                  </div>
-                  <ArchiveCycleSettings
-                    key={activeArchive.id}
-                    enabled={cycleEnabled}
-                    busy={cycleSettingsSaving}
-                    onSave={saveArchiveCycleSettings}
-                  />
-                </> : null
-              ) : (
-                <Link href={`/user/${activeArchive.user_id}`} style={attributeCreatorLinkStyle}>
-                  {ownerAvatarUrl ? (
-                    <img src={ownerAvatarUrl} alt="" style={attributeCreatorAvatarStyle} />
-                  ) : (
-                    <span style={attributeCreatorAvatarFallbackStyle}><UiIcon name="user" size={16} /></span>
-                  )}
-                  <span>{archiveCopy.enter_user_space_prefix}{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
-                  <UiIcon name="arrow-right" size={15} />
-                </Link>
-              )}
+              onTogglePublic={() => void toggleArchiveVisibility()}
+              onMoveToTrash={() => setDeleteArchiveDialogOpen(true)}
             />
           </div>
-          {isMobileViewport && isOwner ? (
-            <>
-              <ArchiveOwnerSettingsFields
-                category={normalizeArchiveCategory(activeArchive.category)}
-                subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
-                groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
-                subTags={ownerSubTags}
-                groupTags={ownerGroupTags}
-                maxDepth={categoryDepths[normalizeArchiveCategory(activeArchive.category)] || 3}
-                ended={activeArchive.status === "ended"}
-                isPublic={Boolean(activeArchive.is_public)}
-                canWrite={canWriteCloud}
-                busy={Boolean(mobileArchiveSavingField)}
-                onChangeSubcategory={(value) =>
-                  void updateArchiveTaxonomy(value || normalizeArchiveCategory(activeArchive.category))
-                }
-                onChangeGroup={(value) => void updateArchiveGroup(value)}
-                onToggleEnded={() =>
-                  void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
-                }
-                onTogglePublic={() => void toggleArchiveVisibility()}
-              />
-              {canWriteCloud ? (
-                <ArchiveCycleSettings
-                  key={activeArchive.id}
-                  enabled={cycleEnabled}
-                  busy={cycleSettingsSaving}
-                  onSave={saveArchiveCycleSettings}
-                />
-              ) : null}
-              <button
-                type="button"
-                onClick={openSaveToLocalPrompt}
-                disabled={saveToLocalRunning}
-                style={{
-                  ...mobileArchiveSaveLocalButtonStyle,
-                  opacity: saveToLocalRunning ? 0.55 : 1,
-                  cursor: saveToLocalRunning ? "not-allowed" : "pointer",
-                }}
-              >
-                {saveToLocalActionLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteArchiveDialogOpen(true)}
-                style={mobileArchiveTrashButtonStyle}
-              >
-                {archiveCopy.move_to_trash}
-              </button>
-            </>
-          ) : null}
-          </>
-        ) : null}
-
-        {activeDetailTab === "experience" ? (
-          <ArchiveExperienceCards
-            archiveId={activeArchive.id}
-            isOwner={isOwner}
-            canCreate={canWriteCloud}
-            onCountChange={setExperienceCardCount}
+          <ArchiveCycleSettings
+            key={activeArchive.id}
+            enabled={cycleEnabled}
+            busy={cycleSettingsSaving}
+            onSave={saveArchiveCycleSettings}
           />
-        ) : null}
+        </> : null
+      ) : (
+        <InternalLink href={"/user/" + activeArchive.user_id} style={attributeCreatorLinkStyle}>
+          {ownerAvatarUrl ? (
+            <img src={ownerAvatarUrl} alt="" style={attributeCreatorAvatarStyle} />
+          ) : (
+            <span style={attributeCreatorAvatarFallbackStyle}><UiIcon name="user" size={16} /></span>
+          )}
+          <span>{archiveCopy.enter_user_space_prefix}{displayUsername}{archiveCopy.enter_user_space_suffix}</span>
+          <UiIcon name="arrow-right" size={15} />
+        </InternalLink>
+      )}
+      mobileOwnerSettings={isOwner ? (
+        <>
+          <ArchiveOwnerSettingsFields
+            category={normalizeArchiveCategory(activeArchive.category)}
+            subTagId={typeof activeArchive.sub_tag_id === "string" ? activeArchive.sub_tag_id : null}
+            groupTagId={typeof activeArchive.group_tag_id === "string" ? activeArchive.group_tag_id : null}
+            subTags={ownerSubTags}
+            groupTags={ownerGroupTags}
+            maxDepth={categoryDepths[normalizeArchiveCategory(activeArchive.category)] || 3}
+            ended={activeArchive.status === "ended"}
+            isPublic={Boolean(activeArchive.is_public)}
+            canWrite={canWriteCloud}
+            busy={Boolean(mobileArchiveSavingField)}
+            onChangeSubcategory={(value) =>
+              void updateArchiveTaxonomy(value || normalizeArchiveCategory(activeArchive.category))
+            }
+            onChangeGroup={(value) => void updateArchiveGroup(value)}
+            onToggleEnded={() =>
+              void updateArchiveStatus(activeArchive.status === "ended" ? "active" : "ended")
+            }
+            onTogglePublic={() => void toggleArchiveVisibility()}
+          />
+          {canWriteCloud ? (
+            <ArchiveCycleSettings
+              key={activeArchive.id}
+              enabled={cycleEnabled}
+              busy={cycleSettingsSaving}
+              onSave={saveArchiveCycleSettings}
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={openSaveToLocalPrompt}
+            disabled={saveToLocalRunning}
+            style={{
+              ...mobileArchiveSaveLocalButtonStyle,
+              opacity: saveToLocalRunning ? 0.55 : 1,
+              cursor: saveToLocalRunning ? "not-allowed" : "pointer",
+            }}
+          >
+            {saveToLocalActionLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteArchiveDialogOpen(true)}
+            style={mobileArchiveTrashButtonStyle}
+          >
+            {archiveCopy.move_to_trash}
+          </button>
+        </>
+      ) : null}
+      recordComposer={
+        <ArchiveAddRecordSection
+          archiveId={activeArchive.id}
+          archiveCategory={activeArchive.category}
+          archiveIsPublic={activeArchive.is_public}
+          activeCycles={activeCycles}
+          mobileMode={isMobileViewport}
+          open={!isMobileViewport || mobileAddRecordOpen}
+          onClose={() => setMobileAddRecordOpen(false)}
+          onRecordCreated={() => {
+            setReloadKey((value) => value + 1);
+            if (isMobileViewport) setMobileAddRecordOpen(false);
+          }}
+        />
+      }
+      timelineBusy={cycleBusy}
+      onStartCycle={cycleEnabled ? startArchiveCycle : undefined}
+      onEndCycle={cycleEnabled ? endArchiveCycle : undefined}
+      onUpdateCycleDates={cycleEnabled ? updateArchiveCycleDates : undefined}
+      onRenameCycle={cycleEnabled ? renameArchiveCycle : undefined}
+      onDeleteCycle={cycleEnabled ? deleteArchiveCycle : undefined}
+      emptyRecordsText={mode === "owner" ? archiveCopy.no_records_owner : archiveCopy.no_public_records}
+      renderRecord={(item, index) => {
+        const sameTagLinks = (item.display_tags || [])
+          .map((tag) => ({
+            tag,
+            count: getSameTagCount(tag),
+            href: getSameTagSearchHref(tag),
+          }))
+          .filter((entry) => Boolean(entry.href));
 
-        {mode === "owner" && canWriteCloud && activeDetailTab === "records" ? (
-          <ArchiveAddRecordSection
-            archiveId={activeArchive.id}
-            archiveCategory={activeArchive.category}
-            archiveIsPublic={activeArchive.is_public}
-            activeCycles={activeCycles}
-            mobileMode={isMobileViewport}
-            open={!isMobileViewport || mobileAddRecordOpen}
-            onClose={() => setMobileAddRecordOpen(false)}
-            onRecordCreated={() => {
+        return (
+          <ArchiveRecordCard
+            key={item.id}
+            archive={activeArchive}
+            item={item}
+            index={index}
+            mode={mode}
+            cloudWritable={canWriteCloud}
+            startTime={startTime}
+            isHighlighted={highlightedRecordId === item.id}
+            sameTagLinks={sameTagLinks}
+            onOpenLightbox={openLightbox}
+            onDeleteMedia={handleDeleteMedia}
+            onReplaceMedia={handleReplaceMedia}
+            onVisibilityChange={handleRecordVisibilityChange}
+            onSetHelpStatus={setRecordHelpStatus}
+            onRemoveTag={(recordId, tag) => updateRecordTagState(recordId, tag, "remove")}
+            onAddTag={handleAddTag}
+            onNoteSaved={handleRecordNoteSaved}
+            onRecordUpdated={handleRecordUpdated}
+            currentUserId={me ?? null}
+            onCommentCountChange={handleCommentCountChange}
+            onAddMedia={handleAddMediaToRecord}
+            isMobileViewport={isMobileViewport}
+            onRecordDeleted={(recordId) => {
+              setRecords((prev) => prev.filter((record) => record.id !== recordId));
               setReloadKey((value) => value + 1);
-              if (isMobileViewport) setMobileAddRecordOpen(false);
+            }}
+            cycleOptions={cycleOptions}
+            onCycleChange={handleRecordCycleChange}
+          />
+        );
+      }}
+      lightbox={isLightboxOpen ? {
+        images: lightboxImages,
+        index: lightboxIndex,
+        onChange: setLightboxIndex,
+        metaText: lightboxMetaText,
+        note: lightboxRecord?.note || "",
+        onDeleteCurrentImage: isOwner ? handleDeleteLightboxImage : undefined,
+        deleteActionLabel: archiveCopy.move_to_trash,
+        deleteConfirmMessage: archiveCopy.photo_trash_message,
+        onClose: () => {
+          setLightboxImages([]);
+          setLightboxIndex(0);
+          setLightboxRecord(null);
+        },
+      } : null}
+      dialogs={
+        <>
+          <ConfirmDialog
+            open={showUnfollowProjectConfirm}
+            title={archiveCopy.unfollow_title}
+            message={archiveCopy.unfollow_message}
+            confirmText={projectFollowSubmitting ? archiveCopy.processing : archiveCopy.unfollow}
+            cancelText={archiveCopy.keep_following}
+            onClose={() => {
+              if (!projectFollowSubmitting) setShowUnfollowProjectConfirm(false);
+            }}
+            onConfirm={confirmUnfollowProject}
+            danger
+          />
+          <ConfirmDialog
+            open={saveToLocalConfirmOpen}
+            title={
+              movesCloudToLocal
+                ? localCopyId
+                  ? archiveCopy.update_and_transfer_to_device_title
+                  : archiveCopy.transfer_to_device_title
+                : localCopyId
+                  ? archiveCopy.update_device_copy_title
+                  : archiveCopy.save_to_device_title
+            }
+            message={
+              movesCloudToLocal
+                ? localCopyId
+                  ? archiveCopy.update_and_transfer_to_device_message
+                  : archiveCopy.transfer_to_device_message
+                : localCopyId
+                  ? archiveCopy.update_device_copy_message
+                  : archiveCopy.save_to_device_message
+            }
+            confirmText={
+              movesCloudToLocal
+                ? localCopyId
+                  ? archiveCopy.update_and_transfer_to_device
+                  : archiveCopy.transfer_to_device
+                : localCopyId
+                  ? archiveCopy.update_device_copy
+                  : archiveCopy.save_to_device
+            }
+            cancelText={t.cancel}
+            onClose={() => {
+              if (!saveToLocalRunning) setSaveToLocalConfirmOpen(false);
+            }}
+            onConfirm={() => void confirmSaveToLocal()}
+            confirmDisabled={saveToLocalRunning}
+            cancelDisabled={saveToLocalRunning}
+          />
+          <ConfirmDialog
+            open={deleteArchiveDialogOpen}
+            title={archiveCopy.trash_title}
+            message={archiveCopy.project_trash_message}
+            confirmText={isDeletingArchive ? archiveCopy.moving_to_trash : archiveCopy.move_to_trash}
+            cancelText={t.cancel}
+            confirmDisabled={isDeletingArchive}
+            cancelDisabled={isDeletingArchive}
+            onClose={() => {
+              if (!isDeletingArchive) setDeleteArchiveDialogOpen(false);
+            }}
+            onConfirm={confirmDeleteArchive}
+            danger
+          />
+          <ConfirmDialog
+            open={archiveStatusConfirmOpen}
+            title={archiveCopy.end_project_title}
+            message={archiveCopy.end_project_message}
+            confirmText={archiveCopy.confirm_end_project}
+            cancelText={t.cancel}
+            onClose={() => setArchiveStatusConfirmOpen(false)}
+            onConfirm={() => {
+              setArchiveStatusConfirmOpen(false);
+              void applyArchiveStatus("ended");
             }}
           />
-        ) : null}
-
-        {activeDetailTab === "records" ? (
-        <ArchiveCycleTimeline
-          cycles={cycleEnabled ? cycles : []}
-          records={records}
-          category={activeArchive.category}
-          mobileMode={isMobileViewport}
-          canManage={mode === "owner" && canWriteCloud && cycleEnabled}
-          busy={cycleBusy}
-          onStartCycle={cycleEnabled ? startArchiveCycle : undefined}
-          onEndCycle={cycleEnabled ? endArchiveCycle : undefined}
-          onUpdateCycleDates={cycleEnabled ? updateArchiveCycleDates : undefined}
-          onRenameCycle={cycleEnabled ? renameArchiveCycle : undefined}
-          onDeleteCycle={cycleEnabled ? deleteArchiveCycle : undefined}
-          emptyState={
-            <div style={archiveProjectDetailEmptyStateStyle}>
-              {mode === "owner" ? archiveCopy.no_records_owner : archiveCopy.no_public_records}
-            </div>
-          }
-          renderRecord={(item, index) => {
-            const sameTagLinks = (item.display_tags || [])
-              .map((tag) => ({
-                tag,
-                count: getSameTagCount(tag),
-                href: getSameTagSearchHref(tag),
-              }))
-              .filter((entry) => Boolean(entry.href));
-
-            return (
-              <ArchiveRecordCard
-                key={item.id}
-                archive={activeArchive}
-                item={item}
-                index={index}
-                mode={mode}
-                cloudWritable={canWriteCloud}
-                startTime={startTime}
-                isHighlighted={highlightedRecordId === item.id}
-                sameTagLinks={sameTagLinks}
-                onOpenLightbox={openLightbox}
-                onDeleteMedia={handleDeleteMedia}
-                onReplaceMedia={handleReplaceMedia}
-                onVisibilityChange={handleRecordVisibilityChange}
-                onSetHelpStatus={setRecordHelpStatus}
-                onRemoveTag={(recordId, tag) => updateRecordTagState(recordId, tag, "remove")}
-                onAddTag={handleAddTag}
-                onNoteSaved={handleRecordNoteSaved}
-                onRecordUpdated={handleRecordUpdated}
-                currentUserId={me ?? null}
-                onCommentCountChange={handleCommentCountChange}
-                onAddMedia={handleAddMediaToRecord}
-                isMobileViewport={isMobileViewport}
-                onRecordDeleted={(recordId) => {
-                  setRecords((prev) => prev.filter((record) => record.id !== recordId));
-                  setReloadKey((value) => value + 1);
-                }}
-                cycleOptions={cycleOptions}
-                onCycleChange={handleRecordCycleChange}
-              />
-            );
-          }}
-        />
-        ) : null}
-      </main>
-
-      {isLightboxOpen ? (
-        <ArchiveLightbox
-          images={lightboxImages}
-          index={lightboxIndex}
-          onChange={setLightboxIndex}
-          isMobileViewport={isMobileViewport}
-          metaText={lightboxMetaText}
-          note={lightboxRecord?.note || ""}
-          onDeleteCurrentImage={isOwner ? handleDeleteLightboxImage : undefined}
-          deleteActionLabel={archiveCopy.move_to_trash}
-          deleteConfirmMessage={archiveCopy.photo_trash_message}
-          onClose={() => {
-            setLightboxImages([]);
-            setLightboxIndex(0);
-            setLightboxRecord(null);
-          }}
-        />
-      ) : null}
-
-      <ConfirmDialog
-        open={showUnfollowProjectConfirm}
-        title={archiveCopy.unfollow_title}
-        message={archiveCopy.unfollow_message}
-        confirmText={projectFollowSubmitting ? archiveCopy.processing : archiveCopy.unfollow}
-        cancelText={archiveCopy.keep_following}
-        onClose={() => {
-          if (!projectFollowSubmitting) setShowUnfollowProjectConfirm(false);
-        }}
-        onConfirm={confirmUnfollowProject}
-        danger
-      />
-
-      <ConfirmDialog
-        open={saveToLocalConfirmOpen}
-        title={
-          movesCloudToLocal
-            ? localCopyId
-              ? archiveCopy.update_and_transfer_to_device_title
-              : archiveCopy.transfer_to_device_title
-            : localCopyId
-              ? archiveCopy.update_device_copy_title
-              : archiveCopy.save_to_device_title
-        }
-        message={
-          movesCloudToLocal
-            ? localCopyId
-              ? archiveCopy.update_and_transfer_to_device_message
-              : archiveCopy.transfer_to_device_message
-            : localCopyId
-              ? archiveCopy.update_device_copy_message
-              : archiveCopy.save_to_device_message
-        }
-        confirmText={
-          movesCloudToLocal
-            ? localCopyId
-              ? archiveCopy.update_and_transfer_to_device
-              : archiveCopy.transfer_to_device
-            : localCopyId
-              ? archiveCopy.update_device_copy
-              : archiveCopy.save_to_device
-        }
-        cancelText={t.cancel}
-        onClose={() => {
-          if (!saveToLocalRunning) setSaveToLocalConfirmOpen(false);
-        }}
-        onConfirm={() => void confirmSaveToLocal()}
-        confirmDisabled={saveToLocalRunning}
-        cancelDisabled={saveToLocalRunning}
-      />
-
-      <ConfirmDialog
-        open={deleteArchiveDialogOpen}
-        title={archiveCopy.trash_title}
-        message={archiveCopy.project_trash_message}
-        confirmText={isDeletingArchive ? archiveCopy.moving_to_trash : archiveCopy.move_to_trash}
-        cancelText={t.cancel}
-        confirmDisabled={isDeletingArchive}
-        cancelDisabled={isDeletingArchive}
-        onClose={() => {
-          if (!isDeletingArchive) setDeleteArchiveDialogOpen(false);
-        }}
-        onConfirm={confirmDeleteArchive}
-        danger
-      />
-
-      <ConfirmDialog
-        open={archiveStatusConfirmOpen}
-        title={archiveCopy.end_project_title}
-        message={archiveCopy.end_project_message}
-        confirmText={archiveCopy.confirm_end_project}
-        cancelText={t.cancel}
-        onClose={() => setArchiveStatusConfirmOpen(false)}
-        onConfirm={() => {
-          setArchiveStatusConfirmOpen(false);
-          void applyArchiveStatus("ended");
-        }}
-      />
-
-      <ConfirmDialog
-        open={Boolean(deleteMediaTarget)}
-        title={archiveCopy.trash_title}
-        message={archiveCopy.photo_trash_message}
-        confirmText={isDeletingMedia ? archiveCopy.moving_to_trash : archiveCopy.move_to_trash}
-        cancelText={t.cancel}
-        onClose={() => {
-          if (!isDeletingMedia) setDeleteMediaTarget(null);
-        }}
-        onConfirm={confirmDeleteMedia}
-        confirmDisabled={isDeletingMedia}
-        cancelDisabled={isDeletingMedia}
-        danger
-      />
-    </>
+          <ConfirmDialog
+            open={Boolean(deleteMediaTarget)}
+            title={archiveCopy.trash_title}
+            message={archiveCopy.photo_trash_message}
+            confirmText={isDeletingMedia ? archiveCopy.moving_to_trash : archiveCopy.move_to_trash}
+            cancelText={t.cancel}
+            onClose={() => {
+              if (!isDeletingMedia) setDeleteMediaTarget(null);
+            }}
+            onConfirm={confirmDeleteMedia}
+            confirmDisabled={isDeletingMedia}
+            cancelDisabled={isDeletingMedia}
+            danger
+          />
+        </>
+      }
+    />
   );
 }
 

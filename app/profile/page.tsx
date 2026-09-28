@@ -46,6 +46,7 @@ import {
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobileProfileView from "@/components/profile/MobileProfileView";
 import {
   IdentityStat,
   MobileProfileModuleTabs,
@@ -786,8 +787,394 @@ export default function ProfilePage() {
     void refreshProfile(user.id);
   }
 
+  const profileModulePanels = (
+    <>
+      {showMembershipModule ? (
+      <>
+      <section id="profile-module-membership" style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.account_plan}</div>
+            <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.membership_info}</h2>
+            <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
+              {membershipStatusText}
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/membership" style={secondaryLinkStyle}>
+              {membership ? t.profile.open_renew_info : t.profile.learn_cloud_membership}
+            </Link>
+          </div>
+        </div>
+
+        {showMembershipNotice ? (
+          <div style={membershipNoticeStyle}>
+            <div>{membershipNoticeText}</div>
+            <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
+              {t.profile.view_open_renew}
+            </Link>
+          </div>
+        ) : null}
+
+        <div style={membershipRightsStyle}>
+          <div style={membershipRightsTitleStyle}>{t.profile.membership_rights_summary}</div>
+          <div style={membershipRightRowStyle}>
+            <strong>{t.profile.registered_user}</strong>
+            <span>{t.profile.registered_user_rights}</span>
+          </div>
+          <div style={membershipRightRowStyle}>
+            <strong>{t.profile.cloud_member}</strong>
+            <span>{t.profile.cloud_member_rights}</span>
+          </div>
+          <Link href="/membership/benefits" style={membershipRightsLinkStyle}>
+            {t.profile.view_full_membership_rights}
+            <UiIcon name="arrow-right" size={14} />
+          </Link>
+        </div>
+
+        <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
+          <InfoCard
+            label={t.profile.account_identity}
+            value={getUserTypeLabel({ signedIn: !!user, membership, loading: initLoading, failed: !!membershipError }, language)}
+            hint={membership ? getMembershipStatusLabel(membership.status, language) : t.profile.local_free_hint}
+          />
+          <InfoCard
+            label={t.profile.valid_until}
+            value={membership ? formatMembershipDate(membershipEndDate, language) : t.profile.not_applicable}
+            hint={
+              membership
+                ? membership.can_create_content === false
+                  ? t.profile.restricted_existing
+                  : t.profile.active_until_expiry
+                : t.profile.local_no_expiry
+            }
+          />
+          <InfoCard
+            label={t.profile.storage_usage}
+            value={storageText}
+            hint={t.profile.storage_hint}
+          />
+        </div>
+      </section>
+
+      </>
+      ) : null}
+
+      {showPaymentModule ? (
+      <section id="profile-module-payment" style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
+        <div style={paymentHeadingStyle}>
+          <h2 style={{ margin: 0, fontSize: 20, color: "#1f2a1f" }}>
+            {language === "en" ? "Order progress" : "订单进度查询"}
+          </h2>
+          <button
+            type="button"
+            onClick={() => { if (user) void refreshPaymentRows(user.id); }}
+            disabled={paymentLoading}
+            aria-label={t.profile.refresh_payments}
+            title={t.profile.refresh_payments}
+            style={{
+              ...paymentRefreshButtonStyle,
+              cursor: paymentLoading ? "not-allowed" : "pointer",
+              opacity: paymentLoading ? 0.55 : 1,
+            }}
+          >
+            <UiIcon name="refresh" size={17} />
+          </button>
+        </div>
+
+        <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+          {paymentRows.length === 0 ? (
+            <div style={emptyPaymentStyle}>{t.profile.no_payment_orders}</div>
+          ) : (
+            paymentRows.map((payment) => (
+              <div key={payment.id} style={paymentCardStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#243123" }}>
+                      {formatPaymentAmount(payment.amount, payment.currency)}
+                    </div>
+                    <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
+                      {getMembershipPlanLabel(payment.plan, language)} · {getPaymentMethodLabel(payment.payment_method, language)}
+                    </div>
+                  </div>
+                  <span style={profilePaymentStatusStyle(payment.status)}>
+                    {getProfilePaymentStatusLabel(payment.status, language)}
+                  </span>
+                </div>
+
+                {payment.order_number ? (
+                  <div style={paymentMetaTextStyle}>{t.profile.order_number}{payment.order_number}</div>
+                ) : null}
+                {payment.payment_destination_label ? (
+                  <div style={paymentMetaTextStyle}>
+                    {t.profile.order_payment_destination}{payment.payment_destination_label}
+                  </div>
+                ) : null}
+                <div style={paymentMetaTextStyle}>
+                  {payment.status === "confirmed" ? t.profile.payment_time : t.profile.order_time}
+                  {formatMembershipDate(payment.paid_at || payment.submitted_at || payment.created_at, language)}
+                </div>
+                {payment.status === "pending_payment" && payment.expires_at ? (
+                  <div style={paymentMetaTextStyle}>
+                    {t.profile.order_expires_at}{formatMembershipDate(payment.expires_at, language)}
+                  </div>
+                ) : null}
+                {payment.status === "confirmed" ? (
+                  <div style={paymentMetaTextStyle}>
+                    {t.profile.service_period}{formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(payment.service_ends_at, language)}
+                  </div>
+                ) : null}
+                {payment.payment_reference ? (
+                  <div style={paymentMetaTextStyle}>
+                    {t.profile.transaction_reference}{payment.payment_reference}
+                  </div>
+                ) : null}
+                {payment.status === "needs_update" && payment.review_note ? (
+                  <div style={paymentReviewNoteStyle}>{payment.review_note}</div>
+                ) : null}
+                {payment.note ? (
+                  <div style={paymentMetaTextStyle}>
+                    {t.profile.note}{payment.note}
+                  </div>
+                ) : null}
+                {payment.status === "needs_update" ? (
+                  <Link href="/membership/payment" style={paymentUpdateLinkStyle}>{t.profile.update_payment_proof}</Link>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+      ) : null}
+
+      {showBackupModule ? (
+      <section id="profile-module-backup" style={isMobileViewport ? { ...dataSectionStyle, ...sectionCompactStyle } : dataSectionStyle}>
+        <div>
+          <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.my_data}</div>
+          <h2 style={dataTitleStyle}>{t.profile.export_backup}</h2>
+          <p style={dataDescStyle}>
+            {t.profile.export_intro}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting}
+          style={{
+            ...secondaryLinkStyle,
+            cursor: exporting ? "not-allowed" : "pointer",
+            opacity: exporting ? 0.65 : 1,
+          }}
+        >
+          {exportPhase === "estimating"
+            ? t.profile.estimating_export
+            : exportPhase === "packaging"
+              ? t.profile.packaging
+              : t.profile.export_records}
+        </button>
+        {exportPhase === "packaging" ? (
+          <p style={exportProgressStyle}>
+            {t.profile.packaging_hint}
+          </p>
+        ) : null}
+      </section>
+      ) : null}
+
+      {showAccountModule ? (
+      <section id="profile-module-account" style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
+        <div>
+          <div style={{ fontSize: 13, color: "#9a5b55" }}>{t.profile.danger}</div>
+          <h2 style={dangerTitleStyle}>{t.profile.delete_account}</h2>
+          <p style={dangerDescStyle}>
+            {t.profile.delete_intro}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={openDeleteDialog}
+          style={dangerButtonStyle}
+        >
+          {t.profile.delete_account}
+        </button>
+      </section>
+      ) : null}
+    </>
+  );
+
   if (initLoading || !user || !profile) {
     return <div style={{ padding: 40 }}>{t.profile.loading}</div>;
+  }
+
+  if (isMobileViewport) {
+    return (
+      <>
+        <MobileProfileView
+          email={user.email}
+          avatarUrl={profile.avatar_url ? String(profile.avatar_url) : null}
+          username={username || t.profile.unset_username}
+          accountNumber={formatAccountNumber(profile.account_number) || "—"}
+          helpfulCount={language === "en"
+            ? String(profileStats?.receivedFlowerCount || 0)
+            : `${profileStats?.receivedFlowerCount || 0}次`}
+          userType={getUserTypeLabel({ signedIn: !!user, membership, loading: initLoading, failed: !!membershipError }, language)}
+          storageText={storageText}
+          error={errorMsg ? (
+            <div style={{ marginTop: 16, background: "#fff2f0", border: "1px solid #ffd6cf", color: "#c23a2b", padding: "10px 12px", borderRadius: 12, fontSize: 14 }}>
+              {errorMsg}
+            </div>
+          ) : null}
+          modules={visibleMobileProfileModules}
+          activeModule={mobileProfileModule}
+          onModuleChange={(value) => {
+            setMobileProfileModule((current) => current === value ? null : value);
+          }}
+          onLogout={() => void handleProfileLogout()}
+          logoutLabel={t.nav.logout_full}
+          showAndroidVersion={isNativeApp === true}
+          adminAlert={isAdmin && pendingPaymentCount + pendingRefundCount > 0 ? (
+            <Link
+              href={pendingRefundCount > 0 ? "/admin/memberships#refund-review" : "/admin/memberships#payment-review"}
+              style={adminPaymentAlertStyle}
+            >
+              <span style={adminPaymentAlertCountStyle}>{pendingPaymentCount + pendingRefundCount}</span>
+              <span>
+                <strong style={{ display: "block" }}>{t.profile.admin_finance_alert}</strong>
+                <span style={adminPaymentAlertHintStyle}>{t.profile.admin_finance_alert_hint}</span>
+              </span>
+              <UiIcon name="arrow-right" size={18} />
+            </Link>
+          ) : null}
+          identityAfterStats={isEditingProfile ? (
+            <div style={profileEditPanelStyle}>
+              <div style={profileEditHeadingStyle}>{t.profile.editing_profile}</div>
+              <div style={locationEditGridStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <label style={fieldLabelStyle}>{t.profile.country_region}</label>
+                  <select
+                    value={countryCode}
+                    onChange={(event) => {
+                      setCountryCode(event.target.value);
+                      setRegionName("");
+                    }}
+                    style={fieldInputStyle}
+                  >
+                    <option value="">{t.profile.select}</option>
+                    {getLocalizedCountryOptions(language).map((item) => (
+                      <option key={item.code} value={item.code}>{item.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={fieldLabelStyle}>{t.profile.region}</label>
+                  {useRegionSelect ? (
+                    <select value={regionName} onChange={(event) => setRegionName(event.target.value)} style={fieldInputStyle}>
+                      <option value="">{t.profile.select}</option>
+                      {regionOptions.map((item) => (
+                        <option key={item.value} value={item.value}>{item.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={regionName}
+                      onChange={(event) => setRegionName(event.target.value)}
+                      style={fieldInputStyle}
+                      placeholder={t.profile.region_example}
+                    />
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={fieldLabelStyle}>{t.profile.city}</label>
+                  <input
+                    value={cityName}
+                    onChange={(event) => setCityName(event.target.value)}
+                    style={fieldInputStyle}
+                    placeholder={t.profile.city_example}
+                  />
+                </div>
+              </div>
+              {showCustomCountryInput ? (
+              <div>
+                <label style={fieldLabelStyle}>{t.profile.custom_country_region}</label>
+                <input
+                  value={customCountryName}
+                  onChange={(event) => setCustomCountryName(event.target.value)}
+                  style={fieldInputStyle}
+                  placeholder={t.profile.country_example}
+                />
+              </div>
+              ) : null}
+              <div style={profileEditActionsStyle}>
+                <button type="button" onClick={handleSave} disabled={saving} style={primaryActionStyle}>
+                  {saving ? t.profile.saving : t.profile.save_profile}
+                </button>
+                <button type="button" onClick={cancelProfileEdit} disabled={saving} style={secondaryEditButtonStyle}>
+                  {t.profile.cancel_edit}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={savedLocationStyle}>
+              <span>{t.profile.location_summary}</span>
+              <strong>{locationPreview || t.profile.not_assigned}</strong>
+            </div>
+          )}
+          identityTop={(
+            <>
+              <label style={profileAvatarEditorStyle}>
+                {profile.avatar_url ? (
+                  <img src={String(profile.avatar_url)} alt="" style={profileIdentityAvatarStyle} />
+                ) : (
+                  <span style={profileIdentityAvatarFallbackStyle}><UiIcon name="sprout" size={24} /></span>
+                )}
+                <input type="file" accept="image/*" onChange={handleUpload} hidden />
+                <span style={profileAvatarChangeStyle}>
+                  {uploading ? t.profile.uploading : t.profile.change_avatar}
+                </span>
+              </label>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <label style={fieldLabelStyle}>{t.profile.username}</label>
+                {!initLoading && !membershipError && !membership ? <CloudTrialEntry /> : null}
+                {isEditingProfile ? (
+                  <input
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    style={fieldInputStyle}
+                    placeholder={t.profile.username_placeholder}
+                    autoFocus
+                  />
+                ) : (
+                  <div style={savedUsernameStyle}>
+                    {username || t.profile.unset_username}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={isEditingProfile ? cancelProfileEdit : beginProfileEdit}
+                style={profileEditButtonStyle}
+              >
+                {isEditingProfile ? t.profile.cancel_edit : t.profile.edit_profile}
+              </button>
+            </>
+          )}
+        >
+          {profileModulePanels}
+        </MobileProfileView>
+        <ConfirmDialog
+          open={deleteDialogOpen}
+          title={t.profile.delete_confirm_title}
+          message={t.profile.delete_confirm_message}
+          confirmText={deleteLoading ? t.profile.deleting : t.profile.confirm_delete}
+          cancelText={t.profile.cancel}
+          danger
+          confirmDisabled={deleteLoading || !deleteConfirmed}
+          cancelDisabled={deleteLoading}
+          onConfirm={handleDeleteAccount}
+          onClose={closeDeleteDialog}
+        />
+      </>
+    );
   }
 
   return (
@@ -995,216 +1382,7 @@ export default function ProfilePage() {
           compact={isMobileViewport}
         >
 
-        {showMembershipModule ? (
-        <>
-        <section id="profile-module-membership" style={isMobileViewport ? { ...membershipSectionStyle, ...sectionCompactStyle } : membershipSectionStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.account_plan}</div>
-              <h2 style={{ margin: "4px 0 0", fontSize: 20, color: "#1f2a1f" }}>{t.profile.membership_info}</h2>
-              <p style={{ margin: "8px 0 0", color: "#6f7b69", fontSize: 13, lineHeight: 1.6 }}>
-                {membershipStatusText}
-              </p>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link href="/membership" style={secondaryLinkStyle}>
-                {membership ? t.profile.open_renew_info : t.profile.learn_cloud_membership}
-              </Link>
-            </div>
-          </div>
-
-          {showMembershipNotice ? (
-            <div style={membershipNoticeStyle}>
-              <div>{membershipNoticeText}</div>
-              <Link href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                {t.profile.view_open_renew}
-              </Link>
-            </div>
-          ) : null}
-
-          <div style={membershipRightsStyle}>
-            <div style={membershipRightsTitleStyle}>{t.profile.membership_rights_summary}</div>
-            <div style={membershipRightRowStyle}>
-              <strong>{t.profile.registered_user}</strong>
-              <span>{t.profile.registered_user_rights}</span>
-            </div>
-            <div style={membershipRightRowStyle}>
-              <strong>{t.profile.cloud_member}</strong>
-              <span>{t.profile.cloud_member_rights}</span>
-            </div>
-            <Link href="/membership/benefits" style={membershipRightsLinkStyle}>
-              {t.profile.view_full_membership_rights}
-              <UiIcon name="arrow-right" size={14} />
-            </Link>
-          </div>
-
-          <div style={{ ...statsGridStyle, gridTemplateColumns: statsGridColumns, marginTop: 14 }}>
-            <InfoCard
-              label={t.profile.account_identity}
-              value={getUserTypeLabel({ signedIn: !!user, membership, loading: initLoading, failed: !!membershipError }, language)}
-              hint={membership ? getMembershipStatusLabel(membership.status, language) : t.profile.local_free_hint}
-            />
-            <InfoCard
-              label={t.profile.valid_until}
-              value={membership ? formatMembershipDate(membershipEndDate, language) : t.profile.not_applicable}
-              hint={
-                membership
-                  ? membership.can_create_content === false
-                    ? t.profile.restricted_existing
-                    : t.profile.active_until_expiry
-                  : t.profile.local_no_expiry
-              }
-            />
-            <InfoCard
-              label={t.profile.storage_usage}
-              value={storageText}
-              hint={t.profile.storage_hint}
-            />
-          </div>
-        </section>
-
-        </>
-        ) : null}
-
-        {showPaymentModule ? (
-        <section id="profile-module-payment" style={isMobileViewport ? { ...paymentHistorySectionStyle, ...sectionCompactStyle } : paymentHistorySectionStyle}>
-          <div style={paymentHeadingStyle}>
-            <h2 style={{ margin: 0, fontSize: 20, color: "#1f2a1f" }}>
-              {language === "en" ? "Order progress" : "订单进度查询"}
-            </h2>
-            <button
-              type="button"
-              onClick={() => void refreshPaymentRows(user.id)}
-              disabled={paymentLoading}
-              aria-label={t.profile.refresh_payments}
-              title={t.profile.refresh_payments}
-              style={{
-                ...paymentRefreshButtonStyle,
-                cursor: paymentLoading ? "not-allowed" : "pointer",
-                opacity: paymentLoading ? 0.55 : 1,
-              }}
-            >
-              <UiIcon name="refresh" size={17} />
-            </button>
-          </div>
-
-          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-            {paymentRows.length === 0 ? (
-              <div style={emptyPaymentStyle}>{t.profile.no_payment_orders}</div>
-            ) : (
-              paymentRows.map((payment) => (
-                <div key={payment.id} style={paymentCardStyle}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#243123" }}>
-                        {formatPaymentAmount(payment.amount, payment.currency)}
-                      </div>
-                      <div style={{ marginTop: 5, fontSize: 13, color: "#6f7b69" }}>
-                        {getMembershipPlanLabel(payment.plan, language)} · {getPaymentMethodLabel(payment.payment_method, language)}
-                      </div>
-                    </div>
-                    <span style={profilePaymentStatusStyle(payment.status)}>
-                      {getProfilePaymentStatusLabel(payment.status, language)}
-                    </span>
-                  </div>
-
-                  {payment.order_number ? (
-                    <div style={paymentMetaTextStyle}>{t.profile.order_number}{payment.order_number}</div>
-                  ) : null}
-                  {payment.payment_destination_label ? (
-                    <div style={paymentMetaTextStyle}>
-                      {t.profile.order_payment_destination}{payment.payment_destination_label}
-                    </div>
-                  ) : null}
-                  <div style={paymentMetaTextStyle}>
-                    {payment.status === "confirmed" ? t.profile.payment_time : t.profile.order_time}
-                    {formatMembershipDate(payment.paid_at || payment.submitted_at || payment.created_at, language)}
-                  </div>
-                  {payment.status === "pending_payment" && payment.expires_at ? (
-                    <div style={paymentMetaTextStyle}>
-                      {t.profile.order_expires_at}{formatMembershipDate(payment.expires_at, language)}
-                    </div>
-                  ) : null}
-                  {payment.status === "confirmed" ? (
-                    <div style={paymentMetaTextStyle}>
-                      {t.profile.service_period}{formatMembershipDate(payment.service_started_at, language)} - {formatMembershipDate(payment.service_ends_at, language)}
-                    </div>
-                  ) : null}
-                  {payment.payment_reference ? (
-                    <div style={paymentMetaTextStyle}>
-                      {t.profile.transaction_reference}{payment.payment_reference}
-                    </div>
-                  ) : null}
-                  {payment.status === "needs_update" && payment.review_note ? (
-                    <div style={paymentReviewNoteStyle}>{payment.review_note}</div>
-                  ) : null}
-                  {payment.note ? (
-                    <div style={paymentMetaTextStyle}>
-                      {t.profile.note}{payment.note}
-                    </div>
-                  ) : null}
-                  {payment.status === "needs_update" ? (
-                    <Link href="/membership/payment" style={paymentUpdateLinkStyle}>{t.profile.update_payment_proof}</Link>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-        ) : null}
-
-        {showBackupModule ? (
-        <section id="profile-module-backup" style={isMobileViewport ? { ...dataSectionStyle, ...sectionCompactStyle } : dataSectionStyle}>
-          <div>
-            <div style={{ fontSize: 13, color: "#6b7b66" }}>{t.profile.my_data}</div>
-            <h2 style={dataTitleStyle}>{t.profile.export_backup}</h2>
-            <p style={dataDescStyle}>
-              {t.profile.export_intro}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={exporting}
-            style={{
-              ...secondaryLinkStyle,
-              cursor: exporting ? "not-allowed" : "pointer",
-              opacity: exporting ? 0.65 : 1,
-            }}
-          >
-            {exportPhase === "estimating"
-              ? t.profile.estimating_export
-              : exportPhase === "packaging"
-                ? t.profile.packaging
-                : t.profile.export_records}
-          </button>
-          {exportPhase === "packaging" ? (
-            <p style={exportProgressStyle}>
-              {t.profile.packaging_hint}
-            </p>
-          ) : null}
-        </section>
-        ) : null}
-
-        {showAccountModule ? (
-        <section id="profile-module-account" style={isMobileViewport ? { ...dangerSectionStyle, ...sectionCompactStyle, alignItems: "stretch" } : dangerSectionStyle}>
-          <div>
-            <div style={{ fontSize: 13, color: "#9a5b55" }}>{t.profile.danger}</div>
-            <h2 style={dangerTitleStyle}>{t.profile.delete_account}</h2>
-            <p style={dangerDescStyle}>
-              {t.profile.delete_intro}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openDeleteDialog}
-            style={dangerButtonStyle}
-          >
-            {t.profile.delete_account}
-          </button>
-        </section>
-        ) : null}
+        {profileModulePanels}
         </MobileProfileModuleTabs>
 
         <button

@@ -1,41 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import PlantingRegionEditor from "@/components/archive/PlantingRegionEditor";
+import { useEffect, useState, type ReactNode } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettings";
-import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
-import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
 import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
-import ArchiveDetailHeaderView, {
-  type ArchiveProfileFieldSave,
-} from "@/components/archive-ui/ArchiveDetailHeaderView";
-import ArchiveProjectDetailTabs from "@/components/archive-ui/ArchiveProjectDetailTabs";
+import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
 import {
-  archiveProjectDetailBadgeStyle,
   archiveProjectDetailEmptyStateStyle,
   archiveProjectDetailExperienceHintStyle,
-  archiveProjectDetailFloatingAddStyle,
-  archiveProjectDetailGuideLinkStyle,
-  archiveProjectDetailGuideTextStyle,
-  archiveProjectDetailLocalHintStyle,
-  archiveProjectDetailHeaderProjectStyle,
-  archiveProjectDetailHeaderTitleStyle,
-  archiveProjectDetailMainStyle,
-  archiveProjectDetailMetaLineStyle,
   archiveProjectDetailReadOnlyNoticeStyle,
-  archiveProjectDetailStatsStyle,
   type ArchiveProjectDetailTabId,
 } from "@/components/archive-ui/archiveProjectDetailLayout";
-import type { ArchiveProjectView } from "@/components/archive-ui/types";
-import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
-import ProjectMetaLine from "@/components/ui/ProjectMetaLine";
-import { getArchiveCategoryIcon } from "@/lib/archive-categories";
+import type { LightboxImage, RecordItem } from "@/lib/archive-detail-types";
+import { formatDate, getDayNumber } from "@/lib/archive-detail-utils";
 import { formatLocalCycleDate } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
-import type { ArchiveCycle, LightboxImage, RecordItem } from "@/lib/archive-detail-types";
-import { formatDate, getDayNumber } from "@/lib/archive-detail-utils";
 import type { MediaItem } from "@/lib/domain-types";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import {
@@ -78,6 +58,9 @@ export default function DeviceOwnedProjectDetail({
   onAddRecord,
   onDeleteArchive,
   onDeleteRecord,
+  extra,
+  recordComposer,
+  view: View = ArchiveProjectDetailView,
 }: {
   detail: LocalArchiveDetail;
   ownerContext: LocalArchiveOwnerContext | null;
@@ -86,6 +69,9 @@ export default function DeviceOwnedProjectDetail({
   onAddRecord: () => void;
   onDeleteArchive: () => void;
   onDeleteRecord: (recordId: string) => void;
+  extra?: ReactNode;
+  recordComposer?: ReactNode;
+  view?: typeof ArchiveProjectDetailView;
 }) {
   const { language, t } = useLanguage();
   const archiveCopy = t.archive;
@@ -140,42 +126,6 @@ export default function DeviceOwnedProjectDetail({
         : archive.category === "insect_fish"
           ? archiveCopy.categories.insect_fish_label
           : archiveCopy.categories.other_label;
-  const projectView = useMemo<ArchiveProjectView>(() => ({
-    id: archive.id,
-    mode: "local",
-    title: archive.title || archiveCopy.unnamed_project,
-    category: archive.category,
-    plantId: archive.plant_id,
-    plantSlug: archive.plant_slug,
-    categoryLabel: localCategoryLabel,
-    categoryIcon: getArchiveCategoryIcon(archive.category),
-    systemName: archive.system_name || archive.species_name || archiveCopy.not_filled,
-    visibilityLabel: isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project,
-    visibilityTone: "neutral",
-    storageLabel: isCloudCache ? archiveCopy.device : archiveCopy.saved_on_this_device,
-    storageTone: "device",
-    recordCount: detail.records.length,
-    durationDays: ongoingDays,
-    latestTime: latestUpdate,
-    ended: archive.status === "ended",
-  }), [
-    archive,
-    archiveCopy.device,
-    archiveCopy.local_project,
-    workspaceCopy.cloud_cache_copy,
-    archiveCopy.not_filled,
-    archiveCopy.saved_on_this_device,
-    archiveCopy.unnamed_project,
-    detail.records.length,
-    isCloudCache,
-    latestUpdate,
-    localCategoryLabel,
-    ongoingDays,
-  ]);
-  const durationText = ongoingDays
-    ? `${archiveCopy.ongoing_days_prefix} ${ongoingDays} ${archiveCopy.days_suffix}`
-    : archiveCopy.none;
-  const archiveDisplayName = archive.system_name || archive.species_name || "";
   const localArchiveRecordShell = localArchiveToDetailArchive(
     archive,
     detail.records.length,
@@ -185,10 +135,6 @@ export default function DeviceOwnedProjectDetail({
     id: cycle.id,
     label: `${cycle.display_name || cycleTerminology.cycleLabel(cycle.cycle_no)} (${cycle.status === "active" ? archiveCopy.ongoing : archiveCopy.ended} · ${formatLocalCycleDate(cycle.started_at)})`,
   }));
-  const localSystemNameLabel =
-    archive.category === "plant"
-      ? archiveCopy.system_plant_name_required
-      : archiveCopy.system_name_required;
   const lightboxRecordIndex = lightboxRecord
     ? recordItems.findIndex((record) => record.id === lightboxRecord.id)
     : -1;
@@ -210,31 +156,6 @@ export default function DeviceOwnedProjectDetail({
     }
   }
 
-  async function saveProfileField(changeField: ArchiveProfileFieldSave) {
-    if (!canEditArchive) return;
-    if (changeField.field === "title") {
-      await updateLocalArchiveFields(archive.id, { title: changeField.value }, ownerContext);
-    } else if (changeField.field === "category") {
-      await updateLocalArchiveFields(archive.id, { category: changeField.value }, ownerContext);
-    } else if (changeField.field === "systemName") {
-      await updateLocalArchiveFields(
-        archive.id,
-        {
-          system_name: changeField.value.name,
-          species_name: changeField.value.name,
-        },
-        ownerContext,
-      );
-    } else if (changeField.field === "source") {
-      await updateLocalArchiveFields(archive.id, { source: changeField.value }, ownerContext);
-    } else if (changeField.field === "note") {
-      await updateLocalArchiveFields(archive.id, { note: changeField.value }, ownerContext);
-    } else if (changeField.field === "archiveSummary") {
-      await updateLocalArchiveFields(archive.id, { archive_summary: changeField.value }, ownerContext);
-    }
-    await onChanged();
-  }
-
   function openLightbox(mediaItems: MediaItem[], imageIndex: number, record: RecordItem) {
     const images = mediaItems
       .map((item, index) => ({
@@ -251,349 +172,265 @@ export default function DeviceOwnedProjectDetail({
   }
 
   const pendingRecordCount = detail.records.filter((record) =>
-    isPendingCloudSyncStatus(record.sync.status)
+    isPendingCloudSyncStatus(record.sync.status),
   ).length;
   const archivePending = isPendingCloudSyncStatus(archive.sync.status);
   const showPendingNotice = archivePending || pendingRecordCount > 0;
-
-  const profileRows = [
-    {
-      label: archiveCopy.project_name_required,
-      value: archive.title || archiveCopy.unnamed_project,
-      field: "title" as const,
-    },
-    {
-      label: localSystemNameLabel,
-      value: archive.system_name || archive.species_name || archiveCopy.not_filled,
-      field: "systemName" as const,
-    },
-    {
-      label: archiveCopy.category,
-      value: localCategoryLabel,
-      field: "category" as const,
-    },
-    ...(archive.category === "plant"
-      ? [{
-          label: archiveCopy.planting_region_required,
-          content: (
-            <PlantingRegionEditor
-              layout="attribute"
-              language={language}
-              value={archive.planting_region}
-              canEdit={canEditArchive && !busy}
-              onSave={async (region) => {
-                await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
-                await onChanged();
-              }}
-            />
-          ),
-        }]
-      : []),
-    {
-      label: archiveCopy.source,
-      value: archive.source || archiveCopy.not_filled,
-      field: "source" as const,
-    },
-    {
-      label: archiveCopy.note,
-      value: archive.note || archiveCopy.not_filled,
-      field: "note" as const,
-    },
-    {
-      label: archiveCopy.summary,
-      value: archive.archive_summary || archiveCopy.not_filled,
-      field: "archiveSummary" as const,
-    },
-    { label: archiveCopy.created_time, value: formatDate(archive.created_at) || archiveCopy.none },
-    { label: archiveCopy.latest_update, value: formatDate(latestUpdate) || archiveCopy.none },
-    { label: archiveCopy.record_count, value: `${detail.records.length}` },
-    { label: archiveCopy.duration_days, value: durationText },
-  ];
+  const archiveDisplayName = archive.system_name || archive.species_name || "";
 
   return (
-    <>
-      <MobilePageHeaderView
-        title={
-          <span style={archiveProjectDetailHeaderTitleStyle}>
-            <span style={archiveProjectDetailHeaderProjectStyle}>{archive.title}</span>
-          </span>
-        }
-        titleText={archive.title}
-        showBack
-        ariaLabel={t.nav.back}
-        onBack={onBack}
-      />
-      <main style={archiveProjectDetailMainStyle(true)}>
-        <div style={archiveProjectDetailStatsStyle}>
-          {archiveDisplayName ? (
-            encyclopediaHref ? (
-              <a href={encyclopediaHref} style={archiveProjectDetailGuideLinkStyle}>
-                {archiveDisplayName}
-              </a>
-            ) : (
-              <span style={archiveProjectDetailGuideTextStyle}>{archiveDisplayName}</span>
-            )
-          ) : null}
-          <span style={archiveProjectDetailBadgeStyle}>
-            {isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
-          </span>
-          <ProjectMetaLine
-            recordCount={detail.records.length}
-            durationDays={ongoingDays}
-            ended={archive.status === "ended"}
-            order={["record", "duration"]}
-            style={archiveProjectDetailMetaLineStyle}
-          />
-        </div>
-
-        {isCloudCache ? (
+    <View
+      archive={localArchiveRecordShell}
+      records={recordItems}
+      cycles={cycleEnabled ? ((archive.cycles || []) as never) : []}
+      cycleEnabled={cycleEnabled}
+      mode="owner"
+      capabilities={{
+        canFollow: false,
+        canWriteArchive: canEditArchive,
+        canAddRecord,
+        canManageCycle: canEditArchive && cycleEnabled,
+        canSaveToLocal: false,
+        canDeleteArchive: canEditArchive,
+        canToggleVisibility: false,
+      }}
+      isMobileViewport
+      language={language}
+      copy={archiveCopy}
+      username={ownerContext?.email || archiveCopy.default_user}
+      archiveDisplayName={archiveDisplayName}
+      archiveCategoryLabel={localCategoryLabel}
+      archiveSubcategoryLabel={archive.subcategory || null}
+      archiveGroupLabel={archive.group_name || null}
+      encyclopediaHref={encyclopediaHref}
+      systemNameMode="text"
+      latestUpdate={latestUpdate}
+      recordCount={detail.records.length}
+      viewCount={0}
+      followerCount={0}
+      durationDays={ongoingDays}
+      statusBadge={isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
+      statusNotice={
+        <>
           <div style={archiveProjectDetailReadOnlyNoticeStyle}>
-            <span>{archiveCopy.cloud_read_only_notice}</span>
+            <span>
+              {isCloudCache ? archiveCopy.cloud_read_only_notice : archiveCopy.saved_on_this_device}
+            </span>
           </div>
-        ) : (
-          <div style={archiveProjectDetailLocalHintStyle}>
-            {archiveCopy.saved_on_this_device}
-          </div>
-        )}
-        {showPendingNotice ? (
-          <div style={{ margin: "0 0 10px", color: "#8a5a36", fontSize: 12, lineHeight: 1.4 }}>
-            {archiveCopy.pending_sync_workspace_notice}
-          </div>
-        ) : null}
-
-        <ArchiveProjectDetailTabs
-          ariaLabel={archiveCopy.detail_navigation}
-          active={activeDetailTab}
-          onChange={setActiveDetailTab}
-          labels={{
-            records: archiveCopy.details,
-            profile: archiveCopy.dossier,
-            experience: language === "en"
-              ? `${archiveCopy.experience_cards} (0)`
-              : `${archiveCopy.experience_cards}（0）`,
-          }}
-        />
-
-        {activeDetailTab === "profile" ? (
-          <ArchiveDetailHeaderView
-            project={projectView}
-            eyebrow={archiveCopy.project_archive}
-            latestUpdateText={`${archiveCopy.latest_update} ${formatDate(latestUpdate) || archiveCopy.none}`}
-            recordCountText={`${archiveCopy.records} ${detail.records.length}`}
-            durationText={ongoingDays ? durationText : undefined}
-            hint={isCloudCache ? archiveCopy.cloud_read_only_notice : archiveCopy.saved_on_this_device}
-            profileAlwaysOpen
-            showPageChrome={false}
-            showSystemNameInTitle={false}
-            encyclopediaHref={encyclopediaHref}
-            profileRows={profileRows}
-            profileEditor={canEditArchive ? {
-              values: {
-                title: archive.title || "",
-                category: archive.category,
-                systemName: archive.system_name || archive.species_name || "",
-                source: archive.source || "",
-                note: archive.note || "",
-                archiveSummary: archive.archive_summary || "",
-              },
-              onSaveField: saveProfileField,
-              systemNameMode: "text",
-            } : undefined}
-            profileActions={canEditArchive ? (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setDeleteArchiveOpen(true)}
-                  style={{
-                    border: "1px solid #efd8d5",
-                    borderRadius: 999,
-                    background: "#fff",
-                    color: "#9a4a42",
-                    padding: "8px 14px",
-                    fontSize: 13,
-                    fontWeight: 750,
-                  }}
-                >
-                  {archiveCopy.delete_local_project}
-                </button>
-              </div>
-            ) : null}
-            profileExtra={
-              <div>
-                <ArchiveOwnerSettingsFields
-                  category={archive.category}
-                  subTagId={archive.subcategory || null}
-                  groupTagId={archive.group_name || null}
-                  subTags={[]}
-                  groupTags={[]}
-                  maxDepth={1}
-                  ended={archive.status === "ended"}
-                  isPublic={false}
-                  canWrite={canEditArchive && !busy}
-                  busy={busy}
-                  showVisibility={false}
-                  onChangeSubcategory={() => undefined}
-                  onChangeGroup={() => undefined}
-                  onToggleEnded={() => {
-                    void change(() => updateLocalArchiveFields(archive.id, {
-                      status: archive.status === "ended" ? "active" : "ended",
-                      ended_at: archive.status === "ended" ? null : new Date().toISOString(),
-                    }, ownerContext));
-                  }}
-                />
-                {canEditArchive ? (
-                  <ArchiveCycleSettings
-                    key={archive.id}
-                    enabled={cycleEnabled}
-                    busy={busy}
-                    onSave={async ({ enabled }) => {
-                      await change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: enabled }, ownerContext));
-                    }}
-                  />
-                ) : null}
-              </div>
-            }
-          />
-        ) : null}
-
-        {activeDetailTab === "experience" ? (
-          <div style={archiveProjectDetailEmptyStateStyle}>
-            <div>{t.experience.no_cards}</div>
-            <div style={archiveProjectDetailExperienceHintStyle}>
-              {archiveCopy.local_experience_cards_hint}
+          {showPendingNotice ? (
+            <div style={{ margin: "0 0 10px", color: "#8a5a36", fontSize: 12, lineHeight: 1.4 }}>
+              {archiveCopy.pending_sync_workspace_notice}
             </div>
+          ) : null}
+        </>
+      }
+      activeTab={activeDetailTab}
+      onTabChange={setActiveDetailTab}
+      experienceTabLabel={
+        language === "en"
+          ? `${archiveCopy.experience_cards} (0)`
+          : `${archiveCopy.experience_cards}（0）`
+      }
+      experienceContent={
+        <div style={archiveProjectDetailEmptyStateStyle}>
+          <div>{t.experience.no_cards}</div>
+          <div style={archiveProjectDetailExperienceHintStyle}>
+            {archiveCopy.local_experience_cards_hint}
           </div>
-        ) : null}
-
-        {activeDetailTab === "records" ? (
-          <ArchiveCycleTimeline
-            cycles={cycleEnabled ? ((archive.cycles || []) as ArchiveCycle[]) : []}
-            records={recordItems}
+        </div>
+      }
+      headerFallbackHref="/archive"
+      headerBackLabel={t.nav.back}
+      onHeaderBack={onBack}
+      onToggleArchiveVisibility={() => undefined}
+      onToggleArchiveStatus={() => {
+        void change(() => updateLocalArchiveFields(archive.id, {
+          status: archive.status === "ended" ? "active" : "ended",
+          ended_at: archive.status === "ended" ? null : new Date().toISOString(),
+        }, ownerContext));
+      }}
+      onDeleteArchive={() => setDeleteArchiveOpen(true)}
+      onSaveTitle={async (nextTitle) => {
+        await updateLocalArchiveFields(archive.id, { title: nextTitle }, ownerContext);
+        await onChanged();
+      }}
+      onSaveCategory={async (nextCategory) => {
+        await updateLocalArchiveFields(archive.id, { category: nextCategory }, ownerContext);
+        await onChanged();
+      }}
+      onSaveSystemName={async (value) => {
+        await updateLocalArchiveFields(archive.id, {
+          system_name: value.name,
+          species_name: value.name,
+        }, ownerContext);
+        await onChanged();
+      }}
+      onSaveSource={async (nextSource) => {
+        await updateLocalArchiveFields(archive.id, { source: nextSource }, ownerContext);
+        await onChanged();
+      }}
+      onSaveNote={async (nextNote) => {
+        await updateLocalArchiveFields(archive.id, { note: nextNote }, ownerContext);
+        await onChanged();
+      }}
+      onSaveArchiveSummary={async (nextSummary) => {
+        await updateLocalArchiveFields(archive.id, { archive_summary: nextSummary }, ownerContext);
+        await onChanged();
+      }}
+      onSavePlantingRegion={async (region) => {
+        await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
+        await onChanged();
+      }}
+      storageLabel={isCloudCache ? archiveCopy.device : archiveCopy.saved_on_this_device}
+      storageTone="device"
+      visibilityLabel={isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
+      mobileOwnerSettings={
+        <>
+          <ArchiveOwnerSettingsFields
             category={archive.category}
-            mobileMode
-            canManage={canEditArchive && cycleEnabled}
+            subTagId={archive.subcategory || null}
+            groupTagId={archive.group_name || null}
+            subTags={[]}
+            groupTags={[]}
+            maxDepth={1}
+            ended={archive.status === "ended"}
+            isPublic={false}
+            canWrite={canEditArchive && !busy}
             busy={busy}
-            onStartCycle={canEditArchive && cycleEnabled
-              ? (startedAt) => change(() => createLocalArchiveCycle(archive.id, startedAt, ownerContext))
-              : undefined}
-            onEndCycle={canEditArchive && cycleEnabled
-              ? (cycle, endedAt) => change(() => endLocalArchiveCycle(archive.id, cycle.id, endedAt, ownerContext))
-              : undefined}
-            onUpdateCycleDates={canEditArchive && cycleEnabled
-              ? (cycle, dates) => change(() => updateLocalArchiveCycleDates(
-                archive.id,
-                cycle.id,
-                { started_at: dates.startedAt, ended_at: dates.endedAt },
-                ownerContext,
-              ))
-              : undefined}
-            onRenameCycle={canEditArchive && cycleEnabled
-              ? (cycle, displayName) => change(() => updateLocalArchiveCycleName(archive.id, cycle.id, displayName, ownerContext))
-              : undefined}
-            onDeleteCycle={canEditArchive && cycleEnabled
-              ? async (cycle) => {
-                  await deleteLocalArchiveCycle(archive.id, cycle.id, ownerContext);
-                  await onChanged();
-                  return true;
-                }
-              : undefined}
-            emptyState={
-              <div style={archiveProjectDetailEmptyStateStyle}>
-                {recordCopy.no_local_records}
-              </div>
-            }
-            renderRecord={(record, index) => {
-              const source = detail.records.find((item) => item.id === record.id);
-              const editable = source ? canEditLocalArchiveRecord(archive, source) : false;
-              return (
-                <ArchiveRecordCard
-                  key={record.id}
-                  variant="local"
-                  archive={localArchiveRecordShell}
-                  item={record}
-                  index={index}
-                  mode={editable ? "owner" : "viewer"}
-                  startTime={startTime}
-                  isHighlighted={false}
-                  sameTagLinks={[]}
-                  isMobileViewport
-                  onOpenLightbox={openLightbox}
-                  onDeleteMedia={async () => undefined}
-                  onVisibilityChange={async () => undefined}
-                  onSetHelpStatus={async () => undefined}
-                  onRemoveTag={() => undefined}
-                  onAddTag={async () => undefined}
-                  onRecordUpdated={editable ? async (recordId, patch) => {
-                    await updateLocalRecordFields(recordId, {
-                      location: patch.location,
-                      note: typeof patch.note === "string" ? patch.note : undefined,
-                      record_time: typeof patch.record_time === "string" ? patch.record_time : undefined,
-                    });
-                    await onChanged();
-                  } : undefined}
-                  onNoteSaved={async () => undefined}
-                  onRecordDeleted={editable ? (recordId) => {
-                    const target = detail.records.find((item) => item.id === recordId);
-                    if (target) setRecordToDelete(target);
-                  } : undefined}
-                  cycleOptions={cycleOptions}
-                  onCycleChange={editable ? async (recordId, cycleId) => {
-                    await updateLocalRecordFields(recordId, { cycle_id: cycleId });
-                    await onChanged();
-                  } : undefined}
-                />
-              );
+            showVisibility={false}
+            onChangeSubcategory={() => undefined}
+            onChangeGroup={() => undefined}
+            onToggleEnded={() => {
+              void change(() => updateLocalArchiveFields(archive.id, {
+                status: archive.status === "ended" ? "active" : "ended",
+                ended_at: archive.status === "ended" ? null : new Date().toISOString(),
+              }, ownerContext));
             }}
           />
-        ) : null}
-
-        {lightboxImages.length > 0 ? (
-          <ArchiveLightbox
-            images={lightboxImages}
-            index={lightboxIndex}
-            onChange={setLightboxIndex}
+          {canEditArchive ? (
+            <ArchiveCycleSettings
+              key={archive.id}
+              enabled={cycleEnabled}
+              busy={busy}
+              onSave={async ({ enabled }) => {
+                await change(() => updateLocalArchiveFields(archive.id, { cycle_enabled: enabled }, ownerContext));
+              }}
+            />
+          ) : null}
+        </>
+      }
+      timelineBusy={busy}
+      onStartCycle={canEditArchive && cycleEnabled
+        ? (startedAt) => change(() => createLocalArchiveCycle(archive.id, startedAt, ownerContext))
+        : undefined}
+      onEndCycle={canEditArchive && cycleEnabled
+        ? (cycle, endedAt) => change(() => endLocalArchiveCycle(archive.id, cycle.id, endedAt, ownerContext))
+        : undefined}
+      onUpdateCycleDates={canEditArchive && cycleEnabled
+        ? (cycle, dates) => change(() => updateLocalArchiveCycleDates(
+          archive.id,
+          cycle.id,
+          { started_at: dates.startedAt, ended_at: dates.endedAt },
+          ownerContext,
+        ))
+        : undefined}
+      onRenameCycle={canEditArchive && cycleEnabled
+        ? (cycle, displayName) => change(() => updateLocalArchiveCycleName(archive.id, cycle.id, displayName, ownerContext))
+        : undefined}
+      onDeleteCycle={canEditArchive && cycleEnabled
+        ? async (cycle) => {
+            await deleteLocalArchiveCycle(archive.id, cycle.id, ownerContext);
+            await onChanged();
+            return true;
+          }
+        : undefined}
+      emptyRecordsText={recordCopy.no_local_records}
+      renderRecord={(record, index) => {
+        const source = detail.records.find((item) => item.id === record.id);
+        const editable = source ? canEditLocalArchiveRecord(archive, source) : false;
+        return (
+          <ArchiveRecordCard
+            key={record.id}
+            variant="local"
+            archive={localArchiveRecordShell}
+            item={record}
+            index={index}
+            mode={editable ? "owner" : "viewer"}
+            startTime={startTime}
+            isHighlighted={false}
+            sameTagLinks={[]}
             isMobileViewport
-            metaText={lightboxMetaText}
-            note={lightboxRecord?.note || ""}
-            onClose={() => {
-              setLightboxImages([]);
-              setLightboxIndex(0);
-              setLightboxRecord(null);
+            onOpenLightbox={openLightbox}
+            onDeleteMedia={async () => undefined}
+            onVisibilityChange={async () => undefined}
+            onSetHelpStatus={async () => undefined}
+            onRemoveTag={() => undefined}
+            onAddTag={async () => undefined}
+            onRecordUpdated={editable ? async (recordId, patch) => {
+              await updateLocalRecordFields(recordId, {
+                location: patch.location,
+                note: typeof patch.note === "string" ? patch.note : undefined,
+                record_time: typeof patch.record_time === "string" ? patch.record_time : undefined,
+              });
+              await onChanged();
+            } : undefined}
+            onNoteSaved={async () => undefined}
+            onRecordDeleted={editable ? (recordId) => {
+              const target = detail.records.find((item) => item.id === recordId);
+              if (target) setRecordToDelete(target);
+            } : undefined}
+            cycleOptions={cycleOptions}
+            onCycleChange={editable ? async (recordId, cycleId) => {
+              await updateLocalRecordFields(recordId, { cycle_id: cycleId });
+              await onChanged();
+            } : undefined}
+          />
+        );
+      }}
+      lightbox={lightboxImages.length > 0 ? {
+        images: lightboxImages,
+        index: lightboxIndex,
+        onChange: setLightboxIndex,
+        metaText: lightboxMetaText,
+        note: lightboxRecord?.note || "",
+        onClose: () => {
+          setLightboxImages([]);
+          setLightboxIndex(0);
+          setLightboxRecord(null);
+        },
+      } : null}
+      recordComposer={recordComposer}
+      extra={extra}
+      floatingAddLabel={recordCopy.add_record_short}
+      onFloatingAdd={onAddRecord}
+      dialogs={
+        <>
+          <ConfirmDialog
+            open={Boolean(recordToDelete)}
+            title={recordCopy.delete_local_record_title}
+            message={recordCopy.delete_local_record_message}
+            confirmText={recordCopy.confirm_delete}
+            danger
+            onClose={() => setRecordToDelete(null)}
+            onConfirm={() => {
+              if (recordToDelete) onDeleteRecord(recordToDelete.id);
+              setRecordToDelete(null);
             }}
           />
-        ) : null}
-
-        {canAddRecord && activeDetailTab === "records" ? (
-          <button type="button" onClick={onAddRecord} style={archiveProjectDetailFloatingAddStyle}>
-            {recordCopy.add_record_short}
-          </button>
-        ) : null}
-
-        <ConfirmDialog
-          open={Boolean(recordToDelete)}
-          title={recordCopy.delete_local_record_title}
-          message={recordCopy.delete_local_record_message}
-          confirmText={recordCopy.confirm_delete}
-          danger
-          onClose={() => setRecordToDelete(null)}
-          onConfirm={() => {
-            if (recordToDelete) onDeleteRecord(recordToDelete.id);
-            setRecordToDelete(null);
-          }}
-        />
-        <ConfirmDialog
-          open={deleteArchiveOpen}
-          title={archiveCopy.delete_local_project}
-          message={archiveCopy.delete_local_project_message}
-          confirmText={archiveCopy.confirm_delete_project}
-          danger
-          onClose={() => setDeleteArchiveOpen(false)}
-          onConfirm={() => {
-            setDeleteArchiveOpen(false);
-            onDeleteArchive();
-          }}
-        />
-      </main>
-    </>
+          <ConfirmDialog
+            open={deleteArchiveOpen}
+            title={archiveCopy.delete_local_project}
+            message={archiveCopy.delete_local_project_message}
+            confirmText={archiveCopy.confirm_delete_project}
+            danger
+            onClose={() => setDeleteArchiveOpen(false)}
+            onConfirm={() => {
+              setDeleteArchiveOpen(false);
+              onDeleteArchive();
+            }}
+          />
+        </>
+      }
+    />
   );
 }

@@ -87,8 +87,9 @@ test("profile page remains available offline in the Android shell", () => {
   assert.match(shell, /<OfflineAndroidProfilePage/);
   assert.doesNotMatch(shell, /<ProfilePage/);
   assert.match(shell, /profileHref="\/profile"/);
-  assert.match(offlineProfile, /<MobileProfileModuleTabs/);
-  assert.match(offlineProfile, /IdentityStat/);
+  assert.match(offlineProfile, /<MobileProfileView/);
+  assert.match(read("components/profile/MobileProfileView.tsx"), /<MobileProfileModuleTabs/);
+  assert.match(read("components/profile/MobileProfileView.tsx"), /IdentityStat/);
   assert.match(offlineProfile, /开通云会员|Cloud Membership/);
   assert.match(offlineProfile, /订单进度查询|Order progress/);
   assert.match(offlineProfile, /备份与导出|Backup & export/);

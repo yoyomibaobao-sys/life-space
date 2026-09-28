@@ -17,7 +17,7 @@ import {
   createLocalRecord,
   deleteLocalArchive,
   deleteLocalRecord,
-  getLocalArchiveDetail,
+  resolveLocalArchiveDetail,
   inferSingleLocalArchiveOwnerContext,
   listVisibleLocalArchiveSummaries,
   listVisibleCloudOfflineArchiveSummaries,
@@ -56,6 +56,13 @@ import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import DeviceOwnedProjectDetail from "@/components/archive-ui/DeviceOwnedProjectDetail";
+import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
+import ArchiveProjectDetailStatus, {
+  ArchiveProjectDetailLoading,
+} from "@/components/archive-ui/ArchiveProjectDetailStatus";
+import MobileShellErrorBoundary from "@/components/mobile/MobileShellErrorBoundary";
+import { InternalNavigationProvider } from "@/components/navigation/InternalLink";
+import ProjectCategorySettingsView from "@/components/profile/ProjectCategorySettingsView";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
 import ArchiveTaxonomyPanel from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
@@ -115,6 +122,14 @@ import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 import FollowPage from "@/app/follow/page";
 import MarketPage from "@/app/market/page";
 import OfflineAndroidProfilePage from "@/components/profile/OfflineAndroidProfilePage";
+import {
+  DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
+  getLocalArchiveCategoryDepths,
+  saveLocalArchiveCategoryDepths,
+  type ArchiveCategoryDepth,
+  type ArchiveCategoryDepths,
+  type ArchiveCategorySpace,
+} from "@/lib/archive-category-settings";
 import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
 import { buildOfflineProfileSnapshot } from "@/lib/android-offline-profile";
 import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
@@ -211,6 +226,7 @@ type Screen =
   | { kind: "guides" }
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "profile" }
+  | { kind: "project-categories" }
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
@@ -426,6 +442,47 @@ function BlobImage({ image, className, alt }: {
   return url ? <img src={url} alt={alt} className={className} /> : null;
 }
 
+function OfflineProjectCategorySettings({
+  ownerUserId,
+  onBack,
+}: {
+  ownerUserId: string;
+  onBack: () => void;
+}) {
+  const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>("local");
+  const [localDepths, setLocalDepths] = useState<ArchiveCategoryDepths>(() =>
+    getLocalArchiveCategoryDepths(ownerUserId),
+  );
+  const [saving, setSaving] = useState(false);
+
+  function updateDepth(category: ArchiveCategory, depth: ArchiveCategoryDepth) {
+    setLocalDepths((current) => ({ ...current, [category]: depth }));
+  }
+
+  function save() {
+    if (activeSpace === "cloud") return;
+    setSaving(true);
+    try {
+      saveLocalArchiveCategoryDepths(localDepths, ownerUserId);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ProjectCategorySettingsView
+      activeSpace={activeSpace}
+      onSpaceChange={setActiveSpace}
+      depths={activeSpace === "local" ? localDepths : { ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS }}
+      saving={saving}
+      cloudRequiresNetwork
+      onToggleDepth={updateDepth}
+      onSave={save}
+      onBack={onBack}
+    />
+  );
+}
+
 function App() {
   const [language, setLanguage] = useState<Language>(getLanguage);
   const copy = text[language];
@@ -461,6 +518,7 @@ function App() {
   const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
+  const [detailStatus, setDetailStatus] = useState<"idle" | "loading" | "ready" | "not-found" | "forbidden" | "error">("idle");
   const [loading, setLoading] = useState(true);
   const [migrationWarning, setMigrationWarning] = useState(false);
   const [toast, setToast] = useState("");
@@ -613,12 +671,13 @@ function App() {
     archiveId: string,
     context?: LocalArchiveOwnerContext | null,
   ) => {
-    const next = await getLocalArchiveDetail(
+    const result = await resolveLocalArchiveDetail(
       archiveId,
       context === undefined ? ownerContext : context,
     );
-    setDetail(next);
-    return next;
+    setDetailStatus(result.status);
+    setDetail(result.detail);
+    return result.detail;
   }, [ownerContext]);
 
   const loadActivity = useCallback(async () => {
@@ -816,11 +875,22 @@ function App() {
   useEffect(() => {
     if (screen.kind !== "detail" && screen.kind !== "edit-project" &&
         screen.kind !== "new-record" && screen.kind !== "edit-record") return;
+    if (loading) return;
     let canceled = false;
+    setDetailStatus("loading");
     setDetail(null);
-    void getLocalArchiveDetail(screen.archiveId, ownerContext).then((next) => { if (!canceled) setDetail(next); }).catch(() => showToast(copy.readFailed));
+    void resolveLocalArchiveDetail(screen.archiveId, ownerContext).then((result) => {
+      if (canceled) return;
+      setDetailStatus(result.status);
+      setDetail(result.detail);
+    }).catch(() => {
+      if (canceled) return;
+      setDetailStatus("error");
+      setDetail(null);
+      showToast(copy.readFailed);
+    });
     return () => { canceled = true; };
-  }, [screen, ownerContext, showToast, copy.readFailed]);
+  }, [screen, ownerContext, showToast, copy.readFailed, loading]);
 
   function goList() {
     setScreen({ kind: "list" });
@@ -858,10 +928,6 @@ function App() {
     const routed = parseAndroidShellPath(pathname, search);
     if (!routed) return false;
     if (routed.kind === "network-required") {
-      if (navigator.onLine) {
-        window.location.href = `${pathname}${search}`;
-        return true;
-      }
       showToast(copy.needNetwork);
       return true;
     }
@@ -871,6 +937,10 @@ function App() {
     }
     if (routed.kind === "profile") {
       setScreen({ kind: "profile" });
+      return true;
+    }
+    if (routed.kind === "project-categories") {
+      setScreen({ kind: "project-categories" });
       return true;
     }
     if (routed.kind === "activity") {
@@ -935,10 +1005,6 @@ function App() {
         const mapped = cache || localCopy;
         if (mapped) {
           openDetail(mapped.id);
-          return;
-        }
-        if (navigator.onLine) {
-          window.location.href = `/archive/${routed.id}`;
           return;
         }
         showToast(copy.needNetwork);
@@ -1232,7 +1298,7 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides", "following", "market", "profile", "guide-detail", "public-detail"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides", "following", "market", "profile", "project-categories", "guide-detail", "public-detail"].includes(screen.kind);
   const detailOwnsTopNav = ["detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
@@ -1261,6 +1327,16 @@ function App() {
   }
 
   return (
+    <InternalNavigationProvider
+      onNavigate={(href) => {
+        try {
+          const url = new URL(href, window.location.origin);
+          return applyShellPath(url.pathname, url.search);
+        } catch {
+          return false;
+        }
+      }}
+    >
     <main className="offline-shell">
       {!homeSectionOwnsTopNav && !detailOwnsTopNav ? (
         <MobilePageHeaderView
@@ -1502,33 +1578,71 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "detail" && detail ? (
-        <>
-          <DeviceOwnedProjectDetail
-            detail={detail}
-            ownerContext={ownerContext}
-            onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
-            onBack={goList}
-            onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
-            onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
-            onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
-          />
-          {online && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
-            <section className="notice warning">
-              <strong>{copy.pendingUpload}</strong>
-              <div className="action-row">
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={syncingArchiveId === detail.archive.id}
-                  onClick={() => void uploadPending(detail.archive.id)}
-                >
-                  {syncingArchiveId === detail.archive.id ? copy.uploading : copy.uploadNow}
-                </button>
-              </div>
-            </section>
-          ) : null}
-        </>
+      {screen.kind === "detail" ? (
+        <MobileShellErrorBoundary
+          routeKind="detail"
+          archiveId={"archiveId" in screen ? screen.archiveId : null}
+          title={language === "zh" ? "无法打开项目" : "Could not open project"}
+          message={language === "zh" ? "页面加载出错。" : "This page failed to render."}
+          backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
+          retryLabel={language === "zh" ? "重试" : "Retry"}
+          onBack={goList}
+          onRetry={() => {
+            if ("archiveId" in screen) openDetail(screen.archiveId);
+          }}
+        >
+          {detailStatus === "loading" || detailStatus === "idle" ? (
+            <ArchiveProjectDetailLoading>{copy.loading}</ArchiveProjectDetailLoading>
+          ) : detailStatus === "ready" && detail ? (
+            <>
+              <DeviceOwnedProjectDetail
+                view={ArchiveProjectDetailView}
+                detail={detail}
+                ownerContext={ownerContext}
+                onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
+                onBack={goList}
+                onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
+                onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
+                onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
+              />
+              {online && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
+                <section className="notice warning">
+                  <strong>{copy.pendingUpload}</strong>
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={syncingArchiveId === detail.archive.id}
+                      onClick={() => void uploadPending(detail.archive.id)}
+                    >
+                      {syncingArchiveId === detail.archive.id ? copy.uploading : copy.uploadNow}
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+            </>
+          ) : (
+            <ArchiveProjectDetailStatus
+              status={detailStatus === "forbidden" || detailStatus === "not-found" || detailStatus === "error" ? detailStatus : "error"}
+              title={detailStatus === "forbidden"
+                ? (language === "zh" ? "无法访问该项目" : "This project is not available")
+                : detailStatus === "not-found"
+                  ? (language === "zh" ? "找不到项目" : "Project not found")
+                  : (language === "zh" ? "加载失败" : "Could not load project")}
+              message={detailStatus === "forbidden"
+                ? (language === "zh" ? "当前账号不能打开这个项目。" : "The current account cannot open this project.")
+                : detailStatus === "not-found"
+                  ? (language === "zh" ? "这个项目不存在或无法找到。" : "This project does not exist or could not be found.")
+                  : (language === "zh" ? "项目加载失败，请重试。" : "The project failed to load. Please retry.")}
+              backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
+              retryLabel={language === "zh" ? "重试" : "Retry"}
+              onBack={goList}
+              onRetry={detailStatus === "error" ? () => {
+                if ("archiveId" in screen) openDetail(screen.archiveId);
+              } : undefined}
+            />
+          )}
+        </MobileShellErrorBoundary>
       ) : null}
 
       {screen.kind === "edit-project" && detail ? (
@@ -1725,15 +1839,40 @@ function App() {
       ) : null}
       {screen.kind === "profile" ? (
         <div data-android-shell-page="profile">
-          <OfflineAndroidProfilePage
-            snapshot={buildOfflineProfileSnapshot({
-              owner,
-              profile: spaceProfile,
-              membership,
-            })}
-            onBack={() => setScreen({ kind: "list" })}
-            onLogout={() => void logoutFromProfile()}
-          />
+          <MobileShellErrorBoundary
+            routeKind="profile"
+            title={language === "zh" ? "无法打开资料" : "Could not open profile"}
+            message={language === "zh" ? "页面加载出错。" : "This page failed to render."}
+            backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
+            onBack={goList}
+          >
+            <OfflineAndroidProfilePage
+              snapshot={buildOfflineProfileSnapshot({
+                owner,
+                profile: spaceProfile,
+                membership,
+              })}
+              onBack={() => setScreen({ kind: "list" })}
+              onLogout={() => void logoutFromProfile()}
+            />
+          </MobileShellErrorBoundary>
+        </div>
+      ) : null}
+
+      {screen.kind === "project-categories" ? (
+        <div data-android-shell-page="project-categories">
+          <MobileShellErrorBoundary
+            routeKind="project-categories"
+            title={language === "zh" ? "无法打开分组设置" : "Could not open group settings"}
+            message={language === "zh" ? "页面加载出错。" : "This page failed to render."}
+            backLabel={language === "zh" ? "返回资料" : "Back to profile"}
+            onBack={() => setScreen({ kind: "profile" })}
+          >
+            <OfflineProjectCategorySettings
+              ownerUserId={ownerContext?.userId || owner?.userId || ""}
+              onBack={() => setScreen({ kind: "profile" })}
+            />
+          </MobileShellErrorBoundary>
         </div>
       ) : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
@@ -1759,6 +1898,7 @@ function App() {
       />
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </main>
+    </InternalNavigationProvider>
   );
 }
 

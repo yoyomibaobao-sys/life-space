@@ -715,12 +715,13 @@ test("legacy user profile routes merge into the canonical user space", async () 
 
   assert.doesNotMatch(userSpaceHeader, /\/profile/);
 
-  assert.match(archiveDetail, /href=\{isOwner \? "\/archive" : `\/user\/\$\{activeArchive\.user_id\}`\}/);
+  assert.match(archiveDetail, /headerFallbackHref=\{isOwner \? "\/archive" : "\/user\/" \+ activeArchive\.user_id\}/);
   assert.match(archiveDetail, /displayUsername/);
   assert.match(archiveDetail, /<UiIcon name="arrow-right" size=\{15\} \/>/);
   assert.match(archiveDetail, /style=\{attributeCreatorLinkStyle\}/);
-  assert.match(archiveDetail, /style=\{projectPageFollowStyle\(isProjectFollowed\)\}/);
-  assert.match(archiveDetail, /background: followed \? "#f6f7f5" : "#edf7ea"/);
+  const detailView = await source("components/archive-ui/ArchiveProjectDetailView.tsx");
+  assert.match(detailView, /style=\{projectPageFollowStyle\(isProjectFollowed\)\}/);
+  assert.match(detailView, /background: followed \? "#f6f7f5" : "#edf7ea"/);
 });
 
 test("page headings omit copy that only restates the visible interface", async () => {

@@ -1,36 +1,11 @@
 "use client";
 
-import AndroidAppVersionEntry from "@/components/AndroidAppVersionEntry";
-import type { OfflineProfileSnapshot } from "@/lib/android-offline-profile";
+import MobileProfileView from "@/components/profile/MobileProfileView";
 import { formatStorage } from "@/lib/user-profile-shared";
 import { getUserTypeLabel } from "@/lib/membership";
-import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
-import {
-  IdentityStat,
-  MobileProfileModuleTabs,
-  ProfileLanguageSwitch,
-  accountLogoutButtonStyle,
-  identityStatsStyle,
-  languageInlineStyle,
-  mobileGroupedRowStyle,
-  mobileProfileGroupStyle,
-  mobileProfileMainStyle,
-  mobileProfileShellStyle,
-  offlineProfileModuleHintStyle,
-  profileIdentityAvatarFallbackStyle,
-  profileIdentityAvatarStyle,
-  profileIdentityCardStyle,
-  profileIdentityEmailStyle,
-  profileIdentityTopStyle,
-  projectCategorySettingsLinkStyle,
-  projectCategorySettingsTitleStyle,
-  savedUsernameStyle,
-  type MobileProfileModule,
-  type MobileProfileNavItem,
-} from "@/components/profile/MobileProfilePresentation";
-import UiIcon from "@/components/ui/UiIcon";
+import type { OfflineProfileSnapshot } from "@/lib/android-offline-profile";
+import { offlineProfileModuleHintStyle, type MobileProfileModule, type MobileProfileNavItem } from "@/components/profile/MobileProfilePresentation";
 import { useLanguage } from "@/lib/i18n/useLanguage";
-import Link from "next/link";
 import { useState } from "react";
 
 export default function OfflineAndroidProfilePage({
@@ -73,111 +48,44 @@ export default function OfflineAndroidProfilePage({
     { href: "/admin/memberships", label: language === "en" ? "User management" : "用户管理" },
   ];
 
+  const networkHint = language === "zh" ? "需要联网。" : "A network connection is required.";
+
   return (
     <div data-android-offline-profile="true">
-      <MobilePageHeaderView
-        title={t.profile.settings_title}
-        titleText={t.profile.settings_title}
-        showBack
-        ariaLabel={t.nav.back}
+      <MobileProfileView
+        email={snapshot.email}
+        avatarUrl={snapshot.avatarUrl}
+        username={displayName}
+        accountNumber="—"
+        helpfulCount={language === "en" ? "0" : "0次"}
+        userType={userType}
+        storageText={storageText}
+        modules={modules}
+        activeModule={mobileProfileModule}
+        onModuleChange={(value) => {
+          setMobileProfileModule((current) => (current === value ? null : value));
+        }}
         onBack={onBack}
-      />
-      <main style={mobileProfileMainStyle}>
-        <section style={mobileProfileShellStyle}>
-          <section style={profileIdentityCardStyle}>
-            <div style={profileIdentityTopStyle}>
-              {snapshot.avatarUrl ? (
-                <img src={snapshot.avatarUrl} alt="" style={profileIdentityAvatarStyle} />
-              ) : (
-                <span style={profileIdentityAvatarFallbackStyle}><UiIcon name="sprout" size={24} /></span>
-              )}
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={savedUsernameStyle}>{displayName}</div>
-              </div>
-            </div>
-            {snapshot.email ? (
-              <div style={profileIdentityEmailStyle} title={snapshot.email}>{snapshot.email}</div>
-            ) : null}
-            <div
-              style={{
-                ...identityStatsStyle,
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              }}
-            >
-              <IdentityStat label={language === "en" ? "Member no." : "会员编号"} value="—" />
-              <IdentityStat
-                label={language === "en" ? "Suggestions adopted" : "被采纳的次数"}
-                value={language === "en" ? "0" : "0次"}
-                href="/profile/helpful"
-              />
-              <IdentityStat label={language === "en" ? "User type" : "用户类型"} value={userType} />
-              <IdentityStat label={language === "en" ? "Storage" : "空间用量"} value={storageText} />
-            </div>
-          </section>
-
-          <section
-            aria-label={language === "en" ? "Preferences" : "常用设置"}
-            style={mobileProfileGroupStyle}
-          >
-            <AndroidAppVersionEntry />
-            <section
-              id="language-settings"
-              style={{ ...languageInlineStyle, ...mobileGroupedRowStyle }}
-            >
-              <span style={{ color: "#334c32", fontSize: 15, fontWeight: 800 }}>
-                {t.profile.language_setting}
-              </span>
-              <ProfileLanguageSwitch />
-            </section>
-            <Link
-              href="/profile/project-categories"
-              style={{ ...projectCategorySettingsLinkStyle, ...mobileGroupedRowStyle }}
-            >
-              <span style={{ minWidth: 0 }}>
-                <strong style={projectCategorySettingsTitleStyle}>
-                  {t.archive_workspace.group_settings_title}
-                </strong>
-              </span>
-              <UiIcon name="arrow-right" size={17} />
-            </Link>
-          </section>
-
-          <MobileProfileModuleTabs
-            active={mobileProfileModule}
-            modules={modules}
-            onChange={(value) => {
-              setMobileProfileModule((current) => (current === value ? null : value));
-            }}
-            compact
-          >
-            {mobileProfileModule === "payment" ? (
-              <p style={offlineProfileModuleHintStyle}>
-                {language === "zh" ? "需要联网。" : "A network connection is required."}
-              </p>
-            ) : null}
-            {mobileProfileModule === "backup" ? (
-              <p style={offlineProfileModuleHintStyle}>
-                {language === "zh"
-                  ? "本机项目、记录和照片仍可在离线使用。云端导出需要联网。"
-                  : "Local projects, records, and photos stay available offline. Cloud export needs a network."}
-              </p>
-            ) : null}
-            {mobileProfileModule === "account" ? (
-              <p style={offlineProfileModuleHintStyle}>
-                {language === "zh"
-                  ? "注销账号需要联网。退出登录不会删除未同步的本机创作。"
-                  : "Account deletion needs a network. Signing out does not remove unsynced local work."}
-              </p>
-            ) : null}
-          </MobileProfileModuleTabs>
-
-          {snapshot.userId ? (
-            <button type="button" onClick={onLogout} style={accountLogoutButtonStyle}>
-              {t.nav.logout_full}
-            </button>
-          ) : null}
-        </section>
-      </main>
+        onLogout={snapshot.userId ? onLogout : undefined}
+      >
+        {mobileProfileModule === "payment" || mobileProfileModule === "membership" ? (
+          <p style={offlineProfileModuleHintStyle}>{networkHint}</p>
+        ) : null}
+        {mobileProfileModule === "backup" ? (
+          <p style={offlineProfileModuleHintStyle}>
+            {language === "zh"
+              ? "本机项目、记录和照片仍可在离线使用。云端导出需要联网。"
+              : "Local projects, records, and photos stay available offline. Cloud export needs a network."}
+          </p>
+        ) : null}
+        {mobileProfileModule === "account" ? (
+          <p style={offlineProfileModuleHintStyle}>
+            {language === "zh"
+              ? "注销账号需要联网。退出登录不会删除未同步的本机创作。"
+              : "Account deletion needs a network. Signing out does not remove unsynced local work."}
+          </p>
+        ) : null}
+      </MobileProfileView>
     </div>
   );
 }

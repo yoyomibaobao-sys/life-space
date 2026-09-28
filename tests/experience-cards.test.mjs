@@ -428,11 +428,12 @@ test("experience cards stay reachable from projects after profile space shortcut
   assert.doesNotMatch(navbar, />\s*我的关注\s*</);
   assert.doesNotMatch(navbar, />\s*本人空间\s*</);
 
-  assert.match(archivePage, /activeDetailTab === "experience"/);
-  assert.match(archivePage, /profileExtra=\{isOwner \? \([\s\S]*?<ArchiveCycleSettings/);
+  assert.match(archivePage, /experienceContent=/);
+  assert.match(archivePage, /profileExtra=/);
+  assert.match(archivePage, /<ArchiveCycleSettings/);
   assert.match(
     archivePage,
-    /activeDetailTab === "experience" \? \([\s\S]*?<ArchiveExperienceCards/
+    /<ArchiveExperienceCards/,
   );
   assert.match(archiveCards, /\.eq\("archive_id", archiveId\)/);
   assert.match(archiveCards, /href=\{`\/experience-cards\/\$\{item\.id\}`\}/);
@@ -448,7 +449,7 @@ test("experience cards stay reachable from projects after profile space shortcut
   assert.match(archiveCards, /onCountChange\?\.\(rows\.length\)/);
   assert.match(archiveCards, /hydrateExperienceCardListItems\(rows\)/);
   assert.match(archiveCards, /ExperienceCardListCard/);
-  assert.match(archivePage, /\{archiveCopy\.experience_cards\}/);
+  assert.match(archivePage, /archiveCopy\.experience_cards/);
   assert.match(archivePage, /experienceCardCount/);
   assert.doesNotMatch(archivePage, /!isMobileViewport && !isOwner/);
 });
@@ -784,7 +785,7 @@ test("guidance counts and public navigation use compact non-duplicated entries",
 
   assert.match(
     archiveDetail,
-    /href=\{`\/user\/\$\{activeArchive\.user_id\}`\}/
+    /href=\{\s*"\/user\/" \+ activeArchive\.user_id\}/,
   );
   assert.match(
     archiveDetail,
@@ -803,23 +804,25 @@ test("guidance counts and public navigation use compact non-duplicated entries",
 });
 
 test("project details hide the unfinished growth line and keep the three complete peer tabs", async () => {
-  const [archiveDetail, archiveHeader, headerView, detailTabs] = await Promise.all([
+  const [archiveDetail, archiveHeader, headerView, detailTabs, detailView] = await Promise.all([
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveDetailHeader.tsx"),
     source("components/archive-ui/ArchiveDetailHeaderView.tsx"),
     source("components/archive-ui/archiveProjectDetailLayout.ts"),
+    source("components/archive-ui/ArchiveProjectDetailView.tsx"),
   ]);
 
   assert.match(
     archiveDetail,
     /type ArchiveDetailTab = "profile" \| "records" \| "experience"/
   );
-  assert.match(archiveDetail, /records: archiveCopy\.details/);
-  assert.match(archiveDetail, /profile: archiveCopy\.dossier/);
+  assert.match(detailView, /records: copy\.details/);
+  assert.match(detailView, /profile: copy\.dossier/);
   assert.match(archiveDetail, /archiveCopy\.experience_cards/);
   assert.doesNotMatch(archiveDetail, /\{archiveCopy\.growth_line\}/);
+  assert.doesNotMatch(detailView, /\{archiveCopy\.growth_line\}/);
   assert.match(archiveDetail, /experienceCardCount/);
-  assert.match(archiveDetail, /activeDetailTab === "experience"/);
+  assert.match(detailView, /activeTab === "experience"/);
   assert.doesNotMatch(archiveDetail, /activeDetailTab === "growth"/);
   assert.match(detailTabs, /repeat\(3, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(archiveDetail, /className="mobile-app-grid-only"/);
@@ -836,9 +839,9 @@ test("personal space project page has a direct Experience Cards entry", async ()
   ]);
 
   assert.match(personalSpace, /href="\/experience-cards"/);
-  assert.match(personalSpace, /href="\/profile"/);
+  assert.match(personalSpace, /profileHref="\/profile"/);
   assert.match(personalSpace, /spaceProfile\?\.avatar_url/);
-  assert.match(personalSpace, /t\.archive_workspace\.personal_info/);
+  assert.match(personalSpace, /PersonalSpaceMobileIdentity/);
   assert.match(
     personalSpace,
     /\{t\.archive_workspace\.experience_cards\} \{experienceCardCount\}/

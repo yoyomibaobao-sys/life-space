@@ -17,6 +17,7 @@ test("crop cycles stay opt-in and support concurrent rename, trash, and restore"
     settings,
     cloudDetail,
     localDetail,
+    localOwned,
     timeline,
     localDb,
     localSync,
@@ -26,6 +27,7 @@ test("crop cycles stay opt-in and support concurrent rename, trash, and restore"
     source("components/archive-detail/ArchiveCycleSettings.tsx"),
     source("app/archive/[id]/page.tsx"),
     source("app/local/archive/[id]/page.tsx"),
+    source("components/archive-ui/DeviceOwnedProjectDetail.tsx"),
     source("components/archive-detail/ArchiveCycleTimeline.tsx"),
     source("lib/local-offline-db.ts"),
     source("lib/local-to-cloud-sync.ts"),
@@ -42,7 +44,7 @@ test("crop cycles stay opt-in and support concurrent rename, trash, and restore"
   assert.match(cloudDetail, /rpc\("create_archive_cycle"/);
   assert.match(cloudDetail, /rpc\("move_archive_cycle_to_trash"/);
   assert.match(cloudDetail, /update\(\{ display_name: displayName\.trim\(\)\.slice\(0, 80\) \|\| null \}\)/);
-  assert.match(localDetail, /onRenameCycle=\{cycleEnabled \? renameLocalCycle : undefined\}/);
+  assert.match(localOwned, /onRenameCycle=\{canEditArchive && cycleEnabled/);
   assert.match(localDetail, /restoreLocalArchiveCycle/);
   assert.match(timeline, /copy\.rename_cycle/);
   assert.match(timeline, /<details style=\{cycleMoreStyle\}>/);
@@ -196,6 +198,7 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
     projectDetail,
     plantDetail,
     experienceDetail,
+    projectDetailView,
   ] = await Promise.all([
     source("components/mobile/MobilePageHeader.tsx"),
     source("components/mobile/MobilePageHeaderView.tsx"),
@@ -205,6 +208,7 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
     source("app/archive/[id]/page.tsx"),
     source("app/plant/[id]/page.tsx"),
     source("app/experience-cards/[id]/page.tsx"),
+    source("components/archive-ui/ArchiveProjectDetailView.tsx"),
   ]);
 
   assert.match(headerView, /const sideWidth = right \? 80 : 44/);
@@ -213,7 +217,7 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
   assert.match(sharedHeader, /getMobileSourceRoute/);
   assert.match(sharedHeader, /prepareMobileSourceReturn/);
   assert.match(sharedHeader, /router\.push\(destination/);
-  for (const page of [userSpace, projectDetail, plantDetail, experienceDetail]) {
+  for (const page of [userSpace, projectDetailView, plantDetail, experienceDetail]) {
     assert.match(page, /<MobilePageHeader/);
   }
   assert.doesNotMatch(mySpace, /<MobilePageHeader/);
@@ -222,11 +226,11 @@ test("mobile secondary and deeper pages share a source-aware left back arrow", a
   assert.doesNotMatch(navbar, /pathname\.startsWith\("\/market\/"\) \|\|/);
   assert.match(navbar, /"\/profile\/project-categories"/);
   assert.match(navbar, /"\/admin\/guides"/);
-  assert.match(projectDetail, /titleText=\{activeArchive\.title\}/);
-  assert.doesNotMatch(projectDetail, /mobileProjectHeaderSystem/);
-  assert.match(projectDetail, /archiveProjectDetailStatsStyle[\s\S]*?archiveProjectDetailGuideLinkStyle/);
-  assert.match(projectDetail, /order=\{\["view", "follow", "record", "duration"\]\}/);
-  assert.match(projectDetail, /right=\{[\s\S]*?toggleProjectFollow/);
+  assert.match(projectDetailView, /titleText=\{archive\.title\}/);
+  assert.doesNotMatch(projectDetailView, /mobileProjectHeaderSystem/);
+  assert.match(projectDetailView, /archiveProjectDetailStatsStyle[\s\S]*?archiveProjectDetailGuideLinkStyle/);
+  assert.match(projectDetailView, /order=\{\["view", "follow", "record", "duration"\]\}/);
+  assert.match(projectDetail, /onToggleFollow=\{\(\) => void toggleProjectFollow\(\)\}/);
 });
 
 test("mobile discovery filters, search fields, cards, and project menus follow the compact layout", async () => {
@@ -282,20 +286,19 @@ test("mobile discovery filters, search fields, cards, and project menus follow t
 
 test("mobile owner attributes expose direct project actions without a management menu", async () => {
   const projectDetail = await source("app/archive/[id]/page.tsx");
+  const projectDetailView = await source("components/archive-ui/ArchiveProjectDetailView.tsx");
 
-  assert.match(projectDetail, /<ArchiveDetailHeader/);
-  assert.match(projectDetail, /showPageChrome=\{false\}/);
-  assert.match(projectDetail, /isMobileViewport && isOwner/);
+  assert.match(projectDetailView, /<ArchiveDetailHeader/);
+  assert.match(projectDetailView, /showPageChrome=\{false\}/);
+  assert.match(projectDetail, /mobileOwnerSettings=\{isOwner/);
   assert.match(projectDetail, /<ArchiveOwnerSettingsFields/);
   assert.match(projectDetail, /onChangeSubcategory=/);
   assert.match(projectDetail, /onChangeGroup=/);
   assert.match(projectDetail, /onToggleEnded=/);
   assert.match(projectDetail, /onTogglePublic=/);
   assert.match(projectDetail, /<ArchiveCycleSettings[\s\S]*?mobileArchiveTrashButtonStyle/);
-  assert.doesNotMatch(
-    projectDetail.match(/\{isMobileViewport && isOwner \? \([\s\S]*?\n          \) : null\}/)?.[0] || "",
-    /MobileArchiveActions|project_management/
-  );
+  const mobileOwnerBlock = projectDetail.match(/mobileOwnerSettings=\{isOwner \? \([\s\S]*?\n      \)\}/)?.[0] || "";
+  assert.doesNotMatch(mobileOwnerBlock, /MobileArchiveActions|project_management/);
 });
 
 test("public views and payment policies have a reproducible hardening migration", async () => {

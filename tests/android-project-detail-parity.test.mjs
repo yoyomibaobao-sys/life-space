@@ -22,24 +22,16 @@ test("Android project details share one presentation across cloud, local, and of
   assert.match(layout, /archiveProjectDetailStatsStyle/);
   assert.match(layout, /archiveProjectDetailEmptyStateStyle/);
 
-  assert.match(cloudDetail, /<ArchiveProjectDetailTabs/);
-  assert.match(cloudDetail, /<ArchiveDetailHeader/);
-  assert.match(cloudDetail, /archiveProjectDetailMainStyle\(isMobileViewport\)/);
+  assert.match(cloudDetail, /<ArchiveProjectDetailView/);
+  assert.match(cloudDetail, /archiveProjectDetailNoticeLinkStyle|ArchiveProjectDetailView/);
   assert.doesNotMatch(cloudDetail, /archiveDetailTabWrapStyle/);
 
-  assert.match(localDetail, /<ArchiveProjectDetailTabs/);
-  assert.match(localDetail, /<ArchiveDetailHeaderView/);
-  assert.match(localDetail, /archiveProjectDetailMainStyle\(isMobileViewport\)/);
-  assert.match(localDetail, /variant="local"/);
+  assert.match(localDetail, /view=\{ArchiveProjectDetailView\}/);
 
   assert.match(offline, /<DeviceOwnedProjectDetail/);
-  assert.match(deviceDetail, /<ArchiveProjectDetailTabs/);
-  assert.match(deviceDetail, /<ArchiveDetailHeaderView/);
-  assert.match(deviceDetail, /<ArchiveCycleTimeline/);
+  assert.match(deviceDetail, /ArchiveProjectDetailView/);
   assert.match(deviceDetail, /<ArchiveRecordCard/);
   assert.match(deviceDetail, /variant="local"/);
-  assert.match(deviceDetail, /<MobilePageHeaderView/);
-  assert.match(deviceDetail, /archiveProjectDetailMainStyle\(true\)/);
   assert.doesNotMatch(offline, /className="top-tabs"/);
   assert.doesNotMatch(offline, /className="property-list"/);
   assert.doesNotMatch(offline, /<ArchiveRecordCardShell/);
@@ -52,7 +44,7 @@ test("Android project details share one presentation across cloud, local, and of
   assert.match(deviceDetail, /isCloudCache \? archiveCopy\.cloud_read_only_notice/);
   assert.match(deviceDetail, /isCloudCache \? workspaceCopy\.cloud_cache_copy/);
   assert.match(deviceDetail, /encyclopediaHref/);
-  assert.match(deviceDetail, /archiveProjectDetailGuideLinkStyle/);
+  assert.match(read("components/archive-ui/ArchiveProjectDetailView.tsx"), /archiveProjectDetailGuideLinkStyle/);
   assert.match(layout, /archiveProjectDetailGuideLinkStyle/);
   assert.match(deviceDetail, /archiveCopy\.pending_sync_workspace_notice/);
 });

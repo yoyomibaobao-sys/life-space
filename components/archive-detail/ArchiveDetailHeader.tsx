@@ -48,6 +48,9 @@ export default function ArchiveDetailHeader({
   profileExtra,
   showPageChrome = true,
   showProfileActions = true,
+  storageLabel,
+  storageTone,
+  visibilityLabel,
 }: {
   mode: ArchiveMode;
   canWriteCloud?: boolean;
@@ -79,6 +82,9 @@ export default function ArchiveDetailHeader({
   profileExtra?: ReactNode;
   showPageChrome?: boolean;
   showProfileActions?: boolean;
+  storageLabel?: string;
+  storageTone?: "cloud" | "device";
+  visibilityLabel?: string | null;
 }) {
   const { language, t } = useLanguage();
   const copy = t.archive;
@@ -114,10 +120,10 @@ export default function ArchiveDetailHeader({
     groupLabel: archiveGroupLabel,
     badges: archive.status === "ended" ? [copy.ended] : [],
     footerItems: [`${copy.created_on} ${createdAtText}`],
-    visibilityLabel: null,
+    visibilityLabel: visibilityLabel ?? null,
     visibilityTone: archive.is_public ? ("public" as const) : ("private" as const),
-    storageLabel: copy.cloud,
-    storageTone: "cloud" as const,
+    storageLabel: storageLabel || copy.cloud,
+    storageTone: storageTone || "cloud",
     recordCount,
     durationDays: ongoingDays,
     latestTime: latestUpdate,

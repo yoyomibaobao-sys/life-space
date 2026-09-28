@@ -23,15 +23,16 @@ test("offline profile does not use the network-only ProfilePage render path", ()
   assert.match(shell, /<OfflineAndroidProfilePage/);
   assert.match(shell, /buildOfflineProfileSnapshot/);
   assert.match(offlineProfile, /data-android-offline-profile="true"/);
-  assert.match(offlineProfile, /t\.profile\.settings_title/);
-  assert.match(offlineProfile, /<MobileProfileModuleTabs/);
+  assert.match(offlineProfile, /<MobileProfileView/);
+  assert.match(read("components/profile/MobileProfileView.tsx"), /t\.profile\.settings_title/);
+  assert.match(read("components/profile/MobileProfileView.tsx"), /<MobileProfileModuleTabs/);
   assert.match(offlineProfile, /浏览历史|Browsing history/);
   assert.match(offlineProfile, /备份与导出|Backup & export/);
   assert.match(offlineProfile, /开通云会员|Cloud Membership/);
   assert.match(offlineProfile, /订单进度查询|Order progress/);
   assert.match(offlineProfile, /User management|用户管理/);
   assert.match(read("components/profile/MobileProfilePresentation.tsx"), /export function MobileProfileModuleTabs/);
-  assert.match(offlineProfile, /t\.nav\.logout_full/);
+  assert.match(offlineProfile, /onLogout/);
   assert.match(shell, /clearCloudOfflineCacheOnExplicitLogout/);
 });
 
@@ -117,6 +118,7 @@ test("/plant/:id offline links enter guide-detail", () => {
 test("network-only links stay inside the offline shell", () => {
   const shell = read("mobile-offline-src/main.tsx");
   assert.equal(parseAndroidShellPath("/membership/payment")?.kind, "network-required");
+  assert.equal(parseAndroidShellPath("/profile/project-categories")?.kind, "project-categories");
   assert.equal(parseAndroidShellPath("/profile/recent")?.kind, "network-required");
   assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "network-required");
   assert.equal(parseAndroidShellPath("/legal")?.kind, "network-required");

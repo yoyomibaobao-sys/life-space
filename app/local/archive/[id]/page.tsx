@@ -16,28 +16,11 @@ import {
 } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
-import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
-import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettings";
-import ArchiveCycleTimeline from "@/components/archive-detail/ArchiveCycleTimeline";
-import ArchiveLightbox from "@/components/archive-detail/ArchiveLightbox";
-import ArchiveDetailHeaderView, {
+import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
+import DeviceOwnedProjectDetail from "@/components/archive-ui/DeviceOwnedProjectDetail";
+import {
   type ArchiveProfileFieldSave,
 } from "@/components/archive-ui/ArchiveDetailHeaderView";
-import ArchiveProjectDetailTabs from "@/components/archive-ui/ArchiveProjectDetailTabs";
-import {
-  archiveProjectDetailBadgeStyle,
-  archiveProjectDetailEmptyStateStyle,
-  archiveProjectDetailExperienceHintStyle,
-  archiveProjectDetailFloatingAddStyle,
-  archiveProjectDetailGuideTextStyle,
-  archiveProjectDetailLocalHintStyle,
-  archiveProjectDetailHeaderProjectStyle,
-  archiveProjectDetailHeaderTitleStyle,
-  archiveProjectDetailMainStyle,
-  archiveProjectDetailMetaLineStyle,
-  archiveProjectDetailStatsStyle,
-} from "@/components/archive-ui/archiveProjectDetailLayout";
-import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import ArchiveRecordComposer from "@/components/archive-ui/ArchiveRecordComposer";
 import { supabase } from "@/lib/supabase";
 import {
@@ -1184,248 +1167,22 @@ export default function LocalArchiveDetailPage() {
 
   return (
     <>
-      <MobilePageHeader
-        title={
-          <span style={archiveProjectDetailHeaderTitleStyle}>
-            <span style={archiveProjectDetailHeaderProjectStyle}>{archive.title}</span>
-          </span>
-        }
-        titleText={archive.title}
-        fallbackHref="/archive?source=local"
-        ariaLabel={t.nav.back}
-      />
-      <main
-        style={{
-          ...pageStyle,
-          ...archiveProjectDetailMainStyle(isMobileViewport),
+      <DeviceOwnedProjectDetail
+        view={ArchiveProjectDetailView}
+        detail={detail}
+        ownerContext={ownerContext}
+        onBack={() => router.push("/archive?source=local")}
+        onChanged={async () => {
+          const nextDetail = await getLocalArchiveDetail(archive.id, ownerContext);
+          setDetail(nextDetail);
         }}
-      >
-        <header className="mobile-app-desktop-only" style={projectPageHeaderStyle}>
-          <Link href="/archive?source=local" style={projectPageBackLinkStyle}>
-            {archiveCopy.back_to_local_projects}
-          </Link>
-          <h1 style={projectPageTitleStyle}>{archive.title}</h1>
-          <span aria-hidden="true" />
-        </header>
-
-        <div style={archiveProjectDetailStatsStyle}>
-          {archiveDisplayName ? (
-            <span style={archiveProjectDetailGuideTextStyle}>{archiveDisplayName}</span>
-          ) : null}
-          {archive.local_role === "cloud-offline-cache" ? null : (
-            <span style={archiveProjectDetailBadgeStyle}>{archiveCopy.local_project}</span>
-          )}
-          <ProjectMetaLine
-            recordCount={records.length}
-            durationDays={ongoingDays}
-            ended={archive.status === "ended"}
-            order={["record", "duration"]}
-            style={archiveProjectDetailMetaLineStyle}
-          />
-        </div>
-
-        <div style={archiveProjectDetailLocalHintStyle}>
-          {archive.source_cloud_archive_id
-            ? archiveCopy.cloud_local_copy_hint
-            : archiveCopy.saved_on_this_device}
-        </div>
-
-        <ArchiveProjectDetailTabs
-          ariaLabel={archiveCopy.detail_navigation}
-          active={activeDetailTab}
-          onChange={setActiveDetailTab}
-          labels={{
-            records: archiveCopy.details,
-            profile: archiveCopy.dossier,
-            experience: language === "en" ? `${archiveCopy.experience_cards} (0)` : `${archiveCopy.experience_cards}（0）`,
-          }}
-        />
-
-        {activeDetailTab === "profile" ? (
-        <ArchiveDetailHeaderView
-          project={projectView}
-          eyebrow={archiveCopy.project_archive}
-          latestUpdateText={
-            `${archiveCopy.latest_update} ${formatDate(latestUpdate) || archiveCopy.none}`
-          }
-          recordCountText={`${archiveCopy.records} ${records.length}`}
-          durationText={ongoingDays ? durationText : undefined}
-          hint={
-            archive.source_cloud_archive_id
-              ? archiveCopy.cloud_local_copy_hint
-              : archiveCopy.saved_on_this_device
-          }
-          profileAlwaysOpen
-          showPageChrome={false}
-          showSystemNameInTitle={false}
-          actionSlot={
-            <div style={headerActionSlotStyle}>
-              {!archive.local_owner_user_id && ownerContext?.userId ? (
-                <button
-                  type="button"
-                  onClick={markCurrentLocalArchiveAsMine}
-                  style={markOwnerButtonStyle}
-                >
-                  {archiveCopy.mark_owner}
-                </button>
-              ) : null}
-              {archive.source_cloud_archive_id ? (
-                pendingSyncSummary ? (
-                  <button
-                    type="button"
-                    onClick={openPendingSyncPrompt}
-                    disabled={pendingSyncRunning}
-                    style={{
-                      ...transferActionButtonStyle,
-                      opacity: pendingSyncRunning ? 0.55 : 1,
-                      cursor: pendingSyncRunning ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {pendingSyncRunning
-                      ? archiveCopy.pending_sync_uploading
-                      : archiveCopy.pending_sync_upload}
-                  </button>
-                ) : (
-                  <Link
-                    href={`/archive/${archive.source_cloud_archive_id}`}
-                    style={transferActionLinkStyle}
-                  >
-                    {archiveCopy.view_cloud_project}
-                  </Link>
-                )
-              ) : (
-                <button
-                  type="button"
-                  onClick={openTransferPrompt}
-                  disabled={transferRunning || archive.migration_status === "migrating"}
-                  style={{
-                    ...transferActionButtonStyle,
-                    opacity:
-                      transferRunning || archive.migration_status === "migrating"
-                        ? 0.55
-                        : 1,
-                    cursor:
-                      transferRunning || archive.migration_status === "migrating"
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
-                >
-                  {archiveCopy.transfer_to_cloud}
-                </button>
-              )}
-            </div>
-          }
-          profileRows={localProfileRows}
-          profileEditor={{
-            values: {
-              title: archive.title || "",
-              category: archive.category,
-              systemName: archive.system_name || archive.species_name || "",
-              source: archive.source || "",
-              note: archive.note || "",
-              archiveSummary: archive.archive_summary || "",
-            },
-            onSaveField: saveLocalArchiveProfileField,
-            systemNameMode: "candidate",
-            systemNameCandidates,
-            systemNameCandidatesLoading: candidatesLoading,
-            systemNameHint: archiveCopy.system_name_helper,
-          }}
-          profileActions={
-            <div style={localProfileActionsStyle}>
-              <button type="button" onClick={() => setDeleteArchiveOpen(true)} style={localProfileDangerButtonStyle}>
-                {archiveCopy.delete_local_project}
-              </button>
-            </div>
-          }
-          profileExtra={
-            <div style={localCycleProfileExtraStyle}>
-              <ArchiveOwnerSettingsFields
-                category={archive.category}
-                subTagId={archive.subcategory || null}
-                groupTagId={archive.group_name || null}
-                subTags={localTaxonomyItems
-                  .filter((item) => item.kind === "subcategory" && item.category === archive.category)
-                  .map((item) => ({
-                    id: item.label,
-                    name: item.label,
-                    category: item.category || archive.category,
-                  }))}
-                groupTags={localTaxonomyItems
-                  .filter((item) => item.kind === "group" && item.category === archive.category)
-                  .map((item) => ({
-                    id: item.label,
-                    name: item.label,
-                    sub_tag_id: item.subcategory || "",
-                  }))}
-                maxDepth={getArchiveCategoryDepth(categoryDepths, archive.category)}
-                ended={archive.status === "ended"}
-                isPublic={false}
-                canWrite={archive.local_role !== "cloud-offline-cache"}
-                busy={ownerSettingsBusy}
-                showVisibility={false}
-                onChangeSubcategory={(value) =>
-                  void saveLocalOwnerFields({
-                    subcategory: value || null,
-                    group_name: null,
-                  })
-                }
-                onChangeGroup={(value) =>
-                  void saveLocalOwnerFields({ group_name: value || null })
-                }
-                onToggleEnded={() =>
-                  void saveLocalOwnerFields({
-                    status: archive.status === "ended" ? "active" : "ended",
-                    ended_at: archive.status === "ended" ? null : new Date().toISOString(),
-                  })
-                }
-              />
-              <ArchiveCycleSettings
-                key={archive.id}
-                enabled={cycleEnabled}
-                busy={cycleSettingsSaving}
-                onSave={saveLocalCycleSettings}
-              />
-              {(archive.trashed_cycles || []).length > 0 ? (
-                <section style={localCycleTrashStyle}>
-                  <div style={localCycleTrashTitleStyle}>
-                    {archiveCopy.deleted_cycles}（{archive.trashed_cycles?.length || 0}）
-                  </div>
-                  <div style={localCycleTrashHintStyle}>
-                    {archiveCopy.deleted_cycles_hint}
-                  </div>
-                  <div style={localCycleTrashListStyle}>
-                    {(archive.trashed_cycles || []).map((item) => (
-                      <div key={item.id} style={localCycleTrashRowStyle}>
-                        <div style={localCycleTrashNameStyle}>
-                          <strong>
-                            {item.cycle.display_name ||
-                              cycleTerminology.cycleLabel(item.cycle.cycle_no)}
-                          </strong>
-                          <span>
-                            {formatLocalCycleDate(item.cycle.started_at)} · {item.record_ids.length}
-                            {language === "en" ? ` ${archiveCopy.records}` : `条${archiveCopy.records}`}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => restoreLocalCycle(item.id)}
-                          disabled={cycleBusy}
-                          style={localCycleRestoreButtonStyle}
-                        >
-                          {archiveCopy.restore_cycle}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-            </div>
-          }
-        />
-        ) : null}
-
-      {pendingSyncError && !pendingSyncPromptOpen ? (
+        onAddRecord={() => setAddRecordOpen(true)}
+        onDeleteArchive={() => setDeleteArchiveOpen(true)}
+        onDeleteRecord={(recordId) => {
+          const target = records.find((item) => item.id === recordId);
+          if (target) setRecordToDelete(target);
+        }}
+        extra={<>      {pendingSyncError && !pendingSyncPromptOpen ? (
         <div style={transferErrorStyle}>{pendingSyncError}</div>
       ) : transferError ? (
         <div style={transferErrorStyle}>
@@ -1601,9 +1358,8 @@ export default function LocalArchiveDetailPage() {
           </section>
         </div>
       ) : null}
-
-      {activeDetailTab === "records" ? (
-      <>
+        </>}
+        recordComposer={
       <ArchiveRecordComposer
         mobileMode={isMobileViewport}
         open={!isMobileViewport || addRecordOpen}
@@ -1756,116 +1512,9 @@ export default function LocalArchiveDetailPage() {
             </div>
           </form>
       </ArchiveRecordComposer>
-
-      <ArchiveCycleTimeline
-        cycles={cycleEnabled ? cycles : []}
-        records={localRecordItems}
-        category={archive.category}
-        mobileMode={isMobileViewport}
-        canManage={cycleEnabled}
-        busy={cycleBusy}
-        onStartCycle={cycleEnabled ? startLocalCycle : undefined}
-        onEndCycle={cycleEnabled ? endLocalCycle : undefined}
-        onUpdateCycleDates={cycleEnabled ? updateLocalCycleDates : undefined}
-        onRenameCycle={cycleEnabled ? renameLocalCycle : undefined}
-        onDeleteCycle={cycleEnabled ? deleteLocalCycle : undefined}
-        emptyState={
-          <div style={archiveProjectDetailEmptyStateStyle}>
-            <div>{recordCopy.no_local_records}</div>
-          </div>
         }
-        renderRecord={(record, index) => (
-            <ArchiveRecordCard
-              key={record.id}
-              variant="local"
-              archive={localArchiveRecordShell}
-              item={record}
-              index={index}
-              mode="owner"
-              startTime={startTime}
-              isHighlighted={false}
-              sameTagLinks={[]}
-              onOpenLightbox={(media, mediaIndex, item) =>
-                openLocalRecordItemLightbox(media, mediaIndex, item)
-              }
-              onDeleteMedia={async () => undefined}
-              onVisibilityChange={async () => undefined}
-              onSetHelpStatus={async () => undefined}
-              onRemoveTag={() => undefined}
-              onAddTag={async () => undefined}
-              onRecordUpdated={async (recordId, patch) => {
-                await updateLocalRecordFields(recordId, {
-                  location: patch.location,
-                  note: typeof patch.note === "string" ? patch.note : undefined,
-                  record_time:
-                    typeof patch.record_time === "string"
-                      ? patch.record_time
-                      : undefined,
-                });
-                await loadDetail();
-              }}
-              onNoteSaved={async () => undefined}
-              onRecordDeleted={(recordId) => {
-                const target = records.find((item) => item.id === recordId);
-                if (target) setRecordToDelete(target);
-              }}
-              cycleOptions={cycleOptions}
-              onCycleChange={async (recordId, cycleId) => {
-                try {
-                  await updateLocalRecordFields(recordId, { cycle_id: cycleId });
-                  showToast(
-                    cycleId
-                      ? cycleTerminology.recordAssignedSuccess
-                      : cycleTerminology.recordUnassignedSuccess
-                  );
-                  await loadDetail();
-                } catch (err) {
-                  showToast(
-                    err instanceof Error
-                      ? err.message
-                      : recordCopy.adjust_failed
-                  );
-                }
-              }}
-              isMobileViewport={isMobileViewport}
-            />
-        )}
       />
-      </>
-      ) : null}
-
-      {activeDetailTab === "experience" ? (
-        <div style={archiveProjectDetailEmptyStateStyle}>
-          <div>{t.experience.no_cards}</div>
-          <div style={archiveProjectDetailExperienceHintStyle}>
-            {archiveCopy.local_experience_cards_hint}
-          </div>
-        </div>
-      ) : null}
-
-      {localLightboxImages.length > 0 ? (
-        <ArchiveLightbox
-          images={localLightboxImages}
-          index={localLightboxIndex}
-          onChange={setLocalLightboxIndex}
-          isMobileViewport={isMobileViewport}
-          metaText={localLightboxMetaText}
-          note={localLightboxRecord?.note || ""}
-          onClose={closeLocalLightbox}
-        />
-      ) : null}
-
-      {isMobileViewport && !addRecordOpen && activeDetailTab === "records" ? (
-        <button
-          type="button"
-          onClick={() => setAddRecordOpen(true)}
-          style={archiveProjectDetailFloatingAddStyle}
-        >
-          {recordCopy.add_record_short}
-        </button>
-      ) : null}
-
-      <ConfirmDialog
+            <ConfirmDialog
         open={Boolean(recordToDelete)}
         title={recordCopy.delete_local_record_title}
         message={recordCopy.delete_local_record_message}
@@ -1884,7 +1533,7 @@ export default function LocalArchiveDetailPage() {
         onClose={() => setDeleteArchiveOpen(false)}
         onConfirm={confirmDeleteArchive}
       />
-    </main>
+
     </>
   );
 }

@@ -2,7 +2,7 @@
 
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import { Fragment, type CSSProperties, type ReactNode } from "react";
 
 export type MobileProfileModule = "membership" | "payment" | "backup" | "account";
@@ -40,7 +40,7 @@ export function MobileProfileModuleTabs({
         return (
           <Fragment key={key}>
             {item.href ? (
-              <Link
+              <InternalLink
                 href={item.href}
                 style={
                   item.href === "/admin/memberships"
@@ -56,7 +56,7 @@ export function MobileProfileModuleTabs({
               >
                 <span>{item.label}</span>
                 <UiIcon name="arrow-right" size={15} />
-              </Link>
+              </InternalLink>
             ) : item.value ? (
               <button
                 type="button"
@@ -117,7 +117,7 @@ export function IdentityStat({ label, value, href }: { label: string; value: str
   );
 
   return href ? (
-    <Link href={href} style={identityStatLinkStyle}>{content}</Link>
+    <InternalLink href={href} style={identityStatLinkStyle}>{content}</InternalLink>
   ) : (
     <div style={{ minWidth: 0 }}>{content}</div>
   );

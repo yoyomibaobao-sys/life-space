@@ -2827,15 +2827,25 @@ export async function getLocalArchiveDetail(
   archiveId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const result = await resolveLocalArchiveDetail(archiveId, ownerContext);
+  return result.detail;
+}
+
+export async function resolveLocalArchiveDetail(
+  archiveId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
   const [archive, records, images] = await Promise.all([
     getRowById<LocalArchive>(ARCHIVE_STORE, archiveId),
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
 
-  if (!archive) return null;
+  if (!archive) return { status: "not-found" as const, detail: null };
   const normalizedArchive = normalizeLocalArchive(archive);
-  if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) return null;
+  if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+    return { status: "forbidden" as const, detail: null };
+  }
 
   const imageMap = new Map<string, LocalImage[]>();
   images
@@ -2860,7 +2870,10 @@ export async function getLocalArchiveDetail(
       ),
     }));
 
-  return { archive: normalizedArchive, records: detailRecords } satisfies LocalArchiveDetail;
+  return {
+    status: "ready" as const,
+    detail: { archive: normalizedArchive, records: detailRecords } satisfies LocalArchiveDetail,
+  };
 }
 
 export async function getLocalArchiveByCloudSource(

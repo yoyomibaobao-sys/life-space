@@ -7,11 +7,12 @@ async function source(path) {
 }
 
 test("cloud and local project category depths remain independent", async () => {
-  const [migration, optimization, settings, page] = await Promise.all([
+  const [migration, optimization, settings, page, view] = await Promise.all([
     source("supabase/migrations/20260829034713_add_archive_category_settings.sql"),
     source("supabase/migrations/20260829034846_optimize_archive_category_guide_policies.sql"),
     source("lib/archive-category-settings.ts"),
     source("app/profile/project-categories/page.tsx"),
+    source("components/profile/ProjectCategorySettingsView.tsx"),
   ]);
 
   assert.match(migration, /create table if not exists public\.archive_category_settings/);
@@ -24,11 +25,11 @@ test("cloud and local project category depths remain independent", async () => {
   assert.match(settings, /LOCAL_SETTINGS_PREFIX/);
   assert.match(settings, /getCloudArchiveCategoryDepths/);
   assert.match(settings, /saveCloudArchiveCategoryDepths/);
-  assert.match(page, /activeSpace === "cloud"/);
-  assert.match(page, /\(\["cloud", "local"\] as const\)\.map/);
+  assert.match(page, /<ProjectCategorySettingsView/);
   assert.match(page, /saveLocalArchiveCategoryDepths/);
-  assert.match(page, /depth >= 2/);
-  assert.match(page, /depth >= 3/);
+  assert.match(view, /\(\["cloud", "local"\] as const\)\.map/);
+  assert.match(view, /depth >= 2/);
+  assert.match(view, /depth >= 3/);
 });
 
 test("public related guides are explicit-grant, RLS-protected, and admin reviewed", async () => {
