@@ -73,6 +73,30 @@ test("website and Android controllers share a live timeline loader with media an
   assert.ok(calls.includes("records") && calls.includes("media"));
 });
 
+test("followed public project resolves by archive ID without treating another owner's project as mine", async () => {
+  const module = await loadModule("lib/cloud-archive-detail.ts", {
+    "@/lib/supabase": "export const supabase = {};",
+    "@/lib/media-urls": "export const attachMediaDisplayUrls = async (_, rows) => rows;",
+    "@/lib/archive-category-settings": "export const getCloudArchiveCategoryDepths = async () => ({});",
+  });
+  let archive = {
+    id: "followed-1", user_id: "other-owner", title: "Followed project",
+    is_public: true, trashed_at: null, system_name: "Basil", archive_summary: "Growing",
+  };
+  const client = { from(table) {
+    return { select() { return this; }, eq() { return this; },
+      maybeSingle: async () => ({ data: table === "archives" ? archive : { username: "Grower" }, error: null }) };
+  } };
+  const route = await module.resolveCloudArchiveRoute("followed-1", client);
+  assert.equal(route.ownerId, "other-owner");
+  assert.equal(route.publicSummary.archive_title, "Followed project");
+  assert.equal(route.publicSummary.profile_display_name, "Grower");
+  archive = { ...archive, is_public: false };
+  assert.equal((await module.resolveCloudArchiveRoute("followed-1", client)).publicSummary, null);
+  archive = { ...archive, trashed_at: "2026-09-01" };
+  assert.equal(await module.resolveCloudArchiveRoute("followed-1", client), null);
+});
+
 test("native API transport carries Bearer auth for all JSON methods and rejects redirects, HTML and network failure", async () => {
   const module = await loadModule("lib/android-remote-api.ts", { "@/lib/supabase": "export const supabase = {};" });
   const calls = [];
@@ -227,6 +251,14 @@ test("Android route and shared presentation contract avoids Next navigation and 
   const follow = read("app/follow/page.tsx");
   const market = read("app/market/page.tsx");
   assert.match(shell, /kind: "cloud-detail"/);
+  assert.match(shell, /kind: "public-cloud-detail"/);
+  assert.match(shell, /<PublicCloudArchiveRouteController/);
+  assert.doesNotMatch(shell, /publicItem\?\.owner_user_id === cloudUserId \|\| !publicItem/);
+  const handledLink = shell.match(/if \(applyShellPath\(url\.pathname, url\.search\)\) \{([\s\S]*?)\n      \}/)?.[1];
+  assert.match(handledLink || "", /event\.preventDefault\(\)/);
+  assert.doesNotMatch(handledLink || "", /event\.stopPropagation\(\)/);
+  assert.match(shell, /anchor\.dataset\.shellHandled === "true"/);
+  assert.match(read("components/discover/DiscoverProjectCard.tsx"), /data-shell-handled=\{onOpen/);
   assert.match(shell, /detailOwnsTopNav = \[[^\]]*"cloud-detail"/);
   assert.match(shell, /<CloudProjectRuntime/);
   assert.match(shell, /getCloudOfflineCacheByCloudSource/);

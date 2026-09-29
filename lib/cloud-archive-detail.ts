@@ -3,6 +3,11 @@ import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { getCloudArchiveCategoryDepths } from "@/lib/archive-category-settings";
 import type { ArchiveCycle, ArchiveDetailArchive, RecordItem, RecordQueryRow, RecordTagRow } from "@/lib/archive-detail-types";
 import type { MediaItem } from "@/lib/domain-types";
+import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
+
+export type ReadonlyPublicProjectSummary = Pick<DiscoveryProjectFeedItem,
+  "archive_id" | "archive_title" | "profile_display_name" | "system_name" |
+  "display_image_url" | "card_summary">;
 
 // Used by the website and the bundled Android controller. This module has no
 // Next route or document dependency; Supabase RLS remains the access boundary.
@@ -76,5 +81,36 @@ export async function loadCloudArchiveDetail(
     subTags: subTags.data || [],
     groupTags: groupTags.data || [],
     depths,
+  };
+}
+
+// A followed project's URL is not necessarily in the home feed or the
+// signed-in owner's cloud list. Resolve the archive before choosing the
+// Android owner controller or the existing public read-only presentation.
+export async function resolveCloudArchiveRoute(
+  archiveId: string,
+  client: typeof supabase = supabase,
+): Promise<{ ownerId: string; publicSummary: ReadonlyPublicProjectSummary | null } | null> {
+  const result = await client.from("archives")
+    .select("id, user_id, title, system_name, species_name_snapshot, archive_summary, is_public, trashed_at")
+    .eq("id", archiveId).maybeSingle();
+  if (result.error) throw result.error;
+  const archive = result.data;
+  if (!archive || archive.trashed_at) return null;
+  if (!archive.is_public) return { ownerId: archive.user_id, publicSummary: null };
+
+  const profile = await client.from("public_profiles")
+    .select("username").eq("id", archive.user_id).maybeSingle();
+  if (profile.error) throw profile.error;
+  return {
+    ownerId: archive.user_id,
+    publicSummary: {
+      archive_id: archive.id,
+      archive_title: archive.title,
+      profile_display_name: profile.data?.username || null,
+      system_name: archive.system_name || archive.species_name_snapshot || null,
+      display_image_url: null,
+      card_summary: archive.archive_summary || null,
+    },
   };
 }

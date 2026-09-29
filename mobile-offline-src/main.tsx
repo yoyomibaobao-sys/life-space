@@ -60,6 +60,7 @@ import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
 import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
 import DeviceOwnedProjectDetail from "@/components/archive-ui/DeviceOwnedProjectDetail";
 import CloudArchiveDetailController from "@/components/archive-ui/CloudArchiveDetailController";
+import PublicCloudArchiveRouteController from "@/components/archive-ui/PublicCloudArchiveRouteController";
 import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
 import ArchiveProjectDetailStatus, {
   ArchiveProjectDetailLoading,
@@ -237,6 +238,7 @@ type Screen =
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
   | { kind: "cloud-detail"; archiveId: string }
+  | { kind: "public-cloud-detail"; archiveId: string; back: "list" | "activity" | "discover-search" | "experience" | "following" | "market" }
   | { kind: "edit-project"; archiveId: string }
   | { kind: "new-record"; archiveId: string }
   | { kind: "edit-record"; archiveId: string; recordId: string };
@@ -1037,7 +1039,7 @@ function App() {
       const publicItem = activityItems.find((row) => row.archive_id === routed.id);
       if (online && cloudUserId &&
           (cloudArchives.some((item) => item.id === routed.id) ||
-            publicItem?.owner_user_id === cloudUserId || !publicItem)) {
+            publicItem?.owner_user_id === cloudUserId)) {
         setScreen({ kind: "cloud-detail", archiveId: routed.id });
         return true;
       }
@@ -1050,6 +1052,13 @@ function App() {
         setPublicDetailItem(publicItem);
         setPublicDetailBack("activity");
         setScreen({ kind: "public-detail" });
+        return true;
+      }
+      if (online) {
+        const back = screen.kind === "activity" || screen.kind === "discover-search" ||
+          screen.kind === "experience" || screen.kind === "following" || screen.kind === "market"
+          ? screen.kind : "list";
+        setScreen({ kind: "public-cloud-detail", archiveId: routed.id, back });
         return true;
       }
       void Promise.all([
@@ -1073,6 +1082,7 @@ function App() {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target === "_blank") return;
+      if (anchor.dataset.shellHandled === "true") return;
       const href = anchor.getAttribute("href");
       if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return;
       let url: URL;
@@ -1084,7 +1094,8 @@ function App() {
       if (url.origin !== window.location.origin) return;
       if (applyShellPath(url.pathname, url.search)) {
         event.preventDefault();
-        event.stopPropagation();
+        // Let the shared card's onClick run (for example, Follow's unread
+        // marker). Next Link sees defaultPrevented and cannot navigate away.
         return;
       }
       // A same-origin website document would replace the bundled React tree.
@@ -1357,7 +1368,7 @@ function App() {
   ];
 
   const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides", "following", "market", "profile", "project-categories", "guide-detail", "public-detail"].includes(screen.kind);
-  const detailOwnsTopNav = ["detail", "cloud-detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
+  const detailOwnsTopNav = ["detail", "cloud-detail", "public-cloud-detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
     0,
@@ -1720,6 +1731,18 @@ function App() {
             onDeleteArchive={(id) => void handleDeleteArchive(id)}
             onDeleteRecord={(recordId, id) => void handleDeleteRecord(recordId, id)}
           />
+        </MobileShellErrorBoundary>
+      ) : null}
+
+      {screen.kind === "public-cloud-detail" ? (
+        <MobileShellErrorBoundary routeKind="public-cloud-detail" archiveId={screen.archiveId}
+          title={language === "zh" ? "无法打开公开项目" : "Could not open public project"}
+          message={language === "zh" ? "项目详情加载失败。" : "The project failed to render."}
+          backLabel={copy.mySpace} onBack={() => setScreen({ kind: screen.back })}>
+          <PublicCloudArchiveRouteController key={screen.archiveId}
+            archiveId={screen.archiveId} userId={cloudUserId} online={online} language={language}
+            onBack={() => setScreen({ kind: screen.back })}
+            onOwned={() => setScreen({ kind: "cloud-detail", archiveId: screen.archiveId }, true)} />
         </MobileShellErrorBoundary>
       ) : null}
 

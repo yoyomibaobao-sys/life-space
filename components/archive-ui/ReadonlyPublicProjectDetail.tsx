@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DiscoveryProjectFeedItem } from "@/lib/discover-project-types";
+import type { ReadonlyPublicProjectSummary } from "@/lib/cloud-archive-detail";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
 import { supabase } from "@/lib/supabase";
 
@@ -15,7 +15,7 @@ type PublicRecord = {
 export default function ReadonlyPublicProjectDetail({
   item, language, onBack,
 }: {
-  item: DiscoveryProjectFeedItem;
+  item: ReadonlyPublicProjectSummary;
   language: "zh" | "en";
   onBack: () => void;
 }) {

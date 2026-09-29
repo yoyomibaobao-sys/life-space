@@ -57,6 +57,7 @@ export function DiscoverProjectCard({
   return (
     <Link
       href={`/archive/${item.archive_id}`}
+      data-shell-handled={onOpen ? "true" : undefined}
       onClick={onOpen ? (event) => { event.preventDefault(); onOpen(); } : undefined}
       aria-label={`${t.discover.view_project_prefix}${title}`}
       className={`${styles.card} ${verticalCard.card}`}

@@ -7,6 +7,7 @@
 | 入口 | 在线 | 离线 | 展示 |
 | --- | --- | --- | --- |
 | 我的空间云项目卡片或 `/archive/:id` | `CloudArchiveDetailController` → `loadCloudArchiveDetail` / `loadCloudArchiveTimeline`（Supabase RLS） | `CloudProjectRuntime` → 按 `source_cloud_archive_id` 找 IndexedDB 缓存 → `DeviceOwnedProjectDetail` | `ArchiveProjectDetailView` |
+| 关注列表的他人公开项目 `/archive/:id` | `PublicCloudArchiveRouteController` 按 ID 核对项目所有者、公开状态和 RLS，复用现有 `ReadonlyPublicProjectDetail` | 提示需要联网 | 现有公开项目只读展示 |
 | 本地项目 `/local/archive/:id` | IndexedDB → `DeviceOwnedProjectDetail` | 同左 | `ArchiveProjectDetailView` |
 | Profile | `loadAndroidProfileLive` 读取本人 profile、身份统计、会员、容量、最近订单、管理员 RPC；可在原界面修改用户名 | 现有 owner/identity snapshot | `MobileProfileView` |
 | 项目分组 | 本人登录后 `getCloudArchiveCategoryDepths` / `saveCloudArchiveCategoryDepths` | 本地标签 `getLocalArchiveCategoryDepths` / `saveLocalArchiveCategoryDepths`；云标签需联网 | `ProjectCategorySettingsView` |
@@ -50,7 +51,7 @@ Android Profile 在线订单为**只读状态**，云分组设置在本 document
 | 首页记录/发现 | `fetchDiverseDiscoveryProjectBatch` + shell React | 无 Next router，数据走 Supabase；共享 UI 的 CSS module 随 bundle 内联 |
 | 经验 | `fetchDiscoverExperienceCardSearchResults` + `PublicExperienceGallery` | 共享组件；经验卡详情是 web-only，不替换 document |
 | 指引 | `PlantPage` + 离线 guide detail | 指引详情走 shell route；网站独有会员/注册链接被阻止并提示 |
-| 关注 | 共享 `FollowPage` | 已移除 `useRouter`，在 Android 使用 `InternalNavigationProvider`；用户空间详情仍 web-only |
+| 关注 | 共享 `FollowPage` | 已移除 `useRouter`，在 Android 使用 `InternalNavigationProvider`；关注卡片可按 ID 打开他人公开项目，点击时的已读标记继续触发；用户空间详情仍 web-only |
 | 集市 | 共享 `MarketPage` | 列表不依赖 Next router，链接使用 `InternalLink`；发布、消息、单条详情仍 web-only |
 | 我的空间 | `ArchiveWorkspaceTemplate`、本地/云列表及两种 controller | Android 内部 history/route；本地项目不跳 Next `/local/archive/:id` |
 
