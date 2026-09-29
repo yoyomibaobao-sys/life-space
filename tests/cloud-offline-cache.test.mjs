@@ -219,8 +219,8 @@ test("offline shell separates true local projects from cloud offline copies", ()
   assert.match(offline, /type ShellSourceFilter = "all" \| "cloud" \| "local"/);
   assert.match(offline, /filteredCloudCaches\.map/);
   assert.match(offline, /filteredCloudArchives\.map\(renderCloudProjectCard\)/);
-  assert.match(offline, /online && cloudUserId && !cloudError \? \(/);
-  assert.match(offline, /online && cloudUserId && !cloudError \? cloudArchives\.length : cloudCaches\.length/);
+  assert.match(offline, /liveCloudWorkspace \? \(/);
+  assert.match(offline, /liveCloudWorkspace \? cloudArchives\.length : cloudCaches\.length/);
   assert.match(view, /cloud_cache_copy/);
   assert.match(offline, /cloudCacheReadOnly/);
   assert.match(adapters, /isPendingCloudSyncStatus\(record\.sync\?\.status\)/);

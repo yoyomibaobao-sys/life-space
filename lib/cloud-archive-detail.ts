@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { attachMediaDisplayUrls, resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { getCloudArchiveCategoryDepths } from "@/lib/archive-category-settings";
 import type { ArchiveCycle, ArchiveDetailArchive, RecordItem, RecordQueryRow, RecordTagRow } from "@/lib/archive-detail-types";
 import type { MediaItem } from "@/lib/domain-types";
@@ -92,7 +92,7 @@ export async function resolveCloudArchiveRoute(
   client: typeof supabase = supabase,
 ): Promise<{ ownerId: string; publicSummary: ReadonlyPublicProjectSummary | null } | null> {
   const result = await client.from("archives")
-    .select("id, user_id, title, system_name, species_name_snapshot, archive_summary, is_public, trashed_at")
+    .select("id, user_id, title, system_name, species_name_snapshot, archive_summary, is_public, trashed_at, cover_image_url, cover_image_path, cover_thumb_path")
     .eq("id", archiveId).maybeSingle();
   if (result.error) throw result.error;
   const archive = result.data;
@@ -102,6 +102,11 @@ export async function resolveCloudArchiveRoute(
   const profile = await client.from("public_profiles")
     .select("username").eq("id", archive.user_id).maybeSingle();
   if (profile.error) throw profile.error;
+  const covers = await resolveMediaDisplayPairs(client, [{
+    url: archive.cover_image_url,
+    path: archive.cover_image_path,
+    thumb_path: archive.cover_thumb_path,
+  }]);
   return {
     ownerId: archive.user_id,
     publicSummary: {
@@ -109,7 +114,7 @@ export async function resolveCloudArchiveRoute(
       archive_title: archive.title,
       profile_display_name: profile.data?.username || null,
       system_name: archive.system_name || archive.species_name_snapshot || null,
-      display_image_url: null,
+      display_image_url: covers[0]?.display_thumb_url || covers[0]?.display_url || archive.cover_image_url || null,
       card_summary: archive.archive_summary || null,
     },
   };

@@ -97,7 +97,6 @@ import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 import { supabase } from "@/lib/supabase";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
-import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncAllPendingCloudArchives, syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 import { formatStorage } from "@/lib/user-profile-shared";
@@ -141,8 +140,9 @@ import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnav
 import { buildOfflineProfileSnapshot } from "@/lib/android-offline-profile";
 import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
 import {
+  liveCloudCardImageUrl,
   parseAndroidShellPath,
-  resolveOwnedShellArchiveId,
+  resolveAndroidArchiveScreen,
 } from "@/lib/android-shell-app-routes";
 
 const MAX_PHOTOS = 10;
@@ -574,7 +574,6 @@ function App() {
   const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState("");
-  const [cloudBusyArchiveId, setCloudBusyArchiveId] = useState<string | null>(null);
   const [pendingSync, setPendingSync] = useState<PendingCloudSyncSummary[]>([]);
   const [syncingArchiveId, setSyncingArchiveId] = useState<string | null>(null);
   const [activityItems, setActivityItems] = useState<DiscoveryProjectFeedItem[]>([]);
@@ -1037,28 +1036,34 @@ function App() {
     }
     if (routed.kind === "archive" && routed.id) {
       const publicItem = activityItems.find((row) => row.archive_id === routed.id);
-      if (online && cloudUserId &&
-          (cloudArchives.some((item) => item.id === routed.id) ||
-            publicItem?.owner_user_id === cloudUserId)) {
-        setScreen({ kind: "cloud-detail", archiveId: routed.id });
+      const target = resolveAndroidArchiveScreen({
+        online,
+        archiveId: routed.id,
+        cloudUserId,
+        cloudArchives,
+        activityOwnerUserId: publicItem?.owner_user_id || null,
+        hasPublicFeedItem: Boolean(publicItem),
+        ownedLocalArchives: [...archives, ...cloudCaches],
+      });
+      if (target.kind === "cloud-detail") {
+        setScreen({ kind: "cloud-detail", archiveId: target.archiveId });
         return true;
       }
-      const ownedId = resolveOwnedShellArchiveId(routed.id, [...archives, ...cloudCaches]);
-      if (ownedId) {
-        openDetail(ownedId);
+      if (target.kind === "local-detail") {
+        openDetail(target.archiveId);
         return true;
       }
-      if (publicItem) {
+      if (target.kind === "public-detail" && publicItem) {
         setPublicDetailItem(publicItem);
         setPublicDetailBack("activity");
         setScreen({ kind: "public-detail" });
         return true;
       }
-      if (online) {
+      if (target.kind === "public-cloud-detail") {
         const back = screen.kind === "activity" || screen.kind === "discover-search" ||
           screen.kind === "experience" || screen.kind === "following" || screen.kind === "market"
           ? screen.kind : "list";
-        setScreen({ kind: "public-cloud-detail", archiveId: routed.id, back });
+        setScreen({ kind: "public-cloud-detail", archiveId: target.archiveId, back });
         return true;
       }
       void Promise.all([
@@ -1124,29 +1129,6 @@ function App() {
     await clearCloudOfflineCacheOnExplicitLogout(owner);
     await supabase.auth.signOut({ scope: "local" });
     setScreen({ kind: "list" });
-  }
-
-  async function saveCloudCopy(cloudArchiveId: string) {
-    if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
-      showToast(copy.cloudSignIn);
-      return;
-    }
-
-    setCloudBusyArchiveId(cloudArchiveId);
-    try {
-      const result = await saveCloudArchiveToLocal({
-        cloudArchiveId,
-        ownerContext,
-        mode: "copy",
-      });
-      await loadList(ownerContext);
-      showToast(copy.cloudCopySaved);
-      openDetail(result.localArchiveId);
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : copy.cloudLoadFailed);
-    } finally {
-      setCloudBusyArchiveId(null);
-    }
   }
 
   async function uploadPending(localArchiveId: string) {
@@ -1218,17 +1200,11 @@ function App() {
   const filteredCloudCaches = cloudCaches.filter(
     (archive) => categoryFilter === "all" || archive.category === categoryFilter,
   );
-  const mappedCloudIds = new Set(
-    [...archives, ...cloudCaches]
-      .map((archive) => archive.source_cloud_archive_id)
-      .filter((value): value is string => Boolean(value)),
-  );
+  const liveCloudWorkspace = online && Boolean(cloudUserId) && !cloudError;
   const filteredCloudArchives = cloudArchives.filter(
-    (archive) =>
-      (categoryFilter === "all" || archive.category === categoryFilter) &&
-      !mappedCloudIds.has(archive.id),
+    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
   );
-  const cloudSourceCount = online && cloudUserId && !cloudError ? cloudArchives.length : cloudCaches.length;
+  const cloudSourceCount = liveCloudWorkspace ? cloudArchives.length : cloudCaches.length;
   const visibleExperienceItems = experienceItems.filter((item) => {
     if (experienceCategoryFilter !== "all" && item.archiveCategory !== experienceCategoryFilter) {
       return false;
@@ -1262,10 +1238,10 @@ function App() {
         archive.category === "plant"
           ? archive.species_name_snapshot || ""
           : archive.system_name || "",
-      cover: archive.display_cover_thumb_url || archive.display_cover_image_url || archive.cover_image_url
+      cover: liveCloudCardImageUrl(archive)
         ? {
             kind: "url" as const,
-            url: archive.display_cover_thumb_url || archive.display_cover_image_url || archive.cover_image_url || "",
+            url: liveCloudCardImageUrl(archive) || "",
             alt: archive.title || copy.project,
           }
         : null,
@@ -1285,10 +1261,6 @@ function App() {
   }
 
   function renderCloudProjectCard(archive: CloudArchiveSummary) {
-    const localCopy = archives.find(
-      (item) => item.source_cloud_archive_id === archive.id,
-    );
-    const busy = cloudBusyArchiveId === archive.id;
     return (
       <ArchiveProjectCard
         key={archive.id}
@@ -1296,23 +1268,6 @@ function App() {
         mobileMode
         mobileShowCategoryBadge={false}
         onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}
-        actionSlot={(
-          <button
-            type="button"
-            className="primary-button"
-            disabled={busy}
-            onClick={(event) => {
-              event.stopPropagation();
-              void saveCloudCopy(archive.id);
-            }}
-          >
-            {busy
-              ? copy.savingCloudCopy
-              : localCopy
-                ? copy.refreshLocalCopy
-                : copy.saveLocalCopy}
-          </button>
-        )}
       />
     );
   }
@@ -1537,33 +1492,15 @@ function App() {
           ) : null}
         >
           {sourceFilter !== "local" ? (
-            online && cloudUserId && !cloudError ? (
+            liveCloudWorkspace ? (
               <>
                 {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
-                {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
-                {!cloudLoading && !cloudError && filteredCloudArchives.length ? (
-                  <div className="project-list">
+                {!cloudLoading && filteredCloudArchives.length ? (
+                  <div className="project-list" data-android-live-cloud-list="true">
                     {filteredCloudArchives.map(renderCloudProjectCard)}
                   </div>
                 ) : null}
-                {!cloudLoading && !cloudError && filteredCloudCaches.filter((archive) => mappedCloudIds.has(archive.source_cloud_archive_id || "")).length ? (
-                  <div className="project-list">
-                    {filteredCloudCaches
-                      .filter((archive) => mappedCloudIds.has(archive.source_cloud_archive_id || ""))
-                      .map((archive) => (
-                        <ArchiveProjectCard
-                          key={archive.id}
-                          project={{
-                            ...localArchiveToProjectView(archive, ownerContext, language),
-                            href: undefined,
-                          }}
-                          onClick={() => openDetail(archive.id)}
-                          mobileMode
-                        />
-                      ))}
-                  </div>
-                ) : null}
-                {!cloudLoading && !cloudError && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && !filteredCloudCaches.some((archive) => mappedCloudIds.has(archive.source_cloud_archive_id || "")) ? (
+                {!cloudLoading && sourceFilter === "cloud" && filteredCloudArchives.length === 0 ? (
                   <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
                 ) : null}
               </>
@@ -1574,7 +1511,7 @@ function App() {
                 ) : null}
                 {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
                 {filteredCloudCaches.length ? (
-                  <div className="project-list">
+                  <div className="project-list" data-android-cloud-cache-list="true">
                     {filteredCloudCaches.map((archive) => (
                       <ArchiveProjectCard
                         key={archive.id}
@@ -1619,7 +1556,7 @@ function App() {
 
           {sourceFilter === "all" &&
           filteredLocalArchives.length === 0 &&
-          (online && cloudUserId && !cloudError
+          (liveCloudWorkspace
             ? !cloudLoading && filteredCloudArchives.length === 0
             : filteredCloudCaches.length === 0) ? (
             <section className="panel empty">
@@ -1735,6 +1672,9 @@ function App() {
       ) : null}
 
       {screen.kind === "public-cloud-detail" ? (
+        !online ? (
+          <MobileNetworkUnavailableState onReconnect={reconnect} />
+        ) : (
         <MobileShellErrorBoundary routeKind="public-cloud-detail" archiveId={screen.archiveId}
           title={language === "zh" ? "无法打开公开项目" : "Could not open public project"}
           message={language === "zh" ? "项目详情加载失败。" : "The project failed to render."}
@@ -1744,6 +1684,7 @@ function App() {
             onBack={() => setScreen({ kind: screen.back })}
             onOwned={() => setScreen({ kind: "cloud-detail", archiveId: screen.archiveId }, true)} />
         </MobileShellErrorBoundary>
+        )
       ) : null}
 
       {screen.kind === "edit-project" && detail ? (
@@ -1840,9 +1781,21 @@ function App() {
         </div>
       </> : null}
 
-      {screen.kind === "public-detail" && publicDetailItem ? <ReadonlyPublicProjectDetail item={publicDetailItem} language={language} onBack={() => setScreen({ kind: publicDetailBack })} /> : null}
+      {screen.kind === "public-detail" ? (
+        !online ? (
+          <MobileNetworkUnavailableState onReconnect={reconnect} />
+        ) : publicDetailItem ? (
+          <ReadonlyPublicProjectDetail item={publicDetailItem} language={language} onBack={() => setScreen({ kind: publicDetailBack })} />
+        ) : null
+      ) : null}
 
-      {screen.kind === "discover-search" ? <DiscoverSearchPage onBack={() => setScreen({ kind: "activity" })} onOpenProject={(item) => { setPublicDetailItem(item); setPublicDetailBack("discover-search"); setScreen({ kind: "public-detail" }); }} /> : null}
+      {screen.kind === "discover-search" ? (
+        !online ? (
+          <MobileNetworkUnavailableState onReconnect={reconnect} />
+        ) : (
+          <DiscoverSearchPage onBack={() => setScreen({ kind: "activity" })} onOpenProject={(item) => { setPublicDetailItem(item); setPublicDetailBack("discover-search"); setScreen({ kind: "public-detail" }); }} />
+        )
+      ) : null}
 
       {screen.kind === "experience" ? <>
         <HomeSectionTabs
@@ -1919,7 +1872,9 @@ function App() {
 
       {screen.kind === "following" ? (
         <div data-android-shell-page="following">
-          {!cloudUserId ? (
+          {!online ? (
+            <MobileNetworkUnavailableState onReconnect={reconnect} />
+          ) : !cloudUserId ? (
             <CloudLogin copy={copy} onSuccess={() => setScreen({ kind: "following" })} />
           ) : (
             <FollowPage />
@@ -1929,7 +1884,11 @@ function App() {
 
       {screen.kind === "market" ? (
         <div data-android-shell-page="market">
-          <MarketPage />
+          {!online ? (
+            <MobileNetworkUnavailableState onReconnect={reconnect} />
+          ) : (
+            <MarketPage />
+          )}
         </div>
       ) : null}
 

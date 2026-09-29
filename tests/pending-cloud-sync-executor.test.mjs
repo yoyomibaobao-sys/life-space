@@ -48,5 +48,5 @@ test("reconnect auto-processes the pending queue and keeps a manual retry", asyn
   assert.match(workspace, /\?sync=1/);
   assert.match(offline, /syncAllPendingCloudArchives/);
   assert.match(offline, /sync_destination/);
-  assert.match(offline, /mappedCloudIds/);
+  assert.match(offline, /refreshCloudOfflineCaches/);
 });

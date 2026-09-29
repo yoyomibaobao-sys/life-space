@@ -58,7 +58,7 @@ test("website and Android controllers share a live timeline loader with media an
   } };
   const module = await loadModule("lib/cloud-archive-detail.ts", {
     "@/lib/supabase": "export const supabase = {};",
-    "@/lib/media-urls": "export const attachMediaDisplayUrls = async (_, rows) => rows;",
+    "@/lib/media-urls": "export const attachMediaDisplayUrls = async (_, rows) => rows; export const resolveMediaDisplayPairs = async (_, sources) => sources.map((source) => ({ display_url: source.url || null, display_thumb_url: source.thumb_path || null }));",
     "@/lib/archive-category-settings": "export const getCloudArchiveCategoryDepths = async () => ({ plant:3, system:3, insect_fish:3, other:3 });",
   });
   const live = await module.loadCloudArchiveDetail("cloud-1", "owner-1", db);
@@ -76,12 +76,13 @@ test("website and Android controllers share a live timeline loader with media an
 test("followed public project resolves by archive ID without treating another owner's project as mine", async () => {
   const module = await loadModule("lib/cloud-archive-detail.ts", {
     "@/lib/supabase": "export const supabase = {};",
-    "@/lib/media-urls": "export const attachMediaDisplayUrls = async (_, rows) => rows;",
+    "@/lib/media-urls": "export const attachMediaDisplayUrls = async (_, rows) => rows; export const resolveMediaDisplayPairs = async (_, sources) => sources.map((source) => ({ display_url: source.url || null, display_thumb_url: source.thumb_path || null }));",
     "@/lib/archive-category-settings": "export const getCloudArchiveCategoryDepths = async () => ({});",
   });
   let archive = {
     id: "followed-1", user_id: "other-owner", title: "Followed project",
     is_public: true, trashed_at: null, system_name: "Basil", archive_summary: "Growing",
+    cover_image_url: "https://cdn.example/cover.jpg",
   };
   const client = { from(table) {
     return { select() { return this; }, eq() { return this; },
@@ -91,6 +92,7 @@ test("followed public project resolves by archive ID without treating another ow
   assert.equal(route.ownerId, "other-owner");
   assert.equal(route.publicSummary.archive_title, "Followed project");
   assert.equal(route.publicSummary.profile_display_name, "Grower");
+  assert.equal(route.publicSummary.display_image_url, "https://cdn.example/cover.jpg");
   archive = { ...archive, is_public: false };
   assert.equal((await module.resolveCloudArchiveRoute("followed-1", client)).publicSummary, null);
   archive = { ...archive, trashed_at: "2026-09-01" };

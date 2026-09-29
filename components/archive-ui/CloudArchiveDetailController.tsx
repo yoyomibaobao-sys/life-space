@@ -2,12 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
+import ArchiveExperienceCards from "@/components/archive-detail/ArchiveExperienceCards";
 import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
 import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettings";
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import ArchiveProjectDetailStatus, { ArchiveProjectDetailLoading } from "@/components/archive-ui/ArchiveProjectDetailStatus";
-import type { ArchiveProjectDetailTabId } from "@/components/archive-ui/archiveProjectDetailLayout";
+import {
+  archiveProjectDetailNoticeLinkStyle,
+  archiveProjectDetailReadOnlyNoticeStyle,
+} from "@/components/archive-ui/ArchiveProjectDetailView";
+import {
+  type ArchiveProjectDetailTabId,
+} from "@/components/archive-ui/archiveProjectDetailLayout";
+import InternalLink from "@/components/navigation/InternalLink";
 import type { ArchiveCycle, ArchiveDetailArchive, LightboxImage, RecordItem } from "@/lib/archive-detail-types";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
@@ -46,6 +54,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const [canWrite, setCanWrite] = useState(false);
   const [candidates, setCandidates] = useState<Awaited<ReturnType<typeof getSystemNameCandidates>>>([]);
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number; record: RecordItem } | null>(null);
+  const [experienceCardCount, setExperienceCardCount] = useState(0);
 
   const reload = useCallback(async () => {
     const [next, membership] = await Promise.all([
@@ -87,7 +96,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
     if (busy || (requiresCloudWrite && !canWrite) || !navigator.onLine) return;
     setBusy(true);
     setError("");
-    try { await work(); await reload(); }
+    try { await work(); await reload(); await onCacheChanged(); }
     catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       void reload().catch(() => undefined);
@@ -124,22 +133,38 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const groupTag = groupTags.find((item) => item.id === archive.group_tag_id);
   const term = getArchiveCycleTerminology(archive.category, language);
   const activeCycles = cycles.filter((cycle) => cycle.status === "active");
+  const encyclopediaHref = category === "plant" && archive.species_id
+    ? `/plant/${encodeURIComponent(archive.species_id)}`
+    : null;
 
   return <>
     {error ? <p role="alert" style={{ color: "#a33622", padding: "8px 16px" }}>{error}</p> : null}
     <ArchiveProjectDetailView
       archive={archive} records={records} cycles={cycles} cycleEnabled={Boolean(archive.cycle_enabled)}
-      mode="owner" capabilities={{ canWriteArchive: canWrite, canAddRecord: canWrite, canManageCycle: canWrite && Boolean(archive.cycle_enabled), canSaveToLocal: true, canDeleteArchive: true, canToggleVisibility: canWrite }}
+      mode="owner" capabilities={{ canWriteArchive: canWrite, canAddRecord: canWrite, canManageCycle: canWrite && Boolean(archive.cycle_enabled), canSaveToLocal: false, canDeleteArchive: true, canToggleVisibility: canWrite }}
       isMobileViewport language={language} copy={copy} username={detail.username || ""}
       archiveDisplayName={archive.system_name || archive.species_name_snapshot || ""}
       archiveCategoryLabel={getArchiveCategoryLabel(category, language)}
       archiveSubcategoryLabel={depths[category] >= 2 ? subTag?.name : null}
       archiveGroupLabel={depths[category] >= 3 ? groupTag?.name : null}
-      systemNameCandidates={candidates} latestUpdate={archive.last_record_time || records[0]?.record_time || null}
+      encyclopediaHref={encyclopediaHref}
+      systemNameCandidates={candidates} systemNameMode="candidate" latestUpdate={archive.last_record_time || records[0]?.record_time || null}
       recordCount={Number(archive.record_count || records.length)} durationDays={getDurationDays(archive.created_at || null, archive.status === "ended" ? archive.ended_at || null : null)}
       viewCount={Number(archive.view_count || 0)}
-      activeTab={tab} onTabChange={setTab} experienceTabLabel={copy.experience_cards}
-      experienceContent={<p>{language === "zh" ? "经验卡需要联网。" : "Experience cards require a connection."}</p>}
+      statusNotice={!canWrite ? (
+        <div style={archiveProjectDetailReadOnlyNoticeStyle}>
+          <span>{copy.cloud_read_only_notice}</span>
+          <InternalLink href="/membership" style={archiveProjectDetailNoticeLinkStyle}>
+            {copy.view_cloud_membership}
+          </InternalLink>
+        </div>
+      ) : null}
+      activeTab={tab} onTabChange={setTab} experienceTabLabel={
+        language === "en"
+          ? `${copy.experience_cards} (${experienceCardCount})`
+          : `${copy.experience_cards}（${experienceCardCount}）`
+      }
+      experienceContent={<ArchiveExperienceCards archiveId={archiveId} isOwner canCreate={canWrite} onCountChange={setExperienceCardCount} />}
       onToggleArchiveVisibility={() => void change(async () => {
         const result = await supabase.rpc(archive.is_public ? "make_my_archive_private" : "make_my_archive_public", { p_archive_id: archiveId });
         if (result.error || result.data !== true) throw result.error || new Error(recordCopy.visibility_update_failed);
@@ -149,12 +174,6 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         const result = await supabase.rpc(archive.status === "ended" ? "restore_archive_active" : "mark_archive_ended", { p_archive_id: archiveId });
         if (result.error) throw result.error;
       })}
-      onSaveToLocal={() => void change(async () => {
-        const { saveCloudArchiveToLocal } = await import("@/lib/cloud-to-local-save");
-        await saveCloudArchiveToLocal({ cloudArchiveId: archiveId, ownerContext: { userId, email: null }, mode: "copy" });
-        await onCacheChanged();
-      }, false)}
-      saveToLocalLabel={language === "zh" ? "保存到本机" : "Save to device"} saveToLocalDisabled={busy}
       onDeleteArchive={() => void change(async () => {
         if (!window.confirm(copy.project_trash_message)) return;
         if (!await requestCloudTrash("archives", archiveId)) throw new Error(copy.save_retry);
@@ -219,6 +238,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
       renderRecord={(item, index) => <ArchiveRecordCard key={item.id} archive={archive as ArchiveDetailArchive}
         item={item} index={index} mode="owner" cloudWritable={canWrite} startTime={records.at(-1)?.record_time || archive.created_at}
         isHighlighted={false} sameTagLinks={[]} currentUserId={userId} isMobileViewport
+        canOpenMediaLightbox
         onOpenLightbox={(media: MediaItem[], imageIndex: number, record: RecordItem) => {
           const images = media.map((m) => ({ id: m.id, recordId: record.id, url: m.display_url || m.url || "", alt: m.original_filename || "" })).filter((m) => m.url);
           if (images.length) setLightbox({ images, index: imageIndex, record });

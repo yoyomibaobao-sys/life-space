@@ -72,6 +72,7 @@ type ArchiveRecordCardProps = {
   cycleOptions?: Array<{ id: string; label: string }>;
   onCycleChange?: (recordId: string, cycleId: string | null) => void | Promise<void>;
   isMobileViewport?: boolean;
+  canOpenMediaLightbox?: boolean;
 };
 
 export default function ArchiveRecordCard({
@@ -100,6 +101,7 @@ export default function ArchiveRecordCard({
   cycleOptions = [],
   onCycleChange,
   isMobileViewport = false,
+  canOpenMediaLightbox = true,
 }: ArchiveRecordCardProps) {
   const { language, t } = useLanguage();
   const copy = t.record;
@@ -239,6 +241,7 @@ export default function ArchiveRecordCard({
               <MobileRecordMediaGrid
                 mediaList={mediaList}
                 mediaItems={item.media || []}
+                canOpen={canOpenMediaLightbox}
                 onOpen={(mediaIndex) =>
                   onOpenLightbox(item.media || [], mediaIndex, item)
                 }
@@ -401,6 +404,7 @@ export default function ArchiveRecordCard({
                 mode={mode}
                 canDeleteMedia={!isLocalMode && mode === "owner"}
                 recordId={item.id}
+                canOpen={canOpenMediaLightbox}
                 onOpen={(mediaIndex) =>
                   onOpenLightbox(item.media || [], mediaIndex, item)
                 }
@@ -892,10 +896,12 @@ function MobileRecordFileInputs({
 function MobileRecordMediaGrid({
   mediaList,
   mediaItems,
+  canOpen = true,
   onOpen,
 }: {
   mediaList: Array<{ url: string; alt: string }>;
   mediaItems: MediaItem[];
+  canOpen?: boolean;
   onOpen: (mediaIndex: number) => void;
 }) {
   const { t } = useLanguage();
@@ -906,8 +912,15 @@ function MobileRecordMediaGrid({
     <div style={mobileRecordMediaGridStyle}>
       {mediaList.map((media, mediaIndex) => {
         const target = mediaItems[mediaIndex];
+        const image = (
+            <img
+              src={target?.display_thumb_url || media.url}
+              alt={media.alt}
+              style={mobileRecordMediaImageStyle}
+            />
+        );
 
-        return (
+        return canOpen ? (
           <button
             key={media.url}
             type="button"
@@ -915,14 +928,16 @@ function MobileRecordMediaGrid({
             onClick={() => onOpen(mediaIndex)}
             style={mobileRecordMediaButtonStyle}
           >
-            <img
-              src={target?.display_thumb_url || media.url}
-              alt={media.alt}
-              loading="lazy"
-              decoding="async"
-              style={mobileRecordMediaImageStyle}
-            />
+            {image}
           </button>
+        ) : (
+          <div
+            key={media.url}
+            data-media-lightbox="disabled"
+            style={mobileRecordMediaButtonStyle}
+          >
+            {image}
+          </div>
         );
       })}
     </div>
@@ -935,6 +950,7 @@ function DesktopRecordMediaGrid({
   mode,
   canDeleteMedia,
   recordId,
+  canOpen = true,
   onOpen,
   onDeleteMedia,
 }: {
@@ -943,6 +959,7 @@ function DesktopRecordMediaGrid({
   mode: ArchiveMode;
   canDeleteMedia: boolean;
   recordId: string;
+  canOpen?: boolean;
   onOpen: (mediaIndex: number) => void;
   onDeleteMedia: (recordId: string, mediaId: string) => Promise<void>;
 }) {
@@ -962,17 +979,18 @@ function DesktopRecordMediaGrid({
         return (
           <div
             key={media.url}
-            role="button"
-            tabIndex={0}
-            aria-label={t.record.open_image_preview}
-            onClick={() => onOpen(mediaIndex)}
-            onKeyDown={(event) => {
+            role={canOpen ? "button" : undefined}
+            tabIndex={canOpen ? 0 : undefined}
+            aria-label={canOpen ? t.record.open_image_preview : undefined}
+            data-media-lightbox={canOpen ? undefined : "disabled"}
+            onClick={canOpen ? () => onOpen(mediaIndex) : undefined}
+            onKeyDown={canOpen ? (event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 onOpen(mediaIndex);
               }
-            }}
-            style={{ position: "relative", cursor: "pointer" }}
+            } : undefined}
+            style={{ position: "relative", cursor: canOpen ? "pointer" : "default" }}
           >
             <img
               src={target?.display_thumb_url || media.url}

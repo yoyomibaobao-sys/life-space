@@ -164,6 +164,7 @@ export default function DeviceOwnedProjectDetail({
   }
 
   function openLightbox(mediaItems: MediaItem[], imageIndex: number, record: RecordItem) {
+    if (isCloudCache) return;
     const images = mediaItems
       .map((item, index) => ({
         id: item.id,
@@ -367,6 +368,7 @@ export default function DeviceOwnedProjectDetail({
             isHighlighted={false}
             sameTagLinks={[]}
             isMobileViewport
+            canOpenMediaLightbox={!isCloudCache}
             onOpenLightbox={openLightbox}
             onDeleteMedia={async () => undefined}
             onVisibilityChange={async () => undefined}

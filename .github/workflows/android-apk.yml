@@ -128,7 +128,7 @@ jobs:
         run: npm ci
 
       - name: Run Android shell contracts
-        run: node --test tests/android-shell.test.mjs tests/android-offline-shell.test.mjs tests/offline-local-parity.test.mjs tests/android-single-runtime-acceptance.test.mjs tests/android-single-runtime-prerequisites.test.mjs
+        run: node --test tests/android-shell.test.mjs tests/android-offline-shell.test.mjs tests/offline-local-parity.test.mjs tests/android-single-runtime-acceptance.test.mjs tests/android-single-runtime-prerequisites.test.mjs tests/android-single-runtime-sr1-device.test.mjs
 
       - name: Sync Capacitor Android project
         run: npm run android:sync

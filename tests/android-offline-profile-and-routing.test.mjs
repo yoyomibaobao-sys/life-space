@@ -48,7 +48,7 @@ test("offline /profile can render from stored owner and identity snapshot", () =
   assert.deepEqual(parseAndroidShellPath("/profile"), { kind: "profile" });
 });
 
-test("own /archive/:cloudId maps to owner cloud cache before public detail", () => {
+test("own /archive/:cloudId stays on live cloud-detail while online", () => {
   const ownedId = resolveOwnedShellArchiveId("cloud-1", [
     { id: "local-plain", source_cloud_archive_id: null },
     {
@@ -65,22 +65,22 @@ test("own /archive/:cloudId maps to owner cloud cache before public detail", () 
   });
 
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(shell, /resolveOwnedShellArchiveId/);
+  assert.match(shell, /resolveAndroidArchiveScreen/);
+  assert.match(shell, /kind: "cloud-detail"/);
   assert.match(shell, /getCloudOfflineCacheByCloudSource/);
-  assert.match(shell, /openDetail\(ownedId\)/);
   assert.match(shell, /<DeviceOwnedProjectDetail/);
   assert.doesNotMatch(shell, /kind === "public-archive"/);
 });
 
 test("owner cached cloud project does not enter ReadonlyPublicProjectDetail first", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  const start = shell.indexOf("routed.kind === \"archive\"");
-  const block = shell.slice(start, start + 900);
-  assert.match(block, /resolveOwnedShellArchiveId/);
-  assert.match(block, /openDetail\(ownedId\)/);
-  const ownedFirst = block.indexOf("openDetail(ownedId)");
+  const start = shell.indexOf('routed.kind === "archive"');
+  const block = shell.slice(start, start + 1600);
+  assert.match(block, /resolveAndroidArchiveScreen/);
+  assert.match(block, /kind === "cloud-detail"/);
+  const liveFirst = block.indexOf('kind === "cloud-detail"');
   const publicLater = block.indexOf("public-detail");
-  assert.ok(ownedFirst >= 0 && publicLater > ownedFirst);
+  assert.ok(liveFirst >= 0 && publicLater > liveFirst);
 });
 
 test("public discover archives can still use ReadonlyPublicProjectDetail", () => {

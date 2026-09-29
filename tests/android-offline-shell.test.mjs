@@ -48,7 +48,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<DeviceOwnedProjectDetail/);
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
   assert.match(source, /navigator\.onLine/);
-  assert.match(source, /saveCloudArchiveToLocal/);
+  assert.match(source, /refreshCloudOfflineCaches/);
   assert.match(source, /syncAllPendingCloudArchives/);
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
@@ -166,7 +166,7 @@ test("Android cloud project covers resolve through the shared signed media layer
   const web = read("app/archive/page.tsx");
   assert.match(source, /resolveMediaDisplayPairs\(supabase/);
   assert.match(source, /thumb_path: archive\.cover_thumb_path/);
-  assert.match(source, /archive\.display_cover_thumb_url \|\| archive\.display_cover_image_url/);
+  assert.match(source, /liveCloudCardImageUrl\(archive\)/);
   assert.match(web, /resolveMediaDisplayPairs\(supabase/);
 });
 
