@@ -234,6 +234,7 @@ test("bundled Auth restores a session and requires Turnstile for login", async (
 
 test("every Next route handler is classified and Android-native paths use the transport", () => {
   const handlers = fs.readdirSync(path.join(root, "app/api"), { recursive: true })
+    .map((name) => String(name).replaceAll("\\", "/"))
     .filter((name) => name.endsWith("/route.ts") || name === "route.ts")
     .map((name) => `/api/${name.replace(/\/route\.ts$/, "")}`)
     .sort();

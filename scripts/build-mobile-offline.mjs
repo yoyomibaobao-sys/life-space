@@ -5,8 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRoot = path.join(root, "mobile-offline-src");
-const outputRoot = path.join(root, "mobile-shell");
+const outputRoot = process.env.ANDROID_SHELL_OUTPUT
+  ? path.resolve(process.env.ANDROID_SHELL_OUTPUT)
+  : path.join(root, "mobile-shell");
 const defaultServerUrl = "https://life-space.uk";
+const singleRuntimeAcceptance = process.env.ANDROID_SINGLE_RUNTIME === "1";
 
 function resolveCloudOrigin() {
   const url = new URL(process.env.CAPACITOR_SERVER_URL || defaultServerUrl);
@@ -23,6 +26,12 @@ const supabasePublishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 const turnstileSiteKey =
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "";
+
+if (singleRuntimeAcceptance && !turnstileSiteKey) {
+  throw new Error(
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY is required for ANDROID_SINGLE_RUNTIME acceptance builds.",
+  );
+}
 
 if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Android local shell requires public Supabase configuration.");
@@ -116,12 +125,24 @@ const bridgeHtml = bridgeTemplate.replace(
 );
 
 await fs.mkdir(outputRoot, { recursive: true });
-await Promise.all([
-  // Online startup uses Capacitor server.url. This placeholder is only the
-  // bundled default document; the local-first shell lives in offline.html.
-  fs.writeFile(path.join(outputRoot, "index.html"), indexTemplate),
-  fs.writeFile(path.join(outputRoot, "offline.html"), offlineHtml),
-  fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml),
-]);
-
-console.log(`Built Android local app shell; cloud data origin is ${cloudOrigin}`);
+if (singleRuntimeAcceptance) {
+  const bundledIndex = offlineHtml.replace(
+    "<html lang=\"zh-CN\">",
+    "<html lang=\"zh-CN\" data-android-runtime=\"bundled\">",
+  );
+  await fs.writeFile(path.join(outputRoot, "index.html"), bundledIndex);
+  await fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml);
+  await fs.rm(path.join(outputRoot, "offline.html"), { force: true });
+  console.log(
+    `Built Android single-runtime acceptance shell; document origin host is ${cloudOrigin}`,
+  );
+} else {
+  await Promise.all([
+    // Online startup uses Capacitor server.url. This placeholder is only the
+    // bundled default document; the local-first shell lives in offline.html.
+    fs.writeFile(path.join(outputRoot, "index.html"), indexTemplate),
+    fs.writeFile(path.join(outputRoot, "offline.html"), offlineHtml),
+    fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml),
+  ]);
+  console.log(`Built Android local app shell; cloud data origin is ${cloudOrigin}`);
+}
