@@ -111,6 +111,8 @@ test("cloud cache media cannot open lightbox; local and live cloud still can", (
 
 test("public-detail and network feeds show unavailable after going offline", () => {
   const shell = read("mobile-offline-src/main.tsx");
+  const follow = read("app/follow/page.tsx");
+  const market = read("app/market/page.tsx");
   assert.match(shell, /screen\.kind === "public-detail"/);
   assert.match(shell, /screen\.kind === "discover-search"/);
   assert.match(shell, /screen\.kind === "following"/);
@@ -119,8 +121,6 @@ test("public-detail and network feeds show unavailable after going offline", () 
   for (const kind of [
     "public-detail",
     "discover-search",
-    "following",
-    "market",
     "public-cloud-detail",
   ]) {
     const start = shell.indexOf(`{screen.kind === "${kind}"`);
@@ -129,6 +129,20 @@ test("public-detail and network feeds show unavailable after going offline", () 
     assert.match(block, /!online/);
     assert.match(block, /<MobileNetworkUnavailableState/);
   }
+  const followingStart = shell.indexOf(`{screen.kind === "following"`);
+  assert.ok(followingStart >= 0);
+  const followingBlock = shell.slice(followingStart, followingStart + 700);
+  assert.match(followingBlock, /<FollowPage/);
+  assert.doesNotMatch(followingBlock, /!online \?[\s\S]*<MobileNetworkUnavailableState/);
+  const marketStart = shell.indexOf(`{screen.kind === "market"`);
+  assert.ok(marketStart >= 0);
+  const marketBlock = shell.slice(marketStart, marketStart + 700);
+  assert.match(marketBlock, /<MarketPage/);
+  assert.doesNotMatch(marketBlock, /!online \?[\s\S]*<MobileNetworkUnavailableState/);
+  assert.match(follow, /useAndroidConnectivity/);
+  assert.match(follow, /<MobileNetworkUnavailableState/);
+  assert.match(market, /useAndroidConnectivity/);
+  assert.match(market, /<MobileNetworkUnavailableState/);
   assert.match(shell, /!online \?[\s\S]*DiscoverProjectGrid/);
 });
 

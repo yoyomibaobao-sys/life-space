@@ -2033,9 +2033,7 @@ function App() {
 
       {screen.kind === "following" ? (
         <div data-android-shell-page="following">
-          {!online ? (
-            <MobileNetworkUnavailableState onReconnect={reconnect} />
-          ) : auth.status === "signed-out" ? (
+          {online && auth.status === "signed-out" ? (
             <CloudLogin copy={copy} onSuccess={() => setScreen({ kind: "following" })} />
           ) : auth.status === "checking" ? (
             <section className="panel empty">{copy.cloudLoading}</section>
@@ -2047,11 +2045,7 @@ function App() {
 
       {screen.kind === "market" ? (
         <div data-android-shell-page="market">
-          {!online ? (
-            <MobileNetworkUnavailableState onReconnect={reconnect} />
-          ) : (
-            <MarketPage />
-          )}
+          <MarketPage />
         </div>
       ) : null}
 
