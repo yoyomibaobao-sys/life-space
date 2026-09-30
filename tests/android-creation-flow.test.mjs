@@ -72,7 +72,8 @@ test("center action acquires camera/gallery before project choice and preserves 
   const shell = read("mobile-offline-src/main.tsx");
   assert.match(shell, /onClick=\{\(\) => setScreen\(\{ kind: "quick-add" \}\)\}/);
   assert.match(shell, /acceptQuickAddFiles[\s\S]*setQuickAddDraft\(\{ files, capturedAt, source, note: "" \}\)[\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
-  assert.match(shell, /creation-login[\s\S]*returnTo: "choose-project"/);
+  assert.match(shell, /kind: "cloud-login"; returnTo: "choose-project"/);
+  assert.match(shell, /openCloudLogin\("choose-project"\)/);
   assert.match(shell, /initialFiles=\{quickAddDraft\?\.files\}/);
   assert.match(shell, /setQuickAddDraft\(null\)/);
   assert.match(read("app/archive/[id]/AddRecord.tsx"), /initialFiles[\s\S]*appendFiles\(initialFiles\)/);

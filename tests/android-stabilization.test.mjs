@@ -69,10 +69,10 @@ test("one native connectivity subscription handles hot toggle, missed event on r
   assert.doesNotMatch(read("mobile-offline-src/main.tsx"), /navigator\.onLine/);
 });
 
-test("signed-out cloud is an exclusive login state; remembered local content remains", () => {
+test("signed-out cloud links to one bundled login screen; remembered local content remains", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const auth = read("lib/android-auth-state.ts");
-  assert.match(shell, /sourceFilter === "cloud" \? \(\s*<CloudLogin/);
+  assert.match(shell, /sourceFilter === "cloud" \? \([\s\S]*?openCloudLogin\("list-cloud"\)/);
   assert.match(shell, /sourceFilter !== "cloud" \? \(\s*filteredLocalArchives/);
   assert.match(auth, /preserveLocalOwner: true/);
   assert.match(shell, /auth\.status === "signed-out"/);

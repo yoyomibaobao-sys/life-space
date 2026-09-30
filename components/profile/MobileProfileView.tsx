@@ -50,6 +50,7 @@ export default function MobileProfileView({
   children,
   showAndroidVersion = true,
   onLogout,
+  onLogin,
   logoutLabel,
   onBack,
   fallbackHref = "/archive",
@@ -74,6 +75,7 @@ export default function MobileProfileView({
   children?: ReactNode;
   showAndroidVersion?: boolean;
   onLogout?: () => void;
+  onLogin?: () => void;
   logoutLabel?: string;
   onBack?: () => void;
   fallbackHref?: string;
@@ -181,6 +183,9 @@ export default function MobileProfileView({
               {logoutLabel || t.nav.logout_full}
             </button>
           ) : null}
+          {onLogin ? <button type="button" onClick={onLogin} style={accountLogoutButtonStyle}>
+            {language === "zh" ? "登录云空间" : "Sign in to cloud"}
+          </button> : null}
         </section>
       </main>
     </div>

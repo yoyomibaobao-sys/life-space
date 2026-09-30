@@ -216,6 +216,27 @@ test("offline explicit logout survives reconnect and clears cache without restor
   assert.equal(harness.getUserCalls(), callsBeforeReconnect);
 });
 
+test("explicit logout then unified login clears signed-out and restores authenticated owner", async () => {
+  const auth = await loadAuthModule();
+  const owner = { id: "owner", email: "owner@example.test" };
+  const harness = createAuthHarness(auth, { user: owner, online: true });
+  await harness.controller.initialize();
+  await harness.controller.explicitLogout();
+  assert.equal(harness.controller.getSnapshot().explicitSignedOut, true);
+  assert.equal(harness.controller.getSnapshot().status, "signed-out");
+  harness.controller.completeLogin(owner);
+  assert.equal(harness.controller.getSnapshot().explicitSignedOut, false);
+  assert.equal(harness.controller.getSnapshot().status, "signed-in");
+  assert.equal(auth.resolveAuthenticatedOwnerContext(harness.controller.getSnapshot(), { userId: owner.id })?.userId, owner.id);
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /screen\.kind === "cloud-login" \? <CloudLogin/);
+  assert.match(shell, /onSuccess=\{\(userId\) => \{[\s\S]*?loadShellIdentity\(userId\)/);
+  assert.match(shell, /openCloudLogin\("list-cloud"\)/);
+  assert.match(shell, /openCloudLogin\("profile"\)/);
+  assert.match(shell, /openCloudLogin\("project-destination"\)/);
+  assert.doesNotMatch(shell, /kind: "creation-login"|<CloudLogin copy=\{copy\} onSuccess=\{\(\) => undefined\}/);
+});
+
 test("explicit signed-out startup ignores a persisted session and token refresh", async () => {
   const module = await loadAuthModule();
   const user = { id: "owner", email: "owner@example.test" };
@@ -422,7 +443,7 @@ test("Android login keeps its form mounted during a pending request and reports 
   assert.match(login, /completeAndroidAuthLogin\(user\)/);
   assert.match(login, /role="alert"/);
   assert.match(login, /setCaptchaToken\(null\)[\s\S]*setCaptchaResetKey/);
-  assert.equal((shell.match(/<CloudLogin\b/g) || []).length, 3); // My Space, Following, creation login.
+  assert.equal((shell.match(/<CloudLogin\b/g) || []).length, 1); // One bundled login screen.
 
   const auth = await loadAuthModule();
   const harness = createAuthHarness(auth, { online: true });
@@ -480,7 +501,7 @@ test("authenticated owner hard-gates sync, pending creation and private cache ro
   );
   assert.match(
     shell,
-    /preparePendingCloudSyncQueue\(authenticatedOwnerContext\)[\s\S]*?syncAllPendingCloudArchives\(\{ ownerContext: authenticatedOwnerContext \}\)/,
+    /preparePendingCloudSyncQueue\(authenticatedOwnerContext\)[\s\S]*?loadList\(authenticatedOwnerContext\)/,
   );
   assert.match(
     shell,

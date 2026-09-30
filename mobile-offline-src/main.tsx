@@ -262,7 +262,7 @@ type Screen =
   | { kind: "new-project"; guide?: SystemNameCandidate; destination?: CreationDestination }
   | { kind: "project-destination" }
   | { kind: "quick-add" }
-  | { kind: "creation-login"; returnTo: "choose-project" | "project-destination" }
+  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "local-transfer"; archiveId?: string }
   | { kind: "activity" }
   | { kind: "discover-search" }
   | { kind: "public-detail" }
@@ -292,7 +292,7 @@ const text = {
     cloudUnavailable: "当前未联网，云端内容暂不可用", needNetwork: "需要联网", webOnly: "此功能暂需在网页中使用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
     cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
     saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
-    offlineCopies: "云端缓存副本",     cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，恢复网络后自动同步。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。", 
+    offlineCopies: "云端缓存副本",     cacheNotReady: "这个项目尚未缓存，请联网登录后等待后台准备。", cloudCacheReadOnly: "云端已有记录离线只读；新增记录先保存本机，联网后手动上传。", noCachedProjects: "还没有云项目缓存。请先联网登录，后台会准备轻量副本。",
     savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
     pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
     uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
@@ -307,7 +307,7 @@ const text = {
     brand: "有时·耕作",
     offlineMode: "本地离线模式",
     offlineTitle: "当前离线，本地记录可用",
-    offlineBody: "项目、记录和照片先保存在本机。恢复网络后会自动同步待上传的云端内容；明确选择本地免费使用的项目不会自动上传。",
+    offlineBody: "项目、记录和照片先保存在本机。联网后可手动上传待上传的云端内容；明确选择本地免费使用的项目不会自动上传。",
     migrationWarning: "旧版本地资料暂未完成迁移。现有资料不会被删除，请稍后重新打开 App 再试。",
     reconnect: "重新连接云端",
     newProject: "新建项目",
@@ -363,7 +363,7 @@ const text = {
     cloudUnavailable: "Cloud content is unavailable while offline", needNetwork: "A network connection is required", webOnly: "This feature is currently available on the website", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
     cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
     saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
-    offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device and sync automatically when you reconnect.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
+    offlineCopies: "Cached cloud copy", cacheNotReady: "This project has not been cached yet. Sign in online and let it prepare in the background.", cloudCacheReadOnly: "Existing cloud records are read-only offline. New records stay on this device and you can upload them after reconnecting.", noCachedProjects: "No cached cloud projects yet. Sign in online to prepare lightweight copies.",
     savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
     pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
     uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
@@ -378,7 +378,7 @@ const text = {
     brand: "LifeSpace",
     offlineMode: "Local offline mode",
     offlineTitle: "Cloud is temporarily unavailable. Local records still work.",
-    offlineBody: "Projects, records and photos are saved on this device first. Pending cloud changes sync automatically when you reconnect. Projects you mark as local-only stay local.",
+    offlineBody: "Projects, records and photos are saved on this device first. Upload pending cloud changes manually after reconnecting. Projects you mark as local-only stay local.",
     migrationWarning: "Previous local data has not finished migrating. Nothing was deleted; reopen the app later to retry.",
     reconnect: "Reconnect to cloud",
     newProject: "New local project",
@@ -645,6 +645,10 @@ function App() {
     window.history[replace ? "replaceState" : "pushState"]({ offlineScreen: next }, "", `#${next.kind}`);
     setScreenState(next);
     window.scrollTo({ top: 0 });
+  }
+  function openCloudLogin(returnTo: Extract<Screen, { kind: "cloud-login" }>["returnTo"], archiveId?: string) {
+    if (!online) { showToast(copy.needNetwork); return; }
+    setScreen({ kind: "cloud-login", returnTo, archiveId });
   }
   useEffect(() => {
     window.history.replaceState({ offlineScreen: { kind: "list" } }, "", "#list");
@@ -987,17 +991,8 @@ function App() {
     void loadShellIdentity(cloudUserId);
     void preparePendingCloudSyncQueue(authenticatedOwnerContext)
       .then(() => loadList(authenticatedOwnerContext))
-      .then(() =>
-        syncAllPendingCloudArchives({ ownerContext: authenticatedOwnerContext }).then(async (results) => {
-          await loadList(authenticatedOwnerContext);
-          if (results.some((result) => result.archiveUpdated)) await loadCloudList(cloudUserId);
-          window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
-          const warning = results.find((result) => result.taxonomyWarning)?.taxonomyWarning;
-          if (warning) { setTaxonomySyncWarning(warning); showToast(warning); }
-        }),
-      )
       .catch(() => undefined);
-  }, [online, cloudUserId, authenticatedOwnerContext, loadCloudList, loadList, loadShellIdentity, showToast]);
+  }, [online, cloudUserId, authenticatedOwnerContext, loadCloudList, loadList, loadShellIdentity]);
 
   useEffect(() => {
     if (screen.kind !== "activity" || !online) return;
@@ -1840,7 +1835,7 @@ function App() {
             ) : (
               <>
                 {online && auth.status === "signed-out" && sourceFilter === "cloud" ? (
-                  <CloudLogin copy={copy} onSuccess={() => undefined} />
+                  <section className="panel empty"><p>{copy.cloudSignIn}</p><button type="button" onClick={() => openCloudLogin("list-cloud")}>{copy.login}</button></section>
                 ) : null}
                 {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
                 {auth.status === "signed-in" &&
@@ -2231,12 +2226,10 @@ function App() {
 
       {screen.kind === "following" ? (
         <div data-android-shell-page="following">
-          {online && auth.status === "signed-out" ? (
-            <CloudLogin copy={copy} onSuccess={() => setScreen({ kind: "following" })} />
-          ) : auth.status === "checking" ? (
+          {auth.status === "checking" ? (
             <section className="panel empty">{copy.cloudLoading}</section>
           ) : (
-            <FollowPage />
+            <><FollowPage />{online && auth.status === "signed-out" ? <button type="button" onClick={() => openCloudLogin("following")}>{copy.login}</button> : null}</>
           )}
         </div>
       ) : null}
@@ -2274,6 +2267,7 @@ function App() {
               online={online && cloudUserId === owner?.userId}
               onBack={() => setScreen({ kind: "list" })}
               onLogout={auth.status === "signed-in" ? () => void logoutFromProfile() : undefined}
+              onLogin={online && auth.status === "signed-out" ? () => openCloudLogin("profile") : undefined}
               onProfileSaved={() => cloudUserId ? void loadShellIdentity(cloudUserId) : undefined}
             />
           </MobileShellErrorBoundary>
@@ -2308,13 +2302,19 @@ function App() {
         online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => window.history.back()} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "quick-add" ? <section className="panel quick-add-sheet" role="dialog" aria-label={copy.addRecord}><h1>{copy.addRecord}</h1><div className="action-row"><button type="button" onClick={() => quickCamera.current?.click()}>{copy.camera}</button><button type="button" onClick={() => quickGallery.current?.click()}>{copy.album}</button><button type="button" onClick={goList}>{copy.cancel}</button></div></section> : null}
-      {screen.kind === "creation-login" ? <CloudLogin copy={copy} onSuccess={() => setScreen({ kind: screen.returnTo })} /> : null}
-      {screen.kind === "project-destination" ? <section className="panel"><h1>{copy.newProject}</h1><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button" key={destination} onClick={() => destination === "login" ? setScreen({ kind: "creation-login", returnTo: "project-destination" }) : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}{destination === "pending-cloud" ? <small> 当前离线，将先保存在本机，联网后自动同步</small> : null}</button>)}</div></section> : null}
+      {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onSuccess={(userId) => {
+        const destination = screen;
+        void loadShellIdentity(userId);
+        if (destination.returnTo === "list-cloud") { setSourceFilter("cloud"); setScreen({ kind: "list" }); }
+        else if (destination.returnTo === "local-transfer" && destination.archiveId) setScreen({ kind: "detail", archiveId: destination.archiveId });
+        else if (destination.returnTo !== "local-transfer") setScreen({ kind: destination.returnTo });
+      }} /> : null}
+      {screen.kind === "project-destination" ? <section className="panel"><h1>{copy.newProject}</h1><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}{destination === "pending-cloud" ? <small> 当前离线，将先保存在本机，联网后手动上传</small> : null}</button>)}</div></section> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">
         {archives.filter((archive) => archive.status === "active" && (authenticatedOwnerContext || archive.sync?.operation_kind !== "create-archive")).map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}{archive.sync?.operation_kind === "create-archive" ? <small> · 待联网同步</small> : null}</button>)}
         {authenticatedOwnerContext && online ? cloudArchives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
         {authenticatedOwnerContext && !online ? cloudCaches.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
-      </div><div className="action-row">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button key={destination} type="button" className="primary-button" onClick={() => destination === "login" ? setScreen({ kind: "creation-login", returnTo: "choose-project" }) : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>)}<button type="button" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button></div></section> : null}
+      </div><div className="action-row">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button key={destination} type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>)}<button type="button" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button></div></section> : null}
       <input ref={quickCamera} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "camera"); event.target.value = ""; }} />
       <input ref={quickGallery} type="file" accept="image/*" multiple hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "gallery"); event.target.value = ""; }} />
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section> : null}

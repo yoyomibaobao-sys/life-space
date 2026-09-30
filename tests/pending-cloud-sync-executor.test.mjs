@@ -29,7 +29,7 @@ test("pending image retries keep deterministic paths and never delete uncertain 
   assert.doesNotMatch(executor, /storage\.from\("media"\)\.remove/);
 });
 
-test("reconnect auto-processes the pending queue and keeps a manual retry", async () => {
+test("Android reconnect prepares pending queue without uploading; web prompt remains separate", async () => {
   const [prompt, layout, localDetail, workspace, offline] = await Promise.all([
     source("components/PendingCloudSyncPrompt.tsx"),
     source("app/layout.tsx"),
@@ -47,6 +47,9 @@ test("reconnect auto-processes the pending queue and keeps a manual retry", asyn
   assert.match(localDetail, /syncPendingCloudArchive/);
   assert.match(workspace, /\?sync=1/);
   assert.match(offline, /syncAllPendingCloudArchives/);
+  const reconnectEffect = offline.slice(offline.indexOf("const recoveryKey ="), offline.indexOf("useEffect(() => {\n    if (screen.kind !== \"activity\""));
+  assert.match(reconnectEffect, /preparePendingCloudSyncQueue/);
+  assert.doesNotMatch(reconnectEffect, /syncAllPendingCloudArchives|syncPendingCloudArchive/);
   assert.match(offline, /sync_destination/);
   assert.match(offline, /refreshCloudOfflineCaches/);
 });

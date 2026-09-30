@@ -17,11 +17,12 @@ import { Browser } from "@capacitor/browser";
 
 type Live = Awaited<ReturnType<typeof loadAndroidProfileLive>>;
 
-export default function AndroidProfileController({ snapshot, online, onBack, onLogout, onProfileSaved }: {
+export default function AndroidProfileController({ snapshot, online, onBack, onLogout, onLogin, onProfileSaved }: {
   snapshot: OfflineProfileSnapshot;
   online: boolean;
   onBack: () => void;
   onLogout?: () => void;
+  onLogin?: () => void;
   onProfileSaved?: () => void;
 }) {
   const { language, t } = useLanguage();
@@ -178,6 +179,7 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     modules={modules} activeModule={module}
     onModuleChange={(next) => setModule((current) => current === next ? null : next)}
     onBack={onBack} onLogout={snapshot.userId ? onLogout : undefined}
+    onLogin={!snapshot.userId && online ? onLogin : undefined}
   >
     {module === "payment" ? (
       live ? <div data-android-profile-payments="true">
