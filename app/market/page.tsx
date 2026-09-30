@@ -23,6 +23,7 @@ import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnav
 import MarketMessageLink from "@/components/market/MarketMessageLink";
 import MobileMarketFeedCard, { mobileMarketCardStyle } from "@/components/market/MobileMarketFeedCard";
 import { getCompactCardLocation } from "@/lib/card-location";
+import { useAndroidConnectivity } from "@/lib/android-connectivity";
 
 export default function MarketPage() {
   const { language, t } = useLanguage();
@@ -39,9 +40,7 @@ export default function MarketPage() {
   const [contentFilter, setContentFilter] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const [online, setOnline] = useState(
-    () => typeof navigator === "undefined" || navigator.onLine,
-  );
+  const online = useAndroidConnectivity();
 
   useEffect(() => {
     function updateViewportMode() {
@@ -55,22 +54,10 @@ export default function MarketPage() {
   }, []);
 
   useEffect(() => {
-    function syncOnline() {
-      setOnline(navigator.onLine);
-    }
-    window.addEventListener("online", syncOnline);
-    window.addEventListener("offline", syncOnline);
-    return () => {
-      window.removeEventListener("online", syncOnline);
-      window.removeEventListener("offline", syncOnline);
-    };
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function loadMarketPosts() {
-      if (!navigator.onLine) {
+      if (!online) {
         if (cancelled) return;
         setLoading(false);
         return;

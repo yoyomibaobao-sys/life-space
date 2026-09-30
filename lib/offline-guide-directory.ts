@@ -205,6 +205,13 @@ export function loadOfflineGuideDirectory(): OfflineGuideDirectoryEntry[] {
   return mergeEntries([...BUNDLED_GUIDE_DIRECTORY, ...cached]);
 }
 
+export function findOfflineGuideEntry(rows: OfflineGuideDirectoryEntry[], key: string) {
+  const normalized = decodeURIComponent(key).trim().toLocaleLowerCase();
+  return rows.find((row) => [getOfflineGuideKey(row), row.id, row.plantId,
+    row.plantSlug, row.label, row.nameEn, ...(row.aliases || [])]
+    .some((value) => String(value || "").toLocaleLowerCase() === normalized));
+}
+
 export function rememberGuideDirectory(rows: readonly SystemNameCandidate[]) {
   try {
     if (typeof localStorage === "undefined") return;
@@ -213,6 +220,7 @@ export function rememberGuideDirectory(rows: readonly SystemNameCandidate[]) {
       ...clean(rows),
     ]);
     localStorage.setItem(KEY, JSON.stringify(merged));
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("lifespace-guide-directory-updated"));
   } catch {
     // Local recording does not depend on the guide cache.
   }

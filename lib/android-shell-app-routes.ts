@@ -11,6 +11,8 @@ export type AndroidShellRouteKind =
   | "guide-detail"
   | "archive"
   | "local-archive"
+  | "recent"
+  | "trash"
   | "network-required";
 
 export type AndroidShellRoute = {
@@ -24,29 +26,30 @@ export type AndroidShellOwnedArchive = {
   source_cloud_archive_id?: string | null;
 };
 
-const NETWORK_REQUIRED_PREFIXES = [
-  "/membership",
-  "/admin",
-  "/market/",
-  "/experience-cards",
-  "/profile/",
-  "/user/",
-  "/legal",
-  "/feedback",
-  "/login",
-  "/register",
-  "/download",
-  "/app-update",
-  "/notifications",
-  "/report",
+export type AndroidRouteCapability = "local" | "hybrid" | "online-controller" | "online-web" | "unsupported";
+
+const WEB_ROUTES = [
+  /^\/membership(?:\/|$)/, /^\/admin(?:\/|$)/,
+  /^\/experience-cards(?:\/|$)/, /^\/profile\/(?:helpful|flowers|account|backup|export|orders|followers)(?:\/|$)/,
+  /^\/user(?:\/|$)/, /^\/legal(?:\/|$)/, /^\/feedback(?:\/|$)/,
+  /^\/(?:login|register|reset-password|auth|download|app-update|notifications|report)(?:\/|$)/,
+  /^\/market\//,
 ];
 
-export function isAndroidShellNetworkRequiredPath(pathname: string) {
+export function getAndroidRouteCapability(pathname: string): AndroidRouteCapability {
   const path = pathname.replace(/\/+$/, "") || "/";
-  if (path === "/profile/project-categories") return false;
-  return NETWORK_REQUIRED_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(prefix),
-  );
+  if (path === "/profile/recent" || path === "/profile/trash" || path === "/profile" ||
+      path === "/archive" || path === "/local/archive" || path === "/profile/project-categories" ||
+      /^\/local\/archive\//.test(path) || /^\/plant\//.test(path)) return "hybrid";
+  if (path === "/plant" || path === "/") return "local";
+  if (path === "/discover" || path === "/discover/search" || path === "/experience" ||
+      path === "/follow" || path === "/market" || /^\/archive\//.test(path)) return "online-controller";
+  if (WEB_ROUTES.some((pattern) => pattern.test(path))) return "online-web";
+  return "unsupported";
+}
+
+export function isAndroidShellNetworkRequiredPath(pathname: string) {
+  return getAndroidRouteCapability(pathname) === "online-web";
 }
 
 export type AndroidArchiveScreenTarget =
@@ -163,6 +166,8 @@ export function parseAndroidShellPath(
   if (path === "/archive" || path === "/local/archive") return { kind: "list" };
   if (path === "/profile") return { kind: "profile" };
   if (path === "/profile/project-categories") return { kind: "project-categories" };
+  if (path === "/profile/recent") return { kind: "recent" };
+  if (path === "/profile/trash") return { kind: "trash" };
   if (path === "/discover") return { kind: "activity" };
   if (path === "/discover/search") return { kind: "discover-search" };
   if (path === "/experience") return { kind: "experience" };

@@ -118,7 +118,8 @@ test("network-only links stay inside the offline shell", () => {
   const shell = read("mobile-offline-src/main.tsx");
   assert.equal(parseAndroidShellPath("/membership/payment")?.kind, "network-required");
   assert.equal(parseAndroidShellPath("/profile/project-categories")?.kind, "project-categories");
-  assert.equal(parseAndroidShellPath("/profile/recent")?.kind, "network-required");
+  assert.equal(parseAndroidShellPath("/profile/recent")?.kind, "recent");
+  assert.equal(parseAndroidShellPath("/profile/trash")?.kind, "trash");
   assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "network-required");
   assert.equal(parseAndroidShellPath("/legal")?.kind, "network-required");
   assert.match(shell, /showToast\(copy\.needNetwork\)/);

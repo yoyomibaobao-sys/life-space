@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
+import { isAndroidOnline } from "@/lib/android-connectivity";
 
-export async function restoreBundledSession(client: typeof supabase = supabase, online = navigator.onLine) {
+export async function restoreBundledSession(client: typeof supabase = supabase, online = isAndroidOnline()) {
   const stored = await client.auth.getSession();
   if (stored.error) throw stored.error;
   const user = stored.data.session?.user || null;

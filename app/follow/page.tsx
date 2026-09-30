@@ -9,6 +9,7 @@ import {
 } from "react";
 import InternalLink, { useInternalNavigate } from "@/components/navigation/InternalLink";
 import { supabase } from "@/lib/supabase";
+import { useAndroidConnectivity } from "@/lib/android-connectivity";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -172,9 +173,7 @@ export default function FollowPage() {
   const [projectSubmitting, setProjectSubmitting] = useState(false);
   const [userSubmitting, setUserSubmitting] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [online, setOnline] = useState(
-    () => typeof navigator === "undefined" || navigator.onLine,
-  );
+  const online = useAndroidConnectivity();
   const activeTab = !isMobileViewport && tab === "experience" ? "projects" : tab;
   const [userMenuTargetId, setUserMenuTargetId] = useState<string | null>(null);
   const [pinnedUserIds, setPinnedUserIds] = useState<string[]>(() => {
@@ -203,25 +202,13 @@ export default function FollowPage() {
   }, []);
 
   useEffect(() => {
-    function syncOnline() {
-      setOnline(navigator.onLine);
-    }
-    window.addEventListener("online", syncOnline);
-    window.addEventListener("offline", syncOnline);
-    return () => {
-      window.removeEventListener("online", syncOnline);
-      window.removeEventListener("offline", syncOnline);
-    };
-  }, []);
-
-  useEffect(() => {
     async function load() {
       setLoading(true);
       setProjectLoadError(false);
       setUserProjectsError(false);
       setExperienceLoadError(false);
 
-      if (!navigator.onLine) {
+      if (!online) {
         setLoading(false);
         return;
       }

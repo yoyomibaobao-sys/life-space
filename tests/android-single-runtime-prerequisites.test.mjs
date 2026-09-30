@@ -218,7 +218,7 @@ test("cloud and local group settings persist separately, including offline local
 });
 
 test("bundled Auth restores a session and requires Turnstile for login", async () => {
-  const module = await loadModule("lib/android-auth-session.ts", { "@/lib/supabase": "export const supabase = {};" });
+  const module = await loadModule("lib/android-auth-session.ts", { "@/lib/supabase": "export const supabase = {};", "@/lib/android-connectivity": "export const isAndroidOnline = () => true;" });
   let loginInput = null;
   const client = { auth: {
     getSession: async () => ({ data: { session: { user: { id: "owner" } } }, error: null }),

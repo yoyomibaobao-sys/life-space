@@ -70,7 +70,7 @@ test("personal space local, cloud, cache, and pending share ArchiveProjectCard",
 
   assert.match(card, /export default function ArchiveProjectCard/);
   assert.match(shell, /renderCloudProjectCard/);
-  assert.match(shell, /localArchiveToProjectView\(archive, ownerContext, language\)/);
+  assert.match(shell, /localArchiveToProjectView\(archive, ownerContext, language, (?:cloudDepths|getLocalArchiveCategoryDepths)/);
   assert.doesNotMatch(shell, /visibilityLabel: copy\.offlineCopies/);
   assert.doesNotMatch(shell, /visibilityLabel: copy\.local/);
   assert.match(view, /pending_sync_badge/);
@@ -97,13 +97,14 @@ test("profile page remains available offline in the Android shell", () => {
   assert.match(shell, /data-android-shell-page="profile"/);
 });
 
-test("guide offline uses the same PlantPage chrome", () => {
+test("guide offline opens cached directory without PlantPage fetch", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const plant = read("app/plant/page.tsx");
 
   assert.match(plant, /<HomeSectionTabs\s+active="guide"/);
   assert.match(shell, /<PlantPage/);
-  assert.doesNotMatch(shell, /online \? <PlantPage/);
+  assert.match(shell, /online \? <PlantPage[\s\S]*guide-directory-offline/);
+  assert.match(shell, /findOfflineGuideEntry/);
   assert.match(shell, /data-android-shell-page="guides"/);
   assert.match(shell, /kind: "guide-detail"/);
 });

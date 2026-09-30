@@ -44,6 +44,10 @@ export type ArchiveProjectDetailCapabilities = {
   canToggleVisibility?: boolean;
 };
 
+// All data adapters target this single detail contract; their writable actions
+// differ through capabilities and handlers, not a separate presentation.
+export type ArchiveProjectDetailPresentationModel = Parameters<typeof ArchiveProjectDetailView>[0];
+
 export default function ArchiveProjectDetailView({
   archive,
   records,

@@ -12,6 +12,8 @@ import {
 } from "@/lib/archive-categories";
 import type { ArchiveCategoryDepth, ArchiveCategoryDepths, ArchiveCategorySpace } from "@/lib/archive-category-settings";
 import { useLanguage } from "@/lib/i18n/useLanguage";
+import { useState, type FormEvent } from "react";
+import type { ProjectTaxonomyEntry } from "@/lib/android-project-taxonomy";
 
 export default function ProjectCategorySettingsView({
   activeSpace,
@@ -24,6 +26,10 @@ export default function ProjectCategorySettingsView({
   onToggleDepth,
   onSave,
   onBack,
+  entries = [],
+  onCreate,
+  onRename,
+  onDelete,
 }: {
   activeSpace: ArchiveCategorySpace;
   onSpaceChange: (space: ArchiveCategorySpace) => void;
@@ -35,11 +41,40 @@ export default function ProjectCategorySettingsView({
   onToggleDepth: (category: ArchiveCategory, depth: ArchiveCategoryDepth) => void;
   onSave: () => void;
   onBack?: () => void;
+  entries?: ProjectTaxonomyEntry[];
+  onCreate?: (category: ArchiveCategory, label: string, parentId?: string | null) => Promise<void>;
+  onRename?: (entry: ProjectTaxonomyEntry, label: string) => Promise<void>;
+  onDelete?: (entry: ProjectTaxonomyEntry) => Promise<void>;
 }) {
   const { language, t } = useLanguage();
   const isEnglish = language === "en";
   const pageTitle = t.archive_workspace.group_settings_title;
   const cloudLocked = activeSpace === "cloud" && cloudRequiresNetwork;
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+
+  async function create(event: FormEvent<HTMLFormElement>, category: ArchiveCategory, parentId?: string | null) {
+    event.preventDefault();
+    const key = parentId || category;
+    const value = drafts[key]?.trim();
+    if (!value || !onCreate) return;
+    setBusy(true);
+    try { await onCreate(category, value, parentId); setDrafts((current) => ({ ...current, [key]: "" })); }
+    finally { setBusy(false); }
+  }
+
+  async function rename(entry: ProjectTaxonomyEntry) {
+    const value = window.prompt(isEnglish ? "Rename group" : "重命名分组", entry.label)?.trim();
+    if (!value || value === entry.label || !onRename) return;
+    setBusy(true);
+    try { await onRename(entry, value); } finally { setBusy(false); }
+  }
+
+  async function remove(entry: ProjectTaxonomyEntry) {
+    if (!onDelete || !window.confirm(isEnglish ? "Delete this group?" : "删除此分组？")) return;
+    setBusy(true);
+    try { await onDelete(entry); } finally { setBusy(false); }
+  }
 
   function updateDepth(category: ArchiveCategory, depth: ArchiveCategoryDepth) {
     if (cloudLocked) return;
@@ -131,6 +166,24 @@ export default function ProjectCategorySettingsView({
                       onToggle={() => updateDepth(category, thirdEnabled ? 2 : 3)}
                     />
                   ) : null}
+                  {secondEnabled && onCreate ? <div style={{ padding: 14 }}>
+                    {entries.filter((entry) => entry.kind === "subcategory" && entry.category === category).map((parent) => (
+                      <div key={parent.id} data-taxonomy-level="1" style={{ marginBottom: 12 }}>
+                        <div><strong>{parent.label}</strong>{onRename ? <button type="button" disabled={busy} onClick={() => void rename(parent)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
+                          {onDelete ? <button type="button" disabled={busy} onClick={() => void remove(parent)}>{isEnglish ? "Delete" : "删除"}</button> : null}</div>
+                        {thirdEnabled ? <div style={{ paddingLeft: 16 }}>
+                          {entries.filter((child) => child.kind === "group" && child.parentId === parent.id).map((child) => <div key={child.id} data-taxonomy-level="2">
+                            {child.label}{onRename ? <button type="button" disabled={busy} onClick={() => void rename(child)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
+                            {onDelete ? <button type="button" disabled={busy} onClick={() => void remove(child)}>{isEnglish ? "Delete" : "删除"}</button> : null}
+                          </div>)}
+                          <form onSubmit={(event) => void create(event, category, parent.id)}><input aria-label={isEnglish ? "New level 2 group" : "新建二级分组"} value={drafts[parent.id] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [parent.id]: event.target.value }))} />
+                            <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form>
+                        </div> : null}
+                      </div>
+                    ))}
+                    <form onSubmit={(event) => void create(event, category)}><input aria-label={isEnglish ? "New level 1 group" : "新建一级分组"} value={drafts[category] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [category]: event.target.value }))} />
+                      <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form>
+                  </div> : null}
                 </article>
               );
             })}

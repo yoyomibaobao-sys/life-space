@@ -28,6 +28,7 @@ type Props<T extends string> = {
   noticeSlot?: ReactNode;
   sourceTrailingSlot?: ReactNode;
   children: ReactNode;
+  online?: boolean;
 };
 
 export default function ArchiveWorkspaceTemplate<T extends string>({
@@ -44,11 +45,13 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
   noticeSlot,
   sourceTrailingSlot,
   children,
+  online: controlledOnline,
 }: Props<T>) {
   const { t } = useLanguage();
   const [online, setOnline] = useState(true);
 
   useEffect(() => {
+    if (controlledOnline !== undefined) return;
     const refresh = () => setOnline(navigator.onLine);
     refresh();
     window.addEventListener("online", refresh);
@@ -57,7 +60,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
       window.removeEventListener("online", refresh);
       window.removeEventListener("offline", refresh);
     };
-  }, []);
+  }, [controlledOnline]);
 
   return (
     <>
@@ -80,7 +83,7 @@ export default function ArchiveWorkspaceTemplate<T extends string>({
       ) : null}
 
       {filtersSlot}
-      {!online ? (
+      {!(controlledOnline ?? online) ? (
         <ConnectivityNotice message={t.archive_workspace.offline_notice} />
       ) : null}
       {noticeSlot}

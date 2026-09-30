@@ -10,6 +10,7 @@ import { formatStorage } from "@/lib/user-profile-shared";
 import { getUserTypeLabel } from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
+import { Browser } from "@capacitor/browser";
 
 type Live = Awaited<ReturnType<typeof loadAndroidProfileLive>>;
 
@@ -17,7 +18,7 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
   snapshot: OfflineProfileSnapshot;
   online: boolean;
   onBack: () => void;
-  onLogout: () => void;
+  onLogout?: () => void;
 }) {
   const { language, t } = useLanguage();
   const [live, setLive] = useState<Live | null>(null);
@@ -46,6 +47,7 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     { href: "/membership/benefits", label: language === "zh" ? "会员类别说明" : "Membership types" },
     { value: "backup", label: language === "zh" ? "备份与导出" : "Backup & export" },
     { href: "/profile/trash", label: t.profile.modules.trash },
+    { href: "/profile/recent", label: language === "zh" ? "最近浏览" : "Recent browsing" },
     { value: "account", label: language === "zh" ? "账号管理" : "Account management" },
     ...(live?.isAdmin ? [{ href: "/admin/memberships", label: language === "zh" ? "用户管理" : "User management" }] : []),
   ];
@@ -101,7 +103,9 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
         </p>) : <p>{t.profile.no_payment_orders}</p>}
       </div> : <p>{needNetwork}</p>
     ) : null}
-    {module === "backup" ? <p>{language === "zh" ? "本机项目可离线使用；云端导出需要联网并在网页完成。" : "Local projects remain available offline. Cloud export requires the website."}</p> : null}
-    {module === "account" ? <p>{language === "zh" ? "退出登录不会删除本机未同步内容。注销账号须联网在网页完成。" : "Sign out keeps unsynced local content. Account deletion requires the website."}</p> : null}
+    {module === "backup" ? <div><p>{language === "zh" ? "本机项目可离线使用；云端导出需联网。" : "Local projects work offline. Cloud export requires a connection."}</p>
+      {online ? <button type="button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile" })}>{language === "zh" ? "打开云端备份与导出" : "Open backup and export"}</button> : <p>{needNetwork}</p>}</div> : null}
+    {module === "account" ? <div><p>{language === "zh" ? "退出登录不会删除本机未同步内容。" : "Sign out keeps unsynced local content."}</p>
+      {online ? <button type="button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile" })}>{language === "zh" ? "打开账号管理" : "Open account management"}</button> : <p>{needNetwork}</p>}</div> : null}
   </MobileProfileView>;
 }

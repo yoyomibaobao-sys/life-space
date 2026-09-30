@@ -10,6 +10,10 @@
   --card: rgba(255, 255, 255, 0.92);
   --danger: #a0443b;
   --shell-pad-x: 8px;
+  /* Native StatusBar.overlaysWebView=false owns the top window inset. */
+  --app-safe-area-top: 0px;
+  --page-pad-x: 16px;
+  --radius-lg: 18px;
 }
 
 * { box-sizing: border-box; }
@@ -38,7 +42,7 @@ button { touch-action: manipulation; }
   max-width: 1080px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 8px var(--shell-pad-x)
+  padding: 0 var(--shell-pad-x)
     calc(env(safe-area-inset-bottom, 0px) + 94px);
 }
 
@@ -90,6 +94,8 @@ button:disabled { opacity: 0.55; }
   box-shadow: 0 8px 24px rgba(48, 75, 42, 0.05);
 }
 .project-meta, .record-meta { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.offline-shell :is(.market-shell-body small, .experience-shell-body small) { font-size: 13px; }
+.offline-shell .market-shell-badges span { font-size: 12px; }
 
 .empty {
   text-align: center;

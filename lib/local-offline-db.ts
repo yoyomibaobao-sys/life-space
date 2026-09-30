@@ -1443,7 +1443,7 @@ export async function listVisibleCloudOfflineArchiveSummaries(
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
 
-  return archives
+  const summaries = archives
     .map(normalizeLocalArchive)
     .filter(
       (archive) =>
@@ -1459,6 +1459,45 @@ export async function listVisibleCloudOfflineArchiveSummaries(
         new Date(b.updated_at || b.created_at).getTime() -
         new Date(a.updated_at || a.created_at).getTime()
     );
+  const seen = new Set<string>();
+  return summaries.filter((archive) => {
+    const source = archive.source_cloud_archive_id || archive.id;
+    if (seen.has(source)) return false;
+    seen.add(source);
+    return true;
+  });
+}
+
+// Read-only device diagnosis. Never remove rows or pending user content here.
+export async function diagnoseCloudOfflineCache(ownerContext?: LocalArchiveOwnerContext | null) {
+  const [archives, records, images] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const rows = archives.map(normalizeLocalArchive).filter((archive) =>
+    archive.local_role === "cloud-offline-cache" && isLocalArchiveVisibleToOwner(archive, ownerContext));
+  const sources = new Map<string, number>();
+  const details = rows.map((archive) => {
+    const source = archive.source_cloud_archive_id || "unknown";
+    sources.set(source, (sources.get(source) || 0) + 1);
+    const archiveRecords = records.filter((record) => record.archive_id === archive.id);
+    const pendingRecordIds = new Set(archiveRecords.filter((record) =>
+      isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)).map((record) => record.id));
+    return {
+      cacheId: archive.id, sourceId: source, ownerId: archive.local_owner_user_id,
+      status: archive.status, updatedAt: archive.updated_at,
+      pendingRecords: pendingRecordIds.size,
+      pendingImages: images.filter((image) => image.archive_id === archive.id &&
+        (pendingRecordIds.has(image.record_id) ||
+          isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status))).length,
+    };
+  });
+  return {
+    rawCount: rows.length, uniqueSourceCount: sources.size,
+    sourceCounts: [...sources].map(([sourceId, count]) => ({ sourceId, count })),
+    rows: details,
+  };
 }
 
 export async function listVisibleLocalTaxonomyItems(
@@ -3012,8 +3051,11 @@ async function stripSyncedCloudOfflineCacheRows(
     const archiveStore = transaction.objectStore(ARCHIVE_STORE);
     const recordStore = transaction.objectStore(RECORD_STORE);
     const imageStore = transaction.objectStore(IMAGE_STORE);
+    const pendingImageParents = new Set(archiveImages.filter((image) =>
+      isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status)).map((image) => image.record_id));
     for (const record of archiveRecords) {
-      if (!isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)) {
+      if (!isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status) &&
+          !pendingImageParents.has(record.id)) {
         await requestToPromise(recordStore.delete(record.id));
       }
     }
@@ -3487,7 +3529,7 @@ export async function completeCloudArchiveLocalImport(input: {
   }
 }
 
-export async function replaceCloudOfflineCache(input: {
+async function replaceCloudOfflineCacheUnlocked(input: {
   cloud_archive_id: string;
   owner_context: LocalArchiveOwnerContext;
   title: string;
@@ -3531,7 +3573,7 @@ export async function replaceCloudOfflineCache(input: {
         archive.source_cloud_archive_id === cloudArchiveId &&
         isLocalArchiveVisibleToOwner(archive, input.owner_context)
     );
-  const archiveId = previous?.id || createId("cloud_cache_archive");
+  const archiveId = previous?.id || `cloud_cache_archive_${ownerUserId}_${cloudArchiveId}`;
   const timestamp = nowIso();
   const category = normalizeLocalArchiveCategory(input.category);
   const cycleIdByCloudId = new Map<string, string>();
@@ -3663,10 +3705,13 @@ export async function replaceCloudOfflineCache(input: {
     }),
   };
 
+  const pendingImageParents = new Set(allImages.filter((image) =>
+    image.archive_id === archiveId &&
+    isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status)).map((image) => image.record_id));
   const pendingRecords = allRecords.filter(
     (record) =>
       record.archive_id === archiveId &&
-      isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)
+      (isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status) || pendingImageParents.has(record.id))
   );
   const pendingRecordIds = new Set(pendingRecords.map((record) => record.id));
   const pendingImages = allImages.filter(
@@ -3689,7 +3734,8 @@ export async function replaceCloudOfflineCache(input: {
     for (const record of allRecords.filter(
       (item) =>
         item.archive_id === archiveId &&
-        !isPendingCloudSyncStatus(normalizeLocalSyncMeta(item.sync).status)
+        !isPendingCloudSyncStatus(normalizeLocalSyncMeta(item.sync).status) &&
+        !pendingImageParents.has(item.id)
     )) {
       await requestToPromise(recordStore.delete(record.id));
     }
@@ -3721,6 +3767,83 @@ export async function replaceCloudOfflineCache(input: {
   }
 }
 
+const cacheWrites = new Map<string, Promise<unknown>>();
+export function replaceCloudOfflineCache(input: Parameters<typeof replaceCloudOfflineCacheUnlocked>[0]) {
+  const key = `${input.owner_context.userId}\u0000${input.cloud_archive_id}`;
+  const prior = cacheWrites.get(key) || Promise.resolve();
+  const current = prior.catch(() => undefined).then(() => replaceCloudOfflineCacheUnlocked(input));
+  cacheWrites.set(key, current);
+  void current.finally(() => { if (cacheWrites.get(key) === current) cacheWrites.delete(key); }).catch(() => undefined);
+  return current;
+}
+
+// Explicit, diagnosis-gated maintenance only. Never invoke this on startup or
+// during refresh: a device owner must inspect the read-only diagnosis first.
+export async function repairDiagnosedCloudCacheDuplicates(input: {
+  ownerContext: LocalArchiveOwnerContext;
+  sourceId: string;
+  expectedCacheIds: string[];
+}) {
+  const ownerId = getOwnerUserId(input.ownerContext);
+  if (!ownerId || input.expectedCacheIds.length < 2) throw new Error("diagnosis_required");
+  const key = `${ownerId}\u0000${input.sourceId}`;
+  const prior = cacheWrites.get(key) || Promise.resolve();
+  const repair = prior.catch(() => undefined).then(async () => {
+    const db = await openLocalDb();
+    try {
+      const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE], "readwrite");
+      const done = transactionDone(transaction);
+      const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+      const recordStore = transaction.objectStore(RECORD_STORE);
+      const imageStore = transaction.objectStore(IMAGE_STORE);
+      const archives = (await requestToPromise<LocalArchive[]>(archiveStore.getAll()))
+        .map(normalizeLocalArchive).filter((archive) =>
+          resolveLocalArchiveRole(archive) === "cloud-offline-cache" &&
+          archive.source_cloud_archive_id === input.sourceId &&
+          archive.local_owner_user_id === ownerId);
+      const expected = [...input.expectedCacheIds].sort();
+      if (archives.length < 2 || JSON.stringify(archives.map((archive) => archive.id).sort()) !== JSON.stringify(expected)) {
+        transaction.abort();
+        await done.catch(() => undefined);
+        throw new Error("diagnosis_changed");
+      }
+      const records = await requestToPromise<LocalRecord[]>(recordStore.getAll());
+      const images = await requestToPromise<LocalImage[]>(imageStore.getAll());
+      const sorted = archives.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+      const canonical = sorted[0];
+      const duplicateIds = new Set(sorted.slice(1).map((archive) => archive.id));
+      const pendingRecordIds = new Set(records.filter((record) =>
+        (duplicateIds.has(record.archive_id) || record.archive_id === canonical.id) &&
+        isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)).map((record) => record.id));
+      const pendingImageRecordIds = new Set(images.filter((image) =>
+        duplicateIds.has(image.archive_id) &&
+        isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status)).map((image) => image.record_id));
+      let preservedRecords = 0;
+      let preservedImages = 0;
+      for (const record of records.filter((row) => duplicateIds.has(row.archive_id))) {
+        if (pendingRecordIds.has(record.id) || pendingImageRecordIds.has(record.id)) {
+          await requestToPromise(recordStore.put({ ...record, archive_id: canonical.id }));
+          preservedRecords++;
+        } else await requestToPromise(recordStore.delete(record.id));
+      }
+      for (const image of images.filter((row) => duplicateIds.has(row.archive_id))) {
+        if (pendingRecordIds.has(image.record_id) || isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status)) {
+          await requestToPromise(imageStore.put({ ...image, archive_id: canonical.id }));
+          preservedImages++;
+        } else await requestToPromise(imageStore.delete(image.id));
+      }
+      const cycleMap = new Map(sorted.flatMap((archive) => archive.cycles || []).map((cycle) => [cycle.id, cycle]));
+      await requestToPromise(archiveStore.put({ ...canonical, cycles: [...cycleMap.values()] }));
+      for (const duplicateId of duplicateIds) await requestToPromise(archiveStore.delete(duplicateId));
+      await done;
+      return { canonicalId: canonical.id, removedSyncedOnlyCopies: duplicateIds.size, preservedRecords, preservedImages };
+    } finally { db.close(); }
+  });
+  cacheWrites.set(key, repair);
+  void repair.finally(() => { if (cacheWrites.get(key) === repair) cacheWrites.delete(key); }).catch(() => undefined);
+  return repair;
+}
+
 export async function pruneCloudOfflineCacheForEndedSource(
   cloudArchiveId: string,
   ownerContext?: LocalArchiveOwnerContext | null,
@@ -3748,6 +3871,8 @@ export async function pruneCloudOfflineCacheForEndedSource(
       pendingRecordIds.has(image.record_id)
   );
   const hasPending = pendingRecords.length > 0 || pendingImages.length > 0;
+  const pendingImageParents = new Set(pendingImages.filter((image) =>
+    isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status)).map((image) => image.record_id));
   const db = await openLocalDb();
   try {
     const transaction = db.transaction(
@@ -3760,7 +3885,8 @@ export async function pruneCloudOfflineCacheForEndedSource(
     const imageStore = transaction.objectStore(IMAGE_STORE);
 
     for (const record of archiveRecords) {
-      if (!hasPending || !isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)) {
+      if (!hasPending || (!isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status) &&
+        !pendingImageParents.has(record.id))) {
         await requestToPromise(recordStore.delete(record.id));
       }
     }

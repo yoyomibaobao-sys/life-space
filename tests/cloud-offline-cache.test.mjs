@@ -19,15 +19,15 @@ test("active cloud archives are cached and ended archives are pruned", () => {
   assert.doesNotMatch(cache, /cloud_media_url: media\.url/);
   assert.doesNotMatch(cache, /display_url \|\|/);
   assert.match(db, /local_role: "cloud-offline-cache"/);
-  assert.match(db, /export async function replaceCloudOfflineCache/);
+  assert.match(db, /export function replaceCloudOfflineCache/);
   assert.match(db, /export async function pruneCloudOfflineCacheForEndedSource/);
-  assert.match(db, /createId\("cloud_cache_archive"\)/);
+  assert.match(db, /`cloud_cache_archive_\$\{ownerUserId\}_\$\{cloudArchiveId\}`/);
 });
 
 test("cloud cache refresh does not delete local-project or saved-local-copy", () => {
   const db = read("lib/local-offline-db.ts");
   const replace = db.slice(
-    db.indexOf("export async function replaceCloudOfflineCache"),
+    db.indexOf("async function replaceCloudOfflineCacheUnlocked"),
     db.indexOf("export async function pruneCloudOfflineCacheForEndedSource")
   );
   const prune = db.slice(
@@ -108,7 +108,7 @@ test("cloud offline cache is read-only for existing cloud content", () => {
     );
   }
 
-  const replace = sliceExport("replaceCloudOfflineCache", "pruneCloudOfflineCacheForEndedSource");
+  const replace = db.slice(db.indexOf("async function replaceCloudOfflineCacheUnlocked"), db.indexOf("export async function pruneCloudOfflineCacheForEndedSource"));
   const prune = sliceExport("pruneCloudOfflineCacheForEndedSource", "createLocalArchiveCycle");
   const clear = sliceExport("clearCloudOfflineCachesForOwner", "beginCloudArchiveLocalImport");
   assert.doesNotMatch(replace, /abortIfCloudOfflineCacheWrite/);

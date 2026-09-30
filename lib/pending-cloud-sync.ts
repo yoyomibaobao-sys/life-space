@@ -18,6 +18,7 @@ import {
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import { normalizePlantingRegion } from "@/lib/planting-region";
+import { isAndroidOnline } from "@/lib/android-connectivity";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
   reserveStorageUpload,
@@ -845,7 +846,7 @@ export async function syncPendingCloudArchive(params: {
       error: "请先登录，再上传本机改动。",
     };
   }
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
+  if (!isAndroidOnline()) {
     return {
       success: false,
       cloudArchiveId: null,
@@ -988,7 +989,7 @@ export async function syncPendingCloudArchive(params: {
     }
 
     for (const record of pendingRecords) {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (!isAndroidOnline()) {
         lastError = "网络已断开，剩余内容保留在本机。";
         break;
       }
@@ -1011,7 +1012,7 @@ export async function syncPendingCloudArchive(params: {
       for (const image of record.images.filter((candidate) =>
         isPendingCloudSyncStatus(candidate.sync.status)
       )) {
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
+        if (!isAndroidOnline()) {
           lastError = "网络已断开，剩余照片保留在本机。";
           break;
         }

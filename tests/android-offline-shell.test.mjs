@@ -47,7 +47,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<DeviceOwnedProjectDetail/);
   assert.match(sharedWorkspace, /<ConnectivityNotice/);
-  assert.match(source, /navigator\.onLine/);
+  assert.match(source, /useAndroidConnectivity/);
   assert.match(source, /refreshCloudOfflineCaches/);
   assert.match(source, /syncAllPendingCloudArchives/);
   assert.match(source, /syncPendingCloudArchive/);
@@ -155,9 +155,9 @@ test("explicit Android sign-out hides account-bound offline cache state", () => 
   const source = read("mobile-offline-src/main.tsx");
 
   assert.match(source, /event === "SIGNED_OUT"/);
-  assert.match(source, /clearRememberedLocalOwnerContext\(\)/);
+  assert.match(source, /preserveLocalOwner: true/);
   assert.match(source, /setCloudArchives\(\[\]\)/);
-  assert.match(source, /listVisibleCloudOfflineArchiveSummaries\(null\)/);
+  assert.match(source, /listVisibleCloudOfflineArchiveSummaries\(loadRememberedLocalOwnerContext\(\)\)/);
   assert.match(source, /setCloudCaches\(cachedCloud\)/);
 });
 

@@ -22,6 +22,12 @@ import {
   listVisibleLocalArchiveSummaries,
   listVisibleCloudOfflineArchiveSummaries,
   listPendingCloudSyncSummaries,
+  listLocalArchiveCycleTrash,
+  restoreLocalArchiveCycle,
+  listVisibleLocalTaxonomyItems,
+  createLocalTaxonomyItem,
+  renameLocalTaxonomyItem,
+  deleteLocalTaxonomyItem,
   deferPendingCloudSyncPrompt,
   markUnownedLocalArchivesForOwner,
   preparePendingCloudSyncQueue,
@@ -36,7 +42,6 @@ import {
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import {
-  clearRememberedLocalOwnerContext,
   wasLocalOwnerExplicitlySignedOut,
   loadRememberedLocalOwnerContext,
   rememberLocalOwnerContext,
@@ -89,13 +94,22 @@ import {
   getOfflineGuideOverview,
   getOfflineGuideParameters,
   loadOfflineGuideDirectory,
+  findOfflineGuideEntry,
   type OfflineGuideDirectoryEntry,
 } from "@/lib/offline-guide-directory";
 import type { SystemNameCandidate } from "@/lib/system-name-candidates";
 import { setStoredLanguage } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 import { supabase } from "@/lib/supabase";
+import { Browser } from "@capacitor/browser";
+import { isAndroidOnline, recheckAndroidConnectivity, useAndroidConnectivity } from "@/lib/android-connectivity";
+import { getRecentArchiveBrowseItems, saveRecentArchiveBrowse } from "@/lib/recent-browse";
+import {
+  createCloudProjectTaxonomy, deleteCloudProjectTaxonomy, loadCloudProjectTaxonomy,
+  mapLocalProjectTaxonomy, renameCloudProjectTaxonomy, type ProjectTaxonomyEntry,
+} from "@/lib/android-project-taxonomy";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncAllPendingCloudArchives, syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
@@ -219,6 +233,8 @@ type CloudArchiveSummary = {
   display_cover_image_url?: string | null;
   display_cover_thumb_url?: string | null;
   is_public?: boolean | null;
+  sub_tag_id?: string | null;
+  group_tag_id?: string | null;
 };
 
 type Screen =
@@ -234,6 +250,8 @@ type Screen =
   | { kind: "guide-detail"; guideKey: string }
   | { kind: "profile" }
   | { kind: "project-categories" }
+  | { kind: "recent" }
+  | { kind: "trash" }
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
@@ -481,14 +499,25 @@ function OfflineProjectCategorySettings({
   const [cloudLoading, setCloudLoading] = useState(false);
   const [error, setError] = useState("");
   const cloudAvailable = online && cloudUserId === ownerUserId;
+  const [localEntries, setLocalEntries] = useState<ProjectTaxonomyEntry[]>([]);
+  const [cloudEntries, setCloudEntries] = useState<ProjectTaxonomyEntry[]>([]);
+  const localContext = useMemo(() => ownerUserId ? { userId: ownerUserId } : null, [ownerUserId]);
+  const reloadLocal = useCallback(async () => {
+    setLocalEntries(mapLocalProjectTaxonomy(await listVisibleLocalTaxonomyItems(localContext)));
+  }, [localContext]);
+  const reloadCloud = useCallback(async () => {
+    if (cloudAvailable) setCloudEntries(await loadCloudProjectTaxonomy(ownerUserId));
+  }, [cloudAvailable, ownerUserId]);
+
+  useEffect(() => { void reloadLocal().catch((cause) => setError(String(cause))); }, [reloadLocal]);
 
   useEffect(() => {
     if (!cloudAvailable || activeSpace !== "cloud") return;
     let active = true;
     setCloudLoading(true);
     setError("");
-    void getCloudArchiveCategoryDepths(ownerUserId).then((depths) => {
-      if (active) setCloudDepths(depths);
+    void Promise.all([getCloudArchiveCategoryDepths(ownerUserId), loadCloudProjectTaxonomy(ownerUserId)]).then(([depths, entries]) => {
+      if (active) { setCloudDepths(depths); setCloudEntries(entries); }
     }).catch((cause) => {
       if (active) setError(cause instanceof Error ? cause.message : String(cause));
     }).finally(() => { if (active) setCloudLoading(false); });
@@ -514,6 +543,32 @@ function OfflineProjectCategorySettings({
     }
   }
 
+  async function mutateTaxonomy(action: "create" | "rename" | "delete", category: ArchiveCategory,
+    labelOrEntry: string | ProjectTaxonomyEntry, parentId?: string | null, nextLabel?: string) {
+    setError("");
+    try {
+      const entry = typeof labelOrEntry === "string" ? null : labelOrEntry;
+      if (activeSpace === "cloud") {
+        if (!cloudAvailable) throw new Error("需要联网");
+        if (action === "create") await createCloudProjectTaxonomy({ userId: ownerUserId, category, label: labelOrEntry as string, parentId });
+        else if (entry && action === "rename") await renameCloudProjectTaxonomy({ userId: ownerUserId, entry, label: nextLabel || "" });
+        else if (entry) await deleteCloudProjectTaxonomy({ userId: ownerUserId, entry });
+        await reloadCloud();
+      } else {
+        const parent = localEntries.find((item) => item.id === parentId);
+        const fields = { category, subcategory: entry?.kind === "group"
+          ? localEntries.find((item) => item.id === entry.parentId)?.label || null
+          : parent?.label || null };
+        if (action === "create") await createLocalTaxonomyItem({ ...fields, kind: parentId ? "group" : "subcategory", label: labelOrEntry as string }, localContext);
+        else if (entry && action === "rename") await renameLocalTaxonomyItem({ ...fields, kind: entry.kind, oldLabel: entry.label, newLabel: nextLabel || "" }, localContext);
+        else if (entry) await deleteLocalTaxonomyItem({ ...fields, kind: entry.kind, label: entry.label }, localContext);
+        await reloadLocal();
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
   return (
     <ProjectCategorySettingsView
       activeSpace={activeSpace}
@@ -524,6 +579,10 @@ function OfflineProjectCategorySettings({
       error={error}
       cloudRequiresNetwork={!cloudAvailable}
       onToggleDepth={updateDepth}
+      entries={activeSpace === "cloud" ? cloudEntries : localEntries}
+      onCreate={(category, label, parentId) => mutateTaxonomy("create", category, label, parentId)}
+      onRename={(entry, label) => mutateTaxonomy("rename", entry.category, entry, entry.parentId, label)}
+      onDelete={(entry) => mutateTaxonomy("delete", entry.category, entry, entry.parentId)}
       onSave={() => void save()}
       onBack={onBack}
     />
@@ -535,7 +594,14 @@ function App() {
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
-  const [directory] = useState(loadOfflineGuideDirectory);
+  const [subcategoryFilter, setSubcategoryFilter] = useState<string | null>(null);
+  const [groupFilter, setGroupFilter] = useState<string | null>(null);
+  const [directory, setDirectory] = useState(loadOfflineGuideDirectory);
+  useEffect(() => {
+    const update = () => setDirectory(loadOfflineGuideDirectory());
+    window.addEventListener("lifespace-guide-directory-updated", update);
+    return () => window.removeEventListener("lifespace-guide-directory-updated", update);
+  }, []);
   function setScreen(next: Screen, replace = false) {
     window.history[replace ? "replaceState" : "pushState"]({ offlineScreen: next }, "", `#${next.kind}`);
     setScreenState(next);
@@ -569,9 +635,12 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [migrationWarning, setMigrationWarning] = useState(false);
   const [toast, setToast] = useState("");
-  const [online, setOnline] = useState(() => navigator.onLine);
+  const online = useAndroidConnectivity();
   const [cloudUserId, setCloudUserId] = useState<string | null>(null);
   const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
+  const [cloudTaxonomy, setCloudTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
+  const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
+  const [cloudDepths, setCloudDepths] = useState<ArchiveCategoryDepths>({ ...DEFAULT_ARCHIVE_CATEGORY_DEPTHS });
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState("");
   const [pendingSync, setPendingSync] = useState<PendingCloudSyncSummary[]>([]);
@@ -592,6 +661,8 @@ function App() {
   const [experienceCategoryFilter, setExperienceCategoryFilter] = useState<
     "all" | ArchiveCategory
   >("all");
+  const connectivityEpoch = useRef(0);
+  const lastRecoveryKey = useRef("");
 
   const ownerContext: LocalArchiveOwnerContext | null = useMemo(
     () => owner
@@ -613,7 +684,7 @@ function App() {
       setExperienceCardCount(cached.experienceCardCount);
     }
 
-    if (!navigator.onLine) return;
+    if (!isAndroidOnline()) return;
 
     try {
       const [profileResult, membershipResult, experienceResult] = await Promise.all([
@@ -663,11 +734,14 @@ function App() {
     setCloudCaches(cachedCloud);
     setUnownedCount(result.unownedCount);
     setPendingSync(pending);
+    void listVisibleLocalTaxonomyItems(resolvedContext)
+      .then((rows) => setLocalTaxonomy(mapLocalProjectTaxonomy(rows)))
+      .catch((error) => console.warn("local taxonomy", error));
   }, [ownerContext]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
     const resolvedUserId = userId || cloudUserId;
-    if (!navigator.onLine || !resolvedUserId) {
+    if (!isAndroidOnline() || !resolvedUserId) {
       setCloudArchives([]);
       setCloudError("");
       return;
@@ -698,8 +772,12 @@ function App() {
       } catch (mediaError) {
         console.warn("cloud cover resolution", mediaError);
       }
+      if (!isAndroidOnline()) return;
       setCloudArchives(displayRows);
       setCloudError("");
+      void Promise.all([loadCloudProjectTaxonomy(resolvedUserId), getCloudArchiveCategoryDepths(resolvedUserId)])
+        .then(([entries, depths]) => { if (isAndroidOnline()) { setCloudTaxonomy(entries); setCloudDepths(depths); } })
+        .catch((error) => console.warn("cloud taxonomy", error));
       void refreshCloudOfflineCaches(
         (data || []) as CloudOfflineCacheArchiveSource[],
         { userId: resolvedUserId },
@@ -727,7 +805,7 @@ function App() {
   }, [ownerContext]);
 
   const loadActivity = useCallback(async () => {
-    if (!navigator.onLine) {
+    if (!isAndroidOnline()) {
       setActivityItems([]);
       setActivityError(false);
       return;
@@ -742,7 +820,7 @@ function App() {
         limit: 24,
       });
       if (result.error) throw result.error;
-      setActivityItems(result.items);
+      if (isAndroidOnline()) setActivityItems(result.items);
     } catch (error) {
       console.warn("local shell discovery feed", error);
       setActivityError(true);
@@ -752,7 +830,7 @@ function App() {
   }, [activityFilterMode, activityHelpOnly]);
 
   const loadExperience = useCallback(async () => {
-    if (!navigator.onLine) {
+    if (!isAndroidOnline()) {
       setExperienceItems([]);
       setExperienceError(false);
       return;
@@ -763,7 +841,7 @@ function App() {
       const items = await fetchDiscoverExperienceCardSearchResults(
         emptySearchFilters,
       );
-      setExperienceItems(items);
+      if (isAndroidOnline()) setExperienceItems(items);
     } catch (error) {
       console.warn("local shell experience feed", error);
       setExperienceError(true);
@@ -773,14 +851,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const updateConnectivity = () => setOnline(navigator.onLine);
-    window.addEventListener("online", updateConnectivity);
-    window.addEventListener("offline", updateConnectivity);
-    return () => {
-      window.removeEventListener("online", updateConnectivity);
-      window.removeEventListener("offline", updateConnectivity);
-    };
-  }, []);
+    if (online) return;
+    connectivityEpoch.current += 1;
+    lastRecoveryKey.current = "";
+    setCloudArchives([]);
+    setCloudTaxonomy([]);
+    setActivityItems([]);
+    setPublicDetailItem(null);
+    setExperienceItems([]);
+  }, [online]);
 
   useEffect(() => {
     let cancelled = false;
@@ -809,19 +888,18 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
-        clearRememberedLocalOwnerContext();
         clearShellIdentityCache(activeSessionUserId);
         activeSessionUserId = null;
-        setOwner(null);
         setCloudUserId(null);
         setCloudArchives([]);
+        setCloudTaxonomy([]);
         setSpaceProfile(null);
         setMembership(null);
         setExperienceCardCount(0);
         void Promise.all([
-          listVisibleLocalArchiveSummaries(null),
-          listVisibleCloudOfflineArchiveSummaries(null),
-          listPendingCloudSyncSummaries(null),
+          listVisibleLocalArchiveSummaries(loadRememberedLocalOwnerContext()),
+          listVisibleCloudOfflineArchiveSummaries(loadRememberedLocalOwnerContext()),
+          listPendingCloudSyncSummaries(loadRememberedLocalOwnerContext()),
         ]).then(([result, cachedCloud, pending]) => {
           if (cancelled) return;
           setArchives(result.archives);
@@ -843,8 +921,12 @@ function App() {
 
   useEffect(() => {
     if (!online || !cloudUserId || !ownerContext) return;
+    const recoveryKey = `${connectivityEpoch.current}:${cloudUserId}`;
+    if (lastRecoveryKey.current === recoveryKey) return;
+    lastRecoveryKey.current = recoveryKey;
 
     void loadCloudList(cloudUserId);
+    void loadShellIdentity(cloudUserId);
     void preparePendingCloudSyncQueue(ownerContext)
       .then(() => loadList(ownerContext))
       .then(() =>
@@ -854,7 +936,7 @@ function App() {
         }),
       )
       .catch(() => undefined);
-  }, [online, cloudUserId, ownerContext, loadCloudList, loadList]);
+  }, [online, cloudUserId, ownerContext, loadCloudList, loadList, loadShellIdentity]);
 
   useEffect(() => {
     if (screen.kind !== "activity" || !online) return;
@@ -947,37 +1029,36 @@ function App() {
     void loadList();
   }
 
-  function reconnect() {
-    const nextOnline = navigator.onLine;
-    setOnline(nextOnline);
-    if (!nextOnline) {
-      showToast(copy.offlineTitle);
-      return;
-    }
-
-    void loadList(ownerContext);
-    if (cloudUserId) {
-      void loadCloudList(cloudUserId);
-    }
-    if (ownerContext && cloudUserId && ownerContext.userId === cloudUserId) {
-      void syncAllPendingCloudArchives({ ownerContext })
-        .then(async () => { await loadList(ownerContext); window.dispatchEvent(new Event("lifespace-cloud-sync-complete")); })
-        .catch(() => undefined);
-    }
-
-    if (screen.kind === "activity") void loadActivity();
-    if (screen.kind === "experience") void loadExperience();
+  async function reconnect() {
+    const nextOnline = await recheckAndroidConnectivity();
+    if (!nextOnline) showToast(copy.offlineTitle);
   }
 
   function openDetail(archiveId: string) {
+    const item = [...archives, ...cloudCaches].find((row) => row.id === archiveId);
+    if (item) saveRecentArchiveBrowse({ id: item.id, title: item.title,
+      systemName: item.system_name || item.species_name, category: item.category, userId: item.local_owner_user_id });
     setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record"].includes(screen.kind));
+  }
+
+  function openOnlineWeb(pathname: string, search = "") {
+    if (!online) { showToast(copy.needNetwork); return; }
+    // The native custom tab resolves the remote host outside WebViewLocalServer.
+    // Closing it returns to the same bundled React document.
+    const url = new URL(pathname + search, "https://life-space.uk");
+    if (url.origin !== "https://life-space.uk") return;
+    void Browser.open({ url: url.href }).catch(() => showToast(copy.webOnly));
   }
 
   function applyShellPath(pathname: string, search = "") {
     const routed = parseAndroidShellPath(pathname, search);
     if (!routed) return false;
     if (routed.kind === "network-required") {
-      showToast(online ? copy.webOnly : copy.needNetwork);
+      openOnlineWeb(pathname, search);
+      return true;
+    }
+    if (routed.kind === "recent" || routed.kind === "trash") {
+      setScreen({ kind: routed.kind });
       return true;
     }
     if (routed.kind === "list") {
@@ -1017,13 +1098,7 @@ function App() {
       return true;
     }
     if (routed.kind === "guide-detail" && routed.id) {
-      const match = directory.find((guide) =>
-        getOfflineGuideKey(guide) === routed.id ||
-        guide.id === routed.id ||
-        guide.plantId === routed.id ||
-        guide.plantSlug === routed.id ||
-        guide.label === routed.id
-      );
+      const match = findOfflineGuideEntry(directory, routed.id);
       setScreen({
         kind: "guide-detail",
         guideKey: match ? getOfflineGuideKey(match) : routed.id,
@@ -1126,7 +1201,7 @@ function App() {
   ]);
 
   async function logoutFromProfile() {
-    await clearCloudOfflineCacheOnExplicitLogout(owner);
+    await clearCloudOfflineCacheOnExplicitLogout(owner, { preserveLocalOwner: true });
     await supabase.auth.signOut({ scope: "local" });
     setScreen({ kind: "list" });
   }
@@ -1192,18 +1267,35 @@ function App() {
   }
 
   const activeGuide = screen.kind === "guide-detail"
-    ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
+    ? findOfflineGuideEntry(directory, screen.guideKey)
     : undefined;
-  const filteredLocalArchives = archives.filter(
-    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
-  );
-  const filteredCloudCaches = cloudCaches.filter(
-    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
-  );
+  const cachedTaxonomy: ProjectTaxonomyEntry[] = cloudCaches.flatMap((archive) => {
+    if (!archive.subcategory) return [];
+    const parentId = `cached:${archive.category}:${archive.subcategory}`;
+    return [{ id: parentId, kind: "subcategory" as const, label: archive.subcategory,
+      category: archive.category, parentId: null },
+      ...(archive.group_name ? [{ id: `${parentId}:${archive.group_name}`, kind: "group" as const,
+        label: archive.group_name, category: archive.category, parentId }] : [])];
+  }).filter((entry, index, entries) => entries.findIndex((candidate) => candidate.id === entry.id) === index);
+  const currentCloudTaxonomy = online && cloudUserId ? cloudTaxonomy : cachedTaxonomy;
+  const selectedTaxonomy = sourceFilter === "local" ? localTaxonomy
+    : sourceFilter === "cloud" ? currentCloudTaxonomy : [...currentCloudTaxonomy, ...localTaxonomy];
+  const visibleSubcategories = selectedTaxonomy.filter((item) => item.kind === "subcategory" && item.category === categoryFilter);
+  const visibleGroups = selectedTaxonomy.filter((item) => item.kind === "group" && item.parentId === subcategoryFilter);
+  const subcategoryLabel = selectedTaxonomy.find((item) => item.id === subcategoryFilter)?.label;
+  const groupLabel = selectedTaxonomy.find((item) => item.id === groupFilter)?.label;
+  const filterCategory = (archive: { category?: string | null }) => categoryFilter === "all" || archive.category === categoryFilter;
+  const filteredLocalArchives = archives.filter((archive) => filterCategory(archive) &&
+    (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
+    (!groupFilter || archive.group_name === groupLabel));
+  const filteredCloudCaches = cloudCaches.filter((archive) => filterCategory(archive) &&
+    (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
+    (!groupFilter || archive.group_name === groupLabel));
   const liveCloudWorkspace = online && Boolean(cloudUserId) && !cloudError;
-  const filteredCloudArchives = cloudArchives.filter(
-    (archive) => categoryFilter === "all" || archive.category === categoryFilter,
-  );
+  const filteredCloudArchives = cloudArchives.filter((archive) => filterCategory(archive) &&
+    (!subcategoryFilter || archive.sub_tag_id === subcategoryFilter) &&
+    (!groupFilter || archive.group_tag_id === groupFilter));
+  const activeDepths = sourceFilter === "local" ? getLocalArchiveCategoryDepths(ownerContext?.userId) : cloudDepths;
   const cloudSourceCount = liveCloudWorkspace ? cloudArchives.length : cloudCaches.length;
   const visibleExperienceItems = experienceItems.filter((item) => {
     if (experienceCategoryFilter !== "all" && item.archiveCategory !== experienceCategoryFilter) {
@@ -1227,13 +1319,18 @@ function App() {
   }
   function cloudProjectView(archive: CloudArchiveSummary) {
     const ended = archive.status === "ended";
+    const category = archive.category as ArchiveCategory;
     return {
       id: archive.id,
       mode: "cloud" as const,
       title: archive.title || copy.project,
-      category: archive.category as ArchiveCategory,
+      category,
       categoryLabel: getArchiveCategoryLabel(archive.category as ArchiveCategory, language),
       categoryIcon: getArchiveCategoryIcon(archive.category as ArchiveCategory),
+      subcategoryLabel: cloudDepths[category] >= 2
+        ? cloudTaxonomy.find((item) => item.id === archive.sub_tag_id)?.label || null : null,
+      groupLabel: cloudDepths[category] >= 3
+        ? cloudTaxonomy.find((item) => item.id === archive.group_tag_id)?.label || null : null,
       systemName:
         archive.category === "plant"
           ? archive.species_name_snapshot || ""
@@ -1256,7 +1353,7 @@ function App() {
       visibilityTone: archive.is_public ? "public" as const : "private" as const,
       statusLabel: ended ? copy.ended : null,
       ended,
-      showClassificationRow: false,
+      showClassificationRow: cloudDepths[category] >= 2,
     };
   }
 
@@ -1267,7 +1364,12 @@ function App() {
         project={cloudProjectView(archive)}
         mobileMode
         mobileShowCategoryBadge={false}
-        onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}
+        onClick={() => {
+          saveRecentArchiveBrowse({ id: archive.id, title: archive.title,
+            systemName: archive.system_name || archive.species_name_snapshot,
+            category: archive.category, userId: cloudUserId });
+          setScreen({ kind: "cloud-detail", archiveId: archive.id });
+        }}
       />
     );
   }
@@ -1444,6 +1546,7 @@ function App() {
       {screen.kind === "list" ? (
         <div data-android-shell-page="personal-space">
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
+          online={online}
           sourceOptions={[
             { value: "all", label: copy.all, count: archives.length + cloudSourceCount },
             { value: "cloud", label: copy.cloud, count: cloudSourceCount },
@@ -1452,6 +1555,8 @@ function App() {
           activeSource={sourceFilter}
           onSelectSource={(source) => {
             setSourceFilter(source);
+            setSubcategoryFilter(null);
+            setGroupFilter(null);
             setScreen({ kind: "list" });
           }}
           onCreateArchive={() => setScreen({ kind: "new-project" })}
@@ -1464,19 +1569,19 @@ function App() {
           filtersSlot={(
             <ArchiveTaxonomyPanel
               activeCategory={categoryFilter === "all" ? null : categoryFilter}
-              activeSubcategoryId={null}
-              activeGroupId={null}
-              subcategories={[]}
-              groups={[]}
+              activeSubcategoryId={subcategoryFilter}
+              activeGroupId={groupFilter}
+              subcategories={visibleSubcategories}
+              groups={visibleGroups}
               mobileMode
-              showSubcategoryRow={false}
-              showGroupRow={false}
-              onReset={() => setCategoryFilter("all")}
-              onSelectCategory={(category) => setCategoryFilter(category)}
-              onResetSubcategory={() => undefined}
-              onSelectSubcategory={() => undefined}
-              onResetGroup={() => undefined}
-              onSelectGroup={() => undefined}
+              showSubcategoryRow={categoryFilter !== "all" && activeDepths[categoryFilter] >= 2}
+              showGroupRow={categoryFilter !== "all" && activeDepths[categoryFilter] >= 3}
+              onReset={() => { setCategoryFilter("all"); setSubcategoryFilter(null); setGroupFilter(null); }}
+              onSelectCategory={(category) => { setCategoryFilter(category); setSubcategoryFilter(null); setGroupFilter(null); }}
+              onResetSubcategory={() => { setSubcategoryFilter(null); setGroupFilter(null); }}
+              onSelectSubcategory={(chip) => { setSubcategoryFilter(chip.id); setGroupFilter(null); }}
+              onResetGroup={() => setGroupFilter(null)}
+              onSelectGroup={(chip) => setGroupFilter(chip.id)}
             />
           )}
           noticeSlot={ownerContext && unownedCount > 0 ? (
@@ -1506,17 +1611,17 @@ function App() {
               </>
             ) : (
               <>
-                {online && !cloudUserId ? (
-                  <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
+                {online && !cloudUserId && sourceFilter === "cloud" ? (
+                  <CloudLogin copy={copy} onSuccess={(userId) => void loadCloudList(userId)} />
                 ) : null}
-                {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
-                {filteredCloudCaches.length ? (
+                {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
+                {!(online && !cloudUserId && sourceFilter === "cloud") && filteredCloudCaches.length ? (
                   <div className="project-list" data-android-cloud-cache-list="true">
                     {filteredCloudCaches.map((archive) => (
                       <ArchiveProjectCard
                         key={archive.id}
                         project={{
-                          ...localArchiveToProjectView(archive, ownerContext, language),
+                          ...localArchiveToProjectView(archive, ownerContext, language, cloudDepths[archive.category]),
                           href: undefined,
                         }}
                         onClick={() => openDetail(archive.id)}
@@ -1538,7 +1643,7 @@ function App() {
                   <ArchiveProjectCard
                     key={archive.id}
                     project={{
-                      ...localArchiveToProjectView(archive, ownerContext, language),
+                      ...localArchiveToProjectView(archive, ownerContext, language, getLocalArchiveCategoryDepths(ownerContext?.userId)[archive.category]),
                       href: undefined,
                     }}
                     onClick={() => openDetail(archive.id)}
@@ -1894,7 +1999,14 @@ function App() {
 
       {screen.kind === "guides" ? (
         <div data-android-shell-page="guides">
-          <PlantPage />
+          {online ? <PlantPage /> : <section className="guide-directory-offline">
+            <HomeSectionTabs active="guide" showGuestLanguageSwitcher={false}
+              onSelect={(section: HomeSection) => setScreen({ kind: section === "activity" ? "activity" : section === "experience" ? "experience" : "guides" })} />
+            <p className="project-meta">{language === "zh" ? "本机已保存的指引概要" : "Guide summaries saved on this device"}</p>
+            <div className="project-list">{directory.map((guide) => <button type="button" className="secondary-button"
+              key={getOfflineGuideKey(guide)} onClick={() => setScreen({ kind: "guide-detail", guideKey: getOfflineGuideKey(guide) })}>
+              {getOfflineGuideName(guide, language)}</button>)}</div>
+          </section>}
         </div>
       ) : null}
       {screen.kind === "profile" ? (
@@ -1914,7 +2026,7 @@ function App() {
               })}
               online={online && cloudUserId === owner?.userId}
               onBack={() => setScreen({ kind: "list" })}
-              onLogout={() => void logoutFromProfile()}
+              onLogout={cloudUserId ? () => void logoutFromProfile() : undefined}
             />
           </MobileShellErrorBoundary>
         </div>
@@ -1938,6 +2050,13 @@ function App() {
           </MobileShellErrorBoundary>
         </div>
       ) : null}
+      {screen.kind === "recent" ? <AndroidRecentBrowse
+        online={online}
+        onBack={() => setScreen({ kind: "profile" })}
+        onOpen={(id) => { applyShellPath(`${[...archives, ...cloudCaches].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
+      /> : null}
+      {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
+        online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => void supabase.auth.signOut({ scope: "local" })}>{copy.logout}</button> : null}</div></section> : null}
@@ -1966,6 +2085,68 @@ function App() {
 }
 
 type OfflineCopy = typeof text.zh | typeof text.en;
+
+function AndroidRecentBrowse({ online, onBack, onOpen }: { online: boolean; onBack: () => void; onOpen: (id: string) => void }) {
+  const { language } = useLanguage();
+  const [items] = useState(getRecentArchiveBrowseItems);
+  const [live, setLive] = useState<Map<string, CloudArchiveSummary>>(new Map());
+  useEffect(() => {
+    if (!online || !items.length) { queueMicrotask(() => setLive(new Map())); return; }
+    let active = true;
+    void (async () => {
+      const result = await supabase.from("archives")
+        .select("id, title, category, system_name, species_name_snapshot, cover_image_url, cover_image_path, cover_thumb_path")
+        .in("id", items.map((item) => item.id));
+      if (result.error) throw result.error;
+      const rows = (result.data || []) as CloudArchiveSummary[];
+      const covers = await resolveMediaDisplayPairs(supabase, rows.map((archive) => ({
+        url: archive.cover_image_url, path: archive.cover_image_path, thumb_path: archive.cover_thumb_path,
+      })));
+      if (active && isAndroidOnline()) setLive(new Map(rows.map((row, index) => [row.id, {
+        ...row, display_cover_thumb_url: covers[index]?.display_thumb_url || covers[index]?.display_url || null,
+      }])));
+    })().catch((error) => console.warn("recent browse enrichment", error));
+    return () => { active = false; };
+  }, [online, items]);
+  return <section data-android-shell-page="recent">
+    <MobilePageHeaderView title={language === "zh" ? "最近浏览" : "Recent"} showBack onBack={onBack} />
+    <div className="project-list">{items.map((item) => <button className="secondary-button" key={item.id}
+      type="button" onClick={() => onOpen(item.id)} style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left" }}>
+      {live.get(item.id)?.display_cover_thumb_url ? <img src={live.get(item.id)?.display_cover_thumb_url || ""}
+        alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8 }} /> : null}
+      <span>{live.get(item.id)?.title || item.title} · {live.get(item.id)?.system_name || item.systemName || ""}</span>
+    </button>)}</div>
+    {!items.length ? <p className="panel empty">{language === "zh" ? "暂无本机浏览记录" : "No local history"}</p> : null}
+  </section>;
+}
+
+function AndroidLocalTrash({ ownerContext, online, onBack }: {
+  ownerContext: LocalArchiveOwnerContext | null; online: boolean; onBack: () => void;
+}) {
+  const { language } = useLanguage();
+  const [items, setItems] = useState<Awaited<ReturnType<typeof listLocalArchiveCycleTrash>>>([]);
+  const [error, setError] = useState("");
+  useEffect(() => { let active = true;
+    void listLocalArchiveCycleTrash(ownerContext).then((rows) => { if (active) setItems(rows); });
+    return () => { active = false; };
+  }, [ownerContext]);
+  return <section data-android-shell-page="trash">
+    <MobilePageHeaderView title={language === "zh" ? "回收站" : "Trash"} showBack onBack={onBack} />
+    <h2>{language === "zh" ? "本机已删除周期" : "Local deleted cycles"}</h2>
+    {items.map((item) => <article className="panel" key={item.trash.id} style={{ padding: 14, marginBottom: 10 }}>
+      <strong>{item.archive_title} · {item.trash.cycle.display_name || item.trash.cycle.cycle_no}</strong>
+      <p className="project-meta">{language === "zh" ? "记录" : "Records"} {item.trash.record_ids.length}</p>
+      <button type="button" className="secondary-button" onClick={() => void restoreLocalArchiveCycle(item.archive_id, item.trash.id, ownerContext)
+        .then(() => listLocalArchiveCycleTrash(ownerContext)).then(setItems)
+        .catch((cause) => setError(String(cause)))}>{language === "zh" ? "恢复周期" : "Restore cycle"}</button>
+    </article>)}
+    {error ? <p role="alert">{error}</p> : null}
+    {!items.length ? <p className="panel empty">{language === "zh" ? "本机回收站为空" : "Local trash is empty"}</p> : null}
+    {online ? <button type="button" className="secondary-button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile/trash" })}>
+      {language === "zh" ? "查看云端回收站" : "Open cloud trash"}</button>
+      : <p className="notice warning">{language === "zh" ? "云端回收站需要联网" : "Cloud trash requires a connection"}</p>}
+  </section>;
+}
 
 function CloudProjectRuntime({ archiveId, online, ownerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord }: {
   archiveId: string;
@@ -2015,7 +2196,7 @@ function CloudLogin({
   onSuccess,
 }: {
   copy: OfflineCopy;
-  onSuccess: () => void;
+  onSuccess: (userId: string) => void;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2038,9 +2219,9 @@ function CloudLogin({
     setSubmitting(true);
     setMessage("");
     try {
-      await loginBundledWithTurnstile({ email: normalizedEmail, password,
+      const user = await loginBundledWithTurnstile({ email: normalizedEmail, password,
         captchaToken, siteKeyConfigured: AUTH_CAPTCHA_ENABLED });
-      onSuccess();
+      onSuccess(user.id);
     } catch (error) {
       setMessage(
         `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
@@ -2186,6 +2367,15 @@ function ProjectForm({
   );
   const [title, setTitle] = useState(archive?.title || guide?.label || "");
   const [category, setCategory] = useState<ArchiveCategory>(archive?.category || guide?.category || "plant");
+  const [subcategory, setSubcategory] = useState(archive?.subcategory || "");
+  const [groupName, setGroupName] = useState(archive?.group_name || "");
+  const [taxonomy, setTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
+  useEffect(() => {
+    let active = true;
+    void listVisibleLocalTaxonomyItems(owner ? { userId: owner.userId, email: owner.email } : null)
+      .then((rows) => { if (active) setTaxonomy(mapLocalProjectTaxonomy(rows)); });
+    return () => { active = false; };
+  }, [owner]);
   const [systemName, setSystemName] = useState(archive?.system_name || archive?.species_name || guide?.label || "");
   const [directory] = useState(loadOfflineGuideDirectory);
   const [selectedGuide, setSelectedGuide] = useState<SystemNameCandidate | undefined>(guide);
@@ -2216,6 +2406,8 @@ function ProjectForm({
           {
             title,
             category,
+            subcategory: subcategory || null,
+            group_name: groupName || null,
             system_name: systemName,
             species_name: category === "plant" ? systemName : null,
             plant_id: selectedGuide?.plantId || (systemName === (archive.system_name || archive.species_name) ? archive.plant_id : null),
@@ -2231,6 +2423,8 @@ function ProjectForm({
         const created = await createLocalArchive({
           title,
           category,
+          subcategory: subcategory || null,
+          group_name: groupName || null,
           system_name: systemName,
           species_name: category === "plant" ? systemName : null,
           plant_id: selectedGuide?.plantId || null,
@@ -2270,13 +2464,26 @@ function ProjectForm({
           <div className="field"><label>{copy.title}</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></div>
           <div className="field">
             <label>{copy.category}</label>
-            <select value={category} onChange={(event) => setCategory(event.target.value as ArchiveCategory)}>
+            <select value={category} onChange={(event) => { setCategory(event.target.value as ArchiveCategory); setSubcategory(""); setGroupName(""); }}>
               <option value="plant">{copy.plant}</option>
               <option value="system">{copy.system}</option>
               <option value="insect_fish">{copy.insect_fish}</option>
               <option value="other">{copy.other}</option>
             </select>
           </div>
+          {getLocalArchiveCategoryDepths(owner?.userId)[category] >= 2 ? <div className="field"><label>{language === "zh" ? "一级分组" : "Level 1 group"}</label>
+            <select value={subcategory} onChange={(event) => { setSubcategory(event.target.value); setGroupName(""); }}>
+              <option value="">{language === "zh" ? "未分组" : "None"}</option>
+              {taxonomy.filter((entry) => entry.kind === "subcategory" && entry.category === category).map((entry) =>
+                <option key={entry.id} value={entry.label}>{entry.label}</option>)}
+            </select></div> : null}
+          {subcategory && getLocalArchiveCategoryDepths(owner?.userId)[category] >= 3 ? <div className="field"><label>{language === "zh" ? "二级分组" : "Level 2 group"}</label>
+            <select value={groupName} onChange={(event) => setGroupName(event.target.value)}>
+              <option value="">{language === "zh" ? "未分组" : "None"}</option>
+              {taxonomy.filter((entry) => entry.kind === "group" && entry.category === category &&
+                taxonomy.find((parent) => parent.id === entry.parentId)?.label === subcategory).map((entry) =>
+                <option key={entry.id} value={entry.label}>{entry.label}</option>)}
+            </select></div> : null}
           <div className="field"><label>{copy.systemName}</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
             <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div>
           </div>

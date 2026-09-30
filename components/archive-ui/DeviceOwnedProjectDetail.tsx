@@ -36,10 +36,13 @@ import {
   updateLocalArchiveCycleName,
   updateLocalArchiveFields,
   updateLocalRecordFields,
+  listVisibleLocalTaxonomyItems,
+  type LocalTaxonomyItem,
   type LocalArchiveDetail,
   type LocalArchiveOwnerContext,
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
+import { getLocalArchiveCategoryDepths } from "@/lib/archive-category-settings";
 
 function getOngoingDays(createdAt?: string | null, endedAt?: string | null) {
   if (!createdAt) return null;
@@ -96,6 +99,19 @@ export default function DeviceOwnedProjectDetail({
   const [lightboxRecord, setLightboxRecord] = useState<RecordItem | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<LocalRecordWithImages | null>(null);
   const [deleteArchiveOpen, setDeleteArchiveOpen] = useState(false);
+  const [taxonomy, setTaxonomy] = useState<LocalTaxonomyItem[]>([]);
+  useEffect(() => {
+    let active = true;
+    void listVisibleLocalTaxonomyItems(ownerContext).then((rows) => { if (active) setTaxonomy(rows); });
+    return () => { active = false; };
+  }, [ownerContext, detail]);
+  const subTags = taxonomy.filter((row) => row.kind === "subcategory" && row.category === archive.category)
+    .map((row) => ({ id: row.label, name: row.label, category: archive.category,
+      user_id: ownerContext?.userId || "", created_at: row.created_at }));
+  const groupTags = taxonomy.filter((row) => row.kind === "group" && row.category === archive.category)
+    .map((row) => ({ id: row.label, name: row.label, sub_tag_id: row.subcategory || "",
+      user_id: ownerContext?.userId || "", created_at: row.created_at }));
+  const maxDepth = isCloudCache ? 3 : getLocalArchiveCategoryDepths(ownerContext?.userId)[archive.category];
 
   useEffect(() => {
     const urls: string[] = [];
@@ -298,16 +314,18 @@ export default function DeviceOwnedProjectDetail({
             category={archive.category}
             subTagId={archive.subcategory || null}
             groupTagId={archive.group_name || null}
-            subTags={[]}
-            groupTags={[]}
-            maxDepth={1}
+            subTags={subTags}
+            groupTags={groupTags}
+            maxDepth={maxDepth}
             ended={archive.status === "ended"}
             isPublic={false}
             canWrite={canEditArchive && !busy}
             busy={busy}
             showVisibility={false}
-            onChangeSubcategory={() => undefined}
-            onChangeGroup={() => undefined}
+            onChangeSubcategory={(value) => { void change(() => updateLocalArchiveFields(archive.id,
+              { subcategory: value || null, group_name: null }, ownerContext)); }}
+            onChangeGroup={(value) => { void change(() => updateLocalArchiveFields(archive.id,
+              { group_name: value || null }, ownerContext)); }}
             onToggleEnded={() => {
               void change(() => updateLocalArchiveFields(archive.id, {
                 status: archive.status === "ended" ? "active" : "ended",

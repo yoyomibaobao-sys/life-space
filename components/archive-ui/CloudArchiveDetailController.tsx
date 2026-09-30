@@ -31,6 +31,7 @@ import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { getSystemNameCandidates } from "@/lib/system-name-candidates";
 import { resolveSystemNameSelection } from "@/lib/system-name-candidates";
 import { uploadCloudRecordImages } from "@/lib/cloud-record-media";
+import { isAndroidOnline } from "@/lib/android-connectivity";
 
 type Detail = NonNullable<Awaited<ReturnType<typeof loadCloudArchiveDetail>>>;
 
@@ -93,7 +94,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   }, [reload]);
 
   async function change(work: () => Promise<unknown>, requiresCloudWrite = true) {
-    if (busy || (requiresCloudWrite && !canWrite) || !navigator.onLine) return;
+    if (busy || (requiresCloudWrite && !canWrite) || !isAndroidOnline()) return;
     setBusy(true);
     setError("");
     try { await work(); await reload(); await onCacheChanged(); }
