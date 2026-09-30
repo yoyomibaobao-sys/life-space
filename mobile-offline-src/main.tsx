@@ -40,11 +40,13 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { migrateLegacyLocalOrigin } from "@/lib/local-origin-migration";
-import type { ArchiveCategory } from "@/lib/archive-categories";
+import { getArchiveCategoryIcon, getArchiveCategoryLabel, type ArchiveCategory } from "@/lib/archive-categories";
 
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
+import ArchiveWorkspaceTemplate from "@/components/archive-ui/ArchiveWorkspaceTemplate";
+import type { ArchiveProjectView } from "@/components/archive-ui/types";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import ArchiveRecordCardShell from "@/components/archive-detail/ArchiveRecordCardShell";
 import ConnectivityNotice from "@/components/mobile/ConnectivityNotice";
@@ -68,10 +70,25 @@ import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-t
 import { supabase } from "@/lib/supabase";
 import { saveCloudArchiveToLocal } from "@/lib/cloud-to-local-save";
 import { syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
+import {
+  clearOfflineCloudArchiveCache,
+  listOfflineCloudArchiveCache,
+  OFFLINE_CLOUD_CACHE_MAX_THUMBNAIL_BYTES,
+  OFFLINE_CLOUD_CACHE_MAX_THUMBNAILS,
+  replaceOfflineCloudArchiveCache,
+  type OfflineCloudArchiveSnapshot,
+} from "@/lib/offline-cloud-archive-cache";
+import { compressImageFile } from "@/lib/image-compression";
+import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { CapacitorHttp } from "@capacitor/core";
 
+declare const __LIFESPACE_CLOUD_ORIGIN__: string;
+
+const CLOUD_ORIGIN = __LIFESPACE_CLOUD_ORIGIN__;
 const MAX_PHOTOS = 10;
 
 type Language = "zh" | "en";
+type ArchiveSourceFilter = "all" | "cloud" | "local";
 
 type CloudArchiveSummary = {
   id: string;
@@ -80,8 +97,16 @@ type CloudArchiveSummary = {
   system_name?: string | null;
   species_name_snapshot?: string | null;
   status?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
+  last_record_time?: string | null;
+  record_count?: number | null;
   is_public?: boolean | null;
+  cover_image_url?: string | null;
+  cover_image_path?: string | null;
+  cover_thumb_path?: string | null;
+  cover_thumbnail?: Blob | null;
+  cached_at?: string | null;
 };
 
 type Screen =
@@ -92,6 +117,7 @@ type Screen =
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "cloud" }
+  | { kind: "cached-cloud-detail"; archiveId: string }
   | { kind: "detail"; archiveId: string }
   | { kind: "edit-project"; archiveId: string }
   | { kind: "new-record"; archiveId: string }
@@ -103,11 +129,16 @@ const text = {
     home: "首页", follow: "关注", market: "集市", me: "我", guides: "指引", discover: "发现", experience: "经验",
     cloudUnavailable: "当前未联网，云端内容暂不可用", cloudProjects: "云端项目", cloudLoading: "正在读取云端项目…",
     cloudLoadFailed: "云端项目读取失败，请稍后重试。", cloudSignIn: "登录后可查看云端项目",
+    cachedCloudNotice: "当前显示上次联网时保存的轻量只读副本；已结束项目不会缓存。",
+    cachedCloudReadOnly: "这是轻量只读副本，只保存项目摘要和一张压缩缩略图，不包含完整照片。云端项目请联网后修改。",
+    cachedCloudEmpty: "这台设备上还没有可离线查看的云端项目副本。",
+    cachedAt: "本机副本更新于",
+    readOnlyCopy: "只读副本",
     saveLocalCopy: "保存到本机", refreshLocalCopy: "更新本机副本", openLocalCopy: "打开本机副本",
     savingCloudCopy: "正在保存到本机…", cloudCopySaved: "云端项目已保存到本机",
     pendingUpload: "本机有修改等待上传到原云端项目", uploadNow: "现在上传", later: "稍后",
     uploading: "正在上传…", uploadSuccess: "本机修改已上传", uploadFailed: "还有内容未上传，请稍后重试",
-    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败",
+    login: "登录", logout: "退出登录", email: "邮箱", password: "密码", loginFailed: "登录失败", captchaLoading: "正在加载安全验证…", captchaRequired: "请先完成安全验证。", captchaLoadFailed: "安全验证加载失败，请检查网络后重试。",
     camera: "拍照", album: "从相册添加", chooseProject: "选择项目",
     guideSearch: "搜索指引名称", guideHint: "选择指引，也可以填写自定义名称", details: "详情", properties: "属性",
     guideOverview: "基础概要", basicReferences: "基础参考", createFromGuide: "按此指引新建项目",
@@ -169,11 +200,16 @@ const text = {
     home: "Home", follow: "Following", market: "Market", me: "Me", guides: "Guides", discover: "Discover", experience: "Experience",
     cloudUnavailable: "Cloud content is unavailable while offline", cloudProjects: "Cloud projects", cloudLoading: "Loading cloud projects…",
     cloudLoadFailed: "Could not load cloud projects. Try again later.", cloudSignIn: "Sign in to view cloud projects",
+    cachedCloudNotice: "Showing lightweight read-only copies saved during the last connection. Ended projects are not cached.",
+    cachedCloudReadOnly: "This lightweight read-only copy stores project metadata and one compressed thumbnail, not full photos. Reconnect to edit the cloud project.",
+    cachedCloudEmpty: "No cloud project copies are available offline on this device yet.",
+    cachedAt: "Device copy updated",
+    readOnlyCopy: "Read-only copy",
     saveLocalCopy: "Save on device", refreshLocalCopy: "Refresh device copy", openLocalCopy: "Open device copy",
     savingCloudCopy: "Saving on device…", cloudCopySaved: "Cloud project saved on this device",
     pendingUpload: "This device has changes waiting to upload to the original cloud project", uploadNow: "Upload now", later: "Later",
     uploading: "Uploading…", uploadSuccess: "Device changes uploaded", uploadFailed: "Some changes are still pending",
-    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed",
+    login: "Sign in", logout: "Sign out", email: "Email", password: "Password", loginFailed: "Sign-in failed", captchaLoading: "Loading security check…", captchaRequired: "Complete the security check first.", captchaLoadFailed: "Security check could not load. Check the network and retry.",
     camera: "Camera", album: "Gallery", chooseProject: "Choose project",
     guideSearch: "Search guides", guideHint: "Choose a guide or enter your own name", details: "Details", properties: "Properties",
     guideOverview: "Basic overview", basicReferences: "Basic references", createFromGuide: "Start a project from this guide",
@@ -255,8 +291,364 @@ function formatDate(value: string | null | undefined, language: Language) {
   }).format(date);
 }
 
+function getOngoingDays(
+  createdAt?: string | null,
+  endedAt?: string | null,
+) {
+  if (!createdAt) return null;
+  const started = new Date(createdAt);
+  const finished = endedAt ? new Date(endedAt) : new Date();
+  if (Number.isNaN(started.getTime()) || Number.isNaN(finished.getTime())) {
+    return null;
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startDay = new Date(
+    started.getFullYear(),
+    started.getMonth(),
+    started.getDate(),
+  ).getTime();
+  const finishDay = new Date(
+    finished.getFullYear(),
+    finished.getMonth(),
+    finished.getDate(),
+  ).getTime();
+  return Math.max(1, Math.floor((finishDay - startDay) / dayMs) + 1);
+}
+
 function toDateTimeLocal(value?: string | null) {
   return toLocalDateTimeInputValue(value || new Date());
+}
+
+function normalizeCloudCategory(value?: string | null): ArchiveCategory {
+  if (
+    value === "plant" ||
+    value === "system" ||
+    value === "insect_fish" ||
+    value === "other"
+  ) {
+    return value;
+  }
+  return "other";
+}
+
+function cloudArchiveToProjectView(
+  archive: CloudArchiveSummary,
+  language: Language,
+): ArchiveProjectView {
+  const category = normalizeCloudCategory(archive.category);
+  const ended = archive.status === "ended";
+  return {
+    id: archive.id,
+    mode: "cloud",
+    title: archive.title || (language === "en" ? "Untitled project" : "未命名项目"),
+    category,
+    categoryLabel: getArchiveCategoryLabel(category, language),
+    categoryIcon: getArchiveCategoryIcon(category),
+    systemName:
+      archive.species_name_snapshot ||
+      archive.system_name ||
+      (language === "en" ? "Not filled" : "未填写"),
+    cover: archive.cover_thumbnail
+      ? { kind: "blob", blob: archive.cover_thumbnail, alt: archive.title || "" }
+      : null,
+    latestTime: archive.last_record_time || archive.updated_at || null,
+    recordCount: Math.max(0, Number(archive.record_count) || 0),
+    durationDays: getOngoingDays(archive.created_at),
+    visibilityLabel: archive.is_public
+      ? language === "en" ? "Public" : "公开"
+      : language === "en" ? "Private" : "私密",
+    visibilityTone: archive.is_public ? "public" : "private",
+    statusLabel: ended ? (language === "en" ? "Ended" : "已结束") : null,
+    ended,
+    showClassificationRow: false,
+    footerItems: [],
+    badges: [],
+  };
+}
+
+function cachedSnapshotToCloudArchive(
+  snapshot: OfflineCloudArchiveSnapshot,
+): CloudArchiveSummary {
+  return {
+    id: snapshot.id,
+    title: snapshot.title,
+    category: snapshot.category,
+    system_name: snapshot.system_name,
+    species_name_snapshot: snapshot.species_name_snapshot,
+    status: snapshot.status,
+    created_at: snapshot.created_at,
+    updated_at: snapshot.updated_at,
+    last_record_time: snapshot.last_record_time,
+    record_count: snapshot.record_count,
+    is_public: snapshot.is_public,
+    cover_thumbnail: snapshot.cover_thumbnail,
+    cached_at: snapshot.cached_at,
+  };
+}
+
+function hasCloudCoverSource(archive: CloudArchiveSummary) {
+  return Boolean(
+    archive.cover_image_url ||
+      archive.cover_image_path ||
+      archive.cover_thumb_path,
+  );
+}
+
+async function downloadCloudCacheThumbnail(url: string) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Thumbnail HTTP ${response.status}`);
+  const source = await response.blob();
+  if (!source.type.startsWith("image/") || source.size <= 0) return null;
+  if (source.size <= OFFLINE_CLOUD_CACHE_MAX_THUMBNAIL_BYTES) return source;
+
+  const file = new File([source], "cloud-cache-cover", {
+    type: source.type,
+    lastModified: Date.now(),
+  });
+  const result = await compressImageFile(file, {
+    maxWidthOrHeight: 320,
+    quality: 0.68,
+    minCompressBytes: 1,
+  });
+  return result.file.size <= OFFLINE_CLOUD_CACHE_MAX_THUMBNAIL_BYTES
+    ? result.file
+    : null;
+}
+
+async function cacheActiveCloudArchives(
+  ownerUserId: string,
+  archives: CloudArchiveSummary[],
+) {
+  const active = archives.filter((archive) => archive.status !== "ended");
+  const metadataRows = await replaceOfflineCloudArchiveCache(
+    ownerUserId,
+    active.map((archive, index) => ({
+      ...archive,
+      cover_thumbnail:
+        index < OFFLINE_CLOUD_CACHE_MAX_THUMBNAILS ? undefined : null,
+    })),
+  );
+  const coverCandidates = active.slice(
+    0,
+    OFFLINE_CLOUD_CACHE_MAX_THUMBNAILS,
+  );
+  if (coverCandidates.length === 0) return metadataRows;
+  const coverSources = coverCandidates.map((archive) => ({
+    url: archive.cover_image_url,
+    storage_path: archive.cover_image_path,
+    thumb_path: archive.cover_thumb_path,
+  }));
+  const displayPairs = await resolveMediaDisplayPairs(
+    supabase,
+    coverSources,
+  );
+  const thumbnailResults = new Map<string, Blob | null>();
+
+  for (let offset = 0; offset < coverCandidates.length; offset += 4) {
+    const batch = coverCandidates.slice(offset, offset + 4);
+    await Promise.all(
+      batch.map(async (archive, batchIndex) => {
+        const pair = displayPairs[offset + batchIndex];
+        const originalUrl = String(archive.cover_image_url || "").trim();
+        const url =
+          pair?.display_thumb_url ||
+          (/^https:\/\//i.test(originalUrl) ? originalUrl : "");
+
+        if (!hasCloudCoverSource(archive)) {
+          thumbnailResults.set(archive.id, null);
+          return;
+        }
+        if (!url) return;
+
+        try {
+          thumbnailResults.set(
+            archive.id,
+            await downloadCloudCacheThumbnail(url),
+          );
+        } catch (error) {
+          console.warn("cloud cache thumbnail", archive.id, error);
+        }
+      }),
+    );
+  }
+
+  return replaceOfflineCloudArchiveCache(
+    ownerUserId,
+    active.map((archive) => ({
+      ...archive,
+      cover_thumbnail: thumbnailResults.has(archive.id)
+        ? thumbnailResults.get(archive.id) || null
+        : undefined,
+    })),
+  );
+}
+
+type TurnstileApi = {
+  render: (container: HTMLElement, options: {
+    sitekey: string;
+    action: string;
+    theme: "auto";
+    language: "auto";
+    callback: (token: string) => void;
+    "expired-callback": () => void;
+    "error-callback": () => void;
+  }) => string;
+  remove: (widgetId: string) => void;
+  reset: (widgetId: string) => void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
+
+let publicAuthConfigPromise: Promise<{ turnstileSiteKey: string }> | null = null;
+let turnstileScriptPromise: Promise<void> | null = null;
+
+function loadPublicAuthConfig() {
+  if (publicAuthConfigPromise) return publicAuthConfigPromise;
+
+  publicAuthConfigPromise = (async () => {
+    const response = await CapacitorHttp.get({
+      url: `${CLOUD_ORIGIN}/api/public-auth-config?ts=${Date.now()}`,
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+      },
+      connectTimeout: 12_000,
+      readTimeout: 12_000,
+      disableRedirects: true,
+      responseType: "json",
+    });
+    if (response.status !== 200) {
+      throw new Error(`Auth config HTTP ${response.status}`);
+    }
+    const value =
+      typeof response.data === "string"
+        ? JSON.parse(response.data)
+        : response.data;
+    return {
+      turnstileSiteKey:
+        typeof value?.turnstileSiteKey === "string"
+          ? value.turnstileSiteKey.trim()
+          : "",
+    };
+  })();
+
+  return publicAuthConfigPromise;
+}
+
+function ensureTurnstileScript() {
+  if (window.turnstile) return Promise.resolve();
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+
+  turnstileScriptPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-lifespace-turnstile="true"]',
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Turnstile failed to load")), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src =
+      "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.dataset.lifespaceTurnstile = "true";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Turnstile failed to load"));
+    document.head.appendChild(script);
+  });
+
+  return turnstileScriptPromise;
+}
+
+function NativeTurnstile({
+  copy,
+  resetKey,
+  onTokenChange,
+  onRequiredChange,
+}: {
+  copy: OfflineCopy;
+  resetKey: number;
+  onTokenChange: (token: string | null) => void;
+  onRequiredChange: (required: boolean | null) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    onRequiredChange(null);
+
+    void loadPublicAuthConfig()
+      .then(async ({ turnstileSiteKey }) => {
+        if (cancelled) return;
+        if (!turnstileSiteKey) {
+          setSiteKey("");
+          onRequiredChange(false);
+          return;
+        }
+
+        setSiteKey(turnstileSiteKey);
+        onRequiredChange(true);
+        await ensureTurnstileScript();
+        if (cancelled || !containerRef.current || !window.turnstile) return;
+
+        widgetIdRef.current = window.turnstile.render(containerRef.current, {
+          sitekey: turnstileSiteKey,
+          action: "auth",
+          theme: "auto",
+          language: "auto",
+          callback: (token) => onTokenChange(token),
+          "expired-callback": () => onTokenChange(null),
+          "error-callback": () => onTokenChange(null),
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFailed(true);
+        onRequiredChange(true);
+        onTokenChange(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (window.turnstile && widgetIdRef.current) {
+        window.turnstile.remove(widgetIdRef.current);
+      }
+      widgetIdRef.current = null;
+    };
+  }, [onRequiredChange, onTokenChange]);
+
+  useEffect(() => {
+    if (!resetKey || !window.turnstile || !widgetIdRef.current) return;
+    window.turnstile.reset(widgetIdRef.current);
+    onTokenChange(null);
+  }, [resetKey, onTokenChange]);
+
+  if (siteKey === "") return null;
+
+  return (
+    <div className="native-captcha">
+      <div ref={containerRef} />
+      {siteKey === null && !failed ? (
+        <p className="project-meta">{copy.captchaLoading}</p>
+      ) : null}
+      {failed ? (
+        <p className="project-meta">{copy.captchaLoadFailed}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function BlobImage({ image, className, alt }: {
@@ -282,6 +674,7 @@ function App() {
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
+  const [activeSource, setActiveSource] = useState<ArchiveSourceFilter>("all");
   const [guideQuery, setGuideQuery] = useState("");
   const [directory] = useState(loadOfflineGuideDirectory);
   function setScreen(next: Screen, replace = false) {
@@ -307,6 +700,7 @@ function App() {
   const [online, setOnline] = useState(() => navigator.onLine);
   const [cloudUserId, setCloudUserId] = useState<string | null>(null);
   const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
+  const [cloudListIsCached, setCloudListIsCached] = useState(false);
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState("");
   const [cloudBusyArchiveId, setCloudBusyArchiveId] = useState<string | null>(null);
@@ -337,9 +731,20 @@ function App() {
   }, [ownerContext]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
-    const resolvedUserId = userId || cloudUserId;
-    if (!navigator.onLine || !resolvedUserId) {
+    const resolvedUserId = userId || cloudUserId || ownerContext?.userId;
+    if (!resolvedUserId) {
       setCloudArchives([]);
+      setCloudListIsCached(false);
+      setCloudError("");
+      return;
+    }
+
+    if (!navigator.onLine) {
+      const cached = await listOfflineCloudArchiveCache(resolvedUserId).catch(
+        () => [],
+      );
+      setCloudArchives(cached.map(cachedSnapshotToCloudArchive));
+      setCloudListIsCached(true);
       setCloudError("");
       return;
     }
@@ -348,20 +753,37 @@ function App() {
     try {
       const { data, error } = await supabase
         .from("archives")
-        .select("id,title,category,system_name,species_name_snapshot,status,updated_at,is_public")
+        .select("id,title,category,system_name,species_name_snapshot,status,created_at,updated_at,last_record_time,record_count,is_public,cover_image_url,cover_image_path,cover_thumb_path")
         .eq("user_id", resolvedUserId)
         .is("trashed_at", null)
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      setCloudArchives((data || []) as CloudArchiveSummary[]);
+      const next = (data || []) as CloudArchiveSummary[];
+      setCloudArchives(next);
+      setCloudListIsCached(false);
       setCloudError("");
+      void cacheActiveCloudArchives(resolvedUserId, next)
+        .then((cached) => {
+          if (!navigator.onLine) {
+            setCloudArchives(cached.map(cachedSnapshotToCloudArchive));
+            setCloudListIsCached(true);
+          }
+        })
+        .catch((cacheError) =>
+          console.warn("offline cloud cache refresh", cacheError),
+        );
     } catch (error) {
       console.warn("local shell cloud list", error);
-      setCloudError(copy.cloudLoadFailed);
+      const cached = await listOfflineCloudArchiveCache(resolvedUserId).catch(
+        () => [],
+      );
+      setCloudArchives(cached.map(cachedSnapshotToCloudArchive));
+      setCloudListIsCached(cached.length > 0);
+      setCloudError(cached.length > 0 ? "" : copy.cloudLoadFailed);
     } finally {
       setCloudLoading(false);
     }
-  }, [cloudUserId, copy.cloudLoadFailed]);
+  }, [cloudUserId, ownerContext?.userId, copy.cloudLoadFailed]);
 
   const loadDetail = useCallback(async (
     archiveId: string,
@@ -418,7 +840,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!online || !cloudUserId || !ownerContext) return;
+    if (!ownerContext) return;
+    if (!online) {
+      void loadCloudList(cloudUserId || ownerContext.userId);
+      return;
+    }
+    if (!cloudUserId) return;
 
     void loadCloudList(cloudUserId);
     void preparePendingCloudSyncQueue(ownerContext)
@@ -494,6 +921,19 @@ function App() {
     if (cloudUserId) void loadCloudList(cloudUserId);
     void loadList(ownerContext);
     setScreen({ kind: "cloud" });
+  }
+
+  async function signOutCloud() {
+    const ownerUserId = cloudUserId || ownerContext?.userId;
+    await supabase.auth.signOut();
+    if (ownerUserId) {
+      await clearOfflineCloudArchiveCache(ownerUserId).catch(() => undefined);
+    }
+    setCloudUserId(null);
+    setCloudArchives([]);
+    setCloudListIsCached(false);
+    setCloudError("");
+    goList();
   }
 
   async function saveCloudCopy(cloudArchiveId: string) {
@@ -581,6 +1021,9 @@ function App() {
   const activeGuide = screen.kind === "guide-detail"
     ? directory.find((guide) => getOfflineGuideKey(guide) === screen.guideKey)
     : undefined;
+  const cachedCloudDetail = screen.kind === "cached-cloud-detail"
+    ? cloudArchives.find((archive) => archive.id === screen.archiveId)
+    : undefined;
   const bottomNavigationItems: [
     MobileBottomNavigationItem,
     MobileBottomNavigationItem,
@@ -623,10 +1066,12 @@ function App() {
     <main className="offline-shell">
       <header className="offline-header">
         <div className="brand">
-          <div className="brand-mark"><UiIcon name="sprout" size={25} /></div>
+          <div className="brand-mark"><UiIcon name="user" size={17} /></div>
           <div>
             <div className="brand-name">{copy.mySpace}</div>
-            <div className="brand-mode">{copy.offlineMode}</div>
+            <div className="brand-mode">
+              {owner?.email || (online ? copy.cloudSignIn : copy.offlineTitle)}
+            </div>
           </div>
         </div>
         <div className="header-actions">
@@ -670,59 +1115,230 @@ function App() {
         );
       })() : null}
 
-      {migrationWarning ? (
-        <section className="notice warning"><p>{copy.migrationWarning}</p></section>
-      ) : null}
-
       {screen.kind === "list" ? (
-        <>
-          <div className="source-row">
-            <button type="button" aria-pressed={false} onClick={() => setCategoryFilter("all")}>{copy.all} {archives.length}</button>
-            <button type="button" onClick={() => setScreen({ kind: "cloud" })}>{copy.cloud}</button>
-            <button type="button" aria-pressed="true" onClick={() => setCategoryFilter("all")}>{copy.local} {archives.length}</button>
-            <button type="button" className="add-project" onClick={() => setScreen({ kind: "new-project" })}>+{copy.project}</button>
-          </div>
-          <div className="category-row">{(["all", "plant", "system", "insect_fish", "other"] as const).map((category) => <button type="button" key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{copy[category]}</button>)}</div>
-
-          {ownerContext && unownedCount > 0 ? (
-            <section className="notice warning">
-              <strong>{copy.unownedTitle}</strong>
-              <p>{copy.unownedBody}</p>
-              <div className="action-row">
-                <button className="secondary-button" type="button" onClick={() => void claimUnowned()}>
-                  {copy.claim}
-                </button>
-              </div>
-            </section>
+        <ArchiveWorkspaceTemplate<ArchiveSourceFilter>
+          sourceOptions={[
+            {
+              value: "all",
+              label: copy.all,
+              count: archives.length + cloudArchives.length,
+            },
+            {
+              value: "cloud",
+              label: copy.cloud,
+              count: cloudArchives.length,
+            },
+            {
+              value: "local",
+              label: copy.local,
+              count: archives.length,
+            },
+          ]}
+          activeSource={activeSource}
+          onSelectSource={setActiveSource}
+          onCreateArchive={() => setScreen({ kind: "new-project" })}
+          showCreateToolbar={false}
+          sourceTrailingSlot={(
+            <button
+              type="button"
+              onClick={() => setScreen({ kind: "new-project" })}
+            >
+              +{copy.project}
+            </button>
+          )}
+          filtersSlot={(
+            <div className="category-row">
+              {(["all", "plant", "system", "insect_fish", "other"] as const).map(
+                (category) => (
+                  <button
+                    type="button"
+                    key={category}
+                    aria-pressed={categoryFilter === category}
+                    onClick={() => setCategoryFilter(category)}
+                  >
+                    {copy[category]}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+          noticeSlot={(
+            <>
+              {ownerContext && unownedCount > 0 ? (
+                <section className="notice warning">
+                  <strong>{copy.unownedTitle}</strong>
+                  <p>{copy.unownedBody}</p>
+                  <div className="action-row">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void claimUnowned()}
+                    >
+                      {copy.claim}
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+              {migrationWarning ? (
+                <section className="notice warning">
+                  <p>{copy.migrationWarning}</p>
+                </section>
+              ) : null}
+            </>
+          )}
+        >
+          {activeSource !== "local" ? (
+            !online && !cloudListIsCached ? (
+              <section className="panel empty">
+                <strong>{copy.cachedCloudEmpty}</strong>
+              </section>
+            ) : online && !cloudUserId ? (
+              <CloudLogin copy={copy} onSuccess={() => setActiveSource("cloud")} />
+            ) : cloudLoading ? (
+              <section className="panel empty">{copy.cloudLoading}</section>
+            ) : cloudError ? (
+              <section className="notice warning"><p>{cloudError}</p></section>
+            ) : (
+              <>
+                {cloudListIsCached && cloudArchives.length > 0 ? (
+                  <section className="notice">
+                    <p>{copy.cachedCloudNotice}</p>
+                  </section>
+                ) : null}
+                {cloudArchives
+                  .filter((archive) => {
+                    const category = normalizeCloudCategory(archive.category);
+                    return categoryFilter === "all" || category === categoryFilter;
+                  })
+                  .map((archive) => {
+                    const localCopy = archives.find(
+                      (item) => item.source_cloud_archive_id === archive.id,
+                    );
+                    const busy = cloudBusyArchiveId === archive.id;
+                    return (
+                      <ArchiveProjectCard
+                        key={`cloud:${archive.id}`}
+                        project={cloudArchiveToProjectView(archive, language)}
+                        onClick={() => {
+                          if (cloudListIsCached) {
+                            setScreen({
+                              kind: "cached-cloud-detail",
+                              archiveId: archive.id,
+                            });
+                          } else if (localCopy) {
+                            openDetail(localCopy.id);
+                          }
+                        }}
+                        mobileMode
+                        actionSlot={cloudListIsCached ? (
+                          <span className="project-meta">{copy.readOnlyCopy}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="link-button"
+                            disabled={busy}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              if (localCopy) {
+                                openDetail(localCopy.id);
+                              } else {
+                                void saveCloudCopy(archive.id);
+                              }
+                            }}
+                          >
+                            {busy
+                              ? copy.savingCloudCopy
+                              : localCopy
+                                ? copy.openLocalCopy
+                                : copy.saveLocalCopy}
+                          </button>
+                        )}
+                      />
+                    );
+                  })}
+              </>
+            )
           ) : null}
 
-          <div className="section-title">
-            <h1>{copy.localProjects}</h1>
-            <span className="count">{archives.length}</span>
-          </div>
-          {archives.length ? (
-            <div className="project-list">
-              {archives.filter((archive) => categoryFilter === "all" || archive.category === categoryFilter).map((archive) => (
-                <ArchiveProjectCard
-                  key={archive.id}
-                  project={{
-                    ...localArchiveToProjectView(archive, ownerContext, language),
-                    href: undefined,
-                  }}
-                  onClick={() => openDetail(archive.id)}
-                  mobileMode
-                />
-              ))}
-            </div>
-          ) : (
+          {activeSource !== "cloud"
+            ? archives
+                .filter(
+                  (archive) =>
+                    categoryFilter === "all" ||
+                    archive.category === categoryFilter,
+                )
+                .map((archive) => (
+                  <ArchiveProjectCard
+                    key={`local:${archive.id}`}
+                    project={{
+                      ...localArchiveToProjectView(
+                        archive,
+                        ownerContext,
+                        language,
+                      ),
+                      href: undefined,
+                    }}
+                    onClick={() => openDetail(archive.id)}
+                    mobileMode
+                  />
+                ))
+            : null}
+
+          {activeSource === "local" && archives.length === 0 ? (
             <section className="panel empty">
               <strong>{copy.noProjects}</strong>
               {copy.noProjectsHint}
             </section>
-          )}
-        </>
+          ) : null}
+          {activeSource === "cloud" &&
+          (online || cloudListIsCached) &&
+          (cloudUserId || cloudListIsCached) &&
+          !cloudLoading &&
+          !cloudError &&
+          cloudArchives.length === 0 ? (
+            <section className="panel empty">
+              <strong>{copy.cloudProjects}</strong>
+              {cloudListIsCached || !online
+                ? copy.cachedCloudEmpty
+                : copy.noProjects}
+            </section>
+          ) : null}
+        </ArchiveWorkspaceTemplate>
       ) : null}
-
+      {screen.kind === "cached-cloud-detail" && cachedCloudDetail ? (
+        <section className="panel">
+          <button type="button" className="link-button" onClick={goList}>
+            ← {copy.back}
+          </button>
+          <ArchiveProjectCard
+            project={cloudArchiveToProjectView(cachedCloudDetail, language)}
+            mobileMode
+            actionSlot={(
+              <span className="project-meta">{copy.readOnlyCopy}</span>
+            )}
+          />
+          <p className="project-meta">{copy.cachedCloudReadOnly}</p>
+          {cachedCloudDetail.cached_at ? (
+            <p className="project-meta">
+              {copy.cachedAt}: {formatDate(cachedCloudDetail.cached_at, language)}
+            </p>
+          ) : null}
+          <div className="action-row">
+            <button type="button" className="primary-button" onClick={reconnect}>
+              {copy.reconnect}
+            </button>
+          </div>
+        </section>
+      ) : null}
+      {screen.kind === "cached-cloud-detail" && !cachedCloudDetail ? (
+        <section className="panel empty">
+          <strong>{copy.cachedCloudEmpty}</strong>
+          <button type="button" className="secondary-button" onClick={goList}>
+            {copy.back}
+          </button>
+        </section>
+      ) : null}
       {screen.kind === "new-project" ? (
         <ProjectForm
           language={language}
@@ -828,26 +1444,31 @@ function App() {
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{archives.map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button></section> : null}
       {screen.kind === "cloud" ? (
-        !online ? (
-          <section className="panel empty"><strong>{copy.cloudUnavailable}</strong></section>
-        ) : !cloudUserId ? (
+        !online && !cloudListIsCached ? (
+          <section className="panel empty"><strong>{copy.cachedCloudEmpty}</strong></section>
+        ) : online && !cloudUserId ? (
           <CloudLogin copy={copy} onSuccess={() => void loadCloudList()} />
         ) : (
           <>
             <div className="section-title">
               <h1>{copy.cloudProjects}</h1>
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => void supabase.auth.signOut()}
-              >
-                {copy.logout}
-              </button>
+              {online && cloudUserId ? (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => void signOutCloud()}
+                >
+                  {copy.logout}
+                </button>
+              ) : null}
             </div>
+            {cloudListIsCached && cloudArchives.length > 0 ? (
+              <section className="notice"><p>{copy.cachedCloudNotice}</p></section>
+            ) : null}
             {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
             {cloudError ? <section className="notice warning"><p>{cloudError}</p></section> : null}
             {!cloudLoading && !cloudError && cloudArchives.length === 0 ? (
-              <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
+              <section className="panel empty"><strong>{copy.cloudProjects}</strong>{cloudListIsCached || !online ? copy.cachedCloudEmpty : copy.noProjects}</section>
             ) : null}
             <div className="project-list">
               {cloudArchives.map((archive) => {
@@ -855,6 +1476,22 @@ function App() {
                   (item) => item.source_cloud_archive_id === archive.id,
                 );
                 const busy = cloudBusyArchiveId === archive.id;
+                if (cloudListIsCached) {
+                  return (
+                    <ArchiveProjectCard
+                      key={archive.id}
+                      project={cloudArchiveToProjectView(archive, language)}
+                      onClick={() => setScreen({
+                        kind: "cached-cloud-detail",
+                        archiveId: archive.id,
+                      })}
+                      mobileMode
+                      actionSlot={(
+                        <span className="project-meta">{copy.readOnlyCopy}</span>
+                      )}
+                    />
+                  );
+                }
                 return (
                   <section className="panel" key={archive.id}>
                     <h2>{archive.title || copy.project}</h2>
@@ -924,11 +1561,23 @@ function CloudLogin({
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaRequired, setCaptchaRequired] = useState<boolean | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) return;
+
+    if (captchaRequired === null) {
+      setMessage(copy.captchaLoading);
+      return;
+    }
+    if (captchaRequired && !captchaToken) {
+      setMessage(copy.captchaRequired);
+      return;
+    }
 
     setSubmitting(true);
     setMessage("");
@@ -936,9 +1585,12 @@ function CloudLogin({
       const { error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
+        options: captchaToken ? { captchaToken } : undefined,
       });
       if (error) {
         setMessage(`${copy.loginFailed}: ${error.message}`);
+        setCaptchaToken(null);
+        setCaptchaResetKey((value) => value + 1);
         return;
       }
       onSuccess();
@@ -946,6 +1598,8 @@ function CloudLogin({
       setMessage(
         `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
       );
+      setCaptchaToken(null);
+      setCaptchaResetKey((value) => value + 1);
     } finally {
       setSubmitting(false);
     }
@@ -960,6 +1614,8 @@ function CloudLogin({
           <input
             type="email"
             autoComplete="email"
+            autoCapitalize="none"
+            inputMode="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
@@ -975,9 +1631,23 @@ function CloudLogin({
             required
           />
         </div>
+        <NativeTurnstile
+          copy={copy}
+          resetKey={captchaResetKey}
+          onTokenChange={setCaptchaToken}
+          onRequiredChange={setCaptchaRequired}
+        />
         {message ? <p className="project-meta">{message}</p> : null}
         <div className="submit-row">
-          <button type="submit" className="primary-button" disabled={submitting}>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={
+              submitting ||
+              captchaRequired === null ||
+              (captchaRequired === true && !captchaToken)
+            }
+          >
             {submitting ? copy.loading : copy.login}
           </button>
         </div>

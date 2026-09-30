@@ -18,11 +18,10 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(buildScript, /local-parity\.css/);
   assert.match(buildScript, /bundledComponentCss/);
   assert.match(buildScript, /`\$\{css\}\\n\$\{localParityCss\}\\n\$\{bundledComponentCss\}`/);
-  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.match(parityStyles, /\.brand-mode[\s\S]*display: block/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
-  assert.match(parityStyles, /grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(source, /<ArchiveWorkspaceTemplate/);
+  assert.match(parityStyles, /\.offline-shell[\s\S]*width: min\(1080px/);
   assert.match(source, /<MobileBottomNavigationView/);
   assert.match(source, /<ArchiveProjectCard/);
   assert.match(source, /<ArchiveRecordCardShell/);
@@ -62,6 +61,20 @@ test("network-only sections use one quiet offline state", () => {
   assert.match(discoverLayout, /<NetworkRequiredBoundary>/);
   assert.match(marketLayout, /<NetworkRequiredBoundary>/);
   assert.match(followLayout, /<NetworkRequiredBoundary>/);
+});
+
+test("cloud projects expose a small read-only device cache while offline", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const cache = read("lib/offline-cloud-archive-cache.ts");
+
+  assert.match(source, /cachedCloudNotice/);
+  assert.match(source, /cachedCloudReadOnly/);
+  assert.match(source, /cloudListIsCached/);
+  assert.match(source, /clearOfflineCloudArchiveCache/);
+  assert.match(source, /cover_thumbnail/);
+  assert.match(cache, /status: "active"/);
+  assert.match(cache, /archive\.status === "ended"/);
+  assert.doesNotMatch(cache, /record_body|media_blob|full_photo/);
 });
 
 test("temporary single-character startup placeholder is replaced by the product brand", () => {
