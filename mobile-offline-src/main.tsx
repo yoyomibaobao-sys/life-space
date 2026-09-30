@@ -61,12 +61,10 @@ import {
 } from "@/lib/archive-categories";
 
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
-import { loginBundledWithTurnstile } from "@/lib/android-auth-session";
+import { formatBundledLoginError, loginBundledWithTurnstile } from "@/lib/android-auth-session";
 import {
-  beginAndroidAuthLogin,
   completeAndroidAuthLogin,
   explicitAndroidLogout,
-  failAndroidAuthLogin,
   resolveAuthenticatedOwnerContext,
   useAndroidAuthState,
 } from "@/lib/android-auth-state";
@@ -87,7 +85,7 @@ import MobileShellErrorBoundary from "@/components/mobile/MobileShellErrorBounda
 import { InternalNavigationProvider } from "@/components/navigation/InternalLink";
 import ProjectCategorySettingsView from "@/components/profile/ProjectCategorySettingsView";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
-import ArchiveTaxonomyPanel from "@/components/archive-ui/ArchiveTaxonomyPanel";
+import ArchiveTaxonomyPanel, { type ArchiveTaxonomyChip } from "@/components/archive-ui/ArchiveTaxonomyPanel";
 import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveProjectView";
 import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
@@ -1393,6 +1391,60 @@ function App() {
     (!subcategoryFilter || archive.sub_tag_id === subcategoryFilter) &&
     (!groupFilter || archive.group_tag_id === groupFilter));
   const activeDepths = sourceFilter === "local" ? getLocalArchiveCategoryDepths(ownerContext?.userId) : cloudDepths;
+  const canEditLocalTaxonomy = sourceFilter === "local";
+  const canEditCloudTaxonomy = sourceFilter === "cloud" && online && Boolean(authenticatedOwnerContext);
+
+  async function mutateWorkspaceTaxonomy(
+    action: "create" | "rename" | "delete",
+    kind: "subcategory" | "group",
+    category: ArchiveCategory,
+    chip?: ArchiveTaxonomyChip,
+    nextLabel?: string,
+  ) {
+    const entry = chip && selectedTaxonomy.find((item) => item.id === chip.id && item.kind === kind && item.category === category);
+    if (action !== "create" && !entry) return;
+    try {
+      if (sourceFilter === "local") {
+        const parent = kind === "group" ? localTaxonomy.find((item) => item.id === subcategoryFilter && item.kind === "subcategory" && item.category === category) : null;
+        if (kind === "group" && !parent) return;
+        const fields = { kind, category, subcategory: parent?.label || null };
+        if (action === "create") await createLocalTaxonomyItem({ ...fields, label: nextLabel || "" }, ownerContext);
+        else if (action === "rename" && entry) await renameLocalTaxonomyItem({ ...fields, oldLabel: entry.label, newLabel: nextLabel || "" }, ownerContext);
+        else if (entry) await deleteLocalTaxonomyItem({ ...fields, label: entry.label }, ownerContext);
+
+        const entries = mapLocalProjectTaxonomy(await listVisibleLocalTaxonomyItems(ownerContext));
+        setLocalTaxonomy(entries);
+        if (entry && action === "rename") {
+          const replacement = entries.find((item) => item.kind === kind && item.category === category && item.label === nextLabel?.trim() && item.parentId === (parent?.id || null));
+          if (kind === "subcategory" && subcategoryFilter === entry.id) {
+            setSubcategoryFilter(replacement?.id || null);
+            setGroupFilter(null);
+          }
+          if (kind === "group" && groupFilter === entry.id) setGroupFilter(replacement?.id || null);
+        } else if (entry && action === "delete") {
+          if (kind === "subcategory" && subcategoryFilter === entry.id) { setSubcategoryFilter(null); setGroupFilter(null); }
+          if (kind === "group" && groupFilter === entry.id) setGroupFilter(null);
+        }
+        await loadList(ownerContext);
+        if (detail) await loadDetail(detail.archive.id, ownerContext);
+      } else if (sourceFilter === "cloud" && online && authenticatedOwnerContext?.userId) {
+        const userId = authenticatedOwnerContext.userId;
+        const parentId = kind === "group" ? subcategoryFilter : null;
+        if (kind === "group" && !parentId) return;
+        if (action === "create") await createCloudProjectTaxonomy({ userId, category, label: nextLabel || "", parentId });
+        else if (action === "rename" && entry) await renameCloudProjectTaxonomy({ userId, entry, label: nextLabel || "" });
+        else if (entry) await deleteCloudProjectTaxonomy({ userId, entry });
+        if (entry && action === "delete") {
+          if (kind === "subcategory" && subcategoryFilter === entry.id) { setSubcategoryFilter(null); setGroupFilter(null); }
+          if (kind === "group" && groupFilter === entry.id) setGroupFilter(null);
+        }
+        setCloudTaxonomy(await loadCloudProjectTaxonomy(userId));
+        await loadCloudList(userId);
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.cloudLoadFailed);
+    }
+  }
   const cloudSourceCount = liveCloudWorkspace ? cloudArchives.length : cloudCaches.length;
   const visibleExperienceItems = experienceItems.filter((item) => {
     if (experienceCategoryFilter !== "all" && item.archiveCategory !== experienceCategoryFilter) {
@@ -1594,8 +1646,9 @@ function App() {
   const storageTotalLabel = storageLimitBytes > 0
     ? formatStorage(storageLimitBytes)
     : "—";
+  const hasAuthenticatedIdentity = auth.status === "signed-in" && Boolean(authenticatedOwnerContext);
   const membershipLabel = getUserTypeLabel(
-    { signedIn: Boolean(owner), membership },
+    { signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity ? membership : null },
     language,
   );
   const shellHeaderTitle =
@@ -1653,17 +1706,17 @@ function App() {
 
       {screen.kind === "list" ? (
         <PersonalSpaceMobileIdentity
-          avatarUrl={spaceProfile?.avatar_url}
+          avatarUrl={hasAuthenticatedIdentity ? spaceProfile?.avatar_url : null}
           username={
-            spaceProfile?.username ||
-            owner?.email ||
-            (language === "zh" ? "我的空间" : "My space")
+            hasAuthenticatedIdentity
+              ? spaceProfile?.username || auth.email || (language === "zh" ? "我的空间" : "My space")
+              : language === "zh" ? "本机空间" : "Device space"
           }
           membershipLabel={membershipLabel}
-          storageUsagePercent={storageUsagePercent}
-          storageTotalLabel={storageTotalLabel}
-          experienceLabel={language === "zh" ? "经验卡" : "Experience"}
-          experienceCardCount={experienceCardCount}
+          storageUsagePercent={hasAuthenticatedIdentity ? storageUsagePercent : null}
+          storageTotalLabel={hasAuthenticatedIdentity ? storageTotalLabel : null}
+          experienceLabel={hasAuthenticatedIdentity ? (language === "zh" ? "经验卡" : "Experience") : null}
+          experienceCardCount={hasAuthenticatedIdentity ? experienceCardCount : null}
           language={language}
           profileHref="/profile"
         />
@@ -1725,6 +1778,7 @@ function App() {
             </button>
           )}
           filtersSlot={(
+            <>
             <ArchiveTaxonomyPanel
               activeCategory={categoryFilter === "all" ? null : categoryFilter}
               activeSubcategoryId={subcategoryFilter}
@@ -1738,9 +1792,25 @@ function App() {
               onSelectCategory={(category) => { setCategoryFilter(category); setSubcategoryFilter(null); setGroupFilter(null); }}
               onResetSubcategory={() => { setSubcategoryFilter(null); setGroupFilter(null); }}
               onSelectSubcategory={(chip) => { setSubcategoryFilter(chip.id); setGroupFilter(null); }}
+              onCreateSubcategory={canEditLocalTaxonomy || canEditCloudTaxonomy
+                ? (category, name) => mutateWorkspaceTaxonomy("create", "subcategory", category, undefined, name) : undefined}
+              onRenameSubcategory={canEditLocalTaxonomy || canEditCloudTaxonomy
+                ? (chip, name) => mutateWorkspaceTaxonomy("rename", "subcategory", categoryFilter as ArchiveCategory, chip, name) : undefined}
+              onDeleteSubcategory={canEditLocalTaxonomy || canEditCloudTaxonomy
+                ? (chip) => mutateWorkspaceTaxonomy("delete", "subcategory", categoryFilter as ArchiveCategory, chip) : undefined}
               onResetGroup={() => setGroupFilter(null)}
               onSelectGroup={(chip) => setGroupFilter(chip.id)}
+              onCreateGroup={canEditLocalTaxonomy || canEditCloudTaxonomy
+                ? (name) => mutateWorkspaceTaxonomy("create", "group", categoryFilter as ArchiveCategory, undefined, name) : undefined}
+              onRenameGroup={canEditLocalTaxonomy || canEditCloudTaxonomy
+                ? (chip, name) => mutateWorkspaceTaxonomy("rename", "group", categoryFilter as ArchiveCategory, chip, name) : undefined}
+              onDeleteGroup={canEditLocalTaxonomy || canEditCloudTaxonomy
+                ? (chip) => mutateWorkspaceTaxonomy("delete", "group", categoryFilter as ArchiveCategory, chip) : undefined}
             />
+            {sourceFilter === "cloud" && !online && authenticatedOwnerContext ? (
+              <p className="project-meta">{language === "zh" ? "联网后可编辑云端分组" : "Connect to edit cloud groups"}</p>
+            ) : null}
+            </>
           )}
           noticeSlot={ownerContext && unownedCount > 0 ? (
             <section className="notice warning">
@@ -2430,18 +2500,15 @@ function CloudLogin({
 
     setSubmitting(true);
     setMessage("");
-    beginAndroidAuthLogin();
     try {
       const user = await loginBundledWithTurnstile({ email: normalizedEmail, password,
         captchaToken, siteKeyConfigured: AUTH_CAPTCHA_ENABLED });
       completeAndroidAuthLogin(user);
       onSuccess(user.id);
     } catch (error) {
-      failAndroidAuthLogin();
-      setMessage(
-        `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
-      );
+      setMessage(`${copy.loginFailed}: ${formatBundledLoginError(error, copy.email === "邮箱" ? "zh" : "en")}`);
     } finally {
+      setCaptchaToken(null);
       setCaptchaResetKey((value) => value + 1);
       setSubmitting(false);
     }
@@ -2476,7 +2543,7 @@ function CloudLogin({
           onTokenChange={setCaptchaToken}
           resetKey={captchaResetKey}
         />
-        {message ? <p className="project-meta">{message}</p> : null}
+        {message ? <p className="project-meta" role="alert">{message}</p> : null}
         <div className="submit-row">
           <button type="submit" className="primary-button" disabled={submitting}>
             {submitting ? copy.loading : copy.login}

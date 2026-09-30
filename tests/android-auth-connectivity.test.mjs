@@ -414,6 +414,64 @@ test("CloudLogin eligibility and screen stability follow auth and connectivity s
   assert.doesNotMatch(read("lib/android-connectivity.ts"), /signOut|VPN|vpn/);
 });
 
+test("Android login keeps its form mounted during a pending request and reports invalid credentials", async () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  const login = shell.slice(shell.indexOf("function CloudLogin("), shell.indexOf("function ProjectForm("));
+  assert.doesNotMatch(login, /beginAndroidAuthLogin|failAndroidAuthLogin/);
+  assert.match(login, /setSubmitting\(true\)[\s\S]*await loginBundledWithTurnstile/);
+  assert.match(login, /completeAndroidAuthLogin\(user\)/);
+  assert.match(login, /role="alert"/);
+  assert.match(login, /setCaptchaToken\(null\)[\s\S]*setCaptchaResetKey/);
+  assert.equal((shell.match(/<CloudLogin\b/g) || []).length, 3); // My Space, Following, creation login.
+
+  const auth = await loadAuthModule();
+  const harness = createAuthHarness(auth, { online: true });
+  await harness.controller.initialize();
+  assert.equal(harness.controller.getSnapshot().status, "signed-out");
+  // CloudLogin holds its own submitting state; the global status stays signed-out until success.
+  assert.equal(harness.controller.getSnapshot().status, "signed-out");
+  harness.controller.completeLogin({ id: "new-user", email: "new@example.test" });
+  assert.equal(harness.controller.getSnapshot().status, "signed-in");
+
+  const session = await loadModule("lib/android-auth-session.ts", {
+    "@/lib/supabase": "export const supabase = {};",
+    "@/lib/android-connectivity": "export const isAndroidOnline = () => true;",
+  });
+  assert.equal(session.formatBundledLoginError({ code: "invalid_credentials", message: "Invalid login credentials" }, "zh"), "邮箱或密码不正确");
+  assert.equal(session.formatBundledLoginError({ code: "invalid_credentials" }, "en"), "Incorrect email or password");
+});
+
+test("remembered owner cannot identify a signed-out Android user in My Space", async () => {
+  const auth = await loadAuthModule();
+  const owner = { userId: "old-user", email: "old@example.test" };
+  const harness = createAuthHarness(auth, { rememberedOwner: owner, online: true });
+  await harness.controller.initialize();
+  assert.equal(auth.resolveAuthenticatedOwnerContext(harness.controller.getSnapshot(), owner), null);
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /const hasAuthenticatedIdentity = auth\.status === "signed-in" && Boolean\(authenticatedOwnerContext\)/);
+  assert.match(shell, /signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity \? membership : null/);
+  assert.match(shell, /hasAuthenticatedIdentity[\s\S]*spaceProfile\?\.username \|\| auth\.email[\s\S]*"本机空间"/);
+  assert.doesNotMatch(shell, /username=\{[\s\S]{0,90}owner\?\.email/);
+  const membership = await loadModule("lib/membership.ts");
+  assert.equal(membership.getUserTypeLabel({ signedIn: false, membership: { plan: "admin" } }, "zh"), "游客");
+});
+
+test("My Space taxonomy editing follows local, authenticated cloud, and All capabilities", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /canEditLocalTaxonomy = sourceFilter === "local"/);
+  assert.match(shell, /canEditCloudTaxonomy = sourceFilter === "cloud" && online && Boolean\(authenticatedOwnerContext\)/);
+  for (const prop of ["onCreateSubcategory", "onRenameSubcategory", "onDeleteSubcategory", "onCreateGroup", "onRenameGroup", "onDeleteGroup"]) {
+    assert.match(shell, new RegExp(`${prop}=\\{canEditLocalTaxonomy \\|\\| canEditCloudTaxonomy`));
+  }
+  assert.match(shell, /sourceFilter === "local"[\s\S]*createLocalTaxonomyItem[\s\S]*renameLocalTaxonomyItem[\s\S]*deleteLocalTaxonomyItem/);
+  assert.match(shell, /sourceFilter === "cloud" && online && authenticatedOwnerContext\?\.userId[\s\S]*createCloudProjectTaxonomy[\s\S]*renameCloudProjectTaxonomy[\s\S]*deleteCloudProjectTaxonomy/);
+  assert.match(shell, /setCloudTaxonomy\(await loadCloudProjectTaxonomy\(userId\)\)/);
+  assert.match(shell, /await loadCloudList\(userId\)/);
+  assert.match(shell, /await loadList\(ownerContext\)/);
+  assert.match(shell, /联网后可编辑云端分组/);
+  assert.doesNotMatch(shell.slice(shell.indexOf("async function mutateWorkspaceTaxonomy("), shell.indexOf("const cloudSourceCount")), /\bprompt\(/);
+});
+
 test("authenticated owner hard-gates sync, pending creation and private cache routes", () => {
   const shell = read("mobile-offline-src/main.tsx");
   assert.match(

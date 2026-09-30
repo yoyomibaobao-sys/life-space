@@ -1,6 +1,14 @@
 import { supabase } from "@/lib/supabase";
 import { isAndroidOnline } from "@/lib/android-connectivity";
 
+export function formatBundledLoginError(error: unknown, language: "zh" | "en") {
+  const authError = error as { code?: string; message?: string } | null;
+  if (authError?.code === "invalid_credentials" || authError?.message === "Invalid login credentials") {
+    return language === "zh" ? "邮箱或密码不正确" : "Incorrect email or password";
+  }
+  return authError?.message || (language === "zh" ? "请稍后重试" : "Please try again");
+}
+
 export async function restoreBundledSession(client: typeof supabase = supabase, online = isAndroidOnline()) {
   const stored = await client.auth.getSession();
   if (stored.error) throw stored.error;
