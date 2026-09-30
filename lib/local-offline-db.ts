@@ -266,6 +266,9 @@ export type LocalArchiveVisibilityResult = {
 export type PendingCloudSyncSummary = {
   local_archive_id: string;
   cloud_archive_id: string | null;
+  archive_create_pending: boolean;
+  archive_failed: boolean;
+  last_error: string | null;
   title: string;
   record_count: number;
   image_count: number;
@@ -1261,6 +1264,9 @@ export async function listPendingCloudSyncSummaries(
         cloud_archive_id:
           archive.source_cloud_archive_id ||
           resolveIntendedCloudArchiveId(archive),
+        archive_create_pending: isPendingCloudCreateArchive(archive) && !archive.source_cloud_archive_id,
+        archive_failed: archive.sync.status === "failed",
+        last_error: archive.sync.last_error || null,
         title: archive.title,
         record_count: pendingRecords.length,
         image_count: pendingImages.length,

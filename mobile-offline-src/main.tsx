@@ -30,7 +30,6 @@ import {
   createLocalTaxonomyItem,
   renameLocalTaxonomyItem,
   deleteLocalTaxonomyItem,
-  deferPendingCloudSyncPrompt,
   localArchiveHasPendingCloudWork,
   markUnownedLocalArchivesForOwner,
   preparePendingCloudSyncQueue,
@@ -125,6 +124,7 @@ import {
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncAllPendingCloudArchives, syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
+import { buildAndroidCloudWorkspace, type PendingCloudProject } from "@/lib/android-cloud-workspace";
 import { readCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
 import { createLiveCloudArchive } from "@/lib/android-live-cloud-create";
 import { projectCreationDestinations, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
@@ -1294,8 +1294,9 @@ function App() {
   }
 
   async function uploadPending(localArchiveId: string) {
+    if (!online) { showToast(language === "zh" ? "联网后可上传待同步内容" : "Connect to upload pending changes"); return; }
     if (!authenticatedOwnerContext || !cloudUserId) {
-      showToast(copy.cloudSignIn);
+      openCloudLogin("list-cloud");
       return;
     }
 
@@ -1306,21 +1307,57 @@ function App() {
         ownerContext: authenticatedOwnerContext,
       });
       await loadList(authenticatedOwnerContext);
-      if (result.archiveUpdated) await loadCloudList(cloudUserId);
+      await loadCloudList(cloudUserId);
       if (result.taxonomyWarning) setTaxonomySyncWarning(result.taxonomyWarning);
       window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
       showToast(
         result.taxonomyWarning || (result.success ? copy.uploadSuccess : result.error || copy.uploadFailed),
       );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.uploadFailed);
     } finally {
       setSyncingArchiveId(null);
     }
   }
 
-  async function deferPending(localArchiveId: string) {
-    if (!authenticatedOwnerContext) return;
-    await deferPendingCloudSyncPrompt(localArchiveId, authenticatedOwnerContext);
-    await loadList(authenticatedOwnerContext);
+  async function uploadAllPending() {
+    if (!online) { showToast(language === "zh" ? "联网后可上传待同步内容" : "Connect to upload pending changes"); return; }
+    if (!authenticatedOwnerContext || !cloudUserId) { openCloudLogin("list-cloud"); return; }
+    setSyncingArchiveId("all");
+    try {
+      const results = await syncAllPendingCloudArchives({ ownerContext: authenticatedOwnerContext });
+      await loadList(authenticatedOwnerContext);
+      await loadCloudList(cloudUserId);
+      window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
+      const warning = results.find((result) => result.taxonomyWarning)?.taxonomyWarning;
+      if (warning) setTaxonomySyncWarning(warning);
+      showToast(warning || (results.every((result) => result.success) ? copy.uploadSuccess : copy.uploadFailed));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.uploadFailed);
+    } finally {
+      setSyncingArchiveId(null);
+    }
+  }
+
+  async function uploadPendingProject(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
+    if (!online) { showToast(language === "zh" ? "联网后可上传待同步内容" : "Connect to upload pending changes"); return; }
+    if (!authenticatedOwnerContext || !cloudUserId) { openCloudLogin("list-cloud"); return; }
+    if (item.summaries.length === 1) { await uploadPending(item.summaries[0].local_archive_id); return; }
+    setSyncingArchiveId(item.key);
+    try {
+      const results = [];
+      for (const summary of item.summaries) {
+        results.push(await syncPendingCloudArchive({ localArchiveId: summary.local_archive_id, ownerContext: authenticatedOwnerContext }));
+      }
+      await loadList(authenticatedOwnerContext);
+      await loadCloudList(cloudUserId);
+      window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
+      showToast(results.every((result) => result.success) ? copy.uploadSuccess : copy.uploadFailed);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : copy.uploadFailed);
+    } finally {
+      setSyncingArchiveId(null);
+    }
   }
 
   async function claimUnowned() {
@@ -1372,19 +1409,37 @@ function App() {
   const subcategoryLabel = selectedTaxonomy.find((item) => item.id === subcategoryFilter)?.label;
   const groupLabel = selectedTaxonomy.find((item) => item.id === groupFilter)?.label;
   const filterCategory = (archive: { category?: string | null }) => categoryFilter === "all" || archive.category === categoryFilter;
-  const filteredLocalArchives = archives.filter((archive) => filterCategory(archive) &&
-    (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
-    (!groupFilter || archive.group_name === groupLabel));
-  const filteredCloudCaches = cloudCaches.filter((archive) => filterCategory(archive) &&
-    (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
-    (!groupFilter || archive.group_name === groupLabel));
   const liveCloudWorkspace =
     online &&
     Boolean(authenticatedOwnerContext) &&
     !cloudError;
-  const filteredCloudArchives = cloudArchives.filter((archive) => filterCategory(archive) &&
+  const workspace = buildAndroidCloudWorkspace({
+    local: archives,
+    caches: authenticatedOwnerContext ? cloudCaches : [],
+    live: authenticatedOwnerContext ? cloudArchives : [],
+    pending: authenticatedOwnerContext ? pendingSync : [],
+    preferLive: liveCloudWorkspace,
+  });
+  const filteredLocalArchives = workspace.localOnly.filter((archive) => filterCategory(archive) &&
+    (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
+    (!groupFilter || archive.group_name === groupLabel));
+  const filteredCloudCaches = workspace.normalCache.filter((archive) => filterCategory(archive) &&
+    (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
+    (!groupFilter || archive.group_name === groupLabel));
+  const filteredCloudArchives = workspace.normalLive.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.sub_tag_id === subcategoryFilter) &&
     (!groupFilter || archive.group_tag_id === groupFilter));
+  const filteredPending = workspace.pending.filter((item) => {
+    const archive = item.local || item.cache || item.cloud;
+    if (!archive || !filterCategory(archive)) return false;
+    if (item.local || item.cache) {
+      const local = (item.local || item.cache)!;
+      return (!subcategoryFilter || local.intended_cloud_sub_tag_id === subcategoryFilter || local.source_cloud_sub_tag_id === subcategoryFilter) &&
+        (!groupFilter || local.intended_cloud_group_tag_id === groupFilter || local.source_cloud_group_tag_id === groupFilter);
+    }
+    return (!subcategoryFilter || item.cloud?.sub_tag_id === subcategoryFilter) &&
+      (!groupFilter || item.cloud?.group_tag_id === groupFilter);
+  });
   const activeDepths = sourceFilter === "local" ? getLocalArchiveCategoryDepths(ownerContext?.userId) : cloudDepths;
   const canEditLocalTaxonomy = sourceFilter === "local";
   const canEditCloudTaxonomy = sourceFilter === "cloud" && online && Boolean(authenticatedOwnerContext);
@@ -1440,7 +1495,7 @@ function App() {
       showToast(error instanceof Error ? error.message : copy.cloudLoadFailed);
     }
   }
-  const cloudSourceCount = liveCloudWorkspace ? cloudArchives.length : cloudCaches.length;
+  const cloudSourceCount = workspace.counts.cloud;
   const visibleExperienceItems = experienceItems.filter((item) => {
     if (experienceCategoryFilter !== "all" && item.archiveCategory !== experienceCategoryFilter) {
       return false;
@@ -1517,6 +1572,31 @@ function App() {
         }}
       />
     );
+  }
+  function renderPendingProjectCard(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
+    const local = item.local || item.cache;
+    const base = local
+      ? localArchiveToProjectView(local, ownerContext, language, cloudDepths[local.category])
+      : item.cloud ? cloudProjectView(item.cloud) : null;
+    if (!base) return null;
+    const badge = item.failed
+      ? (language === "zh" ? "待重试" : "Retry upload")
+      : item.creating
+        ? (language === "zh" ? "待创建云端" : "Pending cloud creation")
+        : (language === "zh" ? "待同步" : "Pending upload");
+    const counts = language === "zh"
+      ? `${item.recordCount} 条记录 · ${item.imageCount} 张照片待上传`
+      : `${item.recordCount} records · ${item.imageCount} photos to upload`;
+    return <ArchiveProjectCard
+      key={item.key}
+      project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
+      onClick={() => local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
+      mobileMode mobileShowCategoryBadge={false}
+      actionSlot={online && authenticatedOwnerContext ? <button type="button"
+        disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
+        {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? copy.uploading : (language === "zh" ? "上传待同步内容" : "Upload pending changes")}
+      </button> : null}
+    />;
   }
   function renderProjectActions(archive: CloudArchiveSummary | LocalArchiveSummary, source: "cloud" | "local" | "cache") {
     const category = archive.category as ArchiveCategory;
@@ -1717,33 +1797,6 @@ function App() {
         />
       ) : null}
 
-      {online && authenticatedOwnerContext && pendingSync.find((item) => item.should_prompt) ? (() => {
-        const pending = pendingSync.find((item) => item.should_prompt)!;
-        return (
-          <section className="notice warning">
-            <strong>{copy.pendingUpload}</strong>
-            <p>{pending.title}</p>
-            <div className="action-row">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={syncingArchiveId === pending.local_archive_id}
-                onClick={() => void uploadPending(pending.local_archive_id)}
-              >
-                {syncingArchiveId === pending.local_archive_id ? copy.uploading : copy.uploadNow}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => void deferPending(pending.local_archive_id)}
-              >
-                {copy.later}
-              </button>
-            </div>
-          </section>
-        );
-      })() : null}
-
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
       ) : null}
@@ -1754,9 +1807,9 @@ function App() {
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
           online={online}
           sourceOptions={[
-            { value: "all", label: copy.all, count: archives.length + cloudSourceCount },
+            { value: "all", label: copy.all, count: workspace.counts.all },
             { value: "cloud", label: copy.cloud, count: cloudSourceCount },
-            { value: "local", label: copy.local, count: archives.length },
+            { value: "local", label: copy.local, count: workspace.counts.local },
           ]}
           activeSource={sourceFilter}
           onSelectSource={(source) => {
@@ -1819,16 +1872,31 @@ function App() {
             </section>
           ) : null}
         >
+          {sourceFilter !== "local" && authenticatedOwnerContext && filteredPending.length ? (
+            sourceFilter === "cloud" ? <section data-android-cloud-pending="true">
+              <div className="panel">
+                <h2>{language === "zh" ? "待上传" : "Pending uploads"} {workspace.pending.length}</h2>
+                <p>{language === "zh"
+                  ? `${workspace.pendingCounts.archive} 个待创建云项目 · ${workspace.pendingCounts.record} 条记录 · ${workspace.pendingCounts.image} 张照片`
+                  : `${workspace.pendingCounts.archive} projects to create · ${workspace.pendingCounts.record} records · ${workspace.pendingCounts.image} photos`}</p>
+                {online ? <button type="button" disabled={Boolean(syncingArchiveId)} onClick={() => void uploadAllPending()}>
+                  {syncingArchiveId === "all" ? copy.uploading : language === "zh" ? "全部上传" : "Upload all"}
+                </button> : <p>{language === "zh" ? "联网后可上传" : "Connect to upload"}</p>}
+              </div>
+              <div className="project-list">{filteredPending.map(renderPendingProjectCard)}</div>
+            </section> : <div className="project-list" data-android-pending-cards="true">{filteredPending.map(renderPendingProjectCard)}</div>
+          ) : null}
           {sourceFilter !== "local" ? (
             liveCloudWorkspace ? (
               <>
+                {sourceFilter === "cloud" && (filteredCloudArchives.length || filteredPending.length) ? <h2>{copy.cloudProjects}</h2> : null}
                 {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
                 {!cloudLoading && filteredCloudArchives.length ? (
                   <div className="project-list" data-android-live-cloud-list="true">
                     {filteredCloudArchives.map(renderCloudProjectCard)}
                   </div>
                 ) : null}
-                {!cloudLoading && sourceFilter === "cloud" && filteredCloudArchives.length === 0 ? (
+                {!cloudLoading && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && filteredPending.length === 0 ? (
                   <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
                 ) : null}
               </>
@@ -1841,6 +1909,8 @@ function App() {
                 {auth.status === "signed-in" &&
                 (!online || Boolean(cloudError)) &&
                 filteredCloudCaches.length ? (
+                  <>
+                  {sourceFilter === "cloud" ? <h2>{copy.cloudProjects}</h2> : null}
                   <div className="project-list" data-android-cloud-cache-list="true">
                     {filteredCloudCaches.map((archive) => (
                       <ArchiveProjectCard
@@ -1856,7 +1926,8 @@ function App() {
                       />
                     ))}
                   </div>
-                ) : sourceFilter === "cloud" && (!online || Boolean(cloudError)) ? (
+                  </>
+                ) : sourceFilter === "cloud" && (!online || Boolean(cloudError)) && filteredPending.length === 0 ? (
                   <section className="panel empty">{copy.noCachedProjects}</section>
                 ) : null}
               </>
@@ -1890,6 +1961,7 @@ function App() {
 
           {sourceFilter === "all" &&
           filteredLocalArchives.length === 0 &&
+          filteredPending.length === 0 &&
           (liveCloudWorkspace
             ? !cloudLoading && filteredCloudArchives.length === 0
             : filteredCloudCaches.length === 0) ? (
@@ -1957,18 +2029,24 @@ function App() {
                 onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
                 onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
               />
-              {online && authenticatedOwnerContext && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
+              {authenticatedOwnerContext && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
                 <section className="notice warning">
-                  <strong>{copy.pendingUpload}</strong>
+                  <strong>{language === "zh" ? "此项目有内容等待上传" : "This project has pending uploads"}</strong>
+                  {(() => {
+                    const pending = pendingSync.find((item) => item.local_archive_id === detail.archive.id)!;
+                    return <p>{pending.archive_create_pending ? (language === "zh" ? "待创建云项目 · " : "Cloud project to create · ") : ""}
+                      {pending.record_count} {language === "zh" ? "条记录" : "records"} · {pending.image_count} {language === "zh" ? "张照片" : "photos"}
+                      {pending.archive_failed || pending.failed_record_count || pending.failed_image_count ? (language === "zh" ? " · 待重试" : " · Retry") : ""}</p>;
+                  })()}
                   <div className="action-row">
-                    <button
+                    {online ? <button
                       type="button"
                       className="primary-button"
                       disabled={syncingArchiveId === detail.archive.id}
                       onClick={() => void uploadPending(detail.archive.id)}
                     >
-                      {syncingArchiveId === detail.archive.id ? copy.uploading : copy.uploadNow}
-                    </button>
+                      {syncingArchiveId === detail.archive.id ? copy.uploading : language === "zh" ? "上传待同步内容" : "Upload pending changes"}
+                    </button> : <p>{language === "zh" ? "联网后可上传" : "Connect to upload"}</p>}
                   </div>
                 </section>
               ) : null}

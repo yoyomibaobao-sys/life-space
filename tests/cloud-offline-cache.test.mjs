@@ -189,7 +189,7 @@ test("cloud offline copies are distinct from local projects and preserve pending
   assert.match(db, /云端期次离线时只读/);
 });
 
-test("pending cloud records sync from the reconnect queue without deleting local originals", () => {
+test("pending cloud records upload by explicit action without deleting local originals", () => {
   const sync = read("lib/local-to-cloud-sync.ts");
   const page = read("app/archive/page.tsx");
   const offline = read("mobile-offline-src/main.tsx");
@@ -200,7 +200,8 @@ test("pending cloud records sync from the reconnect queue without deleting local
   assert.match(sync, /原云端项目已不存在/);
   assert.match(sync, /原云端项目已结束/);
   assert.match(offline, /syncAllPendingCloudArchives/);
-  assert.match(offline, /onClick=\{\(\) => void uploadPending\(pending\.local_archive_id\)\}/);
+  assert.match(offline, /onClick=\{\(\) => void uploadPendingProject\(item\)\}/);
+  assert.match(offline, /onClick=\{\(\) => void uploadAllPending\(\)\}/);
   assert.match(db, /stripSyncedCloudOfflineCacheRows/);
   assert.match(db, /keepUserCreated/);
   assert.doesNotMatch(page, /addEventListener\(["']online["']/);
@@ -220,7 +221,8 @@ test("offline shell separates true local projects from cloud offline copies", ()
   assert.match(offline, /filteredCloudCaches\.map/);
   assert.match(offline, /filteredCloudArchives\.map\(renderCloudProjectCard\)/);
   assert.match(offline, /liveCloudWorkspace \? \(/);
-  assert.match(offline, /liveCloudWorkspace \? cloudArchives\.length : cloudCaches\.length/);
+  assert.match(offline, /const cloudSourceCount = workspace\.counts\.cloud/);
+  assert.match(offline, /count: workspace\.counts\.all/);
   assert.match(view, /cloud_cache_copy/);
   assert.match(offline, /cloudCacheReadOnly/);
   assert.match(adapters, /isPendingCloudSyncStatus\(record\.sync\?\.status\)/);
