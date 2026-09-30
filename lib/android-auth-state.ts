@@ -26,6 +26,19 @@ export type AndroidAuthSnapshot = {
   explicitSignedOut: boolean;
 };
 
+export function resolveAuthenticatedOwnerContext<
+  T extends { userId?: string | null },
+>(
+  auth: Pick<AndroidAuthSnapshot, "status" | "sessionUserId">,
+  ownerContext: T | null,
+) {
+  return auth.status === "signed-in" &&
+    Boolean(auth.sessionUserId) &&
+    ownerContext?.userId === auth.sessionUserId
+    ? ownerContext
+    : null;
+}
+
 type AuthUser = { id: string; email?: string | null };
 type AuthSession = { user?: AuthUser | null } | null;
 type AuthClient = {

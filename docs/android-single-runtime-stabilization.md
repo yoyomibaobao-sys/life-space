@@ -93,6 +93,14 @@ image's synced parent) to the newest row, and removes only redundant synced
 rows in one transaction. **Nothing calls this function automatically.** Review
 the device diagnosis and user data before invoking it on a real installation.
 
+## Health deployment prerequisite
+
+Before building the next single-runtime device acceptance APK, confirm that
+`https://life-space.uk/api/health` is deployed in production and returns HTTP
+`200` with `{ "ok": true }`. The native connectivity controller now uses this
+endpoint as its LifeSpace service-reachability criterion. This checkpoint does
+not deploy production, so production availability is not yet claimed.
+
 ## Remaining device checks
 
 - Measure native status bar bounds, header bounding rectangle and computed top
@@ -100,8 +108,8 @@ the device diagnosis and user data before invoking it on a real installation.
   inset `0px` because `StatusBar.overlaysWebView=false` positions the WebView
   below the native bar. This is a code contract, not a device measurement.
 - Verify native Network hot toggle, Browser custom tab session behavior,
-  Turnstile, cloud taxonomy RLS and guide appearance on the installed sr2 APK
-  after a new acceptance build. No APK is built in this task.
+  Turnstile, cloud taxonomy RLS and guide appearance on the next acceptance
+  APK after a new acceptance build. No APK is built in this task.
 - The online guide list still uses the existing PlantPage presentation while
   the offline directory uses the shared home tabs and cached summary list;
   further visual parity needs device review.

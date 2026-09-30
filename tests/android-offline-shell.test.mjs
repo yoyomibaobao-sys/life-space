@@ -160,7 +160,7 @@ test("explicit Android sign-out hides account-bound offline cache state", () => 
   assert.match(auth, /preserveLocalOwner: true/);
   assert.match(auth, /markExplicitlySignedOut/);
   assert.match(source, /setCloudArchives\(\[\]\)/);
-  assert.match(source, /canUsePrivateCloudData[\s\S]*listVisibleCloudOfflineArchiveSummaries/);
+  assert.match(source, /privateContext[\s\S]*listVisibleCloudOfflineArchiveSummaries\(privateContext\)/);
   assert.match(source, /setCloudCaches\(cachedCloud\)/);
 });
 

@@ -689,6 +689,26 @@ export function isPendingCloudCreateArchive(archive: LocalArchive) {
   );
 }
 
+export function localArchiveHasPendingCloudWork(
+  archive: LocalArchive,
+  records: Array<Pick<LocalRecord, "archive_id" | "sync">> = [],
+  images: Array<Pick<LocalImage, "archive_id" | "sync">> = [],
+) {
+  return (
+    isPendingCloudSyncStatus(archive.sync?.status) ||
+    records.some(
+      (record) =>
+        record.archive_id === archive.id &&
+        isPendingCloudSyncStatus(record.sync?.status),
+    ) ||
+    images.some(
+      (image) =>
+        image.archive_id === archive.id &&
+        isPendingCloudSyncStatus(image.sync?.status),
+    )
+  );
+}
+
 export function resolveIntendedCloudArchiveId(archive: LocalArchive) {
   return (
     normalizeOptionalText(archive.source_cloud_archive_id) ||
@@ -1131,7 +1151,8 @@ export async function listLocalArchiveCycleTrash(
 }
 
 export async function listVisibleLocalArchiveSummaries(
-  ownerContext?: LocalArchiveOwnerContext | null
+  ownerContext?: LocalArchiveOwnerContext | null,
+  options: { includePendingCloud?: boolean } = {},
 ): Promise<LocalArchiveVisibilityResult> {
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
@@ -1151,6 +1172,11 @@ export async function listVisibleLocalArchiveSummaries(
   );
   const summaries = normalizedArchives
     .filter(isUserLocalArchive)
+    .filter(
+      (archive) =>
+        options.includePendingCloud !== false ||
+        !localArchiveHasPendingCloudWork(archive, records, images),
+    )
     .map((archive) => buildSummary(archive, records, images));
   const visible = summaries.filter((archive) =>
     isLocalArchiveVisibleToOwner(archive, ownerContext)

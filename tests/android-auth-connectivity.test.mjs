@@ -5,6 +5,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { IDBFactory } from "fake-indexeddb";
+import { resolveAndroidArchiveScreen } from "../lib/android-shell-app-routes.ts";
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
@@ -137,6 +138,40 @@ test("remembered local owner is not an authenticated Android session", async () 
   assert.deepEqual(harness.controller.getSnapshot().rememberedOwner, rememberedOwner);
 });
 
+test("authenticated owner requires signed-in session and exact owner match", async () => {
+  const module = await loadAuthModule();
+  const ownerA = { userId: "owner-a", email: "a@example.test" };
+  const ownerB = { userId: "owner-b", email: "b@example.test" };
+  assert.equal(
+    module.resolveAuthenticatedOwnerContext(
+      { status: "signed-in", sessionUserId: "owner-a" },
+      ownerA,
+    ),
+    ownerA,
+  );
+  assert.equal(
+    module.resolveAuthenticatedOwnerContext(
+      { status: "signed-out", sessionUserId: null },
+      ownerA,
+    ),
+    null,
+  );
+  assert.equal(
+    module.resolveAuthenticatedOwnerContext(
+      { status: "signed-in", sessionUserId: "owner-b" },
+      ownerA,
+    ),
+    null,
+  );
+  assert.equal(
+    module.resolveAuthenticatedOwnerContext(
+      { status: "signed-in", sessionUserId: "owner-b" },
+      ownerB,
+    ),
+    ownerB,
+  );
+});
+
 test("signed-in remains signed-in across offline and online revalidation", async () => {
   const module = await loadAuthModule();
   const user = { id: "owner", email: "owner@example.test" };
@@ -219,6 +254,18 @@ test("pending queues stay owner scoped and local-only archives survive cache cle
 
   assert.equal((await db.listPendingCloudSyncSummaries(ownerA)).length, 1);
   assert.equal((await db.listPendingCloudSyncSummaries(ownerB)).length, 0);
+  assert.deepEqual(
+    (await db.listVisibleLocalArchiveSummaries(ownerA, {
+      includePendingCloud: false,
+    })).archives.map((archive) => archive.id),
+    [local.id],
+  );
+  assert.deepEqual(
+    new Set((await db.listVisibleLocalArchiveSummaries(ownerA, {
+      includePendingCloud: true,
+    })).archives.map((archive) => archive.id)),
+    new Set([local.id, pending.id]),
+  );
   await db.clearCloudOfflineCachesForOwner(ownerA);
   assert.ok((await db.getLocalArchiveDetail(local.id, ownerA)).archive);
   assert.ok((await db.getLocalArchiveDetail(pending.id, ownerA)).archive);
@@ -365,4 +412,72 @@ test("CloudLogin eligibility and screen stability follow auth and connectivity s
     /setScreen|goList|window\.location|location\.replace|signOut/,
   );
   assert.doesNotMatch(read("lib/android-connectivity.ts"), /signOut|VPN|vpn/);
+});
+
+test("authenticated owner hard-gates sync, pending creation and private cache routes", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(
+    shell,
+    /authenticatedOwnerContext\.userId !== cloudUserId[\s\S]*?return;/,
+  );
+  assert.match(
+    shell,
+    /preparePendingCloudSyncQueue\(authenticatedOwnerContext\)[\s\S]*?syncAllPendingCloudArchives\(\{ ownerContext: authenticatedOwnerContext \}\)/,
+  );
+  assert.match(
+    shell,
+    /canCreatePendingCloud=\{Boolean\(authenticatedOwnerContext\)\}/,
+  );
+  assert.match(
+    shell,
+    /\.\.\.\(authenticatedOwnerContext \? cloudCaches : \[\]\)/,
+  );
+  assert.match(
+    shell,
+    /if \(!authenticatedOwnerContext\) \{\s*showToast\(copy\.cloudSignIn\);[\s\S]*?getCloudOfflineCacheByCloudSource\(routed\.id, authenticatedOwnerContext\)/,
+  );
+  assert.match(
+    shell,
+    /function CloudProjectRuntime\(\{ archiveId, online, authenticatedOwnerContext/,
+  );
+  assert.match(
+    shell,
+    /if \(!authenticatedOwnerContext\?\.userId\) return <ArchiveProjectDetailStatus[\s\S]*?请登录后查看云端项目/,
+  );
+  assert.match(
+    shell,
+    /localArchiveHasPendingCloudWork\([\s\S]*?if \(requiresAuthenticatedOwner && !authenticatedOwnerContext\)/,
+  );
+});
+
+test("signed-out archive routing keeps local-only detail but excludes private cache", () => {
+  const local = {
+    id: "local-a",
+    local_role: "local-project",
+    source_cloud_archive_id: null,
+  };
+  assert.deepEqual(
+    resolveAndroidArchiveScreen({
+      online: false,
+      archiveId: local.id,
+      cloudUserId: null,
+      cloudArchives: [],
+      activityOwnerUserId: null,
+      hasPublicFeedItem: false,
+      ownedLocalArchives: [local],
+    }),
+    { kind: "local-detail", archiveId: local.id },
+  );
+  assert.deepEqual(
+    resolveAndroidArchiveScreen({
+      online: false,
+      archiveId: "cloud-a",
+      cloudUserId: null,
+      cloudArchives: [],
+      activityOwnerUserId: null,
+      hasPublicFeedItem: false,
+      ownedLocalArchives: [local],
+    }),
+    { kind: "need-network" },
+  );
 });

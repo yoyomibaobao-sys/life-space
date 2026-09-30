@@ -29,6 +29,7 @@ import {
   renameLocalTaxonomyItem,
   deleteLocalTaxonomyItem,
   deferPendingCloudSyncPrompt,
+  localArchiveHasPendingCloudWork,
   markUnownedLocalArchivesForOwner,
   preparePendingCloudSyncQueue,
   updateLocalArchiveFields,
@@ -64,6 +65,7 @@ import {
   completeAndroidAuthLogin,
   explicitAndroidLogout,
   failAndroidAuthLogin,
+  resolveAuthenticatedOwnerContext,
   useAndroidAuthState,
 } from "@/lib/android-auth-state";
 import UiIcon from "@/components/ui/UiIcon";
@@ -677,6 +679,10 @@ function App() {
       : null,
     [owner],
   );
+  const authenticatedOwnerContext = useMemo(
+    () => resolveAuthenticatedOwnerContext(auth, ownerContext),
+    [auth, ownerContext],
+  );
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -732,18 +738,19 @@ function App() {
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
     const resolvedContext = context === undefined ? ownerContext : context;
-    const canUsePrivateCloudData = Boolean(
-      auth.status === "signed-in" &&
-      auth.sessionUserId &&
-      resolvedContext?.userId === auth.sessionUserId,
-    );
+    const privateContext =
+      authenticatedOwnerContext?.userId === resolvedContext?.userId
+        ? authenticatedOwnerContext
+        : null;
     const [result, cachedCloud, pending] = await Promise.all([
-      listVisibleLocalArchiveSummaries(resolvedContext),
-      canUsePrivateCloudData
-        ? listVisibleCloudOfflineArchiveSummaries(resolvedContext)
+      listVisibleLocalArchiveSummaries(resolvedContext, {
+        includePendingCloud: Boolean(privateContext),
+      }),
+      privateContext
+        ? listVisibleCloudOfflineArchiveSummaries(privateContext)
         : Promise.resolve([]),
-      canUsePrivateCloudData
-        ? listPendingCloudSyncSummaries(resolvedContext)
+      privateContext
+        ? listPendingCloudSyncSummaries(privateContext)
         : Promise.resolve([]),
     ]);
     setArchives(result.archives);
@@ -753,11 +760,15 @@ function App() {
     void listVisibleLocalTaxonomyItems(resolvedContext)
       .then((rows) => setLocalTaxonomy(mapLocalProjectTaxonomy(rows)))
       .catch((error) => console.warn("local taxonomy", error));
-  }, [auth.sessionUserId, auth.status, ownerContext]);
+  }, [authenticatedOwnerContext, ownerContext]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
-    const resolvedUserId = userId || cloudUserId;
-    if (!isAndroidOnline() || !resolvedUserId) {
+    const resolvedUserId = userId || authenticatedOwnerContext?.userId;
+    if (
+      !isAndroidOnline() ||
+      !resolvedUserId ||
+      authenticatedOwnerContext?.userId !== resolvedUserId
+    ) {
       setCloudArchives([]);
       setCloudError("");
       return;
@@ -805,7 +816,7 @@ function App() {
     } finally {
       setCloudLoading(false);
     }
-  }, [cloudUserId, copy.cloudLoadFailed, loadList]);
+  }, [authenticatedOwnerContext, copy.cloudLoadFailed, loadList]);
 
   const loadDetail = useCallback(async (
     archiveId: string,
@@ -880,6 +891,16 @@ function App() {
   useEffect(() => {
     if (auth.status === "checking") return;
     if (auth.status === "signed-in" && auth.sessionUserId) {
+      if (owner?.userId !== auth.sessionUserId) {
+        clearShellIdentityCache(owner?.userId);
+        setCloudArchives([]);
+        setCloudTaxonomy([]);
+        setCloudCaches([]);
+        setPendingSync([]);
+        setSpaceProfile(null);
+        setMembership(null);
+        setExperienceCardCount(0);
+      }
       const nextOwner = auth.rememberedOwner || {
         userId: auth.sessionUserId,
         email: auth.email,
@@ -912,23 +933,28 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (!online || !cloudUserId || !ownerContext) return;
+    if (
+      !online ||
+      !cloudUserId ||
+      !authenticatedOwnerContext ||
+      authenticatedOwnerContext.userId !== cloudUserId
+    ) return;
     const recoveryKey = `${connectivityEpoch.current}:${cloudUserId}`;
     if (lastRecoveryKey.current === recoveryKey) return;
     lastRecoveryKey.current = recoveryKey;
 
     void loadCloudList(cloudUserId);
     void loadShellIdentity(cloudUserId);
-    void preparePendingCloudSyncQueue(ownerContext)
-      .then(() => loadList(ownerContext))
+    void preparePendingCloudSyncQueue(authenticatedOwnerContext)
+      .then(() => loadList(authenticatedOwnerContext))
       .then(() =>
-        syncAllPendingCloudArchives({ ownerContext }).then(async () => {
-          await loadList(ownerContext);
+        syncAllPendingCloudArchives({ ownerContext: authenticatedOwnerContext }).then(async () => {
+          await loadList(authenticatedOwnerContext);
           window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
         }),
       )
       .catch(() => undefined);
-  }, [online, cloudUserId, ownerContext, loadCloudList, loadList, loadShellIdentity]);
+  }, [online, cloudUserId, authenticatedOwnerContext, loadCloudList, loadList, loadShellIdentity]);
 
   useEffect(() => {
     if (screen.kind !== "activity" || !online) return;
@@ -1004,6 +1030,21 @@ function App() {
     setDetail(null);
     void resolveLocalArchiveDetail(screen.archiveId, ownerContext).then((result) => {
       if (canceled) return;
+      const requiresAuthenticatedOwner = Boolean(
+        result.detail && (
+          result.detail.archive.local_role === "cloud-offline-cache" ||
+          localArchiveHasPendingCloudWork(
+            result.detail.archive,
+            result.detail.records,
+            result.detail.records.flatMap((record) => record.images),
+          )
+        ),
+      );
+      if (requiresAuthenticatedOwner && !authenticatedOwnerContext) {
+        setDetailStatus("forbidden");
+        setDetail(null);
+        return;
+      }
       setDetailStatus(result.status);
       setDetail(result.detail);
     }).catch(() => {
@@ -1013,7 +1054,7 @@ function App() {
       showToast(copy.readFailed);
     });
     return () => { canceled = true; };
-  }, [screen, ownerContext, showToast, copy.readFailed, loading]);
+  }, [screen, ownerContext, authenticatedOwnerContext, showToast, copy.readFailed, loading]);
 
   function goList() {
     setScreen({ kind: "list" });
@@ -1027,7 +1068,10 @@ function App() {
   }
 
   function openDetail(archiveId: string) {
-    const item = [...archives, ...cloudCaches].find((row) => row.id === archiveId);
+    const item = [
+      ...archives,
+      ...(authenticatedOwnerContext ? cloudCaches : []),
+    ].find((row) => row.id === archiveId);
     if (item) saveRecentArchiveBrowse({ id: item.id, title: item.title,
       systemName: item.system_name || item.species_name, category: item.category, userId: item.local_owner_user_id });
     setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record"].includes(screen.kind));
@@ -1106,11 +1150,14 @@ function App() {
       const target = resolveAndroidArchiveScreen({
         online,
         archiveId: routed.id,
-        cloudUserId,
+        cloudUserId: authenticatedOwnerContext?.userId || null,
         cloudArchives,
         activityOwnerUserId: publicItem?.owner_user_id || null,
         hasPublicFeedItem: Boolean(publicItem),
-        ownedLocalArchives: [...archives, ...cloudCaches],
+        ownedLocalArchives: [
+          ...archives,
+          ...(authenticatedOwnerContext ? cloudCaches : []),
+        ],
       });
       if (target.kind === "cloud-detail") {
         setScreen({ kind: "cloud-detail", archiveId: target.archiveId });
@@ -1133,9 +1180,13 @@ function App() {
         setScreen({ kind: "public-cloud-detail", archiveId: target.archiveId, back });
         return true;
       }
+      if (!authenticatedOwnerContext) {
+        showToast(copy.cloudSignIn);
+        return true;
+      }
       void Promise.all([
-        getCloudOfflineCacheByCloudSource(routed.id, ownerContext),
-        getLocalArchiveByCloudSource(routed.id, ownerContext),
+        getCloudOfflineCacheByCloudSource(routed.id, authenticatedOwnerContext),
+        getLocalArchiveByCloudSource(routed.id, authenticatedOwnerContext),
       ]).then(([cache, localCopy]) => {
         const mapped = cache || localCopy;
         if (mapped) {
@@ -1185,8 +1236,10 @@ function App() {
     cloudArchives,
     cloudUserId,
     cloudCaches,
+    copy.cloudSignIn,
     copy.needNetwork,
     directory,
+    authenticatedOwnerContext,
     ownerContext,
     online,
     showToast,
@@ -1198,7 +1251,7 @@ function App() {
   }
 
   async function uploadPending(localArchiveId: string) {
-    if (!ownerContext || !cloudUserId || ownerContext.userId !== cloudUserId) {
+    if (!authenticatedOwnerContext || !cloudUserId) {
       showToast(copy.cloudSignIn);
       return;
     }
@@ -1207,9 +1260,9 @@ function App() {
     try {
       const result = await syncPendingCloudArchive({
         localArchiveId,
-        ownerContext,
+        ownerContext: authenticatedOwnerContext,
       });
-      await loadList(ownerContext);
+      await loadList(authenticatedOwnerContext);
       window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
       showToast(
         result.success ? copy.uploadSuccess : result.error || copy.uploadFailed,
@@ -1220,9 +1273,9 @@ function App() {
   }
 
   async function deferPending(localArchiveId: string) {
-    if (!ownerContext) return;
-    await deferPendingCloudSyncPrompt(localArchiveId, ownerContext);
-    await loadList(ownerContext);
+    if (!authenticatedOwnerContext) return;
+    await deferPendingCloudSyncPrompt(localArchiveId, authenticatedOwnerContext);
+    await loadList(authenticatedOwnerContext);
   }
 
   async function claimUnowned() {
@@ -1268,7 +1321,11 @@ function App() {
       ...(archive.group_name ? [{ id: `${parentId}:${archive.group_name}`, kind: "group" as const,
         label: archive.group_name, category: archive.category, parentId }] : [])];
   }).filter((entry, index, entries) => entries.findIndex((candidate) => candidate.id === entry.id) === index);
-  const currentCloudTaxonomy = online && cloudUserId ? cloudTaxonomy : cachedTaxonomy;
+  const currentCloudTaxonomy = online && authenticatedOwnerContext
+    ? cloudTaxonomy
+    : authenticatedOwnerContext
+      ? cachedTaxonomy
+      : [];
   const selectedTaxonomy = sourceFilter === "local" ? localTaxonomy
     : sourceFilter === "cloud" ? currentCloudTaxonomy : [...currentCloudTaxonomy, ...localTaxonomy];
   const visibleSubcategories = selectedTaxonomy.filter((item) => item.kind === "subcategory" && item.category === categoryFilter);
@@ -1284,8 +1341,7 @@ function App() {
     (!groupFilter || archive.group_name === groupLabel));
   const liveCloudWorkspace =
     online &&
-    auth.status === "signed-in" &&
-    Boolean(cloudUserId) &&
+    Boolean(authenticatedOwnerContext) &&
     !cloudError;
   const filteredCloudArchives = cloudArchives.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.sub_tag_id === subcategoryFilter) &&
@@ -1507,7 +1563,7 @@ function App() {
         />
       ) : null}
 
-      {online && pendingSync.find((item) => item.should_prompt) ? (() => {
+      {online && authenticatedOwnerContext && pendingSync.find((item) => item.should_prompt) ? (() => {
         const pending = pendingSync.find((item) => item.should_prompt)!;
         return (
           <section className="notice warning">
@@ -1607,7 +1663,7 @@ function App() {
             ) : (
               <>
                 {online && auth.status === "signed-out" && sourceFilter === "cloud" ? (
-                  <CloudLogin copy={copy} onSuccess={(userId) => void loadCloudList(userId)} />
+                  <CloudLogin copy={copy} onSuccess={() => undefined} />
                 ) : null}
                 {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
                 {auth.status === "signed-in" &&
@@ -1675,7 +1731,7 @@ function App() {
           language={language}
           copy={copy}
           owner={owner}
-          canCreatePendingCloud={auth.status === "signed-in"}
+          canCreatePendingCloud={Boolean(authenticatedOwnerContext)}
           guide={screen.guide}
           onCancel={goList}
           onSaved={async (archive) => {
@@ -1717,7 +1773,7 @@ function App() {
                 onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
                 onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
               />
-              {online && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
+              {online && authenticatedOwnerContext && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
                 <section className="notice warning">
                   <strong>{copy.pendingUpload}</strong>
                   <div className="action-row">
@@ -1763,10 +1819,12 @@ function App() {
           message={language === "zh" ? "项目详情加载失败。" : "The project failed to render."}
           backLabel={copy.mySpace} onBack={goList}>
           <CloudProjectRuntime
-            key={`${screen.archiveId}:${online && cloudUserId === ownerContext?.userId}:${ownerContext?.userId || ""}`}
-            archiveId={screen.archiveId} online={online && cloudUserId === ownerContext?.userId}
-            ownerContext={ownerContext} onBack={goList}
-            onCacheChanged={() => loadList(ownerContext)}
+            key={`${screen.archiveId}:${online}:${authenticatedOwnerContext?.userId || "signed-out"}`}
+            archiveId={screen.archiveId}
+            online={online}
+            authenticatedOwnerContext={authenticatedOwnerContext}
+            onBack={goList}
+            onCacheChanged={() => loadList(authenticatedOwnerContext)}
             onAddRecord={(id) => setScreen({ kind: "new-record", archiveId: id })}
             onDeleteArchive={(id) => void handleDeleteArchive(id)}
             onDeleteRecord={(recordId, id) => void handleDeleteRecord(recordId, id)}
@@ -2053,12 +2111,12 @@ function App() {
       {screen.kind === "recent" ? <AndroidRecentBrowse
         online={online}
         onBack={() => setScreen({ kind: "profile" })}
-        onOpen={(id) => { applyShellPath(`${[...archives, ...cloudCaches].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
+        onOpen={(id) => { applyShellPath(`${[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
       /> : null}
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
         online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
+      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section> : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
@@ -2148,38 +2206,53 @@ function AndroidLocalTrash({ ownerContext, online, onBack }: {
   </section>;
 }
 
-function CloudProjectRuntime({ archiveId, online, ownerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord }: {
+function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord }: {
   archiveId: string;
   online: boolean;
-  ownerContext: LocalArchiveOwnerContext | null;
+  authenticatedOwnerContext: LocalArchiveOwnerContext | null;
   onBack: () => void;
   onCacheChanged: () => Promise<void>;
   onAddRecord: (localId: string) => void;
   onDeleteArchive: (localId: string) => void;
   onDeleteRecord: (recordId: string, localId: string) => void;
 }) {
+  const { language } = useLanguage();
   const [cached, setCached] = useState<LocalArchiveDetail | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
   useEffect(() => {
-    if (online) return;
+    if (online || !authenticatedOwnerContext) {
+      if (!authenticatedOwnerContext) {
+        setCached(null);
+        setStatus("missing");
+      }
+      return;
+    }
     let active = true;
-    void getCloudOfflineCacheByCloudSource(archiveId, ownerContext)
-      .then((archive) => archive ? resolveLocalArchiveDetail(archive.id, ownerContext) : null)
+    void getCloudOfflineCacheByCloudSource(archiveId, authenticatedOwnerContext)
+      .then((archive) => archive
+        ? resolveLocalArchiveDetail(archive.id, authenticatedOwnerContext)
+        : null)
       .then((result) => {
         if (!active) return;
         setCached(result?.detail || null);
         setStatus(result?.status === "ready" ? "ready" : "missing");
       }).catch(() => { if (active) setStatus("error"); });
     return () => { active = false; };
-  }, [archiveId, online, ownerContext]);
+  }, [archiveId, online, authenticatedOwnerContext]);
 
-  if (online && ownerContext?.userId) return <CloudArchiveDetailController
-    archiveId={archiveId} userId={ownerContext.userId} onBack={onBack} onCacheChanged={onCacheChanged} />;
+  if (!authenticatedOwnerContext?.userId) return <ArchiveProjectDetailStatus
+    status="forbidden"
+    title={language === "zh" ? "请登录后查看云端项目" : "Sign in to view this cloud project"}
+    message={language === "zh" ? "当前未登录，不能读取此前账号的云端缓存或待同步内容。" : "You are signed out, so private cache and pending cloud data are unavailable."}
+    backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
+    onBack={onBack} />;
+  if (online) return <CloudArchiveDetailController
+    archiveId={archiveId} userId={authenticatedOwnerContext.userId} onBack={onBack} onCacheChanged={onCacheChanged} />;
   if (status === "loading") return <ArchiveProjectDetailLoading>正在读取本机缓存…</ArchiveProjectDetailLoading>;
   if (status === "ready" && cached) return <DeviceOwnedProjectDetail
-    detail={cached} ownerContext={ownerContext} onBack={onBack}
+    detail={cached} ownerContext={authenticatedOwnerContext} onBack={onBack}
     onChanged={async () => {
-      const result = await resolveLocalArchiveDetail(cached.archive.id, ownerContext);
+      const result = await resolveLocalArchiveDetail(cached.archive.id, authenticatedOwnerContext);
       setCached(result.detail);
       await onCacheChanged();
     }}
