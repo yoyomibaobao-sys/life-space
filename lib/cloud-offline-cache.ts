@@ -59,6 +59,7 @@ type CloudCacheMediaRow = MediaItem & {
 
 function cacheRevision(archive: CloudOfflineCacheArchiveSource, taxonomy: ProjectTaxonomyEntry[]) {
   return [
+    "taxonomy-identity-v1",
     archive.created_at || "",
     archive.title || "",
     archive.category || "",
@@ -228,6 +229,8 @@ async function refreshOneCloudOfflineCache(
     category: archive.category,
     subcategory: taxonomy.find((entry) => entry.id === archive.sub_tag_id)?.label || null,
     group_name: taxonomy.find((entry) => entry.id === archive.group_tag_id)?.label || null,
+    source_cloud_sub_tag_id: archive.sub_tag_id || null,
+    source_cloud_group_tag_id: archive.group_tag_id || null,
     plant_id: archive.species_id || null,
     system_name: archive.system_name || null,
     species_name: archive.species_name_snapshot || null,

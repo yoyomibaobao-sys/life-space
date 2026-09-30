@@ -426,7 +426,7 @@ test("authenticated owner hard-gates sync, pending creation and private cache ro
   );
   assert.match(
     shell,
-    /canCreatePendingCloud=\{Boolean\(authenticatedOwnerContext\)\}/,
+    /projectCreationDestinations\(online, Boolean\(authenticatedOwnerContext\)\)/,
   );
   assert.match(
     shell,

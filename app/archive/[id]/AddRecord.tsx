@@ -39,6 +39,7 @@ import {
 } from "@/lib/archive-cycle-dates";
 import { getArchiveCycleTerminology } from "@/lib/archive-cycle-terminology";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
+import { toLocalDateTimeInputValue } from "@/lib/date-time";
 import {
   buildRecordPhotoGroups,
   limitRecordPhotoBatch,
@@ -65,6 +66,9 @@ type Props = {
   placeholder?: string;
   onRecordCreated?: () => void | Promise<void>;
   mobileMode?: boolean;
+  initialFiles?: File[];
+  initialCapturedAt?: (string | null)[];
+  initialNote?: string;
 };
 
 type SelectedPreview = {
@@ -85,13 +89,16 @@ export default function AddRecord({
   placeholder,
   onRecordCreated,
   mobileMode = false,
+  initialFiles = [],
+  initialCapturedAt = [],
+  initialNote = "",
 }: Props) {
   const { language, t } = useLanguage();
   const copy = t.record;
   const terminology = getArchiveCycleTerminology(archiveCategory, language);
   const [location, setLocation] = useState<RecordLocation | null>(() => loadDefaultRecordLocation());
   const locationEdited = useRef(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialNote);
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<SelectedPreview[]>([]);
   const [timeMode, setTimeMode] = useState("exif");
@@ -113,6 +120,18 @@ export default function AddRecord({
   const filePreviewsRef = useRef<SelectedPreview[]>([]);
   const loadedQuickCaptureIdRef = useRef("");
   const quickCaptureId = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("quickCapture") || "";
+  const initialFilesLoaded = useRef(false);
+  useEffect(() => {
+    if (initialFilesLoaded.current || !initialFiles.length) return;
+    initialFilesLoaded.current = true;
+    appendFiles(initialFiles);
+    if (initialCapturedAt[0]) {
+      setTimeMode("custom");
+      setCustomTime(toLocalDateTimeInputValue(initialCapturedAt[0]));
+    }
+    // Initial files belong to this composer instance; the owner keeps the draft on failure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFiles]);
   const sortedActiveCycles = [...activeCycles].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
   );
@@ -260,7 +279,8 @@ export default function AddRecord({
   async function prepareSelectedPhotos(): Promise<TimedRecordPhoto<File>[]> {
     return Promise.all(
       files.map(async (file) => {
-        const capturedAt = await readImageCapturedAt(file);
+        const capturedAt = (await readImageCapturedAt(file)) ||
+          (initialFiles.includes(file) ? initialCapturedAt[initialFiles.indexOf(file)] || null : null);
 
         return {
           file,

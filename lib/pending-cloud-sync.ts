@@ -31,6 +31,8 @@ import {
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
 import { ensureCloudCycles } from "@/lib/local-to-cloud-sync";
+import { loadCloudProjectTaxonomy } from "@/lib/android-project-taxonomy";
+import { resolvePendingCloudTaxonomy } from "@/lib/pending-cloud-taxonomy";
 
 export const PENDING_CLOUD_SYNC_UPDATED_EVENT =
   "lifespace:pending-cloud-sync-updated";
@@ -49,6 +51,7 @@ export type PendingCloudSyncResult = {
   imageCount: number;
   failedCount: number;
   error?: string;
+  taxonomyWarning?: string;
 };
 
 type CloudArchiveRow = {
@@ -762,6 +765,7 @@ async function syncCreateArchive(params: {
   );
 
   try {
+    const taxonomy = resolvePendingCloudTaxonomy(archive, await loadCloudProjectTaxonomy(params.userId));
     let existing = await findCloudArchiveById(operationId);
     if (existing) {
       if (existing.user_id !== params.userId) {
@@ -787,6 +791,8 @@ async function syncCreateArchive(params: {
         user_id: params.userId,
         is_public: isPublic,
         default_record_visibility: visibility,
+        sub_tag_id: taxonomy.sub_tag_id,
+        group_tag_id: taxonomy.group_tag_id,
       };
       const inserted = await supabase
         .from("archives")
@@ -813,7 +819,7 @@ async function syncCreateArchive(params: {
       operationId,
       params.ownerContext
     );
-    return mapped.source_cloud_archive_id || existing.id;
+    return { cloudArchiveId: mapped.source_cloud_archive_id || existing.id, taxonomyWarning: taxonomy.warning };
   } catch (error) {
     await updateLocalArchiveCloudSyncOperation(
       archive.id,
@@ -829,7 +835,23 @@ async function syncCreateArchive(params: {
   }
 }
 
-export async function syncPendingCloudArchive(params: {
+const activeArchiveSyncs = new Map<string, Promise<PendingCloudSyncResult>>();
+
+export function syncPendingCloudArchive(params: {
+  localArchiveId: string;
+  ownerContext: LocalArchiveOwnerContext;
+  onProgress?: (progress: PendingCloudSyncProgress) => void;
+}): Promise<PendingCloudSyncResult> {
+  const key = `${params.ownerContext.userId}:${params.localArchiveId}`;
+  const active = activeArchiveSyncs.get(key);
+  if (active) return active;
+  const work = syncPendingCloudArchiveUnlocked(params);
+  activeArchiveSyncs.set(key, work);
+  void work.finally(() => { if (activeArchiveSyncs.get(key) === work) activeArchiveSyncs.delete(key); }).catch(() => undefined);
+  return work;
+}
+
+async function syncPendingCloudArchiveUnlocked(params: {
   localArchiveId: string;
   ownerContext: LocalArchiveOwnerContext;
   onProgress?: (progress: PendingCloudSyncProgress) => void;
@@ -881,14 +903,17 @@ export async function syncPendingCloudArchive(params: {
   let imageCount = 0;
   let failedCount = 0;
   let lastError = "";
+  let taxonomyWarning: string | null = null;
 
   try {
     if (!cloudArchiveId && isPendingCloudCreateArchive(detail.archive)) {
-      cloudArchiveId = await syncCreateArchive({
+      const created = await syncCreateArchive({
         detail,
         userId,
         ownerContext: params.ownerContext,
       });
+      cloudArchiveId = created.cloudArchiveId;
+      taxonomyWarning = created.taxonomyWarning;
       archiveUpdated = true;
       params.onProgress?.({ completed: 1, total: 1, label: "archive" });
       const mapped = await getLocalArchiveDetail(
@@ -1085,6 +1110,7 @@ export async function syncPendingCloudArchive(params: {
       recordCount,
       imageCount,
       failedCount,
+      ...(taxonomyWarning ? { taxonomyWarning } : {}),
       ...(success
         ? {}
         : { error: lastError || "部分内容尚未上传，请稍后重试。" }),

@@ -564,6 +564,35 @@ test("offline pending cloud projects keep one local identity and persist mapping
   assert.equal(converted.source_cloud_archive_id, mapped.source_cloud_archive_id);
 });
 
+test("pending cloud taxonomy IDs persist in IndexedDB without writing local-only cloud identity", async () => {
+  await fixture();
+  const cloud = await dbModule.createLocalArchive({ title: "离线云", category: "system", system_name: "堆肥",
+    subcategory: "云一级", group_name: "云二级", intended_cloud_sub_tag_id: "sub-id", intended_cloud_group_tag_id: "group-id",
+    local_owner_user_id: owner.userId, sync_destination: "pending-cloud" });
+  const local = await dbModule.createLocalArchive({ title: "纯本地", category: "system", system_name: "堆肥",
+    intended_cloud_sub_tag_id: "sub-id", intended_cloud_group_tag_id: "group-id", sync_destination: "local-only" });
+  const restored = await dbModule.getLocalArchiveDetail(cloud.id, owner);
+  assert.equal(restored.archive.intended_cloud_sub_tag_id, "sub-id");
+  assert.equal(restored.archive.intended_cloud_group_tag_id, "group-id");
+  assert.equal(restored.archive.subcategory, "云一级");
+  assert.equal(local.intended_cloud_sub_tag_id, null);
+  assert.equal(local.intended_cloud_group_tag_id, null);
+  assert.equal(restored.archive.sync.client_operation_id, cloud.sync.client_operation_id);
+});
+
+test("cloud cache retains source taxonomy IDs after IndexedDB reload", async () => {
+  await fixture();
+  const sourceId = "fedcba98-7654-4321-8765-123456789abc";
+  await dbModule.replaceCloudOfflineCache({ cloud_archive_id: sourceId, owner_context: owner,
+    title: "云缓存", category: "system", subcategory: "一级", group_name: "二级",
+    source_cloud_sub_tag_id: "cloud-sub-id", source_cloud_group_tag_id: "cloud-group-id",
+    cycles: [], records: [], images: [] });
+  const restored = await dbModule.getCloudOfflineCacheByCloudSource(sourceId, owner);
+  assert.equal(restored.source_cloud_sub_tag_id, "cloud-sub-id");
+  assert.equal(restored.source_cloud_group_tag_id, "cloud-group-id");
+  assert.equal(restored.subcategory, "一级");
+});
+
 test("logout keeps pending user-created work and hides it from another owner", async () => {
   await fixture();
   await addCacheProject();

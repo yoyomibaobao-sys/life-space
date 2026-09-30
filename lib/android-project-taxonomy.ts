@@ -1,6 +1,7 @@
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import type { LocalTaxonomyItem } from "@/lib/local-offline-db";
 import { supabase } from "@/lib/supabase";
+import { saveCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
 
 export type ProjectTaxonomyEntry = {
   id: string;
@@ -24,11 +25,15 @@ export async function loadCloudProjectTaxonomy(userId: string, client: Client = 
     category: row.category as ArchiveCategory, parentId: null,
   }));
   const byId = new Map(parents.map((row) => [row.id, row]));
-  return [...parents, ...(groups.data || []).flatMap((row) => {
+  const entries = [...parents, ...(groups.data || []).flatMap((row) => {
     const parent = byId.get(row.sub_tag_id as string);
     return parent ? [{ id: row.id as string, kind: "group" as const,
       label: row.name as string, category: parent.category, parentId: parent.id }] : [];
   })] satisfies ProjectTaxonomyEntry[];
+  if (typeof localStorage !== "undefined") {
+    try { saveCloudTaxonomySnapshot(userId, entries); } catch { /* Cache is optional online. */ }
+  }
+  return entries;
 }
 
 export function mapLocalProjectTaxonomy(items: LocalTaxonomyItem[]): ProjectTaxonomyEntry[] {

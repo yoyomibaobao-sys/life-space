@@ -37,11 +37,16 @@ type Detail = NonNullable<Awaited<ReturnType<typeof loadCloudArchiveDetail>>>;
 
 // Android's live owner controller shares the website timeline loader and the
 // single detail presentation. Offline cache is rendered by DeviceOwnedProjectDetail.
-export default function CloudArchiveDetailController({ archiveId, userId, onBack, onCacheChanged }: {
+export default function CloudArchiveDetailController({ archiveId, userId, onBack, onCacheChanged, initialFiles, initialCapturedAt, initialNote, onRecordCreated, onRecordCancelled }: {
   archiveId: string;
   userId: string;
   onBack: () => void;
   onCacheChanged: () => Promise<void>;
+  initialFiles?: File[];
+  initialCapturedAt?: (string | null)[];
+  initialNote?: string;
+  onRecordCreated?: () => void;
+  onRecordCancelled?: () => void;
 }) {
   const { language, t } = useLanguage();
   const copy = t.archive;
@@ -50,7 +55,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const [status, setStatus] = useState<"loading" | "ready" | "not-found" | "error">("loading");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<ArchiveProjectDetailTabId>("records");
-  const [addOpen, setAddOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(Boolean(initialFiles?.length));
   const [busy, setBusy] = useState(false);
   const [canWrite, setCanWrite] = useState(false);
   const [candidates, setCandidates] = useState<Awaited<ReturnType<typeof getSystemNameCandidates>>>([]);
@@ -216,7 +221,8 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
       </>}
       recordComposer={<ArchiveAddRecordSection archiveId={archiveId} archiveCategory={archive.category}
         archiveIsPublic={archive.is_public} activeCycles={activeCycles} mobileMode open={addOpen}
-        onClose={() => setAddOpen(false)} onRecordCreated={async () => { await reload(); setAddOpen(false); }} />}
+        initialFiles={initialFiles} initialCapturedAt={initialCapturedAt} initialNote={initialNote}
+        onClose={() => { setAddOpen(false); onRecordCancelled?.(); }} onRecordCreated={async () => { await reload(); setAddOpen(false); onRecordCreated?.(); }} />}
       onFloatingAdd={() => setAddOpen(true)} floatingAddLabel={language === "zh" ? "添加记录" : "Add record"}
       emptyRecordsText={copy.no_records_owner}
       onStartCycle={(startedAt) => change(async () => {

@@ -127,6 +127,9 @@ import {
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncAllPendingCloudArchives, syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
+import { readCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
+import { createLiveCloudArchive } from "@/lib/android-live-cloud-create";
+import { projectCreationDestinations, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
 import { formatStorage } from "@/lib/user-profile-shared";
 import {
   getUserTypeLabel,
@@ -258,7 +261,10 @@ type CloudArchiveSummary = {
 
 type Screen =
   | { kind: "list" }
-  | { kind: "new-project"; guide?: SystemNameCandidate }
+  | { kind: "new-project"; guide?: SystemNameCandidate; destination?: CreationDestination }
+  | { kind: "project-destination" }
+  | { kind: "quick-add" }
+  | { kind: "creation-login"; returnTo: "choose-project" | "project-destination" }
   | { kind: "activity" }
   | { kind: "discover-search" }
   | { kind: "public-detail" }
@@ -615,6 +621,19 @@ function App() {
   const [language, setLanguage] = useState<Language>(getLanguage);
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
+  const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
+  const [taxonomySyncWarning, setTaxonomySyncWarning] = useState<string | null>(null);
+  const quickCamera = useRef<HTMLInputElement>(null);
+  const quickGallery = useRef<HTMLInputElement>(null);
+  async function acceptQuickAddFiles(list: FileList | null, source: QuickAddSource) {
+    const images = Array.from(list || []).filter((file) => file.type.startsWith("image/"));
+    if (images.length > MAX_PHOTOS) showToast(copy.photoLimit);
+    const files = images.slice(0, MAX_PHOTOS);
+    if (!files.length) return;
+    const capturedAt = await Promise.all(files.map((file) => readImageCapturedAt(file).catch(() => null)));
+    setQuickAddDraft({ files, capturedAt, source, note: "" });
+    setScreen({ kind: "choose-project" });
+  }
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
   const [subcategoryFilter, setSubcategoryFilter] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
@@ -697,6 +716,11 @@ function App() {
     () => resolveAuthenticatedOwnerContext(auth, ownerContext),
     [auth, ownerContext],
   );
+  useEffect(() => {
+    if (!online && quickAddDraft && screen.kind === "cloud-detail") {
+      setScreen({ kind: "choose-project" });
+    }
+  }, [online, quickAddDraft, screen.kind]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -966,13 +990,16 @@ function App() {
     void preparePendingCloudSyncQueue(authenticatedOwnerContext)
       .then(() => loadList(authenticatedOwnerContext))
       .then(() =>
-        syncAllPendingCloudArchives({ ownerContext: authenticatedOwnerContext }).then(async () => {
+        syncAllPendingCloudArchives({ ownerContext: authenticatedOwnerContext }).then(async (results) => {
           await loadList(authenticatedOwnerContext);
+          if (results.some((result) => result.archiveUpdated)) await loadCloudList(cloudUserId);
           window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
+          const warning = results.find((result) => result.taxonomyWarning)?.taxonomyWarning;
+          if (warning) { setTaxonomySyncWarning(warning); showToast(warning); }
         }),
       )
       .catch(() => undefined);
-  }, [online, cloudUserId, authenticatedOwnerContext, loadCloudList, loadList, loadShellIdentity]);
+  }, [online, cloudUserId, authenticatedOwnerContext, loadCloudList, loadList, loadShellIdentity, showToast]);
 
   useEffect(() => {
     if (screen.kind !== "activity" || !online) return;
@@ -1286,9 +1313,11 @@ function App() {
         ownerContext: authenticatedOwnerContext,
       });
       await loadList(authenticatedOwnerContext);
+      if (result.archiveUpdated) await loadCloudList(cloudUserId);
+      if (result.taxonomyWarning) setTaxonomySyncWarning(result.taxonomyWarning);
       window.dispatchEvent(new Event("lifespace-cloud-sync-complete"));
       showToast(
-        result.success ? copy.uploadSuccess : result.error || copy.uploadFailed,
+        result.taxonomyWarning || (result.success ? copy.uploadSuccess : result.error || copy.uploadFailed),
       );
     } finally {
       setSyncingArchiveId(null);
@@ -1336,14 +1365,8 @@ function App() {
   const activeGuide = screen.kind === "guide-detail"
     ? findOfflineGuideEntry(directory, screen.guideKey)
     : undefined;
-  const cachedTaxonomy: ProjectTaxonomyEntry[] = cloudCaches.flatMap((archive) => {
-    if (!archive.subcategory) return [];
-    const parentId = `cached:${archive.category}:${archive.subcategory}`;
-    return [{ id: parentId, kind: "subcategory" as const, label: archive.subcategory,
-      category: archive.category, parentId: null },
-      ...(archive.group_name ? [{ id: `${parentId}:${archive.group_name}`, kind: "group" as const,
-        label: archive.group_name, category: archive.category, parentId }] : [])];
-  }).filter((entry, index, entries) => entries.findIndex((candidate) => candidate.id === entry.id) === index);
+  const cachedTaxonomy: ProjectTaxonomyEntry[] = authenticatedOwnerContext
+    ? readCloudTaxonomySnapshot(authenticatedOwnerContext.userId || null) : [];
   const currentCloudTaxonomy = online && authenticatedOwnerContext
     ? cloudTaxonomy
     : authenticatedOwnerContext
@@ -1676,6 +1699,7 @@ function App() {
       {migrationWarning ? (
         <section className="notice warning"><p>{copy.migrationWarning}</p></section>
       ) : null}
+      {taxonomySyncWarning ? <section className="notice warning" role="status"><p>{taxonomySyncWarning}</p><button type="button" onClick={() => setTaxonomySyncWarning(null)}>{language === "zh" ? "知道了" : "Dismiss"}</button></section> : null}
 
       {screen.kind === "list" ? (
         <div data-android-shell-page="personal-space">
@@ -1693,10 +1717,10 @@ function App() {
             setGroupFilter(null);
             setScreen({ kind: "list" });
           }}
-          onCreateArchive={() => setScreen({ kind: "new-project" })}
+          onCreateArchive={() => setScreen({ kind: "project-destination" })}
           showCreateToolbar={false}
           sourceTrailingSlot={(
-            <button type="button" onClick={() => setScreen({ kind: "new-project" })}>
+            <button type="button" onClick={() => setScreen({ kind: "project-destination" })}>
               +{copy.project}
             </button>
           )}
@@ -1817,10 +1841,12 @@ function App() {
         <ProjectForm
           language={language}
           copy={copy}
-          owner={owner}
-          canCreatePendingCloud={Boolean(authenticatedOwnerContext)}
+          owner={screen.destination === "local-only" ? owner : authenticatedOwnerContext as StoredLocalOwnerContext | null}
+          destination={screen.destination || "local-only"}
+          cloudTaxonomy={online ? cloudTaxonomy : cachedTaxonomy}
+          cloudDepths={cloudDepths}
           guide={screen.guide}
-          onCancel={goList}
+          onCancel={() => quickAddDraft ? setScreen({ kind: "choose-project" }) : goList()}
           onSaved={async (archive) => {
             await loadList();
             showToast(
@@ -1828,7 +1854,13 @@ function App() {
                 ? copy.createPendingCloudSuccess
                 : copy.createSuccess,
             );
-            openDetail(archive.id);
+            if (quickAddDraft) setScreen({ kind: "new-record", archiveId: archive.id });
+            else openDetail(archive.id);
+          }}
+          onLiveSaved={async (id) => {
+            await loadCloudList(authenticatedOwnerContext?.userId);
+            setScreen({ kind: "cloud-detail", archiveId: id });
+            showToast(copy.createSuccess);
           }}
         />
       ) : null}
@@ -1915,6 +1947,8 @@ function App() {
             onAddRecord={(id) => setScreen({ kind: "new-record", archiveId: id })}
             onDeleteArchive={(id) => void handleDeleteArchive(id)}
             onDeleteRecord={(recordId, id) => void handleDeleteRecord(recordId, id)}
+            quickAddDraft={quickAddDraft}
+            onQuickAddSaved={() => setQuickAddDraft(null)}
           />
         </MobileShellErrorBoundary>
       ) : null}
@@ -1940,6 +1974,9 @@ function App() {
           language={language}
           copy={copy}
           owner={owner}
+          destination={detail.archive.sync.operation_kind === "create-archive" ? "pending-cloud" : "local-only"}
+          cloudTaxonomy={online ? cloudTaxonomy : cachedTaxonomy}
+          cloudDepths={cloudDepths}
           archive={detail.archive}
           onCancel={() => openDetail(detail.archive.id)}
           onSaved={async () => {
@@ -1951,13 +1988,17 @@ function App() {
         />
       ) : null}
 
-      {screen.kind === "new-record" && detail ? (
+      {screen.kind === "new-record" && detail?.archive.id === screen.archiveId ? (
         <RecordForm
           copy={copy}
           archive={detail.archive}
           language={language}
-          onCancel={() => openDetail(detail.archive.id)}
+          initialFiles={quickAddDraft?.files}
+          initialCapturedAt={quickAddDraft?.capturedAt}
+          initialNote={quickAddDraft?.note}
+          onCancel={() => { setQuickAddDraft(null); openDetail(detail.archive.id); }}
           onSaved={async () => {
+            setQuickAddDraft(null);
             await loadDetail(detail.archive.id);
             await loadList();
             showToast(copy.recordSuccess);
@@ -2196,7 +2237,16 @@ function App() {
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
         online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => window.history.back()} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
+      {screen.kind === "quick-add" ? <section className="panel quick-add-sheet" role="dialog" aria-label={copy.addRecord}><h1>{copy.addRecord}</h1><div className="action-row"><button type="button" onClick={() => quickCamera.current?.click()}>{copy.camera}</button><button type="button" onClick={() => quickGallery.current?.click()}>{copy.album}</button><button type="button" onClick={goList}>{copy.cancel}</button></div></section> : null}
+      {screen.kind === "creation-login" ? <CloudLogin copy={copy} onSuccess={() => setScreen({ kind: screen.returnTo })} /> : null}
+      {screen.kind === "project-destination" ? <section className="panel"><h1>{copy.newProject}</h1><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button" key={destination} onClick={() => destination === "login" ? setScreen({ kind: "creation-login", returnTo: "project-destination" }) : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}{destination === "pending-cloud" ? <small> 当前离线，将先保存在本机，联网后自动同步</small> : null}</button>)}</div></section> : null}
+      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">
+        {archives.filter((archive) => archive.status === "active" && (authenticatedOwnerContext || archive.sync?.operation_kind !== "create-archive")).map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}{archive.sync?.operation_kind === "create-archive" ? <small> · 待联网同步</small> : null}</button>)}
+        {authenticatedOwnerContext && online ? cloudArchives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
+        {authenticatedOwnerContext && !online ? cloudCaches.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
+      </div><div className="action-row">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button key={destination} type="button" className="primary-button" onClick={() => destination === "login" ? setScreen({ kind: "creation-login", returnTo: "choose-project" }) : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>)}<button type="button" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button></div></section> : null}
+      <input ref={quickCamera} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "camera"); event.target.value = ""; }} />
+      <input ref={quickGallery} type="file" accept="image/*" multiple hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "gallery"); event.target.value = ""; }} />
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section> : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
@@ -2206,11 +2256,7 @@ function App() {
             type="button"
             className="quick-add"
             aria-label={copy.addRecord}
-            onClick={() => setScreen(
-              screen.kind === "detail" && detail
-                ? { kind: "new-record", archiveId: detail.archive.id }
-                : { kind: "choose-project" },
-            )}
+            onClick={() => setScreen({ kind: "quick-add" })}
           >
             <UiIcon name="plus" size={25} strokeWidth={2.2} />
           </button>
@@ -2295,7 +2341,7 @@ function AndroidLocalTrash({ ownerContext, online, onBack }: {
   </section>;
 }
 
-function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord }: {
+function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord, quickAddDraft, onQuickAddSaved }: {
   archiveId: string;
   online: boolean;
   authenticatedOwnerContext: LocalArchiveOwnerContext | null;
@@ -2304,6 +2350,8 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
   onAddRecord: (localId: string) => void;
   onDeleteArchive: (localId: string) => void;
   onDeleteRecord: (recordId: string, localId: string) => void;
+  quickAddDraft?: QuickAddDraft | null;
+  onQuickAddSaved?: () => void;
 }) {
   const { language } = useLanguage();
   const [cached, setCached] = useState<LocalArchiveDetail | null>(null);
@@ -2336,7 +2384,9 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
     backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
     onBack={onBack} />;
   if (online) return <CloudArchiveDetailController
-    archiveId={archiveId} userId={authenticatedOwnerContext.userId} onBack={onBack} onCacheChanged={onCacheChanged} />;
+    archiveId={archiveId} userId={authenticatedOwnerContext.userId} onBack={onBack} onCacheChanged={onCacheChanged}
+    initialFiles={quickAddDraft?.files} initialCapturedAt={quickAddDraft?.capturedAt}
+    initialNote={quickAddDraft?.note} onRecordCreated={onQuickAddSaved} onRecordCancelled={onQuickAddSaved} />;
   if (status === "loading") return <ArchiveProjectDetailLoading>正在读取本机缓存…</ArchiveProjectDetailLoading>;
   if (status === "ready" && cached) return <DeviceOwnedProjectDetail
     detail={cached} ownerContext={authenticatedOwnerContext} onBack={onBack}
@@ -2441,41 +2491,75 @@ function ProjectForm({
   language,
   copy,
   owner,
-  canCreatePendingCloud = false,
+  destination = "local-only",
+  cloudTaxonomy = [],
+  cloudDepths = DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   archive,
   guide,
   onCancel,
   onSaved,
+  onLiveSaved,
 }: {
   language: Language;
   copy: OfflineCopy;
   owner: StoredLocalOwnerContext | null;
-  canCreatePendingCloud?: boolean;
+  destination?: CreationDestination;
+  cloudTaxonomy?: ProjectTaxonomyEntry[];
+  cloudDepths?: ArchiveCategoryDepths;
   archive?: LocalArchive;
   guide?: SystemNameCandidate;
   onCancel: () => void;
   onSaved: (archive: LocalArchive) => void | Promise<void>;
+  onLiveSaved?: (archiveId: string) => void | Promise<void>;
 }) {
-  const [destination, setDestination] = useState<"pending-cloud" | "local-only">(
-    owner?.userId && canCreatePendingCloud ? "pending-cloud" : "local-only",
-  );
+  const cloudOperationId = useRef(crypto.randomUUID());
   const [title, setTitle] = useState(archive?.title || guide?.label || "");
   const [category, setCategory] = useState<ArchiveCategory>(archive?.category || guide?.category || "plant");
   const [subcategory, setSubcategory] = useState(archive?.subcategory || "");
   const [groupName, setGroupName] = useState(archive?.group_name || "");
-  const [taxonomy, setTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
+  const [subTagId, setSubTagId] = useState(archive?.intended_cloud_sub_tag_id || "");
+  const [groupTagId, setGroupTagId] = useState(archive?.intended_cloud_group_tag_id || "");
+  const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
+  const [liveTaxonomy, setLiveTaxonomy] = useState<ProjectTaxonomyEntry[]>(cloudTaxonomy);
+  const [liveDepths, setLiveDepths] = useState<ArchiveCategoryDepths>(cloudDepths);
+  const [liveTaxonomyReady, setLiveTaxonomyReady] = useState(destination !== "live-cloud");
   useEffect(() => {
     let active = true;
     void listVisibleLocalTaxonomyItems(owner ? { userId: owner.userId, email: owner.email } : null)
-      .then((rows) => { if (active) setTaxonomy(mapLocalProjectTaxonomy(rows)); });
+      .then((rows) => { if (active) setLocalTaxonomy(mapLocalProjectTaxonomy(rows)); });
     return () => { active = false; };
   }, [owner]);
+  useEffect(() => {
+    if (destination !== "live-cloud" || !owner?.userId) return;
+    let active = true;
+    void Promise.all([loadCloudProjectTaxonomy(owner.userId), getCloudArchiveCategoryDepths(owner.userId)]).then(([entries, depths]) => {
+      if (active) { setLiveTaxonomy(entries); setLiveDepths(depths); setLiveTaxonomyReady(true); }
+    }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : copy.cloudLoadFailed); });
+    return () => { active = false; };
+  }, [destination, owner?.userId, copy.cloudLoadFailed]);
+  const taxonomy = destination === "local-only" ? localTaxonomy : destination === "live-cloud" ? liveTaxonomy : cloudTaxonomy;
+  const depths = destination === "local-only" ? getLocalArchiveCategoryDepths(owner?.userId)
+    : destination === "live-cloud" ? liveDepths : cloudDepths;
+  useEffect(() => {
+    if (!archive || destination !== "local-only" || subTagId || !archive.subcategory) return;
+    const parent = localTaxonomy.find((entry) => entry.kind === "subcategory" && entry.category === category && entry.label === archive.subcategory);
+    if (parent) {
+      setSubTagId(parent.id);
+      setGroupTagId(localTaxonomy.find((entry) => entry.kind === "group" && entry.parentId === parent.id && entry.label === archive.group_name)?.id || "");
+    }
+  }, [archive, category, destination, localTaxonomy, subTagId]);
+  const subTag = taxonomy.find((entry) => entry.kind === "subcategory" && entry.category === category && entry.id === subTagId);
+  const groupTag = taxonomy.find((entry) => entry.kind === "group" && entry.category === category && entry.parentId === subTag?.id && entry.id === groupTagId);
   const [systemName, setSystemName] = useState(archive?.system_name || archive?.species_name || guide?.label || "");
   const [directory] = useState(loadOfflineGuideDirectory);
   const [selectedGuide, setSelectedGuide] = useState<SystemNameCandidate | undefined>(guide);
   const [source, setSource] = useState(archive?.source || "");
   const [plantingRegion, setPlantingRegion] = useState<PlantingRegion | null>(archive ? archive.planting_region || null : loadDefaultPlantingRegion(owner?.userId));
   const [note, setNote] = useState(archive?.note || "");
+  const [archiveSummary, setArchiveSummary] = useState(archive?.archive_summary || "");
+  const [cycleEnabled, setCycleEnabled] = useState(Boolean(archive?.cycle_enabled));
+  const [nextCycleName, setNextCycleName] = useState(archive?.next_cycle_name || "");
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -2484,6 +2568,9 @@ function ProjectForm({
     if (!title.trim() || !systemName.trim()) {
       setError(copy.requiredProject);
       return;
+    }
+    if (destination === "live-cloud" && !liveTaxonomyReady) {
+      setError(copy.cloudLoading); return;
     }
     const normalizedRegion = normalizePlantingRegion(plantingRegion);
     const hasRegionDraft = plantingRegion && Object.values(plantingRegion).some((value) => value.trim());
@@ -2494,7 +2581,15 @@ function ProjectForm({
     setBusy(true);
     setError("");
     try {
-      if (archive) {
+      if (!archive && destination === "live-cloud") {
+        if (!owner?.userId || !onLiveSaved) throw new Error(copy.cloudSignIn);
+        const id = await createLiveCloudArchive({ id: cloudOperationId.current, userId: owner.userId,
+          title, category, subTagId: subTag?.id, groupTagId: groupTag?.id,
+          systemName, speciesId: selectedGuide?.plantId, source,
+          plantingRegion: normalizedRegion, note, visibility,
+          archiveSummary, cycleEnabled, nextCycleName });
+        await onLiveSaved(id);
+      } else if (archive) {
         const updated = await updateLocalArchiveFields(
           archive.id,
           {
@@ -2502,6 +2597,8 @@ function ProjectForm({
             category,
             subcategory: subcategory || null,
             group_name: groupName || null,
+            intended_cloud_sub_tag_id: destination === "pending-cloud" ? subTagId || null : undefined,
+            intended_cloud_group_tag_id: destination === "pending-cloud" ? groupTagId || null : undefined,
             system_name: systemName,
             species_name: category === "plant" ? systemName : null,
             plant_id: selectedGuide?.plantId || (systemName === (archive.system_name || archive.species_name) ? archive.plant_id : null),
@@ -2509,6 +2606,9 @@ function ProjectForm({
             source,
             planting_region: normalizedRegion,
             note,
+            archive_summary: archiveSummary,
+            cycle_enabled: cycleEnabled,
+            next_cycle_name: nextCycleName,
           },
           owner ? { userId: owner.userId, email: owner.email } : null,
         );
@@ -2519,6 +2619,8 @@ function ProjectForm({
           category,
           subcategory: subcategory || null,
           group_name: groupName || null,
+          intended_cloud_sub_tag_id: destination === "pending-cloud" ? subTag?.id : null,
+          intended_cloud_group_tag_id: destination === "pending-cloud" ? groupTag?.id : null,
           system_name: systemName,
           species_name: category === "plant" ? systemName : null,
           plant_id: selectedGuide?.plantId || null,
@@ -2526,13 +2628,14 @@ function ProjectForm({
           source,
           planting_region: normalizedRegion,
           note,
+          archive_summary: archiveSummary,
+          cycle_enabled: cycleEnabled,
+          next_cycle_name: nextCycleName,
           local_owner_user_id: owner?.userId || null,
           local_owner_email: owner?.email || null,
           local_owner_marked_at: owner ? new Date().toISOString() : null,
-          sync_destination:
-            owner?.userId && canCreatePendingCloud && destination === "pending-cloud"
-              ? "pending-cloud"
-              : "local-only",
+          sync_destination: owner?.userId && destination === "pending-cloud" ? "pending-cloud" : "local-only",
+          migration_visibility: destination === "pending-cloud" ? visibility : null,
         });
         await onSaved(created);
       }
@@ -2558,46 +2661,41 @@ function ProjectForm({
           <div className="field"><label>{copy.title}</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></div>
           <div className="field">
             <label>{copy.category}</label>
-            <select value={category} onChange={(event) => { setCategory(event.target.value as ArchiveCategory); setSubcategory(""); setGroupName(""); }}>
+            <select value={category} onChange={(event) => { setCategory(event.target.value as ArchiveCategory); setSubcategory(""); setGroupName(""); setSubTagId(""); setGroupTagId(""); }}>
               <option value="plant">{copy.plant}</option>
               <option value="system">{copy.system}</option>
               <option value="insect_fish">{copy.insect_fish}</option>
               <option value="other">{copy.other}</option>
             </select>
           </div>
-          {getLocalArchiveCategoryDepths(owner?.userId)[category] >= 2 ? <div className="field"><label>{language === "zh" ? "一级分组" : "Level 1 group"}</label>
-            <select value={subcategory} onChange={(event) => { setSubcategory(event.target.value); setGroupName(""); }}>
+          {depths[category] >= 2 ? <div className="field"><label>{language === "zh" ? "一级分组" : "Level 1 group"}</label>
+            <select value={subTagId} onChange={(event) => { const next = taxonomy.find((entry) => entry.id === event.target.value && entry.kind === "subcategory"); setSubTagId(next?.id || ""); setSubcategory(next?.label || ""); setGroupName(""); setGroupTagId(""); }}>
               <option value="">{language === "zh" ? "未分组" : "None"}</option>
               {taxonomy.filter((entry) => entry.kind === "subcategory" && entry.category === category).map((entry) =>
-                <option key={entry.id} value={entry.label}>{entry.label}</option>)}
+                <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
-          {subcategory && getLocalArchiveCategoryDepths(owner?.userId)[category] >= 3 ? <div className="field"><label>{language === "zh" ? "二级分组" : "Level 2 group"}</label>
-            <select value={groupName} onChange={(event) => setGroupName(event.target.value)}>
+          {subTagId && depths[category] >= 3 ? <div className="field"><label>{language === "zh" ? "二级分组" : "Level 2 group"}</label>
+            <select value={groupTagId} onChange={(event) => { const next = taxonomy.find((entry) => entry.id === event.target.value && entry.kind === "group" && entry.parentId === subTagId); setGroupTagId(next?.id || ""); setGroupName(next?.label || ""); }}>
               <option value="">{language === "zh" ? "未分组" : "None"}</option>
               {taxonomy.filter((entry) => entry.kind === "group" && entry.category === category &&
-                taxonomy.find((parent) => parent.id === entry.parentId)?.label === subcategory).map((entry) =>
-                <option key={entry.id} value={entry.label}>{entry.label}</option>)}
+                entry.parentId === subTagId).map((entry) =>
+                <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
           <div className="field"><label>{copy.systemName}</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
             <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div>
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
-          {!archive && owner?.userId && canCreatePendingCloud ? (
-            <div className="field">
-              <label>{copy.destinationPendingCloud}</label>
-              <select value={destination} onChange={(event) => setDestination(event.target.value as "pending-cloud" | "local-only")}>
-                <option value="pending-cloud">{copy.destinationPendingCloud}</option>
-                <option value="local-only">{copy.destinationLocalOnly}</option>
-              </select>
-              <small>{copy.destinationHint}</small>
-            </div>
-          ) : null}
+          {!archive && destination === "pending-cloud" && !cloudTaxonomy.length ? <small>联网后可设置云端分组；项目仍可保存为未分组。</small> : null}
           <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
+          {!archive && destination !== "local-only" ? <label className="field">{copy.visibility}<select value={visibility} onChange={(event) => setVisibility(event.target.value as "public" | "private")}><option value="public">{language === "zh" ? "公开" : "Public"}</option><option value="private">{copy.private}</option></select></label> : null}
           <div className="field"><label>{copy.note}</label><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>
+          <div className="field"><label>{language === "zh" ? "项目概要" : "Project summary"}</label><textarea value={archiveSummary} onChange={(event) => setArchiveSummary(event.target.value)} maxLength={2000} /></div>
+          <label className="field"><span>{language === "zh" ? "启用项目分期" : "Enable project cycles"}</span><input type="checkbox" checked={cycleEnabled} onChange={(event) => setCycleEnabled(event.target.checked)} /></label>
+          {cycleEnabled ? <div className="field"><label>{language === "zh" ? "下一期名称" : "Next cycle name"}</label><input value={nextCycleName} onChange={(event) => setNextCycleName(event.target.value)} maxLength={80} /></div> : null}
           {error ? <section className="notice warning"><p>{error}</p></section> : null}
           <div className="submit-row">
             <button className="secondary-button" type="button" onClick={onCancel}>{copy.cancel}</button>
-            <button className="primary-button" type="submit" disabled={busy}>{busy ? copy.saving : copy.save}</button>
+            <button className="primary-button" type="submit" disabled={busy || !liveTaxonomyReady}>{busy ? copy.saving : copy.save}</button>
           </div>
         </form>
       </section>
@@ -2611,15 +2709,16 @@ function FilePreview({ file }: { file: File }) {
   return <img src={url} alt="" />;
 }
 
-function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
+function RecordForm({ copy, archive, language, record, initialFiles = [], initialCapturedAt = [], initialNote = "", onCancel, onSaved }: {
   copy: OfflineCopy; archive: LocalArchive; language: Language; record?: LocalRecordWithImages;
+  initialFiles?: File[]; initialCapturedAt?: (string | null)[]; initialNote?: string;
   onCancel: () => void; onSaved: () => void | Promise<void>;
 }) {
-  const [note, setNote] = useState(record?.note || "");
-  const [recordTime, setRecordTime] = useState(toDateTimeLocal(record?.record_time));
+  const [note, setNote] = useState(record?.note || initialNote);
+  const [recordTime, setRecordTime] = useState(toDateTimeLocal(record?.record_time || initialCapturedAt[0] || undefined));
   const [location, setLocation] = useState<RecordLocation | null>(() => record ? record.location || null : loadDefaultRecordLocation());
   const [cycleId, setCycleId] = useState(record?.cycle_id || (archive.cycle_enabled ? archive.cycles?.find((cycle) => cycle.status === "active")?.id : null) || "");
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>(initialFiles);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const camera = useRef<HTMLInputElement>(null);
@@ -2638,7 +2737,9 @@ function RecordForm({ copy, archive, language, record, onCancel, onSaved }: {
     try {
       const isoTime = localDateTimeInputToIso(recordTime, record?.record_time);
       if (!isoTime) throw new Error(language === "en" ? "Enter a valid local date and time." : "请输入有效的本地日期和时间。");
-      const imageCapturedAt = await Promise.all(files.map(readImageCapturedAt));
+      const imageCapturedAt = await Promise.all(files.map(async (file) => initialFiles.includes(file)
+        ? initialCapturedAt[initialFiles.indexOf(file)] || await readImageCapturedAt(file)
+        : readImageCapturedAt(file)));
       if (record) await updateLocalRecordFields(record.id, { note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
       else await createLocalRecord({ archive_id: archive.id, note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
       await onSaved();

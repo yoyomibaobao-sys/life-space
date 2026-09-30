@@ -1761,3 +1761,12 @@ Connectivity 变化只发布 connectivity/auth capability 状态，不得 reload
 ### 四、Android presentation 总规则
 
 Android 长期采用 `same presentation + different data source + different capability`，不维护在线版、离线版、cache 版三套页面。`live cloud／cloud cache／pending cloud／local-only` 是运行与数据状态，不是四个用户空间；用户主要感知仍只有“云端”和“本地”。状态切换不得改变项目 identity、删除真实 cache 或 pending、执行未确认的去重修复、重建 IndexedDB 或批量迁移真实用户内容。
+
+### 五、云端分类身份与数据安全
+
+1. 云端与本地 taxonomy 相互独立。
+2. local taxonomy label 不得自动创建或映射成 cloud taxonomy。
+3. offline pending cloud project 只能使用已缓存的真实 cloud taxonomy ID。
+4. 没有可信 cloud taxonomy identity 时，允许未分组同步，不猜测、不自动创建。
+5. cloud cache 应保留 source cloud taxonomy identity。
+6. taxonomy failure 不得导致项目、记录或照片数据丢失。

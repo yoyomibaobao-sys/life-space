@@ -97,6 +97,10 @@ export type LocalArchive = {
   // sub_tags/group_tags; future sync must ask before mapping or copying them.
   subcategory?: string | null;
   group_name?: string | null;
+  intended_cloud_sub_tag_id?: string | null;
+  intended_cloud_group_tag_id?: string | null;
+  source_cloud_sub_tag_id?: string | null;
+  source_cloud_group_tag_id?: string | null;
   plant_id?: string | null;
   plant_slug?: string | null;
   system_name?: string | null;
@@ -543,6 +547,10 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
     ),
     subcategory: normalizeOptionalText(archive.subcategory),
     group_name: normalizeOptionalText(archive.group_name),
+    intended_cloud_sub_tag_id: normalizeOptionalText(archive.intended_cloud_sub_tag_id),
+    intended_cloud_group_tag_id: normalizeOptionalText(archive.intended_cloud_group_tag_id),
+    source_cloud_sub_tag_id: normalizeOptionalText(archive.source_cloud_sub_tag_id),
+    source_cloud_group_tag_id: normalizeOptionalText(archive.source_cloud_group_tag_id),
     plant_id: normalizeOptionalText(archive.plant_id),
     plant_slug: normalizeOptionalText(archive.plant_slug),
     system_name: normalizeOptionalText(archive.system_name),
@@ -1800,6 +1808,8 @@ export async function updateLocalArchiveFields(
     category?: ArchiveCategory | null;
     subcategory?: string | null;
     group_name?: string | null;
+    intended_cloud_sub_tag_id?: string | null;
+    intended_cloud_group_tag_id?: string | null;
     system_name?: string | null;
     species_name?: string | null;
     plant_id?: string | null;
@@ -1870,6 +1880,12 @@ export async function updateLocalArchiveFields(
         updates.group_name === undefined
           ? normalizedArchive.group_name
           : normalizeOptionalText(updates.group_name),
+      intended_cloud_sub_tag_id: updates.intended_cloud_sub_tag_id === undefined
+        ? normalizedArchive.intended_cloud_sub_tag_id
+        : normalizeOptionalText(updates.intended_cloud_sub_tag_id),
+      intended_cloud_group_tag_id: updates.intended_cloud_group_tag_id === undefined
+        ? normalizedArchive.intended_cloud_group_tag_id
+        : normalizeOptionalText(updates.intended_cloud_group_tag_id),
       system_name:
         updates.system_name === undefined
           ? normalizedArchive.system_name
@@ -2806,6 +2822,8 @@ export async function createLocalArchive(input: {
   category: ArchiveCategory;
   subcategory?: string | null;
   group_name?: string | null;
+  intended_cloud_sub_tag_id?: string | null;
+  intended_cloud_group_tag_id?: string | null;
   plant_id?: string | null;
   plant_slug?: string | null;
   system_name?: string | null;
@@ -2839,6 +2857,8 @@ export async function createLocalArchive(input: {
     main_category: category,
     subcategory: normalizeOptionalText(input.subcategory),
     group_name: normalizeOptionalText(input.group_name),
+    intended_cloud_sub_tag_id: wantsPendingCloud ? normalizeOptionalText(input.intended_cloud_sub_tag_id) : null,
+    intended_cloud_group_tag_id: wantsPendingCloud ? normalizeOptionalText(input.intended_cloud_group_tag_id) : null,
     plant_id: normalizeOptionalText(input.plant_id),
     plant_slug: normalizeOptionalText(input.plant_slug),
     system_name: normalizeOptionalText(input.system_name),
@@ -3566,6 +3586,8 @@ async function replaceCloudOfflineCacheUnlocked(input: {
   category: ArchiveCategory;
   subcategory?: string | null;
   group_name?: string | null;
+  source_cloud_sub_tag_id?: string | null;
+  source_cloud_group_tag_id?: string | null;
   plant_id?: string | null;
   plant_slug?: string | null;
   system_name?: string | null;
@@ -3694,6 +3716,8 @@ async function replaceCloudOfflineCacheUnlocked(input: {
     main_category: category,
     subcategory: normalizeOptionalText(input.subcategory),
     group_name: normalizeOptionalText(input.group_name),
+    source_cloud_sub_tag_id: normalizeOptionalText(input.source_cloud_sub_tag_id),
+    source_cloud_group_tag_id: normalizeOptionalText(input.source_cloud_group_tag_id),
     plant_id: normalizeOptionalText(input.plant_id),
     plant_slug: normalizeOptionalText(input.plant_slug),
     system_name: normalizeOptionalText(input.system_name),

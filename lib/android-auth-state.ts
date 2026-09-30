@@ -11,6 +11,7 @@ import {
   type StoredLocalOwnerContext,
 } from "@/lib/local-owner-context";
 import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
+import { clearCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
 import {
   getAndroidConnectivitySnapshot,
   subscribeAndroidConnectivity,
@@ -287,7 +288,10 @@ const androidAuthController = createAndroidAuthController({
   rememberOwner: rememberLocalOwnerContext,
   markExplicitlySignedOut: markLocalOwnerExplicitlySignedOut,
   clearExplicitSignOut: clearLocalOwnerExplicitSignOut,
-  clearCloudCache: clearCloudOfflineCacheOnExplicitLogout,
+  clearCloudCache: async (owner, options) => {
+    await clearCloudOfflineCacheOnExplicitLogout(owner, options);
+    if (typeof localStorage !== "undefined") clearCloudTaxonomySnapshot(owner?.userId || null);
+  },
 });
 
 let connectivitySubscribed = false;

@@ -188,4 +188,5 @@ button:disabled { opacity: 0.55; }
 .photo-lightbox { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; background: #172217f5; z-index: 100; padding: 18px; }
 .photo-lightbox img { display: block; width: 100%; height: calc(100% - 60px); object-fit: contain; }
 .quick-add { justify-self: center; align-self: center; width: 48px; height: 48px; display: grid; place-items: center; margin-top: -16px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
+.quick-add-sheet { position: fixed; z-index: 210; left: 12px; right: 12px; bottom: calc(76px + var(--app-safe-area-bottom, 0px)); max-width: 540px; margin: 0 auto; box-shadow: 0 12px 36px rgba(30, 45, 30, 0.24); }
 .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
