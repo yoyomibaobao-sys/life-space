@@ -124,7 +124,8 @@ import {
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "@/lib/cloud-offline-cache";
 import { syncAllPendingCloudArchives, syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
-import { buildAndroidCloudWorkspace, type PendingCloudProject } from "@/lib/android-cloud-workspace";
+import { buildAndroidCloudWorkspace, canOfferLocalCloudTransfer, type PendingCloudProject } from "@/lib/android-cloud-workspace";
+import { syncLocalArchiveToCloud, type LocalToCloudVisibility } from "@/lib/local-to-cloud-sync";
 import { readCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
 import { createLiveCloudArchive } from "@/lib/android-live-cloud-create";
 import { projectCreationDestinations, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
@@ -263,6 +264,7 @@ type Screen =
   | { kind: "project-destination" }
   | { kind: "quick-add" }
   | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "local-transfer"; archiveId?: string }
+  | { kind: "local-transfer"; archiveId: string }
   | { kind: "activity" }
   | { kind: "discover-search" }
   | { kind: "public-detail" }
@@ -689,6 +691,9 @@ function App() {
   const [cloudError, setCloudError] = useState("");
   const [pendingSync, setPendingSync] = useState<PendingCloudSyncSummary[]>([]);
   const [syncingArchiveId, setSyncingArchiveId] = useState<string | null>(null);
+  const [transferVisibility, setTransferVisibility] = useState<LocalToCloudVisibility>("private");
+  const [transferRunning, setTransferRunning] = useState(false);
+  const [transferError, setTransferError] = useState("");
   const [activityItems, setActivityItems] = useState<DiscoveryProjectFeedItem[]>([]);
   const [publicDetailItem, setPublicDetailItem] = useState<DiscoveryProjectFeedItem | null>(null);
   const [publicDetailBack, setPublicDetailBack] = useState<"activity" | "discover-search">("activity");
@@ -1360,6 +1365,38 @@ function App() {
     }
   }
 
+  function beginLocalTransfer(archiveId: string) {
+    const archive = archives.find((row) => row.id === archiveId);
+    if (!archive || !canOfferLocalCloudTransfer(archive)) return;
+    if (!online) { showToast(language === "zh" ? "联网后可上传到云端" : "Connect to upload to cloud"); return; }
+    if (!authenticatedOwnerContext) { openCloudLogin("local-transfer", archiveId); return; }
+    setTransferVisibility(archive.migration_visibility || "private");
+    setTransferError("");
+    setScreen({ kind: "local-transfer", archiveId });
+  }
+
+  async function confirmLocalTransfer(archiveId: string) {
+    if (transferRunning || !online) { showToast(copy.needNetwork); return; }
+    if (!authenticatedOwnerContext || !cloudUserId) { openCloudLogin("local-transfer", archiveId); return; }
+    setTransferRunning(true);
+    setTransferError("");
+    try {
+      const result = await syncLocalArchiveToCloud({
+        localArchiveId: archiveId, ownerContext: authenticatedOwnerContext, visibility: transferVisibility,
+      });
+      if (!result.success) { setTransferError(result.error); await loadList(authenticatedOwnerContext); return; }
+      await loadList(authenticatedOwnerContext);
+      await loadCloudList(cloudUserId);
+      showToast(language === "zh" ? "已上传到云端" : "Uploaded to cloud");
+      setScreen({ kind: "cloud-detail", archiveId: result.cloudArchiveId }, true);
+    } catch (error) {
+      setTransferError(error instanceof Error ? error.message : copy.uploadFailed);
+      await loadList(authenticatedOwnerContext);
+    } finally {
+      setTransferRunning(false);
+    }
+  }
+
   async function claimUnowned() {
     if (!ownerContext) return;
     await markUnownedLocalArchivesForOwner({
@@ -1655,6 +1692,10 @@ function App() {
         if (window.confirm(language === "zh" ? "将云项目移入回收站？" : "Move this cloud project to trash?"))
           void mutate({ trashed_at: new Date().toISOString() });
       } : undefined}
+      extraActions={source === "local" && local && canOfferLocalCloudTransfer(local) ? [{
+        label: language === "zh" ? "上传到云端" : "Upload to cloud",
+        onClick: () => beginLocalTransfer(local.id),
+      }] : []}
     />;
   }
   const baseNavigationItems = getMobilePrimaryNavigationDescriptors({
@@ -2028,6 +2069,9 @@ function App() {
                 onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
                 onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
                 onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
+                onTransferToCloud={canOfferLocalCloudTransfer(detail.archive) &&
+                  !pendingSync.some((item) => item.local_archive_id === detail.archive.id)
+                  ? () => beginLocalTransfer(detail.archive.id) : undefined}
               />
               {authenticatedOwnerContext && pendingSync.some((item) => item.local_archive_id === detail.archive.id) ? (
                 <section className="notice warning">
@@ -2384,9 +2428,39 @@ function App() {
         const destination = screen;
         void loadShellIdentity(userId);
         if (destination.returnTo === "list-cloud") { setSourceFilter("cloud"); setScreen({ kind: "list" }); }
-        else if (destination.returnTo === "local-transfer" && destination.archiveId) setScreen({ kind: "detail", archiveId: destination.archiveId });
+        else if (destination.returnTo === "local-transfer" && destination.archiveId) {
+          setTransferVisibility("private");
+          setTransferError("");
+          setScreen({ kind: "local-transfer", archiveId: destination.archiveId });
+        }
         else if (destination.returnTo !== "local-transfer") setScreen({ kind: destination.returnTo });
       }} /> : null}
+      {screen.kind === "local-transfer" ? (() => {
+        const archive = archives.find((row) => row.id === screen.archiveId);
+        return <section className="panel" data-android-local-transfer="true">
+          <h1>{language === "zh" ? "上传到云端" : "Upload to cloud"}</h1>
+          {archive && canOfferLocalCloudTransfer(archive) ? <>
+            <p><strong>{archive.title}</strong></p>
+            <p>{language === "zh" ? "上传到云端不等于公开。上传成功后，本地项目将移出本地列表。" : "Uploading to cloud does not make this public. Once complete, the project leaves the local list."}</p>
+            <fieldset disabled={transferRunning}>
+              <legend>{language === "zh" ? "可见性" : "Visibility"}</legend>
+              <label><input type="radio" name="android-local-transfer-visibility" checked={transferVisibility === "private"}
+                onChange={() => setTransferVisibility("private")} />{language === "zh" ? "仅自己可见" : "Only me"}</label>
+              <label><input type="radio" name="android-local-transfer-visibility" checked={transferVisibility === "public"}
+                onChange={() => setTransferVisibility("public")} />{language === "zh" ? "公开" : "Public"}</label>
+            </fieldset>
+            {transferError ? <p role="alert">{transferError}</p> : null}
+            <div className="action-row">
+              <button type="button" className="primary-button" disabled={transferRunning || !online || !authenticatedOwnerContext}
+                onClick={() => void confirmLocalTransfer(archive.id)}>
+                {transferRunning ? copy.uploading : language === "zh" ? "确认上传到云端" : "Confirm upload to cloud"}
+              </button>
+              <button type="button" disabled={transferRunning} onClick={() => openDetail(archive.id)}>{copy.cancel}</button>
+            </div>
+            {!online ? <p>{language === "zh" ? "联网后可上传到云端" : "Connect to upload to cloud"}</p> : null}
+          </> : <p>{language === "zh" ? "这个本地项目已不可转到云端。" : "This device project is no longer available for transfer."}</p>}
+        </section>;
+      })() : null}
       {screen.kind === "project-destination" ? <section className="panel"><h1>{copy.newProject}</h1><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}{destination === "pending-cloud" ? <small> 当前离线，将先保存在本机，联网后手动上传</small> : null}</button>)}</div></section> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">
         {archives.filter((archive) => archive.status === "active" && (authenticatedOwnerContext || archive.sync?.operation_kind !== "create-archive")).map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}{archive.sync?.operation_kind === "create-archive" ? <small> · 待联网同步</small> : null}</button>)}

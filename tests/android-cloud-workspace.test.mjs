@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { buildAndroidCloudWorkspace } from "../lib/android-cloud-workspace.ts";
+import { buildAndroidCloudWorkspace, canOfferLocalCloudTransfer } from "../lib/android-cloud-workspace.ts";
 
 const shell = () => fs.readFileSync("mobile-offline-src/main.tsx", "utf8");
 const local = (id, extra = {}) => ({ id, title: id, category: "plant", sync: { status: "local-only" }, ...extra });
@@ -73,6 +73,14 @@ test("independent saved local copy stays local; linked pending row does not", ()
   assert.deepEqual(view.localOnly.map((row) => row.id), ["saved-copy"]);
   assert.equal(view.pending.length, 1);
   assert.equal(view.normalLive.length, 0);
+});
+
+test("local transfer is offered only for local intent, never cloud cache or pending create", () => {
+  assert.equal(canOfferLocalCloudTransfer(local("pure-local")), true);
+  assert.equal(canOfferLocalCloudTransfer(local("saved-copy", { local_role: "saved-local-copy", source_cloud_archive_id: "cloud" })), true);
+  assert.equal(canOfferLocalCloudTransfer(local("cache", { local_role: "cloud-offline-cache", source_cloud_archive_id: "cloud" })), false);
+  assert.equal(canOfferLocalCloudTransfer(local("pending", { sync: { status: "pending-cloud-sync", operation_kind: "create-archive" } })), false);
+  assert.equal(canOfferLocalCloudTransfer(local("linked", { source_cloud_archive_id: "cloud" })), false);
 });
 
 test("pending UI stays visible offline and both upload paths require a user click", () => {

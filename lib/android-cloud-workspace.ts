@@ -2,6 +2,12 @@ import type { LocalArchiveSummary, PendingCloudSyncSummary } from "@/lib/local-o
 
 type CloudRow = { id: string };
 
+export function canOfferLocalCloudTransfer(archive: Pick<LocalArchiveSummary, "local_role" | "sync" | "source_cloud_archive_id">) {
+  return archive.local_role !== "cloud-offline-cache" &&
+    archive.sync?.operation_kind !== "create-archive" &&
+    (archive.local_role === "saved-local-copy" || !archive.source_cloud_archive_id);
+}
+
 export type PendingCloudProject<L extends LocalArchiveSummary, C extends CloudRow> = {
   key: string;
   summaries: PendingCloudSyncSummary[];
@@ -55,8 +61,7 @@ export function buildAndroidCloudWorkspace<L extends LocalArchiveSummary, C exte
 
   const localOnly = input.local.filter((row) =>
     !pendingLocalIds.has(row.id) &&
-    row.sync?.operation_kind !== "create-archive" &&
-    (row.local_role === "saved-local-copy" || !row.source_cloud_archive_id),
+    canOfferLocalCloudTransfer(row),
   );
   const seenCloud = new Set(pendingCloudIds);
   const normalLive: C[] = [];

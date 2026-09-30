@@ -62,6 +62,7 @@ export default function DeviceOwnedProjectDetail({
   onAddRecord,
   onDeleteArchive,
   onDeleteRecord,
+  onTransferToCloud,
   extra,
   recordComposer,
   view: View = ArchiveProjectDetailView,
@@ -73,6 +74,7 @@ export default function DeviceOwnedProjectDetail({
   onAddRecord: () => void;
   onDeleteArchive: () => void;
   onDeleteRecord: (recordId: string) => void;
+  onTransferToCloud?: () => void;
   extra?: ReactNode;
   recordComposer?: ReactNode;
   view?: typeof ArchiveProjectDetailView;
@@ -246,6 +248,9 @@ export default function DeviceOwnedProjectDetail({
               {archiveCopy.pending_sync_workspace_notice}
             </div>
           ) : null}
+          {onTransferToCloud && !isCloudCache ? <button type="button" onClick={onTransferToCloud}>
+            {language === "zh" ? "上传到云端" : "Upload to cloud"}
+          </button> : null}
         </>
       }
       activeTab={activeDetailTab}
@@ -333,6 +338,9 @@ export default function DeviceOwnedProjectDetail({
               }, ownerContext));
             }}
           />
+          {onTransferToCloud && !isCloudCache ? <button type="button" onClick={onTransferToCloud}>
+            {language === "zh" ? "上传到云端" : "Upload to cloud"}
+          </button> : null}
           {canEditArchive ? (
             <ArchiveCycleSettings
               key={archive.id}
