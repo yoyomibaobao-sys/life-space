@@ -202,6 +202,7 @@ export default function FollowPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       setLoading(true);
       setProjectLoadError(false);
@@ -209,6 +210,9 @@ export default function FollowPage() {
       setExperienceLoadError(false);
 
       if (!online) {
+        setProjectCards([]);
+        setUserCards([]);
+        setSavedExperienceCards([]);
         setLoading(false);
         return;
       }
@@ -216,6 +220,8 @@ export default function FollowPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      if (cancelled) return;
 
       if (!user) {
         navigate(buildLoginHref(getCurrentInternalPath()));
@@ -554,6 +560,7 @@ export default function FollowPage() {
       );
       const savedCardById = new Map(hydratedSavedCards.map((item) => [item.id, item]));
 
+      if (cancelled) return;
       setProjectCards(nextProjectCards);
       setUserCards(nextUserCards);
       setSavedExperienceCards(
@@ -564,7 +571,8 @@ export default function FollowPage() {
       setLoading(false);
     }
 
-    load();
+    void load();
+    return () => { cancelled = true; };
   }, [followT, language, loadVersion, online, shellNavigate]);
 
   const filteredProjectCards = useMemo(() => {
@@ -828,10 +836,7 @@ export default function FollowPage() {
 
         {loading ? (
           <div style={emptyWrapStyle}>{followT.loading}</div>
-        ) : !online &&
-          projectCards.length === 0 &&
-          userCards.length === 0 &&
-          savedExperienceCards.length === 0 ? (
+        ) : !online ? (
           <MobileNetworkUnavailableState />
         ) : isMobileViewport ? (
           activeTab === "projects" ? (

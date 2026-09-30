@@ -127,6 +127,7 @@ export type LocalArchive = {
   cycles?: LocalArchiveCycle[];
   trashed_cycles?: LocalArchiveCycleTrash[];
   status: "active" | "ended";
+  trashed_at?: string | null;
   ended_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -595,6 +596,7 @@ function normalizeLocalArchive(archive: LocalArchive): LocalArchive {
     next_cycle_name: normalizeOptionalText(archive.next_cycle_name),
     cycles,
     trashed_cycles: trashedCycles,
+    trashed_at: normalizeOptionalText(archive.trashed_at),
     sync: normalizeLocalSyncMeta(archive.sync),
   };
 }
@@ -1172,6 +1174,7 @@ export async function listVisibleLocalArchiveSummaries(
   );
   const summaries = normalizedArchives
     .filter(isUserLocalArchive)
+    .filter((archive) => !archive.trashed_at)
     .filter(
       (archive) =>
         options.includePendingCloud !== false ||
@@ -2909,6 +2912,7 @@ export async function resolveLocalArchiveDetail(
 
   if (!archive) return { status: "not-found" as const, detail: null };
   const normalizedArchive = normalizeLocalArchive(archive);
+  if (normalizedArchive.trashed_at) return { status: "not-found" as const, detail: null };
   if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
     return { status: "forbidden" as const, detail: null };
   }
@@ -4652,6 +4656,42 @@ export async function deleteLocalRecord(recordId: string) {
   } finally {
     db.close();
   }
+}
+
+export async function listLocalProjectTrash(ownerContext?: LocalArchiveOwnerContext | null) {
+  const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
+  return archives.map(normalizeLocalArchive)
+    .filter((archive) => archive.trashed_at && isUserLocalArchive(archive) && isLocalArchiveVisibleToOwner(archive, ownerContext))
+    .sort((a, b) => String(b.trashed_at).localeCompare(String(a.trashed_at)));
+}
+
+export async function setLocalProjectTrashed(archiveId: string, trashed: boolean, ownerContext?: LocalArchiveOwnerContext | null) {
+  const archive = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  if (!archive) throw new Error("本地项目不存在。");
+  const normalized = normalizeLocalArchive(archive);
+  if (!isLocalArchiveVisibleToOwner(normalized, ownerContext)) throw new Error("没有权限修改这个本地项目。");
+  assertWritableUserArchive(normalized, "云项目离线缓存只读，不能修改。");
+  if (trashed) {
+    const [records, images] = await Promise.all([getAllRows<LocalRecord>(RECORD_STORE), getAllRows<LocalImage>(IMAGE_STORE)]);
+    if (localArchiveHasPendingCloudWork(normalized, records, images)) {
+      throw new Error("请先处理云端待同步内容，再移动此项目。");
+    }
+  }
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(ARCHIVE_STORE);
+    const current = await requestToPromise<LocalArchive | undefined>(store.get(archiveId));
+    if (!current || !isLocalArchiveVisibleToOwner(normalizeLocalArchive(current), ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+    await requestToPromise(store.put({ ...current, trashed_at: trashed ? nowIso() : null, updated_at: nowIso() }));
+    await done;
+    await refreshLocalUsageHints();
+  } finally { db.close(); }
 }
 
 export async function deleteLocalArchive(archiveId: string) {

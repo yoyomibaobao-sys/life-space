@@ -67,7 +67,7 @@ import {
   projectCategorySettingsTitleStyle,
   savedUsernameStyle,
   type MobileProfileModule,
-  type MobileProfileNavItem,
+  mobileProfileNavigation,
 } from "@/components/profile/MobileProfilePresentation";
 import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
 import { useIsNativeApp } from "@/lib/capacitor/useIsNativeApp";
@@ -151,36 +151,6 @@ export default function ProfilePage() {
   const router = useRouter();
   const { language, t } = useLanguage();
   const isNativeApp = useIsNativeApp();
-  const baseMobileProfileModules: MobileProfileNavItem[] = [
-    ...(isNativeApp === true
-      ? []
-      : [
-          { href: "/", label: language === "en" ? "Website introduction" : "网站介绍主页" },
-          { href: "/download/android", label: language === "en" ? "Download Android app" : "下载安卓版" },
-        ]),
-    { href: "/membership/payment", label: language === "en" ? "Cloud Membership" : "开通云会员" },
-    { value: "payment", label: language === "en" ? "Order progress" : "订单进度查询" },
-    { href: "/membership/refund", label: t.profile.refund_request_nav },
-    { href: "/membership/benefits", label: language === "en" ? "Membership types" : "会员类别说明" },
-    { href: "/profile/recent", label: language === "en" ? "Browsing history" : "浏览历史" },
-    { value: "backup", label: language === "en" ? "Backup & export" : "备份与导出" },
-    { href: "/legal", label: t.profile.legal_rules_nav },
-    { href: "/feedback", label: t.feedback_and_contact },
-    { href: "/profile/trash", label: t.profile.modules.trash },
-    { value: "account", label: language === "en" ? "Account management" : "账号管理" },
-  ];
-  const adminMembershipProfileModule: MobileProfileNavItem = {
-    href: "/admin/memberships",
-    label: language === "en" ? "User management" : "用户管理",
-  };
-  const adminGuideProfileModule: MobileProfileNavItem = {
-    href: "/admin/guides",
-    label: language === "en" ? "Linked guide review" : "关联指引审核",
-  };
-  const adminSupportProfileModule: MobileProfileNavItem = {
-    href: "/admin/support",
-    label: t.support_admin_title,
-  };
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [profileStats, setProfileStats] = useState<UserProfileStats | null>(null);
@@ -210,6 +180,9 @@ export default function ProfilePage() {
   const [viewportWidth, setViewportWidth] = useState(1200);
   const [mobileProfileModule, setMobileProfileModule] =
     useState<MobileProfileModule | null>(null);
+  useEffect(() => {
+    if (window.location.hash === "#profile-module-account") setMobileProfileModule("account");
+  }, []);
   const restoringProfilePositionRef = useRef(false);
   const isMobileViewport = viewportWidth < 760;
 
@@ -403,9 +376,14 @@ export default function ProfilePage() {
   const membershipStatusText = membershipError
     ? t.profile.membership_load_failed
     : getMembershipSummary(membership, language);
-  const visibleMobileProfileModules = isAdmin
-    ? [...baseMobileProfileModules, adminMembershipProfileModule, adminGuideProfileModule, adminSupportProfileModule]
-    : baseMobileProfileModules;
+  const visibleMobileProfileModules = mobileProfileNavigation({
+    language, native: isNativeApp === true, admin: isAdmin,
+    refundLabel: t.profile.refund_request_nav,
+    legalLabel: t.profile.legal_rules_nav,
+    feedbackLabel: t.feedback_and_contact,
+    trashLabel: t.profile.modules.trash,
+    adminSupportLabel: t.support_admin_title,
+  });
   const statsGridColumns = isMobileViewport
     ? "1fr"
     : viewportWidth < 900
@@ -1018,6 +996,7 @@ export default function ProfilePage() {
             ? String(profileStats?.receivedFlowerCount || 0)
             : `${profileStats?.receivedFlowerCount || 0}次`}
           userType={getUserTypeLabel({ signedIn: !!user, membership, loading: initLoading, failed: !!membershipError }, language)}
+          membershipText={membershipStatusText}
           storageText={storageText}
           error={errorMsg ? (
             <div style={{ marginTop: 16, background: "#fff2f0", border: "1px solid #ffd6cf", color: "#c23a2b", padding: "10px 12px", borderRadius: 12, fontSize: 14 }}>

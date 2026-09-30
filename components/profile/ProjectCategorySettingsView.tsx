@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import InternalLink from "@/components/navigation/InternalLink";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import UiIcon from "@/components/ui/UiIcon";
 import {
   archiveCategoryOptions,
@@ -52,6 +53,9 @@ export default function ProjectCategorySettingsView({
   const cloudLocked = activeSpace === "cloud" && cloudRequiresNetwork;
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<ProjectTaxonomyEntry | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [deleting, setDeleting] = useState<ProjectTaxonomyEntry | null>(null);
 
   async function create(event: FormEvent<HTMLFormElement>, category: ArchiveCategory, parentId?: string | null) {
     event.preventDefault();
@@ -63,18 +67,21 @@ export default function ProjectCategorySettingsView({
     finally { setBusy(false); }
   }
 
-  async function rename(entry: ProjectTaxonomyEntry) {
-    const value = window.prompt(isEnglish ? "Rename group" : "重命名分组", entry.label)?.trim();
-    if (!value || value === entry.label || !onRename) return;
+  async function rename() {
+    const value = editLabel.trim();
+    if (!editing || !value || !onRename) return;
     setBusy(true);
-    try { await onRename(entry, value); } finally { setBusy(false); }
+    try { if (value !== editing.label) await onRename(editing, value); setEditing(null); }
+    finally { setBusy(false); }
   }
 
-  async function remove(entry: ProjectTaxonomyEntry) {
-    if (!onDelete || !window.confirm(isEnglish ? "Delete this group?" : "删除此分组？")) return;
+  async function remove() {
+    if (!onDelete || !deleting) return;
     setBusy(true);
-    try { await onDelete(entry); } finally { setBusy(false); }
+    try { await onDelete(deleting); setDeleting(null); } finally { setBusy(false); }
   }
+
+  function startRename(entry: ProjectTaxonomyEntry) { setEditing(entry); setEditLabel(entry.label); }
 
   function updateDepth(category: ArchiveCategory, depth: ArchiveCategoryDepth) {
     if (cloudLocked) return;
@@ -134,9 +141,8 @@ export default function ProjectCategorySettingsView({
           <p style={{ margin: 0 }}>{t.archive_workspace.group_options_hint}</p>
         </div>
 
-        {cloudLocked ? (
-          <section style={messageStyle}>{isEnglish ? "A network connection is required." : "需要联网。"}</section>
-        ) : loading ? (
+        {cloudLocked ? <section style={messageStyle}>{isEnglish ? "Reconnect to edit cloud groups." : "联网后可编辑云端分组。"}</section> : null}
+        {loading ? (
           <section style={messageStyle}>{isEnglish ? "Loading..." : "加载中…"}</section>
         ) : (
           <section style={categoryListStyle}>
@@ -157,32 +163,32 @@ export default function ProjectCategorySettingsView({
                   <SettingRow
                     label={isEnglish ? "Enable level 1 groups" : "开启一级分组"}
                     checked={secondEnabled}
-                    onToggle={() => updateDepth(category, secondEnabled ? 1 : 2)}
+                    onToggle={cloudLocked ? undefined : () => updateDepth(category, secondEnabled ? 1 : 2)}
                   />
                   {secondEnabled ? (
                     <SettingRow
                       label={isEnglish ? "Enable level 2 groups" : "开启二级分组"}
                       checked={thirdEnabled}
-                      onToggle={() => updateDepth(category, thirdEnabled ? 2 : 3)}
+                      onToggle={cloudLocked ? undefined : () => updateDepth(category, thirdEnabled ? 2 : 3)}
                     />
                   ) : null}
-                  {secondEnabled && onCreate ? <div style={{ padding: 14 }}>
+                  {secondEnabled && (onCreate || entries.length > 0) ? <div style={{ padding: 14 }}>
                     {entries.filter((entry) => entry.kind === "subcategory" && entry.category === category).map((parent) => (
                       <div key={parent.id} data-taxonomy-level="1" style={{ marginBottom: 12 }}>
-                        <div><strong>{parent.label}</strong>{onRename ? <button type="button" disabled={busy} onClick={() => void rename(parent)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
-                          {onDelete ? <button type="button" disabled={busy} onClick={() => void remove(parent)}>{isEnglish ? "Delete" : "删除"}</button> : null}</div>
+                        <div><strong>{parent.label}</strong>{onRename && !cloudLocked ? <button type="button" disabled={busy} onClick={() => startRename(parent)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
+                          {onDelete && !cloudLocked ? <button type="button" disabled={busy} onClick={() => setDeleting(parent)}>{isEnglish ? "Delete" : "删除"}</button> : null}</div>
                         {thirdEnabled ? <div style={{ paddingLeft: 16 }}>
                           {entries.filter((child) => child.kind === "group" && child.parentId === parent.id).map((child) => <div key={child.id} data-taxonomy-level="2">
-                            {child.label}{onRename ? <button type="button" disabled={busy} onClick={() => void rename(child)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
-                            {onDelete ? <button type="button" disabled={busy} onClick={() => void remove(child)}>{isEnglish ? "Delete" : "删除"}</button> : null}
+                            {child.label}{onRename && !cloudLocked ? <button type="button" disabled={busy} onClick={() => startRename(child)}>{isEnglish ? "Rename" : "重命名"}</button> : null}
+                            {onDelete && !cloudLocked ? <button type="button" disabled={busy} onClick={() => setDeleting(child)}>{isEnglish ? "Delete" : "删除"}</button> : null}
                           </div>)}
-                          <form onSubmit={(event) => void create(event, category, parent.id)}><input aria-label={isEnglish ? "New level 2 group" : "新建二级分组"} value={drafts[parent.id] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [parent.id]: event.target.value }))} />
-                            <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form>
+                          {!cloudLocked && onCreate ? <form onSubmit={(event) => void create(event, category, parent.id)}><input aria-label={isEnglish ? "New level 2 group" : "新建二级分组"} value={drafts[parent.id] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [parent.id]: event.target.value }))} />
+                            <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form> : null}
                         </div> : null}
                       </div>
                     ))}
-                    <form onSubmit={(event) => void create(event, category)}><input aria-label={isEnglish ? "New level 1 group" : "新建一级分组"} value={drafts[category] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [category]: event.target.value }))} />
-                      <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form>
+                    {!cloudLocked && onCreate ? <form onSubmit={(event) => void create(event, category)}><input aria-label={isEnglish ? "New level 1 group" : "新建一级分组"} value={drafts[category] || ""} onChange={(event) => setDrafts((current) => ({ ...current, [category]: event.target.value }))} />
+                      <button type="submit" disabled={busy}>{isEnglish ? "Add" : "新增"}</button></form> : null}
                   </div> : null}
                 </article>
               );
@@ -200,6 +206,13 @@ export default function ProjectCategorySettingsView({
           {saving ? (isEnglish ? "Saving..." : "保存中…") : (isEnglish ? "Save" : "保存")}
         </button>
       </div>
+      <ConfirmDialog open={Boolean(editing)} title={isEnglish ? "Rename group" : "重命名分组"}
+        message={editing?.label || ""} confirmDisabled={busy || !editLabel.trim()} onClose={() => setEditing(null)} onConfirm={rename}>
+        <input aria-label={isEnglish ? "Group name" : "分组名称"} value={editLabel} onChange={(event) => setEditLabel(event.target.value)} maxLength={80} />
+      </ConfirmDialog>
+      <ConfirmDialog open={Boolean(deleting)} title={isEnglish ? "Delete group" : "删除分组"}
+        message={isEnglish ? `Delete ${deleting?.label || ""}?` : `删除“${deleting?.label || ""}”？`}
+        danger confirmDisabled={busy} onClose={() => setDeleting(null)} onConfirm={remove} />
     </main>
   );
 }

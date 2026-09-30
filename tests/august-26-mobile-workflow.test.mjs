@@ -101,7 +101,7 @@ test("market publishing manages all images first and links to the exact source r
   const [createPage, editPage, detailPage, deleteButton, action] = await Promise.all([
     source("app/market/new/page.tsx"),
     source("app/market/[id]/edit/page.tsx"),
-    source("app/market/[id]/page.tsx"),
+    source("components/market/MarketDetailView.tsx"),
     source("app/archive/[id]/DeleteRecordButton.tsx"),
     source("components/quick-record/QuickCaptureNavAction.tsx"),
   ]);

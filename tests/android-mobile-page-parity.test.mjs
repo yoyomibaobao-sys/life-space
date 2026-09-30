@@ -80,7 +80,7 @@ test("personal space local, cloud, cache, and pending share ArchiveProjectCard",
 
 test("profile page remains available offline in the Android shell", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  const androidProfile = read("components/profile/AndroidProfileController.tsx");
+  const androidProfile = read("components/profile/AndroidProfileController.tsx") + read("components/profile/MobileProfilePresentation.tsx");
   const identity = read("components/archive-ui/PersonalSpaceMobileIdentity.tsx");
 
   assert.match(shell, /kind: "profile"/);
@@ -97,13 +97,14 @@ test("profile page remains available offline in the Android shell", () => {
   assert.match(shell, /data-android-shell-page="profile"/);
 });
 
-test("guide offline opens cached directory without PlantPage fetch", () => {
+test("guide online and offline keep the PlantPage presentation and swap data", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const plant = read("app/plant/page.tsx");
 
   assert.match(plant, /<HomeSectionTabs\s+active="guide"/);
   assert.match(shell, /<PlantPage/);
-  assert.match(shell, /online \? <PlantPage[\s\S]*guide-directory-offline/);
+  assert.match(shell, /<PlantPage offline=\{!online\} offlineDirectory=\{directory\}/);
+  assert.match(plant, /if \(offline\)[\s\S]*setPlants\(entries\.map/);
   assert.match(shell, /findOfflineGuideEntry/);
   assert.match(shell, /data-android-shell-page="guides"/);
   assert.match(shell, /kind: "guide-detail"/);

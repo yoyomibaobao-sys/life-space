@@ -74,7 +74,7 @@ test("public guide library has sections, reusable content, and openable details"
   const [migration, indexPage, detailPage, guideLibrary, candidates, newProject] = await Promise.all([
     source("supabase/migrations/20260829054053_expand_public_guide_library.sql"),
     source("app/plant/page.tsx"),
-    source("app/plant/guide/[id]/page.tsx"),
+    source("components/plant-detail/GuideDetailView.tsx"),
     source("lib/public-guide-library.ts"),
     source("lib/system-name-candidates.ts"),
     source("app/archive/new/page.tsx"),
@@ -100,7 +100,7 @@ test("public guide library has sections, reusable content, and openable details"
   assert.match(indexPage, /guide_sections/);
   assert.match(indexPage, /\/plant\/guide\/\$\{entry\.id\}/);
   assert.match(detailPage, /buildPublicGuideContent/);
-  assert.match(detailPage, /system_name=\$\{encodeURIComponent\(entry\.name\)\}/);
+  assert.match(detailPage, /system_name=\$\{encodeURIComponent\(displayEntry\.name\)\}/);
   assert.match(guideLibrary, /aquatic_plant/);
   assert.match(guideLibrary, /food_ferment/);
   assert.match(candidates, /\.eq\("is_active", true\)/);
@@ -111,7 +111,7 @@ test("non-plant guides keep their browsing hierarchy with shared global search a
   const [migration, indexPage, detailPage, guideLibrary] = await Promise.all([
     source("supabase/migrations/20260829120000_expand_domain_guide_hierarchy.sql"),
     source("app/plant/page.tsx"),
-    source("app/plant/guide/[id]/page.tsx"),
+    source("components/plant-detail/GuideDetailView.tsx"),
     source("lib/public-guide-library.ts"),
   ]);
 

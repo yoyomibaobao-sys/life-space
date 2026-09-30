@@ -35,7 +35,8 @@ test("feedback stays in navigation and the profile list without a duplicate bann
   assert.match(navbar, /desktopUtilityDividerStyle/);
   assert.doesNotMatch(navbar, /\{user\.email\}/);
   assert.match(footer, /href="\/feedback"/);
-  assert.match(profile, /href: "\/feedback", label: t\.feedback_and_contact/);
+  assert.match(profile, /feedbackLabel: t\.feedback_and_contact/);
+  assert.match(mobilePresentation, /href: "\/feedback", label: input\.feedbackLabel/);
 });
 
 test("Chinese and English feedback copy stay in the shared dictionaries", () => {

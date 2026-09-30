@@ -12,6 +12,43 @@ export type MobileProfileNavItem = {
   href?: string;
 };
 
+export function mobileProfileNavigation(input: {
+  language: "zh" | "en";
+  native: boolean;
+  admin: boolean;
+  refundLabel: string;
+  legalLabel: string;
+  feedbackLabel: string;
+  trashLabel: string;
+  adminSupportLabel: string;
+}): MobileProfileNavItem[] {
+  const en = input.language === "en";
+  return [
+    ...(!input.native ? [
+      { href: "/", label: en ? "Website introduction" : "网站介绍主页" },
+      { href: "/download/android", label: en ? "Download Android app" : "下载安卓版" },
+    ] : []),
+    { href: "/membership/payment", label: en ? "Cloud Membership" : "开通云会员" },
+    { value: "payment", label: en ? "Order progress" : "订单进度查询" },
+    { href: "/membership/refund", label: input.refundLabel },
+    { href: "/membership/benefits", label: en ? "Membership types" : "会员类别说明" },
+    { href: "/profile/recent", label: en ? "Browsing history" : "浏览历史" },
+    { href: "/profile/helpful", label: en ? "Suggestions adopted" : "收到有用" },
+    { href: "/experience-cards", label: en ? "Experience cards" : "经验卡" },
+    { value: "backup", label: en ? "Backup & export" : "备份与导出" },
+    { href: "/legal/privacy", label: en ? "Data & security" : "数据与安全" },
+    { href: "/legal", label: input.legalLabel },
+    { href: "/feedback", label: input.feedbackLabel },
+    { href: "/profile/trash", label: input.trashLabel },
+    { value: "account", label: en ? "Account management" : "账号管理" },
+    ...(input.admin ? [
+      { href: "/admin/memberships", label: en ? "User management" : "用户管理" },
+      { href: "/admin/guides", label: en ? "Linked guide review" : "关联指引审核" },
+      { href: "/admin/support", label: input.adminSupportLabel },
+    ] : []),
+  ] as MobileProfileNavItem[];
+}
+
 export function MobileProfileModuleTabs({
   active,
   modules,
@@ -112,7 +149,7 @@ export function IdentityStat({ label, value, href }: { label: string; value: str
   const content = (
     <>
       <div style={{ color: "#7a8676", fontSize: 11 }}>{label}</div>
-      <div style={{ marginTop: 3, color: "#2e422d", fontSize: 12, fontWeight: 800, lineHeight: 1.4, overflowWrap: "anywhere" }}>{value}</div>
+      <div style={{ marginTop: 3, color: "#2e422d", fontSize: 14, fontWeight: 800, lineHeight: 1.4, overflowWrap: "anywhere" }}>{value}</div>
     </>
   );
 

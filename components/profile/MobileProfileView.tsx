@@ -37,6 +37,8 @@ export default function MobileProfileView({
   accountNumber,
   helpfulCount,
   userType,
+  membershipText,
+  experienceCount,
   storageText,
   identityTop,
   identityAfterStats,
@@ -58,6 +60,8 @@ export default function MobileProfileView({
   accountNumber: string;
   helpfulCount: string;
   userType: string;
+  membershipText?: string | null;
+  experienceCount?: string | null;
   storageText: string;
   canEditIdentity?: boolean;
   identityTop?: ReactNode;
@@ -129,6 +133,8 @@ export default function MobileProfileView({
                 href="/profile/helpful"
               />
               <IdentityStat label={language === "en" ? "User type" : "用户类型"} value={userType} />
+              {membershipText ? <IdentityStat label={language === "en" ? "Membership" : "会员类型"} value={membershipText} /> : null}
+              {experienceCount ? <IdentityStat label={language === "en" ? "Experience cards" : "经验卡数量"} value={experienceCount} href="/experience-cards" /> : null}
               <IdentityStat label={language === "en" ? "Storage" : "空间用量"} value={storageText} />
             </div>
             {identityAfterStats}

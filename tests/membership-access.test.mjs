@@ -69,7 +69,7 @@ test("expired cloud access is database-enforced read-only with narrow downgrade 
     source("app/archive/page.tsx"),
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveRecordCard.tsx"),
-    source("app/market/[id]/page.tsx"),
+    source("components/market/MarketDetailController.tsx"),
     source("supabase/tests/membership_access_dynamic.sql"),
   ]);
 

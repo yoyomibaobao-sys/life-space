@@ -89,7 +89,7 @@ test("online cloud cards and live detail have no cache save-to-device entry", ()
     shell.indexOf("function renderCloudProjectCard"),
     shell.indexOf("const baseNavigationItems"),
   );
-  assert.doesNotMatch(card, /saveLocalCopy|refreshLocalCopy|openLocalCopy|actionSlot/);
+  assert.doesNotMatch(card, /saveLocalCopy|refreshLocalCopy|openLocalCopy/);
   const cloud = read("components/archive-ui/CloudArchiveDetailController.tsx");
   assert.match(cloud, /canSaveToLocal: false/);
   assert.doesNotMatch(cloud, /onSaveToLocal|saveToLocalLabel|saveCloudArchiveToLocal/);

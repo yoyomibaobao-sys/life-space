@@ -7,6 +7,7 @@ export type AndroidShellRouteKind =
   | "experience"
   | "following"
   | "market"
+  | "market-detail"
   | "guides"
   | "guide-detail"
   | "archive"
@@ -33,7 +34,7 @@ const WEB_ROUTES = [
   /^\/experience-cards(?:\/|$)/, /^\/profile\/(?:helpful|flowers|account|backup|export|orders|followers)(?:\/|$)/,
   /^\/user(?:\/|$)/, /^\/legal(?:\/|$)/, /^\/feedback(?:\/|$)/,
   /^\/(?:login|register|reset-password|auth|download|app-update|notifications|report)(?:\/|$)/,
-  /^\/market\//,
+  /^\/market\/[^/]+\/edit(?:\/|$)/,
 ];
 
 export function getAndroidRouteCapability(pathname: string): AndroidRouteCapability {
@@ -43,7 +44,7 @@ export function getAndroidRouteCapability(pathname: string): AndroidRouteCapabil
       /^\/local\/archive\//.test(path) || /^\/plant\//.test(path)) return "hybrid";
   if (path === "/plant" || path === "/") return "local";
   if (path === "/discover" || path === "/discover/search" || path === "/experience" ||
-      path === "/follow" || path === "/market" || /^\/archive\//.test(path)) return "online-controller";
+      path === "/follow" || path === "/market" || /^\/market\/[^/]+$/.test(path) || /^\/archive\//.test(path)) return "online-controller";
   if (WEB_ROUTES.some((pattern) => pattern.test(path))) return "online-web";
   return "unsupported";
 }
@@ -173,6 +174,8 @@ export function parseAndroidShellPath(
   if (path === "/experience") return { kind: "experience" };
   if (path === "/follow") return { kind: "following" };
   if (path === "/market") return { kind: "market" };
+  const marketDetail = path.match(/^\/market\/([^/]+)$/);
+  if (marketDetail) return { kind: "market-detail", id: decodeURIComponent(marketDetail[1]) };
   if (path === "/plant") return { kind: "guides" };
 
   const localArchive = path.match(/^\/local\/archive\/([^/]+)$/);

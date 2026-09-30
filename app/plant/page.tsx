@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -228,7 +228,11 @@ function FilterSelect({
   );
 }
 
-export default function PlantIndexPage() {
+export default function PlantIndexPage({ offline = false, offlineDirectory = [], offlineSignedIn = false }: {
+  offline?: boolean;
+  offlineDirectory?: OfflineGuideDirectoryEntry[];
+  offlineSignedIn?: boolean;
+} = {}) {
   const { language, t } = useLanguage();
   const categoryLabels = t.plant.categories as Record<string, string>;
   const lightOptions = t.plant.light_options;
@@ -405,12 +409,36 @@ export default function PlantIndexPage() {
   }, []);
 
   useEffect(() => {
+    if (offline) {
+      const entries = offlineDirectory.filter((entry) => entry.category === "plant");
+      setPlants(entries.map((entry) => ({ id: entry.id || entry.plantId || entry.label,
+        slug: entry.plantSlug, common_name: entry.label, scientific_name: entry.nameEn,
+        category: "all", is_active: true })));
+      setAliases(entries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
+        species_id: entry.id || entry.plantId || entry.label, alias_name: alias,
+      }))));
+      setBasicOverviews(entries.filter((entry) => entry.overviewZh).map((entry) => ({
+        species_id: entry.id || entry.plantId || entry.label, summary: entry.overviewZh || "",
+      })) as BasicOverview[]);
+      setBasicOverviewsEn(entries.filter((entry) => entry.overviewEn).map((entry) => ({
+        species_id: entry.id || entry.plantId || entry.label, summary: entry.overviewEn || "",
+      })) as BasicOverview[]);
+      setParameters(entries.filter((entry) => entry.plantCoreParameters).map((entry) => ({
+        species_id: entry.id || entry.plantId || entry.label, ...entry.plantCoreParameters,
+      })) as PlantParameterLite[]);
+      setIsSignedIn(offlineSignedIn);
+      setLoading(false);
+      setPlantCatalogError(false);
+      return;
+    }
+    let cancelled = false;
     async function load() {
       setLoading(true);
 
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      if (cancelled) return;
 
       setIsSignedIn(Boolean(user));
 
@@ -469,6 +497,7 @@ export default function PlantIndexPage() {
         user ? getGuideInterestCount(user.id) : Promise.resolve(null),
       ]);
 
+      if (cancelled) return;
       setPlants(plantData || []);
       setAliases(aliasData || []);
       setPlantCatalogError(Boolean(plantError || aliasError));
@@ -480,12 +509,22 @@ export default function PlantIndexPage() {
     }
 
     void load().catch(() => {
-      setPlantCatalogError(true);
-      setLoading(false);
+      if (!cancelled) { setPlantCatalogError(true); setLoading(false); }
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [offline, offlineDirectory, offlineSignedIn]);
 
   useEffect(() => {
+    if (offline) {
+      setPublicGuides(offlineDirectory.filter((entry) => entry.category !== "plant" || entry.source === "public_guide")
+        .map((entry) => ({ id: entry.id || entry.label, category: entry.category || "other",
+          name: entry.label, name_en: entry.nameEn, source: "preset" as const,
+          summary: entry.overviewZh, summary_en: entry.overviewEn, is_active: true })));
+      setPublicGuideSections([]);
+      setPublicGuidesLoading(false);
+      setPublicGuidesError(false);
+      return;
+    }
     let cancelled = false;
 
     async function loadPublicGuides() {
@@ -554,7 +593,7 @@ export default function PlantIndexPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [offline, offlineDirectory]);
 
   useEffect(() => {
     if (loading || (query && publicGuidesLoading) || !searchStateRestored || pendingScrollYRef.current === null) return;

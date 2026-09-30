@@ -15,7 +15,7 @@ const read = (relativePath) =>
 test("offline profile does not use the network-only ProfilePage render path", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const profile = read("app/profile/page.tsx");
-  const offlineProfile = read("components/profile/AndroidProfileController.tsx");
+  const offlineProfile = read("components/profile/AndroidProfileController.tsx") + read("components/profile/MobileProfilePresentation.tsx");
 
   assert.match(profile, /await supabase\.auth\.getUser/);
   assert.match(profile, /router\.push\(buildLoginHref\("\/profile"\)\)/);

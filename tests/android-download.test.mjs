@@ -209,7 +209,7 @@ test("website exposes one download page before and after login", () => {
   const page = read("app/download/android/page.tsx");
   const home = read("app/page.tsx");
   const login = read("app/login/page.tsx");
-  const profile = read("app/profile/page.tsx");
+  const profile = read("app/profile/page.tsx") + read("components/profile/MobileProfilePresentation.tsx");
   const footer = read("components/SiteFooter.tsx");
   const experience = read("app/experience-cards/[id]/page.tsx");
 
@@ -223,7 +223,7 @@ test("website exposes one download page before and after login", () => {
   assert.match(login, /href="\/download\/android"/);
   assert.match(profile, /href: "\/download\/android"/);
   assert.match(profile, /href: "\/"/);
-  assert.match(profile, /isNativeApp === true[\s\S]*\? \[\]/);
+  assert.match(profile, /native: isNativeApp === true/);
   assert.match(footer, /href="\/download\/android"/);
   assert.match(experience, /<AndroidAppDownloadPrompt \/>/);
 });

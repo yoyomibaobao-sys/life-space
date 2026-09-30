@@ -34,6 +34,7 @@ type Props = {
   ended?: boolean;
   isPublic?: boolean;
   allowTaxonomyEdit?: boolean;
+  taxonomyUnavailableLabel?: string;
   onChangeCategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
   onToggleEnded?: () => void;
@@ -58,6 +59,7 @@ export default function MobileArchiveActions({
   ended,
   isPublic,
   allowTaxonomyEdit = true,
+  taxonomyUnavailableLabel,
   onChangeCategory,
   onChangeGroup,
   onToggleEnded,
@@ -141,6 +143,8 @@ export default function MobileArchiveActions({
                   }}
                   trailing={<UiIcon name="chevron-right" size={16} />}
                 />
+              ) : taxonomyUnavailableLabel ? (
+                <ActionButton label={taxonomyUnavailableLabel} disabled onClick={() => undefined} />
               ) : null}
               {onTogglePublic ? (
                 <ActionButton
@@ -279,18 +283,21 @@ function ActionButton({
   onClick,
   danger = false,
   trailing,
+  disabled = false,
 }: {
   label: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   danger?: boolean;
   trailing?: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      style={danger ? dangerActionStyle : actionStyle}
+      disabled={disabled}
+      style={{ ...(danger ? dangerActionStyle : actionStyle), ...(disabled ? { opacity: 0.56 } : {}) }}
     >
       <span>{label}</span>
       {trailing}

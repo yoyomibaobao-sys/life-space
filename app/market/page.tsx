@@ -59,6 +59,10 @@ export default function MarketPage() {
     async function loadMarketPosts() {
       if (!online) {
         if (cancelled) return;
+        setItems([]);
+        setProfiles(new Map());
+        setArchives(new Map());
+        setCurrentUserId(null);
         setLoading(false);
         return;
       }
@@ -296,7 +300,7 @@ export default function MarketPage() {
 
         {loading ? (
           <section style={emptyStyle}>{t.market.loading}</section>
-        ) : !online && items.length === 0 ? (
+        ) : !online ? (
           <MobileNetworkUnavailableState />
         ) : visibleItems.length === 0 ? (
           <section style={emptyStyle}>

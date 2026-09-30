@@ -853,10 +853,10 @@ test("food examples specify usable quantities, stages and distinct safety contro
 });
 
 test("non-plant details remove redundant preset, creation and guest prompts while keeping parent links", () => {
-  const page = source("app/plant/guide/[id]/page.tsx");
+  const page = source("components/plant-detail/GuideDetailView.tsx");
   assert.doesNotMatch(page, /className=\{styles\.sourceLabel\}|className=\{styles\.bottomAction\}/);
-  assert.match(page, /<Link href=\{fallbackHref\} className=\{styles\.categoryBadge\}/);
-  assert.match(page, /<Link href=\{`\$\{fallbackHref\}&category=/);
+  assert.match(page, /<InternalLink href=\{fallbackHref\} className=\{styles\.categoryBadge\}/);
+  assert.match(page, /<InternalLink href=\{`\$\{fallbackHref\}&category=/);
   assert.match(page, /signedIn \? <span>\{copy\.membershipForFull\}<\/span> : null/);
   assert.equal(publicGuideCopyZh(), "登录／注册后查看基础概要");
   function publicGuideCopyZh() { return guideLibrary.publicGuideCopy.zh.registerForOverview; }

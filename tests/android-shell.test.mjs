@@ -136,7 +136,7 @@ test("Android login uses one resize path and blocks IME extracted-text overlays"
 });
 
 test("mobile Market lightbox requests the dark native status bar", () => {
-  const marketDetail = read("app/market/[id]/page.tsx");
+  const marketDetail = read("components/market/MarketDetailView.tsx");
 
   assert.match(marketDetail, /setIsMobileViewport\(window\.innerWidth < 760\)/);
   assert.match(marketDetail, /isMobileViewport=\{isMobileViewport\}/);
@@ -185,7 +185,7 @@ test("Android updates notify automatically, stay official-only, and require the 
   const updateClient = read("lib/android-app-update.ts");
   const updateNotice = read("components/AppUpdateNotifier.tsx");
   const versionEntry = read("components/AndroidAppVersionEntry.tsx");
-  const profile = read("app/profile/page.tsx");
+  const profile = read("app/profile/page.tsx") + read("components/profile/MobileProfilePresentation.tsx");
   const home = read("app/page.tsx");
   const layout = read("app/layout.tsx");
 
@@ -231,7 +231,8 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(layout, /<AppUpdateNotifier \/>/);
   assert.doesNotMatch(updateNotice, /installAndroidUpdate|installUpdate\(/);
   assert.match(profile, /<AndroidAppVersionEntry \/>/);
-  assert.match(profile, /isNativeApp === true[\s\S]*\? \[\][\s\S]*href: "\/download\/android"/);
+  assert.match(profile, /native: isNativeApp === true/);
+  assert.match(profile, /href: "\/download\/android"/);
   assert.doesNotMatch(home, /explicitlyViewingIntroduction/);
   assert.doesNotMatch(layout, /manifest: "\/manifest\.webmanifest"/);
   assert.match(layout, /title: "有时·耕作网页版"/);

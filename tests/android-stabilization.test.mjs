@@ -261,3 +261,23 @@ test("local taxonomy and detail offer both levels; native header owns no duplica
     assert.match(read(source), /ArchiveProjectDetailView/);
   }
 });
+
+test("local project card trash preserves records and can be restored for its owner", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  globalThis.window = { indexedDB };
+  const db = await loadModule("lib/local-offline-db.ts");
+  const owner = { userId: "trash-owner" };
+  const project = await db.createLocalArchive({ title: "Recoverable", category: "system",
+    system_name: "Compost", local_owner_user_id: owner.userId, sync_destination: "local-only" });
+  await db.setLocalProjectTrashed(project.id, true, owner);
+  assert.ok(!(await db.listVisibleLocalArchiveSummaries(owner)).archives.some((item) => item.id === project.id));
+  assert.equal((await db.resolveLocalArchiveDetail(project.id, owner)).status, "not-found");
+  assert.equal((await db.listLocalProjectTrash(owner)).some((item) => item.id === project.id), true);
+  assert.equal((await db.listLocalProjectTrash({ userId: "another-owner" })).length, 0);
+  await assert.rejects(db.setLocalProjectTrashed(project.id, false, { userId: "another-owner" }), /没有权限/);
+  await db.setLocalProjectTrashed(project.id, false, owner);
+  assert.equal((await db.resolveLocalArchiveDetail(project.id, owner)).status, "ready");
+  assert.equal((await db.listLocalProjectTrash(owner)).length, 0);
+  delete globalThis.indexedDB;
+  delete globalThis.window;
+});
