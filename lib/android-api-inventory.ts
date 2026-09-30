@@ -1,6 +1,7 @@
 // Contract for every current Next route handler. Adding a handler requires
 // classifying it before any bundled Android caller may use it.
 export const androidNextApiInventory = {
+  "/api/health": "android-public-native",
   "/api/archives/[id]": "android-native",
   "/api/records/[id]": "android-native",
   "/api/media/[id]": "android-native",

@@ -43,20 +43,22 @@ test("one native connectivity subscription handles hot toggle, missed event on r
   document.visibilityState = "visible";
   const connectivity = await loadModule("lib/android-connectivity.ts", {
     "react": "export const useSyncExternalStore = () => {};",
-    "@capacitor/core": "export const Capacitor = { isNativePlatform: () => true };",
+    "@capacitor/core": "export const Capacitor = { isNativePlatform: () => true }; export const CapacitorHttp = { request: async () => ({ status: 200, data: { ok: true }, headers: {}, url: 'https://life-space.uk/api/health' }) };",
     "@capacitor/network": "export const Network = { getStatus: async () => globalThis.__connectivityTest.status(), addListener: async (_, listener) => globalThis.__connectivityTest.subscribe('network', listener) };",
     "@capacitor/app": "export const App = { addListener: async (_, listener) => globalThis.__connectivityTest.subscribe('resume', listener) };",
   });
   const changes = [];
   const unsubscribe = connectivity.subscribeAndroidConnectivity(() => changes.push(connectivity.isAndroidOnline()));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(connectivity.isAndroidOnline(), true);
   status = false;
   subscriptions.network({ connected: false });
   assert.equal(connectivity.isAndroidOnline(), false);
   status = true;
   subscriptions.resume();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(changes, [false, true]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(changes.includes(false));
+  assert.equal(changes.at(-1), true);
   assert.equal(connectivity.isAndroidOnline(), true);
   unsubscribe();
   delete globalThis.__connectivityTest;
@@ -69,9 +71,11 @@ test("one native connectivity subscription handles hot toggle, missed event on r
 
 test("signed-out cloud is an exclusive login state; remembered local content remains", () => {
   const shell = read("mobile-offline-src/main.tsx");
+  const auth = read("lib/android-auth-state.ts");
   assert.match(shell, /sourceFilter === "cloud" \? \(\s*<CloudLogin/);
   assert.match(shell, /sourceFilter !== "cloud" \? \(\s*filteredLocalArchives/);
-  assert.match(shell, /preserveLocalOwner: true/);
+  assert.match(auth, /preserveLocalOwner: true/);
+  assert.match(shell, /auth\.status === "signed-out"/);
   assert.match(shell, /setCloudArchives\(\[\]\)/);
   assert.match(shell, /if \(online\) return;[\s\S]*setActivityItems\(\[\]\)/);
 });

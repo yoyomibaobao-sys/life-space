@@ -32,7 +32,8 @@ test("offline profile does not use the network-only ProfilePage render path", ()
   assert.match(offlineProfile, /live\?\.isAdmin/);
   assert.match(read("components/profile/MobileProfilePresentation.tsx"), /export function MobileProfileModuleTabs/);
   assert.match(offlineProfile, /onLogout/);
-  assert.match(shell, /clearCloudOfflineCacheOnExplicitLogout/);
+  assert.match(shell, /explicitAndroidLogout/);
+  assert.match(read("lib/android-auth-state.ts"), /clearCloudOfflineCacheOnExplicitLogout/);
 });
 
 test("offline /profile can render from stored owner and identity snapshot", () => {

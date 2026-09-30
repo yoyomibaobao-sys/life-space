@@ -39,7 +39,11 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(source, /<PersonalSpaceMobileIdentity/);
   assert.match(source, /SHELL_IDENTITY_CACHE_PREFIX/);
   assert.match(source, /clearShellIdentityCache/);
-  assert.match(source, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
+  assert.match(source, /explicitAndroidLogout/);
+  assert.match(
+    read("lib/android-auth-state.ts"),
+    /auth\.signOut\(\{ scope: "local" \}\)/,
+  );
   assert.match(archivePage, /<PersonalSpaceMobileIdentity/);
   assert.match(sharedIdentity, /storageUsagePercent/);
   assert.match(source, /<HomeSectionTabs/);

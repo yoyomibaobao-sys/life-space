@@ -58,7 +58,14 @@ import {
 } from "@/lib/archive-categories";
 
 import AuthCaptcha, { AUTH_CAPTCHA_ENABLED } from "@/components/AuthCaptcha";
-import { loginBundledWithTurnstile, restoreBundledSession } from "@/lib/android-auth-session";
+import { loginBundledWithTurnstile } from "@/lib/android-auth-session";
+import {
+  beginAndroidAuthLogin,
+  completeAndroidAuthLogin,
+  explicitAndroidLogout,
+  failAndroidAuthLogin,
+  useAndroidAuthState,
+} from "@/lib/android-auth-state";
 import UiIcon from "@/components/ui/UiIcon";
 import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import ArchiveProjectCard from "@/components/archive-ui/ArchiveProjectCard";
@@ -152,7 +159,6 @@ import {
 } from "@/lib/archive-category-settings";
 import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
 import { buildOfflineProfileSnapshot } from "@/lib/android-offline-profile";
-import { clearCloudOfflineCacheOnExplicitLogout } from "@/lib/cloud-offline-cache-session";
 import {
   liveCloudCardImageUrl,
   parseAndroidShellPath,
@@ -636,7 +642,8 @@ function App() {
   const [migrationWarning, setMigrationWarning] = useState(false);
   const [toast, setToast] = useState("");
   const online = useAndroidConnectivity();
-  const [cloudUserId, setCloudUserId] = useState<string | null>(null);
+  const auth = useAndroidAuthState();
+  const cloudUserId = auth.status === "signed-in" ? auth.sessionUserId : null;
   const [cloudArchives, setCloudArchives] = useState<CloudArchiveSummary[]>([]);
   const [cloudTaxonomy, setCloudTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
   const [localTaxonomy, setLocalTaxonomy] = useState<ProjectTaxonomyEntry[]>([]);
@@ -725,10 +732,19 @@ function App() {
 
   const loadList = useCallback(async (context?: LocalArchiveOwnerContext | null) => {
     const resolvedContext = context === undefined ? ownerContext : context;
+    const canUsePrivateCloudData = Boolean(
+      auth.status === "signed-in" &&
+      auth.sessionUserId &&
+      resolvedContext?.userId === auth.sessionUserId,
+    );
     const [result, cachedCloud, pending] = await Promise.all([
       listVisibleLocalArchiveSummaries(resolvedContext),
-      listVisibleCloudOfflineArchiveSummaries(resolvedContext),
-      listPendingCloudSyncSummaries(resolvedContext),
+      canUsePrivateCloudData
+        ? listVisibleCloudOfflineArchiveSummaries(resolvedContext)
+        : Promise.resolve([]),
+      canUsePrivateCloudData
+        ? listPendingCloudSyncSummaries(resolvedContext)
+        : Promise.resolve([]),
     ]);
     setArchives(result.archives);
     setCloudCaches(cachedCloud);
@@ -737,7 +753,7 @@ function App() {
     void listVisibleLocalTaxonomyItems(resolvedContext)
       .then((rows) => setLocalTaxonomy(mapLocalProjectTaxonomy(rows)))
       .catch((error) => console.warn("local taxonomy", error));
-  }, [ownerContext]);
+  }, [auth.sessionUserId, auth.status, ownerContext]);
 
   const loadCloudList = useCallback(async (userId?: string | null) => {
     const resolvedUserId = userId || cloudUserId;
@@ -862,62 +878,38 @@ function App() {
   }, [online]);
 
   useEffect(() => {
-    let cancelled = false;
-    let activeSessionUserId: string | null = null;
-
-    function applySession(user?: { id?: string; email?: string | null } | null) {
-      if (cancelled) return;
-      if (!user?.id) {
-        setCloudUserId(null);
-        return;
-      }
-
-      const nextOwner = { userId: user.id, email: user.email || null };
-      activeSessionUserId = user.id;
-      rememberLocalOwnerContext(nextOwner);
+    if (auth.status === "checking") return;
+    if (auth.status === "signed-in" && auth.sessionUserId) {
+      const nextOwner = auth.rememberedOwner || {
+        userId: auth.sessionUserId,
+        email: auth.email,
+      };
       setOwner(nextOwner);
-      setCloudUserId(user.id);
-      void loadShellIdentity(user.id);
+      void loadList(nextOwner);
+      if (online) void loadShellIdentity(auth.sessionUserId);
+      return;
     }
 
-    void restoreBundledSession()
-      .then((user) => applySession(user))
-      .catch(() => undefined);
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT") {
-        clearShellIdentityCache(activeSessionUserId);
-        activeSessionUserId = null;
-        setCloudUserId(null);
-        setCloudArchives([]);
-        setCloudTaxonomy([]);
-        setSpaceProfile(null);
-        setMembership(null);
-        setExperienceCardCount(0);
-        void Promise.all([
-          listVisibleLocalArchiveSummaries(loadRememberedLocalOwnerContext()),
-          listVisibleCloudOfflineArchiveSummaries(loadRememberedLocalOwnerContext()),
-          listPendingCloudSyncSummaries(loadRememberedLocalOwnerContext()),
-        ]).then(([result, cachedCloud, pending]) => {
-          if (cancelled) return;
-          setArchives(result.archives);
-          setCloudCaches(cachedCloud);
-          setUnownedCount(result.unownedCount);
-          setPendingSync(pending);
-        }).catch(() => undefined);
-        return;
-      }
-
-      applySession(session?.user);
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [loadShellIdentity]);
+    clearShellIdentityCache(owner?.userId);
+    setCloudArchives([]);
+    setCloudTaxonomy([]);
+    setCloudCaches([]);
+    setPendingSync([]);
+    setSpaceProfile(null);
+    setMembership(null);
+    setExperienceCardCount(0);
+    void loadList(ownerContext);
+  }, [
+    auth.email,
+    auth.rememberedOwner,
+    auth.sessionUserId,
+    auth.status,
+    loadList,
+    loadShellIdentity,
+    online,
+    owner?.userId,
+    ownerContext,
+  ]);
 
   useEffect(() => {
     if (!online || !cloudUserId || !ownerContext) return;
@@ -1201,8 +1193,7 @@ function App() {
   ]);
 
   async function logoutFromProfile() {
-    await clearCloudOfflineCacheOnExplicitLogout(owner, { preserveLocalOwner: true });
-    await supabase.auth.signOut({ scope: "local" });
+    await explicitAndroidLogout();
     setScreen({ kind: "list" });
   }
 
@@ -1291,7 +1282,11 @@ function App() {
   const filteredCloudCaches = cloudCaches.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
     (!groupFilter || archive.group_name === groupLabel));
-  const liveCloudWorkspace = online && Boolean(cloudUserId) && !cloudError;
+  const liveCloudWorkspace =
+    online &&
+    auth.status === "signed-in" &&
+    Boolean(cloudUserId) &&
+    !cloudError;
   const filteredCloudArchives = cloudArchives.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.sub_tag_id === subcategoryFilter) &&
     (!groupFilter || archive.group_tag_id === groupFilter));
@@ -1611,11 +1606,13 @@ function App() {
               </>
             ) : (
               <>
-                {online && !cloudUserId && sourceFilter === "cloud" ? (
+                {online && auth.status === "signed-out" && sourceFilter === "cloud" ? (
                   <CloudLogin copy={copy} onSuccess={(userId) => void loadCloudList(userId)} />
                 ) : null}
                 {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
-                {!(online && !cloudUserId && sourceFilter === "cloud") && filteredCloudCaches.length ? (
+                {auth.status === "signed-in" &&
+                (!online || Boolean(cloudError)) &&
+                filteredCloudCaches.length ? (
                   <div className="project-list" data-android-cloud-cache-list="true">
                     {filteredCloudCaches.map((archive) => (
                       <ArchiveProjectCard
@@ -1678,6 +1675,7 @@ function App() {
           language={language}
           copy={copy}
           owner={owner}
+          canCreatePendingCloud={auth.status === "signed-in"}
           guide={screen.guide}
           onCancel={goList}
           onSaved={async (archive) => {
@@ -1979,8 +1977,10 @@ function App() {
         <div data-android-shell-page="following">
           {!online ? (
             <MobileNetworkUnavailableState onReconnect={reconnect} />
-          ) : !cloudUserId ? (
+          ) : auth.status === "signed-out" ? (
             <CloudLogin copy={copy} onSuccess={() => setScreen({ kind: "following" })} />
+          ) : auth.status === "checking" ? (
+            <section className="panel empty">{copy.cloudLoading}</section>
           ) : (
             <FollowPage />
           )}
@@ -2026,7 +2026,7 @@ function App() {
               })}
               online={online && cloudUserId === owner?.userId}
               onBack={() => setScreen({ kind: "list" })}
-              onLogout={cloudUserId ? () => void logoutFromProfile() : undefined}
+              onLogout={auth.status === "signed-in" ? () => void logoutFromProfile() : undefined}
             />
           </MobileShellErrorBoundary>
         </div>
@@ -2059,7 +2059,7 @@ function App() {
         online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
       {screen.kind === "guide-detail" ? <OfflineGuideDetail guide={activeGuide} owner={owner} language={language} copy={copy} onBack={() => window.history.back()} onReconnect={reconnect} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">{[...archives, ...cloudCaches].filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}</div><div className="action-row"><button type="button" className="primary-button" onClick={() => setScreen({ kind: "new-project" })}>{copy.newProject}</button></div></section> : null}
-      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{cloudUserId ? <button type="button" className="danger-button" onClick={() => void supabase.auth.signOut({ scope: "local" })}>{copy.logout}</button> : null}</div></section> : null}
+      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section> : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
@@ -2218,11 +2218,14 @@ function CloudLogin({
 
     setSubmitting(true);
     setMessage("");
+    beginAndroidAuthLogin();
     try {
       const user = await loginBundledWithTurnstile({ email: normalizedEmail, password,
         captchaToken, siteKeyConfigured: AUTH_CAPTCHA_ENABLED });
+      completeAndroidAuthLogin(user);
       onSuccess(user.id);
     } catch (error) {
+      failAndroidAuthLogin();
       setMessage(
         `${copy.loginFailed}: ${error instanceof Error ? error.message : ""}`,
       );
@@ -2349,6 +2352,7 @@ function ProjectForm({
   language,
   copy,
   owner,
+  canCreatePendingCloud = false,
   archive,
   guide,
   onCancel,
@@ -2357,13 +2361,14 @@ function ProjectForm({
   language: Language;
   copy: OfflineCopy;
   owner: StoredLocalOwnerContext | null;
+  canCreatePendingCloud?: boolean;
   archive?: LocalArchive;
   guide?: SystemNameCandidate;
   onCancel: () => void;
   onSaved: (archive: LocalArchive) => void | Promise<void>;
 }) {
   const [destination, setDestination] = useState<"pending-cloud" | "local-only">(
-    owner?.userId ? "pending-cloud" : "local-only",
+    owner?.userId && canCreatePendingCloud ? "pending-cloud" : "local-only",
   );
   const [title, setTitle] = useState(archive?.title || guide?.label || "");
   const [category, setCategory] = useState<ArchiveCategory>(archive?.category || guide?.category || "plant");
@@ -2436,7 +2441,7 @@ function ProjectForm({
           local_owner_email: owner?.email || null,
           local_owner_marked_at: owner ? new Date().toISOString() : null,
           sync_destination:
-            owner?.userId && destination === "pending-cloud"
+            owner?.userId && canCreatePendingCloud && destination === "pending-cloud"
               ? "pending-cloud"
               : "local-only",
         });
@@ -2488,7 +2493,7 @@ function ProjectForm({
             <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div>
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
-          {!archive && owner?.userId ? (
+          {!archive && owner?.userId && canCreatePendingCloud ? (
             <div className="field">
               <label>{copy.destinationPendingCloud}</label>
               <select value={destination} onChange={(event) => setDestination(event.target.value as "pending-cloud" | "local-only")}>

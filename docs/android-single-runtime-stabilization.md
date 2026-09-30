@@ -6,19 +6,56 @@ production deployment is produced by this checkpoint.
 
 ## Connectivity and data ownership
 
-`lib/android-connectivity.ts` publishes one observable status. Native Android
-uses Capacitor Network `getStatus` and `networkStatusChange`; resume, focus and
-visibility recheck it. Browser mode uses browser online/offline events. Shell,
-Follow, Market, cloud detail writes, auth restore and pending sync read this
-source. A connectivity transition changes mounted data/capabilities without
-reloading the document. Discovery, search, public detail, Follow and Market
-stop rendering live data as soon as status turns offline. Recovery reloads
-current feeds and coalesces owner recovery work by connection epoch.
+`lib/android-connectivity.ts` publishes transport, service and final business
+status. Capacitor Network only determines `connected` or `disconnected`.
+Connected transport enters `checking`; a native `CapacitorHttp` request to
+`https://life-space.uk/api/health` must return `{ "ok": true }` before the app
+becomes online. Failed or timed-out health checks make the app offline. The
+probe has a 2500 ms timeout, debounce, single-flight execution and a generation
+guard so an old response cannot overwrite a newer transport transition.
+
+Initial boot, native network changes, resume, focus, visible
+`visibilitychange`, disconnected-to-connected transitions and manual reconnect
+all recheck reachability. Wi-Fi, mobile data and VPN are only possible network
+paths; no VPN flag is a LifeSpace product state. A transport with an
+unreachable LifeSpace service is offline, while a reachable service without a
+VPN is online.
 
 The remembered local owner identifies IndexedDB data; a verified Supabase
-session independently permits cloud workspace access. Explicit Android logout
-clears cloud snapshots according to the existing pending preservation rule,
-but retains the remembered local owner and local projects.
+session independently permits cloud workspace access.
+`lib/android-auth-state.ts` is the bundled Android auth state machine. Its
+`checking`, `signed-out` and `signed-in` states do not derive from connectivity.
+A persisted, previously validated session remains signed in while the service
+is offline. Recovery revalidates the same session without first publishing
+signed-out. Only explicit logout or a server-confirmed invalid session can
+publish signed-out.
+
+The four business combinations are:
+
+1. Online + signed-in: live cloud, local data and authenticated online
+   capabilities.
+2. Online + signed-out: local data and public online content; no private cloud
+   data or cloud writes.
+3. Offline + signed-in: local data, the same owner's cloud cache and pending
+   queue, including offline pending cloud work.
+4. Offline + signed-out: local data and bundled public material only; no
+   private cache or pending writes under an old identity.
+
+Explicit logout works online or offline. It writes the explicit signed-out
+marker, clears the locally recoverable Supabase session and removes synced
+cloud snapshots under the existing cache rule. It retains remembered local
+ownership, local-only projects and every pending cloud project, record and
+image. Pending rows remain scoped to their original owner: only the same
+account can resume them; a different account cannot list or sync them.
+
+Connectivity transitions change mounted data sources and capabilities only.
+They do not reload or replace the document, reset the current screen, clear
+authenticated identity or force a login route.
+
+Android presentation remains one shared presentation with different data
+sources and capabilities. Live cloud, cloud cache, pending cloud and local-only
+are data/runtime states, not four separate user spaces. The user-facing source
+model remains cloud and local.
 
 ## Route capability matrix
 
@@ -70,3 +107,9 @@ the device diagnosis and user data before invoking it on a real installation.
   further visual parity needs device review.
 - Public record cards currently use a read-only record renderer inside the
   canonical detail hierarchy; owner records use `ArchiveRecordCard`.
+- Follow presentation parity remains for the next UI round.
+- Market internal detail remains for the next UI round.
+- Guide presentation parity remains for the next UI round.
+- Project-card action menus and final Profile parity remain for later rounds.
+- The centered add action and the complete +Project flow are not completed by
+  this auth/connectivity checkpoint.

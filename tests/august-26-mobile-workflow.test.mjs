@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function source(path) {
-  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+  return (await readFile(new URL(`../${path}`, import.meta.url), "utf8"))
+    .replaceAll("\r\n", "\n");
 }
 
 const externalUrlModuleSource = (await source("lib/external-url.ts")).replace(

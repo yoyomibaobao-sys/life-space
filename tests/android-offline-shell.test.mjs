@@ -52,8 +52,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /syncAllPendingCloudArchives/);
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
-  assert.match(source, /restoreBundledSession/);
-  assert.match(read("lib/android-auth-session.ts"), /auth\.getSession/);
+  assert.match(source, /useAndroidAuthState/);
+  assert.match(read("lib/android-auth-state.ts"), /auth\.getSession/);
   assert.match(source, /supabase[\s\S]*?\.from\("archives"\)/);
   assert.match(source, /\.order\("created_at", \{ ascending: false \}\)/);
   assert.doesNotMatch(source, /\.order\("updated_at", \{ ascending: false \}\)/);
@@ -153,11 +153,14 @@ test("new local projects inherit the signed-in account only on this device", () 
 
 test("explicit Android sign-out hides account-bound offline cache state", () => {
   const source = read("mobile-offline-src/main.tsx");
+  const auth = read("lib/android-auth-state.ts");
 
-  assert.match(source, /event === "SIGNED_OUT"/);
-  assert.match(source, /preserveLocalOwner: true/);
+  assert.match(source, /explicitAndroidLogout/);
+  assert.match(auth, /event !== "SIGNED_OUT"/);
+  assert.match(auth, /preserveLocalOwner: true/);
+  assert.match(auth, /markExplicitlySignedOut/);
   assert.match(source, /setCloudArchives\(\[\]\)/);
-  assert.match(source, /listVisibleCloudOfflineArchiveSummaries\(loadRememberedLocalOwnerContext\(\)\)/);
+  assert.match(source, /canUsePrivateCloudData[\s\S]*listVisibleCloudOfflineArchiveSummaries/);
   assert.match(source, /setCloudCaches\(cachedCloud\)/);
 });
 
