@@ -115,15 +115,29 @@ test("/plant/:id offline links enter guide-detail", () => {
   );
 });
 
-test("network-only links stay inside the offline shell", () => {
+test("profile links stay inside the shell and offline-readable information remains available", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.equal(parseAndroidShellPath("/membership/payment")?.kind, "network-required");
+  assert.equal(parseAndroidShellPath("/membership/payment")?.kind, "membership-payment");
+  assert.equal(parseAndroidShellPath("/membership/refund")?.kind, "membership-refund");
   assert.equal(parseAndroidShellPath("/profile/project-categories")?.kind, "project-categories");
   assert.equal(parseAndroidShellPath("/profile/recent")?.kind, "recent");
   assert.equal(parseAndroidShellPath("/profile/trash")?.kind, "trash");
+  assert.equal(parseAndroidShellPath("/membership/benefits")?.kind, "membership-benefits");
+  assert.equal(parseAndroidShellPath("/profile/data-security")?.kind, "data-security");
+  assert.equal(parseAndroidShellPath("/legal")?.kind, "legal");
+  assert.deepEqual(parseAndroidShellPath("/legal/privacy"), { kind: "legal-page", id: "privacy" });
+  assert.equal(parseAndroidShellPath("/feedback")?.kind, "feedback");
+  assert.equal(parseAndroidShellPath("/app-update")?.kind, "app-update");
   assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "network-required");
-  assert.equal(parseAndroidShellPath("/legal")?.kind, "network-required");
+  assert.match(shell, /<AndroidProfileInfoPage/);
   assert.match(shell, /showToast\(copy\.needNetwork\)/);
   assert.match(shell, /event\.preventDefault\(\)/);
-  assert.match(shell, /event\.preventDefault\(\)/);
+});
+
+test("profile child-page back restores the prior shell scroll position", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /scrollY: window\.scrollY/);
+  assert.match(shell, /restoreShellScroll\(event\.state\?\.scrollY\)/);
+  assert.match(shell, /function goBackInShell/);
+  assert.match(shell, /window\.history\.back\(\)/);
 });

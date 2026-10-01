@@ -135,6 +135,11 @@ test("pending sync validates taxonomy before insert and keeps record/image path"
 });
 
 test("taxonomy safety rules are identical in both project charters", () => {
-  const rules = read("AGENTS.md").split("### 五、云端分类身份与数据安全")[1].split("\n\n")[1].trim();
-  assert.ok(read("总纲.md").includes(rules));
+  const agents = read("AGENTS.md").replace(/\r\n/g, "\n");
+  const charter = read("总纲.md").replace(/\r\n/g, "\n");
+  const section = agents.split("### 五、云端分类身份与数据安全")[1];
+  assert.ok(section);
+  const rules = section.split("\n\n")[1]?.trim();
+  assert.ok(rules);
+  assert.ok(charter.includes(rules));
 });

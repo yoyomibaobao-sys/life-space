@@ -81,11 +81,17 @@ test("signed-out cloud links to one bundled login screen; remembered local conte
 });
 
 test("route registry handles all profile, user and membership destinations", () => {
-  for (const route of ["/profile/recent", "/profile/trash", "/profile/project-categories"]) {
+  for (const route of ["/profile/recent", "/profile/trash", "/profile/project-categories", "/feedback", "/app-update",
+    "/membership/payment", "/membership/refund"]) {
     assert.equal(getAndroidRouteCapability(route), "hybrid");
+    assert.notEqual(parseAndroidShellPath(route)?.kind, "network-required");
   }
-  for (const route of ["/profile/helpful", "/profile/followers", "/membership", "/membership/payment",
-    "/membership/benefits", "/user/person/profile", "/admin/memberships", "/legal"]) {
+  for (const route of ["/membership/benefits", "/profile/data-security", "/legal", "/legal/privacy", "/legal/terms", "/legal/refunds", "/legal/contact"]) {
+    assert.equal(getAndroidRouteCapability(route), "local");
+    assert.notEqual(parseAndroidShellPath(route)?.kind, "network-required");
+  }
+  for (const route of ["/profile/helpful", "/profile/followers", "/membership",
+    "/user/person/profile", "/admin/memberships"]) {
     assert.equal(getAndroidRouteCapability(route), "online-web");
     assert.equal(parseAndroidShellPath(route)?.kind, "network-required");
   }

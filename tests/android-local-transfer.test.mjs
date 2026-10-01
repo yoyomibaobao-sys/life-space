@@ -26,7 +26,7 @@ test("offline transfer preserves its entry but cannot call the transfer engine",
 
 test("signed-out transfer returns from bundled login to confirmation with private default", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(shell, /kind: "cloud-login"; returnTo:[^\n]*"local-transfer"; archiveId\?: string/);
+  assert.match(shell, /kind: "cloud-login"; returnTo:[^\r\n]*"local-transfer"[^\r\n]*"membership-payment"[^\r\n]*"membership-refund"; archiveId\?: string/);
   assert.match(shell, /destination\.returnTo === "local-transfer" && destination\.archiveId[\s\S]*setTransferVisibility\("private"\)[\s\S]*kind: "local-transfer"/);
   assert.match(shell, /screen\.kind === "local-transfer"[\s\S]*data-android-local-transfer="true"/);
   assert.match(shell, /上传到云端不等于公开/);

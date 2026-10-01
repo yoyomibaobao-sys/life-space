@@ -2,15 +2,28 @@
 
 import { useEffect, useState } from "react";
 import MobileProfileView from "@/components/profile/MobileProfileView";
-import { mobileProfileNavigation, profileIdentityAvatarStyle, profileIdentityAvatarFallbackStyle, savedUsernameStyle } from "@/components/profile/MobileProfilePresentation";
+import {
+  androidProfileIdentityAvatarFallbackStyle,
+  androidProfileIdentityAvatarStyle,
+  androidProfileIdentityEmailStyle,
+  androidProfileIdentityUsernameStyle,
+  mobileProfileNavigation,
+  profileIdentityAvatarColumnStyle,
+  profileIdentityDetailsStyle,
+  profileIdentityInlineControlStyle,
+  profileIdentityLocationButtonStyle,
+  profileIdentityLocationRowStyle,
+  profileIdentityMemberNumberStyle,
+  profileIdentityMembershipStyle,
+} from "@/components/profile/MobileProfilePresentation";
 import type { MobileProfileModule } from "@/components/profile/MobileProfilePresentation";
 import UiIcon from "@/components/ui/UiIcon";
 import { buildLocationTextFromFields, buildRegionDisplay, getCountryName, getLocalizedCountryOptions, getRegionOptions, hasPresetRegions } from "@/lib/region-shared";
 import { loadAndroidProfileLive } from "@/lib/android-profile-controller";
 import type { OfflineProfileSnapshot } from "@/lib/android-offline-profile";
-import { formatAccountNumber } from "@/lib/account-number";
+import { parseAccountNumber } from "@/lib/account-number";
 import { formatStorage } from "@/lib/user-profile-shared";
-import { getMembershipSummary, getUserTypeLabel } from "@/lib/membership";
+import { formatMembershipDate, getMembershipEndDate, getUserTypeLabel } from "@/lib/membership";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
 import { Browser } from "@capacitor/browser";
@@ -30,7 +43,7 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
   const live = snapshot.userId ? loaded : null;
   const [error, setError] = useState("");
   const [module, setModule] = useState<MobileProfileModule | null>(null);
-  const [editingProfile, setEditingProfile] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<"username" | "location" | null>(null);
   const [name, setName] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [countryName, setCountryName] = useState("");
@@ -38,7 +51,7 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
   const [cityName, setCityName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploading, setUploading] = useState(false);
-  useEffect(() => { if (!online) setEditingProfile(false); }, [online]);
+  useEffect(() => { if (!online) setEditingProfile(null); }, [online]);
   useEffect(() => {
     if (!online || !snapshot.userId) { setLive(null); return; }
     let active = true;
@@ -66,6 +79,19 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
   const userType = getUserTypeLabel({ signedIn: Boolean(snapshot.userId), membership,
     loading: false, failed: Boolean(error) }, language);
   const needNetwork = language === "zh" ? "需要联网。" : "A network connection is required.";
+  const parsedAccountNumber = parseAccountNumber(profile?.account_number || snapshot.accountNumber);
+  const accountNumber = parsedAccountNumber
+    ? `No.${String(parsedAccountNumber.registrationSequence).padStart(5, "0")}`
+    : "";
+  const membershipEndDate = getMembershipEndDate(membership);
+  const hasMembershipTerm = Boolean(
+    membershipEndDate && membership && ["trial", "basic", "large"].includes(String(membership.plan)),
+  );
+  const membershipLine = hasMembershipTerm
+    ? `${userType} · ${membership?.can_create_content === true
+      ? (language === "en" ? "Valid until" : "有效至")
+      : (language === "en" ? "Ended" : "已到期")} ${formatMembershipDate(membershipEndDate, language)}`
+    : userType;
 
   const locationParts = {
     countryCode: profile?.country_code || snapshot.countryCode,
@@ -74,20 +100,21 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     cityName: profile?.city_name || snapshot.cityName,
     location: profile?.location || snapshot.location,
   };
-  function startEditing() {
+  function startEditing(field: "username" | "location") {
     if (!online || !live) return;
     setName(profile?.username || "");
     setCountryCode(locationParts.countryCode || "");
     setCountryName(locationParts.countryName || "");
     setRegionName(locationParts.regionName || "");
     setCityName(locationParts.cityName || "");
-    setEditingProfile(true);
+    setEditingProfile(field);
   }
   async function saveProfile() {
     if (!online || !snapshot.userId || !live || savingProfile) return;
     const value = name.trim();
     if (value.length < 2) { setError(t.profile.username_too_short); return; }
     if (countryCode === "OTHER" && !countryName.trim()) { setError(t.profile.custom_country_required); return; }
+    const editingMode = editingProfile;
     setSavingProfile(true);
     setError("");
     try {
@@ -101,7 +128,7 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
       if (result.error) throw result.error;
       setLive(await loadAndroidProfileLive(snapshot.userId));
       onProfileSaved?.();
-      setEditingProfile(false);
+      setEditingProfile((current) => current === editingMode ? null : current);
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setSavingProfile(false); }
   }
@@ -128,53 +155,136 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     finally { setUploading(false); event.target.value = ""; }
   }
 
+  const countryDisplay = getCountryName(locationParts.countryCode, locationParts.countryName, language);
+  const locationDisplayParts = [countryDisplay, locationParts.regionName, locationParts.cityName]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  const locationDisplay = locationDisplayParts.length
+    ? locationDisplayParts.join(" · ")
+    : buildRegionDisplay(locationParts, language);
+
   return <MobileProfileView
     email={snapshot.email} avatarUrl={profile?.avatar_url || snapshot.avatarUrl}
     username={profile?.username || snapshot.username || t.profile.unset_username}
-    accountNumber={formatAccountNumber(profile?.account_number || snapshot.accountNumber) || "—"}
+    accountNumber={accountNumber}
     helpfulCount={live ? String(live.stats.receivedFlowerCount) : "—"}
     userType={userType}
-    membershipText={snapshot.userId ? getMembershipSummary(membership, language) : null}
-    experienceCount={snapshot.userId && snapshot.experienceCardCount != null ? String(snapshot.experienceCardCount) : null}
+    membershipLine={membershipLine}
+    androidIdentityLayout
     storageText={storageLimit ? `${formatStorage(storageUsed)} / ${formatStorage(storageLimit)}` : (language === "zh" ? "本机可用" : "Available on device")}
     identityTop={<>
-      <label style={{ display: "grid", gap: 3, fontSize: 12, color: "#52654d" }}>
+      <label
+        style={{ ...profileIdentityAvatarColumnStyle, cursor: online && live ? "pointer" : "default" }}
+        title={online && live ? (uploading ? t.profile.uploading : t.profile.change_avatar) : undefined}
+      >
         {profile?.avatar_url || snapshot.avatarUrl
-          ? <img src={profile?.avatar_url || snapshot.avatarUrl || ""} alt="" style={profileIdentityAvatarStyle} />
-          : <span style={profileIdentityAvatarFallbackStyle}><UiIcon name="sprout" size={24} /></span>}
-        {online && live ? <><span>{uploading ? t.profile.uploading : t.profile.change_avatar}</span>
-          <input type="file" accept="image/*" hidden disabled={uploading} onChange={(event) => void uploadAvatar(event)} /></> : null}
+          ? <img src={profile?.avatar_url || snapshot.avatarUrl || ""} alt="" style={androidProfileIdentityAvatarStyle} />
+          : <span style={androidProfileIdentityAvatarFallbackStyle}><UiIcon name="sprout" size={24} /></span>}
+        {accountNumber ? <span style={profileIdentityMemberNumberStyle}>{uploading ? t.profile.uploading : accountNumber}</span> : null}
+        {online && live ? <input type="file" accept="image/*" hidden disabled={uploading} onChange={(event) => void uploadAvatar(event)} /> : null}
       </label>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <label style={{ fontSize: 12, color: "#53664f" }}>{t.profile.username}</label>
-        {editingProfile ? <input aria-label={t.profile.username} value={name} maxLength={60}
-          onChange={(event) => setName(event.target.value)} style={{ width: "100%", fontSize: 16 }} />
-          : <div style={savedUsernameStyle}>{profile?.username || snapshot.username || t.profile.unset_username}</div>}
+      <div style={profileIdentityDetailsStyle}>
+        {editingProfile === "username" ? (
+          <input
+            aria-label={t.profile.username}
+            value={name}
+            maxLength={60}
+            autoFocus
+            disabled={savingProfile}
+            onChange={(event) => setName(event.target.value)}
+            onBlur={() => void saveProfile()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+              if (event.key === "Escape") setEditingProfile(null);
+            }}
+            style={{ ...profileIdentityInlineControlStyle, width: "100%", maxWidth: "100%", height: 30, minHeight: 30, flex: "none", fontSize: 16, fontWeight: 800 }}
+          />
+        ) : (
+          <button
+            type="button"
+            disabled={!online || !live}
+            onClick={() => startEditing("username")}
+            style={{ ...androidProfileIdentityUsernameStyle, border: 0, padding: 0, background: "transparent", textAlign: "left", cursor: online && live ? "text" : "default" }}
+          >
+            {profile?.username || snapshot.username || t.profile.unset_username}
+          </button>
+        )}
+        {snapshot.email ? <div style={androidProfileIdentityEmailStyle} title={snapshot.email}>{snapshot.email}</div> : null}
+        <div style={profileIdentityMembershipStyle}>{membershipLine}</div>
       </div>
-      <button type="button" disabled={!online || !live} onClick={() => editingProfile ? setEditingProfile(false) : startEditing()}
-        style={{ fontSize: 14 }}>{editingProfile ? t.profile.cancel_edit : t.profile.edit_profile}</button>
     </>}
-    identityAfterStats={editingProfile ? <section style={{ display: "grid", gap: 10, marginTop: 12 }}>
-      <label>{t.profile.country_region}
-        <select value={countryCode} onChange={(event) => { setCountryCode(event.target.value); setRegionName(""); }} style={{ display: "block", width: "100%", fontSize: 16 }}>
+    identityAfterStats={editingProfile === "location" ? (
+      <div
+        style={profileIdentityLocationRowStyle}
+        onBlur={(event) => {
+          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+          void saveProfile();
+        }}
+      >
+        <select
+          aria-label={t.profile.country_region}
+          value={countryCode}
+          autoFocus
+          disabled={savingProfile}
+          onChange={(event) => { setCountryCode(event.target.value); setRegionName(""); }}
+          style={profileIdentityInlineControlStyle}
+        >
           <option value="">{t.profile.select}</option>
           {getLocalizedCountryOptions(language).map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
         </select>
-      </label>
-      {countryCode === "OTHER" ? <label>{t.profile.custom_country_region}<input value={countryName} onChange={(event) => setCountryName(event.target.value)} /></label> : null}
-      <label>{t.profile.region}
-        {hasPresetRegions(countryCode) ? <select value={regionName} onChange={(event) => setRegionName(event.target.value)}>
-          <option value="">{t.profile.select}</option>
-          {getRegionOptions(countryCode, language).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select> : <input value={regionName} onChange={(event) => setRegionName(event.target.value)} />}
-      </label>
-      <label>{t.profile.city}<input value={cityName} onChange={(event) => setCityName(event.target.value)} /></label>
-      <button type="button" disabled={savingProfile} onClick={() => void saveProfile()}>{savingProfile ? t.profile.saving : t.profile.save_profile}</button>
-    </section> : <div style={{ display: "grid", gap: 3, marginTop: 12, color: "#52654d", fontSize: 14 }}>
-      <span>{t.profile.location_summary}</span>
-      <strong style={{ color: "#30432d" }}>{buildRegionDisplay(locationParts, language)}</strong>
-      {!online && snapshot.userId ? <span>{language === "zh" ? "联网后编辑资料" : "Connect to edit your profile"}</span> : null}
-    </div>}
+        {countryCode === "OTHER" ? (
+          <input
+            aria-label={t.profile.custom_country_region}
+            value={countryName}
+            disabled={savingProfile}
+            onChange={(event) => setCountryName(event.target.value)}
+            style={profileIdentityInlineControlStyle}
+          />
+        ) : null}
+        <span>·</span>
+        {hasPresetRegions(countryCode) ? (
+          <select
+            aria-label={t.profile.region}
+            value={regionName}
+            disabled={savingProfile}
+            onChange={(event) => setRegionName(event.target.value)}
+            style={profileIdentityInlineControlStyle}
+          >
+            <option value="">{t.profile.select}</option>
+            {getRegionOptions(countryCode, language).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>
+        ) : (
+          <input
+            aria-label={t.profile.region}
+            value={regionName}
+            disabled={savingProfile}
+            onChange={(event) => setRegionName(event.target.value)}
+            style={profileIdentityInlineControlStyle}
+          />
+        )}
+        <span>·</span>
+        <input
+          aria-label={t.profile.city}
+          value={cityName}
+          disabled={savingProfile}
+          onChange={(event) => setCityName(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+          style={profileIdentityInlineControlStyle}
+        />
+      </div>
+    ) : (
+      <div style={profileIdentityLocationRowStyle}>
+        <button
+          type="button"
+          disabled={!online || !live}
+          onClick={() => startEditing("location")}
+          style={{ ...profileIdentityLocationButtonStyle, cursor: online && live ? "text" : "default" }}
+        >
+          {locationDisplay || t.profile.not_assigned}
+        </button>
+        {!online && snapshot.userId ? <span>{language === "zh" ? "联网后编辑资料" : "Connect to edit your profile"}</span> : null}
+      </div>
+    )}
     error={error ? <p role="alert">{error}</p> : null}
     modules={modules} activeModule={module}
     onModuleChange={(next) => setModule((current) => current === next ? null : next)}

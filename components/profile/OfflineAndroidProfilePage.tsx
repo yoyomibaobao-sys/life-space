@@ -2,7 +2,9 @@
 
 import MobileProfileView from "@/components/profile/MobileProfileView";
 import { formatStorage } from "@/lib/user-profile-shared";
-import { getUserTypeLabel } from "@/lib/membership";
+import { formatMembershipDate, getMembershipEndDate, getUserTypeLabel } from "@/lib/membership";
+import { parseAccountNumber } from "@/lib/account-number";
+import { buildRegionDisplay } from "@/lib/region-shared";
 import type { OfflineProfileSnapshot } from "@/lib/android-offline-profile";
 import { offlineProfileModuleHintStyle, type MobileProfileModule, type MobileProfileNavItem } from "@/components/profile/MobileProfilePresentation";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -33,19 +35,39 @@ export default function OfflineAndroidProfilePage({
     },
     language,
   );
+  const parsedAccountNumber = parseAccountNumber(snapshot.accountNumber);
+  const accountNumber = parsedAccountNumber
+    ? `No.${String(parsedAccountNumber.registrationSequence).padStart(5, "0")}`
+    : "";
+  const membershipEndDate = getMembershipEndDate(snapshot.membership);
+  const hasMembershipTerm = Boolean(
+    membershipEndDate && snapshot.membership && ["trial", "basic", "large"].includes(String(snapshot.membership.plan)),
+  );
+  const membershipLine = hasMembershipTerm
+    ? `${userType} · ${snapshot.membership?.can_create_content === true
+      ? (language === "en" ? "Valid until" : "有效至")
+      : (language === "en" ? "Ended" : "已到期")} ${formatMembershipDate(membershipEndDate, language)}`
+    : userType;
+  const locationText = buildRegionDisplay({
+    countryCode: snapshot.countryCode,
+    countryName: snapshot.countryName,
+    regionName: snapshot.regionName,
+    cityName: snapshot.cityName,
+    location: snapshot.location,
+  }, language);
 
   const modules: MobileProfileNavItem[] = [
-    { href: "/membership/payment", label: language === "en" ? "Cloud Membership" : "开通云会员" },
-    { value: "payment", label: language === "en" ? "Order progress" : "订单进度查询" },
-    { href: "/membership/refund", label: t.profile.refund_request_nav },
-    { href: "/membership/benefits", label: language === "en" ? "Membership types" : "会员类别说明" },
-    { href: "/profile/recent", label: language === "en" ? "Browsing history" : "浏览历史" },
-    { value: "backup", label: language === "en" ? "Backup & export" : "备份与导出" },
-    { href: "/legal", label: t.profile.legal_rules_nav },
-    { href: "/feedback", label: t.feedback_and_contact },
-    { href: "/profile/trash", label: t.profile.modules.trash },
-    { value: "account", label: language === "en" ? "Account management" : "账号管理" },
-    { href: "/admin/memberships", label: language === "en" ? "User management" : "用户管理" },
+    { href: "/membership/payment", label: language === "en" ? "Cloud Membership" : "开通云会员", section: "membership" },
+    { value: "payment", label: language === "en" ? "Order progress" : "订单进度查询", section: "membership" },
+    { href: "/membership/refund", label: t.profile.refund_request_nav, section: "membership" },
+    { href: "/membership/benefits", label: language === "en" ? "Membership types" : "会员类别说明", section: "membership" },
+    { href: "/profile/recent", label: language === "en" ? "Browsing history" : "浏览历史", section: "data" },
+    { value: "backup", label: language === "en" ? "Backup & export" : "备份与导出", section: "data" },
+    { href: "/profile/data-security", label: language === "en" ? "Data rules" : "数据规则", section: "support" },
+    { href: "/profile/trash", label: t.profile.modules.trash, section: "data" },
+    { value: "account", label: language === "en" ? "Account management" : "账号管理", section: "account" },
+    { href: "/legal", label: t.profile.legal_rules_nav, section: "support" },
+    { href: "/feedback", label: t.feedback_and_contact, section: "support" },
   ];
 
   const networkHint = language === "zh" ? "需要联网。" : "A network connection is required.";
@@ -56,10 +78,13 @@ export default function OfflineAndroidProfilePage({
         email={snapshot.email}
         avatarUrl={snapshot.avatarUrl}
         username={displayName}
-        accountNumber="—"
-        helpfulCount={language === "en" ? "0" : "0次"}
+        accountNumber={accountNumber}
+        helpfulCount="0"
         userType={userType}
+        membershipLine={membershipLine}
+        androidIdentityLayout
         storageText={storageText}
+        locationText={locationText}
         modules={modules}
         activeModule={mobileProfileModule}
         onModuleChange={(value) => {

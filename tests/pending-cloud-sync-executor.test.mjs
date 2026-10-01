@@ -47,7 +47,10 @@ test("Android reconnect prepares pending queue without uploading; web prompt rem
   assert.match(localDetail, /syncPendingCloudArchive/);
   assert.match(workspace, /\?sync=1/);
   assert.match(offline, /syncAllPendingCloudArchives/);
-  const reconnectEffect = offline.slice(offline.indexOf("const recoveryKey ="), offline.indexOf("useEffect(() => {\n    if (screen.kind !== \"activity\""));
+  const reconnectStart = offline.indexOf("const recoveryKey =");
+  const reconnectEnd = offline.search(/useEffect\(\(\) => \{\r?\n\s+if \(screen\.kind !== "activity"/);
+  assert.ok(reconnectStart >= 0 && reconnectEnd > reconnectStart);
+  const reconnectEffect = offline.slice(reconnectStart, reconnectEnd);
   assert.match(reconnectEffect, /preparePendingCloudSyncQueue/);
   assert.doesNotMatch(reconnectEffect, /syncAllPendingCloudArchives|syncPendingCloudArchive/);
   assert.match(offline, /sync_destination/);

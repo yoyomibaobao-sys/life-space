@@ -26,6 +26,8 @@ const supabasePublishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 const turnstileSiteKey =
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "";
+const alipayPaymentQrUrl = process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL?.trim() || "";
+const alipayPayeeName = process.env.NEXT_PUBLIC_ALIPAY_PAYEE_NAME?.trim() || "";
 
 if (singleRuntimeAcceptance && !turnstileSiteKey) {
   throw new Error(
@@ -57,6 +59,8 @@ const buildResult = await build({
     "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": "undefined",
     "process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY":
       JSON.stringify(turnstileSiteKey),
+    "process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL": JSON.stringify(alipayPaymentQrUrl),
+    "process.env.NEXT_PUBLIC_ALIPAY_PAYEE_NAME": JSON.stringify(alipayPayeeName),
     // A few shared UI components pull in Next client helpers. In the normal
     // Next build these flags are replaced by the compiler. The standalone
     // Android shell is bundled by esbuild, so leaving them behind causes

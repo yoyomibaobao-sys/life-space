@@ -156,6 +156,10 @@ import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 import FollowPage from "@/app/follow/page";
 import MarketPage from "@/app/market/page";
 import AndroidProfileController from "@/components/profile/AndroidProfileController";
+import AndroidProfileInfoPage, { type AndroidProfileInfoKind } from "@/components/profile/AndroidProfileInfoPage";
+import MembershipPaymentPage from "@/app/membership/payment/page";
+import MembershipRefundPage from "@/app/membership/refund/page";
+import AndroidAppUpdatePage from "@/app/app-update/page";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   getCloudArchiveCategoryDepths,
@@ -263,7 +267,7 @@ type Screen =
   | { kind: "new-project"; guide?: SystemNameCandidate; destination?: CreationDestination }
   | { kind: "project-destination" }
   | { kind: "quick-add" }
-  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "local-transfer"; archiveId?: string }
+  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "local-transfer" | "membership-payment" | "membership-refund"; archiveId?: string }
   | { kind: "local-transfer"; archiveId: string }
   | { kind: "activity" }
   | { kind: "discover-search" }
@@ -278,6 +282,14 @@ type Screen =
   | { kind: "project-categories" }
   | { kind: "recent" }
   | { kind: "trash" }
+  | { kind: "membership-payment" }
+  | { kind: "membership-refund" }
+  | { kind: "membership-benefits" }
+  | { kind: "data-security" }
+  | { kind: "legal" }
+  | { kind: "legal-page"; id: string }
+  | { kind: "feedback" }
+  | { kind: "app-update" }
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
@@ -643,18 +655,50 @@ function App() {
     window.addEventListener("lifespace-guide-directory-updated", update);
     return () => window.removeEventListener("lifespace-guide-directory-updated", update);
   }, []);
+  function restoreShellScroll(value: unknown) {
+    const parsed = Number(value);
+    const top = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top, behavior: "auto" }));
+    });
+  }
+
   function setScreen(next: Screen, replace = false) {
-    window.history[replace ? "replaceState" : "pushState"]({ offlineScreen: next }, "", `#${next.kind}`);
+    const nextHistoryState = { offlineScreen: next, scrollY: 0 };
+    if (replace) {
+      window.history.replaceState(nextHistoryState, "", `#${next.kind}`);
+    } else {
+      const currentHistoryState = window.history.state && typeof window.history.state === "object"
+        ? window.history.state
+        : {};
+      window.history.replaceState(
+        { ...currentHistoryState, offlineScreen: screen, scrollY: window.scrollY },
+        "",
+        window.location.href,
+      );
+      window.history.pushState(nextHistoryState, "", `#${next.kind}`);
+    }
     setScreenState(next);
-    window.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function goBackInShell(fallback: Screen = { kind: "profile" }) {
+    if (window.history.state?.offlineScreen && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    setScreen(fallback, true);
   }
   function openCloudLogin(returnTo: Extract<Screen, { kind: "cloud-login" }>["returnTo"], archiveId?: string) {
     if (!online) { showToast(copy.needNetwork); return; }
     setScreen({ kind: "cloud-login", returnTo, archiveId });
   }
   useEffect(() => {
-    window.history.replaceState({ offlineScreen: { kind: "list" } }, "", "#list");
-    const back = (event: PopStateEvent) => setScreenState(event.state?.offlineScreen || { kind: "list" });
+    window.history.replaceState({ offlineScreen: { kind: "list" }, scrollY: 0 }, "", "#list");
+    const back = (event: PopStateEvent) => {
+      setScreenState(event.state?.offlineScreen || { kind: "list" });
+      restoreShellScroll(event.state?.scrollY);
+    };
     window.addEventListener("popstate", back);
     return () => window.removeEventListener("popstate", back);
   }, []);
@@ -1150,6 +1194,38 @@ function App() {
     }
     if (routed.kind === "project-categories") {
       setScreen({ kind: "project-categories" });
+      return true;
+    }
+    if (routed.kind === "membership-payment" || routed.kind === "membership-refund") {
+      if (online && auth.status === "signed-out") {
+        openCloudLogin(routed.kind);
+      } else {
+        setScreen({ kind: routed.kind });
+      }
+      return true;
+    }
+    if (routed.kind === "membership-benefits") {
+      setScreen({ kind: "membership-benefits" });
+      return true;
+    }
+    if (routed.kind === "data-security") {
+      setScreen({ kind: "data-security" });
+      return true;
+    }
+    if (routed.kind === "legal") {
+      setScreen({ kind: "legal" });
+      return true;
+    }
+    if (routed.kind === "legal-page" && routed.id) {
+      setScreen({ kind: "legal-page", id: routed.id });
+      return true;
+    }
+    if (routed.kind === "feedback") {
+      setScreen({ kind: "feedback" });
+      return true;
+    }
+    if (routed.kind === "app-update") {
+      setScreen({ kind: "app-update" });
       return true;
     }
     if (routed.kind === "activity") {
@@ -2403,25 +2479,51 @@ function App() {
             title={language === "zh" ? "无法打开分组设置" : "Could not open group settings"}
             message={language === "zh" ? "页面加载出错。" : "This page failed to render."}
             backLabel={language === "zh" ? "返回资料" : "Back to profile"}
-            onBack={() => setScreen({ kind: "profile" })}
+            onBack={() => goBackInShell()}
           >
             <OfflineProjectCategorySettings
               ownerUserId={ownerContext?.userId || owner?.userId || ""}
               online={online}
               cloudUserId={cloudUserId}
               cachedEntries={cachedTaxonomy}
-              onBack={() => setScreen({ kind: "profile" })}
+              onBack={() => goBackInShell()}
             />
           </MobileShellErrorBoundary>
         </div>
       ) : null}
       {screen.kind === "recent" ? <AndroidRecentBrowse
         online={online}
-        onBack={() => setScreen({ kind: "profile" })}
+        onBack={() => goBackInShell()}
         onOpen={(id) => { applyShellPath(`${[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
       /> : null}
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
-        online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
+        online={online} onBack={() => goBackInShell()} /> : null}
+      {screen.kind === "membership-payment" ? <div data-android-membership-payment="true">
+        <MobilePageHeaderView title={language === "zh" ? "开通云会员" : "Cloud Membership"} titleText={language === "zh" ? "开通云会员" : "Cloud Membership"}
+          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => goBackInShell()} />
+        {online ? <MembershipPaymentPage /> : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />}
+      </div> : null}
+      {screen.kind === "membership-refund" ? <div data-android-membership-refund="true">
+        <MobilePageHeaderView title={language === "zh" ? "退款申请" : "Refund request"} titleText={language === "zh" ? "退款申请" : "Refund request"}
+          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => goBackInShell()} />
+        {online ? <MembershipRefundPage /> : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />}
+      </div> : null}
+      {screen.kind === "membership-benefits" ? <AndroidProfileInfoPage
+        kind="membership-benefits" online={online} signedIn={auth.status === "signed-in"}
+        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "data-security" ? <AndroidProfileInfoPage
+        kind="data-security" online={online} signedIn={auth.status === "signed-in"}
+        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "legal" ? <AndroidProfileInfoPage
+        kind="legal-index" online={online} signedIn={auth.status === "signed-in"}
+        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "legal-page" ? <AndroidProfileInfoPage
+        kind={`legal-${screen.id}` as AndroidProfileInfoKind} online={online} signedIn={auth.status === "signed-in"}
+        onBack={() => goBackInShell({ kind: "legal" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "feedback" ? <AndroidProfileInfoPage
+        kind="feedback" online={online} signedIn={auth.status === "signed-in"}
+        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={() => goBackInShell()} /> : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => window.history.back()} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "quick-add" ? <section className="panel quick-add-sheet" role="dialog" aria-label={copy.addRecord}><h1>{copy.addRecord}</h1><div className="action-row"><button type="button" onClick={() => quickCamera.current?.click()}>{copy.camera}</button><button type="button" onClick={() => quickGallery.current?.click()}>{copy.album}</button><button type="button" onClick={goList}>{copy.cancel}</button></div></section> : null}
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onSuccess={(userId) => {

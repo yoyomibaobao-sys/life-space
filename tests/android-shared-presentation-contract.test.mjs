@@ -52,6 +52,13 @@ test("online and offline mobile profile share MobileProfileView", () => {
   assert.match(offline, /<MobileProfileView/);
   assert.match(view, /project-categories/);
   assert.match(view, /group_settings_title/);
+  const versionEntry = view.indexOf("showAndroidVersion ? <AndroidAppVersionEntry");
+  const languageEntry = view.indexOf('id="language-settings"');
+  assert.ok(versionEntry > view.indexOf("profileIdentityCardStyle"));
+  assert.ok(languageEntry > versionEntry);
+  assert.match(view, /profileBackOnlyHeaderStyle/);
+  assert.match(view, /profileIdentityLogoutButtonStyle/);
+  assert.match(view, /!androidIdentityLayout && onLogout/);
 });
 
 test("project category settings are shared and local-offline capable", () => {

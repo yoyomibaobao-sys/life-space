@@ -85,7 +85,10 @@ test("local transfer is offered only for local intent, never cloud cache or pend
 
 test("pending UI stays visible offline and both upload paths require a user click", () => {
   const source = shell();
-  const reconnect = source.slice(source.indexOf("const recoveryKey ="), source.indexOf("useEffect(() => {\n    if (screen.kind !== \"activity\""));
+  const reconnectStart = source.indexOf("const recoveryKey =");
+  const reconnectEnd = source.search(/useEffect\(\(\) => \{\r?\n\s+if \(screen\.kind !== "activity"/);
+  assert.ok(reconnectStart >= 0 && reconnectEnd > reconnectStart);
+  const reconnect = source.slice(reconnectStart, reconnectEnd);
   assert.doesNotMatch(reconnect, /syncAllPendingCloudArchives|syncPendingCloudArchive/);
   assert.match(source, /data-android-cloud-pending="true"/);
   assert.match(source, /sourceFilter === "cloud" \? <section data-android-cloud-pending="true">[\s\S]*待上传/);

@@ -6,10 +6,13 @@ import InternalLink from "@/components/navigation/InternalLink";
 import { Fragment, type CSSProperties, type ReactNode } from "react";
 
 export type MobileProfileModule = "membership" | "payment" | "backup" | "account";
+export type MobileProfileNavSection = "membership" | "data" | "account" | "support" | "admin";
+
 export type MobileProfileNavItem = {
   label: string;
   value?: MobileProfileModule;
   href?: string;
+  section?: MobileProfileNavSection;
 };
 
 export function mobileProfileNavigation(input: {
@@ -25,26 +28,24 @@ export function mobileProfileNavigation(input: {
   const en = input.language === "en";
   return [
     ...(!input.native ? [
-      { href: "/", label: en ? "Website introduction" : "网站介绍主页" },
-      { href: "/download/android", label: en ? "Download Android app" : "下载安卓版" },
+      { href: "/", label: en ? "Website introduction" : "网站介绍主页", section: "support" as const },
+      { href: "/download/android", label: en ? "Download Android app" : "下载安卓版", section: "support" as const },
     ] : []),
-    { href: "/membership/payment", label: en ? "Cloud Membership" : "开通云会员" },
-    { value: "payment", label: en ? "Order progress" : "订单进度查询" },
-    { href: "/membership/refund", label: input.refundLabel },
-    { href: "/membership/benefits", label: en ? "Membership types" : "会员类别说明" },
-    { href: "/profile/recent", label: en ? "Browsing history" : "浏览历史" },
-    { href: "/profile/helpful", label: en ? "Suggestions adopted" : "收到有用" },
-    { href: "/experience-cards", label: en ? "Experience cards" : "经验卡" },
-    { value: "backup", label: en ? "Backup & export" : "备份与导出" },
-    { href: "/legal/privacy", label: en ? "Data & security" : "数据与安全" },
-    { href: "/legal", label: input.legalLabel },
-    { href: "/feedback", label: input.feedbackLabel },
-    { href: "/profile/trash", label: input.trashLabel },
-    { value: "account", label: en ? "Account management" : "账号管理" },
+    { href: "/membership/payment", label: en ? "Cloud Membership" : "开通云会员", section: "membership" },
+    { value: "payment", label: en ? "Order progress" : "订单进度查询", section: "membership" },
+    { href: "/membership/refund", label: input.refundLabel, section: "membership" },
+    { href: "/membership/benefits", label: en ? "Membership types" : "会员类别说明", section: "membership" },
+    { href: "/profile/recent", label: en ? "Browsing history" : "浏览历史", section: "data" },
+    { value: "backup", label: en ? "Backup & export" : "备份与导出", section: "data" },
+    { href: "/profile/data-security", label: en ? "Data rules" : "数据规则", section: "support" },
+    { href: "/profile/trash", label: input.trashLabel, section: "data" },
+    { value: "account", label: en ? "Account management" : "账号管理", section: "account" },
+    { href: "/legal", label: input.legalLabel, section: "support" },
+    { href: "/feedback", label: input.feedbackLabel, section: "support" },
     ...(input.admin ? [
-      { href: "/admin/memberships", label: en ? "User management" : "用户管理" },
-      { href: "/admin/guides", label: en ? "Linked guide review" : "关联指引审核" },
-      { href: "/admin/support", label: input.adminSupportLabel },
+      { href: "/admin/memberships", label: en ? "User management" : "用户管理", section: "admin" as const },
+      { href: "/admin/guides", label: en ? "Linked guide review" : "关联指引审核", section: "admin" as const },
+      { href: "/admin/support", label: input.adminSupportLabel, section: "admin" as const },
     ] : []),
   ] as MobileProfileNavItem[];
 }
@@ -118,16 +119,19 @@ export function MobileProfileModuleTabs({
   );
 
   if (compact) {
-    const membershipItems = modules.filter((item) => item.href?.startsWith("/membership") || item.value === "payment" || item.value === "membership");
-    const adminItems = modules.filter((item) => item.href?.startsWith("/admin"));
-    const accountItems = modules.filter((item) => !membershipItems.includes(item) && !adminItems.includes(item));
+    const groups = [
+      { key: "membership", title: language === "en" ? "Membership" : "会员服务" },
+      { key: "data", title: language === "en" ? "Data & records" : "数据与记录" },
+      { key: "account", title: language === "en" ? "Account" : "账号" },
+      { key: "support", title: language === "en" ? "Support & rules" : "支持与规则" },
+      { key: "admin", title: language === "en" ? "Administration" : "管理" },
+    ] as const;
     return (
       <div style={{ display: "grid", gap: 12 }}>
-        {[
-          { title: language === "en" ? "Membership" : "会员服务", items: membershipItems },
-          { title: language === "en" ? "Data & account" : "数据与账号", items: accountItems },
-          { title: language === "en" ? "Administration" : "管理", items: adminItems },
-        ].filter((group) => group.items.length).map((group) => (
+        {groups.map((group) => ({
+          ...group,
+          items: modules.filter((item) => item.section === group.key),
+        })).filter((group) => group.items.length).map((group) => (
           <section key={group.title} style={mobileProfileGroupStyle} aria-label={group.title}>
             <h2 style={{ margin: "2px 12px 4px", fontSize: 12, fontWeight: 600, color: "#73816e" }}>{group.title}</h2>
             {renderNavigation(group.items)}
@@ -187,6 +191,7 @@ export const profileIdentityCardStyle: CSSProperties = {
 };
 
 export const profileIdentityTopStyle: CSSProperties = {
+  position: "relative",
   display: "flex",
   alignItems: "flex-start",
   gap: 10,
@@ -207,6 +212,206 @@ export const profileIdentityAvatarFallbackStyle: CSSProperties = {
   placeItems: "center",
   background: "#eaf3e6",
   color: "#5e8057",
+};
+
+export const androidProfileIdentityAvatarStyle: CSSProperties = {
+  ...profileIdentityAvatarStyle,
+  width: 60,
+  height: 60,
+  flex: "0 0 60px",
+};
+
+export const androidProfileIdentityAvatarFallbackStyle: CSSProperties = {
+  ...profileIdentityAvatarFallbackStyle,
+  width: 60,
+  height: 60,
+  flex: "0 0 60px",
+};
+
+export const profileIdentityAvatarColumnStyle: CSSProperties = {
+  width: 64,
+  flex: "0 0 64px",
+  display: "grid",
+  justifyItems: "center",
+  alignContent: "start",
+  gap: 2,
+};
+
+export const profileIdentityMemberNumberStyle: CSSProperties = {
+  color: "#98a295",
+  fontSize: 10,
+  fontWeight: 650,
+  lineHeight: 1.1,
+  whiteSpace: "nowrap",
+};
+
+export const profileIdentityDetailsStyle: CSSProperties = {
+  minWidth: 0,
+  flex: 1,
+  display: "grid",
+  gridTemplateRows: "30px 18px 24px",
+  gap: 2,
+  alignContent: "start",
+  alignItems: "center",
+  paddingRight: 74,
+  boxSizing: "border-box",
+};
+
+export const profileIdentityUsernameButtonStyle: CSSProperties = {
+  width: "fit-content",
+  maxWidth: "100%",
+  border: 0,
+  padding: 0,
+  background: "transparent",
+  color: "#253523",
+  fontSize: 19,
+  fontWeight: 850,
+  lineHeight: 1.3,
+  textAlign: "left",
+  cursor: "text",
+  overflowWrap: "anywhere",
+};
+
+export const androidProfileIdentityUsernameStyle: CSSProperties = {
+  minHeight: 30,
+  height: 30,
+  display: "flex",
+  alignItems: "center",
+  color: "#253523",
+  fontSize: 19,
+  fontWeight: 850,
+  lineHeight: 1.3,
+};
+
+export const androidProfileIdentityEmailStyle: CSSProperties = {
+  minWidth: 0,
+  height: 18,
+  color: "#667364",
+  fontSize: 13,
+  lineHeight: "18px",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+export const profileIdentityMembershipStyle: CSSProperties = {
+  minHeight: 24,
+  display: "flex",
+  alignItems: "center",
+  color: "#4d6a49",
+  fontSize: 14,
+  fontWeight: 760,
+  lineHeight: 1.35,
+};
+
+export const profileIdentityLogoutButtonStyle: CSSProperties = {
+  position: "absolute",
+  top: 0,
+  right: 0,
+  minHeight: 30,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid #d8e2d4",
+  borderRadius: 8,
+  padding: "5px 8px",
+  background: "#f4f8f1",
+  color: "#52684f",
+  fontSize: 13,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+};
+
+export const profileIdentityBottomStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+  marginTop: 10,
+  paddingTop: 9,
+  borderTop: "1px solid #e4ece0",
+};
+
+export const profileIdentityStatCellStyle: CSSProperties = {
+  minWidth: 0,
+  minHeight: 54,
+  display: "grid",
+  placeItems: "center",
+  alignContent: "center",
+  gap: 3,
+  padding: "7px 8px",
+  borderRadius: 12,
+  background: "#f1f7ed",
+  textAlign: "center",
+};
+
+export const profileIdentityStatLabelStyle: CSSProperties = {
+  color: "#778273",
+  fontSize: 11,
+  lineHeight: 1.25,
+};
+
+export const profileIdentityStatValueStyle: CSSProperties = {
+  maxWidth: "100%",
+  color: "#2e422d",
+  fontSize: 14,
+  fontWeight: 800,
+  lineHeight: 1.3,
+  overflowWrap: "anywhere",
+};
+
+export const profileIdentityHelpfulStyle: CSSProperties = {
+  ...profileIdentityStatCellStyle,
+  color: "inherit",
+  textDecoration: "none",
+};
+
+export const profileIdentityLocationRowStyle: CSSProperties = {
+  height: 42,
+  minHeight: 42,
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  marginTop: 10,
+  paddingTop: 8,
+  borderTop: "1px solid #e4ece0",
+  color: "#425640",
+  fontSize: 15,
+  fontWeight: 700,
+  lineHeight: 1.35,
+  minWidth: 0,
+  flexWrap: "nowrap",
+  overflowX: "auto",
+  boxSizing: "border-box",
+};
+
+export const profileIdentityLocationButtonStyle: CSSProperties = {
+  minHeight: 32,
+  display: "flex",
+  alignItems: "center",
+  border: 0,
+  padding: "5px 2px",
+  background: "transparent",
+  color: "inherit",
+  font: "inherit",
+  cursor: "text",
+  textAlign: "left",
+};
+
+export const profileIdentityInlineControlStyle: CSSProperties = {
+  minWidth: 68,
+  maxWidth: 112,
+  height: 32,
+  minHeight: 32,
+  flex: "1 1 0",
+  border: "1px solid #d8e3d3",
+  borderRadius: 9,
+  background: "#fff",
+  color: "#2d3d2c",
+  padding: "5px 7px",
+  fontSize: 14,
+  boxSizing: "border-box",
 };
 
 export const savedUsernameStyle: CSSProperties = {

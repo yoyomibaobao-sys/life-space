@@ -85,6 +85,7 @@ test("Web and Android Profile share navigation, identity card and offline capabi
   const web = read("app/profile/page.tsx");
   const android = read("components/profile/AndroidProfileController.tsx");
   const presentation = read("components/profile/MobileProfilePresentation.tsx");
+  const profileView = read("components/profile/MobileProfileView.tsx");
   const snapshot = read("lib/android-offline-profile.ts");
   const shell = read("mobile-offline-src/main.tsx");
   assert.match(web, /mobileProfileNavigation\(\{/);
@@ -95,8 +96,9 @@ test("Web and Android Profile share navigation, identity card and offline capabi
   assert.match(android, /getLocalizedCountryOptions|buildLocationTextFromFields/);
   assert.match(android, /uploadAvatar/);
   assert.match(android, /!online && snapshot\.userId/);
-  assert.match(presentation, /href: "\/profile\/helpful"/);
-  assert.match(presentation, /href: "\/experience-cards"/);
+  assert.doesNotMatch(presentation, /href: "\/profile\/helpful"/);
+  assert.doesNotMatch(presentation, /href: "\/experience-cards"/);
+  assert.match(profileView, /href="\/profile\/helpful"/);
   assert.match(snapshot, /countryCode|accountNumber|storageUsed/);
   assert.match(shell, /onLogout=\{auth\.status === "signed-in"/);
   assert.match(shell, /profile: auth\.status === "signed-in" \? spaceProfile : null/);

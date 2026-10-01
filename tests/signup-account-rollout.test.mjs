@@ -10,6 +10,8 @@ const migrationPath =
   "supabase/migrations/20260730063743_add_signup_account_rollout.sql";
 const claimableTrialMigrationPath =
   "supabase/migrations/20260902033206_claimable_cloud_trial.sql";
+const handlingPeriodOverrideMigrationPath =
+  "supabase/migrations/20261001193000_shorten_cloud_trial_handling_to_30_days.sql";
 
 test("formal account numbers are global, permanent, and exclude existing internal accounts", async () => {
   const migration = await source(migrationPath);
@@ -87,6 +89,19 @@ test("formal accounts claim one fixed 30 MB / 90-day trial after email confirmat
   assert.match(migration, /handling_period_days integer not null default 90/i);
 });
 
+test("current cloud-trial handling override is 30 days without automatic local conversion", async () => {
+  const migration = await source(handlingPeriodOverrideMigrationPath);
+
+  assert.match(migration, /handling_period_days\s*=\s*30/i);
+  assert.match(migration, /cleanup_due_at\s*=\s*c\.trial_ends_at \+ interval '30 days'/i);
+  assert.match(migration, /not coalesce\(u\.is_internal_test, false\)/i);
+  assert.match(migration, /check \(cleanup_due_at >= trial_ends_at\)/i);
+  assert.doesNotMatch(migration, /cleanup_thirty_days/i);
+  assert.match(migration, /cleanup_seven_days/i);
+  assert.match(migration, /No automatic local download or automatic cloud-to-local conversion/i);
+  assert.match(migration, /未保存且未升级为 Plus 的体验云端数据会被清除/);
+});
+
 test("registration remains local-free while capacity can pause only new claims", async () => {
   const migration = await source(claimableTrialMigrationPath);
   const initializer =
@@ -147,12 +162,13 @@ test("account identity keeps a pre-migration compatibility path without crowding
 });
 
 test("registration, membership, and admin copy use the claim and handling rules", async () => {
-  const [registration, membership, admin, docs, migration, zhCopy, enCopy] = await Promise.all([
+  const [registration, membership, admin, docs, migration, handlingOverride, zhCopy, enCopy] = await Promise.all([
     source("app/register/page.tsx"),
     source("app/membership/page.tsx"),
     source("app/admin/memberships/page.tsx"),
     source("docs/membership-access.md"),
     source(claimableTrialMigrationPath),
+    source(handlingPeriodOverrideMigrationPath),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
@@ -177,12 +193,15 @@ test("registration, membership, and admin copy use the claim and handling rules"
   assert.match(docs, /LSa-2026-0001/);
   assert.match(docs, /700MB安全线/);
   assert.match(docs, /处理期结束后/);
-  assert.match(docs, /最终结束云端保留前7天发送一次关键邮件/);
-  assert.match(docs, /处理期以站内通知为主/);
+  assert.match(docs, /处理期结束前7天额外发送一次站内提醒/);
+  assert.match(docs, /最后7天节点同步发送一封关键邮件/);
   assert.match(docs, /曾经至少有一笔确认成功且未被撤销的付费会员记录/);
   assert.match(docs, /公开转私密/);
-  assert.match(zhCopy, /trial_cleanup_completed: "已转回本地使用/);
-  assert.doesNotMatch(zhCopy, /trial_cleanup_(?:in_progress|completed): "[^"]*清理/);
+  assert.match(zhCopy, /trial_handling_period: "体验已到期，云端数据处于30天只读处理期/);
+  assert.match(zhCopy, /trial_cleanup_completed: "体验云端处理已完成/);
+  assert.match(zhCopy, /未保存到本机且未升级为 Plus 的体验云端内容会/);
+  assert.match(enCopy, /30-day read-only handling period/);
   assert.match(migration, /insert into public\.notifications/i);
-  assert.doesNotMatch(migration, /云端数据清理(?:还剩|完成|已开始)/);
+  assert.match(handlingOverride, /30-day read-only handling period/i);
+  assert.doesNotMatch(handlingOverride, /cleanup_thirty_days/i);
 });

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import {
   androidInstallFailure, checkAndroidUpdate, getAndroidUpdateSnapshot,
   getAndroidUpdateServerSnapshot, installAndroidUpdate, openAndroidOfficialDownload,
@@ -16,7 +17,7 @@ type InstallFailure = ReturnType<typeof androidInstallFailure> | null;
 type DownloadFallbackState = "idle" | "copied" | "copy_failed";
 const OFFICIAL_DOWNLOAD_PAGE = "https://life-space.uk/download/android";
 
-export default function AndroidAppUpdatePage() {
+export default function AndroidAppUpdatePage({ onBack }: { onBack?: () => void } = {}) {
   const { t } = useLanguage();
   const update = useSyncExternalStore(subscribeAndroidUpdates, getAndroidUpdateSnapshot, getAndroidUpdateServerSnapshot);
   const [installState, setInstallState] = useState<InstallState>("idle");
@@ -93,7 +94,11 @@ export default function AndroidAppUpdatePage() {
 
   return (
     <main className={styles.page}>
-      <MobilePageHeader title={t.app_update.title} titleText={t.app_update.title} fallbackHref="/profile" ariaLabel={t.nav.back} />
+      {onBack ? (
+        <MobilePageHeaderView title={t.app_update.title} titleText={t.app_update.title} showBack ariaLabel={t.nav.back} onBack={onBack} />
+      ) : (
+        <MobilePageHeader title={t.app_update.title} titleText={t.app_update.title} fallbackHref="/profile" ariaLabel={t.nav.back} />
+      )}
       <section className={styles.card}>
         <h1>{t.app_update.title}</h1>
         <p className={styles.intro}>{t.app_update.intro}</p>

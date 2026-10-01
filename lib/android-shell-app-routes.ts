@@ -14,6 +14,14 @@ export type AndroidShellRouteKind =
   | "local-archive"
   | "recent"
   | "trash"
+  | "membership-payment"
+  | "membership-refund"
+  | "membership-benefits"
+  | "data-security"
+  | "legal"
+  | "legal-page"
+  | "feedback"
+  | "app-update"
   | "network-required";
 
 export type AndroidShellRoute = {
@@ -41,8 +49,10 @@ export function getAndroidRouteCapability(pathname: string): AndroidRouteCapabil
   const path = pathname.replace(/\/+$/, "") || "/";
   if (path === "/profile/recent" || path === "/profile/trash" || path === "/profile" ||
       path === "/archive" || path === "/local/archive" || path === "/profile/project-categories" ||
+      path === "/feedback" || path === "/app-update" || path === "/membership/payment" || path === "/membership/refund" ||
       /^\/local\/archive\//.test(path) || /^\/plant\//.test(path)) return "hybrid";
-  if (path === "/plant" || path === "/") return "local";
+  if (path === "/plant" || path === "/" || path === "/membership/benefits" || path === "/profile/data-security" || path === "/legal" ||
+      /^\/legal\/(?:privacy|terms|refunds|contact)$/.test(path)) return "local";
   if (path === "/discover" || path === "/discover/search" || path === "/experience" ||
       path === "/follow" || path === "/market" || /^\/market\/[^/]+$/.test(path) || /^\/archive\//.test(path)) return "online-controller";
   if (WEB_ROUTES.some((pattern) => pattern.test(path))) return "online-web";
@@ -169,6 +179,15 @@ export function parseAndroidShellPath(
   if (path === "/profile/project-categories") return { kind: "project-categories" };
   if (path === "/profile/recent") return { kind: "recent" };
   if (path === "/profile/trash") return { kind: "trash" };
+  if (path === "/membership/payment") return { kind: "membership-payment" };
+  if (path === "/membership/refund") return { kind: "membership-refund" };
+  if (path === "/membership/benefits") return { kind: "membership-benefits" };
+  if (path === "/profile/data-security") return { kind: "data-security" };
+  if (path === "/legal") return { kind: "legal" };
+  const legalPage = path.match(/^\/legal\/(privacy|terms|refunds|contact)$/);
+  if (legalPage) return { kind: "legal-page", id: legalPage[1] };
+  if (path === "/feedback") return { kind: "feedback" };
+  if (path === "/app-update") return { kind: "app-update" };
   if (path === "/discover") return { kind: "activity" };
   if (path === "/discover/search") return { kind: "discover-search" };
   if (path === "/experience") return { kind: "experience" };

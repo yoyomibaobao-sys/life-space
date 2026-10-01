@@ -30,7 +30,7 @@ update private.cloud_trial_settings
 set
   storage_limit_bytes = 30000000,
   trial_duration_days = 90,
-  handling_period_days = 90,
+  handling_period_days = 30,
   platform_storage_pause_bytes = 700000000,
   claims_enabled = true,
   updated_at = now()
@@ -290,7 +290,7 @@ begin
       on membership.user_id = claim.user_id
     where claim.user_id = c.user_one
       and claim.trial_ends_at = claim.claimed_at + interval '90 days'
-      and claim.cleanup_due_at = claim.trial_ends_at + interval '90 days'
+      and claim.cleanup_due_at = claim.trial_ends_at + interval '30 days'
       and membership.plan = 'trial'
       and membership.status = 'trialing'
       and membership.trial_started_at = claim.claimed_at

@@ -534,8 +534,8 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /先执行可领取云体验 migration，再发布/);
   assert.match(docs, /存储安全线只暂停新领取，不阻断注册/);
   assert.match(docs, /处理期结束后的清理只作用于从未转为有效付费会员/);
-  assert.match(docs, /处理期以站内通知为主/);
-  assert.match(docs, /最终结束云端保留前7天发送一次关键邮件/);
+  assert.match(docs, /处理期结束前7天额外发送一次站内提醒/);
+  assert.match(docs, /最后7天节点同步发送一封关键邮件/);
   assert.match(docs, /会员到期未续费后，未由用户主动删除的云端内容长期保留并只读/);
   assert.match(docs, /可随时、多次保存到本机/);
   assert.match(docs, /允许查看、导出、删除和公开转私密/);
