@@ -27,6 +27,8 @@ export type AndroidShellRouteKind =
   | "legal-page"
   | "feedback"
   | "app-update"
+  | "login"
+  | "admin-memberships"
   | "network-required";
 
 export type AndroidShellRoute = {
@@ -46,7 +48,7 @@ const WEB_ROUTES = [
   /^\/membership(?:\/|$)/, /^\/admin(?:\/|$)/,
   /^\/profile\/(?:helpful|flowers|account|backup|export|orders|followers)(?:\/|$)/,
   /^\/user(?:\/|$)/, /^\/legal(?:\/|$)/, /^\/feedback(?:\/|$)/,
-  /^\/(?:login|register|reset-password|auth|download|app-update|notifications|report)(?:\/|$)/,
+  /^\/(?:reset-password|auth|download|app-update|notifications|report)(?:\/|$)/,
   /^\/market\/[^/]+\/edit(?:\/|$)/,
 ];
 
@@ -56,6 +58,7 @@ export function getAndroidRouteCapability(pathname: string): AndroidRouteCapabil
       path === "/archive" || path === "/local/archive" || path === "/archive/interests" || path === "/profile/project-categories" ||
       path === "/feedback" || path === "/app-update" || path === "/membership/payment" || path === "/membership/refund" ||
       /^\/local\/archive\//.test(path) || /^\/plant\//.test(path)) return "hybrid";
+  if (path === "/login" || path === "/register" || path === "/admin/memberships") return "online-controller";
   if (path === "/plant" || path === "/" || path === "/membership/benefits" || path === "/profile/data-security" || path === "/legal" ||
       /^\/legal\/(?:privacy|terms|refunds|contact)$/.test(path)) return "local";
   if (path === "/discover" || path === "/discover/search" || path === "/experience" ||
@@ -194,6 +197,8 @@ export function parseAndroidShellPath(
   if (legalPage) return { kind: "legal-page", id: legalPage[1] };
   if (path === "/feedback") return { kind: "feedback" };
   if (path === "/app-update") return { kind: "app-update" };
+  if (path === "/login" || path === "/register") return { kind: "login", id: params.get("returnTo") || params.get("next") || "" };
+  if (path === "/admin/memberships") return { kind: "admin-memberships" };
   if (path === "/discover") return { kind: "activity" };
   if (path === "/discover/search") return { kind: "discover-search" };
   if (path === "/experience") return { kind: "experience" };

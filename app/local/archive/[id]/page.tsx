@@ -1062,7 +1062,7 @@ export default function LocalArchiveDetailPage() {
     groupLabel: categoryDepth >= 3 ? archive.group_name : null,
     visibilityLabel: archive.local_role === "cloud-offline-cache" ? null : archiveCopy.local_project,
     visibilityTone: "neutral",
-    storageLabel: archive.local_role === "cloud-offline-cache" ? archiveCopy.device : archiveCopy.saved_on_this_device,
+    storageLabel: archive.local_role === "cloud-offline-cache" ? archiveCopy.device : null,
     storageTone: "device",
     recordCount: records.length,
     durationDays: ongoingDays,

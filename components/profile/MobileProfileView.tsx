@@ -4,6 +4,7 @@ import AndroidAppVersionEntry from "@/components/AndroidAppVersionEntry";
 import InternalLink from "@/components/navigation/InternalLink";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import {
   IdentityStat,
   MobileProfileModuleTabs,
@@ -43,7 +44,7 @@ import {
 } from "@/components/profile/MobileProfilePresentation";
 import UiIcon from "@/components/ui/UiIcon";
 import { useLanguage } from "@/lib/i18n/useLanguage";
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 
 export default function MobileProfileView({
   email,
@@ -104,6 +105,7 @@ export default function MobileProfileView({
   fallbackHref?: string;
 }) {
   const { language, t } = useLanguage();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   return (
     <div data-mobile-profile-view="true">
@@ -166,10 +168,7 @@ export default function MobileProfileView({
                     <button
                       type="button"
                       style={profileIdentityLogoutButtonStyle}
-                      onClick={() => {
-                        const message = language === "zh" ? "确定退出登录？" : "Sign out of this account?";
-                        if (window.confirm(message)) onLogout();
-                      }}
+                      onClick={() => setLogoutConfirmOpen(true)}
                     >
                       {logoutLabel || t.nav.logout_full}
                     </button>
@@ -230,6 +229,12 @@ export default function MobileProfileView({
             )}
           </section>
 
+          {androidIdentityLayout && onLogin ? (
+            <button type="button" onClick={onLogin} style={accountLogoutButtonStyle}>
+              {language === "zh" ? "登录云空间" : "Sign in to cloud"}
+            </button>
+          ) : null}
+
           {showAndroidVersion ? <AndroidAppVersionEntry /> : null}
 
           <section
@@ -273,11 +278,24 @@ export default function MobileProfileView({
               {logoutLabel || t.nav.logout_full}
             </button>
           ) : null}
-          {onLogin ? <button type="button" onClick={onLogin} style={accountLogoutButtonStyle}>
+          {!androidIdentityLayout && onLogin ? <button type="button" onClick={onLogin} style={accountLogoutButtonStyle}>
             {language === "zh" ? "登录云空间" : "Sign in to cloud"}
           </button> : null}
         </section>
       </main>
+      <AppConfirmDialog
+        open={logoutConfirmOpen}
+        title={language === "zh" ? "退出登录" : "Sign out"}
+        message={language === "zh" ? "确定退出当前账号？" : "Sign out of the current account?"}
+        cancelLabel={language === "zh" ? "取消" : "Cancel"}
+        confirmLabel={language === "zh" ? "退出登录" : "Sign out"}
+        destructive
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={() => {
+          setLogoutConfirmOpen(false);
+          onLogout?.();
+        }}
+      />
     </div>
   );
 }

@@ -130,7 +130,7 @@ test("profile links stay inside the shell and offline-readable information remai
   assert.deepEqual(parseAndroidShellPath("/legal/privacy"), { kind: "legal-page", id: "privacy" });
   assert.equal(parseAndroidShellPath("/feedback")?.kind, "feedback");
   assert.equal(parseAndroidShellPath("/app-update")?.kind, "app-update");
-  assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "network-required");
+  assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "admin-memberships");
   assert.match(shell, /<AndroidProfileInfoPage/);
   assert.match(shell, /showToast\(copy\.needNetwork\)/);
   assert.match(shell, /event\.preventDefault\(\)/);

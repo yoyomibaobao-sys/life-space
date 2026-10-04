@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { formatAccountNumber, matchesAccountConfirmation } from "@/lib/account-number";
 import { buildLoginHref } from "@/lib/auth-return";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";

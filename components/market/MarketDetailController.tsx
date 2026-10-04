@@ -7,12 +7,13 @@ import { requestMarketPostDeletion } from "@/lib/market-media-storage";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
-export default function MarketDetailController({ id, online, onBack, onDeleted, onExternalLink }: {
+export default function MarketDetailController({ id, online, onBack, onDeleted, onExternalLink, onTitleChange }: {
   id: string;
   online: boolean;
   onBack: () => void;
   onDeleted: () => void;
   onExternalLink?: (url: string) => void;
+  onTitleChange?: (title: string) => void;
 }) {
   const { t } = useLanguage();
   const [payload, setPayload] = useState<MarketDetailPayload | null>(null);
@@ -20,17 +21,17 @@ export default function MarketDetailController({ id, online, onBack, onDeleted, 
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
-    if (!online || !id) { setPayload(null); setLoading(false); return; }
+    if (!online || !id) { setPayload(null); setLoading(false); onTitleChange?.(""); return; }
     let cancelled = false;
     setLoading(true);
     void loadMarketPostDetail(supabase, id).then((value) => {
-      if (!cancelled) { setPayload(value); setLoading(false); }
+      if (!cancelled) { setPayload(value); setLoading(false); onTitleChange?.(value?.item?.title || ""); }
     }).catch((error) => {
       console.error("load market detail error:", error);
-      if (!cancelled) { setPayload(null); setLoading(false); }
+      if (!cancelled) { setPayload(null); setLoading(false); onTitleChange?.(""); }
     });
     return () => { cancelled = true; };
-  }, [id, online]);
+  }, [id, online, onTitleChange]);
 
   async function updateStatus(nextStatus: "active" | "ended") {
     const item = payload?.item;

@@ -58,6 +58,24 @@ const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
 const MAX_RECENT_SEARCHES = 8;
 const INITIAL_VISIBLE_PLANT_COUNT = 24;
 const PLANT_BATCH_SIZE = 24;
+const GUIDE_REMOTE_TIMEOUT_MS = 7000;
+
+function withGuideRemoteTimeout<T>(
+  promise: PromiseLike<T>,
+  timeoutMs = GUIDE_REMOTE_TIMEOUT_MS,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: T | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    Promise.resolve(promise).then((value) => finish(value)).catch(() => finish(null));
+  });
+}
 
 function replaceGuideDirectoryUrl(section: ArchiveCategory, query = "", category = "all") {
   window.history.replaceState(window.history.state, "", buildGuideDirectoryHref(section, query, category));
@@ -409,43 +427,58 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
   }, []);
 
   useEffect(() => {
+    const fallbackEntries = offlineDirectory.filter((entry) => entry.category === "plant");
+    const fallbackPlants = fallbackEntries.map((entry) => ({
+      id: entry.id || entry.plantId || entry.label,
+      slug: entry.plantSlug,
+      common_name: entry.label,
+      scientific_name: entry.nameEn,
+      category: "all",
+      is_active: true,
+    })) as PlantItem[];
+    const fallbackAliases = fallbackEntries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
+      species_id: entry.id || entry.plantId || entry.label,
+      alias_name: alias,
+    }))) as AliasItem[];
+    const fallbackOverviews = fallbackEntries.filter((entry) => entry.overviewZh).map((entry) => ({
+      species_id: entry.id || entry.plantId || entry.label,
+      summary: entry.overviewZh || "",
+    })) as BasicOverview[];
+    const fallbackOverviewsEn = fallbackEntries.filter((entry) => entry.overviewEn).map((entry) => ({
+      species_id: entry.id || entry.plantId || entry.label,
+      summary: entry.overviewEn || "",
+    })) as BasicOverview[];
+    const fallbackParameters = fallbackEntries.filter((entry) => entry.plantCoreParameters).map((entry) => ({
+      species_id: entry.id || entry.plantId || entry.label,
+      ...entry.plantCoreParameters,
+    })) as PlantParameterLite[];
+
+    // The bundled directory is the display baseline in both online and offline
+    // modes. Remote data enriches it later and must never block the screen.
+    setPlants(fallbackPlants);
+    setAliases(fallbackAliases);
+    setBasicOverviews(fallbackOverviews);
+    setBasicOverviewsEn(fallbackOverviewsEn);
+    setParameters(fallbackParameters);
+    setLoading(false);
+    setPlantCatalogError(false);
+
     if (offline) {
-      const entries = offlineDirectory.filter((entry) => entry.category === "plant");
-      setPlants(entries.map((entry) => ({ id: entry.id || entry.plantId || entry.label,
-        slug: entry.plantSlug, common_name: entry.label, scientific_name: entry.nameEn,
-        category: "all", is_active: true })));
-      setAliases(entries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
-        species_id: entry.id || entry.plantId || entry.label, alias_name: alias,
-      }))));
-      setBasicOverviews(entries.filter((entry) => entry.overviewZh).map((entry) => ({
-        species_id: entry.id || entry.plantId || entry.label, summary: entry.overviewZh || "",
-      })) as BasicOverview[]);
-      setBasicOverviewsEn(entries.filter((entry) => entry.overviewEn).map((entry) => ({
-        species_id: entry.id || entry.plantId || entry.label, summary: entry.overviewEn || "",
-      })) as BasicOverview[]);
-      setParameters(entries.filter((entry) => entry.plantCoreParameters).map((entry) => ({
-        species_id: entry.id || entry.plantId || entry.label, ...entry.plantCoreParameters,
-      })) as PlantParameterLite[]);
       setIsSignedIn(offlineSignedIn);
-      setLoading(false);
-      setPlantCatalogError(false);
       return;
     }
     let cancelled = false;
     async function load() {
-      setLoading(true);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const authResult = await withGuideRemoteTimeout(supabase.auth.getUser());
+      const user = authResult?.data.user || null;
       if (cancelled) return;
 
       setIsSignedIn(Boolean(user));
 
       const membershipResult = user
-        ? await supabase.rpc("get_my_membership")
-        : { data: null, error: null };
-      const membership = membershipResult.error
+        ? await withGuideRemoteTimeout(supabase.rpc("get_my_membership"))
+        : null;
+      const membership = !membershipResult || membershipResult.error
         ? null
         : normalizeMembershipRpcResult(membershipResult.data);
       const canReadFullGuide = canAccessMembershipGuidance(membership);
@@ -453,14 +486,14 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
       setHasCloudAccess(canReadFullGuide);
 
       const [
-        { data: plantData, error: plantError },
-        { data: aliasData, error: aliasError },
-        { data: overviewData },
-        { data: overviewDataEn },
-        { data: parameterData },
+        plantResult,
+        aliasResult,
+        overviewResult,
+        overviewEnResult,
+        parameterResult,
         interestCountResult,
       ] = await Promise.all([
-        loadGuideDirectoryRows<PlantItem>((from, to) => supabase
+        withGuideRemoteTimeout(loadGuideDirectoryRows<PlantItem>((from, to) => supabase
           .from("plant_species")
           .select(
             "id, slug, common_name, scientific_name, family, category, sub_category, sort_order, is_active"
@@ -469,60 +502,42 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
           .order("sort_order", { ascending: true, nullsFirst: false })
           .order("common_name", { ascending: true })
           .order("id", { ascending: true })
-          .range(from, to)).catch((error) => ({ data: [] as PlantItem[], error })),
+          .range(from, to))),
 
-        loadGuideDirectoryRows<AliasItem>((from, to) => supabase
+        withGuideRemoteTimeout(loadGuideDirectoryRows<AliasItem>((from, to) => supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name")
           .order("species_id", { ascending: true })
           .order("alias_name", { ascending: true })
-          .range(from, to)).catch((error) => ({ data: [] as AliasItem[], error })),
+          .range(from, to))),
 
         user
-          ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data })).catch(() => ({ data: [] as BasicOverview[] }))
-          : Promise.resolve({ data: [] as BasicOverview[] }),
+          ? withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null).then((data) => ({ data })))
+          : Promise.resolve(null),
 
         user
-          ? loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data })).catch(() => ({ data: [] as BasicOverview[] }))
-          : Promise.resolve({ data: [] as BasicOverview[] }),
+          ? withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data })))
+          : Promise.resolve(null),
 
         canReadFullGuide
-          ? Promise.resolve(supabase.from("plant_parameters").select(
+          ? withGuideRemoteTimeout(Promise.resolve(supabase.from("plant_parameters").select(
               "species_id, sun_score, need_trellis, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
-            )).catch(() => ({ data: [] as PlantParameterLite[], error: null }))
+            )))
           : user
-            ? loadPlantCoreParametersCompat(null).then((data) => ({ data })).catch(() => ({ data: [] as PlantParameterLite[] }))
-            : Promise.resolve({ data: [] as PlantParameterLite[] }),
+            ? withGuideRemoteTimeout(loadPlantCoreParametersCompat(null).then((data) => ({ data })))
+            : Promise.resolve(null),
 
-        user ? getGuideInterestCount(user.id).catch(() => null) : Promise.resolve(null),
+        user ? withGuideRemoteTimeout(getGuideInterestCount(user.id)) : Promise.resolve(null),
       ]);
 
       if (cancelled) return;
-      const fallbackEntries = offlineDirectory.filter((entry) => entry.category === "plant");
-      const fallbackPlants = fallbackEntries.map((entry) => ({
-        id: entry.id || entry.plantId || entry.label,
-        slug: entry.plantSlug,
-        common_name: entry.label,
-        scientific_name: entry.nameEn,
-        category: "all",
-        is_active: true,
-      })) as PlantItem[];
-      const fallbackAliases = fallbackEntries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
-        species_id: entry.id || entry.plantId || entry.label,
-        alias_name: alias,
-      }))) as AliasItem[];
-      const fallbackOverviews = fallbackEntries.filter((entry) => entry.overviewZh).map((entry) => ({
-        species_id: entry.id || entry.plantId || entry.label,
-        summary: entry.overviewZh || "",
-      })) as BasicOverview[];
-      const fallbackOverviewsEn = fallbackEntries.filter((entry) => entry.overviewEn).map((entry) => ({
-        species_id: entry.id || entry.plantId || entry.label,
-        summary: entry.overviewEn || "",
-      })) as BasicOverview[];
-      const fallbackParameters = fallbackEntries.filter((entry) => entry.plantCoreParameters).map((entry) => ({
-        species_id: entry.id || entry.plantId || entry.label,
-        ...entry.plantCoreParameters,
-      })) as PlantParameterLite[];
+      const plantData = plantResult?.data || [];
+      const aliasData = aliasResult?.data || [];
+      const overviewData = overviewResult?.data || [];
+      const overviewDataEn = overviewEnResult?.data || [];
+      const parameterData = parameterResult?.data || [];
+      const plantError = plantResult?.error || (!plantResult ? Error("plant_directory_timeout") : null);
+      const aliasError = aliasResult?.error || (!aliasResult ? Error("plant_alias_timeout") : null);
       setPlants((plantData || []).length ? plantData || [] : fallbackPlants);
       setAliases((aliasData || []).length ? aliasData || [] : fallbackAliases);
       setPlantCatalogError(Boolean(plantError || aliasError));
@@ -530,20 +545,11 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
       setBasicOverviewsEn((overviewDataEn || []).length ? (overviewDataEn || []) as BasicOverview[] : fallbackOverviewsEn);
       setParameters((parameterData || []).length ? parameterData || [] : fallbackParameters);
       setInterestCount(interestCountResult);
-      setLoading(false);
     }
 
     void load().catch(() => {
       if (cancelled) return;
-      const entries = offlineDirectory.filter((entry) => entry.category === "plant");
-      setPlants(entries.map((entry) => ({ id: entry.id || entry.plantId || entry.label,
-        slug: entry.plantSlug, common_name: entry.label, scientific_name: entry.nameEn,
-        category: "all", is_active: true })));
-      setAliases(entries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
-        species_id: entry.id || entry.plantId || entry.label, alias_name: alias,
-      }))));
       setPlantCatalogError(true);
-      setLoading(false);
     });
     return () => { cancelled = true; };
   }, [offline, offlineDirectory, offlineSignedIn]);
@@ -562,8 +568,8 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
     let cancelled = false;
 
     async function loadPublicGuides() {
-      const [entryResult, sectionResult] = await Promise.all([
-        loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
+      const [entryResolved, sectionResolved] = await Promise.all([
+        withGuideRemoteTimeout(loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
           .from("guide_entries")
           .select(
             "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, content_en, sort_order, is_active",
@@ -572,13 +578,15 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
           .order("sort_order", { ascending: true })
           .order("name", { ascending: true })
           .order("id", { ascending: true })
-          .range(from, to)),
-        supabase
+          .range(from, to))),
+        withGuideRemoteTimeout(supabase
           .from("guide_sections")
           .select("id, category, slug, name, name_en, summary, summary_en, sort_order")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true })),
       ]);
+      const entryResult = entryResolved || { data: [] as PublicGuideEntry[], error: Error("guide_entries_timeout") };
+      const sectionResult = sectionResolved || { data: [] as PublicGuideSection[], error: Error("guide_sections_timeout") };
 
       let entryData = (entryResult.data || []) as PublicGuideEntry[];
       let entryError = entryResult.error;
@@ -586,15 +594,15 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
       if (entryError) {
         // Compatibility while the guide-library expansion migration is being
         // rolled out: keep the earlier flat list readable.
-        const fallback = await loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
+        const fallback = await withGuideRemoteTimeout(loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
           .from("guide_entries")
           .select("id, category, name, source, is_active")
           .eq("is_active", true)
           .order("name", { ascending: true })
           .order("id", { ascending: true })
-          .range(from, to));
-        entryData = (fallback.data || []) as PublicGuideEntry[];
-        entryError = fallback.error;
+          .range(from, to)));
+        entryData = (fallback?.data || []) as PublicGuideEntry[];
+        entryError = fallback?.error || entryError;
       }
 
       if (!cancelled) {

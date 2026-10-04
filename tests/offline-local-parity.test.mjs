@@ -108,7 +108,7 @@ test("network-only sections use one quiet offline state", () => {
   assert.match(followLayout, /<NetworkRequiredBoundary>/);
 });
 
-test("local projects reuse the cloud archive card and detail header with device-only status", () => {
+test("local projects reuse the cloud archive card and detail header without redundant device-only copy", () => {
   const archivePage = read("app/archive/page.tsx");
   const localDetail = read("app/local/archive/[id]/page.tsx");
   const localView = read("components/archive-ui/localArchiveProjectView.ts");
@@ -123,7 +123,7 @@ test("local projects reuse the cloud archive card and detail header with device-
   assert.match(archivePage, /<ArchiveCard/);
   assert.match(archivePage, /hidePublicToggle/);
   assert.match(localView, /archiveCopy\.local_project/);
-  assert.match(localView, /archiveCopy\.saved_on_this_device/);
+  assert.doesNotMatch(localView, /archiveCopy\.saved_on_this_device/);
   assert.match(localView, /export function localArchiveToArchiveItem/);
   assert.match(projectCard, /project\.storageLabel/);
   assert.match(summaryCard, /props\.storageLabel/);
@@ -138,11 +138,9 @@ test("local projects reuse the cloud archive card and detail header with device-
   assert.match(cloudCard, /followerCount=\{href \? undefined : item\.follower_count\}/);
   assert.match(localDetail, /view=\{ArchiveProjectDetailView\}/);
   assert.match(localDetail, /archiveCopy\.local_project/);
-  assert.match(localDetail, /archiveCopy\.saved_on_this_device/);
+  assert.doesNotMatch(localDetail, /archiveCopy\.saved_on_this_device/);
   assert.match(localDetail, /archiveCopy\.transfer_to_cloud/);
   assert.match(localDetail, /<ArchiveRecordComposer/);
-  assert.match(zh, /saved_on_this_device: "仅保存于此设备"/);
-  assert.match(en, /saved_on_this_device: "Saved only on this device"/);
 });
 
 test("temporary single-character startup placeholder is replaced by the product brand", () => {

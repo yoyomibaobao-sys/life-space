@@ -8,6 +8,7 @@ import ArchiveCycleSettings from "@/components/archive-detail/ArchiveCycleSettin
 import ArchiveAddRecordSection from "@/components/archive-detail/ArchiveAddRecordSection";
 import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import ArchiveProjectDetailStatus, { ArchiveProjectDetailLoading } from "@/components/archive-ui/ArchiveProjectDetailStatus";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import {
   archiveProjectDetailNoticeLinkStyle,
   archiveProjectDetailReadOnlyNoticeStyle,
@@ -64,6 +65,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const [candidates, setCandidates] = useState<Awaited<ReturnType<typeof getSystemNameCandidates>>>([]);
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number; record: RecordItem } | null>(null);
   const [experienceCardCount, setExperienceCardCount] = useState(0);
+  const [trashConfirmOpen, setTrashConfirmOpen] = useState(false);
   const lastAddRecordRequest = useRef(addRecordRequest);
 
   const reload = useCallback(async () => {
@@ -192,11 +194,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         const result = await supabase.rpc(archive.status === "ended" ? "restore_archive_active" : "mark_archive_ended", { p_archive_id: archiveId });
         if (result.error) throw result.error;
       })}
-      onDeleteArchive={() => void change(async () => {
-        if (!window.confirm(copy.project_trash_message)) return;
-        if (!await requestCloudTrash("archives", archiveId)) throw new Error(copy.save_retry);
-        onBack();
-      }, false)}
+      onDeleteArchive={() => setTrashConfirmOpen(true)}
       onSaveTitle={(value) => patchArchive({ title: value })}
       onSaveCategory={(value) => patchArchive({ category: value, sub_tag_id: null, group_tag_id: null })}
       onSaveSystemName={async (selection) => {
@@ -328,6 +326,22 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         },
         onChange: (index) => setLightbox((current) => current ? { ...current, index } : null),
         onClose: () => setLightbox(null) } : null}
+    />
+    <AppConfirmDialog
+      open={trashConfirmOpen}
+      title={language === "zh" ? "移入回收站" : "Move to trash"}
+      message={copy.project_trash_message}
+      cancelLabel={language === "zh" ? "取消" : "Cancel"}
+      confirmLabel={language === "zh" ? "移入回收站" : "Move to trash"}
+      destructive
+      onCancel={() => setTrashConfirmOpen(false)}
+      onConfirm={() => {
+        setTrashConfirmOpen(false);
+        void change(async () => {
+          if (!await requestCloudTrash("archives", archiveId)) throw new Error(copy.save_retry);
+          onBack();
+        }, false);
+      }}
     />
   </>;
 }

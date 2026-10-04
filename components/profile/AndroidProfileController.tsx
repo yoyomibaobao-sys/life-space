@@ -90,9 +90,9 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     membershipEndDate && membership && ["trial", "basic", "large"].includes(String(membership.plan)),
   );
   const membershipLine = hasMembershipTerm
-    ? `${userType} · ${membership?.can_create_content === true
-      ? (language === "en" ? "Valid until" : "有效至")
-      : (language === "en" ? "Ended" : "已到期")} ${formatMembershipDate(membershipEndDate, language)}`
+    ? (language === "zh"
+      ? `${userType} · ${formatMembershipDate(membershipEndDate, language)}${membership?.can_create_content === true ? " 到期" : " 已到期"}`
+      : `${userType} · ${membership?.can_create_content === true ? "Valid until" : "Ended"} ${formatMembershipDate(membershipEndDate, language)}`)
     : userType;
 
   const locationParts = {
@@ -289,25 +289,18 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     )}
     error={error ? <p role="alert">{error}</p> : null}
     preferencesExtra={onLocalSpaceVisibilityChange ? (
-      <div style={localSpacePreferenceGroupStyle}>
-        <div style={localSpacePreferenceRowStyle}>
-          <span>{language === "zh" ? "显示本地空间" : "Show local space"}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={Boolean(localSpaceVisible)}
-            aria-label={language === "zh" ? "显示本地空间" : "Show local space"}
-            onClick={() => onLocalSpaceVisibilityChange(!localSpaceVisible)}
-            style={localSpaceToggleStyle(Boolean(localSpaceVisible))}
-          >
-            <span style={localSpaceToggleThumbStyle(Boolean(localSpaceVisible))} />
-          </button>
-        </div>
-        <p style={localSpacePreferenceHintStyle}>
-          {language === "zh"
-            ? "无本地内容时自动隐藏；关闭后只隐藏本地空间入口，不删除本机数据。"
-            : "Hidden automatically when there is no local content. Turning this off only hides the local-space entry; device data is not deleted."}
-        </p>
+      <div style={localSpacePreferenceRowStyle}>
+        <span>{language === "zh" ? "显示本地空间" : "Show local space"}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={Boolean(localSpaceVisible)}
+          aria-label={language === "zh" ? "显示本地空间" : "Show local space"}
+          onClick={() => onLocalSpaceVisibilityChange(!localSpaceVisible)}
+          style={localSpaceToggleStyle(Boolean(localSpaceVisible))}
+        >
+          <span style={localSpaceToggleThumbStyle(Boolean(localSpaceVisible))} />
+        </button>
       </div>
     ) : undefined}
     modules={modules} activeModule={module}
@@ -326,22 +319,10 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
       {online ? <button type="button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile" })}>{language === "zh" ? "打开云端备份与导出" : "Open backup and export"}</button> : <p>{needNetwork}</p>}</div> : null}
     {module === "account" ? <div><p>{language === "zh" ? "退出登录不会删除本机未同步内容。" : "Sign out keeps unsynced local content."}</p>
       {online ? <div style={{ display: "grid", gap: 10 }}>
-        <button type="button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile" })}>{language === "zh" ? "打开账号管理" : "Open account management"}</button>
-        <button type="button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile#profile-module-account" })}>{t.profile.delete_account}</button>
+        <button type="button" style={accountDeleteButtonStyle} onClick={() => void Browser.open({ url: "https://life-space.uk/profile#profile-module-account" })}>{t.profile.delete_account}</button>
       </div> : <p>{needNetwork}</p>}</div> : null}
   </MobileProfileView>;
 }
-
-const localSpacePreferenceGroupStyle: CSSProperties = {
-  borderBottom: "1px solid #edf1e9",
-};
-
-const localSpacePreferenceHintStyle: CSSProperties = {
-  margin: "-2px 12px 10px",
-  color: "#7a8675",
-  fontSize: 12,
-  lineHeight: 1.5,
-};
 
 const localSpacePreferenceRowStyle: CSSProperties = {
   minHeight: 50,
@@ -352,6 +333,16 @@ const localSpacePreferenceRowStyle: CSSProperties = {
   padding: "0 12px",
   color: "#334c32",
   fontSize: 15,
+  fontWeight: 800,
+};
+
+const accountDeleteButtonStyle: CSSProperties = {
+  minHeight: 42,
+  border: "1px solid #e4cbc7",
+  borderRadius: 12,
+  background: "#fff7f5",
+  color: "#a34f48",
+  fontSize: 14,
   fontWeight: 800,
 };
 

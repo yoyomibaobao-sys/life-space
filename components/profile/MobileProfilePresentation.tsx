@@ -183,6 +183,9 @@ export function ProfileLanguageSwitch() {
 }
 
 export const profileIdentityCardStyle: CSSProperties = {
+  minWidth: 0,
+  maxWidth: "100%",
+  overflow: "hidden",
   marginTop: 10,
   padding: 12,
   border: "1px solid #dfeadd",
@@ -246,6 +249,8 @@ export const profileIdentityMemberNumberStyle: CSSProperties = {
 };
 
 export const profileIdentityDetailsStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
   minWidth: 0,
   flex: 1,
   display: "grid",
@@ -298,12 +303,14 @@ export const profileIdentityMembershipStyle: CSSProperties = {
   minHeight: 24,
   display: "flex",
   alignItems: "center",
+  maxWidth: "100%",
   color: "#4d6a49",
-  fontSize: 13.5,
+  fontSize: 13,
   fontWeight: 760,
   lineHeight: 1.35,
-  whiteSpace: "normal",
-  overflowWrap: "normal",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 export const profileIdentityLogoutButtonStyle: CSSProperties = {
@@ -370,6 +377,9 @@ export const profileIdentityHelpfulStyle: CSSProperties = {
 };
 
 export const profileIdentityLocationRowStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  overscrollBehaviorInline: "contain",
   height: 42,
   minHeight: 42,
   display: "flex",

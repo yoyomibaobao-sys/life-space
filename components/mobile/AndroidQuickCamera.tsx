@@ -30,6 +30,8 @@ export default function AndroidQuickCamera({
 
   useEffect(() => {
     let active = true;
+    setReady(false);
+    setError("");
     void navigator.mediaDevices?.getUserMedia({
       video: { facingMode: { ideal: "environment" } },
       audio: false,
@@ -43,7 +45,6 @@ export default function AndroidQuickCamera({
         videoRef.current.srcObject = stream;
         void videoRef.current.play().catch(() => undefined);
       }
-      setReady(true);
     }).catch(() => {
       if (active) {
         setError(language === "zh"
@@ -95,7 +96,14 @@ export default function AndroidQuickCamera({
       </div>
 
       <div style={previewStyle}>
-        <video ref={videoRef} playsInline muted style={videoStyle} />
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          onLoadedMetadata={() => { void videoRef.current?.play().catch(() => undefined); }}
+          onPlaying={() => setReady(true)}
+          style={{ ...videoStyle, visibility: ready ? "visible" : "hidden" }}
+        />
         {!ready ? (
           <div style={cameraStateStyle}>{error || (language === "zh" ? "正在打开摄像头…" : "Opening camera…")}</div>
         ) : null}

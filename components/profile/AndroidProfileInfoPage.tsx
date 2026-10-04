@@ -88,6 +88,7 @@ export default function AndroidProfileInfoPage({
         title: "本机数据",
         paragraphs: [
           "本地项目、记录和照片保存在当前设备，可在断网时继续查看和记录。它们不会因为切换到云会员而自动变成云端内容。",
+          "无本地内容时，本地空间入口可自动隐藏；关闭“显示本地空间”只隐藏入口，不删除本机数据。",
         ],
       },
       {
@@ -110,6 +111,12 @@ export default function AndroidProfileInfoPage({
         ],
       },
       {
+        title: "回收站",
+        paragraphs: [
+          "回收站中的内容仍占用对应存储空间；恢复后可继续使用，清空回收站后无法恢复。",
+        ],
+      },
+      {
         title: "备份与导出",
         paragraphs: [
           "备份与导出是单独的操作入口。导出的是本人项目、记录及其原始图片等可备份内容，不把社区互动、集市信息或经验卡本身作为独立备份对象。",
@@ -118,7 +125,7 @@ export default function AndroidProfileInfoPage({
     ] : [
       {
         title: "Local data",
-        paragraphs: ["Local projects, records and photos stay on this device and remain available offline. They do not automatically become cloud data when membership changes."],
+        paragraphs: ["Local projects, records and photos stay on this device and remain available offline. They do not automatically become cloud data when membership changes.", "When there is no local content, the local-space entry can hide automatically. Turning off ‘Show local space’ hides only the entry and does not delete device data."],
       },
       {
         title: "Cloud data",
@@ -131,6 +138,10 @@ export default function AndroidProfileInfoPage({
       {
         title: "Offline records and sync",
         paragraphs: ["Records added to a cloud project while offline are saved locally and marked pending. When connectivity returns, they are uploaded back to the original cloud project."],
+      },
+      {
+        title: "Trash",
+        paragraphs: ["Items in trash continue to use their corresponding storage. Restored items can be used again; emptying trash permanently removes them."],
       },
       {
         title: "Backup & export",
