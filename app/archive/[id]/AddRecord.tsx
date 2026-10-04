@@ -2,7 +2,7 @@
 import RecordLocationField from "@/components/record/RecordLocationField";
 import { loadDefaultRecordLocation, rememberDefaultRecordLocation, normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
@@ -827,16 +827,25 @@ export default function AddRecord({
         </div>
       ) : null}
 
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={placeholder || t.add_record_placeholder}
-        style={{
-          padding: "10px",
-          width: "100%",
-          boxSizing: "border-box",
-        }}
-      />
+      {mobileMode ? (
+        <label style={mobileFieldStyle}>
+          <span style={mobileFieldLabelStyle}>{language === "zh" ? "记录内容" : "Record"}</span>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={placeholder || t.add_record_placeholder}
+            rows={5}
+            style={mobileTextAreaStyle}
+          />
+        </label>
+      ) : (
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={placeholder || t.add_record_placeholder}
+          style={{ padding: "10px", width: "100%", boxSizing: "border-box" }}
+        />
+      )}
 
       <RecordLocationField value={location} onChange={(value) => { locationEdited.current = true; setLocation(value); }} files={files} language={language} disabled={loading || contentBlocked} />
 
@@ -872,32 +881,39 @@ export default function AddRecord({
         </label>
       ) : null}
 
-      <select
-        value={timeMode}
-        onChange={(e) => setTimeMode(e.target.value)}
-        style={{ marginTop: "10px", padding: "6px" }}
-      >
-        <option value="exif">{t.photo_time}</option>
-        <option value="custom">{t.custom_time}</option>
-        <option value="now">{t.current_time}</option>
-      </select>
+      <div style={mobileMode ? mobileOptionGridStyle : undefined}>
+        <label style={mobileMode ? mobileFieldStyle : undefined}>
+          {mobileMode ? <span style={mobileFieldLabelStyle}>{language === "zh" ? "照片时间" : "Photo time"}</span> : null}
+          <select
+            value={timeMode}
+            onChange={(e) => setTimeMode(e.target.value)}
+            style={mobileMode ? mobileControlStyle : { marginTop: "10px", padding: "6px" }}
+          >
+            <option value="exif">{t.photo_time}</option>
+            <option value="custom">{t.custom_time}</option>
+            <option value="now">{t.current_time}</option>
+          </select>
+        </label>
 
-      {archiveIsPublic ? (
-        <select
-          value={recordVisibility}
-          onChange={(e) =>
-            setRecordVisibility(e.target.value as RecordVisibility)
-          }
-          style={{ marginTop: "10px", marginLeft: 8, padding: "6px" }}
-        >
-          <option value="public">{copy.public_discover}</option>
-          <option value="private">{copy.private_only}</option>
-        </select>
-      ) : (
-        <span style={{ marginLeft: 8, fontSize: 12, color: "#888" }}>
-          {copy.project_private}
-        </span>
-      )}
+        {archiveIsPublic ? (
+          <label style={mobileMode ? mobileFieldStyle : undefined}>
+            {mobileMode ? <span style={mobileFieldLabelStyle}>{language === "zh" ? "公开范围" : "Visibility"}</span> : null}
+            <select
+              value={recordVisibility}
+              onChange={(e) => setRecordVisibility(e.target.value as RecordVisibility)}
+              style={mobileMode ? mobileControlStyle : { marginTop: "10px", marginLeft: 8, padding: "6px" }}
+            >
+              <option value="public">{copy.public_discover}</option>
+              <option value="private">{copy.private_only}</option>
+            </select>
+          </label>
+        ) : (
+          <div style={mobileMode ? mobilePrivateNoticeStyle : { marginLeft: 8, fontSize: 12, color: "#888" }}>
+            {mobileMode ? <span style={mobileFieldLabelStyle}>{language === "zh" ? "公开范围" : "Visibility"}</span> : null}
+            <span>{copy.project_private}</span>
+          </div>
+        )}
+      </div>
 
       <div style={{ marginTop: "10px" }}>
         <label style={{ fontSize: 13, color: "#555" }}>
@@ -924,26 +940,20 @@ export default function AddRecord({
 
       <div style={{ marginTop: "10px" }}>
         {mobileMode ? (
-          <button
-            type="button"
-            onClick={() => chooseInputRef.current?.click()}
-            disabled={loading || membershipLoading || contentBlocked}
-            aria-label={copy.add_photo_or_camera}
-            title={copy.add_photo_or_camera}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 999,
-              border: "1px solid #dfe6dc",
-              background: "#fff",
-              color: "#4f684b",
-              fontSize: 24,
-              lineHeight: 1,
-              cursor: loading || membershipLoading || contentBlocked ? "not-allowed" : "pointer",
-            }}
-          >
-            +
-          </button>
+          <div style={mobilePhotoSectionStyle}>
+            <div style={mobilePhotoHeadingStyle}>
+              <strong>{language === "zh" ? `照片（最多 ${MAX_RECORD_PHOTOS_PER_ADD} 张）` : `Photos (max ${MAX_RECORD_PHOTOS_PER_ADD})`}</strong>
+              <span>{files.length} {language === "zh" ? "张照片" : "photos"}</span>
+            </div>
+            <div style={mobilePhotoActionsStyle}>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={loading || membershipLoading || contentBlocked} style={mobilePhotoButtonStyle}>
+                {copy.take_photo}
+              </button>
+              <button type="button" onClick={() => chooseInputRef.current?.click()} disabled={loading || membershipLoading || contentBlocked} style={mobilePhotoButtonStyle}>
+                {copy.choose_photos}
+              </button>
+            </div>
+          </div>
         ) : (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <button
@@ -1127,6 +1137,90 @@ export default function AddRecord({
     </div>
   );
 }
+
+const mobileFieldStyle: CSSProperties = {
+  display: "grid",
+  gap: 7,
+  marginTop: 14,
+};
+
+const mobileFieldLabelStyle: CSSProperties = {
+  color: "#344633",
+  fontSize: 15,
+  fontWeight: 750,
+};
+
+const mobileTextAreaStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 142,
+  resize: "vertical",
+  boxSizing: "border-box",
+  border: "1px solid #ccd5c8",
+  borderRadius: 16,
+  background: "#fff",
+  padding: "12px 13px",
+  color: "#263426",
+  fontSize: 16,
+  lineHeight: 1.55,
+};
+
+const mobileOptionGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const mobileControlStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 44,
+  boxSizing: "border-box",
+  border: "1px solid #d4ddd0",
+  borderRadius: 12,
+  background: "#fff",
+  padding: "8px 10px",
+  color: "#344633",
+  fontSize: 14,
+};
+
+const mobilePrivateNoticeStyle: CSSProperties = {
+  display: "grid",
+  alignContent: "start",
+  gap: 7,
+  marginTop: 14,
+  color: "#758071",
+  fontSize: 13,
+};
+
+const mobilePhotoSectionStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginTop: 4,
+};
+
+const mobilePhotoHeadingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: 10,
+  color: "#344633",
+  fontSize: 14,
+};
+
+const mobilePhotoActionsStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const mobilePhotoButtonStyle: CSSProperties = {
+  minHeight: 46,
+  border: "1px solid #d6dfd2",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#356033",
+  fontSize: 15,
+  fontWeight: 750,
+};
 
 const cycleSelectLabelStyle = {
   display: "flex",

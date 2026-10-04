@@ -197,5 +197,5 @@ button:disabled { opacity: 0.55; }
 .project-destination-button small { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.35; }
 .quick-add-actions { position: relative; justify-self: center; align-self: center; width: 58px; height: 48px; }
 .quick-add { position: absolute; left: 5px; top: 0; width: 48px; height: 48px; display: grid; place-items: center; margin-top: -16px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
-.quick-add-album { position: absolute; right: -1px; bottom: 1px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #f7faf5; color: var(--green-dark); box-shadow: 0 2px 7px rgba(46, 79, 43, 0.18); }
+.market-add { justify-self: center; align-self: center; min-width: 64px; height: 38px; margin-top: -10px; padding: 0 12px; border: 3px solid #fff; border-radius: 999px; background: var(--green); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 3px; font-size: 12px; font-weight: 800; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
 .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }

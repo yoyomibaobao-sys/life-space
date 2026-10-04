@@ -64,7 +64,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /label: copy\.all/);
   assert.match(source, /label: copy\.cloud/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
-  assert.match(source, /sourceOptions=\{\[/);
+  assert.match(source, /sourceOptions=\{auth\.status !== "signed-in"/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(source, /<ArchiveTaxonomyPanel/);
   assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
@@ -72,6 +72,19 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
+});
+
+test("signed-in local-space visibility is optional, persisted, and hides All together with Local", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const profile = read("components/profile/AndroidProfileController.tsx");
+  assert.match(source, /LOCAL_SPACE_VISIBILITY_KEY/);
+  assert.match(source, /localSpacePreference \?\? hasLocalSpaceContent/);
+  assert.match(source, /localSpaceVisible[\s\S]*\{ value: "all"[\s\S]*\{ value: "cloud"[\s\S]*\{ value: "local"/);
+  assert.match(source, /:\s*\[\{ value: "cloud", label: copy\.cloud, count: cloudSourceCount \}\]/);
+  assert.match(source, /writeLocalSpaceVisibilityPreference\(visible\)/);
+  assert.match(source, /localSpaceVisible=\{localSpaceVisible\}/);
+  assert.match(source, /onLocalSpaceVisibilityChange=\{auth\.status === "signed-in" \? updateLocalSpaceVisibility/);
+  assert.match(profile, /显示本地空间|Show local space/);
 });
 
 test("offline shell safely recovers one local owner when browser session state is unavailable", () => {

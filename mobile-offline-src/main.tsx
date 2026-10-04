@@ -89,6 +89,7 @@ import { localArchiveToProjectView } from "@/components/archive-ui/localArchiveP
 import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
+import AndroidQuickCamera from "@/components/mobile/AndroidQuickCamera";
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
@@ -156,6 +157,9 @@ import CategoryLabel from "@/components/ui/CategoryLabel";
 import filterStyles from "@/components/ui/CategoryFilterRow.module.css";
 import FollowPage from "@/app/follow/page";
 import MarketPage from "@/app/market/page";
+import { MyMarketPostsContent } from "@/app/market/mine/page";
+import { NewMarketPostContent } from "@/app/market/new/page";
+import AndroidExperienceCardDetail from "@/components/experience-card/AndroidExperienceCardDetail";
 import AndroidProfileController from "@/components/profile/AndroidProfileController";
 import AndroidProfileInfoPage, { type AndroidProfileInfoKind } from "@/components/profile/AndroidProfileInfoPage";
 import MembershipPaymentPage from "@/app/membership/payment/page";
@@ -241,6 +245,27 @@ function clearShellIdentityCache(userId?: string | null) {
   }
 }
 
+const LOCAL_SPACE_VISIBILITY_KEY = "lifespace_android_show_local_space_v1";
+
+function readLocalSpaceVisibilityPreference(): boolean | null {
+  try {
+    const value = window.localStorage.getItem(LOCAL_SPACE_VISIBILITY_KEY);
+    if (value === "shown") return true;
+    if (value === "hidden") return false;
+  } catch {
+    // Display preference is optional; project data remains untouched.
+  }
+  return null;
+}
+
+function writeLocalSpaceVisibilityPreference(visible: boolean) {
+  try {
+    window.localStorage.setItem(LOCAL_SPACE_VISIBILITY_KEY, visible ? "shown" : "hidden");
+  } catch {
+    // A storage failure must never affect local project data.
+  }
+}
+
 type CloudArchiveSummary = {
   id: string;
   title?: string | null;
@@ -269,14 +294,17 @@ type Screen =
   | { kind: "new-project"; guide?: SystemNameCandidate; destination?: CreationDestination }
   | { kind: "project-destination" }
   | { kind: "quick-add" }
-  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "local-transfer" | "membership-payment" | "membership-refund"; archiveId?: string }
+  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "market-mine" | "market-new" | "local-transfer" | "membership-payment" | "membership-refund"; archiveId?: string }
   | { kind: "local-transfer"; archiveId: string }
   | { kind: "activity" }
   | { kind: "discover-search" }
   | { kind: "public-detail" }
   | { kind: "experience" }
+  | { kind: "experience-detail"; id: string }
   | { kind: "following" }
   | { kind: "market" }
+  | { kind: "market-mine" }
+  | { kind: "market-new"; search?: string }
   | { kind: "market-detail"; id: string }
   | { kind: "guides" }
   | { kind: "guide-detail"; guideKey: string; guideId?: string }
@@ -638,15 +666,24 @@ function App() {
   const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
   const [detailAddRecordRequest, setDetailAddRecordRequest] = useState(0);
   const [taxonomySyncWarning, setTaxonomySyncWarning] = useState<string | null>(null);
-  const quickCamera = useRef<HTMLInputElement>(null);
   const quickGallery = useRef<HTMLInputElement>(null);
-  async function acceptQuickAddFiles(list: FileList | null, source: QuickAddSource) {
-    const images = Array.from(list || []).filter((file) => file.type.startsWith("image/"));
-    if (images.length > MAX_PHOTOS) showToast(copy.photoLimit);
-    const files = images.slice(0, MAX_PHOTOS);
+  async function acceptQuickAddImageFiles(images: File[], source: QuickAddSource) {
+    const validImages = images.filter((file) => file.type.startsWith("image/"));
+    if (validImages.length > MAX_PHOTOS) showToast(copy.photoLimit);
+    const files = validImages.slice(0, MAX_PHOTOS);
     if (!files.length) return;
-    const capturedAt = await Promise.all(files.map((file) => readImageCapturedAt(file).catch(() => null)));
+    const capturedAt = await Promise.all(files.map(async (file) => {
+      const metadataTime = await readImageCapturedAt(file).catch(() => null);
+      return metadataTime || (source === "camera" ? new Date(file.lastModified || Date.now()).toISOString() : null);
+    }));
     setQuickAddDraft({ files, capturedAt, source, note: "" });
+    setScreen({ kind: "choose-project" });
+  }
+  async function acceptQuickAddFiles(list: FileList | null, source: QuickAddSource) {
+    await acceptQuickAddImageFiles(Array.from(list || []), source);
+  }
+  function skipQuickAddPhotos() {
+    setQuickAddDraft({ files: [], capturedAt: [], source: "camera", note: "" });
     setScreen({ kind: "choose-project" });
   }
   const [categoryFilter, setCategoryFilter] = useState<ArchiveCategory | "all">("all");
@@ -721,6 +758,7 @@ function App() {
   const [archives, setArchives] = useState<LocalArchiveSummary[]>([]);
   const [cloudCaches, setCloudCaches] = useState<LocalArchiveSummary[]>([]);
   const [sourceFilter, setSourceFilter] = useState<ShellSourceFilter>("all");
+  const [localSpacePreference, setLocalSpacePreference] = useState<boolean | null>(() => readLocalSpaceVisibilityPreference());
   const [unownedCount, setUnownedCount] = useState(0);
   const [detail, setDetail] = useState<LocalArchiveDetail | null>(null);
   const [detailStatus, setDetailStatus] = useState<"idle" | "loading" | "ready" | "not-found" | "forbidden" | "error">("idle");
@@ -1243,12 +1281,24 @@ function App() {
       setScreen({ kind: "experience" });
       return true;
     }
+    if (routed.kind === "experience-detail" && routed.id) {
+      setScreen({ kind: "experience-detail", id: routed.id });
+      return true;
+    }
     if (routed.kind === "following") {
       setScreen({ kind: "following" });
       return true;
     }
     if (routed.kind === "market") {
       setScreen({ kind: "market" });
+      return true;
+    }
+    if (routed.kind === "market-mine") {
+      setScreen({ kind: "market-mine" });
+      return true;
+    }
+    if (routed.kind === "market-new") {
+      setScreen({ kind: "market-new", search });
       return true;
     }
     if (routed.kind === "market-detail" && routed.id) {
@@ -1527,8 +1577,7 @@ function App() {
   const filterCategory = (archive: { category?: string | null }) => categoryFilter === "all" || archive.category === categoryFilter;
   const liveCloudWorkspace =
     online &&
-    Boolean(authenticatedOwnerContext) &&
-    !cloudError;
+    Boolean(authenticatedOwnerContext);
   const workspace = buildAndroidCloudWorkspace({
     local: archives,
     caches: authenticatedOwnerContext ? cloudCaches : [],
@@ -1536,6 +1585,30 @@ function App() {
     pending: authenticatedOwnerContext ? pendingSync : [],
     preferLive: liveCloudWorkspace,
   });
+  const hasLocalSpaceContent = workspace.localOnly.length > 0;
+  const localSpaceVisible = auth.status !== "signed-in"
+    ? true
+    : (localSpacePreference ?? hasLocalSpaceContent);
+  useEffect(() => {
+    if (auth.status !== "signed-in") {
+      if (sourceFilter !== "local") setSourceFilter("local");
+      return;
+    }
+    if (!localSpaceVisible && sourceFilter !== "cloud") {
+      setSourceFilter("cloud");
+      setSubcategoryFilter(null);
+      setGroupFilter(null);
+    }
+  }, [auth.status, localSpaceVisible, sourceFilter]);
+  function updateLocalSpaceVisibility(visible: boolean) {
+    setLocalSpacePreference(visible);
+    writeLocalSpaceVisibilityPreference(visible);
+    if (!visible) {
+      setSourceFilter("cloud");
+      setSubcategoryFilter(null);
+      setGroupFilter(null);
+    }
+  }
   const filteredLocalArchives = workspace.localOnly.filter((archive) => filterCategory(archive) &&
     (!subcategoryFilter || archive.subcategory === subcategoryLabel) &&
     (!groupFilter || archive.group_name === groupLabel));
@@ -1861,13 +1934,13 @@ function App() {
     if (item.id === "market") {
       return {
         ...item,
-        active: screen.kind === "market" || screen.kind === "market-detail",
+        active: screen.kind === "market" || screen.kind === "market-mine" || screen.kind === "market-new" || screen.kind === "market-detail",
         onSelect: () => setScreen({ kind: "market" }),
       };
     }
     return {
       ...item,
-      active: !["activity", "experience", "following", "market", "market-detail", "guides", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
+      active: !["activity", "experience", "experience-detail", "following", "market", "market-mine", "market-new", "market-detail", "guides", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1877,7 +1950,7 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides", "following", "market", "market-detail", "profile", "project-categories", "guide-detail", "public-detail"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "experience-detail", "guides", "following", "market", "market-mine", "market-new", "market-detail", "profile", "project-categories", "guide-detail", "public-detail"].includes(screen.kind);
   const detailOwnsTopNav = ["detail", "cloud-detail", "public-cloud-detail", "edit-project", "new-record", "edit-record", "new-project", "project-destination"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
@@ -1978,11 +2051,15 @@ function App() {
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
           online={online}
           showConnectivityNotice={false}
-          sourceOptions={[
-            { value: "all", label: copy.all, count: workspace.counts.all },
-            { value: "cloud", label: copy.cloud, count: cloudSourceCount },
-            { value: "local", label: copy.local, count: workspace.counts.local },
-          ]}
+          sourceOptions={auth.status !== "signed-in"
+            ? [{ value: "local", label: copy.local, count: workspace.counts.local }]
+            : localSpaceVisible
+              ? [
+                  { value: "all", label: copy.all, count: workspace.counts.all },
+                  { value: "cloud", label: copy.cloud, count: cloudSourceCount },
+                  { value: "local", label: copy.local, count: workspace.counts.local },
+                ]
+              : [{ value: "cloud", label: copy.cloud, count: cloudSourceCount }]}
           activeSource={sourceFilter}
           onSelectSource={(source) => {
             setSourceFilter(source);
@@ -2060,12 +2137,13 @@ function App() {
               <>
                 {sourceFilter === "cloud" && filteredPending.length > 0 && filteredCloudArchives.length > 0 ? <h2 className="workspace-section-label">{language === "zh" ? "云端" : "Cloud"}</h2> : null}
                 {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
-                {!cloudLoading && filteredCloudArchives.length ? (
+                {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
+                {!cloudLoading && !cloudError && filteredCloudArchives.length ? (
                   <div className="project-list" data-android-live-cloud-list="true">
                     {(sourceFilter === "all" ? activeFilteredCloudArchives : orderedFilteredCloudArchives).map(renderCloudProjectCard)}
                   </div>
                 ) : null}
-                {!cloudLoading && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && filteredPending.length === 0 ? (
+                {!cloudLoading && !cloudError && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && filteredPending.length === 0 ? (
                   <section className="panel empty"><strong>{copy.cloudProjects}</strong>{copy.noProjects}</section>
                 ) : null}
               </>
@@ -2076,7 +2154,7 @@ function App() {
                 ) : null}
                 {cloudError && cloudUserId ? <section className="notice warning"><p>{cloudError}</p></section> : null}
                 {auth.status === "signed-in" &&
-                (!online || Boolean(cloudError)) &&
+                !online &&
                 filteredCloudCaches.length ? (
                   <>
                   {sourceFilter === "cloud" && filteredPending.length > 0 ? <h2 className="workspace-section-label">{language === "zh" ? "云端" : "Cloud"}</h2> : null}
@@ -2084,7 +2162,7 @@ function App() {
                     {(sourceFilter === "all" ? activeFilteredCloudCaches : orderedFilteredCloudCaches).map(renderCloudCacheCard)}
                   </div>
                   </>
-                ) : sourceFilter === "cloud" && (!online || Boolean(cloudError)) && filteredPending.length === 0 ? (
+                ) : sourceFilter === "cloud" && !online && filteredPending.length === 0 ? (
                   <section className="panel empty">{copy.noCachedProjects}</section>
                 ) : null}
               </>
@@ -2125,6 +2203,16 @@ function App() {
           ) : null}
         </ArchiveWorkspaceTemplate>
         </div>
+      ) : null}
+
+      {screen.kind === "quick-add" ? (
+        <AndroidQuickCamera
+          language={language}
+          onCapture={(file) => acceptQuickAddImageFiles([file], "camera")}
+          onAlbum={() => quickGallery.current?.click()}
+          onSkip={skipQuickAddPhotos}
+          onCancel={() => { setQuickAddDraft(null); goList(); }}
+        />
       ) : null}
 
       {screen.kind === "new-project" ? (
@@ -2476,8 +2564,30 @@ function App() {
         </div>
       ) : null}
 
+      {screen.kind === "market-mine" ? (
+        <div data-android-shell-page="market-mine">
+          <MyMarketPostsContent onRequireLogin={() => openCloudLogin("market-mine")} />
+        </div>
+      ) : null}
+
+      {screen.kind === "market-new" ? (() => {
+        const params = new URLSearchParams((screen.search || "").replace(/^\?/, ""));
+        return <div data-android-shell-page="market-new">
+          <NewMarketPostContent
+            sourceArchiveIdParam={params.get("archiveId") || ""}
+            sourceRecordIdParam={params.get("recordId") || ""}
+            onRequireLogin={() => openCloudLogin("market-new")}
+            onSaved={(postId) => setScreen({ kind: "market-detail", id: postId })}
+          />
+        </div>;
+      })() : null}
+
       {screen.kind === "market-detail" ? <AndroidMarketDetailController id={screen.id}
         online={online} onBack={() => setScreen({ kind: "market" })} /> : null}
+
+      {screen.kind === "experience-detail" ? (
+        <AndroidExperienceCardDetail key={screen.id} cardId={screen.id} onBack={() => setScreen({ kind: "experience" })} />
+      ) : null}
 
       {screen.kind === "guides" ? (
         <div data-android-shell-page="guides">
@@ -2505,6 +2615,8 @@ function App() {
               onLogout={auth.status === "signed-in" ? () => void logoutFromProfile() : undefined}
               onLogin={online && auth.status === "signed-out" ? () => openCloudLogin("profile") : undefined}
               onProfileSaved={() => cloudUserId ? void loadShellIdentity(cloudUserId) : undefined}
+              localSpaceVisible={localSpaceVisible}
+              onLocalSpaceVisibilityChange={auth.status === "signed-in" ? updateLocalSpaceVisibility : undefined}
             />
           </MobileShellErrorBoundary>
         </div>
@@ -2517,51 +2629,51 @@ function App() {
             title={language === "zh" ? "无法打开分组设置" : "Could not open group settings"}
             message={language === "zh" ? "页面加载出错。" : "This page failed to render."}
             backLabel={language === "zh" ? "返回资料" : "Back to profile"}
-            onBack={() => goBackInShell()}
+            onBack={() => setScreen({ kind: "profile" })}
           >
             <OfflineProjectCategorySettings
               ownerUserId={ownerContext?.userId || owner?.userId || ""}
               online={online}
               cloudUserId={cloudUserId}
               cachedEntries={cachedTaxonomy}
-              onBack={() => goBackInShell()}
+              onBack={() => setScreen({ kind: "profile" })}
             />
           </MobileShellErrorBoundary>
         </div>
       ) : null}
       {screen.kind === "recent" ? <AndroidRecentBrowse
         online={online}
-        onBack={() => goBackInShell()}
+        onBack={() => setScreen({ kind: "profile" })}
         onOpen={(id) => { applyShellPath(`${[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
       /> : null}
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
-        online={online} onBack={() => goBackInShell()} /> : null}
+        online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
       {screen.kind === "membership-payment" ? <div data-android-membership-payment="true">
         <MobilePageHeaderView title={language === "zh" ? "开通云会员" : "Cloud Membership"} titleText={language === "zh" ? "开通云会员" : "Cloud Membership"}
-          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => goBackInShell()} />
+          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => setScreen({ kind: "profile" })} />
         {online ? <MembershipPaymentPage /> : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />}
       </div> : null}
       {screen.kind === "membership-refund" ? <div data-android-membership-refund="true">
         <MobilePageHeaderView title={language === "zh" ? "退款申请" : "Refund request"} titleText={language === "zh" ? "退款申请" : "Refund request"}
-          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => goBackInShell()} />
+          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => setScreen({ kind: "profile" })} />
         {online ? <MembershipRefundPage /> : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />}
       </div> : null}
       {screen.kind === "membership-benefits" ? <AndroidProfileInfoPage
         kind="membership-benefits" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "data-security" ? <AndroidProfileInfoPage
         kind="data-security" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "legal" ? <AndroidProfileInfoPage
         kind="legal-index" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "legal-page" ? <AndroidProfileInfoPage
         kind={`legal-${screen.id}` as AndroidProfileInfoKind} online={online} signedIn={auth.status === "signed-in"}
         onBack={() => goBackInShell({ kind: "legal" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "feedback" ? <AndroidProfileInfoPage
         kind="feedback" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
-      {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={() => goBackInShell()} /> : null}
+        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={() => setScreen({ kind: "profile" })} /> : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => window.history.back()} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onSuccess={(userId) => {
         const destination = screen;
@@ -2609,7 +2721,6 @@ function App() {
         {authenticatedOwnerContext && online ? cloudArchives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
         {authenticatedOwnerContext && !online ? cloudCaches.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
       </div><div className="action-row">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button key={destination} type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>)}<button type="button" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button></div></section> : null}
-      <input ref={quickCamera} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "camera"); event.target.value = ""; }} />
       <input ref={quickGallery} type="file" accept="image/*" multiple hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "gallery"); event.target.value = ""; }} />
       {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section> : null}
       <MobileBottomNavigationView
@@ -2638,25 +2749,27 @@ function App() {
                 <UiIcon name="plus" size={25} strokeWidth={2.2} />
               </button>
             </div>
+          ) : screen.kind === "market" || screen.kind === "market-mine" || screen.kind === "market-detail" || screen.kind === "market-new" ? (
+            <button
+              type="button"
+              className="market-add"
+              aria-label={language === "zh" ? "发布信息" : "Post"}
+              title={language === "zh" ? "发布信息" : "Post"}
+              onClick={() => setScreen({ kind: "market-new" })}
+            >
+              <UiIcon name="plus" size={18} strokeWidth={2.2} />
+              <span>{language === "zh" ? "发布" : "Post"}</span>
+            </button>
           ) : (
             <div className="quick-add-actions">
               <button
                 type="button"
                 className="quick-add"
-                aria-label={copy.camera}
-                title={copy.camera}
-                onClick={() => quickCamera.current?.click()}
+                aria-label={copy.addRecord}
+                title={copy.addRecord}
+                onClick={() => setScreen({ kind: "quick-add" })}
               >
                 <UiIcon name="plus" size={25} strokeWidth={2.2} />
-              </button>
-              <button
-                type="button"
-                className="quick-add-album"
-                aria-label={copy.album}
-                title={copy.album}
-                onClick={() => quickGallery.current?.click()}
-              >
-                <UiIcon name="image" size={13} strokeWidth={1.9} />
               </button>
             </div>
           )
@@ -3123,6 +3236,12 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
 }) {
   const [note, setNote] = useState(record?.note || initialNote);
   const [recordTime, setRecordTime] = useState(toDateTimeLocal(record?.record_time || initialCapturedAt[0] || undefined));
+  const [photoTimeMode, setPhotoTimeMode] = useState<"photo" | "record">("photo");
+  const [visibility, setVisibility] = useState<"public" | "private">(
+    record?.source_cloud_visibility === "public" || record?.source_cloud_visibility === "private"
+      ? record.source_cloud_visibility
+      : archive.source_cloud_is_public ? "public" : "private",
+  );
   const [location, setLocation] = useState<RecordLocation | null>(() => record ? record.location || null : loadDefaultRecordLocation());
   const [cycleId, setCycleId] = useState(record?.cycle_id || (archive.cycle_enabled ? archive.cycles?.find((cycle) => cycle.status === "active")?.id : null) || "");
   const [files, setFiles] = useState<File[]>(initialFiles);
@@ -3144,11 +3263,13 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
     try {
       const isoTime = localDateTimeInputToIso(recordTime, record?.record_time);
       if (!isoTime) throw new Error(language === "en" ? "Enter a valid local date and time." : "请输入有效的本地日期和时间。");
-      const imageCapturedAt = await Promise.all(files.map(async (file) => initialFiles.includes(file)
-        ? initialCapturedAt[initialFiles.indexOf(file)] || await readImageCapturedAt(file)
-        : readImageCapturedAt(file)));
-      if (record) await updateLocalRecordFields(record.id, { note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
-      else await createLocalRecord({ archive_id: archive.id, note, record_time: isoTime, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
+      const imageCapturedAt = photoTimeMode === "record"
+        ? files.map(() => isoTime)
+        : await Promise.all(files.map(async (file) => initialFiles.includes(file)
+            ? initialCapturedAt[initialFiles.indexOf(file)] || await readImageCapturedAt(file)
+            : readImageCapturedAt(file)));
+      if (record) await updateLocalRecordFields(record.id, { note, record_time: isoTime, visibility, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
+      else await createLocalRecord({ archive_id: archive.id, note, record_time: isoTime, visibility, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
       await onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
   }
@@ -3163,6 +3284,10 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
     <section className="panel"><form className="form" onSubmit={submit}>
       <div className="project-meta">{archive.title} · {copy.local}</div>
       <label className="field">{copy.recordTime}<input type="datetime-local" value={recordTime} onChange={(e) => setRecordTime(e.target.value)} required disabled={busy} /></label>
+      <div className="record-option-grid">
+        <label className="field">{language === "zh" ? "照片时间" : "Photo time"}<select value={photoTimeMode} onChange={(e) => setPhotoTimeMode(e.target.value as "photo" | "record")} disabled={busy}><option value="photo">{language === "zh" ? "使用照片时间" : "Use photo time"}</option><option value="record">{language === "zh" ? "使用记录时间" : "Use record time"}</option></select></label>
+        <label className="field">{copy.visibility}<select value={visibility} onChange={(e) => setVisibility(e.target.value as "public" | "private")} disabled={busy}><option value="public">{language === "zh" ? "公开" : "Public"}</option><option value="private">{copy.private}</option></select></label>
+      </div>
       {archive.cycle_enabled ? <label className="field">{periods.assignLabel}<select value={cycleId} disabled={busy} onChange={(e) => setCycleId(e.target.value)}><option value="">{periods.unassignedOption}</option>{(archive.cycles || []).filter((cycle) => record || cycle.status === "active").map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
       <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={8000} disabled={busy} /></label>
       <div className="field"><label>{copy.selectPhotos}</label><small>{(record?.images.length || 0) + files.length} {copy.photos}</small>

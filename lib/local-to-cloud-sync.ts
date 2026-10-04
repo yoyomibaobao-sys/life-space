@@ -230,10 +230,13 @@ async function ensureCloudRecord(params: {
   record: LocalRecordWithImages;
   cycleId?: string | null;
 }) {
+  const recordVisibility = params.record.source_cloud_visibility === "public" || params.record.source_cloud_visibility === "private"
+    ? params.record.source_cloud_visibility
+    : params.visibility;
   const currentPayload = {
     cycle_id: params.cycleId || null,
     note: params.record.note || "",
-    visibility: params.visibility,
+    visibility: recordVisibility,
     photo_time: params.record.record_time,
     record_time: params.record.record_time,
   };
@@ -276,7 +279,7 @@ async function ensureCloudRecord(params: {
         cycle_id: params.cycleId || null,
         user_id: params.userId,
         note: params.record.note || "",
-        visibility: params.visibility,
+        visibility: recordVisibility,
         photo_time: params.record.record_time,
         record_time: params.record.record_time,
         upload_time: params.record.created_at || new Date().toISOString(),

@@ -469,47 +469,81 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
           .order("sort_order", { ascending: true, nullsFirst: false })
           .order("common_name", { ascending: true })
           .order("id", { ascending: true })
-          .range(from, to)),
+          .range(from, to)).catch((error) => ({ data: [] as PlantItem[], error })),
 
         loadGuideDirectoryRows<AliasItem>((from, to) => supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name")
           .order("species_id", { ascending: true })
           .order("alias_name", { ascending: true })
-          .range(from, to)),
+          .range(from, to)).catch((error) => ({ data: [] as AliasItem[], error })),
 
         user
-          ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))
+          ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data })).catch(() => ({ data: [] as BasicOverview[] }))
           : Promise.resolve({ data: [] as BasicOverview[] }),
 
         user
-          ? loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data }))
+          ? loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data })).catch(() => ({ data: [] as BasicOverview[] }))
           : Promise.resolve({ data: [] as BasicOverview[] }),
 
         canReadFullGuide
-          ? supabase.from("plant_parameters").select(
+          ? Promise.resolve(supabase.from("plant_parameters").select(
               "species_id, sun_score, need_trellis, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
-            )
+            )).catch(() => ({ data: [] as PlantParameterLite[], error: null }))
           : user
-            ? loadPlantCoreParametersCompat(null).then((data) => ({ data }))
+            ? loadPlantCoreParametersCompat(null).then((data) => ({ data })).catch(() => ({ data: [] as PlantParameterLite[] }))
             : Promise.resolve({ data: [] as PlantParameterLite[] }),
 
-        user ? getGuideInterestCount(user.id) : Promise.resolve(null),
+        user ? getGuideInterestCount(user.id).catch(() => null) : Promise.resolve(null),
       ]);
 
       if (cancelled) return;
-      setPlants(plantData || []);
-      setAliases(aliasData || []);
+      const fallbackEntries = offlineDirectory.filter((entry) => entry.category === "plant");
+      const fallbackPlants = fallbackEntries.map((entry) => ({
+        id: entry.id || entry.plantId || entry.label,
+        slug: entry.plantSlug,
+        common_name: entry.label,
+        scientific_name: entry.nameEn,
+        category: "all",
+        is_active: true,
+      })) as PlantItem[];
+      const fallbackAliases = fallbackEntries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
+        species_id: entry.id || entry.plantId || entry.label,
+        alias_name: alias,
+      }))) as AliasItem[];
+      const fallbackOverviews = fallbackEntries.filter((entry) => entry.overviewZh).map((entry) => ({
+        species_id: entry.id || entry.plantId || entry.label,
+        summary: entry.overviewZh || "",
+      })) as BasicOverview[];
+      const fallbackOverviewsEn = fallbackEntries.filter((entry) => entry.overviewEn).map((entry) => ({
+        species_id: entry.id || entry.plantId || entry.label,
+        summary: entry.overviewEn || "",
+      })) as BasicOverview[];
+      const fallbackParameters = fallbackEntries.filter((entry) => entry.plantCoreParameters).map((entry) => ({
+        species_id: entry.id || entry.plantId || entry.label,
+        ...entry.plantCoreParameters,
+      })) as PlantParameterLite[];
+      setPlants((plantData || []).length ? plantData || [] : fallbackPlants);
+      setAliases((aliasData || []).length ? aliasData || [] : fallbackAliases);
       setPlantCatalogError(Boolean(plantError || aliasError));
-      setBasicOverviews((overviewData || []) as BasicOverview[]);
-      setBasicOverviewsEn((overviewDataEn || []) as BasicOverview[]);
-      setParameters(parameterData || []);
+      setBasicOverviews((overviewData || []).length ? (overviewData || []) as BasicOverview[] : fallbackOverviews);
+      setBasicOverviewsEn((overviewDataEn || []).length ? (overviewDataEn || []) as BasicOverview[] : fallbackOverviewsEn);
+      setParameters((parameterData || []).length ? parameterData || [] : fallbackParameters);
       setInterestCount(interestCountResult);
       setLoading(false);
     }
 
     void load().catch(() => {
-      if (!cancelled) { setPlantCatalogError(true); setLoading(false); }
+      if (cancelled) return;
+      const entries = offlineDirectory.filter((entry) => entry.category === "plant");
+      setPlants(entries.map((entry) => ({ id: entry.id || entry.plantId || entry.label,
+        slug: entry.plantSlug, common_name: entry.label, scientific_name: entry.nameEn,
+        category: "all", is_active: true })));
+      setAliases(entries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
+        species_id: entry.id || entry.plantId || entry.label, alias_name: alias,
+      }))));
+      setPlantCatalogError(true);
+      setLoading(false);
     });
     return () => { cancelled = true; };
   }, [offline, offlineDirectory, offlineSignedIn]);

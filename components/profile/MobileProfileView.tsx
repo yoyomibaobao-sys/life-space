@@ -60,6 +60,7 @@ export default function MobileProfileView({
   androidIdentityLayout = false,
   identityTop,
   identityAfterStats,
+  preferencesExtra,
   adminAlert,
   error,
   modules,
@@ -88,6 +89,7 @@ export default function MobileProfileView({
   canEditIdentity?: boolean;
   identityTop?: ReactNode;
   identityAfterStats?: ReactNode;
+  preferencesExtra?: ReactNode;
   adminAlert?: ReactNode;
   error?: ReactNode;
   modules: MobileProfileNavItem[];
@@ -243,6 +245,7 @@ export default function MobileProfileView({
               </span>
               <ProfileLanguageSwitch />
             </section>
+            {preferencesExtra}
             <InternalLink
               href="/profile/project-categories"
               style={{ ...projectCategorySettingsLinkStyle, ...mobileGroupedRowStyle }}

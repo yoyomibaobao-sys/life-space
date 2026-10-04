@@ -249,17 +249,16 @@ export const profileIdentityDetailsStyle: CSSProperties = {
   minWidth: 0,
   flex: 1,
   display: "grid",
-  gridTemplateRows: "30px 18px 24px",
+  gridTemplateRows: "30px auto auto",
   gap: 2,
   alignContent: "start",
   alignItems: "center",
-  paddingRight: 74,
   boxSizing: "border-box",
 };
 
 export const profileIdentityUsernameButtonStyle: CSSProperties = {
   width: "fit-content",
-  maxWidth: "100%",
+  maxWidth: "calc(100% - 74px)",
   border: 0,
   padding: 0,
   background: "transparent",
@@ -277,6 +276,7 @@ export const androidProfileIdentityUsernameStyle: CSSProperties = {
   height: 30,
   display: "flex",
   alignItems: "center",
+  maxWidth: "calc(100% - 74px)",
   color: "#253523",
   fontSize: 19,
   fontWeight: 850,
@@ -285,13 +285,11 @@ export const androidProfileIdentityUsernameStyle: CSSProperties = {
 
 export const androidProfileIdentityEmailStyle: CSSProperties = {
   minWidth: 0,
-  height: 18,
   color: "#667364",
-  fontSize: 13,
-  lineHeight: "18px",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
+  fontSize: 14,
+  lineHeight: 1.4,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
 };
 
 export const profileIdentityMembershipStyle: CSSProperties = {
@@ -299,9 +297,11 @@ export const profileIdentityMembershipStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   color: "#4d6a49",
-  fontSize: 14,
+  fontSize: 15,
   fontWeight: 760,
   lineHeight: 1.35,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
 };
 
 export const profileIdentityLogoutButtonStyle: CSSProperties = {
@@ -326,21 +326,21 @@ export const profileIdentityLogoutButtonStyle: CSSProperties = {
 
 export const profileIdentityBottomStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 8,
-  marginTop: 10,
-  paddingTop: 9,
+  gridTemplateColumns: "minmax(82px, 0.72fr) minmax(0, 1.28fr)",
+  gap: 6,
+  marginTop: 8,
+  paddingTop: 7,
   borderTop: "1px solid #e4ece0",
 };
 
 export const profileIdentityStatCellStyle: CSSProperties = {
   minWidth: 0,
-  minHeight: 54,
+  minHeight: 38,
   display: "grid",
   placeItems: "center",
   alignContent: "center",
-  gap: 3,
-  padding: "7px 8px",
+  gap: 1,
+  padding: "3px 6px",
   borderRadius: 12,
   background: "#f1f7ed",
   textAlign: "center",
@@ -348,17 +348,17 @@ export const profileIdentityStatCellStyle: CSSProperties = {
 
 export const profileIdentityStatLabelStyle: CSSProperties = {
   color: "#778273",
-  fontSize: 11,
-  lineHeight: 1.25,
+  fontSize: 14,
+  lineHeight: 1.15,
 };
 
 export const profileIdentityStatValueStyle: CSSProperties = {
   maxWidth: "100%",
   color: "#2e422d",
-  fontSize: 14,
+  fontSize: 16,
   fontWeight: 800,
-  lineHeight: 1.3,
-  overflowWrap: "anywhere",
+  lineHeight: 1.15,
+  whiteSpace: "nowrap",
 };
 
 export const profileIdentityHelpfulStyle: CSSProperties = {

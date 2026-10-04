@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
 import ArchiveExperienceCards from "@/components/archive-detail/ArchiveExperienceCards";
 import ArchiveOwnerSettingsFields from "@/components/archive-detail/ArchiveOwnerSettingsFields";
@@ -57,12 +57,13 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   const [status, setStatus] = useState<"loading" | "ready" | "not-found" | "error">("loading");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<ArchiveProjectDetailTabId>("records");
-  const [addOpen, setAddOpen] = useState(Boolean(initialFiles?.length));
+  const [addOpen, setAddOpen] = useState(initialFiles !== undefined);
   const [busy, setBusy] = useState(false);
   const [canWrite, setCanWrite] = useState(false);
   const [candidates, setCandidates] = useState<Awaited<ReturnType<typeof getSystemNameCandidates>>>([]);
   const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number; record: RecordItem } | null>(null);
   const [experienceCardCount, setExperienceCardCount] = useState(0);
+  const lastAddRecordRequest = useRef(addRecordRequest);
 
   const reload = useCallback(async () => {
     const [next, membership] = await Promise.all([
@@ -101,7 +102,8 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   }, [reload]);
 
   useEffect(() => {
-    if (!addRecordRequest) return;
+    if (!addRecordRequest || addRecordRequest === lastAddRecordRequest.current) return;
+    lastAddRecordRequest.current = addRecordRequest;
     setTab("records");
     setAddOpen(true);
   }, [addRecordRequest]);

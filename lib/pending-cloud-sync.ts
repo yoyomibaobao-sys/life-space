@@ -373,12 +373,14 @@ async function syncRecord(params: {
       assertMatchingCloudRecord(existing, cloudArchive.id, userId);
     } else if (isCreate) {
       const visibility =
-        cloudArchive.default_record_visibility === "public" ||
-        cloudArchive.default_record_visibility === "private"
-          ? cloudArchive.default_record_visibility
-          : cloudArchive.is_public
-            ? "public"
-            : "private";
+        record.source_cloud_visibility === "public" || record.source_cloud_visibility === "private"
+          ? record.source_cloud_visibility
+          : cloudArchive.default_record_visibility === "public" ||
+              cloudArchive.default_record_visibility === "private"
+            ? cloudArchive.default_record_visibility
+            : cloudArchive.is_public
+              ? "public"
+              : "private";
       const payload = {
         id: cloudRecordId,
         archive_id: cloudArchive.id,
@@ -416,6 +418,9 @@ async function syncRecord(params: {
       if (pendingFields.has("note")) patch.note = record.note || "";
       if (pendingFields.has("record_time")) patch.record_time = record.record_time;
       if (pendingFields.has("cycle_id")) patch.cycle_id = cloudCycleId;
+      if (pendingFields.has("visibility") && (record.source_cloud_visibility === "public" || record.source_cloud_visibility === "private")) {
+        patch.visibility = record.source_cloud_visibility;
+      }
 
       if (Object.keys(patch).length > 0) {
         const { data, error } = await supabase

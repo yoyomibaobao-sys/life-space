@@ -2263,6 +2263,7 @@ export async function convertPendingCloudProjectToOfflineCache(
 
 export async function updateLocalRecordFields(recordId: string, updates: {
   note?: string | null; record_time?: string | null; cycle_id?: string | null;
+  visibility?: "public" | "private" | null;
   location?: RecordLocation | null; image_files?: File[]; image_captured_at?: Array<string | null>;
 }) {
   const files = updates.image_files || [];
@@ -2295,6 +2296,9 @@ export async function updateLocalRecordFields(recordId: string, updates: {
       ...record, location: updates.location === undefined ? record.location : normalizeRecordLocation(updates.location),
       note: updates.note === undefined ? record.note : normalizeOptionalText(updates.note) || "",
       record_time: updates.record_time === undefined ? record.record_time : normalizeOptionalText(updates.record_time) || record.record_time,
+      source_cloud_visibility: updates.visibility === undefined
+        ? record.source_cloud_visibility
+        : (updates.visibility === "public" || updates.visibility === "private" ? updates.visibility : null),
       cycle_id: nextCycleId,
       sync: normalizeLocalSyncMeta(record.sync),
       updated_at: timestamp,
@@ -2303,6 +2307,7 @@ export async function updateLocalRecordFields(recordId: string, updates: {
       ["note", updates.note !== undefined && nextRecord.note !== record.note],
       ["record_time", updates.record_time !== undefined && nextRecord.record_time !== record.record_time],
       ["cycle_id", updates.cycle_id !== undefined && nextRecord.cycle_id !== (record.cycle_id || null)],
+      ["visibility", updates.visibility !== undefined && nextRecord.source_cloud_visibility !== (record.source_cloud_visibility || null)],
       ["location", updates.location !== undefined && JSON.stringify(nextRecord.location || null) !== JSON.stringify(record.location || null)],
     ];
     const changedRecordFields = recordFieldChecks
@@ -4489,6 +4494,7 @@ export async function createLocalRecord(input: {
   image_files?: File[];
   image_captured_at?: Array<string | null>;
   record_time?: string;
+  visibility?: "public" | "private" | null;
 }) {
   const note = input.note.trim();
   const files = input.image_files || [];
@@ -4509,6 +4515,7 @@ export async function createLocalRecord(input: {
     cycle_id: normalizeOptionalText(input.cycle_id),
     note,
     record_time: recordTime,
+    source_cloud_visibility: input.visibility === "public" || input.visibility === "private" ? input.visibility : null,
     created_at: timestamp,
     updated_at: timestamp,
     local_only: true,

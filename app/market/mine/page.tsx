@@ -53,6 +53,10 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
 
 export default function MyMarketPostsPage() {
   const router = useRouter();
+  return <MyMarketPostsContent onRequireLogin={() => router.push(buildLoginHref("/market/mine"))} />;
+}
+
+export function MyMarketPostsContent({ onRequireLogin }: { onRequireLogin?: () => void }) {
   const { language, t } = useLanguage();
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -71,7 +75,7 @@ export default function MyMarketPostsPage() {
       } = await supabase.auth.getUser();
 
       if (error || !user) {
-        router.push(buildLoginHref("/market/mine"));
+        onRequireLogin?.();
         return;
       }
 
@@ -92,7 +96,7 @@ export default function MyMarketPostsPage() {
 
     void init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, statusFilter]);
+  }, [onRequireLogin, statusFilter]);
 
   async function loadItems(userId: string) {
     let query = supabase
