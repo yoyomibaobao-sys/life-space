@@ -14,6 +14,7 @@ export default function PersonalSpaceMobileIdentity({
   experienceCardCount,
   profileHref,
   experienceHref,
+  onExperienceClick,
   notificationSlot,
   language = "zh",
 }: {
@@ -26,6 +27,7 @@ export default function PersonalSpaceMobileIdentity({
   experienceCardCount?: number | null;
   profileHref?: string | null;
   experienceHref?: string | null;
+  onExperienceClick?: (() => void) | null;
   notificationSlot?: ReactNode;
   language?: "zh" | "en";
 }) {
@@ -124,6 +126,15 @@ export default function PersonalSpaceMobileIdentity({
               >
                 {experienceLabel} {experienceCardCount || 0}
               </Link>
+            ) : onExperienceClick ? (
+              <button
+                type="button"
+                onClick={onExperienceClick}
+                style={inlineEntryButtonStyle}
+                aria-label={`${experienceLabel} (${experienceCardCount || 0})`}
+              >
+                {experienceLabel} {experienceCardCount || 0}
+              </button>
             ) : (
               <span style={inlineEntryStyle}>
                 {experienceLabel} {experienceCardCount || 0}
@@ -267,6 +278,15 @@ const inlineEntryStyle: CSSProperties = {
   lineHeight: 1.2,
   whiteSpace: "nowrap",
   textDecoration: "none",
+};
+
+const inlineEntryButtonStyle: CSSProperties = {
+  ...inlineEntryStyle,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  fontFamily: "inherit",
+  cursor: "pointer",
 };
 
 const actionsStyle: CSSProperties = {

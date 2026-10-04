@@ -61,6 +61,7 @@ type Props = {
   onCancelSystemEditing: () => void;
   onUpdateArchiveStatus: (item: ArchiveItem, nextStatus: "active" | "ended") => void;
   onTogglePublic: (item: ArchiveItem) => void;
+  onSetArchiveHelpStatus?: (item: ArchiveItem, nextStatus: "open" | "resolved" | "none") => void;
   onUpdateArchiveCategory: (item: ArchiveItem, value: string) => void;
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
   onDeleteArchive: (item: ArchiveItem) => void;
@@ -198,6 +199,7 @@ export default function ArchiveCard({
   onCancelSystemEditing,
   onUpdateArchiveStatus,
   onTogglePublic,
+  onSetArchiveHelpStatus,
   onUpdateArchiveCategory,
   onUpdateArchiveGroupTag,
   onDeleteArchive,
@@ -250,6 +252,7 @@ export default function ArchiveCard({
         groupTags={groupTags}
         categoryDepths={categoryDepths}
         onTogglePublic={hidePublicToggle ? undefined : onTogglePublic}
+        onSetArchiveHelpStatus={onSetArchiveHelpStatus}
         onUpdateArchiveStatus={onUpdateArchiveStatus}
         onUpdateArchiveCategory={onUpdateArchiveCategory}
         onUpdateArchiveGroupTag={onUpdateArchiveGroupTag}
@@ -658,6 +661,7 @@ function MobileArchiveCard({
   groupTags,
   categoryDepths,
   onTogglePublic,
+  onSetArchiveHelpStatus,
   onUpdateArchiveStatus,
   onUpdateArchiveCategory,
   onUpdateArchiveGroupTag,
@@ -678,6 +682,7 @@ function MobileArchiveCard({
   groupTags: GroupTagItem[];
   categoryDepths: ArchiveCategoryDepths;
   onTogglePublic?: (item: ArchiveItem) => void;
+  onSetArchiveHelpStatus?: (item: ArchiveItem, nextStatus: "open" | "resolved" | "none") => void;
   onUpdateArchiveStatus: (item: ArchiveItem, nextStatus: "active" | "ended") => void;
   onUpdateArchiveCategory: (item: ArchiveItem, value: string) => void;
   onUpdateArchiveGroupTag: (item: ArchiveItem, value: string) => void;
@@ -725,7 +730,11 @@ function MobileArchiveCard({
     recordCount: item.record_count || 0,
     durationDays: ongoingDays,
     followerCount: href ? undefined : item.follower_count,
-    helpLabel: item.help_status === "open" ? t.archive_workspace.help_open : null,
+    helpLabel: item.help_status === "open"
+      ? t.archive_workspace.help_open
+      : item.help_status === "resolved"
+        ? t.archive_workspace.help_resolved
+        : null,
     visibilityLabel: visibilityText,
     visibilityTone: href ? "neutral" : item.is_public ? "public" : "private",
     storageLabel: storageLabel || null,
@@ -756,6 +765,8 @@ function MobileArchiveCard({
           ? undefined
           : () => onTogglePublic(item)
       }
+      helpStatus={item.help_status}
+      onSetHelpStatus={readOnly || !onSetArchiveHelpStatus ? undefined : (nextStatus) => onSetArchiveHelpStatus(item, nextStatus)}
       onMoveToTrash={() => onDeleteArchive(item)}
       extraActions={extraActions}
     />

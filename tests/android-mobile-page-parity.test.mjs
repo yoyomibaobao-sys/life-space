@@ -94,7 +94,28 @@ test("profile page remains available offline in the Android shell", () => {
   assert.match(androidProfile, /订单进度查询|Order progress/);
   assert.match(androidProfile, /备份与导出|Backup & export/);
   assert.match(identity, /profileHref/);
+  assert.match(identity, /onExperienceClick/);
+  assert.match(shell, /experienceHref=\{hasAuthenticatedIdentity && online \? "\/experience-cards" : null\}/);
+  assert.match(shell, /需联网查看经验卡/);
   assert.match(shell, /data-android-shell-page="profile"/);
+});
+
+test("help state stays visible on project cards and editable in record properties and the more menu", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  const archiveCard = read("components/archive/ArchiveCard.tsx");
+  const recordCard = read("components/archive-detail/ArchiveRecordCard.tsx");
+  const archiveActions = read("components/archive/MobileArchiveActions.tsx");
+  const cloudDetail = read("components/archive-ui/CloudArchiveDetailController.tsx");
+
+  assert.match(shell, /help_status\?: string \| null/);
+  assert.match(shell, /helpLabel: archive\.help_status === "open"[\s\S]*"resolved"/);
+  assert.match(archiveCard, /item\.help_status === "resolved"[\s\S]*help_resolved/);
+  assert.match(recordCard, /aria-label=\{copy\.help_status\}[\s\S]*value=\{item\.status_tag \|\| ""\}/);
+  assert.match(recordCard, /mobileRecordHelpActionRowStyle[\s\S]*onSetHelpStatus\("resolved"\)[\s\S]*copy\.resolved[\s\S]*onSetHelpStatus\(null\)[\s\S]*copy\.cancel_help/);
+  assert.match(archiveActions, /helpStatus === "open"[\s\S]*t\.record\.mark_resolved[\s\S]*t\.record\.cancel_help/);
+  assert.match(archiveActions, /helpStatus === "resolved"[\s\S]*重新求助/);
+  assert.match(shell, /helpStatus=\{source === "cloud"[\s\S]*onSetHelpStatus=\{source === "cloud"/);
+  assert.match(cloudDetail, /statusBadge=\{archive\.help_status === "open"[\s\S]*recordCopy\.help_in_progress[\s\S]*recordCopy\.resolved/);
 });
 
 test("guide online and offline keep the PlantPage presentation and swap data", () => {

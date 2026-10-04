@@ -489,7 +489,9 @@ test("My Space taxonomy editing follows local, authenticated cloud, and All capa
   assert.match(shell, /setCloudTaxonomy\(await loadCloudProjectTaxonomy\(userId\)\)/);
   assert.match(shell, /await loadCloudList\(userId\)/);
   assert.match(shell, /await loadList\(ownerContext\)/);
-  assert.match(shell, /联网后可编辑云端分组/);
+  assert.match(shell, /showConnectivityNotice=\{false\}/);
+  assert.match(shell, /showSubcategoryRow=\{sourceFilter !== "all" && categoryFilter !== "all"/);
+  assert.doesNotMatch(shell, /联网后可编辑云端分组/);
   assert.doesNotMatch(shell.slice(shell.indexOf("async function mutateWorkspaceTaxonomy("), shell.indexOf("const cloudSourceCount")), /\bprompt\(/);
 });
 

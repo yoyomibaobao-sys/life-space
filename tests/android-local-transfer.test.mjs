@@ -4,16 +4,17 @@ import test from "node:test";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 
-test("local card and both local detail tabs expose the same voluntary transfer entry", () => {
+test("local card and properties expose voluntary cloud transfer without duplicating it in Details", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const detail = read("components/archive-ui/DeviceOwnedProjectDetail.tsx");
   assert.match(shell, /extraActions=\{source === "local" && local && canOfferLocalCloudTransfer\(local\)/);
   assert.match(shell, /label: language === "zh" \? "上传到云端"/);
   assert.match(shell, /onClick: \(\) => beginLocalTransfer\(local\.id\)/);
   assert.match(shell, /onTransferToCloud=\{canOfferLocalCloudTransfer\(detail\.archive\) &&[\s\S]*!pendingSync\.some/);
-  assert.equal((detail.match(/onTransferToCloud && !isCloudCache/g) || []).length, 2);
-  assert.match(detail, /statusNotice=\{[\s\S]*onTransferToCloud/);
-  assert.match(detail, /mobileOwnerSettings=\{[\s\S]*onTransferToCloud/);
+  assert.equal((detail.match(/onTransferToCloud && !isCloudCache/g) || []).length, 1);
+  const detailsNotice = detail.slice(detail.indexOf("statusNotice={"), detail.indexOf("activeTab="));
+  assert.doesNotMatch(detailsNotice, /onTransferToCloud|上传到云端|Upload to cloud/);
+  assert.match(detail, /mobileOwnerSettings=\{[\s\S]*footerAction=\{onTransferToCloud && !isCloudCache/);
 });
 
 test("offline transfer preserves its entry but cannot call the transfer engine", () => {

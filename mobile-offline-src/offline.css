@@ -187,6 +187,15 @@ button:disabled { opacity: 0.55; }
 .single-photo img { max-height: 340px; aspect-ratio: 4/3; }
 .photo-lightbox { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; background: #172217f5; z-index: 100; padding: 18px; }
 .photo-lightbox img { display: block; width: 100%; height: calc(100% - 60px); object-fit: contain; }
-.quick-add { justify-self: center; align-self: center; width: 48px; height: 48px; display: grid; place-items: center; margin-top: -16px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
-.quick-add-sheet { position: fixed; z-index: 210; left: 12px; right: 12px; bottom: calc(76px + var(--app-safe-area-bottom, 0px)); max-width: 540px; margin: 0 auto; box-shadow: 0 12px 36px rgba(30, 45, 30, 0.24); }
+.workspace-section-label { margin: 10px 4px 8px; color: var(--muted); font-size: 13px !important; font-weight: 650; line-height: 1.35; }
+.pending-upload-summary { padding: 12px 14px; box-shadow: none; }
+.pending-upload-summary .workspace-section-label { margin: 0 0 5px; }
+.pending-upload-summary p { margin: 0 0 9px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.compact-card-action { min-height: 34px; padding: 0 13px; font-size: 12px; font-weight: 650; }
+.project-destination-panel { border: 0; background: transparent; box-shadow: none; padding: 2px 8px 0; }
+.project-destination-button { min-height: 54px; display: grid; align-content: center; justify-items: start; gap: 3px; border-radius: 14px; padding: 9px 14px; text-align: left; }
+.project-destination-button small { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.35; }
+.quick-add-actions { position: relative; justify-self: center; align-self: center; width: 58px; height: 48px; }
+.quick-add { position: absolute; left: 5px; top: 0; width: 48px; height: 48px; display: grid; place-items: center; margin-top: -16px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
+.quick-add-album { position: absolute; right: -1px; bottom: 1px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #f7faf5; color: var(--green-dark); box-shadow: 0 2px 7px rgba(46, 79, 43, 0.18); }
 .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
