@@ -13,6 +13,7 @@ test("Android packages a same-origin standalone local project surface", () => {
   const buildScript = read("scripts/build-mobile-offline.mjs");
   const source = read("mobile-offline-src/main.tsx");
   const parityStyles = read("mobile-offline-src/local-parity.css");
+  const shellStyles = read("mobile-offline-src/offline.css");
   const generated = read("mobile-shell/offline.html");
   const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
   const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
@@ -42,6 +43,8 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /copy.camera/);
   assert.match(source, /copy.album/);
   assert.match(source, /<MobileBottomNavigationView/);
+  assert.match(source, /<KeyboardLayoutGuard \/>/);
+  assert.match(shellStyles, /data-app-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/);
   assert.match(source, /<MobilePageHeaderView/);
   assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);

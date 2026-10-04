@@ -81,6 +81,7 @@ import ArchiveProjectDetailStatus, {
   ArchiveProjectDetailLoading,
 } from "@/components/archive-ui/ArchiveProjectDetailStatus";
 import MobileShellErrorBoundary from "@/components/mobile/MobileShellErrorBoundary";
+import KeyboardLayoutGuard from "@/components/KeyboardLayoutGuard";
 import { InternalNavigationProvider } from "@/components/navigation/InternalLink";
 import ProjectCategorySettingsView from "@/components/profile/ProjectCategorySettingsView";
 import PersonalSpaceMobileIdentity from "@/components/archive-ui/PersonalSpaceMobileIdentity";
@@ -1993,6 +1994,7 @@ function App() {
         }
       }}
     >
+      <KeyboardLayoutGuard />
     <main className="offline-shell">
       {!homeSectionOwnsTopNav && !detailOwnsTopNav ? (
         <MobilePageHeaderView
