@@ -71,15 +71,20 @@ export default function AndroidExperienceCardDetail({
             {detail.card.description ? <p style={descriptionStyle}>{detail.card.description}</p> : null}
           </section>
 
-          <div style={playerWrapStyle}>
+          <div
+            style={playerWrapStyle}
+            role="button"
+            tabIndex={0}
+            aria-label={language === "zh" ? "点击画面全屏" : "Open full screen"}
+            onClick={() => setFullscreen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setFullscreen(true);
+              }
+            }}
+          >
             <PublicExperiencePlayer detail={detail} active />
-            <button
-              type="button"
-              style={fullscreenButtonStyle}
-              onClick={() => setFullscreen(true)}
-            >
-              {language === "zh" ? "全屏" : "Full screen"}
-            </button>
           </div>
 
           <section style={sectionStyle}>
@@ -164,19 +169,5 @@ const sectionTitleStyle: CSSProperties = {
 
 const playerWrapStyle: CSSProperties = {
   position: "relative",
-};
-
-const fullscreenButtonStyle: CSSProperties = {
-  position: "absolute",
-  right: 10,
-  bottom: 10,
-  zIndex: 6,
-  minHeight: 34,
-  padding: "0 12px",
-  border: "1px solid rgba(255,255,255,.45)",
-  borderRadius: 999,
-  background: "rgba(12,18,12,.62)",
-  color: "#fff",
-  fontSize: 13,
-  fontWeight: 750,
+  cursor: "pointer",
 };

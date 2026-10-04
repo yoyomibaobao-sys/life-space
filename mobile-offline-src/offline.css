@@ -209,13 +209,29 @@ button:disabled { opacity: 0.55; }
 .choose-project-column h2 { margin: 0 0 8px; color: #344b31; font-size: 15px; line-height: 1.3; }
 .choose-project-sync-hint { min-height: 30px; margin: -2px 0 6px; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
 .choose-project-list { display: grid; gap: 8px; }
+.choose-project-list.expanded { max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.choose-project-more { width: 100%; margin-top: 7px; border: 0; background: transparent; color: var(--green-dark); font-size: 12px; font-weight: 750; padding: 7px 2px; }
 .choose-project-button { min-width: 0; min-height: 42px; padding: 7px 8px; border-radius: 12px; font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
 .choose-project-create-actions { display: grid; gap: 8px; margin-top: 16px; }
 .choose-project-create-item { display: grid; gap: 3px; }
 .choose-project-create-item > button, .choose-project-cancel { width: 100%; }
 .choose-project-create-item small { color: var(--muted); font-size: 11.5px; text-align: center; }
+.project-form-panel { padding-top: 12px; }
+.project-form-compact { gap: 10px; }
+.project-form-compact .field { gap: 5px; }
+.project-form-compact .project-form-textarea { min-height: 64px; }
 .quick-add-actions { position: relative; justify-self: center; align-self: center; width: 58px; height: 48px; }
-.quick-add { position: absolute; left: 5px; top: 0; width: 48px; height: 48px; display: grid; place-items: center; margin-top: -16px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
+.quick-add { position: absolute; left: 5px; top: 0; width: 48px; height: 48px; display: grid; place-items: center; margin-top: -8px; border: 3px solid #fff; border-radius: 50%; background: var(--green); color: #fff; box-shadow: 0 5px 14px rgba(46, 79, 43, 0.24); }
 .market-add { justify-self: center; align-self: center; min-width: 44px; margin-top: -12px; padding: 0; border: 0; background: transparent; color: #806128; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; line-height: 1; font-weight: 800; white-space: nowrap; }
 .market-add-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 3px solid #fff; border-radius: 999px; background: #8a6a32; box-shadow: 0 5px 14px rgba(104, 76, 30, 0.22); color: #fff; }
+.trash-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 2px 12px; }
+.trash-toolbar > strong { color: #344b31; font-size: 16px; }
+.trash-toolbar .danger-button { min-height: 38px; padding: 0 12px; flex: 0 0 auto; }
+.trash-list { display: grid; gap: 9px; }
+.trash-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; margin-bottom: 0; }
+.trash-item-main { min-width: 0; display: grid; gap: 3px; }
+.trash-item-main > strong { min-width: 0; color: #2f422e; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.trash-item-main > small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.trash-source-tag { width: fit-content; border-radius: 999px; padding: 2px 7px; background: #edf5e9; color: #54724f; font-size: 10px; font-weight: 800; }
+.trash-item > button { flex: 0 0 auto; min-height: 36px; padding: 0 11px; }
 .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }

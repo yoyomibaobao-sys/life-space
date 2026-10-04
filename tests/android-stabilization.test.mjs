@@ -91,10 +91,12 @@ test("route registry handles all profile, user and membership destinations", () 
     assert.notEqual(parseAndroidShellPath(route)?.kind, "network-required");
   }
   for (const route of ["/profile/helpful", "/profile/followers", "/membership",
-    "/user/person/profile", "/admin/memberships"]) {
+    "/user/person/profile"]) {
     assert.equal(getAndroidRouteCapability(route), "online-web");
     assert.equal(parseAndroidShellPath(route)?.kind, "network-required");
   }
+  assert.equal(getAndroidRouteCapability("/admin/memberships"), "online-controller");
+  assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "admin-memberships");
   const shell = read("mobile-offline-src/main.tsx");
   assert.match(shell, /Browser\.open\(\{ url: url\.href \}\)/);
   assert.match(shell, /data-android-shell-page="recent"/);

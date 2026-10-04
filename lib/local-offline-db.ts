@@ -4485,6 +4485,56 @@ export async function restoreLocalArchiveCycle(
   }
 }
 
+export async function purgeLocalArchiveCycleTrash(
+  archiveId: string,
+  trashEntryId: string,
+  ownerContext?: LocalArchiveOwnerContext | null
+) {
+  const db = await openLocalDb();
+  try {
+    const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE], "readwrite");
+    const done = transactionDone(transaction);
+    const archiveStore = transaction.objectStore(ARCHIVE_STORE);
+    const recordStore = transaction.objectStore(RECORD_STORE);
+    const imageStore = transaction.objectStore(IMAGE_STORE);
+    const archive = await requestToPromise<LocalArchive | undefined>(archiveStore.get(archiveId));
+    if (!archive) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("本地项目不存在。");
+    }
+    const normalizedArchive = normalizeLocalArchive(archive);
+    if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("没有权限修改这个本地项目。");
+    }
+    assertWritableUserArchive(normalizedArchive, "云端期次离线时只读");
+    const trashedCycles = normalizedArchive.trashed_cycles || [];
+    const trashEntry = trashedCycles.find((item) => item.id === trashEntryId);
+    if (!trashEntry) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw new Error("这个已删除期次不存在。");
+    }
+    const recordIds = new Set(trashEntry.record_ids);
+    const images = await requestToPromise<LocalImage[]>(imageStore.index("archive_id").getAll(archiveId));
+    for (const image of images) {
+      if (recordIds.has(image.record_id)) await requestToPromise(imageStore.delete(image.id));
+    }
+    for (const recordId of recordIds) await requestToPromise(recordStore.delete(recordId));
+    await requestToPromise(archiveStore.put({
+      ...normalizedArchive,
+      trashed_cycles: trashedCycles.filter((item) => item.id !== trashEntryId),
+      updated_at: nowIso(),
+    } satisfies LocalArchive));
+    await done;
+    await refreshLocalUsageHints();
+  } finally {
+    db.close();
+  }
+}
+
 export async function createLocalRecord(input: {
   location?: RecordLocation | null;
   archive_id: string;

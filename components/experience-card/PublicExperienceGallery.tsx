@@ -28,9 +28,11 @@ import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 export default function PublicExperienceGallery({
   items,
   showCategoryBadge = false,
+  onOpenDetail,
 }: {
   items: ExperienceCardListItem[];
   showCategoryBadge?: boolean;
+  onOpenDetail?: (item: ExperienceCardListItem) => void;
 }) {
   const { language, t } = useLanguage();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -41,6 +43,10 @@ export default function PublicExperienceGallery({
 
   function handleCardClick(event: MouseEvent<HTMLElement>, index: number) {
     if ((event.target as HTMLElement).closest("a")) return;
+    if (onOpenDetail) {
+      onOpenDetail(items[index]);
+      return;
+    }
     openPlayback(index);
   }
 
@@ -48,6 +54,10 @@ export default function PublicExperienceGallery({
     if ((event.target as HTMLElement).closest("a")) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
+    if (onOpenDetail) {
+      onOpenDetail(items[index]);
+      return;
+    }
     openPlayback(index);
   }
 

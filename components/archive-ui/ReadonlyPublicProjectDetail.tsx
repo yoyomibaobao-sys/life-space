@@ -93,7 +93,7 @@ export default function ReadonlyPublicProjectDetail({ item, language, onBack }: 
     viewCount={Number(archive.view_count || 0)}
     statusBadge={language === "zh" ? "公开" : "Public"}
     activeTab={tab} onTabChange={setTab} experienceTabLabel={t.archive.experience_cards}
-    experienceContent={null} profileExtra={item.card_summary ? <p>{item.card_summary}</p> : null}
+    experienceContent={null}
     onToggleArchiveVisibility={() => undefined}
     headerFallbackHref="/discover" headerBackLabel={t.nav.back} onHeaderBack={onBack}
     emptyRecordsText={language === "zh" ? "暂无公开记录" : "No public records"}

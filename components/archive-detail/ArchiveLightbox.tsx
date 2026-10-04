@@ -401,19 +401,34 @@ export default function ArchiveLightbox({
           userSelect: "none",
         }}
       >
-        <img
-          src={current.url}
-          alt={current.alt}
-          style={{
-            width: "100vw",
-            height: "100dvh",
-            objectFit: "contain",
-            display: "block",
-            transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
-            transition: interactedRef.current ? "none" : "transform 0.14s ease",
-            touchAction: "none",
-          }}
-        />
+        <div style={mobileMediaColumnStyle}>
+          <div style={mobileImageFrameStyle}>
+            <img
+              src={current.url}
+              alt={current.alt}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                display: "block",
+                transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
+                transition: interactedRef.current ? "none" : "transform 0.14s ease",
+                touchAction: "none",
+              }}
+            />
+          </div>
+          {mobileToolbarVisible ? (
+            <div
+              style={mobileMediaFooterStyle}
+              onClick={(event) => event.stopPropagation()}
+              onTouchStart={(event) => event.stopPropagation()}
+              onTouchEnd={(event) => event.stopPropagation()}
+            >
+              <div style={mobileImageCountStyle}>{index + 1} / {images.length}</div>
+              {note.trim() ? <div style={mobileFooterNoteStyle}>{note}</div> : null}
+            </div>
+          ) : null}
+        </div>
 
         {mobileToolbarVisible ? (
           <>
@@ -467,9 +482,6 @@ export default function ArchiveLightbox({
               ) : null}
             </div>
 
-            {note.trim() ? (
-              <div style={mobileBottomNoteStyle}>{note}</div>
-            ) : null}
           </>
         ) : null}
       </div>
@@ -821,18 +833,43 @@ const mobileLightboxDangerItemStyle = {
   cursor: "pointer",
 } as const;
 
-const mobileBottomNoteStyle = {
-  position: "fixed",
-  left: 0,
-  right: 0,
-  bottom: "calc(34px + var(--app-safe-area-bottom))",
+const mobileMediaColumnStyle = {
+  width: "100vw",
+  height: "100dvh",
+  display: "grid",
+  gridTemplateRows: "minmax(0, 1fr) auto",
+  background: "#000",
+} as const;
+
+const mobileImageFrameStyle = {
+  minHeight: 0,
+  width: "100%",
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+} as const;
+
+const mobileMediaFooterStyle = {
+  position: "relative",
   zIndex: 3002,
-  maxHeight: "34dvh",
+  width: "100%",
+  maxHeight: "28dvh",
   overflowY: "auto",
-  padding: "18px 16px 16px",
+  padding: "10px 16px calc(14px + var(--app-safe-area-bottom))",
   boxSizing: "border-box",
-  background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))",
+  background: "#000",
   color: "rgba(255,255,255,0.92)",
+  textAlign: "left",
+} as const;
+
+const mobileImageCountStyle = {
+  marginBottom: 5,
+  color: "rgba(255,255,255,0.64)",
+  fontSize: 12,
+  lineHeight: 1.4,
+} as const;
+
+const mobileFooterNoteStyle = {
   fontSize: 14,
   lineHeight: 1.65,
   whiteSpace: "pre-wrap",

@@ -26,6 +26,7 @@ import {
   listLocalProjectTrash,
   setLocalProjectTrashed,
   restoreLocalArchiveCycle,
+  purgeLocalArchiveCycleTrash,
   listVisibleLocalTaxonomyItems,
   createLocalTaxonomyItem,
   renameLocalTaxonomyItem,
@@ -91,6 +92,7 @@ import MobileBottomNavigationView, {
   type MobileBottomNavigationItem,
 } from "@/components/mobile/MobileBottomNavigationView";
 import AndroidQuickCamera from "@/components/mobile/AndroidQuickCamera";
+import AppConfirmDialog from "@/components/mobile/AppConfirmDialog";
 import { getMobilePrimaryNavigationDescriptors } from "@/components/mobile/mobilePrimaryNavigation";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
@@ -98,7 +100,7 @@ import DiscoverSearchPage from "@/app/discover/search/page";
 import PlantPage from "@/app/plant/page";
 import { PlantDetailContent } from "@/app/plant/[id]/page";
 import { PlantInterestsContent } from "@/app/archive/interests/page";
-import { CloudTrashContent } from "@/app/profile/trash/page";
+import { emptyCloudTrash, fetchCloudTrash, restoreCloudTrashItem, type CloudTrashItem } from "@/lib/cloud-trash";
 import AndroidMarketDetailController from "@/components/market/AndroidMarketDetailController";
 import ReadonlyPublicProjectDetail from "@/components/archive-ui/ReadonlyPublicProjectDetail";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
@@ -168,6 +170,7 @@ import AndroidProfileInfoPage, { type AndroidProfileInfoKind } from "@/component
 import MembershipPaymentPage from "@/app/membership/payment/page";
 import MembershipRefundPage from "@/app/membership/refund/page";
 import AndroidAppUpdatePage from "@/app/app-update/page";
+import AdminMembershipsPage from "@/app/admin/memberships/page";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   getCloudArchiveCategoryDepths,
@@ -297,7 +300,7 @@ type Screen =
   | { kind: "new-project"; guide?: SystemNameCandidate; destination?: CreationDestination }
   | { kind: "project-destination" }
   | { kind: "quick-add" }
-  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "market-mine" | "market-new" | "interests" | "trash" | "local-transfer" | "membership-payment" | "membership-refund"; archiveId?: string }
+  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "market-mine" | "market-new" | "interests" | "trash" | "local-transfer" | "membership-payment" | "membership-refund"; archiveId?: string; returnPath?: string }
   | { kind: "local-transfer"; archiveId: string }
   | { kind: "activity" }
   | { kind: "discover-search" }
@@ -325,6 +328,7 @@ type Screen =
   | { kind: "legal-page"; id: string }
   | { kind: "feedback" }
   | { kind: "app-update" }
+  | { kind: "admin-memberships" }
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
@@ -565,7 +569,9 @@ function OfflineProjectCategorySettings({
   cachedEntries: ProjectTaxonomyEntry[];
   onBack: () => void;
 }) {
-  const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>("local");
+  const [activeSpace, setActiveSpace] = useState<ArchiveCategorySpace>(
+    () => online && cloudUserId === ownerUserId ? "cloud" : "local",
+  );
   const [localDepths, setLocalDepths] = useState<ArchiveCategoryDepths>(() =>
     getLocalArchiveCategoryDepths(ownerUserId),
   );
@@ -670,6 +676,8 @@ function App() {
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
   const [detailAddRecordRequest, setDetailAddRecordRequest] = useState<{ archiveId: string; nonce: number } | null>(null);
+  const [chooseProjectExpanded, setChooseProjectExpanded] = useState<{ cloud: boolean; local: boolean }>({ cloud: false, local: false });
+  const [trashMoveConfirm, setTrashMoveConfirm] = useState<null | { message: string; action: () => void }>(null);
   const [taxonomySyncWarning, setTaxonomySyncWarning] = useState<string | null>(null);
   const quickGallery = useRef<HTMLInputElement>(null);
   async function acceptQuickAddImageFiles(images: File[], source: QuickAddSource) {
@@ -734,9 +742,22 @@ function App() {
     }
     setScreen(fallback, true);
   }
-  function openCloudLogin(returnTo: Extract<Screen, { kind: "cloud-login" }>["returnTo"], archiveId?: string) {
+  function openCloudLogin(returnTo: Extract<Screen, { kind: "cloud-login" }>["returnTo"], archiveId?: string, returnPath?: string) {
     if (!online) { showToast(copy.needNetwork); return; }
-    setScreen({ kind: "cloud-login", returnTo, archiveId });
+    setScreen({ kind: "cloud-login", returnTo, archiveId, returnPath });
+  }
+
+  function returnToProfile() {
+    const profileChild = [
+      "project-categories", "recent", "trash", "membership-payment", "membership-refund",
+      "membership-benefits", "data-security", "legal", "feedback", "app-update",
+      "settings", "admin-memberships",
+    ].includes(screen.kind);
+    if (profileChild) {
+      goBackInShell({ kind: "profile" });
+      return;
+    }
+    setScreen({ kind: "profile" });
   }
   useEffect(() => {
     window.history.replaceState({ offlineScreen: { kind: "list" }, scrollY: 0 }, "", "#list");
@@ -1210,6 +1231,32 @@ function App() {
     setScreen({ kind: "detail", archiveId }, ["edit-project", "new-project", "new-record", "edit-record"].includes(screen.kind));
   }
 
+  function openDiscoveryProject(item: DiscoveryProjectFeedItem, back: "activity" | "discover-search") {
+    const target = resolveAndroidArchiveScreen({
+      online,
+      archiveId: item.archive_id,
+      cloudUserId: authenticatedOwnerContext?.userId || null,
+      cloudArchives,
+      activityOwnerUserId: item.owner_user_id || null,
+      hasPublicFeedItem: true,
+      ownedLocalArchives: [
+        ...archives,
+        ...(authenticatedOwnerContext ? cloudCaches : []),
+      ],
+    });
+    if (target.kind === "cloud-detail") {
+      setScreen({ kind: "cloud-detail", archiveId: target.archiveId });
+      return;
+    }
+    if (target.kind === "local-detail") {
+      openDetail(target.archiveId);
+      return;
+    }
+    setPublicDetailItem(item);
+    setPublicDetailBack(back);
+    setScreen({ kind: "public-detail" });
+  }
+
   function openOnlineWeb(pathname: string, search = "") {
     if (!online) { showToast(copy.needNetwork); return; }
     // The native custom tab resolves the remote host outside WebViewLocalServer.
@@ -1235,7 +1282,7 @@ function App() {
       return true;
     }
     if (routed.kind === "profile") {
-      setScreen({ kind: "profile" });
+      returnToProfile();
       return true;
     }
     if (routed.kind === "project-categories") {
@@ -1276,6 +1323,23 @@ function App() {
     }
     if (routed.kind === "app-update") {
       setScreen({ kind: "app-update" });
+      return true;
+    }
+    if (routed.kind === "login") {
+      const returnPath = routed.id && !/^\/(?:login|register)(?:\/|$)/.test(routed.id)
+        ? routed.id
+        : "/profile";
+      if (auth.status === "signed-in") {
+        const url = new URL(returnPath, "https://life-space.uk");
+        applyShellPath(url.pathname, url.search);
+      } else {
+        openCloudLogin("profile", undefined, returnPath);
+      }
+      return true;
+    }
+    if (routed.kind === "admin-memberships") {
+      if (auth.status === "signed-out") openCloudLogin("profile", undefined, "/admin/memberships");
+      else setScreen({ kind: "admin-memberships" });
       return true;
     }
     if (routed.kind === "activity") {
@@ -1899,12 +1963,18 @@ function App() {
             : { help_status: "none", help_opened_at: null, help_resolved_at: null, help_updated_at: now });
       } : undefined}
       onMoveToTrash={source === "local" ? () => {
-        if (!window.confirm(language === "zh" ? "将本机项目移入回收站？" : "Move this device project to trash?")) return;
-        void setLocalProjectTrashed(archive.id, true, ownerContext)
-          .then(() => loadList()).catch((cause) => showToast(cause instanceof Error ? cause.message : String(cause)));
+        setTrashMoveConfirm({
+          message: language === "zh" ? "将这个本地项目移入回收站？" : "Move this local project to trash?",
+          action: () => {
+            void setLocalProjectTrashed(archive.id, true, ownerContext)
+              .then(() => loadList()).catch((cause) => showToast(cause instanceof Error ? cause.message : String(cause)));
+          },
+        });
       } : source === "cloud" ? () => {
-        if (window.confirm(language === "zh" ? "将云项目移入回收站？" : "Move this cloud project to trash?"))
-          void mutate({ trashed_at: new Date().toISOString() });
+        setTrashMoveConfirm({
+          message: language === "zh" ? "将这个云项目移入回收站？" : "Move this cloud project to trash?",
+          action: () => { void mutate({ trashed_at: new Date().toISOString() }); },
+        });
       } : undefined}
       extraActions={source === "local" && local && canOfferLocalCloudTransfer(local) ? [{
         label: language === "zh" ? "上传到云端" : "Upload to cloud",
@@ -2430,11 +2500,7 @@ function App() {
               loaderRef={activityLoaderRef}
               onRetryInitial={() => void loadActivity()}
               onRetryMore={() => undefined}
-              onOpenProject={(item) => {
-                setPublicDetailItem(item);
-                setPublicDetailBack("activity");
-                setScreen({ kind: "public-detail" });
-              }}
+              onOpenProject={(item) => openDiscoveryProject(item, "activity")}
             />
           )}
         </div>
@@ -2452,7 +2518,7 @@ function App() {
         !online ? (
           <MobileNetworkUnavailableState onReconnect={reconnect} />
         ) : (
-          <DiscoverSearchPage onBack={() => setScreen({ kind: "activity" })} onOpenProject={(item) => { setPublicDetailItem(item); setPublicDetailBack("discover-search"); setScreen({ kind: "public-detail" }); }} />
+          <DiscoverSearchPage onBack={() => setScreen({ kind: "activity" })} onOpenProject={(item) => openDiscoveryProject(item, "discover-search")} />
         )
       ) : null}
 
@@ -2521,6 +2587,7 @@ function App() {
           <PublicExperienceGallery
             items={visibleExperienceItems}
             showCategoryBadge={experienceCategoryFilter === "all"}
+            onOpenDetail={(item) => setScreen({ kind: "experience-detail", id: item.id })}
           />
         ) : (
           <section className="panel empty">
@@ -2610,51 +2677,55 @@ function App() {
             title={language === "zh" ? "无法打开分组设置" : "Could not open group settings"}
             message={language === "zh" ? "页面加载出错。" : "This page failed to render."}
             backLabel={language === "zh" ? "返回资料" : "Back to profile"}
-            onBack={() => setScreen({ kind: "profile" })}
+            onBack={returnToProfile}
           >
             <OfflineProjectCategorySettings
               ownerUserId={ownerContext?.userId || owner?.userId || ""}
               online={online}
               cloudUserId={cloudUserId}
               cachedEntries={cachedTaxonomy}
-              onBack={() => setScreen({ kind: "profile" })}
+              onBack={returnToProfile}
             />
           </MobileShellErrorBoundary>
         </div>
       ) : null}
       {screen.kind === "recent" ? <AndroidRecentBrowse
         online={online}
-        onBack={() => setScreen({ kind: "profile" })}
+        onBack={returnToProfile}
         onOpen={(id) => { applyShellPath(`${[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
       /> : null}
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
-        online={online} onBack={() => setScreen({ kind: "profile" })} onRequireLogin={() => openCloudLogin("trash")} /> : null}
+        online={online} onBack={returnToProfile} onRequireLogin={() => openCloudLogin("trash")} /> : null}
       {screen.kind === "membership-payment" ? <div data-android-membership-payment="true">
         <MobilePageHeaderView title={language === "zh" ? "开通云会员" : "Cloud Membership"} titleText={language === "zh" ? "开通云会员" : "Cloud Membership"}
-          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => setScreen({ kind: "profile" })} />
+          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={returnToProfile} />
         {online ? <MembershipPaymentPage /> : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />}
       </div> : null}
       {screen.kind === "membership-refund" ? <div data-android-membership-refund="true">
         <MobilePageHeaderView title={language === "zh" ? "退款申请" : "Refund request"} titleText={language === "zh" ? "退款申请" : "Refund request"}
-          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => setScreen({ kind: "profile" })} />
+          showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={returnToProfile} />
         {online ? <MembershipRefundPage /> : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />}
       </div> : null}
       {screen.kind === "membership-benefits" ? <AndroidProfileInfoPage
         kind="membership-benefits" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+        onBack={returnToProfile} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "data-security" ? <AndroidProfileInfoPage
         kind="data-security" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+        onBack={returnToProfile} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "legal" ? <AndroidProfileInfoPage
         kind="legal-index" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+        onBack={returnToProfile} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "legal-page" ? <AndroidProfileInfoPage
         kind={`legal-${screen.id}` as AndroidProfileInfoKind} online={online} signedIn={auth.status === "signed-in"}
         onBack={() => goBackInShell({ kind: "legal" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "feedback" ? <AndroidProfileInfoPage
         kind="feedback" online={online} signedIn={auth.status === "signed-in"}
-        onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
-      {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={() => setScreen({ kind: "profile" })} /> : null}
+        onBack={returnToProfile} onNavigate={(path) => { applyShellPath(path); }} /> : null}
+      {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={returnToProfile} /> : null}
+      {screen.kind === "admin-memberships" ? (
+        online ? <div data-android-shell-page="admin-memberships"><AdminMembershipsPage /></div>
+          : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
+      ) : null}
       {screen.kind === "interests" ? (
         online ? (
           <PlantInterestsContent
@@ -2672,7 +2743,11 @@ function App() {
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onBack={() => goBackInShell({ kind: "list" })} onSuccess={(userId) => {
         const destination = screen;
         void loadShellIdentity(userId);
-        if (destination.returnTo === "list-cloud") { setSourceFilter("cloud"); setScreen({ kind: "list" }); }
+        if (destination.returnPath) {
+          const url = new URL(destination.returnPath, "https://life-space.uk");
+          applyShellPath(url.pathname, url.search);
+        }
+        else if (destination.returnTo === "list-cloud") { setSourceFilter("cloud"); setScreen({ kind: "list" }); }
         else if (destination.returnTo === "local-transfer" && destination.archiveId) {
           setTransferVisibility("private");
           setTransferError("");
@@ -2714,34 +2789,50 @@ function App() {
         <MobilePageHeaderView title={copy.newProject} titleText={copy.newProject} showBack ariaLabel={copy.back} onBack={() => goBackInShell({ kind: "list" })} />
         <section className="panel project-destination-panel"><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button project-destination-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}><span>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</span>{destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</button>)}</div></section>
       </div> : null}
-      {screen.kind === "choose-project" ? <div data-android-shell-page="choose-project">
-        <MobilePageHeaderView title={copy.chooseProject} titleText={copy.chooseProject} showBack ariaLabel={copy.back} onBack={() => { setQuickAddDraft(null); goList(); }} />
-        <section className="panel choose-project-panel">
-          <div className="choose-project-columns">
-            <section className="choose-project-column" aria-label={copy.cloud}>
-              <h2>{copy.cloud}</h2>
-              {!online && authenticatedOwnerContext ? <p className="choose-project-sync-hint">{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</p> : null}
-              <div className="choose-project-list">
-                {archives.filter((archive) => archive.status === "active" && archive.sync?.operation_kind === "create-archive").map((archive) => <button type="button" className="secondary-button choose-project-button" key={`pending:${archive.id}`} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}
-                {authenticatedOwnerContext && online ? cloudArchives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button choose-project-button" key={archive.id} onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}>{archive.title}</button>) : null}
-                {authenticatedOwnerContext && !online ? cloudCaches.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button choose-project-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>) : null}
-              </div>
-            </section>
-            <section className="choose-project-column" aria-label={copy.local}>
-              <h2>{copy.local}</h2>
-              <div className="choose-project-list">
-                {archives.filter((archive) => archive.status === "active" && archive.sync?.operation_kind !== "create-archive").map((archive) => <button type="button" className="secondary-button choose-project-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}
-              </div>
-            </section>
-          </div>
-          <div className="choose-project-create-actions">
-            {projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
-            <button type="button" className="secondary-button choose-project-cancel" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button>
-          </div>
-        </section>
-      </div> : null}
+      {screen.kind === "choose-project" ? (() => {
+        const recentRank = new Map(getRecentArchiveBrowseItems().map((item, index) => [item.id, index]));
+        const sortRecent = <T extends { id: string }>(rows: T[]) => [...rows].sort((a, b) => (recentRank.get(a.id) ?? 9999) - (recentRank.get(b.id) ?? 9999));
+        const pendingCloud = sortRecent(archives.filter((archive) => archive.status === "active" && archive.sync?.operation_kind === "create-archive"));
+        const liveCloud = authenticatedOwnerContext
+          ? sortRecent((online ? cloudArchives : cloudCaches).filter((archive) => archive.status === "active"))
+          : [];
+        const cloudOptions = [
+          ...pendingCloud.map((archive) => ({ id: `pending:${archive.id}`, title: archive.title, open: () => setScreen({ kind: "new-record", archiveId: archive.id }) })),
+          ...liveCloud.map((archive) => ({ id: archive.id, title: archive.title, open: () => online ? setScreen({ kind: "cloud-detail", archiveId: archive.id }) : setScreen({ kind: "new-record", archiveId: archive.id }) })),
+        ];
+        const localOptions = sortRecent(archives.filter((archive) => archive.status === "active" && archive.sync?.operation_kind !== "create-archive"))
+          .map((archive) => ({ id: archive.id, title: archive.title, open: () => setScreen({ kind: "new-record", archiveId: archive.id }) }));
+        const visibleCloud = chooseProjectExpanded.cloud ? cloudOptions : cloudOptions.slice(0, 4);
+        const visibleLocal = chooseProjectExpanded.local ? localOptions : localOptions.slice(0, 4);
+        return <div data-android-shell-page="choose-project">
+          <MobilePageHeaderView title={copy.chooseProject} titleText={copy.chooseProject} showBack ariaLabel={copy.back} onBack={() => { setQuickAddDraft(null); goList(); }} />
+          <section className="panel choose-project-panel">
+            <div className="choose-project-columns">
+              <section className="choose-project-column" aria-label={copy.cloud}>
+                <h2>{copy.cloud}</h2>
+                {!online && authenticatedOwnerContext ? <p className="choose-project-sync-hint">{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</p> : null}
+                <div className={`choose-project-list${chooseProjectExpanded.cloud ? " expanded" : ""}`}>
+                  {visibleCloud.map((item) => <button type="button" className="secondary-button choose-project-button" key={item.id} onClick={item.open}>{item.title}</button>)}
+                </div>
+                {cloudOptions.length > 4 ? <button type="button" className="choose-project-more" onClick={() => setChooseProjectExpanded((value) => ({ ...value, cloud: !value.cloud }))}>{chooseProjectExpanded.cloud ? (language === "zh" ? "收起" : "Show less") : (language === "zh" ? `更多项目（${cloudOptions.length - 4}）⌄` : `More (${cloudOptions.length - 4}) ⌄`)}</button> : null}
+              </section>
+              <section className="choose-project-column" aria-label={copy.local}>
+                <h2>{copy.local}</h2>
+                <div className={`choose-project-list${chooseProjectExpanded.local ? " expanded" : ""}`}>
+                  {visibleLocal.map((item) => <button type="button" className="secondary-button choose-project-button" key={item.id} onClick={item.open}>{item.title}</button>)}
+                </div>
+                {localOptions.length > 4 ? <button type="button" className="choose-project-more" onClick={() => setChooseProjectExpanded((value) => ({ ...value, local: !value.local }))}>{chooseProjectExpanded.local ? (language === "zh" ? "收起" : "Show less") : (language === "zh" ? `更多项目（${localOptions.length - 4}）⌄` : `More (${localOptions.length - 4}) ⌄`)}</button> : null}
+              </section>
+            </div>
+            <div className="choose-project-create-actions">
+              {projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
+              <button type="button" className="secondary-button choose-project-cancel" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button>
+            </div>
+          </section>
+        </div>;
+      })() : null}
       <input ref={quickGallery} type="file" accept="image/*" multiple hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "gallery"); event.target.value = ""; }} />
-      {screen.kind === "settings" ? <div data-android-shell-page="settings"><MobilePageHeaderView title={copy.settings} titleText={copy.settings} showBack ariaLabel={copy.back} onBack={() => setScreen({ kind: "profile" })} /><section className="panel"><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section></div> : null}
+      {screen.kind === "settings" ? <div data-android-shell-page="settings"><MobilePageHeaderView title={copy.settings} titleText={copy.settings} showBack ariaLabel={copy.back} onBack={returnToProfile} /><section className="panel"><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section></div> : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
@@ -2796,6 +2887,20 @@ function App() {
           )
         )}
       />
+      <AppConfirmDialog
+        open={Boolean(trashMoveConfirm)}
+        title={language === "zh" ? "移入回收站" : "Move to trash"}
+        message={trashMoveConfirm?.message}
+        cancelLabel={language === "zh" ? "取消" : "Cancel"}
+        confirmLabel={language === "zh" ? "移入回收站" : "Move to trash"}
+        destructive
+        onCancel={() => setTrashMoveConfirm(null)}
+        onConfirm={() => {
+          const pending = trashMoveConfirm;
+          setTrashMoveConfirm(null);
+          pending?.action();
+        }}
+      />
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </main>
     </InternalNavigationProvider>
@@ -2844,33 +2949,140 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
   const { language } = useLanguage();
   const [items, setItems] = useState<Awaited<ReturnType<typeof listLocalArchiveCycleTrash>>>([]);
   const [projects, setProjects] = useState<Awaited<ReturnType<typeof listLocalProjectTrash>>>([]);
+  const [cloudItems, setCloudItems] = useState<CloudTrashItem[]>([]);
   const [error, setError] = useState("");
-  useEffect(() => { let active = true;
-    void Promise.all([listLocalArchiveCycleTrash(ownerContext), listLocalProjectTrash(ownerContext)])
-      .then(([cycles, archives]) => { if (active) { setItems(cycles); setProjects(archives); } });
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [working, setWorking] = useState(false);
+
+  async function refreshTrash() {
+    const [cycles, archives] = await Promise.all([
+      listLocalArchiveCycleTrash(ownerContext),
+      listLocalProjectTrash(ownerContext),
+    ]);
+    setItems(cycles);
+    setProjects(archives);
+    if (online) {
+      const cloudResult = await fetchCloudTrash();
+      if (cloudResult.ok) setCloudItems(cloudResult.items);
+      else if (!ownerContext?.userId) onRequireLogin();
+    } else {
+      setCloudItems([]);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      listLocalArchiveCycleTrash(ownerContext),
+      listLocalProjectTrash(ownerContext),
+      online ? fetchCloudTrash() : Promise.resolve({ ok: true, items: [] as CloudTrashItem[] }),
+    ]).then(([cycles, archives, cloud]) => {
+      if (!active) return;
+      setItems(cycles);
+      setProjects(archives);
+      if (cloud.ok) setCloudItems(cloud.items);
+    }).catch((cause) => { if (active) setError(String(cause)); });
     return () => { active = false; };
-  }, [ownerContext]);
+  }, [online, ownerContext]);
+
+  const unified = [
+    ...projects.map((project) => ({
+      key: `local-project:${project.id}`,
+      source: "local" as const,
+      deletedAt: project.trashed_at || project.updated_at || project.created_at,
+      title: project.title,
+      detail: language === "zh" ? "项目" : "Project",
+      restore: async () => { await setLocalProjectTrashed(project.id, false, ownerContext); },
+    })),
+    ...items.map((item) => ({
+      key: `local-cycle:${item.trash.id}`,
+      source: "local" as const,
+      deletedAt: item.trash.deleted_at,
+      title: `${item.archive_title} · ${item.trash.cycle.display_name || item.trash.cycle.cycle_no}`,
+      detail: language === "zh" ? `${item.trash.record_ids.length} 条记录` : `${item.trash.record_ids.length} records`,
+      restore: async () => { await restoreLocalArchiveCycle(item.archive_id, item.trash.id, ownerContext); },
+    })),
+    ...cloudItems.map((item) => ({
+      key: `cloud:${item.trashEntryId}`,
+      source: "cloud" as const,
+      deletedAt: item.deletedAt,
+      title: item.title,
+      detail: item.parentTitle || (language === "zh" ? "云端内容" : "Cloud item"),
+      restore: item.status === "active"
+        ? async () => {
+            const ok = await restoreCloudTrashItem(item.type, item.id);
+            if (!ok) throw new Error(language === "zh" ? "恢复失败" : "Restore failed");
+          }
+        : null,
+    })),
+  ].sort((a, b) => new Date(b.deletedAt || 0).getTime() - new Date(a.deletedAt || 0).getTime());
+
+  async function clearAllTrash() {
+    setClearConfirmOpen(false);
+    if (!online) {
+      setError(language === "zh" ? "联网后才能同时清空云端内容。" : "Connect to clear local and cloud trash together.");
+      return;
+    }
+    setWorking(true);
+    setError("");
+    try {
+      const cloudResult = await emptyCloudTrash();
+      if (!cloudResult.ok) throw new Error(language === "zh" ? "云端回收站清空失败。" : "Could not clear cloud trash.");
+      for (const item of items) {
+        await purgeLocalArchiveCycleTrash(item.archive_id, item.trash.id, ownerContext);
+      }
+      for (const project of projects) {
+        await deleteLocalArchive(project.id);
+      }
+      await refreshTrash();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return <section data-android-shell-page="trash">
     <MobilePageHeaderView title={language === "zh" ? "回收站" : "Trash"} showBack onBack={onBack} />
-    <h2>{language === "zh" ? "本机项目" : "Device projects"}</h2>
-    {projects.map((project) => <article className="panel" key={project.id} style={{ padding: 14, marginBottom: 10 }}>
-      <strong>{project.title}</strong>
-      <button type="button" className="secondary-button" onClick={() => void setLocalProjectTrashed(project.id, false, ownerContext)
-        .then(() => listLocalProjectTrash(ownerContext)).then(setProjects)
-        .catch((cause) => setError(String(cause)))}>{language === "zh" ? "恢复项目" : "Restore project"}</button>
-    </article>)}
-    <h2>{language === "zh" ? "本机已删除周期" : "Local deleted cycles"}</h2>
-    {items.map((item) => <article className="panel" key={item.trash.id} style={{ padding: 14, marginBottom: 10 }}>
-      <strong>{item.archive_title} · {item.trash.cycle.display_name || item.trash.cycle.cycle_no}</strong>
-      <p className="project-meta">{language === "zh" ? "记录" : "Records"} {item.trash.record_ids.length}</p>
-      <button type="button" className="secondary-button" onClick={() => void restoreLocalArchiveCycle(item.archive_id, item.trash.id, ownerContext)
-        .then(() => listLocalArchiveCycleTrash(ownerContext)).then(setItems)
-        .catch((cause) => setError(String(cause)))}>{language === "zh" ? "恢复周期" : "Restore cycle"}</button>
-    </article>)}
-    {error ? <p role="alert">{error}</p> : null}
-    {!items.length && !projects.length ? <p className="panel empty">{language === "zh" ? "本机回收站为空" : "Local trash is empty"}</p> : null}
-    {online ? <CloudTrashContent embedded includeLocalCycles={false} onRequireLogin={onRequireLogin} />
-      : <p className="notice warning">{language === "zh" ? "云端回收站需要联网" : "Cloud trash requires a connection"}</p>}
+    <div className="trash-toolbar">
+      <strong>{language === "zh" ? "回收站内容" : "Trash"}</strong>
+      {unified.length ? <button type="button" className="danger-button" disabled={working}
+        onClick={() => {
+          if (!online) {
+            setError(language === "zh" ? "联网后才能同时清空云端内容。" : "Connect to clear local and cloud trash together.");
+            return;
+          }
+          setClearConfirmOpen(true);
+        }}>{language === "zh" ? "清空回收站" : "Empty trash"}</button> : null}
+    </div>
+    <div className="trash-list">
+      {unified.map((item) => <article className="panel trash-item" key={item.key}>
+        <div className="trash-item-main">
+          <span className="trash-source-tag">{item.source === "local" ? (language === "zh" ? "本地" : "Local") : (language === "zh" ? "云端" : "Cloud")}</span>
+          <strong>{item.title}</strong>
+          <small>{item.detail}</small>
+        </div>
+        {item.restore ? <button type="button" className="secondary-button" disabled={working}
+          onClick={() => {
+            setWorking(true);
+            setError("");
+            void item.restore!().then(refreshTrash).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+              .finally(() => setWorking(false));
+          }}>{language === "zh" ? "恢复" : "Restore"}</button> : null}
+      </article>)}
+    </div>
+    {!unified.length ? <p className="panel empty">{language === "zh" ? "回收站为空" : "Trash is empty"}</p> : null}
+    {error ? <p className="notice warning" role="alert">{error}</p> : null}
+    <AppConfirmDialog
+      open={clearConfirmOpen}
+      title={language === "zh" ? "清空回收站" : "Empty trash"}
+      message={language === "zh" ? "将永久删除回收站中的全部内容，此操作无法恢复。" : "Everything in trash will be permanently deleted and cannot be restored."}
+      cancelLabel={language === "zh" ? "取消" : "Cancel"}
+      confirmLabel={language === "zh" ? "清空回收站" : "Empty trash"}
+      destructive
+      onCancel={() => setClearConfirmOpen(false)}
+      onConfirm={() => void clearAllTrash()}
+    />
   </section>;
 }
 
@@ -3200,12 +3412,11 @@ function ProjectForm({
         ariaLabel={copy.back}
         onBack={onCancel}
       />
-      <section className="panel">
-        <div className="section-title"><h1>{archive ? copy.edit : copy.newProject}</h1></div>
-        <form className="form" onSubmit={submit}>
-          <div className="field"><label>{copy.title}</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></div>
+      <section className="panel project-form-panel">
+        <form className="form project-form-compact" onSubmit={submit}>
+          <div className="field"><label>{copy.title} *</label><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></div>
           <div className="field">
-            <label>{copy.category}</label>
+            <label>{copy.category} *</label>
             <select value={category} onChange={(event) => { setCategory(event.target.value as ArchiveCategory); setSubcategory(""); setGroupName(""); setSubTagId(""); setGroupTagId(""); }}>
               <option value="plant">{copy.plant}</option>
               <option value="system">{copy.system}</option>
@@ -3226,15 +3437,15 @@ function ProjectForm({
                 entry.parentId === subTagId).map((entry) =>
                 <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
-          <div className="field"><label>{copy.systemName}</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
+          <div className="field"><label>{copy.systemName} *</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
             {systemName.trim() ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
           {!archive && destination === "pending-cloud" && !cloudTaxonomy.length ? <small>联网后可设置云端分组；项目仍可保存为未分组。</small> : null}
           <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
           {!archive && destination !== "local-only" ? <div className="field"><label>{copy.visibility}</label><SegmentedChoice label={copy.visibility} value={visibility} options={[{ value: "private", label: language === "zh" ? "仅自己可见" : "Only me" }, { value: "public", label: language === "zh" ? "公开" : "Public" }]} onChange={(value) => setVisibility(value as "public" | "private")} /></div> : null}
-          <div className="field"><label>{copy.note}</label><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>
-          <div className="field"><label>{language === "zh" ? "项目概要" : "Project summary"}</label><textarea value={archiveSummary} onChange={(event) => setArchiveSummary(event.target.value)} maxLength={2000} /></div>
+          <div className="field"><label>{copy.note}</label><textarea className="project-form-textarea" value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>
+          <div className="field"><label>{language === "zh" ? "项目概要" : "Project summary"}</label><textarea className="project-form-textarea" value={archiveSummary} onChange={(event) => setArchiveSummary(event.target.value)} maxLength={2000} /></div>
           {archive ? <><label className="field"><span>{language === "zh" ? "启用项目分期" : "Enable project cycles"}</span><input type="checkbox" checked={cycleEnabled} onChange={(event) => setCycleEnabled(event.target.checked)} /></label>
           {cycleEnabled ? <div className="field"><label>{language === "zh" ? "下一期名称" : "Next cycle name"}</label><input value={nextCycleName} onChange={(event) => setNextCycleName(event.target.value)} maxLength={80} /></div> : null}</> : null}
           {error ? <section className="notice warning"><p>{error}</p></section> : null}
