@@ -413,7 +413,7 @@ test("record photos are unlimited cumulatively but capped at ten per add operati
   assert.match(batchRules, /items\.slice\(0, safeLimit\)/);
   assert.match(batchRules, /if \(mergeIntoOneRecord\)/);
   assert.match(batchRules, /const byDate = new Map/);
-  assert.match(batchRules, /recordTimeISO: latestRecordTime\(photos\)/);
+  assert.match(batchRules, /recordTimeISO: photos\[0\]\?\.recordTimeISO \|\| new Date\(\)\.toISOString\(\)/);
   assert.match(batchRules, /recordTimeISO: latestRecordTime\(groupPhotos\)/);
   assert.match(
     cloudAddRecord,

@@ -96,8 +96,8 @@ test("project-open center plus adds to the current project from records, propert
 
   assert.match(shell, /screen\.kind === "detail" \|\| screen\.kind === "cloud-detail"[\s\S]*aria-label=\{copy\.addRecord\}/);
   assert.match(shell, /screen\.kind === "detail"[\s\S]*setScreen\(\{ kind: "new-record", archiveId: detail\.archive\.id \}\)/);
-  assert.match(shell, /setDetailAddRecordRequest\(\(value\) => value \+ 1\)/);
-  assert.match(shell, /addRecordRequest=\{detailAddRecordRequest\}/);
+  assert.match(shell, /setDetailAddRecordRequest\(\(current\) => \(\{ archiveId: screen\.archiveId, nonce: \(current\?\.nonce \|\| 0\) \+ 1 \}\)\)/);
+  assert.match(shell, /addRecordRequest=\{detailAddRecordRequest\?\.archiveId === screen\.archiveId \? detailAddRecordRequest\.nonce : 0\}/);
   assert.match(localDetail, /onFloatingAdd=\{showFloatingAdd \? onAddRecord : undefined\}/);
   assert.match(cloudDetail, /setTab\("records"\)[\s\S]*setAddOpen\(true\)/);
   assert.match(cloudDetail, /onFloatingAdd=\{showFloatingAdd \? \(\) => setAddOpen\(true\) : undefined\}/);

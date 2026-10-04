@@ -4,6 +4,7 @@ import type { ArchiveItem } from "@/lib/archive-page-types";
 import type { MediaItem } from "@/lib/domain-types";
 import type { PlantingRegion } from "@/lib/planting-region";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { createImageThumbnailFile } from "@/lib/image-compression";
 import { supabase } from "@/lib/supabase";
 import {
   getCloudOfflineCacheByCloudSource,
@@ -59,7 +60,7 @@ type CloudCacheMediaRow = MediaItem & {
 
 function cacheRevision(archive: CloudOfflineCacheArchiveSource, taxonomy: ProjectTaxonomyEntry[]) {
   return [
-    "taxonomy-identity-v1",
+    "taxonomy-identity-v2-media",
     archive.created_at || "",
     archive.title || "",
     archive.category || "",
@@ -76,6 +77,9 @@ function cacheRevision(archive: CloudOfflineCacheArchiveSource, taxonomy: Projec
     archive.status || "active",
     archive.sub_tag_id || "",
     archive.group_tag_id || "",
+    archive.cover_image_url || "",
+    archive.cover_image_path || "",
+    archive.cover_thumb_path || "",
     taxonomy.find((entry) => entry.id === archive.sub_tag_id)?.label || "",
     taxonomy.find((entry) => entry.id === archive.group_tag_id)?.label || "",
   ].join("|");
@@ -134,12 +138,28 @@ async function downloadThumbnail(
     });
     if (!response.ok) return null;
     const blob = await response.blob();
-    if (!blob.size || blob.size > MAX_CLOUD_CACHE_THUMB_BYTES) return null;
+    if (!blob.size) return null;
+
+    let cachedBlob = blob;
+    let mimeType = blob.type || "image/jpeg";
+    if (blob.size > MAX_CLOUD_CACHE_THUMB_BYTES) {
+      const sourceFile = new File([blob], `cloud-source-${media.id}`, {
+        type: mimeType,
+        lastModified: Date.now(),
+      });
+      const thumbnail = await createImageThumbnailFile(sourceFile);
+      if (!thumbnail.wasGenerated || !thumbnail.file.size || thumbnail.file.size > MAX_CLOUD_CACHE_THUMB_BYTES) {
+        return null;
+      }
+      cachedBlob = thumbnail.file;
+      mimeType = thumbnail.file.type || "image/jpeg";
+    }
+
     return {
       id: media.id,
       record_id: media.record_id,
-      blob,
-      mime_type: blob.type || "image/jpeg",
+      blob: cachedBlob,
+      mime_type: mimeType,
       name: "cloud-thumb-" + media.id + ".jpg",
       captured_at: media.captured_at || null,
       sort_order: media.sort_order ?? 0,
@@ -190,7 +210,8 @@ async function refreshOneCloudOfflineCache(
   ]);
   if (cycleError) throw cycleError;
 
-  const media = await readCloudMedia(records.map((record) => record.id));
+  const media = (await readCloudMedia(records.map((record) => record.id)))
+    .filter((item) => !item.type || item.type === "image");
   const images: CloudOfflineCacheImageInput[] = [];
   for (let offset = 0; offset < media.length; offset += 6) {
     const batch = await Promise.all(
@@ -222,6 +243,10 @@ async function refreshOneCloudOfflineCache(
       .map((tag) => String(tag.tag)),
   }));
 
+  const storedRevision = images.length < media.length
+    ? `${revision}|thumbs-incomplete:${images.length}/${media.length}`
+    : revision;
+
   await replaceCloudOfflineCache({
     cloud_archive_id: archive.id,
     owner_context: ownerContext,
@@ -242,7 +267,7 @@ async function refreshOneCloudOfflineCache(
     created_at: archive.created_at || null,
     updated_at: archive.last_record_time || archive.created_at || null,
     is_public: Boolean(archive.is_public),
-    cache_revision: revision,
+    cache_revision: storedRevision,
     cycles: (cycleRows || []) as CloudOfflineCacheCycleInput[],
     records: cacheRecords,
     images,

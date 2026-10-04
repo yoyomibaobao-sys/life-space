@@ -1,13 +1,11 @@
 "use client";
-import RecordLocationField from "@/components/record/RecordLocationField";
-import { loadDefaultRecordLocation, rememberDefaultRecordLocation, normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
-
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
+import SegmentedChoice from "@/components/ui/SegmentedChoice";
 import {
   canCreateMembershipContent,
   formatStorageBytes,
@@ -96,14 +94,12 @@ export default function AddRecord({
   const { language, t } = useLanguage();
   const copy = t.record;
   const terminology = getArchiveCycleTerminology(archiveCategory, language);
-  const [location, setLocation] = useState<RecordLocation | null>(() => loadDefaultRecordLocation());
-  const locationEdited = useRef(false);
   const [text, setText] = useState(initialNote);
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<SelectedPreview[]>([]);
   const [timeMode, setTimeMode] = useState("exif");
   const [customTime, setCustomTime] = useState("");
-  const [mergeMode, setMergeMode] = useState(true);
+  const [splitByDate, setSplitByDate] = useState(false);
   const [recordVisibility, setRecordVisibility] =
     useState<RecordVisibility>(archiveIsPublic ? "public" : "private");
   const [isHelpRecord, setIsHelpRecord] = useState(false);
@@ -125,10 +121,6 @@ export default function AddRecord({
     if (initialFilesLoaded.current || !initialFiles.length) return;
     initialFilesLoaded.current = true;
     appendFiles(initialFiles);
-    if (initialCapturedAt[0]) {
-      setTimeMode("custom");
-      setCustomTime(toLocalDateTimeInputValue(initialCapturedAt[0]));
-    }
     // Initial files belong to this composer instance; the owner keeps the draft on failure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFiles]);
@@ -194,13 +186,8 @@ export default function AddRecord({
 
       const [membershipResult, profileResult] = await Promise.all([
         supabase.rpc("get_my_membership"),
-        supabase.from("profiles").select("storage_used, location").eq("id", user.id).maybeSingle(),
+        supabase.from("profiles").select("storage_used").eq("id", user.id).maybeSingle(),
       ]);
-
-      if (!profileResult.error) {
-        rememberDefaultRecordLocation(user.id, profileResult.data?.location);
-        if (!locationEdited.current) setLocation(loadDefaultRecordLocation(user.id));
-      }
 
       if (membershipResult.error) {
         console.error("load membership error:", membershipResult.error);
@@ -354,7 +341,7 @@ export default function AddRecord({
     const { data: record, error } = await supabase.rpc("create_record_with_location", {
       p_archive_id: params.archiveId, p_cycle_id: effectiveCycleId || null,
       p_note: note, p_record_time: params.recordTimeISO, p_visibility: params.visibility,
-      p_status_tag: params.statusTag, p_location: normalizeRecordLocation(location),
+      p_status_tag: params.statusTag, p_location: null,
     }).single();
 
     if (error) {
@@ -368,7 +355,7 @@ export default function AddRecord({
   async function refreshStorageUsed(userId: string) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("storage_used, location")
+      .select("storage_used")
       .eq("id", userId)
       .maybeSingle();
 
@@ -616,7 +603,7 @@ export default function AddRecord({
       let cycleEndRecordTime: string | null = null;
       const preparedPhotos =
         files.length > 0 ? await prepareSelectedPhotos() : [];
-      const photoGroups = buildRecordPhotoGroups(preparedPhotos, mergeMode);
+      const photoGroups = buildRecordPhotoGroups(preparedPhotos, !splitByDate);
 
       if (endSelectedCycleAfterSave && selectedActiveCycle) {
         cycleEndRecordTime =
@@ -688,11 +675,11 @@ export default function AddRecord({
       }
 
       if (photoGroups.length > 0) {
-        for (const group of photoGroups) {
+        for (const [groupIndex, group] of photoGroups.entries()) {
           const record = await createRecord({
             archiveId,
             userId: user.id,
-            note: text.trim(),
+            note: groupIndex === 0 ? text.trim() : "",
             recordTimeISO: group.recordTimeISO,
             visibility: finalVisibility,
             statusTag: finalStatusTag,
@@ -761,7 +748,6 @@ export default function AddRecord({
       }
 
       setText("");
-      setLocation(loadDefaultRecordLocation());
       clearSelectedFiles();
       setCustomTime("");
       setRecordVisibility(archiveIsPublic ? "public" : "private");
@@ -847,8 +833,6 @@ export default function AddRecord({
         />
       )}
 
-      <RecordLocationField value={location} onChange={(value) => { locationEdited.current = true; setLocation(value); }} files={files} language={language} disabled={loading || contentBlocked} />
-
       {sortedActiveCycles.length > 0 ? (
         <label style={cycleSelectLabelStyle}>
           <span>{terminology.assignLabel}</span>
@@ -883,30 +867,31 @@ export default function AddRecord({
 
       <div style={mobileMode ? mobileOptionGridStyle : undefined}>
         <label style={mobileMode ? mobileFieldStyle : undefined}>
-          {mobileMode ? <span style={mobileFieldLabelStyle}>{language === "zh" ? "照片时间" : "Photo time"}</span> : null}
+          {mobileMode ? <span style={mobileFieldLabelStyle}>{language === "zh" ? "时间" : "Time"}</span> : null}
           <select
             value={timeMode}
             onChange={(e) => setTimeMode(e.target.value)}
             style={mobileMode ? mobileControlStyle : { marginTop: "10px", padding: "6px" }}
           >
-            <option value="exif">{t.photo_time}</option>
-            <option value="custom">{t.custom_time}</option>
-            <option value="now">{t.current_time}</option>
+            <option value="exif">{language === "zh" ? "照片时间" : "Photo time"}</option>
+            <option value="now">{language === "zh" ? "记录时间" : "Record time"}</option>
+            <option value="custom">{language === "zh" ? "自定义时间" : "Custom time"}</option>
           </select>
         </label>
 
         {archiveIsPublic ? (
-          <label style={mobileMode ? mobileFieldStyle : undefined}>
+          <div style={mobileMode ? mobileFieldStyle : undefined}>
             {mobileMode ? <span style={mobileFieldLabelStyle}>{language === "zh" ? "公开范围" : "Visibility"}</span> : null}
-            <select
+            <SegmentedChoice
+              label={language === "zh" ? "公开范围" : "Visibility"}
               value={recordVisibility}
-              onChange={(e) => setRecordVisibility(e.target.value as RecordVisibility)}
-              style={mobileMode ? mobileControlStyle : { marginTop: "10px", marginLeft: 8, padding: "6px" }}
-            >
-              <option value="public">{copy.public_discover}</option>
-              <option value="private">{copy.private_only}</option>
-            </select>
-          </label>
+              options={[
+                { value: "private", label: language === "zh" ? "仅自己可见" : "Only me" },
+                { value: "public", label: language === "zh" ? "公开" : "Public" },
+              ]}
+              onChange={(value) => setRecordVisibility(value as RecordVisibility)}
+            />
+          </div>
         ) : (
           <div style={mobileMode ? mobilePrivateNoticeStyle : { marginLeft: 8, fontSize: 12, color: "#888" }}>
             {mobileMode ? <span style={mobileFieldLabelStyle}>{language === "zh" ? "公开范围" : "Visibility"}</span> : null}
@@ -1012,7 +997,7 @@ export default function AddRecord({
           style={{ display: "none" }}
         />
 
-        <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.6 }}>
+        <div style={{ marginTop: 6, fontSize: 12, color: "#777", lineHeight: 1.55 }}>
           {copy.photo_limit_prefix} {MAX_RECORD_PHOTOS_PER_ADD} {copy.photo_limit_suffix}
           <br />
           {copy.standard_photo_hint}
@@ -1072,49 +1057,17 @@ export default function AddRecord({
           </div>
         ) : null}
 
-        {selectedFileBytes > 0 ? (
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 12,
-              color: uploadWouldExceedStorage ? "#9a4a14" : "#777",
-              lineHeight: 1.6,
-            }}
-          >
-            {copy.original_size_prefix} {formatStorageBytes(selectedFileBytes)}{copy.compression_storage_hint}
-            {storageRemainingBytes !== null
-              ? ` ${copy.remaining_prefix} ${formatStorageBytes(storageRemainingBytes)}.`
-              : ""}
-            {uploadWouldExceedStorage ? (
-              <>
-                <br />
-                {copy.no_storage}{" "}
-                <InternalLink href="/membership" style={{ color: "#5d7c2f", fontWeight: 700 }}>
-                  {t.archive.learn_cloud_membership}
-                </InternalLink>
-                {language === "zh" ? "。" : "."}
-              </>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
       {files.length > 1 && (
-        <div style={{ marginTop: "10px" }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={mergeMode}
-              onChange={(e) => setMergeMode(e.target.checked)}
-            />{" "}
-            {copy.merge_photos}
-          </label>
-          {!mergeMode ? (
-            <div style={{ marginTop: 4, fontSize: 12, color: "#777", lineHeight: 1.6 }}>
-              {copy.split_photos_hint}
-            </div>
-          ) : null}
-        </div>
+        <label style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={splitByDate}
+            onChange={(e) => setSplitByDate(e.target.checked)}
+          />
+          <span>{language === "zh" ? "按日期分开生成多条记录" : "Create separate records by date"}</span>
+        </label>
       )}
 
       <button

@@ -285,11 +285,13 @@ export const androidProfileIdentityUsernameStyle: CSSProperties = {
 
 export const androidProfileIdentityEmailStyle: CSSProperties = {
   minWidth: 0,
+  width: "100%",
   color: "#667364",
-  fontSize: 14,
+  fontSize: 13,
   lineHeight: 1.4,
   whiteSpace: "normal",
-  overflowWrap: "anywhere",
+  overflowWrap: "break-word",
+  wordBreak: "normal",
 };
 
 export const profileIdentityMembershipStyle: CSSProperties = {
@@ -297,11 +299,11 @@ export const profileIdentityMembershipStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   color: "#4d6a49",
-  fontSize: 15,
+  fontSize: 13.5,
   fontWeight: 760,
   lineHeight: 1.35,
   whiteSpace: "normal",
-  overflowWrap: "anywhere",
+  overflowWrap: "normal",
 };
 
 export const profileIdentityLogoutButtonStyle: CSSProperties = {

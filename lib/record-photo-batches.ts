@@ -58,7 +58,7 @@ export function buildRecordPhotoGroups<T>(
     return [
       {
         photos,
-        recordTimeISO: latestRecordTime(photos),
+        recordTimeISO: photos[0]?.recordTimeISO || new Date().toISOString(),
       },
     ];
   }

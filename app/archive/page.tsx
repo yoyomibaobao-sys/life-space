@@ -2164,9 +2164,7 @@ export default function ArchivePage() {
               ]
             : []
         }
-        storageLabel={
-          isDeviceLocalProject ? t.archive.saved_on_this_device : null
-        }
+        storageLabel={null}
         hidePublicToggle
         preferSystemNameEditor
         coverBlob={archive.cover_image?.blob || null}
