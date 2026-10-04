@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import PublicExperiencePlayer from "@/components/experience-card/PublicExperiencePlayer";
+import { ExperienceFullscreenDetail } from "@/components/experience-card/PublicExperienceGallery";
 import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardTimeline";
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
 import { loadExperienceCard } from "@/lib/experience-cards";
@@ -22,6 +23,7 @@ export default function AndroidExperienceCardDetail({
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -69,7 +71,16 @@ export default function AndroidExperienceCardDetail({
             {detail.card.description ? <p style={descriptionStyle}>{detail.card.description}</p> : null}
           </section>
 
-          <PublicExperiencePlayer detail={detail} active />
+          <div style={playerWrapStyle}>
+            <PublicExperiencePlayer detail={detail} active />
+            <button
+              type="button"
+              style={fullscreenButtonStyle}
+              onClick={() => setFullscreen(true)}
+            >
+              {language === "zh" ? "全屏" : "Full screen"}
+            </button>
+          </div>
 
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>{language === "zh" ? "记录过程" : "Timeline"}</h2>
@@ -84,6 +95,9 @@ export default function AndroidExperienceCardDetail({
           />
         </main>
       )}
+      {fullscreen && detail ? (
+        <ExperienceFullscreenDetail detail={detail} onClose={() => setFullscreen(false)} />
+      ) : null}
     </div>
   );
 }
@@ -146,4 +160,23 @@ const sectionTitleStyle: CSSProperties = {
   color: "#2f422e",
   fontSize: 16,
   fontWeight: 850,
+};
+
+const playerWrapStyle: CSSProperties = {
+  position: "relative",
+};
+
+const fullscreenButtonStyle: CSSProperties = {
+  position: "absolute",
+  right: 10,
+  bottom: 10,
+  zIndex: 6,
+  minHeight: 34,
+  padding: "0 12px",
+  border: "1px solid rgba(255,255,255,.45)",
+  borderRadius: 999,
+  background: "rgba(12,18,12,.62)",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 750,
 };

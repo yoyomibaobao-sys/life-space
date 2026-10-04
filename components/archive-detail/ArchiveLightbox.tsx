@@ -6,9 +6,11 @@ import { getTouchDistance } from "@/lib/archive-detail-utils";
 import {
   APP_STATUS_BAR_DARK,
   APP_STATUS_BAR_LIGHT,
+  setAppStatusBarHidden,
   setAppStatusBarTheme,
 } from "@/components/StatusBarTheme";
 import UiIcon from "@/components/ui/UiIcon";
+import InternalLink from "@/components/navigation/InternalLink";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 type PanOffset = {
@@ -25,6 +27,7 @@ export default function ArchiveLightbox({
   metaText = "",
   note = "",
   onDeleteCurrentImage,
+  publishHref,
   deleteActionLabel,
   deleteConfirmMessage,
 }: {
@@ -39,10 +42,11 @@ export default function ArchiveLightbox({
     image: LightboxImage,
     currentIndex: number,
   ) => Promise<number>;
+  publishHref?: string;
   deleteActionLabel?: string;
   deleteConfirmMessage?: string;
 }) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const copy = t.record;
   const resolvedDeleteActionLabel = deleteActionLabel || copy.delete_current_image;
   const resolvedDeleteConfirmMessage =
@@ -90,6 +94,7 @@ export default function ArchiveLightbox({
     if (!isMobileViewport || typeof window === "undefined") return;
 
     setAppStatusBarTheme(APP_STATUS_BAR_DARK);
+    setAppStatusBarHidden(true);
     document.documentElement.dataset.mobileOverlayOpen = "true";
 
     window.history.pushState(
@@ -109,6 +114,7 @@ export default function ArchiveLightbox({
     return () => {
       window.removeEventListener("popstate", handlePopState);
       delete document.documentElement.dataset.mobileOverlayOpen;
+      setAppStatusBarHidden(false);
       setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
     };
     // Run once for this mobile lightbox mount so the Android back key exits it.
@@ -423,7 +429,7 @@ export default function ArchiveLightbox({
                 {copy.back}
               </button>
               <div style={mobileMetaTextStyle}>{metaText}</div>
-              {onDeleteCurrentImage ? (
+              {onDeleteCurrentImage || publishHref ? (
                 <button
                   type="button"
                   onClick={(event) => {
@@ -436,16 +442,27 @@ export default function ArchiveLightbox({
                   <UiIcon name="more" size={20} />
                 </button>
               ) : null}
-              {mobileMenuOpen && onDeleteCurrentImage ? (
+              {mobileMenuOpen && (onDeleteCurrentImage || publishHref) ? (
                 <div style={mobileLightboxMenuStyle}>
-                  <button
-                    type="button"
-                    onClick={() => void deleteCurrentMobileImage()}
-                    disabled={isDeletingCurrentImage}
-                    style={mobileLightboxDangerItemStyle}
-                  >
-                    {isDeletingCurrentImage ? t.archive.processing : resolvedDeleteActionLabel}
-                  </button>
+                  {publishHref ? (
+                    <InternalLink
+                      href={publishHref}
+                      onClick={() => setMobileMenuOpen(false)}
+                      style={mobileLightboxMenuItemStyle}
+                    >
+                      {language === "zh" ? "转到集市发布" : "Publish to market"}
+                    </InternalLink>
+                  ) : null}
+                  {onDeleteCurrentImage ? (
+                    <button
+                      type="button"
+                      onClick={() => void deleteCurrentMobileImage()}
+                      disabled={isDeletingCurrentImage}
+                      style={mobileLightboxDangerItemStyle}
+                    >
+                      {isDeletingCurrentImage ? t.archive.processing : resolvedDeleteActionLabel}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -775,6 +792,21 @@ const mobileLightboxMenuStyle = {
   padding: 6,
 } as const;
 
+const mobileLightboxMenuItemStyle = {
+  width: "100%",
+  minHeight: 36,
+  display: "flex",
+  alignItems: "center",
+  borderRadius: 9,
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 700,
+  textAlign: "left",
+  padding: "0 10px",
+  textDecoration: "none",
+  boxSizing: "border-box",
+} as const;
+
 const mobileLightboxDangerItemStyle = {
   width: "100%",
   minHeight: 36,
@@ -793,11 +825,11 @@ const mobileBottomNoteStyle = {
   position: "fixed",
   left: 0,
   right: 0,
-  bottom: 0,
+  bottom: "calc(34px + var(--app-safe-area-bottom))",
   zIndex: 3002,
   maxHeight: "34dvh",
   overflowY: "auto",
-  padding: "18px 16px calc(18px + var(--app-safe-area-bottom))",
+  padding: "18px 16px 16px",
   boxSizing: "border-box",
   background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))",
   color: "rgba(255,255,255,0.92)",

@@ -208,6 +208,7 @@ export default function ArchiveProjectDetailView({
       image: LightboxImage,
       currentIndex: number,
     ) => Promise<number>;
+    publishHref?: string;
     deleteActionLabel?: string;
     deleteConfirmMessage?: string;
   } | null;
@@ -399,6 +400,7 @@ export default function ArchiveProjectDetailView({
           metaText={lightbox.metaText}
           note={lightbox.note}
           onDeleteCurrentImage={lightbox.onDeleteCurrentImage}
+          publishHref={lightbox.publishHref}
           deleteActionLabel={lightbox.deleteActionLabel}
           deleteConfirmMessage={lightbox.deleteConfirmMessage}
           onClose={lightbox.onClose}

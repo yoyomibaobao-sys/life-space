@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
 import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";

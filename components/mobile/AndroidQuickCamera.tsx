@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import UiIcon from "@/components/ui/UiIcon";
+import { APP_STATUS_BAR_DARK, APP_STATUS_BAR_LIGHT, setAppStatusBarTheme } from "@/components/StatusBarTheme";
 
 export default function AndroidQuickCamera({
   language,
@@ -23,6 +24,11 @@ export default function AndroidQuickCamera({
   const [capturing, setCapturing] = useState(false);
 
   useEffect(() => {
+    setAppStatusBarTheme(APP_STATUS_BAR_DARK);
+    return () => setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     void navigator.mediaDevices?.getUserMedia({
       video: { facingMode: { ideal: "environment" } },
@@ -41,8 +47,8 @@ export default function AndroidQuickCamera({
     }).catch(() => {
       if (active) {
         setError(language === "zh"
-          ? "无法打开摄像头，可使用相册或跳过照片。"
-          : "Camera unavailable. Choose from album or skip photos.");
+          ? "无法打开摄像头，可使用相册或直接下一步。"
+          : "Camera unavailable. Choose from album or continue without a photo.");
       }
     });
     return () => {
@@ -84,10 +90,8 @@ export default function AndroidQuickCamera({
         <button type="button" onClick={onCancel} style={topButtonStyle} aria-label={language === "zh" ? "返回" : "Back"}>
           <UiIcon name="arrow-left" size={22} />
         </button>
-        <strong style={topTitleStyle}>{language === "zh" ? "拍照记录" : "Capture"}</strong>
-        <button type="button" onClick={onSkip} style={skipButtonStyle}>
-          {language === "zh" ? "跳过" : "Skip"}
-        </button>
+        <strong style={topTitleStyle}>{language === "zh" ? "拍照" : "Camera"}</strong>
+        <span aria-hidden="true" />
       </div>
 
       <div style={previewStyle}>
@@ -154,14 +158,6 @@ const topTitleStyle: CSSProperties = {
   textAlign: "center",
   fontSize: 17,
   fontWeight: 800,
-};
-
-const skipButtonStyle: CSSProperties = {
-  border: 0,
-  background: "transparent",
-  color: "#fff",
-  fontSize: 15,
-  fontWeight: 750,
 };
 
 const previewStyle: CSSProperties = {

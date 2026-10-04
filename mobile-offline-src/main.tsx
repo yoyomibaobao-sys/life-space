@@ -96,11 +96,13 @@ import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import HomeSectionTabs, { type HomeSection } from "@/components/home/HomeSectionTabs";
 import DiscoverSearchPage from "@/app/discover/search/page";
 import PlantPage from "@/app/plant/page";
+import { PlantDetailContent } from "@/app/plant/[id]/page";
+import { PlantInterestsContent } from "@/app/archive/interests/page";
+import { CloudTrashContent } from "@/app/profile/trash/page";
 import AndroidMarketDetailController from "@/components/market/AndroidMarketDetailController";
 import ReadonlyPublicProjectDetail from "@/components/archive-ui/ReadonlyPublicProjectDetail";
-import RecordLocationField from "@/components/record/RecordLocationField";
-import { loadDefaultRecordLocation, type RecordLocation } from "@/lib/record-location";
 import { readImageCapturedAt } from "@/lib/photo-metadata";
+import { buildRecordPhotoGroups } from "@/lib/record-photo-batches";
 import {
   getOfflineGuideKey,
   getOfflineGuideName,
@@ -295,7 +297,7 @@ type Screen =
   | { kind: "new-project"; guide?: SystemNameCandidate; destination?: CreationDestination }
   | { kind: "project-destination" }
   | { kind: "quick-add" }
-  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "market-mine" | "market-new" | "local-transfer" | "membership-payment" | "membership-refund"; archiveId?: string }
+  | { kind: "cloud-login"; returnTo: "choose-project" | "project-destination" | "list-cloud" | "profile" | "following" | "market-mine" | "market-new" | "interests" | "trash" | "local-transfer" | "membership-payment" | "membership-refund"; archiveId?: string }
   | { kind: "local-transfer"; archiveId: string }
   | { kind: "activity" }
   | { kind: "discover-search" }
@@ -308,6 +310,8 @@ type Screen =
   | { kind: "market-new"; search?: string }
   | { kind: "market-detail"; id: string }
   | { kind: "guides" }
+  | { kind: "interests"; section: string }
+  | { kind: "plant-detail"; id: string }
   | { kind: "guide-detail"; guideKey: string; guideId?: string }
   | { kind: "profile" }
   | { kind: "project-categories" }
@@ -665,7 +669,7 @@ function App() {
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
-  const [detailAddRecordRequest, setDetailAddRecordRequest] = useState(0);
+  const [detailAddRecordRequest, setDetailAddRecordRequest] = useState<{ archiveId: string; nonce: number } | null>(null);
   const [taxonomySyncWarning, setTaxonomySyncWarning] = useState<string | null>(null);
   const quickGallery = useRef<HTMLInputElement>(null);
   async function acceptQuickAddImageFiles(images: File[], source: QuickAddSource) {
@@ -1246,6 +1250,10 @@ function App() {
       }
       return true;
     }
+    if (routed.kind === "interests") {
+      setScreen({ kind: "interests", section: routed.id || "plant" });
+      return true;
+    }
     if (routed.kind === "membership-benefits") {
       setScreen({ kind: "membership-benefits" });
       return true;
@@ -1308,6 +1316,10 @@ function App() {
     }
     if (routed.kind === "guides") {
       setScreen({ kind: "guides" });
+      return true;
+    }
+    if (routed.kind === "plant-detail" && routed.id) {
+      setScreen({ kind: "plant-detail", id: routed.id });
       return true;
     }
     if (routed.kind === "guide-detail" && routed.id) {
@@ -1921,6 +1933,7 @@ function App() {
           screen.kind === "public-detail" ||
           screen.kind === "experience" ||
           screen.kind === "guides" ||
+          screen.kind === "plant-detail" ||
           screen.kind === "guide-detail",
         onSelect: () => setScreen({ kind: "activity" }),
       };
@@ -1941,7 +1954,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "experience", "experience-detail", "following", "market", "market-mine", "market-new", "market-detail", "guides", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
+      active: !["activity", "experience", "experience-detail", "following", "market", "market-mine", "market-new", "market-detail", "guides", "plant-detail", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -1951,7 +1964,7 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "experience-detail", "guides", "following", "market", "market-mine", "market-new", "market-detail", "profile", "project-categories", "guide-detail", "public-detail"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "experience-detail", "guides", "following", "market", "market-mine", "market-new", "market-detail", "profile", "project-categories", "plant-detail", "guide-detail", "public-detail"].includes(screen.kind);
   const detailOwnsTopNav = ["detail", "cloud-detail", "public-cloud-detail", "edit-project", "new-record", "edit-record", "new-project", "project-destination"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
@@ -1969,13 +1982,6 @@ function App() {
     { signedIn: hasAuthenticatedIdentity, membership: hasAuthenticatedIdentity ? membership : null },
     language,
   );
-  const shellHeaderTitle =
-    screen.kind === "following"
-      ? copy.follow
-      : screen.kind === "market"
-        ? copy.market
-        : copy.mySpace;
-
   if (loading) {
     return <main className="offline-shell loading">{copy.loading}</main>;
   }
@@ -1996,33 +2002,6 @@ function App() {
     >
       <KeyboardLayoutGuard />
     <main className="offline-shell">
-      {!homeSectionOwnsTopNav && !detailOwnsTopNav ? (
-        <MobilePageHeaderView
-          className="android-shell-header"
-          title={shellHeaderTitle}
-          titleText={shellHeaderTitle}
-          showBack={false}
-          ariaLabel={shellHeaderTitle}
-          right={(
-            <div className="header-actions">
-              {!owner ? (
-                <button className="icon-button" type="button" onClick={() => toggleLanguage()}>
-                  {language === "zh" ? "EN" : "中文"}
-                </button>
-              ) : null}
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={copy.settings}
-                onClick={() => setScreen({ kind: "profile" })}
-              >
-                <UiIcon name="menu" size={22} />
-              </button>
-            </div>
-          )}
-        />
-      ) : null}
-
       {screen.kind === "list" ? (
         <PersonalSpaceMobileIdentity
           avatarUrl={hasAuthenticatedIdentity ? spaceProfile?.avatar_url : null}
@@ -2338,7 +2317,7 @@ function App() {
             onDeleteArchive={(id) => void handleDeleteArchive(id)}
             onDeleteRecord={(recordId, id) => void handleDeleteRecord(recordId, id)}
             quickAddDraft={quickAddDraft}
-            addRecordRequest={detailAddRecordRequest}
+            addRecordRequest={detailAddRecordRequest?.archiveId === screen.archiveId ? detailAddRecordRequest.nonce : 0}
             onQuickAddSaved={() => setQuickAddDraft(null)}
           />
         </MobileShellErrorBoundary>
@@ -2568,7 +2547,7 @@ function App() {
 
       {screen.kind === "market-mine" ? (
         <div data-android-shell-page="market-mine">
-          <MyMarketPostsContent onRequireLogin={() => openCloudLogin("market-mine")} />
+          <MyMarketPostsContent onRequireLogin={() => openCloudLogin("market-mine")} onBack={() => setScreen({ kind: "market" })} />
         </div>
       ) : null}
 
@@ -2649,7 +2628,7 @@ function App() {
         onOpen={(id) => { applyShellPath(`${[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
       /> : null}
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
-        online={online} onBack={() => setScreen({ kind: "profile" })} /> : null}
+        online={online} onBack={() => setScreen({ kind: "profile" })} onRequireLogin={() => openCloudLogin("trash")} /> : null}
       {screen.kind === "membership-payment" ? <div data-android-membership-payment="true">
         <MobilePageHeaderView title={language === "zh" ? "开通云会员" : "Cloud Membership"} titleText={language === "zh" ? "开通云会员" : "Cloud Membership"}
           showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={() => setScreen({ kind: "profile" })} />
@@ -2676,8 +2655,21 @@ function App() {
         kind="feedback" online={online} signedIn={auth.status === "signed-in"}
         onBack={() => setScreen({ kind: "profile" })} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={() => setScreen({ kind: "profile" })} /> : null}
+      {screen.kind === "interests" ? (
+        online ? (
+          <PlantInterestsContent
+            requestedCategory={screen.section}
+            onBack={() => setScreen({ kind: "guides" })}
+            onRequireLogin={() => openCloudLogin("interests")}
+            onCategoryChange={(section) => setScreen({ kind: "interests", section })}
+          />
+        ) : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
+      ) : null}
+      {screen.kind === "plant-detail" ? (
+        <PlantDetailContent id={screen.id} onBack={() => setScreen({ kind: "guides" })} />
+      ) : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => window.history.back()} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onSuccess={(userId) => {
+      {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onBack={() => goBackInShell({ kind: "list" })} onSuccess={(userId) => {
         const destination = screen;
         void loadShellIdentity(userId);
         if (destination.returnTo === "list-cloud") { setSourceFilter("cloud"); setScreen({ kind: "list" }); }
@@ -2686,11 +2678,14 @@ function App() {
           setTransferError("");
           setScreen({ kind: "local-transfer", archiveId: destination.archiveId });
         }
+        else if (destination.returnTo === "interests") setScreen({ kind: "interests", section: "plant" });
         else if (destination.returnTo !== "local-transfer") setScreen({ kind: destination.returnTo });
       }} /> : null}
       {screen.kind === "local-transfer" ? (() => {
         const archive = archives.find((row) => row.id === screen.archiveId);
-        return <section className="panel" data-android-local-transfer="true">
+        return <div data-android-local-transfer="true">
+          <MobilePageHeaderView title={language === "zh" ? "上传到云端" : "Upload to cloud"} titleText={language === "zh" ? "上传到云端" : "Upload to cloud"} showBack ariaLabel={copy.back} onBack={() => openDetail(archive?.id || screen.archiveId)} />
+          <section className="panel">
           <h1>{language === "zh" ? "上传到云端" : "Upload to cloud"}</h1>
           {archive && canOfferLocalCloudTransfer(archive) ? <>
             <p><strong>{archive.title}</strong></p>
@@ -2712,19 +2707,41 @@ function App() {
             </div>
             {!online ? <p>{language === "zh" ? "联网后可上传到云端" : "Connect to upload to cloud"}</p> : null}
           </> : <p>{language === "zh" ? "这个本地项目已不可转到云端。" : "This device project is no longer available for transfer."}</p>}
-        </section>;
+          </section>
+        </div>;
       })() : null}
       {screen.kind === "project-destination" ? <div data-android-shell-page="project-destination">
         <MobilePageHeaderView title={copy.newProject} titleText={copy.newProject} showBack ariaLabel={copy.back} onBack={() => goBackInShell({ kind: "list" })} />
         <section className="panel project-destination-panel"><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button project-destination-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}><span>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</span>{destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</button>)}</div></section>
       </div> : null}
-      {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">
-        {archives.filter((archive) => archive.status === "active" && (authenticatedOwnerContext || archive.sync?.operation_kind !== "create-archive")).map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}{archive.sync?.operation_kind === "create-archive" ? <small> · 待联网同步</small> : null}</button>)}
-        {authenticatedOwnerContext && online ? cloudArchives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
-        {authenticatedOwnerContext && !online ? cloudCaches.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
-      </div><div className="action-row">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button key={destination} type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>)}<button type="button" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button></div></section> : null}
+      {screen.kind === "choose-project" ? <div data-android-shell-page="choose-project">
+        <MobilePageHeaderView title={copy.chooseProject} titleText={copy.chooseProject} showBack ariaLabel={copy.back} onBack={() => { setQuickAddDraft(null); goList(); }} />
+        <section className="panel choose-project-panel">
+          <div className="choose-project-columns">
+            <section className="choose-project-column" aria-label={copy.cloud}>
+              <h2>{copy.cloud}</h2>
+              {!online && authenticatedOwnerContext ? <p className="choose-project-sync-hint">{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</p> : null}
+              <div className="choose-project-list">
+                {archives.filter((archive) => archive.status === "active" && archive.sync?.operation_kind === "create-archive").map((archive) => <button type="button" className="secondary-button choose-project-button" key={`pending:${archive.id}`} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}
+                {authenticatedOwnerContext && online ? cloudArchives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button choose-project-button" key={archive.id} onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}>{archive.title}</button>) : null}
+                {authenticatedOwnerContext && !online ? cloudCaches.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button choose-project-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>) : null}
+              </div>
+            </section>
+            <section className="choose-project-column" aria-label={copy.local}>
+              <h2>{copy.local}</h2>
+              <div className="choose-project-list">
+                {archives.filter((archive) => archive.status === "active" && archive.sync?.operation_kind !== "create-archive").map((archive) => <button type="button" className="secondary-button choose-project-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}</button>)}
+              </div>
+            </section>
+          </div>
+          <div className="choose-project-create-actions">
+            {projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <div key={destination} className="choose-project-create-item"><button type="button" className="primary-button" onClick={() => destination === "login" ? openCloudLogin("choose-project") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</button>{!online && destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</div>)}
+            <button type="button" className="secondary-button choose-project-cancel" onClick={() => { setQuickAddDraft(null); goList(); }}>{copy.cancel}</button>
+          </div>
+        </section>
+      </div> : null}
       <input ref={quickGallery} type="file" accept="image/*" multiple hidden onChange={(event) => { void acceptQuickAddFiles(event.target.files, "gallery"); event.target.value = ""; }} />
-      {screen.kind === "settings" ? <section className="panel"><h1>{copy.settings}</h1><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section> : null}
+      {screen.kind === "settings" ? <div data-android-shell-page="settings"><MobilePageHeaderView title={copy.settings} titleText={copy.settings} showBack ariaLabel={copy.back} onBack={() => setScreen({ kind: "profile" })} /><section className="panel"><div className="property-row"><span>{copy.language}</span><SegmentedChoice label={copy.language} value={language} options={[{ value: "zh", label: "中文" }, { value: "en", label: "English" }]} onChange={toggleLanguage} /></div><p className="project-meta">{copy.offlineBody}</p><div className="action-row"><button type="button" className="secondary-button" onClick={reconnect}>{copy.reconnect}</button>{auth.status === "signed-in" ? <button type="button" className="danger-button" onClick={() => void explicitAndroidLogout()}>{copy.logout}</button> : null}</div></section></div> : null}
       <MobileBottomNavigationView
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
@@ -2745,7 +2762,7 @@ function App() {
                     }
                     return;
                   }
-                  setDetailAddRecordRequest((value) => value + 1);
+                  setDetailAddRecordRequest((current) => ({ archiveId: screen.archiveId, nonce: (current?.nonce || 0) + 1 }));
                 }}
               >
                 <UiIcon name="plus" size={25} strokeWidth={2.2} />
@@ -2759,7 +2776,9 @@ function App() {
               title={language === "zh" ? "发布信息" : "Post"}
               onClick={() => setScreen({ kind: "market-new" })}
             >
-              <UiIcon name="plus" size={18} strokeWidth={2.2} />
+              <span className="market-add-icon">
+                <UiIcon name="plus" size={18} strokeWidth={2.2} />
+              </span>
               <span>{language === "zh" ? "发布" : "Post"}</span>
             </button>
           ) : (
@@ -2819,8 +2838,8 @@ function AndroidRecentBrowse({ online, onBack, onOpen }: { online: boolean; onBa
   </section>;
 }
 
-function AndroidLocalTrash({ ownerContext, online, onBack }: {
-  ownerContext: LocalArchiveOwnerContext | null; online: boolean; onBack: () => void;
+function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
+  ownerContext: LocalArchiveOwnerContext | null; online: boolean; onBack: () => void; onRequireLogin: () => void;
 }) {
   const { language } = useLanguage();
   const [items, setItems] = useState<Awaited<ReturnType<typeof listLocalArchiveCycleTrash>>>([]);
@@ -2850,8 +2869,7 @@ function AndroidLocalTrash({ ownerContext, online, onBack }: {
     </article>)}
     {error ? <p role="alert">{error}</p> : null}
     {!items.length && !projects.length ? <p className="panel empty">{language === "zh" ? "本机回收站为空" : "Local trash is empty"}</p> : null}
-    {online ? <button type="button" className="secondary-button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile/trash" })}>
-      {language === "zh" ? "查看云端回收站" : "Open cloud trash"}</button>
+    {online ? <CloudTrashContent embedded includeLocalCycles={false} onRequireLogin={onRequireLogin} />
       : <p className="notice warning">{language === "zh" ? "云端回收站需要联网" : "Cloud trash requires a connection"}</p>}
   </section>;
 }
@@ -2930,9 +2948,11 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
 
 function CloudLogin({
   copy,
+  onBack,
   onSuccess,
 }: {
   copy: OfflineCopy;
+  onBack: () => void;
   onSuccess: (userId: string) => void;
 }) {
   const [email, setEmail] = useState("");
@@ -2970,7 +2990,9 @@ function CloudLogin({
   }
 
   return (
-    <section className="panel">
+    <div data-android-shell-page="cloud-login">
+      <MobilePageHeaderView title={copy.cloudSignIn} titleText={copy.cloudSignIn} showBack ariaLabel={copy.back} onBack={onBack} />
+      <section className="panel">
       <h1>{copy.cloudSignIn}</h1>
       <form className="form" onSubmit={submit}>
         <div className="field">
@@ -3005,7 +3027,8 @@ function CloudLogin({
           </button>
         </div>
       </form>
-    </section>
+      </section>
+    </div>
   );
 }
 
@@ -3190,13 +3213,13 @@ function ProjectForm({
               <option value="other">{copy.other}</option>
             </select>
           </div>
-          {depths[category] >= 2 ? <div className="field"><label>{language === "zh" ? "一级分组" : "Level 1 group"}</label>
+          {archive && depths[category] >= 2 ? <div className="field"><label>{language === "zh" ? "一级分组" : "Level 1 group"}</label>
             <select value={subTagId} onChange={(event) => { const next = taxonomy.find((entry) => entry.id === event.target.value && entry.kind === "subcategory"); setSubTagId(next?.id || ""); setSubcategory(next?.label || ""); setGroupName(""); setGroupTagId(""); }}>
               <option value="">{language === "zh" ? "未分组" : "None"}</option>
               {taxonomy.filter((entry) => entry.kind === "subcategory" && entry.category === category).map((entry) =>
                 <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
-          {subTagId && depths[category] >= 3 ? <div className="field"><label>{language === "zh" ? "二级分组" : "Level 2 group"}</label>
+          {archive && subTagId && depths[category] >= 3 ? <div className="field"><label>{language === "zh" ? "二级分组" : "Level 2 group"}</label>
             <select value={groupTagId} onChange={(event) => { const next = taxonomy.find((entry) => entry.id === event.target.value && entry.kind === "group" && entry.parentId === subTagId); setGroupTagId(next?.id || ""); setGroupName(next?.label || ""); }}>
               <option value="">{language === "zh" ? "未分组" : "None"}</option>
               {taxonomy.filter((entry) => entry.kind === "group" && entry.category === category &&
@@ -3204,16 +3227,16 @@ function ProjectForm({
                 <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select></div> : null}
           <div className="field"><label>{copy.systemName}</label><input value={systemName} onChange={(event) => { setSystemName(event.target.value); setSelectedGuide(undefined); }} maxLength={160} placeholder={copy.guideSearch} /><small>{copy.guideHint}</small>
-            <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div>
+            {systemName.trim() ? <div className="guide-suggestions">{directory.filter((candidate) => candidate.category === category && candidate.label.toLowerCase().includes(systemName.toLowerCase())).slice(0, 10).map((candidate) => <button type="button" key={`${candidate.category}:${candidate.label}`} onClick={() => { setSystemName(candidate.label); setSelectedGuide(candidate); if (!title) setTitle(candidate.label); }}>{candidate.label}</button>)}</div> : null}
           </div>
           {category === "plant" ? <PlantingRegionField value={plantingRegion} onChange={setPlantingRegion} language={language} required={!archive} /> : null}
           {!archive && destination === "pending-cloud" && !cloudTaxonomy.length ? <small>联网后可设置云端分组；项目仍可保存为未分组。</small> : null}
           <div className="field"><label>{copy.source}</label><input value={source} onChange={(event) => setSource(event.target.value)} maxLength={240} /></div>
-          {!archive && destination !== "local-only" ? <label className="field">{copy.visibility}<select value={visibility} onChange={(event) => setVisibility(event.target.value as "public" | "private")}><option value="public">{language === "zh" ? "公开" : "Public"}</option><option value="private">{copy.private}</option></select></label> : null}
+          {!archive && destination !== "local-only" ? <div className="field"><label>{copy.visibility}</label><SegmentedChoice label={copy.visibility} value={visibility} options={[{ value: "private", label: language === "zh" ? "仅自己可见" : "Only me" }, { value: "public", label: language === "zh" ? "公开" : "Public" }]} onChange={(value) => setVisibility(value as "public" | "private")} /></div> : null}
           <div className="field"><label>{copy.note}</label><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} /></div>
           <div className="field"><label>{language === "zh" ? "项目概要" : "Project summary"}</label><textarea value={archiveSummary} onChange={(event) => setArchiveSummary(event.target.value)} maxLength={2000} /></div>
-          <label className="field"><span>{language === "zh" ? "启用项目分期" : "Enable project cycles"}</span><input type="checkbox" checked={cycleEnabled} onChange={(event) => setCycleEnabled(event.target.checked)} /></label>
-          {cycleEnabled ? <div className="field"><label>{language === "zh" ? "下一期名称" : "Next cycle name"}</label><input value={nextCycleName} onChange={(event) => setNextCycleName(event.target.value)} maxLength={80} /></div> : null}
+          {archive ? <><label className="field"><span>{language === "zh" ? "启用项目分期" : "Enable project cycles"}</span><input type="checkbox" checked={cycleEnabled} onChange={(event) => setCycleEnabled(event.target.checked)} /></label>
+          {cycleEnabled ? <div className="field"><label>{language === "zh" ? "下一期名称" : "Next cycle name"}</label><input value={nextCycleName} onChange={(event) => setNextCycleName(event.target.value)} maxLength={80} /></div> : null}</> : null}
           {error ? <section className="notice warning"><p>{error}</p></section> : null}
           <div className="submit-row">
             <button className="secondary-button" type="button" onClick={onCancel}>{copy.cancel}</button>
@@ -3237,14 +3260,15 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
   onCancel: () => void; onSaved: () => void | Promise<void>;
 }) {
   const [note, setNote] = useState(record?.note || initialNote);
-  const [recordTime, setRecordTime] = useState(toDateTimeLocal(record?.record_time || initialCapturedAt[0] || undefined));
-  const [photoTimeMode, setPhotoTimeMode] = useState<"photo" | "record">("photo");
+  const [recordTime, setRecordTime] = useState(toDateTimeLocal(record?.record_time || undefined));
+  const [timeMode, setTimeMode] = useState<"photo" | "record" | "custom">(record ? "custom" : "photo");
+  const [customTime, setCustomTime] = useState(toDateTimeLocal(record?.record_time || undefined));
+  const [splitByDate, setSplitByDate] = useState(false);
   const [visibility, setVisibility] = useState<"public" | "private">(
     record?.source_cloud_visibility === "public" || record?.source_cloud_visibility === "private"
       ? record.source_cloud_visibility
       : archive.source_cloud_is_public ? "public" : "private",
   );
-  const [location, setLocation] = useState<RecordLocation | null>(() => record ? record.location || null : loadDefaultRecordLocation());
   const [cycleId, setCycleId] = useState(record?.cycle_id || (archive.cycle_enabled ? archive.cycles?.find((cycle) => cycle.status === "active")?.id : null) || "");
   const [files, setFiles] = useState<File[]>(initialFiles);
   const [busy, setBusy] = useState(false);
@@ -3263,15 +3287,52 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
     if (busy) return;
     setBusy(true); setError("");
     try {
-      const isoTime = localDateTimeInputToIso(recordTime, record?.record_time);
+      const selectedTime = timeMode === "custom" ? customTime : recordTime;
+      const isoTime = localDateTimeInputToIso(selectedTime, record?.record_time);
       if (!isoTime) throw new Error(language === "en" ? "Enter a valid local date and time." : "请输入有效的本地日期和时间。");
-      const imageCapturedAt = photoTimeMode === "record"
-        ? files.map(() => isoTime)
-        : await Promise.all(files.map(async (file) => initialFiles.includes(file)
-            ? initialCapturedAt[initialFiles.indexOf(file)] || await readImageCapturedAt(file)
-            : readImageCapturedAt(file)));
-      if (record) await updateLocalRecordFields(record.id, { note, record_time: isoTime, visibility, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
-      else await createLocalRecord({ archive_id: archive.id, note, record_time: isoTime, visibility, location, cycle_id: cycleId || null, image_files: files, image_captured_at: imageCapturedAt });
+      const imageCapturedAt = await Promise.all(files.map(async (file) => initialFiles.includes(file)
+        ? initialCapturedAt[initialFiles.indexOf(file)] || await readImageCapturedAt(file)
+        : readImageCapturedAt(file)));
+      const preparedPhotos = files.map((file, index) => ({
+        file,
+        capturedAt: imageCapturedAt[index] || null,
+        recordTimeISO: timeMode === "photo" ? imageCapturedAt[index] || isoTime : isoTime,
+      }));
+      if (record) {
+        await updateLocalRecordFields(record.id, {
+          note,
+          record_time: timeMode === "photo" && preparedPhotos[0] ? preparedPhotos[0].recordTimeISO : isoTime,
+          visibility,
+          cycle_id: cycleId || null,
+          image_files: files,
+          image_captured_at: imageCapturedAt,
+        });
+      } else {
+        const groups = buildRecordPhotoGroups(preparedPhotos, !splitByDate);
+        if (groups.length) {
+          for (const [groupIndex, group] of groups.entries()) {
+            await createLocalRecord({
+              archive_id: archive.id,
+              note: groupIndex === 0 ? note : "",
+              record_time: group.recordTimeISO,
+              visibility,
+              cycle_id: cycleId || null,
+              image_files: group.photos.map((photo) => photo.file),
+              image_captured_at: group.photos.map((photo) => photo.capturedAt),
+            });
+          }
+        } else {
+          await createLocalRecord({
+            archive_id: archive.id,
+            note,
+            record_time: isoTime,
+            visibility,
+            cycle_id: cycleId || null,
+            image_files: [],
+            image_captured_at: [],
+          });
+        }
+      }
       await onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : copy.readFailed); } finally { setBusy(false); }
   }
@@ -3285,11 +3346,12 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
     />
     <section className="panel"><form className="form" onSubmit={submit}>
       <div className="project-meta">{archive.title} · {copy.local}</div>
-      <label className="field">{copy.recordTime}<input type="datetime-local" value={recordTime} onChange={(e) => setRecordTime(e.target.value)} required disabled={busy} /></label>
       <div className="record-option-grid">
-        <label className="field">{language === "zh" ? "照片时间" : "Photo time"}<select value={photoTimeMode} onChange={(e) => setPhotoTimeMode(e.target.value as "photo" | "record")} disabled={busy}><option value="photo">{language === "zh" ? "使用照片时间" : "Use photo time"}</option><option value="record">{language === "zh" ? "使用记录时间" : "Use record time"}</option></select></label>
-        <label className="field">{copy.visibility}<select value={visibility} onChange={(e) => setVisibility(e.target.value as "public" | "private")} disabled={busy}><option value="public">{language === "zh" ? "公开" : "Public"}</option><option value="private">{copy.private}</option></select></label>
+        <label className="field">{language === "zh" ? "时间" : "Time"}<select value={timeMode} onChange={(e) => setTimeMode(e.target.value as "photo" | "record" | "custom")} disabled={busy}><option value="photo">{language === "zh" ? "照片时间" : "Photo time"}</option><option value="record">{language === "zh" ? "记录时间" : "Record time"}</option><option value="custom">{language === "zh" ? "自定义时间" : "Custom time"}</option></select></label>
+        <div className="field"><label>{copy.visibility}</label><SegmentedChoice label={copy.visibility} value={visibility} options={[{ value: "private", label: language === "zh" ? "仅自己可见" : "Only me" }, { value: "public", label: language === "zh" ? "公开" : "Public" }]} onChange={(value) => setVisibility(value as "public" | "private")} /></div>
       </div>
+      {timeMode === "record" ? <label className="field">{language === "zh" ? "记录时间" : "Record time"}<input type="datetime-local" value={recordTime} onChange={(e) => setRecordTime(e.target.value)} required disabled={busy} /></label> : null}
+      {timeMode === "custom" ? <label className="field">{language === "zh" ? "自定义时间" : "Custom time"}<input type="datetime-local" value={customTime} onChange={(e) => setCustomTime(e.target.value)} required disabled={busy} /></label> : null}
       {archive.cycle_enabled ? <label className="field">{periods.assignLabel}<select value={cycleId} disabled={busy} onChange={(e) => setCycleId(e.target.value)}><option value="">{periods.unassignedOption}</option>{(archive.cycles || []).filter((cycle) => record || cycle.status === "active").map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.display_name || periods.cycleLabel(cycle.cycle_no)}</option>)}</select></label> : null}
       <label className="field">{copy.recordNote}<textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={8000} disabled={busy} /></label>
       <div className="field"><label>{copy.selectPhotos}</label><small>{(record?.images.length || 0) + files.length} {copy.photos}</small>
@@ -3298,8 +3360,9 @@ function RecordForm({ copy, archive, language, record, initialFiles = [], initia
         <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <input ref={album} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <div className="submit-row"><button className="secondary-button" type="button" disabled={busy} onClick={() => camera.current?.click()}>{copy.camera}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => album.current?.click()}>{copy.album}</button></div>
+        <small>{language === "zh" ? "每次最多添加 10 张照片；保存时自动压缩至长边不超过 1800px。" : "Add up to 10 photos; saved photos use a long edge of no more than 1800px."}</small>
       </div>
-      <RecordLocationField value={location} onChange={setLocation} files={files} language={language} disabled={busy} />
+      {!record && files.length > 1 ? <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={splitByDate} onChange={(e) => setSplitByDate(e.target.checked)} disabled={busy} /><span>{language === "zh" ? "按日期分开生成多条记录" : "Create separate records by date"}</span></label> : null}
       {error ? <section className="notice warning" role="alert"><p>{error}</p></section> : null}
       <div className="submit-row"><button className="secondary-button" type="button" onClick={onCancel} disabled={busy}>{copy.cancel}</button><button className="primary-button" type="submit" disabled={busy}>{busy ? copy.saving : copy.save}</button></div>
     </form></section>

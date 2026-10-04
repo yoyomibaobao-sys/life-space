@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { useEffect, useState, type CSSProperties, type ChangeEvent } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";

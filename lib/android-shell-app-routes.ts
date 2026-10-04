@@ -12,6 +12,8 @@ export type AndroidShellRouteKind =
   | "market-new"
   | "market-detail"
   | "guides"
+  | "interests"
+  | "plant-detail"
   | "guide-detail"
   | "archive"
   | "local-archive"
@@ -51,7 +53,7 @@ const WEB_ROUTES = [
 export function getAndroidRouteCapability(pathname: string): AndroidRouteCapability {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (path === "/profile/recent" || path === "/profile/trash" || path === "/profile" ||
-      path === "/archive" || path === "/local/archive" || path === "/profile/project-categories" ||
+      path === "/archive" || path === "/local/archive" || path === "/archive/interests" || path === "/profile/project-categories" ||
       path === "/feedback" || path === "/app-update" || path === "/membership/payment" || path === "/membership/refund" ||
       /^\/local\/archive\//.test(path) || /^\/plant\//.test(path)) return "hybrid";
   if (path === "/plant" || path === "/" || path === "/membership/benefits" || path === "/profile/data-security" || path === "/legal" ||
@@ -204,6 +206,7 @@ export function parseAndroidShellPath(
   const marketDetail = path.match(/^\/market\/([^/]+)$/);
   if (marketDetail) return { kind: "market-detail", id: decodeURIComponent(marketDetail[1]) };
   if (path === "/plant") return { kind: "guides" };
+  if (path === "/archive/interests") return { kind: "interests", id: params.get("section") || "plant" };
 
   const localArchive = path.match(/^\/local\/archive\/([^/]+)$/);
   if (localArchive) return { kind: "local-archive", id: localArchive[1] };
@@ -211,8 +214,11 @@ export function parseAndroidShellPath(
   const cloudArchive = path.match(/^\/archive\/([^/]+)$/);
   if (cloudArchive) return { kind: "archive", id: cloudArchive[1] };
 
-  const plantGuide = path.match(/^\/plant\/(?:guide\/)?([^/]+)$/);
+  const plantGuide = path.match(/^\/plant\/guide\/([^/]+)$/);
   if (plantGuide) return { kind: "guide-detail", id: decodeURIComponent(plantGuide[1]) };
+
+  const plantDetail = path.match(/^\/plant\/([^/]+)$/);
+  if (plantDetail) return { kind: "plant-detail", id: decodeURIComponent(plantDetail[1]) };
 
   if (isAndroidShellNetworkRequiredPath(path)) {
     return { kind: "network-required" };

@@ -2,9 +2,10 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import SavedGuideStatus from "@/components/plant-detail/SavedGuideStatus";
 import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
@@ -1202,9 +1203,17 @@ function PlantTabAccessNotice({
 export default function PlantDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+  return <PlantDetailContent id={params?.id} search={searchParams.toString()} />;
+}
+
+export function PlantDetailContent({ id, search = "", onBack }: {
+  id?: string;
+  search?: string;
+  onBack?: () => void;
+}) {
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const { language, t } = useLanguage();
   const copy = t.plant.detail;
-  const id = params?.id;
 
   const [plant, setPlant] = useState<PlantSpeciesRow | null>(null);
   const [i18n, setI18n] = useState<PlantSpeciesI18nRow[]>([]);
@@ -1716,17 +1725,33 @@ export default function PlantDetailPage() {
 
   return (
     <>
-      <MobilePageHeader
-        title={displayName}
-        titleText={displayName}
-        fallbackHref={returnRecordHref || "/plant"}
-        ariaLabel={t.nav.back}
-        right={
-          <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
-            {copy.new_project}
-          </Link>
-        }
-      />
+      {onBack ? (
+        <MobilePageHeaderView
+          className="mobile-app-grid-only"
+          title={displayName}
+          titleText={displayName}
+          showBack
+          onBack={onBack}
+          ariaLabel={t.nav.back}
+          right={
+            <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+              {copy.new_project}
+            </Link>
+          }
+        />
+      ) : (
+        <MobilePageHeader
+          title={displayName}
+          titleText={displayName}
+          fallbackHref={returnRecordHref || "/plant"}
+          ariaLabel={t.nav.back}
+          right={
+            <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+              {copy.new_project}
+            </Link>
+          }
+        />
+      )}
 
       <main className={styles.page}>
       <div className={`${styles.backRow} mobile-app-desktop-only`}>

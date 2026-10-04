@@ -103,11 +103,13 @@ test("/local/archive/:id internal links are taken over by applyShellPath", () =>
   assert.match(shell, /openDetail\(routed\.id\)/);
 });
 
-test("/plant/:id offline links enter guide-detail", () => {
+test("plant and guide detail links keep their distinct shell routes", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.equal(parseAndroidShellPath("/plant/tomato")?.kind, "guide-detail");
+  assert.equal(parseAndroidShellPath("/plant/tomato")?.kind, "plant-detail");
   assert.equal(parseAndroidShellPath("/plant/guide/tomato")?.kind, "guide-detail");
+  assert.match(shell, /routed\.kind === "plant-detail"/);
   assert.match(shell, /routed\.kind === "guide-detail"/);
+  assert.match(shell, /kind: "plant-detail"/);
   assert.match(shell, /kind: "guide-detail"/);
   assert.match(
     read("components/archive-ui/DeviceOwnedProjectDetail.tsx"),

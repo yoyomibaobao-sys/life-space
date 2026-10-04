@@ -40,6 +40,22 @@ type LoadOptions = {
 
 export default function CloudTrashPage() {
   const router = useRouter();
+  return (
+    <CloudTrashContent
+      onRequireLogin={() => router.replace(buildLoginHref("/profile/trash"))}
+    />
+  );
+}
+
+export function CloudTrashContent({
+  onRequireLogin,
+  includeLocalCycles = true,
+  embedded = false,
+}: {
+  onRequireLogin?: () => void;
+  includeLocalCycles?: boolean;
+  embedded?: boolean;
+}) {
   const { t } = useLanguage();
   const trashT = t.profile.trash_page;
   const loadSequence = useRef(0);
@@ -104,7 +120,7 @@ export default function CloudTrashPage() {
       if (controller.signal.aborted) return;
 
       if (userResult.error || !userResult.data.user) {
-        router.replace(buildLoginHref("/profile/trash"));
+        onRequireLogin?.();
         return;
       }
 
@@ -115,9 +131,9 @@ export default function CloudTrashPage() {
           email: user.email || null,
         } satisfies LocalArchiveOwnerContext;
         setLocalOwnerContext(ownerContext);
-        setLocalCycleItems(
-          await listLocalArchiveCycleTrash(ownerContext)
-        );
+        setLocalCycleItems(includeLocalCycles
+          ? await listLocalArchiveCycleTrash(ownerContext)
+          : []);
       } catch (localError) {
         console.warn("load local cycle trash failed", localError);
         setLocalCycleItems([]);
@@ -128,7 +144,7 @@ export default function CloudTrashPage() {
 
     void init();
     return () => controller.abort();
-  }, [loadTrash, router]);
+  }, [includeLocalCycles, loadTrash, onRequireLogin]);
 
   useEffect(() => {
     if (!hasPurgingItems) return;
@@ -288,13 +304,15 @@ export default function CloudTrashPage() {
   }
 
   return (
-    <main style={pageStyle}>
-      <Link href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
-        <UiIcon name="arrow-left" size={15} />
-        {trashT.back}
-      </Link>
+    <main style={embedded ? embeddedPageStyle : pageStyle}>
+      {!embedded ? (
+        <Link href="/profile" className="mobile-app-desktop-only" style={backLinkStyle}>
+          <UiIcon name="arrow-left" size={15} />
+          {trashT.back}
+        </Link>
+      ) : null}
       <div style={topRowStyle}>
-        <h1 className="mobile-app-desktop-only" style={titleStyle}>{trashT.title}</h1>
+        {!embedded ? <h1 className="mobile-app-desktop-only" style={titleStyle}>{trashT.title}</h1> : null}
         <div style={topActionsStyle}>
           {activeCount > 0 ? (
             <button
@@ -314,7 +332,7 @@ export default function CloudTrashPage() {
         <span>{trashT.recover_notice}</span>
       </section>
 
-      {localCycleItems.length > 0 ? (
+      {includeLocalCycles && localCycleItems.length > 0 ? (
         <section style={localTrashSectionStyle} aria-label={trashT.local_list_aria}>
           <div style={sectionHeadingRowStyle}>
             <h2 style={sectionHeadingStyle}>{trashT.local_content}</h2>
@@ -590,6 +608,11 @@ const pageStyle: CSSProperties = {
   maxWidth: 860,
   margin: "0 auto",
   padding: "20px 14px 48px",
+};
+const embeddedPageStyle: CSSProperties = {
+  width: "100%",
+  margin: 0,
+  padding: "8px 0 0",
 };
 const topRowStyle: CSSProperties = {
   display: "flex",

@@ -1,8 +1,5 @@
 "use client";
 import ReportLink from "@/components/support/ReportLink";
-import RecordLocationField from "@/components/record/RecordLocationField";
-import { normalizeRecordLocation, type RecordLocation } from "@/lib/record-location";
-import { readRecordLocations } from "@/lib/record-location-cloud";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
@@ -1281,39 +1278,8 @@ function MobileRecordEditPanel({
   const [timeValue, setTimeValue] = useState(toDateTimeLocalValue(item.record_time));
   const [saving, setSaving] = useState(false);
 
-  const [location, setLocation] = useState<RecordLocation | null>(item.location || null);
-  const [locationAttempt, setLocationAttempt] = useState(0);
-  const local = Boolean(onSaveOverride);
-  const locationRequestKey = `${item.id}:${locationAttempt}`;
-  const [locationLoad, setLocationLoad] = useState<{
-    requestKey: string;
-    status: "ready" | "error";
-  } | null>(null);
-  const locationReady = local || (
-    locationLoad?.requestKey === locationRequestKey &&
-    locationLoad.status === "ready"
-  );
-  const locationError = !local &&
-    locationLoad?.requestKey === locationRequestKey &&
-    locationLoad.status === "error";
-  useEffect(() => {
-    if (local) return;
-    let canceled = false;
-    void readRecordLocations(supabase, [item.id]).then((locations) => {
-      if (!canceled) {
-        setLocation(locations.get(item.id) || null);
-        setLocationLoad({ requestKey: locationRequestKey, status: "ready" });
-      }
-    }).catch(() => {
-      if (!canceled) {
-        setLocationLoad({ requestKey: locationRequestKey, status: "error" });
-      }
-    });
-    return () => { canceled = true; };
-  }, [item.id, local, locationAttempt, locationRequestKey]);
-
   async function save() {
-    if (saving || !locationReady) return;
+    if (saving) return;
 
     const recordTime = localDateTimeInputToIso(timeValue, item.record_time);
     if (!recordTime) {
@@ -1323,7 +1289,7 @@ function MobileRecordEditPanel({
 
     const patch = {
       note: note.trim(),
-      location: normalizeRecordLocation(location),
+      location: null,
       record_time: recordTime,
     };
 
@@ -1338,7 +1304,7 @@ function MobileRecordEditPanel({
     } else {
       const result = await supabase.rpc("save_record_details", {
         p_record_id: item.id, p_note: patch.note, p_record_time: patch.record_time,
-        p_location: patch.location,
+        p_location: null,
       });
       error = result.error;
     }
@@ -1389,13 +1355,10 @@ function MobileRecordEditPanel({
           />
         </label>
 
-        <RecordLocationField value={location} onChange={setLocation} language={language} disabled={saving || !locationReady} />
-        {locationError ? <p role="alert" style={mobileEditHintStyle}>{language === "zh" ? "地点读取失败，请重试后保存。" : "Location could not be loaded. Retry before saving."}<button type="button" onClick={() => setLocationAttempt((value) => value + 1)}>{language === "zh" ? "重试" : "Retry"}</button></p> : null}
-
         <button
           type="button"
           onClick={() => void save()}
-          disabled={saving || !locationReady}
+          disabled={saving}
           style={mobileEditSaveButtonStyle}
         >
           {saving ? t.saving : t.save}

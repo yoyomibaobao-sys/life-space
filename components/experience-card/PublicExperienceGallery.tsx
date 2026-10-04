@@ -215,6 +215,82 @@ function ExperienceFullscreenViewer({
   );
 }
 
+export function ExperienceFullscreenDetail({
+  detail,
+  onClose,
+}: {
+  detail: ExperienceCardDetail;
+  onClose: () => void;
+}) {
+  const { t } = useLanguage();
+  const pushedHistoryRef = useRef(false);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.dataset.mobileOverlayOpen = "true";
+    setAppStatusBarTheme(APP_STATUS_BAR_DARK);
+
+    window.history.pushState(
+      { ...(window.history.state || {}), __experienceFullscreen: true },
+      "",
+      window.location.href,
+    );
+    pushedHistoryRef.current = true;
+
+    function handlePopState() {
+      pushedHistoryRef.current = false;
+      onClose();
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") requestClose();
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      delete document.documentElement.dataset.mobileOverlayOpen;
+      setAppStatusBarTheme(APP_STATUS_BAR_LIGHT);
+    };
+    // One temporary history entry belongs to this overlay mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function requestClose() {
+    if (pushedHistoryRef.current && window.history.state?.__experienceFullscreen) {
+      window.history.back();
+      return;
+    }
+    onClose();
+  }
+
+  return (
+    <div
+      className={styles.fullscreenOverlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t.experience.fullscreen_aria}
+      data-mobile-swipe-ignore="true"
+    >
+      <button
+        type="button"
+        onClick={requestClose}
+        className={styles.fullscreenClose}
+        aria-label={t.experience.close_fullscreen}
+      >
+        <UiIcon name="close" size={21} />
+      </button>
+      <section className={styles.fullscreenItem} aria-label={detail.card.title}>
+        <PublicExperiencePlayer detail={detail} active fullscreen />
+      </section>
+    </div>
+  );
+}
+
 function FullscreenExperienceItem({
   item,
   active,

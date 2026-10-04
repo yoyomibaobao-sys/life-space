@@ -240,11 +240,11 @@ export default function DeviceOwnedProjectDetail({
       statusBadge={isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
       statusNotice={
         <>
-          <div style={archiveProjectDetailReadOnlyNoticeStyle}>
-            <span>
-              {isCloudCache ? archiveCopy.cloud_read_only_notice : archiveCopy.saved_on_this_device}
-            </span>
-          </div>
+          {isCloudCache ? (
+            <div style={archiveProjectDetailReadOnlyNoticeStyle}>
+              <span>{archiveCopy.cloud_read_only_notice}</span>
+            </div>
+          ) : null}
           {showPendingNotice ? (
             <div style={{ margin: "0 0 10px", color: "#8a5a36", fontSize: 12, lineHeight: 1.4 }}>
               {archiveCopy.pending_sync_workspace_notice}
@@ -309,7 +309,7 @@ export default function DeviceOwnedProjectDetail({
         await updateLocalArchiveFields(archive.id, { planting_region: region }, ownerContext);
         await onChanged();
       }}
-      storageLabel={isCloudCache ? archiveCopy.device : archiveCopy.saved_on_this_device}
+      storageLabel={isCloudCache ? archiveCopy.device : undefined}
       storageTone="device"
       visibilityLabel={isCloudCache ? workspaceCopy.cloud_cache_copy : archiveCopy.local_project}
       mobileOwnerSettings={

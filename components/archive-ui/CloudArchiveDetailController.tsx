@@ -32,6 +32,7 @@ import { getSystemNameCandidates } from "@/lib/system-name-candidates";
 import { resolveSystemNameSelection } from "@/lib/system-name-candidates";
 import { uploadCloudRecordImages } from "@/lib/cloud-record-media";
 import { isAndroidOnline } from "@/lib/android-connectivity";
+import { formatDateTime } from "@/lib/archive-detail-utils";
 
 type Detail = NonNullable<Awaited<ReturnType<typeof loadCloudArchiveDetail>>>;
 
@@ -312,7 +313,19 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
           if (result.error) throw result.error;
         })}
       />}
-      lightbox={lightbox ? { ...lightbox, metaText: lightbox.record.record_time, note: lightbox.record.note || "",
+      lightbox={lightbox ? { ...lightbox, metaText: formatDateTime(lightbox.record.record_time), note: lightbox.record.note || "",
+        publishHref: `/market/new?archiveId=${encodeURIComponent(archiveId)}&recordId=${encodeURIComponent(lightbox.record.id)}`,
+        onDeleteCurrentImage: async (image) => {
+          if (!image.id || !await requestCloudTrash("media", image.id)) throw new Error(recordCopy.delete_failed);
+          const remaining = lightbox.images.filter((item) => item.id !== image.id);
+          setLightbox((current) => current ? {
+            ...current,
+            images: remaining,
+            index: Math.min(current.index, Math.max(0, remaining.length - 1)),
+          } : null);
+          await reload();
+          return remaining.length;
+        },
         onChange: (index) => setLightbox((current) => current ? { ...current, index } : null),
         onClose: () => setLightbox(null) } : null}
     />

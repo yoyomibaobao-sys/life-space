@@ -289,18 +289,25 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
     )}
     error={error ? <p role="alert">{error}</p> : null}
     preferencesExtra={onLocalSpaceVisibilityChange ? (
-      <div style={localSpacePreferenceRowStyle}>
-        <span>{language === "zh" ? "显示本地空间" : "Show local space"}</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={Boolean(localSpaceVisible)}
-          aria-label={language === "zh" ? "显示本地空间" : "Show local space"}
-          onClick={() => onLocalSpaceVisibilityChange(!localSpaceVisible)}
-          style={localSpaceToggleStyle(Boolean(localSpaceVisible))}
-        >
-          <span style={localSpaceToggleThumbStyle(Boolean(localSpaceVisible))} />
-        </button>
+      <div style={localSpacePreferenceGroupStyle}>
+        <div style={localSpacePreferenceRowStyle}>
+          <span>{language === "zh" ? "显示本地空间" : "Show local space"}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={Boolean(localSpaceVisible)}
+            aria-label={language === "zh" ? "显示本地空间" : "Show local space"}
+            onClick={() => onLocalSpaceVisibilityChange(!localSpaceVisible)}
+            style={localSpaceToggleStyle(Boolean(localSpaceVisible))}
+          >
+            <span style={localSpaceToggleThumbStyle(Boolean(localSpaceVisible))} />
+          </button>
+        </div>
+        <p style={localSpacePreferenceHintStyle}>
+          {language === "zh"
+            ? "无本地内容时自动隐藏；关闭后只隐藏本地空间入口，不删除本机数据。"
+            : "Hidden automatically when there is no local content. Turning this off only hides the local-space entry; device data is not deleted."}
+        </p>
       </div>
     ) : undefined}
     modules={modules} activeModule={module}
@@ -325,6 +332,17 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
   </MobileProfileView>;
 }
 
+const localSpacePreferenceGroupStyle: CSSProperties = {
+  borderBottom: "1px solid #edf1e9",
+};
+
+const localSpacePreferenceHintStyle: CSSProperties = {
+  margin: "-2px 12px 10px",
+  color: "#7a8675",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
 const localSpacePreferenceRowStyle: CSSProperties = {
   minHeight: 50,
   display: "flex",
@@ -332,7 +350,6 @@ const localSpacePreferenceRowStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 12,
   padding: "0 12px",
-  borderBottom: "1px solid #edf1e9",
   color: "#334c32",
   fontSize: 15,
   fontWeight: 800,

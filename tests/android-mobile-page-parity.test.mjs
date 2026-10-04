@@ -129,6 +129,8 @@ test("guide online and offline keep the PlantPage presentation and swap data", (
   assert.match(shell, /findOfflineGuideEntry/);
   assert.match(shell, /data-android-shell-page="guides"/);
   assert.match(shell, /kind: "guide-detail"/);
+  assert.match(shell, /<PlantDetailContent id=\{screen\.id\}/);
+  assert.match(shell, /kind: "plant-detail"/);
 });
 
 test("offline state replaces data, not the page frame", () => {
@@ -156,6 +158,8 @@ test("shell routes map web paths onto the shared Android screens", () => {
   assert.deepEqual(parseAndroidShellPath("/archive"), { kind: "list" });
   assert.deepEqual(parseAndroidShellPath("/profile"), { kind: "profile" });
   assert.deepEqual(parseAndroidShellPath("/plant"), { kind: "guides" });
+  assert.deepEqual(parseAndroidShellPath("/plant/species-1"), { kind: "plant-detail", id: "species-1" });
+  assert.deepEqual(parseAndroidShellPath("/plant/guide/guide-1"), { kind: "guide-detail", id: "guide-1" });
   assert.equal(parseAndroidShellPath("/membership/benefits")?.kind, "membership-benefits");
   assert.equal(parseAndroidShellPath("/profile/data-security")?.kind, "data-security");
   assert.equal(parseAndroidShellPath("/legal")?.kind, "legal");
