@@ -150,6 +150,9 @@ test("shell routes map web paths onto the shared Android screens", () => {
   });
   assert.deepEqual(parseAndroidShellPath("/follow"), { kind: "following" });
   assert.deepEqual(parseAndroidShellPath("/market"), { kind: "market" });
+  assert.deepEqual(parseAndroidShellPath("/market/mine"), { kind: "market-mine" });
+  assert.deepEqual(parseAndroidShellPath("/market/new"), { kind: "market-new" });
+  assert.deepEqual(parseAndroidShellPath("/experience-cards/card-1"), { kind: "experience-detail", id: "card-1" });
   assert.deepEqual(parseAndroidShellPath("/archive"), { kind: "list" });
   assert.deepEqual(parseAndroidShellPath("/profile"), { kind: "profile" });
   assert.deepEqual(parseAndroidShellPath("/plant"), { kind: "guides" });

@@ -68,12 +68,18 @@ test("four states expose precise project destinations and existing photo targets
   assert.deepEqual(capabilities.quickAddExistingSources(false, false), ["local-only"]);
 });
 
-test("center action acquires camera/gallery before project choice and preserves draft through login", () => {
+test("center action opens the in-app camera, supports album or skip, then preserves draft through project choice", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(shell, /aria-label=\{copy\.camera\}[\s\S]*onClick=\{\(\) => quickCamera\.current\?\.click\(\)\}/);
-  assert.match(shell, /aria-label=\{copy\.album\}[\s\S]*onClick=\{\(\) => quickGallery\.current\?\.click\(\)\}/);
-  assert.doesNotMatch(shell, /quick-add-sheet/);
-  assert.match(shell, /acceptQuickAddFiles[\s\S]*setQuickAddDraft\(\{ files, capturedAt, source, note: "" \}\)[\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
+  const camera = read("components/mobile/AndroidQuickCamera.tsx");
+  assert.match(shell, /onClick=\{\(\) => setScreen\(\{ kind: "quick-add" \}\)\}/);
+  assert.match(shell, /screen\.kind === "quick-add"[\s\S]*<AndroidQuickCamera/);
+  assert.match(camera, /getUserMedia/);
+  assert.match(camera, /onAlbum/);
+  assert.match(camera, /onSkip/);
+  assert.match(shell, /onAlbum=\{\(\) => quickGallery\.current\?\.click\(\)\}/);
+  assert.match(shell, /skipQuickAddPhotos[\s\S]*files: \[\][\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
+  assert.doesNotMatch(shell, /quick-add-album/);
+  assert.match(shell, /acceptQuickAddImageFiles[\s\S]*setQuickAddDraft\(\{ files, capturedAt, source, note: "" \}\)[\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
   assert.match(shell, /kind: "cloud-login"; returnTo: "choose-project"/);
   assert.match(shell, /openCloudLogin\("choose-project"\)/);
   assert.match(shell, /initialFiles=\{quickAddDraft\?\.files\}/);
@@ -84,6 +90,7 @@ test("center action acquires camera/gallery before project choice and preserves 
 
 test("project-open center plus adds to the current project from records, properties, or experience", () => {
   const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /screen\.kind === "market" \|\| screen\.kind === "market-mine"[\s\S]*className="market-add"[\s\S]*kind: "market-new"/);
   const localDetail = read("components/archive-ui/DeviceOwnedProjectDetail.tsx");
   const cloudDetail = read("components/archive-ui/CloudArchiveDetailController.tsx");
 

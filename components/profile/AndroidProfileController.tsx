@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import MobileProfileView from "@/components/profile/MobileProfileView";
 import {
   androidProfileIdentityAvatarFallbackStyle,
@@ -30,13 +30,15 @@ import { Browser } from "@capacitor/browser";
 
 type Live = Awaited<ReturnType<typeof loadAndroidProfileLive>>;
 
-export default function AndroidProfileController({ snapshot, online, onBack, onLogout, onLogin, onProfileSaved }: {
+export default function AndroidProfileController({ snapshot, online, onBack, onLogout, onLogin, onProfileSaved, localSpaceVisible, onLocalSpaceVisibilityChange }: {
   snapshot: OfflineProfileSnapshot;
   online: boolean;
   onBack: () => void;
   onLogout?: () => void;
   onLogin?: () => void;
   onProfileSaved?: () => void;
+  localSpaceVisible?: boolean;
+  onLocalSpaceVisibilityChange?: (visible: boolean) => void;
 }) {
   const { language, t } = useLanguage();
   const [loaded, setLive] = useState<Live | null>(null);
@@ -286,6 +288,21 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
       </div>
     )}
     error={error ? <p role="alert">{error}</p> : null}
+    preferencesExtra={onLocalSpaceVisibilityChange ? (
+      <div style={localSpacePreferenceRowStyle}>
+        <span>{language === "zh" ? "显示本地空间" : "Show local space"}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={Boolean(localSpaceVisible)}
+          aria-label={language === "zh" ? "显示本地空间" : "Show local space"}
+          onClick={() => onLocalSpaceVisibilityChange(!localSpaceVisible)}
+          style={localSpaceToggleStyle(Boolean(localSpaceVisible))}
+        >
+          <span style={localSpaceToggleThumbStyle(Boolean(localSpaceVisible))} />
+        </button>
+      </div>
+    ) : undefined}
     modules={modules} activeModule={module}
     onModuleChange={(next) => setModule((current) => current === next ? null : next)}
     onBack={onBack} onLogout={snapshot.userId ? onLogout : undefined}
@@ -306,4 +323,45 @@ export default function AndroidProfileController({ snapshot, online, onBack, onL
         <button type="button" onClick={() => void Browser.open({ url: "https://life-space.uk/profile#profile-module-account" })}>{t.profile.delete_account}</button>
       </div> : <p>{needNetwork}</p>}</div> : null}
   </MobileProfileView>;
+}
+
+const localSpacePreferenceRowStyle: CSSProperties = {
+  minHeight: 50,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "0 12px",
+  borderBottom: "1px solid #edf1e9",
+  color: "#334c32",
+  fontSize: 15,
+  fontWeight: 800,
+};
+
+function localSpaceToggleStyle(active: boolean): CSSProperties {
+  return {
+    position: "relative",
+    width: 48,
+    height: 28,
+    flex: "0 0 48px",
+    padding: 0,
+    border: "1px solid #cad8c6",
+    borderRadius: 999,
+    background: active ? "#56854e" : "#e8eee5",
+    cursor: "pointer",
+  };
+}
+
+function localSpaceToggleThumbStyle(active: boolean): CSSProperties {
+  return {
+    position: "absolute",
+    top: 3,
+    left: active ? 23 : 3,
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    background: "#fff",
+    boxShadow: "0 1px 4px rgba(31, 46, 30, .25)",
+    transition: "left 160ms ease",
+  };
 }

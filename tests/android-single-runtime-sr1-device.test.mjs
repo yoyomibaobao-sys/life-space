@@ -83,6 +83,14 @@ test("online cloud cards use live images even when a cache thumbnail is missing"
   assert.doesNotMatch(liveBranch, /filteredCloudCaches.map/);
 });
 
+test("online cloud workspace never falls back to cache cards when live loading fails", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /const liveCloudWorkspace =\s*online &&\s*Boolean\(authenticatedOwnerContext\);/);
+  assert.match(shell, /cloudError && cloudUserId[\s\S]*notice warning/);
+  assert.match(shell, /auth\.status === "signed-in" &&\s*!online &&\s*filteredCloudCaches\.length/);
+  assert.doesNotMatch(shell, /\(!online \|\| Boolean\(cloudError\)\)[\s\S]*filteredCloudCaches\.length/);
+});
+
 test("online cloud cards and live detail have no cache save-to-device entry", () => {
   const shell = read("mobile-offline-src/main.tsx");
   const card = shell.slice(

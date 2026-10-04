@@ -68,7 +68,7 @@ test("cold-start Android offline shell presents the local workspace rather than 
   assert.match(navbar, /<MobileBottomNavigationView/);
   assert.match(sharedNavigation, /data-mobile-bottom-nav="true"/);
   assert.match(source, /<ArchiveWorkspaceTemplate/);
-  assert.match(source, /sourceOptions=\{\[/);
+  assert.match(source, /sourceOptions=\{auth\.status !== "signed-in"/);
   assert.match(source, /activeSource=\{sourceFilter\}/);
   assert.match(source, /<ArchiveTaxonomyPanel/);
   assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);

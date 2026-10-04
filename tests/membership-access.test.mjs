@@ -297,7 +297,7 @@ test("the plant pages request only data allowed for the current tier", async () 
   ]);
 
   assert.match(indexPage, /loadPlantBasicOverviewsCompat\(null\)/);
-  assert.match(indexPage, /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/);
+  assert.match(indexPage, /canReadFullGuide\s+\?\s+(?:Promise\.resolve\()?supabase\.from\("plant_parameters"\)/);
   assert.match(indexPage, /loadPlantCoreParametersCompat\(null\)/);
   assert.doesNotMatch(
     indexPage,

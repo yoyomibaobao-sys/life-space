@@ -5,8 +5,11 @@ export type AndroidShellRouteKind =
   | "activity"
   | "discover-search"
   | "experience"
+  | "experience-detail"
   | "following"
   | "market"
+  | "market-mine"
+  | "market-new"
   | "market-detail"
   | "guides"
   | "guide-detail"
@@ -39,7 +42,7 @@ export type AndroidRouteCapability = "local" | "hybrid" | "online-controller" | 
 
 const WEB_ROUTES = [
   /^\/membership(?:\/|$)/, /^\/admin(?:\/|$)/,
-  /^\/experience-cards(?:\/|$)/, /^\/profile\/(?:helpful|flowers|account|backup|export|orders|followers)(?:\/|$)/,
+  /^\/profile\/(?:helpful|flowers|account|backup|export|orders|followers)(?:\/|$)/,
   /^\/user(?:\/|$)/, /^\/legal(?:\/|$)/, /^\/feedback(?:\/|$)/,
   /^\/(?:login|register|reset-password|auth|download|app-update|notifications|report)(?:\/|$)/,
   /^\/market\/[^/]+\/edit(?:\/|$)/,
@@ -54,7 +57,8 @@ export function getAndroidRouteCapability(pathname: string): AndroidRouteCapabil
   if (path === "/plant" || path === "/" || path === "/membership/benefits" || path === "/profile/data-security" || path === "/legal" ||
       /^\/legal\/(?:privacy|terms|refunds|contact)$/.test(path)) return "local";
   if (path === "/discover" || path === "/discover/search" || path === "/experience" ||
-      path === "/follow" || path === "/market" || /^\/market\/[^/]+$/.test(path) || /^\/archive\//.test(path)) return "online-controller";
+      /^\/experience-cards\/[^/]+$/.test(path) || path === "/follow" || path === "/market" ||
+      path === "/market/mine" || path === "/market/new" || /^\/market\/[^/]+$/.test(path) || /^\/archive\//.test(path)) return "online-controller";
   if (WEB_ROUTES.some((pattern) => pattern.test(path))) return "online-web";
   return "unsupported";
 }
@@ -191,8 +195,12 @@ export function parseAndroidShellPath(
   if (path === "/discover") return { kind: "activity" };
   if (path === "/discover/search") return { kind: "discover-search" };
   if (path === "/experience") return { kind: "experience" };
+  const experienceDetail = path.match(/^\/experience-cards\/([^/]+)$/);
+  if (experienceDetail) return { kind: "experience-detail", id: decodeURIComponent(experienceDetail[1]) };
   if (path === "/follow") return { kind: "following" };
   if (path === "/market") return { kind: "market" };
+  if (path === "/market/mine") return { kind: "market-mine" };
+  if (path === "/market/new") return { kind: "market-new" };
   const marketDetail = path.match(/^\/market\/([^/]+)$/);
   if (marketDetail) return { kind: "market-detail", id: decodeURIComponent(marketDetail[1]) };
   if (path === "/plant") return { kind: "guides" };
