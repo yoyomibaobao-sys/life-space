@@ -46,6 +46,14 @@ button { touch-action: manipulation; }
     calc(env(safe-area-inset-bottom, 0px) + 94px);
 }
 
+html[data-app-keyboard-open="true"] .offline-shell {
+  padding-bottom: 0;
+}
+
+html[data-app-keyboard-open="true"] [data-mobile-bottom-nav="true"] {
+  display: none !important;
+}
+
 .icon-button, .secondary-button, .primary-button, .danger-button {
   min-height: 44px;
   border-radius: 999px;
