@@ -98,6 +98,9 @@ test("pending UI stays visible offline and both upload paths require a user clic
   assert.match(source, /item\.failed[\s\S]*待重试[\s\S]*待同步/);
   assert.match(source, /onClick=\{\(\) => void uploadAllPending\(\)\}/);
   assert.match(source, /onClick=\{\(\) => void uploadPendingProject\(item\)\}/);
+  assert.match(source, /language === "zh" \? "上传" : "Upload"/);
+  assert.match(source, /data-android-ended-projects="true"/);
+  assert.match(source, /endedFilteredCloudArchives\.map\(renderCloudProjectCard\)[\s\S]*endedFilteredLocalArchives\.map\(renderLocalProjectCard\)/);
   assert.match(source, /async function uploadPendingProject[\s\S]*syncPendingCloudArchive/);
   assert.match(source, /async function uploadAllPending[\s\S]*syncAllPendingCloudArchives/);
   assert.match(source, /sourceFilter !== "local" && authenticatedOwnerContext && filteredPending\.length/);

@@ -19,6 +19,7 @@ export default function ArchiveOwnerSettingsFields({
   canWrite,
   busy,
   showVisibility = true,
+  footerAction,
   onChangeSubcategory,
   onChangeGroup,
   onToggleEnded,
@@ -35,6 +36,7 @@ export default function ArchiveOwnerSettingsFields({
   canWrite: boolean;
   busy: boolean;
   showVisibility?: boolean;
+  footerAction?: { label: string; onClick: () => void; disabled?: boolean };
   onChangeSubcategory: (value: string) => void;
   onChangeGroup: (value: string) => void;
   onToggleEnded: () => void;
@@ -126,6 +128,13 @@ export default function ArchiveOwnerSettingsFields({
           />
         </div>
       ) : null}
+
+      {footerAction ? (
+        <button type="button" onClick={footerAction.onClick} disabled={footerAction.disabled} style={footerActionStyle}>
+          <span>{footerAction.label}</span>
+          <span aria-hidden="true" style={footerActionIconStyle}><UiIcon name="chevron-down" size={14} /></span>
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -198,4 +207,27 @@ const labelStyle: CSSProperties = {
   color: "#7a8577",
   fontSize: 13,
   lineHeight: 1.45,
+};
+
+const footerActionStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 48,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  border: 0,
+  background: "transparent",
+  color: "#315a2d",
+  padding: 0,
+  fontSize: 14,
+  fontWeight: 750,
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const footerActionIconStyle: CSSProperties = {
+  display: "inline-flex",
+  color: "#748171",
+  transform: "rotate(-90deg)",
 };

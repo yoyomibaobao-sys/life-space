@@ -905,6 +905,27 @@ export default function ArchivePage() {
     showToast(isEnding ? t.archive.marked_ended : t.archive.restored_ongoing);
   }
 
+  async function updateArchiveHelpStatus(
+    item: ArchiveItem,
+    nextStatus: "open" | "resolved" | "none"
+  ) {
+    if (!requireCloudWriteAccess()) return;
+    const now = new Date().toISOString();
+    const patch = nextStatus === "open"
+      ? { help_status: "open", help_opened_at: now, help_resolved_at: null, help_updated_at: now }
+      : nextStatus === "resolved"
+        ? { help_status: "resolved", help_resolved_at: now, help_updated_at: now }
+        : { help_status: "none", help_opened_at: null, help_resolved_at: null, help_updated_at: now };
+    const { error } = await supabase.from("archives").update(patch).eq("id", item.id);
+    if (error) {
+      showToast(t.record.help_status_update_failed);
+      return;
+    }
+    setArchives((prev) => prev.map((archive) =>
+      archive.id === item.id ? { ...archive, help_status: nextStatus } : archive
+    ));
+  }
+
   async function toggleArchivePublic(item: ArchiveItem) {
     const newValue = !item.is_public;
     if (newValue && !requireCloudWriteAccess()) return;
@@ -2050,6 +2071,7 @@ export default function ArchivePage() {
         onCancelSystemEditing={cancelSystemEditing}
         onUpdateArchiveStatus={updateArchiveStatus}
         onTogglePublic={toggleArchivePublic}
+        onSetArchiveHelpStatus={updateArchiveHelpStatus}
         onUpdateArchiveCategory={updateArchiveCategory}
         onUpdateArchiveGroupTag={updateArchiveGroupTag}
         onDeleteArchive={deleteArchive}

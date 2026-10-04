@@ -126,6 +126,7 @@ import { refreshCloudOfflineCaches, type CloudOfflineCacheArchiveSource } from "
 import { syncAllPendingCloudArchives, syncPendingCloudArchive } from "@/lib/pending-cloud-sync";
 import { buildAndroidCloudWorkspace, canOfferLocalCloudTransfer, type PendingCloudProject } from "@/lib/android-cloud-workspace";
 import { syncLocalArchiveToCloud, type LocalToCloudVisibility } from "@/lib/local-to-cloud-sync";
+import { canAddLocalArchiveRecord } from "@/lib/local-archive-detail-adapters";
 import { readCloudTaxonomySnapshot } from "@/lib/cloud-taxonomy-snapshot";
 import { createLiveCloudArchive } from "@/lib/android-live-cloud-create";
 import { projectCreationDestinations, type CreationDestination, type QuickAddDraft, type QuickAddSource } from "@/lib/android-creation-capabilities";
@@ -258,6 +259,7 @@ type CloudArchiveSummary = {
   display_cover_image_url?: string | null;
   display_cover_thumb_url?: string | null;
   is_public?: boolean | null;
+  help_status?: string | null;
   sub_tag_id?: string | null;
   group_tag_id?: string | null;
 };
@@ -634,6 +636,7 @@ function App() {
   const copy = text[language];
   const [screen, setScreenState] = useState<Screen>({ kind: "list" });
   const [quickAddDraft, setQuickAddDraft] = useState<QuickAddDraft | null>(null);
+  const [detailAddRecordRequest, setDetailAddRecordRequest] = useState(0);
   const [taxonomySyncWarning, setTaxonomySyncWarning] = useState<string | null>(null);
   const quickCamera = useRef<HTMLInputElement>(null);
   const quickGallery = useRef<HTMLInputElement>(null);
@@ -1553,6 +1556,15 @@ function App() {
     return (!subcategoryFilter || item.cloud?.sub_tag_id === subcategoryFilter) &&
       (!groupFilter || item.cloud?.group_tag_id === groupFilter);
   });
+  const activeFilteredLocalArchives = filteredLocalArchives.filter((archive) => archive.status !== "ended");
+  const endedFilteredLocalArchives = filteredLocalArchives.filter((archive) => archive.status === "ended");
+  const activeFilteredCloudCaches = filteredCloudCaches.filter((archive) => archive.status !== "ended");
+  const endedFilteredCloudCaches = filteredCloudCaches.filter((archive) => archive.status === "ended");
+  const activeFilteredCloudArchives = filteredCloudArchives.filter((archive) => archive.status !== "ended");
+  const endedFilteredCloudArchives = filteredCloudArchives.filter((archive) => archive.status === "ended");
+  const orderedFilteredLocalArchives = [...activeFilteredLocalArchives, ...endedFilteredLocalArchives];
+  const orderedFilteredCloudCaches = [...activeFilteredCloudCaches, ...endedFilteredCloudCaches];
+  const orderedFilteredCloudArchives = [...activeFilteredCloudArchives, ...endedFilteredCloudArchives];
   const activeDepths = sourceFilter === "local" ? getLocalArchiveCategoryDepths(ownerContext?.userId) : cloudDepths;
   const canEditLocalTaxonomy = sourceFilter === "local";
   const canEditCloudTaxonomy = sourceFilter === "cloud" && online && Boolean(authenticatedOwnerContext);
@@ -1663,6 +1675,11 @@ function App() {
         ? language === "zh" ? "公开" : "Public"
         : copy.private,
       visibilityTone: archive.is_public ? "public" as const : "private" as const,
+      helpLabel: archive.help_status === "open"
+        ? language === "zh" ? "求助中" : "Help requested"
+        : archive.help_status === "resolved"
+          ? language === "zh" ? "已解决" : "Resolved"
+          : null,
       statusLabel: ended ? copy.ended : null,
       ended,
       showClassificationRow: cloudDepths[category] >= 2,
@@ -1686,6 +1703,32 @@ function App() {
       />
     );
   }
+  function renderCloudCacheCard(archive: LocalArchiveSummary) {
+    return <ArchiveProjectCard
+      key={archive.id}
+      project={{
+        ...localArchiveToProjectView(archive, ownerContext, language, cloudDepths[archive.category]),
+        href: undefined,
+      }}
+      onClick={() => openDetail(archive.id)}
+      mobileMode
+      mobileShowCategoryBadge={false}
+      actionSlot={renderProjectActions(archive, "cache")}
+    />;
+  }
+  function renderLocalProjectCard(archive: LocalArchiveSummary) {
+    return <ArchiveProjectCard
+      key={archive.id}
+      project={{
+        ...localArchiveToProjectView(archive, ownerContext, language, getLocalArchiveCategoryDepths(ownerContext?.userId)[archive.category]),
+        href: undefined,
+      }}
+      onClick={() => openDetail(archive.id)}
+      mobileMode
+      mobileShowCategoryBadge={false}
+      actionSlot={renderProjectActions(archive, "local")}
+    />;
+  }
   function renderPendingProjectCard(item: PendingCloudProject<LocalArchiveSummary, CloudArchiveSummary>) {
     const local = item.local || item.cache;
     const base = local
@@ -1705,9 +1748,9 @@ function App() {
       project={{ ...base, href: undefined, visibilityLabel: badge, visibilityTone: "neutral", latestText: counts }}
       onClick={() => local ? openDetail(local.id) : item.cloud && setScreen({ kind: "cloud-detail", archiveId: item.cloud.id })}
       mobileMode mobileShowCategoryBadge={false}
-      actionSlot={online && authenticatedOwnerContext ? <button type="button"
+      actionSlot={online && authenticatedOwnerContext ? <button type="button" className="secondary-button compact-card-action"
         disabled={Boolean(syncingArchiveId)} onClick={() => void uploadPendingProject(item)}>
-        {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? copy.uploading : (language === "zh" ? "上传待同步内容" : "Upload pending changes")}
+        {syncingArchiveId === item.key || syncingArchiveId === item.summaries[0]?.local_archive_id ? (language === "zh" ? "上传中…" : "Uploading…") : (language === "zh" ? "上传" : "Upload")}
       </button> : null}
     />;
   }
@@ -1760,6 +1803,15 @@ function App() {
         : { group_name: groupTags.find((item) => item.id === value)?.name || null })}
       onToggleEnded={source === "cache" ? undefined : () => void mutate({ status: archive.status === "ended" ? "active" : "ended", ended_at: archive.status === "ended" ? null : new Date().toISOString() })}
       onTogglePublic={source === "cloud" ? () => void mutate({ is_public: !(archive as CloudArchiveSummary).is_public }) : undefined}
+      helpStatus={source === "cloud" ? (archive as CloudArchiveSummary).help_status : undefined}
+      onSetHelpStatus={source === "cloud" ? (nextStatus) => {
+        const now = new Date().toISOString();
+        void mutate(nextStatus === "open"
+          ? { help_status: "open", help_opened_at: now, help_resolved_at: null, help_updated_at: now }
+          : nextStatus === "resolved"
+            ? { help_status: "resolved", help_resolved_at: now, help_updated_at: now }
+            : { help_status: "none", help_opened_at: null, help_resolved_at: null, help_updated_at: now });
+      } : undefined}
       onMoveToTrash={source === "local" ? () => {
         if (!window.confirm(language === "zh" ? "将本机项目移入回收站？" : "Move this device project to trash?")) return;
         void setLocalProjectTrashed(archive.id, true, ownerContext)
@@ -1826,7 +1878,7 @@ function App() {
   ];
 
   const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "guides", "following", "market", "market-detail", "profile", "project-categories", "guide-detail", "public-detail"].includes(screen.kind);
-  const detailOwnsTopNav = ["detail", "cloud-detail", "public-cloud-detail", "edit-project", "new-record", "edit-record", "new-project"].includes(screen.kind);
+  const detailOwnsTopNav = ["detail", "cloud-detail", "public-cloud-detail", "edit-project", "new-record", "edit-record", "new-project", "project-destination"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
     0,
@@ -1909,6 +1961,8 @@ function App() {
           storageTotalLabel={hasAuthenticatedIdentity ? storageTotalLabel : null}
           experienceLabel={hasAuthenticatedIdentity ? (language === "zh" ? "经验卡" : "Experience") : null}
           experienceCardCount={hasAuthenticatedIdentity ? experienceCardCount : null}
+          experienceHref={hasAuthenticatedIdentity && online ? "/experience-cards" : null}
+          onExperienceClick={hasAuthenticatedIdentity && !online ? () => showToast(language === "zh" ? "需联网查看经验卡" : "Connect to view experience cards") : undefined}
           language={language}
           profileHref="/profile"
         />
@@ -1923,6 +1977,7 @@ function App() {
         <div data-android-shell-page="personal-space">
         <ArchiveWorkspaceTemplate<ShellSourceFilter>
           online={online}
+          showConnectivityNotice={false}
           sourceOptions={[
             { value: "all", label: copy.all, count: workspace.counts.all },
             { value: "cloud", label: copy.cloud, count: cloudSourceCount },
@@ -1951,8 +2006,8 @@ function App() {
               subcategories={visibleSubcategories}
               groups={visibleGroups}
               mobileMode
-              showSubcategoryRow={categoryFilter !== "all" && activeDepths[categoryFilter] >= 2}
-              showGroupRow={categoryFilter !== "all" && activeDepths[categoryFilter] >= 3}
+              showSubcategoryRow={sourceFilter !== "all" && categoryFilter !== "all" && activeDepths[categoryFilter] >= 2}
+              showGroupRow={sourceFilter !== "all" && categoryFilter !== "all" && activeDepths[categoryFilter] >= 3}
               onReset={() => { setCategoryFilter("all"); setSubcategoryFilter(null); setGroupFilter(null); }}
               onSelectCategory={(category) => { setCategoryFilter(category); setSubcategoryFilter(null); setGroupFilter(null); }}
               onResetSubcategory={() => { setSubcategoryFilter(null); setGroupFilter(null); }}
@@ -1972,9 +2027,6 @@ function App() {
               onDeleteGroup={canEditLocalTaxonomy || canEditCloudTaxonomy
                 ? (chip) => mutateWorkspaceTaxonomy("delete", "group", categoryFilter as ArchiveCategory, chip) : undefined}
             />
-            {sourceFilter === "cloud" && !online && authenticatedOwnerContext ? (
-              <p className="project-meta">{language === "zh" ? "联网后可编辑云端分组" : "Connect to edit cloud groups"}</p>
-            ) : null}
             </>
           )}
           noticeSlot={ownerContext && unownedCount > 0 ? (
@@ -1991,13 +2043,13 @@ function App() {
         >
           {sourceFilter !== "local" && authenticatedOwnerContext && filteredPending.length ? (
             sourceFilter === "cloud" ? <section data-android-cloud-pending="true">
-              <div className="panel">
-                <h2>{language === "zh" ? "待上传" : "Pending uploads"} {workspace.pending.length}</h2>
+              <div className="panel pending-upload-summary">
+                <h2 className="workspace-section-label">{language === "zh" ? "待上传" : "Pending uploads"} {workspace.pending.length}</h2>
                 <p>{language === "zh"
                   ? `${workspace.pendingCounts.archive} 个待创建云项目 · ${workspace.pendingCounts.record} 条记录 · ${workspace.pendingCounts.image} 张照片`
                   : `${workspace.pendingCounts.archive} projects to create · ${workspace.pendingCounts.record} records · ${workspace.pendingCounts.image} photos`}</p>
-                {online ? <button type="button" disabled={Boolean(syncingArchiveId)} onClick={() => void uploadAllPending()}>
-                  {syncingArchiveId === "all" ? copy.uploading : language === "zh" ? "全部上传" : "Upload all"}
+                {online ? <button type="button" className="secondary-button compact-card-action" disabled={Boolean(syncingArchiveId)} onClick={() => void uploadAllPending()}>
+                  {syncingArchiveId === "all" ? (language === "zh" ? "上传中…" : "Uploading…") : language === "zh" ? "全部上传" : "Upload all"}
                 </button> : <p>{language === "zh" ? "联网后可上传" : "Connect to upload"}</p>}
               </div>
               <div className="project-list">{filteredPending.map(renderPendingProjectCard)}</div>
@@ -2006,11 +2058,11 @@ function App() {
           {sourceFilter !== "local" ? (
             liveCloudWorkspace ? (
               <>
-                {sourceFilter === "cloud" && (filteredCloudArchives.length || filteredPending.length) ? <h2>{copy.cloudProjects}</h2> : null}
+                {sourceFilter === "cloud" && filteredPending.length > 0 && filteredCloudArchives.length > 0 ? <h2 className="workspace-section-label">{language === "zh" ? "云端" : "Cloud"}</h2> : null}
                 {cloudLoading ? <section className="panel empty">{copy.cloudLoading}</section> : null}
                 {!cloudLoading && filteredCloudArchives.length ? (
                   <div className="project-list" data-android-live-cloud-list="true">
-                    {filteredCloudArchives.map(renderCloudProjectCard)}
+                    {(sourceFilter === "all" ? activeFilteredCloudArchives : orderedFilteredCloudArchives).map(renderCloudProjectCard)}
                   </div>
                 ) : null}
                 {!cloudLoading && sourceFilter === "cloud" && filteredCloudArchives.length === 0 && filteredPending.length === 0 ? (
@@ -2027,21 +2079,9 @@ function App() {
                 (!online || Boolean(cloudError)) &&
                 filteredCloudCaches.length ? (
                   <>
-                  {sourceFilter === "cloud" ? <h2>{copy.cloudProjects}</h2> : null}
+                  {sourceFilter === "cloud" && filteredPending.length > 0 ? <h2 className="workspace-section-label">{language === "zh" ? "云端" : "Cloud"}</h2> : null}
                   <div className="project-list" data-android-cloud-cache-list="true">
-                    {filteredCloudCaches.map((archive) => (
-                      <ArchiveProjectCard
-                        key={archive.id}
-                        project={{
-                          ...localArchiveToProjectView(archive, ownerContext, language, cloudDepths[archive.category]),
-                          href: undefined,
-                        }}
-                        onClick={() => openDetail(archive.id)}
-                        mobileMode
-                        mobileShowCategoryBadge={false}
-                        actionSlot={renderProjectActions(archive, "cache")}
-                      />
-                    ))}
+                    {(sourceFilter === "all" ? activeFilteredCloudCaches : orderedFilteredCloudCaches).map(renderCloudCacheCard)}
                   </div>
                   </>
                 ) : sourceFilter === "cloud" && (!online || Boolean(cloudError)) && filteredPending.length === 0 ? (
@@ -2054,19 +2094,7 @@ function App() {
           {sourceFilter !== "cloud" ? (
             filteredLocalArchives.length ? (
               <div className="project-list">
-                {filteredLocalArchives.map((archive) => (
-                  <ArchiveProjectCard
-                    key={archive.id}
-                    project={{
-                      ...localArchiveToProjectView(archive, ownerContext, language, getLocalArchiveCategoryDepths(ownerContext?.userId)[archive.category]),
-                      href: undefined,
-                    }}
-                    onClick={() => openDetail(archive.id)}
-                    mobileMode
-                    mobileShowCategoryBadge={false}
-                    actionSlot={renderProjectActions(archive, "local")}
-                  />
-                ))}
+                {(sourceFilter === "all" ? activeFilteredLocalArchives : orderedFilteredLocalArchives).map(renderLocalProjectCard)}
               </div>
             ) : sourceFilter === "local" ? (
               <section className="panel empty">
@@ -2074,6 +2102,14 @@ function App() {
                 {copy.noProjectsHint}
               </section>
             ) : null
+          ) : null}
+
+          {sourceFilter === "all" &&
+          ((liveCloudWorkspace ? endedFilteredCloudArchives.length : endedFilteredCloudCaches.length) > 0 || endedFilteredLocalArchives.length > 0) ? (
+            <div className="project-list" data-android-ended-projects="true">
+              {liveCloudWorkspace ? endedFilteredCloudArchives.map(renderCloudProjectCard) : endedFilteredCloudCaches.map(renderCloudCacheCard)}
+              {endedFilteredLocalArchives.map(renderLocalProjectCard)}
+            </div>
           ) : null}
 
           {sourceFilter === "all" &&
@@ -2143,6 +2179,7 @@ function App() {
                 onChanged={async () => { await loadDetail(detail.archive.id); await loadList(); }}
                 onBack={goList}
                 onAddRecord={() => setScreen({ kind: "new-record", archiveId: detail.archive.id })}
+                showFloatingAdd={false}
                 onDeleteArchive={() => void handleDeleteArchive(detail.archive.id)}
                 onDeleteRecord={(recordId) => void handleDeleteRecord(recordId, detail.archive.id)}
                 onTransferToCloud={canOfferLocalCloudTransfer(detail.archive) &&
@@ -2211,6 +2248,7 @@ function App() {
             onDeleteArchive={(id) => void handleDeleteArchive(id)}
             onDeleteRecord={(recordId, id) => void handleDeleteRecord(recordId, id)}
             quickAddDraft={quickAddDraft}
+            addRecordRequest={detailAddRecordRequest}
             onQuickAddSaved={() => setQuickAddDraft(null)}
           />
         </MobileShellErrorBoundary>
@@ -2525,7 +2563,6 @@ function App() {
         onBack={() => goBackInShell()} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={() => goBackInShell()} /> : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => window.history.back()} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
-      {screen.kind === "quick-add" ? <section className="panel quick-add-sheet" role="dialog" aria-label={copy.addRecord}><h1>{copy.addRecord}</h1><div className="action-row"><button type="button" onClick={() => quickCamera.current?.click()}>{copy.camera}</button><button type="button" onClick={() => quickGallery.current?.click()}>{copy.album}</button><button type="button" onClick={goList}>{copy.cancel}</button></div></section> : null}
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onSuccess={(userId) => {
         const destination = screen;
         void loadShellIdentity(userId);
@@ -2563,7 +2600,10 @@ function App() {
           </> : <p>{language === "zh" ? "这个本地项目已不可转到云端。" : "This device project is no longer available for transfer."}</p>}
         </section>;
       })() : null}
-      {screen.kind === "project-destination" ? <section className="panel"><h1>{copy.newProject}</h1><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}{destination === "pending-cloud" ? <small> 当前离线，将先保存在本机，联网后手动上传</small> : null}</button>)}</div></section> : null}
+      {screen.kind === "project-destination" ? <div data-android-shell-page="project-destination">
+        <MobilePageHeaderView title={copy.newProject} titleText={copy.newProject} showBack ariaLabel={copy.back} onBack={() => goBackInShell({ kind: "list" })} />
+        <section className="panel project-destination-panel"><div className="project-list">{projectCreationDestinations(online, Boolean(authenticatedOwnerContext)).map((destination) => <button type="button" className="secondary-button project-destination-button" key={destination} onClick={() => destination === "login" ? openCloudLogin("project-destination") : setScreen({ kind: "new-project", destination })}><span>{destination === "local-only" ? (language === "zh" ? "新建本地项目" : "New local project") : destination === "login" ? copy.cloudSignIn : (language === "zh" ? "新建云端项目" : "New cloud project")}</span>{destination === "pending-cloud" ? <small>{language === "zh" ? "暂存本地，联网上传" : "Save locally, upload when online"}</small> : null}</button>)}</div></section>
+      </div> : null}
       {screen.kind === "choose-project" ? <section className="panel"><h1>{copy.chooseProject}</h1><div className="project-list">
         {archives.filter((archive) => archive.status === "active" && (authenticatedOwnerContext || archive.sync?.operation_kind !== "create-archive")).map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "new-record", archiveId: archive.id })}>{archive.title}{archive.sync?.operation_kind === "create-archive" ? <small> · 待联网同步</small> : null}</button>)}
         {authenticatedOwnerContext && online ? cloudArchives.filter((archive) => archive.status === "active").map((archive) => <button type="button" className="secondary-button" key={archive.id} onClick={() => setScreen({ kind: "cloud-detail", archiveId: archive.id })}>{archive.title} · {copy.cloud}</button>) : null}
@@ -2576,14 +2616,50 @@ function App() {
         ariaLabel={language === "zh" ? "主导航" : "Main navigation"}
         items={bottomNavigationItems}
         centerAction={(
-          <button
-            type="button"
-            className="quick-add"
-            aria-label={copy.addRecord}
-            onClick={() => setScreen({ kind: "quick-add" })}
-          >
-            <UiIcon name="plus" size={25} strokeWidth={2.2} />
-          </button>
+          screen.kind === "detail" || screen.kind === "cloud-detail" ? (
+            <div className="quick-add-actions">
+              <button
+                type="button"
+                className="quick-add"
+                aria-label={copy.addRecord}
+                title={copy.addRecord}
+                onClick={() => {
+                  if (screen.kind === "detail") {
+                    if (detail?.archive.id === screen.archiveId && canAddLocalArchiveRecord(detail.archive)) {
+                      setScreen({ kind: "new-record", archiveId: detail.archive.id });
+                    } else {
+                      showToast(language === "zh" ? "当前项目不能新增记录" : "This project cannot add records");
+                    }
+                    return;
+                  }
+                  setDetailAddRecordRequest((value) => value + 1);
+                }}
+              >
+                <UiIcon name="plus" size={25} strokeWidth={2.2} />
+              </button>
+            </div>
+          ) : (
+            <div className="quick-add-actions">
+              <button
+                type="button"
+                className="quick-add"
+                aria-label={copy.camera}
+                title={copy.camera}
+                onClick={() => quickCamera.current?.click()}
+              >
+                <UiIcon name="plus" size={25} strokeWidth={2.2} />
+              </button>
+              <button
+                type="button"
+                className="quick-add-album"
+                aria-label={copy.album}
+                title={copy.album}
+                onClick={() => quickGallery.current?.click()}
+              >
+                <UiIcon name="image" size={13} strokeWidth={1.9} />
+              </button>
+            </div>
+          )
         )}
       />
       {toast ? <div className="toast" role="status">{toast}</div> : null}
@@ -2665,7 +2741,7 @@ function AndroidLocalTrash({ ownerContext, online, onBack }: {
   </section>;
 }
 
-function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord, quickAddDraft, onQuickAddSaved }: {
+function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onBack, onCacheChanged, onAddRecord, onDeleteArchive, onDeleteRecord, quickAddDraft, addRecordRequest = 0, onQuickAddSaved }: {
   archiveId: string;
   online: boolean;
   authenticatedOwnerContext: LocalArchiveOwnerContext | null;
@@ -2675,11 +2751,13 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
   onDeleteArchive: (localId: string) => void;
   onDeleteRecord: (recordId: string, localId: string) => void;
   quickAddDraft?: QuickAddDraft | null;
+  addRecordRequest?: number;
   onQuickAddSaved?: () => void;
 }) {
   const { language } = useLanguage();
   const [cached, setCached] = useState<LocalArchiveDetail | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
+  const lastAddRecordRequest = useRef(0);
   useEffect(() => {
     if (online || !authenticatedOwnerContext) {
       if (!authenticatedOwnerContext) {
@@ -2701,19 +2779,27 @@ function CloudProjectRuntime({ archiveId, online, authenticatedOwnerContext, onB
     return () => { active = false; };
   }, [archiveId, online, authenticatedOwnerContext]);
 
+  useEffect(() => {
+    if (online || status !== "ready" || !cached || !addRecordRequest || addRecordRequest === lastAddRecordRequest.current) return;
+    lastAddRecordRequest.current = addRecordRequest;
+    onAddRecord(cached.archive.id);
+  }, [addRecordRequest, cached, onAddRecord, online, status]);
+
   if (!authenticatedOwnerContext?.userId) return <ArchiveProjectDetailStatus
     status="forbidden"
     title={language === "zh" ? "请登录后查看云端项目" : "Sign in to view this cloud project"}
     message={language === "zh" ? "当前未登录，不能读取此前账号的云端缓存或待同步内容。" : "You are signed out, so private cache and pending cloud data are unavailable."}
     backLabel={language === "zh" ? "返回我的空间" : "Back to My Space"}
     onBack={onBack} />;
+
   if (online) return <CloudArchiveDetailController
     archiveId={archiveId} userId={authenticatedOwnerContext.userId} onBack={onBack} onCacheChanged={onCacheChanged}
     initialFiles={quickAddDraft?.files} initialCapturedAt={quickAddDraft?.capturedAt}
-    initialNote={quickAddDraft?.note} onRecordCreated={onQuickAddSaved} onRecordCancelled={onQuickAddSaved} />;
+    initialNote={quickAddDraft?.note} addRecordRequest={addRecordRequest} showFloatingAdd={false}
+    onRecordCreated={onQuickAddSaved} onRecordCancelled={onQuickAddSaved} />;
   if (status === "loading") return <ArchiveProjectDetailLoading>正在读取本机缓存…</ArchiveProjectDetailLoading>;
   if (status === "ready" && cached) return <DeviceOwnedProjectDetail
-    detail={cached} ownerContext={authenticatedOwnerContext} onBack={onBack}
+    detail={cached} ownerContext={authenticatedOwnerContext} onBack={onBack} showFloatingAdd={false}
     onChanged={async () => {
       const result = await resolveLocalArchiveDetail(cached.archive.id, authenticatedOwnerContext);
       setCached(result.detail);

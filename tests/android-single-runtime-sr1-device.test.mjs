@@ -78,7 +78,7 @@ test("online cloud cards use live images even when a cache thumbnail is missing"
     liveBranchStart,
     shell.indexOf("            ) : (", liveBranchStart),
   );
-  assert.match(liveBranch, /filteredCloudArchives.map\(renderCloudProjectCard\)/);
+  assert.match(liveBranch, /activeFilteredCloudArchives : orderedFilteredCloudArchives\)\.map\(renderCloudProjectCard\)/);
   assert.doesNotMatch(liveBranch, /data-android-cloud-cache-list/);
   assert.doesNotMatch(liveBranch, /filteredCloudCaches.map/);
 });

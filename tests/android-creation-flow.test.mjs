@@ -70,7 +70,9 @@ test("four states expose precise project destinations and existing photo targets
 
 test("center action acquires camera/gallery before project choice and preserves draft through login", () => {
   const shell = read("mobile-offline-src/main.tsx");
-  assert.match(shell, /onClick=\{\(\) => setScreen\(\{ kind: "quick-add" \}\)\}/);
+  assert.match(shell, /aria-label=\{copy\.camera\}[\s\S]*onClick=\{\(\) => quickCamera\.current\?\.click\(\)\}/);
+  assert.match(shell, /aria-label=\{copy\.album\}[\s\S]*onClick=\{\(\) => quickGallery\.current\?\.click\(\)\}/);
+  assert.doesNotMatch(shell, /quick-add-sheet/);
   assert.match(shell, /acceptQuickAddFiles[\s\S]*setQuickAddDraft\(\{ files, capturedAt, source, note: "" \}\)[\s\S]*setScreen\(\{ kind: "choose-project" \}\)/);
   assert.match(shell, /kind: "cloud-login"; returnTo: "choose-project"/);
   assert.match(shell, /openCloudLogin\("choose-project"\)/);
@@ -78,6 +80,21 @@ test("center action acquires camera/gallery before project choice and preserves 
   assert.match(shell, /setQuickAddDraft\(null\)/);
   assert.match(read("app/archive/[id]/AddRecord.tsx"), /initialFiles[\s\S]*appendFiles\(initialFiles\)/);
   assert.match(read("app/archive/[id]/AddRecord.tsx"), /URL\.revokeObjectURL/);
+});
+
+test("project-open center plus adds to the current project from records, properties, or experience", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  const localDetail = read("components/archive-ui/DeviceOwnedProjectDetail.tsx");
+  const cloudDetail = read("components/archive-ui/CloudArchiveDetailController.tsx");
+
+  assert.match(shell, /screen\.kind === "detail" \|\| screen\.kind === "cloud-detail"[\s\S]*aria-label=\{copy\.addRecord\}/);
+  assert.match(shell, /screen\.kind === "detail"[\s\S]*setScreen\(\{ kind: "new-record", archiveId: detail\.archive\.id \}\)/);
+  assert.match(shell, /setDetailAddRecordRequest\(\(value\) => value \+ 1\)/);
+  assert.match(shell, /addRecordRequest=\{detailAddRecordRequest\}/);
+  assert.match(localDetail, /onFloatingAdd=\{showFloatingAdd \? onAddRecord : undefined\}/);
+  assert.match(cloudDetail, /setTab\("records"\)[\s\S]*setAddOpen\(true\)/);
+  assert.match(cloudDetail, /onFloatingAdd=\{showFloatingAdd \? \(\) => setAddOpen\(true\) : undefined\}/);
+  assert.match(shell, /showFloatingAdd=\{false\}/);
 });
 
 test("live cloud creation and existing cloud record reuse canonical storage composer", () => {

@@ -1790,7 +1790,7 @@ Android 长期采用 `same presentation + different data source + different capa
 ### 二、恢复联网不得静默自动上传
 
 1. 网络恢复后只允许重新验证 session、刷新 cloud list/cache、整理 pending queue 与刷新待上传状态；不得因为 reconnect 自动调用批量同步。
-2. pending 内容必须由用户主动触发上传：单项目使用“上传待同步内容”，汇总使用“全部上传”。
+2. pending 内容必须由用户主动触发上传：单项目操作统一简写为“上传”，执行中显示“上传中…”，汇总使用“全部上传”；“待上传”只作为状态或分区名称。
 3. 纯本地项目与 pending cloud 内容是两种不同语义：
    - 纯本地项目：始终保持本地，只有用户主动选择“上传到云端”时才进入本地转云流程；
    - pending cloud 内容：已经明确属于云端项目或待创建云项目，只等待用户确认后上传。

@@ -37,7 +37,7 @@ type Detail = NonNullable<Awaited<ReturnType<typeof loadCloudArchiveDetail>>>;
 
 // Android's live owner controller shares the website timeline loader and the
 // single detail presentation. Offline cache is rendered by DeviceOwnedProjectDetail.
-export default function CloudArchiveDetailController({ archiveId, userId, onBack, onCacheChanged, initialFiles, initialCapturedAt, initialNote, onRecordCreated, onRecordCancelled }: {
+export default function CloudArchiveDetailController({ archiveId, userId, onBack, onCacheChanged, initialFiles, initialCapturedAt, initialNote, onRecordCreated, onRecordCancelled, addRecordRequest = 0, showFloatingAdd = true }: {
   archiveId: string;
   userId: string;
   onBack: () => void;
@@ -47,6 +47,8 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
   initialNote?: string;
   onRecordCreated?: () => void;
   onRecordCancelled?: () => void;
+  addRecordRequest?: number;
+  showFloatingAdd?: boolean;
 }) {
   const { language, t } = useLanguage();
   const copy = t.archive;
@@ -97,6 +99,12 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
     window.addEventListener("lifespace-cloud-sync-complete", refresh);
     return () => window.removeEventListener("lifespace-cloud-sync-complete", refresh);
   }, [reload]);
+
+  useEffect(() => {
+    if (!addRecordRequest) return;
+    setTab("records");
+    setAddOpen(true);
+  }, [addRecordRequest]);
 
   async function change(work: () => Promise<unknown>, requiresCloudWrite = true) {
     if (busy || (requiresCloudWrite && !canWrite) || !isAndroidOnline()) return;
@@ -157,6 +165,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
       systemNameCandidates={candidates} systemNameMode="candidate" latestUpdate={archive.last_record_time || records[0]?.record_time || null}
       recordCount={Number(archive.record_count || records.length)} durationDays={getDurationDays(archive.created_at || null, archive.status === "ended" ? archive.ended_at || null : null)}
       viewCount={Number(archive.view_count || 0)}
+      statusBadge={archive.help_status === "open" ? recordCopy.help_in_progress : archive.help_status === "resolved" ? recordCopy.resolved : null}
       statusNotice={!canWrite ? (
         <div style={archiveProjectDetailReadOnlyNoticeStyle}>
           <span>{copy.cloud_read_only_notice}</span>
@@ -223,7 +232,7 @@ export default function CloudArchiveDetailController({ archiveId, userId, onBack
         archiveIsPublic={archive.is_public} activeCycles={activeCycles} mobileMode open={addOpen}
         initialFiles={initialFiles} initialCapturedAt={initialCapturedAt} initialNote={initialNote}
         onClose={() => { setAddOpen(false); onRecordCancelled?.(); }} onRecordCreated={async () => { await reload(); setAddOpen(false); onRecordCreated?.(); }} />}
-      onFloatingAdd={() => setAddOpen(true)} floatingAddLabel={language === "zh" ? "添加记录" : "Add record"}
+      onFloatingAdd={showFloatingAdd ? () => setAddOpen(true) : undefined} floatingAddLabel={language === "zh" ? "添加记录" : "Add record"}
       emptyRecordsText={copy.no_records_owner}
       onStartCycle={(startedAt) => change(async () => {
         const result = await supabase.rpc("create_archive_cycle", { p_archive_id: archiveId, p_started_at: startedAt });

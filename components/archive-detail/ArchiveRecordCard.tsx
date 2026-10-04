@@ -5,7 +5,7 @@ import { normalizeRecordLocation, type RecordLocation } from "@/lib/record-locat
 import { readRecordLocations } from "@/lib/record-location-cloud";
 import { localDateTimeInputToIso, toLocalDateTimeInputValue } from "@/lib/date-time";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import InternalLink from "@/components/navigation/InternalLink";
 import DeleteRecordButton from "@/app/archive/[id]/DeleteRecordButton";
 import EditRecord from "@/components/EditRecord";
@@ -355,6 +355,9 @@ export default function ArchiveRecordCard({
                   onAddTag={async (newTag) => {
                     await onAddTag(item.id, newTag);
                     setTagEditorOpen(false);
+                  }}
+                  onSetHelpStatus={async (nextStatus) => {
+                    await onSetHelpStatus(item.id, nextStatus);
                   }}
                 />
 
@@ -1063,12 +1066,6 @@ function MobileRecordMoreMenu({
   const copy = t.record;
   const visibility =
     item.visibility === "private" || !archive.is_public ? "private" : "public";
-  const nextHelp =
-    item.status_tag === "help"
-      ? { label: copy.mark_resolved, value: "resolved" as const }
-      : item.status_tag === "resolved"
-        ? { label: copy.cancel_help, value: null }
-        : { label: copy.start_help, value: "help" as const };
   const nextVisibility =
     visibility === "public"
       ? { label: copy.set_private, value: "private" }
@@ -1090,7 +1087,14 @@ function MobileRecordMoreMenu({
           >
             {copy.forward_to_market}
           </InternalLink>
-          <button type="button" onClick={() => onSetHelpStatus(nextHelp.value)} style={mobileRecordMenuItemStyle}>{nextHelp.label}</button>
+          {item.status_tag === "help" ? (
+            <div style={mobileRecordHelpActionRowStyle}>
+              <button type="button" onClick={() => onSetHelpStatus("resolved")} style={mobileRecordHelpActionStyle}>{copy.resolved}</button>
+              <button type="button" onClick={() => onSetHelpStatus(null)} style={mobileRecordHelpActionStyle}>{copy.cancel_help}</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => onSetHelpStatus("help")} style={mobileRecordMenuItemStyle}>{copy.start_help}</button>
+          )}
         </>
       ) : null}
       {!readOnly || visibility === "public" ? (
@@ -1157,6 +1161,7 @@ function MobileRecordMetaRow({
   onToggleTagEditor,
   onRemoveTag,
   onAddTag,
+  onSetHelpStatus,
 }: {
   item: RecordItem;
   archive: ArchiveDetailArchive;
@@ -1167,6 +1172,7 @@ function MobileRecordMetaRow({
   onToggleTagEditor: () => void;
   onRemoveTag: (recordId: string, tag: string) => void;
   onAddTag: (tag: string) => Promise<void>;
+  onSetHelpStatus: (nextStatus: "help" | "resolved" | null) => Promise<void>;
 }) {
   const { t } = useLanguage();
   const copy = t.record;
@@ -1205,7 +1211,21 @@ function MobileRecordMetaRow({
           </button>
         ) : null}
 
-        {statusBadge ? (
+        {canEdit ? (
+          <select
+            aria-label={copy.help_status}
+            value={item.status_tag || ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              void onSetHelpStatus(value === "help" || value === "resolved" ? value : null);
+            }}
+            style={mobileRecordHelpSelectStyle(item.status_tag)}
+          >
+            <option value="">{copy.no_help}</option>
+            <option value="help">{copy.help_in_progress}</option>
+            <option value="resolved">{copy.resolved}</option>
+          </select>
+        ) : statusBadge ? (
           <span style={mobileRecordInlineStatusStyle(statusBadge.kind)}>
             {statusBadge.label}
           </span>
@@ -1493,6 +1513,21 @@ const mobileRecordMenuLinkStyle = {
   boxSizing: "border-box",
 } as const;
 
+const mobileRecordHelpActionRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 4,
+} as const;
+
+const mobileRecordHelpActionStyle = {
+  ...mobileRecordMenuItemStyle,
+  minWidth: 0,
+  padding: "0 6px",
+  textAlign: "center",
+  background: "#f7faf5",
+  fontSize: 12,
+} as const;
+
 const mobileRecordMenuDangerItemStyle = {
   ...mobileRecordMenuItemStyle,
   color: "#a44848",
@@ -1556,6 +1591,23 @@ function mobileRecordInlineStatusStyle(kind: "help" | "resolved") {
     color: kind === "help" ? "#9a6232" : "#3f7a49",
     fontWeight: 650,
   } as const;
+}
+
+function mobileRecordHelpSelectStyle(status: RecordItem["status_tag"]): CSSProperties {
+  const kind = status === "help" ? "help" : status === "resolved" ? "resolved" : null;
+  return {
+    width: "auto",
+    maxWidth: 116,
+    height: 28,
+    borderRadius: 999,
+    border: `1px solid ${kind === "help" ? "#ead3bd" : kind === "resolved" ? "#cfe0d1" : "#dfe8da"}`,
+    background: kind === "help" ? "#fff8f1" : kind === "resolved" ? "#f2f8f2" : "#fff",
+    color: kind === "help" ? "#8d5a2c" : kind === "resolved" ? "#3f7448" : "#6f7d6a",
+    fontSize: 12,
+    fontWeight: 650,
+    padding: "0 8px",
+    fontFamily: "inherit",
+  };
 }
 
 const mobileRecordTagEditorSelectStyle = {

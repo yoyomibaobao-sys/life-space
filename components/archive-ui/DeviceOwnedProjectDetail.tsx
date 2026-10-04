@@ -65,6 +65,7 @@ export default function DeviceOwnedProjectDetail({
   onTransferToCloud,
   extra,
   recordComposer,
+  showFloatingAdd = true,
   view: View = ArchiveProjectDetailView,
 }: {
   detail: LocalArchiveDetail;
@@ -77,6 +78,7 @@ export default function DeviceOwnedProjectDetail({
   onTransferToCloud?: () => void;
   extra?: ReactNode;
   recordComposer?: ReactNode;
+  showFloatingAdd?: boolean;
   view?: typeof ArchiveProjectDetailView;
 }) {
   const { language, t } = useLanguage();
@@ -248,9 +250,6 @@ export default function DeviceOwnedProjectDetail({
               {archiveCopy.pending_sync_workspace_notice}
             </div>
           ) : null}
-          {onTransferToCloud && !isCloudCache ? <button type="button" onClick={onTransferToCloud}>
-            {language === "zh" ? "上传到云端" : "Upload to cloud"}
-          </button> : null}
         </>
       }
       activeTab={activeDetailTab}
@@ -327,6 +326,11 @@ export default function DeviceOwnedProjectDetail({
             canWrite={canEditArchive && !busy}
             busy={busy}
             showVisibility={false}
+            footerAction={onTransferToCloud && !isCloudCache ? {
+              label: language === "zh" ? "上传到云端" : "Upload to cloud",
+              onClick: onTransferToCloud,
+              disabled: busy,
+            } : undefined}
             onChangeSubcategory={(value) => { void change(() => updateLocalArchiveFields(archive.id,
               { subcategory: value || null, group_name: null }, ownerContext)); }}
             onChangeGroup={(value) => { void change(() => updateLocalArchiveFields(archive.id,
@@ -338,9 +342,6 @@ export default function DeviceOwnedProjectDetail({
               }, ownerContext));
             }}
           />
-          {onTransferToCloud && !isCloudCache ? <button type="button" onClick={onTransferToCloud}>
-            {language === "zh" ? "上传到云端" : "Upload to cloud"}
-          </button> : null}
           {canEditArchive ? (
             <ArchiveCycleSettings
               key={archive.id}
@@ -437,7 +438,7 @@ export default function DeviceOwnedProjectDetail({
       recordComposer={recordComposer}
       extra={extra}
       floatingAddLabel={recordCopy.add_record_short}
-      onFloatingAdd={onAddRecord}
+      onFloatingAdd={showFloatingAdd ? onAddRecord : undefined}
       dialogs={
         <>
           <ConfirmDialog
