@@ -451,18 +451,13 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
       species_id: entry.id || entry.plantId || entry.label,
       summary: entry.overviewEn || "",
     })) as BasicOverview[];
-    const fallbackParameters = fallbackEntries.filter((entry) => entry.plantCoreParameters).map((entry) => ({
-      species_id: entry.id || entry.plantId || entry.label,
-      ...entry.plantCoreParameters,
-    })) as PlantParameterLite[];
-
     // The bundled directory is the display baseline in both online and offline
     // modes. Remote data enriches it later and must never block the screen.
     setPlants(fallbackPlants);
     setAliases(fallbackAliases);
     setBasicOverviews(fallbackOverviews);
     setBasicOverviewsEn(fallbackOverviewsEn);
-    setParameters(fallbackParameters);
+    setParameters([]);
     setLoading(false);
     setPlantCatalogError(false);
 
@@ -557,7 +552,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
       setPlantCatalogError(Boolean(plantError || aliasError));
       setBasicOverviews((overviewData || []).length ? (overviewData || []) as BasicOverview[] : fallbackOverviews);
       setBasicOverviewsEn((overviewDataEn || []).length ? (overviewDataEn || []) as BasicOverview[] : fallbackOverviewsEn);
-      setParameters((parameterData || []).length ? parameterData || [] : fallbackParameters);
+      setParameters(parameterData || []);
       setInterestCount(interestCountResult);
     }
 
@@ -748,7 +743,6 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     const rows: OfflineGuideDirectoryEntry[] = plants.flatMap((plant) => {
       const label = String(plant.common_name || plant.scientific_name || "").trim();
       if (!label) return [];
-      const core = parameterMap[plant.id];
       const plantAliases = aliasMap[plant.id] || [];
       const row: OfflineGuideDirectoryEntry = {
         id: plant.id,
@@ -770,15 +764,6 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
           .join(" "),
         overviewZh: guideMap[plant.id]?.summary || undefined,
         overviewEn: guideMapEn[plant.id]?.summary || undefined,
-        plantCoreParameters: hasCloudAccess && core
-          ? {
-              sun_score: core.sun_score,
-              need_trellis: core.need_trellis,
-              container_friendly_score: core.container_friendly_score,
-              indoor_friendly_score: core.indoor_friendly_score,
-              balcony_friendly_score: core.balcony_friendly_score,
-            }
-          : undefined,
       };
       return [row];
     });
@@ -788,9 +773,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     aliasMap,
     guideMap,
     guideMapEn,
-    hasCloudAccess,
     loading,
-    parameterMap,
     plants,
   ]);
 

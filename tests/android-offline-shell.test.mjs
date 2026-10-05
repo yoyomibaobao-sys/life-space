@@ -123,8 +123,9 @@ test("offline guides and guests share the simplified tier", () => {
   assert.match(detail, /getOfflineGuideParameters\(offlineGuide/);
   assert.match(source, /full practice guidance, experience cards, and related projects/);
   assert.match(guideCache, /PUBLIC_SOURCES/);
-  assert.match(guideCache, /plantCoreParameters/);
-  assert.match(guideCache, /\["light", "scene", "indoor"\]/);
+  assert.match(guideCache, /LEGACY_KEY/);
+  assert.doesNotMatch(guideCache, /cleanParameters\(row\.parametersZh\)/);
+  assert.doesNotMatch(guideCache, /getEnvironmentDetailItems\(/);
   assert.match(plantIndex, /if \(loading \|\| !plants\.length\) return/);
   assert.match(plantIndex, /overviewZh: getPublicGuideSummary\(entry, "zh"\)/);
   assert.doesNotMatch(plantIndex, /parametersZh: hasCloudAccess \? zh\.parameters/);

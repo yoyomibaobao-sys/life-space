@@ -1,13 +1,10 @@
 import { getDefaultSystemNames, type ArchiveCategory } from "@/lib/archive-categories";
-import {
-  getEnvironmentDetailItems,
-  type PlantParameterLite,
-} from "@/lib/plant-env";
+import type { PlantParameterLite } from "@/lib/plant-env";
 import type { SystemNameCandidate } from "@/lib/system-name-candidates";
 
-const KEY = "lifespace:guide-directory:v1";
+const KEY = "lifespace:guide-directory:v2";
+const LEGACY_KEY = "lifespace:guide-directory:v1";
 const MAX_DIRECTORY_ROWS = 15_000;
-const MAX_PARAMETER_ROWS = 6;
 const PUBLIC_SOURCES = new Set(["builtin", "plant_species", "public_guide"]);
 const CATEGORIES = new Set<ArchiveCategory>([
   "plant",
@@ -79,47 +76,7 @@ function cleanAliases(value: unknown) {
   return aliases.length ? aliases : undefined;
 }
 
-function cleanParameters(value: unknown): OfflineGuideParameter[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const parameters = value.slice(0, MAX_PARAMETER_ROWS).flatMap((item) => {
-    if (!isRecord(item)) return [];
-    const label = cleanText(item.label, 80);
-    const parameterValue = cleanText(item.value, 240);
-    if (!label || !parameterValue) return [];
-    const note = cleanText(item.note, 400);
-    return [{ label, value: parameterValue, ...(note ? { note } : {}) }];
-  });
-  return parameters.length ? parameters : undefined;
-}
-
-function cleanScore(value: unknown) {
-  if (value === null || value === undefined || value === "") return undefined;
-  const score = Number(value);
-  return Number.isFinite(score) && score >= 0 && score <= 10
-    ? score
-    : undefined;
-}
-
-function cleanCoreParameters(
-  value: unknown,
-): OfflineGuideCoreParameters | undefined {
-  if (!isRecord(value)) return undefined;
-  const cleaned: OfflineGuideCoreParameters = {
-    sun_score: cleanScore(value.sun_score),
-    need_trellis:
-      typeof value.need_trellis === "boolean"
-        ? value.need_trellis
-        : undefined,
-    container_friendly_score: cleanScore(value.container_friendly_score),
-    indoor_friendly_score: cleanScore(value.indoor_friendly_score),
-    balcony_friendly_score: cleanScore(value.balcony_friendly_score),
-  };
-  return Object.values(cleaned).some((item) => item !== undefined)
-    ? cleaned
-    : undefined;
-}
-
-function clean(rows: unknown): OfflineGuideDirectoryEntry[] {
+function clean(rows: unknown, legacy = false): OfflineGuideDirectoryEntry[] {
   if (!Array.isArray(rows)) return [];
   return rows.slice(0, MAX_DIRECTORY_ROWS).flatMap((row) => {
     if (!isRecord(row)) return [];
@@ -135,11 +92,11 @@ function clean(rows: unknown): OfflineGuideDirectoryEntry[] {
     const aliases = cleanAliases(row.aliases);
     const description = cleanText(row.description, 400);
     const nameEn = cleanText(row.nameEn, 160);
-    const overviewZh = cleanText(row.overviewZh, 2_000);
-    const overviewEn = cleanText(row.overviewEn, 2_000);
-    const parametersZh = cleanParameters(row.parametersZh);
-    const parametersEn = cleanParameters(row.parametersEn);
-    const plantCoreParameters = cleanCoreParameters(row.plantCoreParameters);
+    // The old plant-species overview came from the basic care summary. Other
+    // old overviews came from the member-capable client generator.
+    const keepOverview = !legacy || row.source === "plant_species";
+    const overviewZh = keepOverview ? cleanText(row.overviewZh, 2_000) : undefined;
+    const overviewEn = keepOverview ? cleanText(row.overviewEn, 2_000) : undefined;
 
     return [
       {
@@ -157,9 +114,6 @@ function clean(rows: unknown): OfflineGuideDirectoryEntry[] {
         ...(nameEn ? { nameEn } : {}),
         ...(overviewZh ? { overviewZh } : {}),
         ...(overviewEn ? { overviewEn } : {}),
-        ...(parametersZh ? { parametersZh } : {}),
-        ...(parametersEn ? { parametersEn } : {}),
-        ...(plantCoreParameters ? { plantCoreParameters } : {}),
       },
     ];
   });
@@ -197,7 +151,20 @@ export function loadOfflineGuideDirectory(): OfflineGuideDirectoryEntry[] {
   let cached: OfflineGuideDirectoryEntry[] = [];
   try {
     if (typeof localStorage !== "undefined") {
-      cached = clean(JSON.parse(localStorage.getItem(KEY) || "[]"));
+      const current = localStorage.getItem(KEY);
+      if (current !== null) {
+        cached = clean(JSON.parse(current));
+        localStorage.removeItem?.(LEGACY_KEY);
+      } else {
+        const previous = localStorage.getItem(LEGACY_KEY);
+        if (previous !== null) {
+          // Old members cached full parameters and generated overviews. Carry
+          // names and lookup keys forward, then refresh basic summaries online.
+          cached = clean(JSON.parse(previous), true);
+          localStorage.setItem(KEY, JSON.stringify(cached));
+          localStorage.removeItem?.(LEGACY_KEY);
+        }
+      }
     }
   } catch {
     // Use bundled names.
@@ -266,32 +233,6 @@ export function getOfflineGuideParameters(
   entry: OfflineGuideDirectoryEntry,
   language: OfflineGuideLanguage,
 ): OfflineGuideParameter[] {
-  if (entry.category === "plant" && entry.plantCoreParameters) {
-    const environment = getEnvironmentDetailItems(
-      entry.plantCoreParameters,
-      language,
-    )
-      .filter((item) => ["light", "scene", "indoor"].includes(item.key))
-      .map((item) => ({ label: item.label, value: String(item.value) }));
-    const trellis = entry.plantCoreParameters.need_trellis;
-    if (typeof trellis === "boolean") {
-      environment.push({
-        label: language === "en" ? "Trellis" : "搭架",
-        value: trellis
-          ? language === "en"
-            ? "Usually needed"
-            : "通常需要"
-          : language === "en"
-            ? "Not usually needed"
-            : "通常不需要",
-      });
-    }
-    if (environment.length) return environment;
-  }
-
-  const exact = language === "en" ? entry.parametersEn : entry.parametersZh;
-  if (exact?.length) return exact;
-
   const generic: Record<ArchiveCategory, Record<OfflineGuideLanguage, OfflineGuideParameter[]>> = {
     plant: {
       zh: [
