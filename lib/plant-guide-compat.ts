@@ -6,6 +6,40 @@ export type PlantBasicOverviewCompatRow = {
   summary?: string | null;
 };
 
+export type PublicPlantCatalogRow = {
+  id: string;
+  slug?: string | null;
+  common_name?: string | null;
+  scientific_name?: string | null;
+  family?: string | null;
+  category?: string | null;
+  sub_category?: string | null;
+  growth_type?: string | null;
+  entry_type?: string | null;
+  sort_order?: number | null;
+  is_active: boolean;
+  aliases: Array<{ species_id: string; alias_name: string; relation_type?: string | null }>;
+  translations: Array<{ plant_id: string; language_code: string; common_name?: string | null; family?: string | null }>;
+  summary_zh?: string | null;
+  summary_en?: string | null;
+};
+
+export function loadPublicPlantCatalogPage(from: number, to: number) {
+  return supabase.rpc("get_public_plant_catalog", {
+    p_lookup: null,
+    p_offset: from,
+    p_limit: to - from + 1,
+  });
+}
+
+export function loadPublicPlantCatalogDetail(lookup: string) {
+  return supabase.rpc("get_public_plant_catalog", {
+    p_lookup: lookup,
+    p_offset: 0,
+    p_limit: 1,
+  });
+}
+
 export type PlantCoreParametersCompatRow = {
   species_id: string;
   sun_score?: number | null;

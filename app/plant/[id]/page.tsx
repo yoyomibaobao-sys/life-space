@@ -22,8 +22,11 @@ import {
 } from "@/lib/membership";
 import {
   loadPlantBasicOverviewsCompat,
+  loadPublicPlantCatalogDetail,
   type PlantBasicOverviewCompatRow,
+  type PublicPlantCatalogRow,
 } from "@/lib/plant-guide-compat";
+import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
 import { getOfflineGuideOverview, type OfflineGuideDirectoryEntry } from "@/lib/offline-guide-directory";
 import type { TranslationDictionary } from "@/lib/i18n";
@@ -1272,8 +1275,15 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       const plantSelect =
         "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order";
       const isPlantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
-      let plantRow: PlantSpeciesRow | null = null;
-      if (isPlantUuid) {
+      const catalogResult = await loadPublicPlantCatalogDetail(id);
+      // The legacy reads are only for the staged interval before this RPC exists.
+      const catalogAvailable = !isMissingDatabaseFunction(catalogResult.error, "get_public_plant_catalog");
+      if (catalogAvailable && catalogResult.error) {
+        console.warn("load public plant detail failed:", catalogResult.error);
+      }
+      const catalogRow = (catalogAvailable && !catalogResult.error ? catalogResult.data?.[0] : null) as PublicPlantCatalogRow | null;
+      let plantRow: PlantSpeciesRow | null = catalogRow;
+      if (!catalogAvailable && isPlantUuid) {
         const byId = await supabase
           .from("plant_species")
           .select(plantSelect)
@@ -1281,7 +1291,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           .maybeSingle();
         plantRow = (byId.data || null) as PlantSpeciesRow | null;
       }
-      if (!plantRow) {
+      if (!catalogAvailable && !plantRow) {
         const bySlug = await supabase
           .from("plant_species")
           .select(plantSelect)
@@ -1290,7 +1300,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           .maybeSingle();
         plantRow = (bySlug.data || null) as PlantSpeciesRow | null;
       }
-      if (!plantRow) {
+      if (!catalogAvailable && !plantRow) {
         const byName = await supabase
           .from("plant_species")
           .select(plantSelect)
@@ -1309,17 +1319,20 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         { data: growthCycleData },
         { data: careGuideData },
       ] = await Promise.all([
-        supabase
+        catalogAvailable ? Promise.resolve({ data: catalogRow?.translations || [] }) : supabase
           .from("plant_species_i18n")
           .select("plant_id, language_code, common_name, family")
           .eq("plant_id", resolvedPlantId)
           .order("language_code", { ascending: true }),
-        supabase
+        catalogAvailable ? Promise.resolve({ data: catalogRow?.aliases || [] }) : supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name, relation_type")
           .eq("species_id", resolvedPlantId)
           .order("alias_name", { ascending: true }),
-        loadPlantBasicOverviewsCompat(resolvedPlantId).then((data) => ({ data })),
+        catalogAvailable ? Promise.resolve({ data: catalogRow ? [{
+          species_id: catalogRow.id,
+          summary: language === "en" ? catalogRow.summary_en : catalogRow.summary_zh,
+        }] : [] }) : loadPlantBasicOverviewsCompat(resolvedPlantId).then((data) => ({ data })),
         canReadFullGuide
           ? supabase.from("plant_parameters").select("*").eq("species_id", resolvedPlantId).maybeSingle()
           : Promise.resolve({ data: [] as PlantParametersRow[] }),

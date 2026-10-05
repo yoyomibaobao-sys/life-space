@@ -15,7 +15,9 @@ import {
 } from "@/lib/membership";
 import {
   loadPlantBasicOverviewsCompat,
+  loadPublicPlantCatalogPage,
   type PlantBasicOverviewCompatRow,
+  type PublicPlantCatalogRow,
 } from "@/lib/plant-guide-compat";
 import {
   rememberGuideDirectory,
@@ -31,6 +33,7 @@ import { loadGuideDirectoryRows, searchGuideDirectory } from "@/lib/guide-direct
 import { getGuideInterestCount } from "@/lib/guide-interests";
 import { buildLoginHref } from "@/lib/auth-return";
 import { buildGuideDirectoryHref } from "@/lib/guide-directory-navigation";
+import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import { type ArchiveCategory } from "@/lib/archive-categories";
 import {
@@ -486,6 +489,16 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
 
       setHasCloudAccess(canReadFullGuide);
 
+      const catalogResult = await withGuideRemoteTimeout(
+        loadGuideDirectoryRows<PublicPlantCatalogRow>(loadPublicPlantCatalogPage),
+      );
+      // Only the not-yet-applied migration uses the legacy column-limited path.
+      const legacyCatalog = isMissingDatabaseFunction(catalogResult?.error, "get_public_plant_catalog");
+      const catalogRows = legacyCatalog ? null : catalogResult?.data || [];
+      if (catalogResult?.error && !isMissingDatabaseFunction(catalogResult.error, "get_public_plant_catalog")) {
+        console.warn("load public plant catalog failed:", catalogResult.error);
+      }
+
       const [
         plantResult,
         aliasResult,
@@ -494,6 +507,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
         parameterResult,
         interestCountResult,
       ] = await Promise.all([
+        catalogRows ? Promise.resolve({ data: catalogRows, error: null }) :
         withGuideRemoteTimeout(loadGuideDirectoryRows<PlantItem>((from, to) => supabase
           .from("plant_species")
           .select(
@@ -505,6 +519,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
           .order("id", { ascending: true })
           .range(from, to))),
 
+        catalogRows ? Promise.resolve({ data: catalogRows.flatMap((row) => row.aliases || []), error: null }) :
         withGuideRemoteTimeout(loadGuideDirectoryRows<AliasItem>((from, to) => supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name")
@@ -512,9 +527,13 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
           .order("alias_name", { ascending: true })
           .range(from, to))),
 
-        withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))),
+        catalogRows ? Promise.resolve({ data: catalogRows.map((row) => ({
+          species_id: row.id, summary: row.summary_zh,
+        })) }) : withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))),
 
-        withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data }))),
+        catalogRows ? Promise.resolve({ data: catalogRows.map((row) => ({
+          species_id: row.id, summary: row.summary_en,
+        })) }) : withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data }))),
 
         canReadFullGuide
           ? withGuideRemoteTimeout(Promise.resolve(supabase.from("plant_parameters").select(
@@ -531,7 +550,8 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
       const overviewData = overviewResult?.data || [];
       const overviewDataEn = overviewEnResult?.data || [];
       const parameterData = parameterResult?.data || [];
-      const plantError = plantResult?.error || (!plantResult ? Error("plant_directory_timeout") : null);
+      const plantError = (!legacyCatalog && (catalogResult?.error || (!catalogResult ? Error("plant_directory_timeout") : null)))
+        || plantResult?.error || (!plantResult ? Error("plant_directory_timeout") : null);
       const aliasError = aliasResult?.error || (!aliasResult ? Error("plant_alias_timeout") : null);
       setPlants((plantData || []).length ? plantData || [] : fallbackPlants);
       setAliases((aliasData || []).length ? aliasData || [] : fallbackAliases);
