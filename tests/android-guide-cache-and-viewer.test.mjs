@@ -40,6 +40,13 @@ test("unchanged guide data cannot retrigger the Android directory reload loop", 
   }
 });
 
+test("standalone guide directory uses a stable fallback dependency", async () => {
+  const source = await readFile(path.join(root, "app/plant/page.tsx"), "utf8");
+  assert.match(source, /const EMPTY_OFFLINE_GUIDE_DIRECTORY: OfflineGuideDirectoryEntry\[\] = \[\]/);
+  assert.match(source, /offlineDirectory = EMPTY_OFFLINE_GUIDE_DIRECTORY/);
+  assert.doesNotMatch(source, /offlineDirectory = \[\]/);
+});
+
 test("public viewer uses the shared record card lightbox without owner controls", async () => {
   const source = await readFile(path.join(root, "components/archive-ui/ReadonlyPublicProjectDetail.tsx"), "utf8");
   assert.match(source, /<ArchiveRecordCard[\s\S]*?mode="viewer"[\s\S]*?onOpenLightbox=/);

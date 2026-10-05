@@ -246,7 +246,9 @@ function FilterSelect({
   );
 }
 
-export default function PlantIndexPage({ offline = false, offlineDirectory = [], offlineSignedIn = false }: {
+const EMPTY_OFFLINE_GUIDE_DIRECTORY: OfflineGuideDirectoryEntry[] = [];
+
+export default function PlantIndexPage({ offline = false, offlineDirectory = EMPTY_OFFLINE_GUIDE_DIRECTORY, offlineSignedIn = false }: {
   offline?: boolean;
   offlineDirectory?: OfflineGuideDirectoryEntry[];
   offlineSignedIn?: boolean;
