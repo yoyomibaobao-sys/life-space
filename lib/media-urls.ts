@@ -110,7 +110,8 @@ export async function createMediaSignedUrl(
 export async function createMediaSignedUrls(
   supabase: MediaUrlSupabaseClient,
   paths: Array<string | null | undefined>,
-  expiresIn = MEDIA_SIGNED_URL_EXPIRES_IN
+  expiresIn = MEDIA_SIGNED_URL_EXPIRES_IN,
+  failOnError = false,
 ) {
   const uniquePaths = Array.from(
     new Set(paths.map(cleanPath).filter((path): path is string => Boolean(path)))
@@ -122,6 +123,7 @@ export async function createMediaSignedUrls(
   const bucket = supabase.storage.from(MEDIA_BUCKET);
 
   const { data, error } = await bucket.createSignedUrls(uniquePaths, expiresIn);
+  if (error && failOnError) throw error;
   if (!error && data) {
     data.forEach((row) => {
       if (row.path && row.signedUrl) {
@@ -169,13 +171,13 @@ export async function resolveMediaDisplayUrls(
 export async function resolveMediaDisplayPairs<T extends MediaUrlSource>(
   supabase: MediaUrlSupabaseClient,
   sources: T[],
-  options?: { expiresIn?: number }
+  options?: { expiresIn?: number; failOnError?: boolean }
 ) {
   const paths = sources.flatMap((source) => [
     getMediaObjectPath(source),
     getMediaThumbObjectPath(source),
   ]);
-  const signedUrlMap = await createMediaSignedUrls(supabase, paths, options?.expiresIn);
+  const signedUrlMap = await createMediaSignedUrls(supabase, paths, options?.expiresIn, options?.failOnError);
 
   return sources.map((source) => {
     const imagePath = getMediaObjectPath(source);

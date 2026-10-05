@@ -37,7 +37,6 @@ import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import { type ArchiveCategory } from "@/lib/archive-categories";
 import {
-  buildPublicGuideContent,
   getPublicGuideFilterLabel,
   getPublicGuideFilterTraits,
   getPublicGuideName,
@@ -585,15 +584,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     async function loadPublicGuides() {
       const [entryResolved, sectionResolved] = await Promise.all([
         withGuideRemoteTimeout(loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
-          .from("guide_entries")
-          .select(
-            "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, content_en, sort_order, is_active",
-          )
-          .eq("is_active", true)
-          .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
-          .order("id", { ascending: true })
-          .range(from, to))),
+          .rpc("get_public_guide_catalog", { p_offset: from, p_limit: to - from + 1 }))),
         withGuideRemoteTimeout(supabase
           .from("guide_sections")
           .select("id, category, slug, name, name_en, summary, summary_en, sort_order")
@@ -606,12 +597,11 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
       let entryData = (entryResult.data || []) as PublicGuideEntry[];
       let entryError = entryResult.error;
 
-      if (entryError) {
-        // Compatibility while the guide-library expansion migration is being
-        // rolled out: keep the earlier flat list readable.
+      if (isMissingDatabaseFunction(entryError, "get_public_guide_catalog")) {
+        // Staged migration: the older database still permits public metadata.
         const fallback = await withGuideRemoteTimeout(loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
           .from("guide_entries")
-          .select("id, category, name, source, is_active")
+          .select("id, category, name, name_en, source, section_id, summary, summary_en, sort_order, is_active")
           .eq("is_active", true)
           .order("name", { ascending: true })
           .order("id", { ascending: true })
@@ -808,8 +798,6 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     if (publicGuidesLoading || !publicGuides.length) return;
 
     const rows: OfflineGuideDirectoryEntry[] = publicGuides.map((entry) => {
-      const zh = buildPublicGuideContent(entry, "zh");
-      const en = buildPublicGuideContent(entry, "en");
       return {
         id: entry.id,
         label: entry.name,
@@ -818,15 +806,13 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
         category: entry.category,
         aliases: entry.name_en ? [entry.name_en] : [],
         searchText: [entry.name, entry.name_en].filter(Boolean).join(" "),
-        overviewZh: zh.overview,
-        overviewEn: en.overview,
-        parametersZh: hasCloudAccess ? zh.parameters.slice(0, 3) : undefined,
-        parametersEn: hasCloudAccess ? en.parameters.slice(0, 3) : undefined,
+        overviewZh: getPublicGuideSummary(entry, "zh"),
+        overviewEn: getPublicGuideSummary(entry, "en"),
       };
     });
 
     rememberGuideDirectory(rows);
-  }, [hasCloudAccess, publicGuides, publicGuidesLoading]);
+  }, [publicGuides, publicGuidesLoading]);
 
   const categories = useMemo(() => {
     const existing = Array.from(
@@ -1835,7 +1821,7 @@ function PublicGuideLibrary({
 
   function renderGuideCard(entry: PublicGuideEntry) {
     const name = getPublicGuideName(entry, language);
-    const summary = buildPublicGuideContent(entry, language).overview || getPublicGuideSummary(entry, language) || copy.contentPending;
+    const summary = getPublicGuideSummary(entry, language) || copy.contentPending;
     const section = orderedSections.find(
       (candidate) => candidate.id === entry.section_id,
     );

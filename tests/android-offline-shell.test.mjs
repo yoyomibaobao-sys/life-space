@@ -126,10 +126,11 @@ test("offline guides and guests share the simplified tier", () => {
   assert.match(guideCache, /plantCoreParameters/);
   assert.match(guideCache, /\["light", "scene", "indoor"\]/);
   assert.match(plantIndex, /if \(loading \|\| !plants\.length\) return/);
-  assert.match(plantIndex, /parametersZh: hasCloudAccess \? zh\.parameters\.slice\(0, 3\) : undefined/);
+  assert.match(plantIndex, /overviewZh: getPublicGuideSummary\(entry, "zh"\)/);
+  assert.doesNotMatch(plantIndex, /parametersZh: hasCloudAccess \? zh\.parameters/);
   assert.match(detail, /canReadFull && content\.parameters\.length > 0/);
-  assert.match(plantIndex, /overviewZh: zh\.overview/);
-  assert.match(plantIndex, /content, content_en/);
+  assert.match(plantIndex, /overviewEn: getPublicGuideSummary\(entry, "en"\)/);
+  assert.doesNotMatch(plantIndex, /\.select\("[^"]*content, content_en/);
 });
 
 test("signed RC local data migrates on-device before the old origin is retired", () => {

@@ -24,22 +24,19 @@ import type {
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { resolveMediaDisplayPairs } from "@/lib/media-urls";
-import {
-  canAccessMembershipGuidance,
-  normalizeMembershipRpcResult,
-} from "@/lib/membership";
 import type { PlantRelatedArchiveItem } from "@/lib/plant-detail-types";
 import {
-  buildPublicGuideContent,
   getPublicGuideName,
   getPublicGuideSectionName,
   getPublicGuideSummary,
   publicGuideCopy,
   type PublicGuideEntry,
+  type PublicGuideContent,
   type PublicGuideLanguage,
   type PublicGuideSection,
 } from "@/lib/public-guide-library";
 import { supabase } from "@/lib/supabase";
+import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
 import styles from "@/app/plant/guide/[id]/page.module.css";
 
 type GuideTab = "guide" | "experience" | "projects";
@@ -311,6 +308,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
   const [saved, setSaved] = useState(false);
   const [savingInterest, setSavingInterest] = useState(false);
   const [hasCloudAccess, setHasCloudAccess] = useState(false);
+  const [memberContent, setMemberContent] = useState<PublicGuideContent | null>(null);
   const [relatedArchives, setRelatedArchives] = useState<
     PlantRelatedArchiveItem[]
   >([]);
@@ -322,6 +320,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
 
   useEffect(() => {
     let cancelled = false;
+    let basicReady = false;
 
     async function load() {
       setLoading(true);
@@ -343,39 +342,23 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         setUserId(null);
         setSaved(false);
         setHasCloudAccess(false);
+        setMemberContent(null);
         setRelatedArchives([]);
         setExperienceCards([]);
         setLoading(false);
         return;
       }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const membershipResult = user
-        ? await supabase.rpc("get_my_membership")
-        : { data: null, error: null };
-      const membership = membershipResult.error
-        ? null
-        : normalizeMembershipRpcResult(membershipResult.data);
-      const canReadFullGuide = canAccessMembershipGuidance(membership);
-
-      const extended = await supabase
-        .from("guide_entries")
-        .select(
-          "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, content_en, sort_order, is_active",
-        )
-        .eq("id", id)
-        .eq("is_active", true)
-        .maybeSingle();
+      const extended = await supabase.rpc("get_public_guide_catalog", { p_id: id }).maybeSingle();
 
       let row = extended.data as PublicGuideEntry | null;
       let error = extended.error;
 
-      if (error) {
+      if (isMissingDatabaseFunction(error, "get_public_guide_catalog")) {
         const fallback = await supabase
           .from("guide_entries")
-          .select("id, category, name, source")
+          .select("id, category, name, name_en, source, section_id, summary, summary_en, sort_order, is_active")
           .eq("id", id)
+          .eq("is_active", true)
           .maybeSingle();
         row = fallback.data as PublicGuideEntry | null;
         error = fallback.error;
@@ -395,25 +378,39 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         }
       }
 
-      const interestResult = user && row
-        ? await supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle()
-        : { data: null };
-
       if (!cancelled) {
         if (error) console.warn("load public guide detail failed:", error);
         setEntry(error ? null : row);
         setSection(sectionRow);
-        setIsSignedIn(Boolean(user));
-        setUserId(user?.id || null);
-        setSaved(Boolean(interestResult.data));
-        setHasCloudAccess(canReadFullGuide);
+        setHasCloudAccess(false);
+        setMemberContent(null);
         setRelatedArchives([]);
         setExperienceCards([]);
-        // The guide itself must not wait for optional related projects/cards.
+        basicReady = Boolean(row && !error);
+        // Guest reading is ready before optional auth and member lookups.
         setLoading(false);
       }
 
-      if (!error && row && canReadFullGuide) {
+      if (error || !row || cancelled) return;
+      const authResult = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+      const user = authResult.data.user;
+      const [memberResult, interestResult] = await Promise.all([
+        user ? Promise.resolve(supabase.rpc("get_member_guide_content", { p_id: row.id, p_language: language }))
+          .catch((error: unknown) => ({ data: null, error })) : Promise.resolve({ data: null, error: null }),
+        user ? Promise.resolve(supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle())
+          .catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+      ]);
+      if (memberResult.error) console.warn("load member guide content failed:", memberResult.error);
+      const fullContent = memberResult.error ? null : memberResult.data as PublicGuideContent | null;
+      if (!cancelled) {
+        setIsSignedIn(Boolean(user));
+        setUserId(user?.id || null);
+        setSaved(Boolean(interestResult.data));
+        setHasCloudAccess(Boolean(fullContent));
+        setMemberContent(fullContent);
+      }
+
+      if (!error && row && fullContent) {
         const related = await loadRelatedGuideContent(row, user?.id || null, language);
         if (!cancelled) {
           setRelatedArchives(related.relatedArchives);
@@ -425,10 +422,14 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
     void load().catch((cause) => {
       console.warn("load public guide detail failed:", cause);
       if (!cancelled) {
-        setEntry(null);
-        setSection(null);
-        setRelatedArchives([]);
-        setExperienceCards([]);
+        if (!basicReady) {
+          setEntry(null);
+          setMemberContent(null);
+          setHasCloudAccess(false);
+          setSection(null);
+          setRelatedArchives([]);
+          setExperienceCards([]);
+        }
         setLoading(false);
       }
     });
@@ -459,8 +460,11 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
       cycle: null,
       sections: [],
       cautions: [],
-    } : displayEntry ? buildPublicGuideContent(displayEntry, language) : null,
-    [displayEntry, language, offline, offlineGuide],
+    } : displayEntry ? memberContent && !offline ? memberContent : {
+      overview: getPublicGuideSummary(displayEntry, language),
+      parameters: [], cycle: null, sections: [], cautions: [],
+    } : null,
+    [displayEntry, language, offline, offlineGuide, memberContent],
   );
   const fallbackCategory = displayEntry?.category || searchParams.get("from") || "plant";
   const fallbackHref = `/plant?section=${encodeURIComponent(fallbackCategory)}`;

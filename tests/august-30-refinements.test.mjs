@@ -44,8 +44,8 @@ const load = createLoader();
 const { fitInlineSummary } = load("lib/fit-inline-summary.ts");
 const { getCompactCardLocation } = load("lib/card-location.ts");
 const { getArchiveCycleTerminology } = load("lib/archive-cycle-terminology.ts");
-const guideLibrary = load("lib/public-guide-library.ts");
-const { getPracticalGuideContent } = load("lib/practical-guide-content.ts");
+const guideLibrary = { ...load("lib/public-guide-library.ts"), ...load("scripts/guide-full/generator.ts") };
+const { getPracticalGuideContent } = load("scripts/guide-full/practical-guide-content.ts");
 const entry = (category, name, extra = {}) => ({ id: `fixture-${category}-${name}`, category, name, source: "preset", ...extra });
 
 function loadFunction(path, name, scope) {
@@ -621,7 +621,10 @@ test("mobile primary identity stays in its existing row and market detail titles
 
 const waterEntry = (name, traits = {}) => entry("insect_fish", name, {
   content_template: "aquatic_plant",
-  content: { filters: { light: "low_medium", temperature: "warm", growth_form: "epiphyte", difficulty: "easy", ...traits } },
+  content: { filters: { light: "low_medium", temperature: "warm", growth_form: "epiphyte", difficulty: "easy",
+    // A member catalog RPC supplies these values; anonymous catalogs do not.
+    ...(name === "水榕" ? { temperature_min_c: 22, temperature_max_c: 28 } :
+      name === "金鱼藻" ? { temperature_min_c: 1, temperature_max_c: 28 } : {}), ...traits } },
 });
 const emptyWaterFilters = { light: [], temperature: [], growthForm: "all", difficulty: "all" };
 
@@ -645,7 +648,8 @@ test("water-temperature filters use numeric reference overlaps, not guessed qual
   assert.equal(guideLibrary.matchesPublicGuideFilters(unknown, { ...emptyWaterFilters, temperature: ["c22_26"] }), false);
   assert.equal(guideLibrary.matchesPublicGuideFilters(unknown, { ...emptyWaterFilters, temperature: ["unknown"] }), true);
   assert.match(guideLibrary.getPublicGuideTemperatureLabel(unknown, "zh"), /待确认/);
-  assert.equal(guideLibrary.matchesPublicGuideFilters({ ...plant, source: "approved" }, { ...emptyWaterFilters, temperature: ["c22_26"] }), false, "never apply a preset to a user's guide by name");
+  const { temperature_min_c, temperature_max_c, ...unverifiedFilters } = plant.content.filters;
+  assert.equal(guideLibrary.matchesPublicGuideFilters({ ...plant, source: "approved", content: { filters: unverifiedFilters } }, { ...emptyWaterFilters, temperature: ["c22_26"] }), false, "never apply a preset to a user's guide by name");
 });
 
 test("explicit water-temperature values take priority and invalid ranges do not inherit a preset", () => {
@@ -653,7 +657,7 @@ test("explicit water-temperature values take priority and invalid ranges do not 
   assert.deepEqual(getAquaticTemperatureReference(waterEntry("水榕", { temperature_min_c: 19, temperature_max_c: 21 })), { min: 19, max: 21, species: "水榕" });
   assert.equal(getAquaticTemperatureReference(waterEntry("水榕", { temperature_min_c: 29, temperature_max_c: 20 })), null);
   assert.equal(getAquaticTemperatureReference(waterEntry("水榕", { temperature_min_c: "22", temperature_max_c: 28 })), null);
-  const content = guideLibrary.buildPublicGuideContent(waterEntry("水榕"), "zh");
+  const content = guideLibrary.buildPublicGuideContent({ ...waterEntry("水榕"), content: { filters: { light: "low" } } }, "zh");
   assert.ok(content.cautions.some((text) => text.includes("Anubias barteri var. nana")));
   assert.ok(content.sources.some((reference) => reference.url.includes("dennerleplants.com")));
 });
@@ -1070,7 +1074,8 @@ test("global result cards preserve category routes, show visitor overviews, and 
   assert.match(html, /href="\/plant\/guide\/two\?from=insect_fish"/);
   assert.match(html, />虫鱼生态</);
   assert.match(html, /玉米基础概要/);
-  assert.match(html, /重点管理来源清楚的湿料/);
+  assert.match(html, /黑水虻基础概要/);
+  assert.doesNotMatch(html, /重点管理来源清楚的湿料/);
   assert.match(render({ signedIn: true }), /玉米基础概要/);
   const failed = render({ matches: [], loadError: true });
   assert.match(failed, /结果可能不完整/);

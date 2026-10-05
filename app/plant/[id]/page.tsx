@@ -23,7 +23,6 @@ import {
 import {
   loadPlantBasicOverviewsCompat,
   loadPublicPlantCatalogDetail,
-  type PlantBasicOverviewCompatRow,
   type PublicPlantCatalogRow,
 } from "@/lib/plant-guide-compat";
 import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
@@ -57,8 +56,6 @@ type PlantGrowthCycleRow = {
   cycle_max?: number | null;
   cycle_note?: string | null;
 };
-
-type PlantBasicOverviewRow = PlantBasicOverviewCompatRow;
 
 type RelatedArchiveSourceRow = {
   id: string;
@@ -1256,21 +1253,13 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
 
       if (!cachedPlant) setLoading(true);
       setActionMessage(null);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setIsSignedIn(Boolean(user));
-      setCurrentUserId(user?.id || null);
-
-      const membershipResult = user
-        ? await supabase.rpc("get_my_membership")
-        : { data: null, error: null };
-      const membership = membershipResult.error
-        ? null
-        : normalizeMembershipRpcResult(membershipResult.data);
-      const canReadFullGuide = canAccessMembershipGuidance(membership);
-      setHasCloudAccess(canReadFullGuide);
+      setHasCloudAccess(false);
+      setParameters(null);
+      setGrowthCycle(null);
+      setCareGuide(null);
+      setRelatedArchives([]);
+      setOwnArchives([]);
+      setRelatedExperienceCards([]);
 
       const plantSelect =
         "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order";
@@ -1310,11 +1299,32 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         plantRow = (byName.data || null) as PlantSpeciesRow | null;
       }
       const resolvedPlantId = plantRow?.id || id;
+      const publicOverview = catalogAvailable
+        ? catalogRow ? [{
+          species_id: catalogRow.id,
+          summary: language === "en" ? catalogRow.summary_en : catalogRow.summary_zh,
+        }] : []
+        : await loadPlantBasicOverviewsCompat(resolvedPlantId);
+      // Public reading must not wait for Android auth or membership requests.
+      setPlant(plantRow || cachedPlant);
+      setBasicOverview(publicOverview[0]?.summary || (offlineGuide ? getOfflineGuideOverview(offlineGuide, language) : null));
+      setLoading(false);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsSignedIn(Boolean(user));
+      setCurrentUserId(user?.id || null);
+      const membershipResult = user
+        ? await supabase.rpc("get_my_membership")
+        : { data: null, error: null };
+      const membership = membershipResult.error
+        ? null
+        : normalizeMembershipRpcResult(membershipResult.data);
+      const canReadFullGuide = canAccessMembershipGuidance(membership);
+      setHasCloudAccess(canReadFullGuide);
 
       const [
         { data: i18nData },
         { data: aliasData },
-        { data: overviewData },
         { data: parameterData },
         { data: growthCycleData },
         { data: careGuideData },
@@ -1329,10 +1339,6 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           .select("species_id, alias_name, relation_type")
           .eq("species_id", resolvedPlantId)
           .order("alias_name", { ascending: true }),
-        catalogAvailable ? Promise.resolve({ data: catalogRow ? [{
-          species_id: catalogRow.id,
-          summary: language === "en" ? catalogRow.summary_en : catalogRow.summary_zh,
-        }] : [] }) : loadPlantBasicOverviewsCompat(resolvedPlantId).then((data) => ({ data })),
         canReadFullGuide
           ? supabase.from("plant_parameters").select("*").eq("species_id", resolvedPlantId).maybeSingle()
           : Promise.resolve({ data: [] as PlantParametersRow[] }),
@@ -1350,12 +1356,10 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       ]);
       const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
       const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
-      const overviewRows = (overviewData || []) as PlantBasicOverviewRow[];
 
       setPlant(plantRow || cachedPlant);
       setI18n(i18nRows);
       setAliases(aliasRows);
-      setBasicOverview(overviewRows[0]?.summary || (offlineGuide ? getOfflineGuideOverview(offlineGuide, language) : null));
       setParameters(
         (Array.isArray(parameterData) ? parameterData[0] : parameterData || null) as
           | PlantParametersRow

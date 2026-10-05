@@ -71,13 +71,14 @@ test("public related guides are explicit-grant, RLS-protected, and admin reviewe
 });
 
 test("public guide library has sections, reusable content, and openable details", async () => {
-  const [migration, indexPage, detailPage, guideLibrary, candidates, newProject] = await Promise.all([
+  const [migration, indexPage, detailPage, guideLibrary, candidates, newProject, guideGenerator] = await Promise.all([
     source("supabase/migrations/20260829054053_expand_public_guide_library.sql"),
     source("app/plant/page.tsx"),
     source("components/plant-detail/GuideDetailView.tsx"),
     source("lib/public-guide-library.ts"),
     source("lib/system-name-candidates.ts"),
     source("app/archive/new/page.tsx"),
+    source("scripts/guide-full/generator.ts"),
   ]);
 
   assert.match(migration, /create table if not exists public\.guide_sections/);
@@ -99,20 +100,21 @@ test("public guide library has sections, reusable content, and openable details"
   assert.match(migration, /on conflict \(category, normalized_name\)/);
   assert.match(indexPage, /guide_sections/);
   assert.match(indexPage, /\/plant\/guide\/\$\{entry\.id\}/);
-  assert.match(detailPage, /buildPublicGuideContent/);
+  assert.match(detailPage, /get_member_guide_content/);
   assert.match(detailPage, /system_name=\$\{encodeURIComponent\(displayEntry\.name\)\}/);
-  assert.match(guideLibrary, /aquatic_plant/);
-  assert.match(guideLibrary, /food_ferment/);
+  assert.match(guideGenerator, /aquatic_plant/);
+  assert.match(guideGenerator, /food_ferment/);
   assert.match(candidates, /\.eq\("is_active", true\)/);
   assert.match(newProject, /searchParams\.get\("system_name"\)/);
 });
 
 test("non-plant guides keep their browsing hierarchy with shared global search and plant-style related content", async () => {
-  const [migration, indexPage, detailPage, guideLibrary] = await Promise.all([
+  const [migration, indexPage, detailPage, guideLibrary, guideGenerator] = await Promise.all([
     source("supabase/migrations/20260829120000_expand_domain_guide_hierarchy.sql"),
     source("app/plant/page.tsx"),
     source("components/plant-detail/GuideDetailView.tsx"),
     source("lib/public-guide-library.ts"),
+    source("scripts/guide-full/generator.ts"),
   ]);
 
   for (const section of [
@@ -172,13 +174,14 @@ test("non-plant guides keep their browsing hierarchy with shared global search a
     "bird",
     "backyard_animal",
   ]) {
-    assert.match(guideLibrary, new RegExp(`${template}:`));
+    assert.match(guideGenerator, new RegExp(`${template}:`));
   }
   assert.match(guideLibrary, /publicGuideWaterFilterOptions/);
   assert.match(guideLibrary, /getPublicGuideFilterTraits/);
   assert.match(guideLibrary, /matchesPublicGuideFilters/);
 
-  assert.match(detailPage, /canAccessMembershipGuidance/);
+  assert.match(detailPage, /get_member_guide_content/);
+  assert.doesNotMatch(detailPage, /can_create_content/);
   assert.match(detailPage, /GuideTab = "guide" \| "experience" \| "projects"/);
   assert.match(detailPage, /hydrateExperienceCardListItems/);
   assert.match(detailPage, /is_experience_card_public/);

@@ -1,5 +1,5 @@
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
-import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import { getMediaStoragePathFromUrl, resolveMediaDisplayPairs } from "@/lib/media-urls";
 import {
   type MarketItemCategory,
   type MarketPostRow,
@@ -51,7 +51,12 @@ async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
       thumb_url: row.cover_thumb_url,
       thumb_path: row.cover_thumb_path,
     })),
+    { failOnError: true },
   );
+
+  if (rows.some((row, index) =>
+    (row.cover_image_path || getMediaStoragePathFromUrl(row.cover_image_url)) && !pairs[index]?.display_url
+  )) throw new Error("market_media_display_url_failed");
 
   return rows.map((row, index) => ({
     ...row,

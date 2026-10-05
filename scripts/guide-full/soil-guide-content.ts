@@ -1,4 +1,4 @@
-import type { PublicGuideContent, PublicGuideLanguage } from "./public-guide-library";
+import type { PublicGuideContent, PublicGuideLanguage } from "../../lib/public-guide-library";
 
 // Editorial content for system presets. The caller retains administrator-written
 // content and never applies these profiles to approved user-created guides.
