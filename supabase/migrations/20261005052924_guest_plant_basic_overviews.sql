@@ -129,8 +129,6 @@ $$;
 
 revoke all on function private.get_plant_basic_overviews(uuid, text)
   from public, anon, authenticated, service_role;
-grant execute on function private.get_plant_basic_overviews(uuid, text)
-  to authenticated;
 
 -- The public wrapper runs with its owner so anon never needs USAGE on the
 -- private schema. Its only result is the two-column active-species overview.

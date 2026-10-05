@@ -161,6 +161,7 @@ test("plant Phase A preserves the legacy registered RPC; held Phase B closes it"
       grant execute on function public.get_plant_core_parameters(uuid) to authenticated;
     `);
     await db.exec(readFileSync(new URL("../supabase/migrations/20261005052924_guest_plant_basic_overviews.sql", import.meta.url), "utf8"));
+    assert.equal((await db.query("select has_function_privilege('authenticated', 'private.get_plant_basic_overviews(uuid,text)', 'execute') as can_execute")).rows[0].can_execute, false);
     await db.exec("set role anon");
     assert.equal((await db.query("select common_name from public.get_public_plant_catalog()")).rows[0].common_name, "罗勒");
     await db.exec("reset role; set role authenticated");
