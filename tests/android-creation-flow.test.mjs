@@ -158,12 +158,14 @@ test("pending sync validates taxonomy before insert and keeps record/image path"
   assert.match(cache, /source_cloud_group_tag_id: archive\.group_tag_id/);
 });
 
-test("taxonomy safety rules are identical in both project charters", () => {
+test("taxonomy safety rules live in the authoritative AGENTS charter", () => {
   const agents = read("AGENTS.md").replace(/\r\n/g, "\n");
-  const charter = read("总纲.md").replace(/\r\n/g, "\n");
   const section = agents.split("### 五、云端分类身份与数据安全")[1];
   assert.ok(section);
   const rules = section.split("\n\n")[1]?.trim();
   assert.ok(rules);
-  assert.ok(charter.includes(rules));
+  assert.match(rules, /local taxonomy label 不得自动创建或映射成 cloud taxonomy/);
+  assert.match(rules, /没有可信 cloud taxonomy identity 时，允许未分组同步，不猜测、不自动创建/);
+  assert.equal(fs.existsSync("总纲.md"), false);
+  assert.equal(fs.existsSync("计划.md"), false);
 });
