@@ -5,6 +5,7 @@ export type AndroidShellRouteKind =
   | "activity"
   | "discover-search"
   | "experience"
+  | "my-experience"
   | "experience-detail"
   | "following"
   | "market"
@@ -206,7 +207,8 @@ export function parseAndroidShellPath(
   if (path === "/admin/support") return { kind: "admin-support" };
   if (path === "/discover") return { kind: "activity" };
   if (path === "/discover/search") return { kind: "discover-search" };
-  if (path === "/experience" || path === "/experience-cards") return { kind: "experience" };
+  if (path === "/experience") return { kind: "experience" };
+  if (path === "/experience-cards") return { kind: "my-experience" };
   const experienceDetail = path.match(/^\/experience-cards\/([^/]+)$/);
   if (experienceDetail) return { kind: "experience-detail", id: decodeURIComponent(experienceDetail[1]) };
   if (path === "/follow") return { kind: "following" };

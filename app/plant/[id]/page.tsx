@@ -26,6 +26,7 @@ import {
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
+import { getOfflineGuideOverview, type OfflineGuideDirectoryEntry } from "@/lib/offline-guide-directory";
 import type { TranslationDictionary } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
@@ -1206,10 +1207,12 @@ export default function PlantDetailPage() {
   return <PlantDetailContent id={params?.id} search={searchParams.toString()} />;
 }
 
-export function PlantDetailContent({ id, search = "", onBack }: {
+export function PlantDetailContent({ id, search = "", onBack, offline = false, offlineGuide }: {
   id?: string;
   search?: string;
   onBack?: () => void;
+  offline?: boolean;
+  offlineGuide?: OfflineGuideDirectoryEntry;
 }) {
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const { language, t } = useLanguage();
@@ -1238,10 +1241,24 @@ export function PlantDetailContent({ id, search = "", onBack }: {
   useGuideInterestRefresh(currentUserId, plant?.id || (typeof id === "string" ? id : undefined), true, setInterestAdded);
 
   useEffect(() => {
+    const cachedPlant = offlineGuide ? {
+      id: offlineGuide.plantId || offlineGuide.id || id || offlineGuide.label,
+      common_name: offlineGuide.label, scientific_name: offlineGuide.nameEn || null,
+      slug: offlineGuide.plantSlug || null, category: "all", is_active: true,
+    } as PlantSpeciesRow : null;
+    if (cachedPlant) {
+      setPlant(cachedPlant);
+      setBasicOverview(getOfflineGuideOverview(offlineGuide!, language));
+      setLoading(false);
+    }
+    if (offline) {
+      setHasCloudAccess(false);
+      return;
+    }
     async function load() {
       if (!id) return;
 
-      setLoading(true);
+      if (!cachedPlant) setLoading(true);
       setActionMessage(null);
 
       const {
@@ -1309,9 +1326,7 @@ export function PlantDetailContent({ id, search = "", onBack }: {
           .select("species_id, alias_name, relation_type")
           .eq("species_id", resolvedPlantId)
           .order("alias_name", { ascending: true }),
-        user
-          ? loadPlantBasicOverviewsCompat(resolvedPlantId).then((data) => ({ data }))
-          : Promise.resolve({ data: [] as PlantBasicOverviewRow[] }),
+        loadPlantBasicOverviewsCompat(resolvedPlantId).then((data) => ({ data })),
         canReadFullGuide
           ? supabase.from("plant_parameters").select("*").eq("species_id", resolvedPlantId).maybeSingle()
           : user
@@ -1333,10 +1348,10 @@ export function PlantDetailContent({ id, search = "", onBack }: {
       const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
       const overviewRows = (overviewData || []) as PlantBasicOverviewRow[];
 
-      setPlant(plantRow);
+      setPlant(plantRow || cachedPlant);
       setI18n(i18nRows);
       setAliases(aliasRows);
-      setBasicOverview(overviewRows[0]?.summary || null);
+      setBasicOverview(overviewRows[0]?.summary || (offlineGuide ? getOfflineGuideOverview(offlineGuide, language) : null));
       setParameters(
         (Array.isArray(parameterData) ? parameterData[0] : parameterData || null) as
           | PlantParametersRow
@@ -1458,8 +1473,11 @@ export function PlantDetailContent({ id, search = "", onBack }: {
       setLoading(false);
     }
 
-    load();
-  }, [id, language]);
+    void load().catch((error) => {
+      console.warn("load plant guide detail failed:", error);
+      setLoading(false);
+    });
+  }, [id, language, offline, offlineGuide]);
 
   const zh = useMemo(
     () => i18n.find((item: PlantSpeciesI18nRow) => item.language_code === "zh"),
@@ -1879,7 +1897,7 @@ export function PlantDetailContent({ id, search = "", onBack }: {
           >
             {copy.visitor_detail_notice}
             <Link href={buildLoginHref(`/plant/${encodeURIComponent(String(id))}${searchParams.size ? `?${searchParams.toString()}` : ""}`)} style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              {language === "en" ? "Log in / register to view the basic overview" : "登录／注册后查看基础概要"}
+              {language === "en" ? "Log in / register" : "登录／注册"}
             </Link>
           </div>
         ) : !hasCloudAccess ? (
@@ -1992,7 +2010,7 @@ export function PlantDetailContent({ id, search = "", onBack }: {
 
       {activeTab === "guide" ? (
         <>
-      {isSignedIn && basicOverview ? (
+      {basicOverview ? (
         <Section title={copy.summary}>
           <TextBlock text={basicOverview} />
         </Section>

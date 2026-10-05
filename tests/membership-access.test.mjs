@@ -322,8 +322,8 @@ test("the plant pages request only data allowed for the current tier", async () 
   );
   assert.doesNotMatch(detailPage, /from\("plant_related_archives_view"\)/);
   assert.match(detailPage, /copy\.visitor_detail_notice/);
-  assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录、名称和分类。"/);
-  assert.match(zhCopy, /visitor_detail_notice: "游客可以查看目录、名称和分类。"/);
+  assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录和简化版指引。"/);
+  assert.match(zhCopy, /visitor_detail_notice: "游客可以阅读简化版指引/);
 
   assert.match(guideCompat, /rpc\("get_plant_basic_overviews"/);
   assert.match(guideCompat, /rpc\("get_plant_core_parameters"/);
@@ -492,7 +492,7 @@ test("client-side entitlement checks fail closed when membership is absent", asy
   );
   assert.match(
     membership,
-    /canAccessMembershipGuidance[\s\S]*?can_create_content === true/
+    /canAccessMembershipGuidance[\s\S]*?status === "active" \|\| membership\?\.status === "trialing"/
   );
   assert.match(membership, /需要开通云会员/);
 });

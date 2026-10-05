@@ -165,6 +165,8 @@ import MarketPage from "@/app/market/page";
 import { MyMarketPostsContent } from "@/app/market/mine/page";
 import { NewMarketPostContent } from "@/app/market/new/page";
 import AndroidExperienceCardDetail from "@/components/experience-card/AndroidExperienceCardDetail";
+import { MyExperienceCardsContent } from "@/app/experience-cards/page";
+import { ExperienceCardContent } from "@/app/experience-cards/[id]/page";
 import AndroidProfileController from "@/components/profile/AndroidProfileController";
 import AndroidProfileInfoPage, { type AndroidProfileInfoKind } from "@/components/profile/AndroidProfileInfoPage";
 import MembershipPaymentPage from "@/app/membership/payment/page";
@@ -308,7 +310,8 @@ type Screen =
   | { kind: "discover-search" }
   | { kind: "public-detail" }
   | { kind: "experience" }
-  | { kind: "experience-detail"; id: string }
+  | { kind: "my-experience" }
+  | { kind: "experience-detail"; id: string; returnTo?: "my-experience" }
   | { kind: "following" }
   | { kind: "market" }
   | { kind: "market-mine" }
@@ -1363,8 +1366,14 @@ function App() {
       setScreen({ kind: "experience" });
       return true;
     }
+    if (routed.kind === "my-experience") {
+      if (auth.status !== "signed-in") { openCloudLogin("profile", undefined, "/experience-cards"); return true; }
+      setScreen({ kind: "my-experience" });
+      return true;
+    }
     if (routed.kind === "experience-detail" && routed.id) {
-      setScreen({ kind: "experience-detail", id: routed.id });
+      setScreen({ kind: "experience-detail", id: routed.id,
+        returnTo: screen.kind === "my-experience" ? "my-experience" : undefined });
       return true;
     }
     if (routed.kind === "following") {
@@ -2033,7 +2042,7 @@ function App() {
     }
     return {
       ...item,
-      active: !["activity", "experience", "experience-detail", "following", "market", "market-mine", "market-new", "market-detail", "guides", "plant-detail", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
+      active: !["activity", "experience", "my-experience", "experience-detail", "following", "market", "market-mine", "market-new", "market-detail", "guides", "plant-detail", "guide-detail", "discover-search", "public-detail"].includes(screen.kind),
       onSelect: goList,
     };
   }) as [
@@ -2043,7 +2052,7 @@ function App() {
     MobileBottomNavigationItem,
   ];
 
-  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "experience-detail", "guides", "following", "market", "market-mine", "market-new", "market-detail", "profile", "project-categories", "plant-detail", "guide-detail", "public-detail"].includes(screen.kind);
+  const homeSectionOwnsTopNav = ["list", "activity", "discover-search", "experience", "my-experience", "experience-detail", "guides", "following", "market", "market-mine", "market-new", "market-detail", "profile", "project-categories", "plant-detail", "guide-detail", "public-detail"].includes(screen.kind);
   const detailOwnsTopNav = ["detail", "cloud-detail", "public-cloud-detail", "edit-project", "new-record", "edit-record", "new-project", "project-destination"].includes(screen.kind);
   const storageUsedBytes = Math.max(0, Number(spaceProfile?.storage_used || 0));
   const storageLimitBytes = Math.max(
@@ -2647,7 +2656,10 @@ function App() {
       {screen.kind === "market-detail" ? <AndroidMarketDetailController id={screen.id}
         online={online} onBack={() => setScreen({ kind: "market" })} /> : null}
 
-      {screen.kind === "experience-detail" ? (
+      {screen.kind === "my-experience" ? <MyExperienceCardsContent onRequireLogin={() => openCloudLogin("profile", undefined, "/experience-cards")} /> : null}
+      {screen.kind === "experience-detail" ? screen.returnTo === "my-experience" ? (
+        <ExperienceCardContent key={screen.id} id={screen.id} onBack={() => setScreen({ kind: "my-experience" })} />
+      ) : (
         <AndroidExperienceCardDetail key={screen.id} cardId={screen.id} onBack={() => setScreen({ kind: "experience" })} />
       ) : null}
 
@@ -2759,7 +2771,9 @@ function App() {
         ) : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
       ) : null}
       {screen.kind === "plant-detail" ? (
-        <PlantDetailContent id={screen.id} onBack={() => goBackInShell({ kind: "guides" })} />
+        <PlantDetailContent id={screen.id} offline={!online}
+          offlineGuide={findOfflineGuideEntry(directory, screen.id)}
+          onBack={() => goBackInShell({ kind: "guides" })} />
       ) : null}
       {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onBack={() => goBackInShell({ kind: "list" })} onSuccess={(userId) => {

@@ -66,9 +66,8 @@ export async function fetchMarketFeed({
   limit = 80,
 }: MarketFeedParams = {}): Promise<MarketFeedResult> {
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Public browsing must not wait for the optional account lookup.
+    const userLookup = supabase.auth.getUser().then(({ data }) => data.user).catch(() => null);
 
     let query = supabase
       .from("market_posts")
@@ -90,7 +89,7 @@ export async function fetchMarketFeed({
         items: [],
         profiles: new Map(),
         archives: new Map(),
-        currentUserId: user?.id || null,
+        currentUserId: null,
         error,
       };
     }
@@ -131,6 +130,10 @@ export async function fetchMarketFeed({
       ]),
     );
 
+    const user = await Promise.race([
+      userLookup,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+    ]);
     return {
       items: rows,
       profiles,
