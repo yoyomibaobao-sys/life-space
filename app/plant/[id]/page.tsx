@@ -22,7 +22,6 @@ import {
 } from "@/lib/membership";
 import {
   loadPlantBasicOverviewsCompat,
-  loadPlantCoreParametersCompat,
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
@@ -1190,13 +1189,7 @@ function PlantTabAccessNotice({
         lineHeight: 1.7,
       }}
     >
-      {label}{copy.complete_content_suffix}
-      <Link
-        href="/membership"
-        style={{ marginLeft: 7, color: "#3f6f37", fontWeight: 700 }}
-      >
-        {copy.learn_membership}
-      </Link>
+      {label}：{copy.plus_visible}
     </section>
   );
 }
@@ -1329,9 +1322,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
         loadPlantBasicOverviewsCompat(resolvedPlantId).then((data) => ({ data })),
         canReadFullGuide
           ? supabase.from("plant_parameters").select("*").eq("species_id", resolvedPlantId).maybeSingle()
-          : user
-            ? loadPlantCoreParametersCompat(resolvedPlantId).then((data) => ({ data }))
-            : Promise.resolve({ data: [] as PlantParametersRow[] }),
+          : Promise.resolve({ data: [] as PlantParametersRow[] }),
         canReadFullGuide
           ? supabase.from("plant_growth_cycle").select("*").eq("species_id", resolvedPlantId).maybeSingle()
           : Promise.resolve({ data: null }),
@@ -1522,22 +1513,6 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
     language
   );
   const environmentCards = getEnvironmentDetailItems(parameters, language);
-  const localCoreParameterCards = [
-    ...environmentCards.filter((item) =>
-      ["light", "scene", "indoor"].includes(item.key)
-    ),
-    {
-      key: "trellis",
-      label: copy.trellis,
-      value:
-        typeof parameters?.need_trellis === "boolean"
-          ? parameters.need_trellis
-            ? copy.trellis_needed
-            : copy.trellis_not_usually_needed
-          : null,
-    },
-  ].filter((item) => item.value);
-
   const parameterCards = [
     { label: copy.parameter_labels.sunlight, value: scoreLabel(parameters?.sun_score) },
     { label: copy.parameter_labels.air_humidity, value: scoreLabel(parameters?.air_humidity_score) },
@@ -1882,7 +1857,7 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
           {en?.common_name && <div>{copy.english_name}{en.common_name}</div>}
         </div>
 
-        {!isSignedIn ? (
+        {!hasCloudAccess ? (
           <div
             style={{
               marginTop: 14,
@@ -1895,32 +1870,11 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
               lineHeight: 1.7,
             }}
           >
-            {copy.visitor_detail_notice}
-            <Link href={buildLoginHref(`/plant/${encodeURIComponent(String(id))}${searchParams.size ? `?${searchParams.toString()}` : ""}`)} style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              {language === "en" ? "Log in / register" : "登录／注册"}
-            </Link>
-          </div>
-        ) : !hasCloudAccess ? (
-          <div
-            style={{
-              marginTop: 14,
-              padding: "11px 13px",
-              borderRadius: 12,
-              border: "1px solid #dce9d5",
-              background: "#f7fbf4",
-              color: "#587052",
-              fontSize: 14,
-              lineHeight: 1.7,
-            }}
-          >
-            {copy.local_detail_notice}
-            <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              {copy.learn_membership}
-            </Link>
+            {copy.plus_visible}
           </div>
         ) : null}
 
-        {isSignedIn && environmentTags.length > 0 && (
+        {hasCloudAccess && environmentTags.length > 0 && (
           <div className={styles.environmentTagList}>
             {environmentTags.map((tag) => (
               <span
@@ -2013,19 +1967,6 @@ export function PlantDetailContent({ id, search = "", onBack, offline = false, o
       {basicOverview ? (
         <Section title={copy.summary}>
           <TextBlock text={basicOverview} />
-        </Section>
-      ) : null}
-
-      {isSignedIn && !hasCloudAccess && localCoreParameterCards.length > 0 ? (
-        <Section title={copy.basic_parameters}>
-          <div className={styles.parameterGrid}>
-            {localCoreParameterCards.map((item) => (
-              <Card key={item.label} label={item.label} value={item.value} />
-            ))}
-          </div>
-          <div style={{ marginTop: 12, color: "#6a7566", fontSize: 13, lineHeight: 1.7 }}>
-            {copy.local_parameter_notice}
-          </div>
         </Section>
       ) : null}
 
