@@ -615,7 +615,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
 
         {activeTab === "guide" ? (
           <>
-            {signedIn && content.parameters.length > 0 ? (
+            {canReadFull && content.parameters.length > 0 ? (
               <section className={styles.sectionCard}>
                 <h2>{copy.keyParameters}</h2>
                 <div className={styles.parameterGrid}>
@@ -636,7 +636,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
             ) : null}
 
             {!canReadFull ? (
-              offline || (!entry && cachedEntry) ? <section className={styles.accessNotice}>{language === "zh" ? "联网后查看完整实操" : "Connect to view the full practice guide"}</section> : <AccessNotice signedIn={signedIn} returnHref={returnHref} />
+              offline || (!entry && cachedEntry) ? <section className={styles.accessNotice}>{copy.membershipForFull}</section> : <AccessNotice />
             ) : (
               <>
                 {content.cycle ? (
@@ -727,7 +727,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
               <div className={styles.stateCard}>{copy.noExperienceCards}</div>
             )
           ) : (
-            offline ? <div className={styles.stateCard}>{language === "zh" ? "联网后查看经验卡" : "Connect to view experience cards"}</div> : <AccessNotice signedIn={signedIn} returnHref={returnHref} />
+            offline ? <div className={styles.stateCard}>{language === "zh" ? "联网后查看经验卡" : "Connect to view experience cards"}</div> : <AccessNotice />
           )
         ) : canReadFull ? (
           relatedArchives.length > 0 ? (
@@ -736,7 +736,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
             <div className={styles.stateCard}>{copy.noRelatedProjects}</div>
           )
         ) : (
-          offline ? <div className={styles.stateCard}>{language === "zh" ? "联网后查看种植记录" : "Connect to view related projects"}</div> : <AccessNotice signedIn={signedIn} returnHref={returnHref} />
+          offline ? <div className={styles.stateCard}>{language === "zh" ? "联网后查看种植记录" : "Connect to view related projects"}</div> : <AccessNotice />
         )}
 
       </main>
@@ -744,23 +744,13 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
   );
 }
 
-function AccessNotice({
-  signedIn,
-  returnHref,
-}: {
-  signedIn: boolean;
-  returnHref: string;
-}) {
+function AccessNotice() {
   const { language } = useLanguage();
   const copy = publicGuideCopy[language];
-  const href = signedIn ? "/membership" : buildLoginHref(returnHref);
 
   return (
     <section className={styles.accessNotice}>
-      {signedIn ? <span>{copy.membershipForFull}</span> : null}
-      <InternalLink href={href}>
-        {signedIn ? copy.learnMembership : copy.registerForOverview}
-      </InternalLink>
+      {copy.membershipForFull}
     </section>
   );
 }

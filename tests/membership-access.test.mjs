@@ -301,15 +301,15 @@ test("the plant pages request only data allowed for the current tier", async () 
     indexPage,
     /canReadFullGuide\s+\?[\s\S]{0,160}withGuideRemoteTimeout\([\s\S]{0,160}supabase\.from\("plant_parameters"\)/,
   );
-  assert.match(indexPage, /loadPlantCoreParametersCompat\(null\)/);
+  assert.doesNotMatch(indexPage, /loadPlantCoreParametersCompat\(null\)/);
   assert.doesNotMatch(
     indexPage,
     /\.from\("plant_species"\)[\s\S]{0,180}\.select\([^)]*description/i
   );
-  assert.match(indexPage, /t\.plant\.visitor_notice/);
+  assert.doesNotMatch(indexPage, /t\.plant\.visitor_notice|t\.plant\.register_for_summary/);
 
   assert.match(detailPage, /loadPlantBasicOverviewsCompat\(resolvedPlantId\)/);
-  assert.match(detailPage, /loadPlantCoreParametersCompat\(resolvedPlantId\)/);
+  assert.doesNotMatch(detailPage, /loadPlantCoreParametersCompat\(resolvedPlantId\)/);
   assert.match(detailPage, /\.eq\("slug", id\)/);
   assert.match(detailPage, /\.eq\("common_name", id\)/);
   assert.match(
@@ -321,9 +321,10 @@ test("the plant pages request only data allowed for the current tier", async () 
     /canReadFullGuide\s+\?\s+supabase\.from\("plant_growth_cycle"\)/
   );
   assert.doesNotMatch(detailPage, /from\("plant_related_archives_view"\)/);
-  assert.match(detailPage, /copy\.visitor_detail_notice/);
+  assert.match(detailPage, /copy\.plus_visible/);
   assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录和简化版指引。"/);
   assert.match(zhCopy, /visitor_detail_notice: "游客可以阅读简化版指引/);
+  assert.match(zhCopy, /plus_visible: "Plus 云端用户可见"/);
 
   assert.match(guideCompat, /rpc\("get_plant_basic_overviews"/);
   assert.match(guideCompat, /rpc\("get_plant_core_parameters"/);

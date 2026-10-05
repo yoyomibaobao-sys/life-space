@@ -53,7 +53,7 @@ test("Guide list and detail change data within the same formal presentation", ()
   assert.match(detail, /getOfflineGuideParameters\(offlineGuide/);
   assert.match(detail, /activeTab === "guide"/);
   assert.match(detail, /activeTab === "experience"/);
-  assert.match(detail, /联网后查看完整实操/);
+  assert.match(detail, /<section className=\{styles\.accessNotice\}>\{copy\.membershipForFull\}/);
 });
 
 test("My Space cards share MobileArchiveActions with source-specific write capability", () => {

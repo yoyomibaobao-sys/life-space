@@ -109,7 +109,7 @@ test("explicit sign-out cannot restore another account from local projects", () 
   assert.match(source, /wasLocalOwnerExplicitlySignedOut\(\)/);
 });
 
-test("offline guides expose guest overviews while retaining registered-only parameters", () => {
+test("offline guides and guests share the simplified tier", () => {
   const source = read("mobile-offline-src/main.tsx");
   const guideCache = read("lib/offline-guide-directory.ts");
   const plantIndex = read("app/plant/page.tsx");
@@ -126,7 +126,8 @@ test("offline guides expose guest overviews while retaining registered-only para
   assert.match(guideCache, /plantCoreParameters/);
   assert.match(guideCache, /\["light", "scene", "indoor"\]/);
   assert.match(plantIndex, /if \(loading \|\| !plants\.length\) return/);
-  assert.match(plantIndex, /parametersZh: isSignedIn \? zh\.parameters\.slice\(0, 3\) : undefined/);
+  assert.match(plantIndex, /parametersZh: hasCloudAccess \? zh\.parameters\.slice\(0, 3\) : undefined/);
+  assert.match(detail, /canReadFull && content\.parameters\.length > 0/);
   assert.match(plantIndex, /overviewZh: zh\.overview/);
   assert.match(plantIndex, /content, content_en/);
 });

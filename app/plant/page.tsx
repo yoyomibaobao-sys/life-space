@@ -15,7 +15,6 @@ import {
 } from "@/lib/membership";
 import {
   loadPlantBasicOverviewsCompat,
-  loadPlantCoreParametersCompat,
   type PlantBasicOverviewCompatRow,
 } from "@/lib/plant-guide-compat";
 import {
@@ -521,9 +520,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
           ? withGuideRemoteTimeout(Promise.resolve(supabase.from("plant_parameters").select(
               "species_id, sun_score, need_trellis, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
             )))
-          : user
-            ? withGuideRemoteTimeout(loadPlantCoreParametersCompat(null).then((data) => ({ data })))
-            : Promise.resolve(null),
+          : Promise.resolve(null),
 
         user ? withGuideRemoteTimeout(getGuideInterestCount(user.id)) : Promise.resolve(null),
       ]);
@@ -763,7 +760,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
           .join(" "),
         overviewZh: guideMap[plant.id]?.summary || undefined,
         overviewEn: guideMapEn[plant.id]?.summary || undefined,
-        plantCoreParameters: isSignedIn && core
+        plantCoreParameters: hasCloudAccess && core
           ? {
               sun_score: core.sun_score,
               need_trellis: core.need_trellis,
@@ -781,7 +778,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
     aliasMap,
     guideMap,
     guideMapEn,
-    isSignedIn,
+    hasCloudAccess,
     loading,
     parameterMap,
     plants,
@@ -803,13 +800,13 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
         searchText: [entry.name, entry.name_en].filter(Boolean).join(" "),
         overviewZh: zh.overview,
         overviewEn: en.overview,
-        parametersZh: isSignedIn ? zh.parameters.slice(0, 3) : undefined,
-        parametersEn: isSignedIn ? en.parameters.slice(0, 3) : undefined,
+        parametersZh: hasCloudAccess ? zh.parameters.slice(0, 3) : undefined,
+        parametersEn: hasCloudAccess ? en.parameters.slice(0, 3) : undefined,
       };
     });
 
     rememberGuideDirectory(rows);
-  }, [isSignedIn, publicGuides, publicGuidesLoading]);
+  }, [hasCloudAccess, publicGuides, publicGuidesLoading]);
 
   const categories = useMemo(() => {
     const existing = Array.from(
@@ -1388,47 +1385,6 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
 
         <div
           style={{
-            display: isMobileViewport && hasCloudAccess ? "none" : "block",
-            marginTop: isMobileViewport ? 8 : 14,
-            padding: isMobileViewport ? "6px 9px" : "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #e0eadb",
-            background: "#f8fbf6",
-            color: "#5a6d55",
-            fontSize: isMobileViewport ? 12 : 13,
-            lineHeight: isMobileViewport ? 1.35 : 1.7,
-          }}
-        >
-          {isMobileViewport ? !isSignedIn ? (
-            <Link href="/register" style={{ color: "#3f6f37", fontWeight: 700 }}>
-              {t.plant.register_for_summary}
-            </Link>
-          ) : !hasCloudAccess ? (
-            <Link href="/membership" style={{ color: "#3f6f37", fontWeight: 700 }}>
-              {t.plant.open_membership}
-            </Link>
-          ) : null : !isSignedIn ? (
-            <>
-              {t.plant.visitor_notice}
-              <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-                {t.plant.register_for_summary}
-              </Link>
-            </>
-          ) : hasCloudAccess ? (
-            t.plant.cloud_notice
-          ) : (
-            <>
-              {t.plant.local_notice_prefix}
-              <Link href="/membership" style={{ marginLeft: 4, color: "#3f6f37", fontWeight: 700 }}>
-                {t.plant.open_membership}
-              </Link>
-              {t.plant.local_notice_suffix}
-            </>
-          )}
-        </div>
-
-        <div
-          style={{
             marginTop: isMobileViewport ? 2 : 16,
             paddingTop: isMobileViewport ? 4 : 16,
             borderTop: "1px solid #f0f0f0",
@@ -1568,7 +1524,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = EMP
             {visiblePlants.map((plant) => {
               const plantAliases = uniqueTextList(aliasMap[plant.id] || []);
               const summary = guideMap[plant.id]?.summary;
-              const envTags = isSignedIn
+              const envTags = hasCloudAccess
                 ? getEnvironmentTags(
                     parameterMap[plant.id],
                     { includeIndoor: true },

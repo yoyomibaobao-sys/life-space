@@ -857,7 +857,8 @@ test("non-plant details remove redundant preset, creation and guest prompts whil
   assert.doesNotMatch(page, /className=\{styles\.sourceLabel\}|className=\{styles\.bottomAction\}/);
   assert.match(page, /<InternalLink href=\{fallbackHref\} className=\{styles\.categoryBadge\}/);
   assert.match(page, /<InternalLink href=\{`\$\{fallbackHref\}&category=/);
-  assert.match(page, /signedIn \? <span>\{copy\.membershipForFull\}<\/span> : null/);
+  assert.match(page, /<section className=\{styles\.accessNotice\}>\s*\{copy\.membershipForFull\}/);
+  assert.equal(guideLibrary.publicGuideCopy.zh.membershipForFull, "Plus 云端用户可见");
   assert.equal(publicGuideCopyZh(), "登录／注册以了解完整指引");
   function publicGuideCopyZh() { return guideLibrary.publicGuideCopy.zh.registerForOverview; }
 });
