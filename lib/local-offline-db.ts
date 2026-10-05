@@ -4746,9 +4746,14 @@ export async function deleteLocalRecord(recordId: string) {
 }
 
 export async function listLocalProjectTrash(ownerContext?: LocalArchiveOwnerContext | null) {
-  const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
+  const [archives, records, images] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
   return archives.map(normalizeLocalArchive)
     .filter((archive) => archive.trashed_at && isUserLocalArchive(archive) && isLocalArchiveVisibleToOwner(archive, ownerContext))
+    .map((archive) => buildSummary(archive, records, images))
     .sort((a, b) => String(b.trashed_at).localeCompare(String(a.trashed_at)));
 }
 

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import {
   formatMembershipDate,
   formatStorageBytes,
@@ -471,7 +472,7 @@ function logSupabaseError(label: string, error: unknown) {
   }
 }
 
-export default function AdminMembershipsPage() {
+export default function AdminMembershipsPage({ onBack }: { onBack?: () => void } = {}) {
   const { language, t } = useLanguage();
   const [currentUserId, setCurrentUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -1489,12 +1490,23 @@ export default function AdminMembershipsPage() {
   }
 
   return (
-    <main style={currentPageStyle}>
-      <Link href="/profile" style={adminBackLinkStyle}>
+    <>
+      {onBack ? (
+        <MobilePageHeaderView
+          className="mobile-app-grid-only"
+          title={t.admin_memberships.title}
+          titleText={t.admin_memberships.title}
+          showBack
+          ariaLabel={t.admin_memberships.back_profile}
+          onBack={onBack}
+        />
+      ) : null}
+      <main style={currentPageStyle}>
+      {!onBack ? <Link href="/profile" style={adminBackLinkStyle}>
         <UiIcon name="arrow-left" size={15} />
         {t.admin_memberships.back_profile}
-      </Link>
-      <section style={currentHeaderStyle}>
+      </Link> : null}
+      <section style={onBack ? { display: "none" } : currentHeaderStyle}>
         <div>
           <div style={eyebrowStyle}>{t.admin_memberships.admin_eyebrow}</div>
           <h1 style={titleStyle}>{t.admin_memberships.title}</h1>
@@ -2652,6 +2664,7 @@ export default function AdminMembershipsPage() {
         ) : null}
       </ConfirmDialog>
     </main>
+    </>
   );
 }
 

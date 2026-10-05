@@ -224,7 +224,14 @@ export default function FollowPage() {
       if (cancelled) return;
 
       if (!user) {
-        navigate(buildLoginHref(getCurrentInternalPath()));
+        setCurrentUserId(null);
+        setProjectCards([]);
+        setUserCards([]);
+        setSavedExperienceCards([]);
+        setLoading(false);
+        // The Android shell owns its signed-out Follow state and login entry.
+        // Standalone web keeps the existing login redirect.
+        if (!shellNavigate) navigate(buildLoginHref(getCurrentInternalPath()));
         return;
       }
 

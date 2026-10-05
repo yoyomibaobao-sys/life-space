@@ -171,6 +171,8 @@ import MembershipPaymentPage from "@/app/membership/payment/page";
 import MembershipRefundPage from "@/app/membership/refund/page";
 import AndroidAppUpdatePage from "@/app/app-update/page";
 import AdminMembershipsPage from "@/app/admin/memberships/page";
+import AdminGuideReviewPage from "@/app/admin/guides/page";
+import AdminSupportPage from "@/app/admin/support/page";
 import {
   DEFAULT_ARCHIVE_CATEGORY_DEPTHS,
   getCloudArchiveCategoryDepths,
@@ -329,6 +331,8 @@ type Screen =
   | { kind: "feedback" }
   | { kind: "app-update" }
   | { kind: "admin-memberships" }
+  | { kind: "admin-guides" }
+  | { kind: "admin-support" }
   | { kind: "settings" }
   | { kind: "choose-project" }
   | { kind: "detail"; archiveId: string }
@@ -751,7 +755,7 @@ function App() {
     const profileChild = [
       "project-categories", "recent", "trash", "membership-payment", "membership-refund",
       "membership-benefits", "data-security", "legal", "feedback", "app-update",
-      "settings", "admin-memberships",
+      "settings", "admin-memberships", "admin-guides", "admin-support",
     ].includes(screen.kind);
     if (profileChild) {
       goBackInShell({ kind: "profile" });
@@ -1337,9 +1341,14 @@ function App() {
       }
       return true;
     }
-    if (routed.kind === "admin-memberships") {
-      if (auth.status === "signed-out") openCloudLogin("profile", undefined, "/admin/memberships");
-      else setScreen({ kind: "admin-memberships" });
+    if (routed.kind === "admin-memberships" || routed.kind === "admin-guides" || routed.kind === "admin-support") {
+      const returnPath = routed.kind === "admin-memberships"
+        ? "/admin/memberships"
+        : routed.kind === "admin-guides"
+          ? "/admin/guides"
+          : "/admin/support";
+      if (auth.status === "signed-out") openCloudLogin("profile", undefined, returnPath);
+      else setScreen({ kind: routed.kind });
       return true;
     }
     if (routed.kind === "activity") {
@@ -2089,6 +2098,11 @@ function App() {
           onExperienceClick={hasAuthenticatedIdentity && !online ? () => showToast(language === "zh" ? "需联网查看经验卡" : "Connect to view experience cards") : undefined}
           language={language}
           profileHref="/profile"
+          notificationSlot={!hasAuthenticatedIdentity && online ? (
+            <button type="button" className="secondary-button" onClick={() => openCloudLogin("profile")}>
+              {copy.login}
+            </button>
+          ) : null}
         />
       ) : null}
 
@@ -2659,7 +2673,7 @@ function App() {
                 experienceCardCount: auth.status === "signed-in" ? experienceCardCount : null,
               })}
               online={online && cloudUserId === owner?.userId}
-              onBack={() => setScreen({ kind: "list" })}
+              onBack={() => goBackInShell({ kind: "list" })}
               onLogout={auth.status === "signed-in" ? () => void logoutFromProfile() : undefined}
               onLogin={online && auth.status === "signed-out" ? () => openCloudLogin("profile") : undefined}
               onProfileSaved={() => cloudUserId ? void loadShellIdentity(cloudUserId) : undefined}
@@ -2723,7 +2737,15 @@ function App() {
         onBack={returnToProfile} onNavigate={(path) => { applyShellPath(path); }} /> : null}
       {screen.kind === "app-update" ? <AndroidAppUpdatePage onBack={returnToProfile} /> : null}
       {screen.kind === "admin-memberships" ? (
-        online ? <div data-android-shell-page="admin-memberships"><AdminMembershipsPage /></div>
+        online ? <div data-android-shell-page="admin-memberships"><AdminMembershipsPage onBack={returnToProfile} /></div>
+          : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
+      ) : null}
+      {screen.kind === "admin-guides" ? (
+        online ? <div data-android-shell-page="admin-guides"><AdminGuideReviewPage onBack={returnToProfile} onRequireLogin={() => openCloudLogin("profile", undefined, "/admin/guides")} /></div>
+          : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
+      ) : null}
+      {screen.kind === "admin-support" ? (
+        online ? <div data-android-shell-page="admin-support"><AdminSupportPage onBack={returnToProfile} /></div>
           : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
       ) : null}
       {screen.kind === "interests" ? (
@@ -2737,9 +2759,9 @@ function App() {
         ) : <MobileNetworkUnavailableState onReconnect={() => void reconnect()} />
       ) : null}
       {screen.kind === "plant-detail" ? (
-        <PlantDetailContent id={screen.id} onBack={() => setScreen({ kind: "guides" })} />
+        <PlantDetailContent id={screen.id} onBack={() => goBackInShell({ kind: "guides" })} />
       ) : null}
-      {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => window.history.back()} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
+      {screen.kind === "guide-detail" ? <GuideDetailView id={screen.guideId || screen.guideKey} offline={!online} offlineGuide={activeGuide} offlineSignedIn={auth.status === "signed-in"} onBack={() => goBackInShell({ kind: "guides" })} onCreate={(guide) => setScreen({ kind: "new-project", guide })} /> : null}
       {screen.kind === "cloud-login" ? <CloudLogin copy={copy} onBack={() => goBackInShell({ kind: "list" })} onSuccess={(userId) => {
         const destination = screen;
         void loadShellIdentity(userId);
@@ -2992,6 +3014,8 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
       deletedAt: project.trashed_at || project.updated_at || project.created_at,
       title: project.title,
       detail: language === "zh" ? "项目" : "Project",
+      previewImage: project.cover_image || null,
+      previewUrl: null as string | null,
       restore: async () => { await setLocalProjectTrashed(project.id, false, ownerContext); },
     })),
     ...items.map((item) => ({
@@ -3000,6 +3024,8 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
       deletedAt: item.trash.deleted_at,
       title: `${item.archive_title} · ${item.trash.cycle.display_name || item.trash.cycle.cycle_no}`,
       detail: language === "zh" ? `${item.trash.record_ids.length} 条记录` : `${item.trash.record_ids.length} records`,
+      previewImage: null as LocalImage | null,
+      previewUrl: null as string | null,
       restore: async () => { await restoreLocalArchiveCycle(item.archive_id, item.trash.id, ownerContext); },
     })),
     ...cloudItems.map((item) => ({
@@ -3008,6 +3034,8 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
       deletedAt: item.deletedAt,
       title: item.title,
       detail: item.parentTitle || (language === "zh" ? "云端内容" : "Cloud item"),
+      previewImage: null as LocalImage | null,
+      previewUrl: item.previewUrl || null,
       restore: item.status === "active"
         ? async () => {
             const ok = await restoreCloudTrashItem(item.type, item.id);
@@ -3057,6 +3085,8 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
     </div>
     <div className="trash-list">
       {unified.map((item) => <article className="panel trash-item" key={item.key}>
+        {item.previewImage ? <BlobImage image={item.previewImage} className="trash-item-image" alt="" />
+          : item.previewUrl ? <img src={item.previewUrl} className="trash-item-image" alt="" /> : null}
         <div className="trash-item-main">
           <span className="trash-source-tag">{item.source === "local" ? (language === "zh" ? "本地" : "Local") : (language === "zh" ? "云端" : "Cloud")}</span>
           <strong>{item.title}</strong>

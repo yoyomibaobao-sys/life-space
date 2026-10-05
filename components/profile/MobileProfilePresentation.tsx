@@ -80,17 +80,10 @@ export function MobileProfileModuleTabs({
             {item.href ? (
               <InternalLink
                 href={item.href}
-                style={
-                  item.href === "/admin/memberships"
-                    ? {
-                        ...mobileAdminMembershipEntryStyle,
-                        ...(compact ? mobileProfileCompactTabStyle : {}),
-                      }
-                    : {
-                        ...mobileProfileLinkTabStyle,
-                        ...(compact ? mobileProfileCompactTabStyle : {}),
-                      }
-                }
+                style={{
+                  ...mobileProfileLinkTabStyle,
+                  ...(compact ? mobileProfileCompactTabStyle : {}),
+                }}
               >
                 <span>{item.label}</span>
                 <UiIcon name="arrow-right" size={15} />
@@ -645,23 +638,6 @@ const desktopProfileModulesStyle: CSSProperties = {
 
 const desktopProfileModuleContentStyle: CSSProperties = {
   minWidth: 0,
-};
-
-const mobileAdminMembershipEntryStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 40,
-  border: "1px solid #c9d8be",
-  borderRadius: 11,
-  background: "#f3faef",
-  color: "#2f5a27",
-  padding: "0 12px",
-  textDecoration: "none",
-  fontSize: 13,
-  fontWeight: 800,
-  lineHeight: 1.2,
-  boxSizing: "border-box",
 };
 
 export const accountLogoutButtonStyle: CSSProperties = {

@@ -395,16 +395,9 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         }
       }
 
-      let related: Awaited<ReturnType<typeof loadRelatedGuideContent>> = {
-        relatedArchives: [],
-        experienceCards: [],
-      };
       const interestResult = user && row
         ? await supabase.from("user_guide_interests").select("guide_id").eq("user_id", user.id).eq("guide_id", row.id).maybeSingle()
         : { data: null };
-      if (!error && row && canReadFullGuide) {
-        related = await loadRelatedGuideContent(row, user?.id || null, language);
-      }
 
       if (!cancelled) {
         if (error) console.warn("load public guide detail failed:", error);
@@ -414,13 +407,31 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
         setUserId(user?.id || null);
         setSaved(Boolean(interestResult.data));
         setHasCloudAccess(canReadFullGuide);
-        setRelatedArchives(related.relatedArchives);
-        setExperienceCards(related.experienceCards);
+        setRelatedArchives([]);
+        setExperienceCards([]);
+        // The guide itself must not wait for optional related projects/cards.
         setLoading(false);
+      }
+
+      if (!error && row && canReadFullGuide) {
+        const related = await loadRelatedGuideContent(row, user?.id || null, language);
+        if (!cancelled) {
+          setRelatedArchives(related.relatedArchives);
+          setExperienceCards(related.experienceCards);
+        }
       }
     }
 
-    void load();
+    void load().catch((cause) => {
+      console.warn("load public guide detail failed:", cause);
+      if (!cancelled) {
+        setEntry(null);
+        setSection(null);
+        setRelatedArchives([]);
+        setExperienceCards([]);
+        setLoading(false);
+      }
+    });
     return () => {
       cancelled = true;
     };

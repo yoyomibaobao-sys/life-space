@@ -42,6 +42,7 @@ export default function ArchiveSourceSwitcher<T extends string>({
             padding: "0 8px",
             minWidth: 0,
             whiteSpace: "nowrap",
+            gridColumn: 4,
             boxShadow: "0 3px 9px rgba(79,132,75,0.16)",
           },
         },
@@ -49,14 +50,17 @@ export default function ArchiveSourceSwitcher<T extends string>({
     : trailingSlot;
 
   return (
-    <section style={sourceSwitchStyle(Boolean(trailingSlot), options.length)}>
+    <section style={sourceSwitchStyle(Boolean(trailingSlot))}>
       {options.map((item) => (
         <button
           key={item.value}
           type="button"
           aria-pressed={activeValue === item.value}
           onClick={() => onSelect(item.value)}
-          style={sourceButtonStyle(activeValue === item.value, Boolean(trailingSlot))}
+          style={{
+            ...sourceButtonStyle(activeValue === item.value, Boolean(trailingSlot)),
+            ...(trailingSlot ? { gridColumn: sourceSlotColumn(item.value) } : {}),
+          }}
         >
           {item.label} {item.count}
         </button>
@@ -66,18 +70,24 @@ export default function ArchiveSourceSwitcher<T extends string>({
   );
 }
 
-function sourceSwitchStyle(singleLine: boolean, optionCount: number): CSSProperties {
-  const compactColumns = Math.max(1, Math.min(optionCount, 3));
+function sourceSwitchStyle(singleLine: boolean): CSSProperties {
   return {
     margin: "0 0 12px",
     display: singleLine ? "grid" : "flex",
     gridTemplateColumns: singleLine
-      ? `repeat(${compactColumns}, minmax(0, 1fr)) auto`
+      ? "repeat(3, minmax(0, 1fr)) auto"
       : undefined,
     alignItems: "center",
     gap: singleLine ? 6 : 8,
     flexWrap: singleLine ? "nowrap" : "wrap",
   };
+}
+
+function sourceSlotColumn(value: string) {
+  if (value === "all") return 1;
+  if (value === "cloud") return 2;
+  if (value === "local") return 3;
+  return undefined;
 }
 
 function sourceButtonStyle(active: boolean, compact: boolean): CSSProperties {

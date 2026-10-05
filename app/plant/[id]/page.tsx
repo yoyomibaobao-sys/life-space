@@ -1235,7 +1235,7 @@ export function PlantDetailContent({ id, search = "", onBack }: {
   const [actionLoading, setActionLoading] = useState<"interest" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
-  useGuideInterestRefresh(currentUserId, typeof id === "string" ? id : undefined, true, setInterestAdded);
+  useGuideInterestRefresh(currentUserId, plant?.id || (typeof id === "string" ? id : undefined), true, setInterestAdded);
 
   useEffect(() => {
     async function load() {
@@ -1259,8 +1259,39 @@ export function PlantDetailContent({ id, search = "", onBack }: {
       const canReadFullGuide = canAccessMembershipGuidance(membership);
       setHasCloudAccess(canReadFullGuide);
 
+      const plantSelect =
+        "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order";
+      const isPlantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+      let plantRow: PlantSpeciesRow | null = null;
+      if (isPlantUuid) {
+        const byId = await supabase
+          .from("plant_species")
+          .select(plantSelect)
+          .eq("id", id)
+          .maybeSingle();
+        plantRow = (byId.data || null) as PlantSpeciesRow | null;
+      }
+      if (!plantRow) {
+        const bySlug = await supabase
+          .from("plant_species")
+          .select(plantSelect)
+          .eq("slug", id)
+          .eq("is_active", true)
+          .maybeSingle();
+        plantRow = (bySlug.data || null) as PlantSpeciesRow | null;
+      }
+      if (!plantRow) {
+        const byName = await supabase
+          .from("plant_species")
+          .select(plantSelect)
+          .eq("common_name", id)
+          .eq("is_active", true)
+          .maybeSingle();
+        plantRow = (byName.data || null) as PlantSpeciesRow | null;
+      }
+      const resolvedPlantId = plantRow?.id || id;
+
       const [
-        { data: plantData },
         { data: i18nData },
         { data: aliasData },
         { data: overviewData },
@@ -1269,44 +1300,35 @@ export function PlantDetailContent({ id, search = "", onBack }: {
         { data: careGuideData },
       ] = await Promise.all([
         supabase
-          .from("plant_species")
-          .select(
-            "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order"
-          )
-          .eq("id", id)
-          .maybeSingle(),
-        supabase
           .from("plant_species_i18n")
           .select("plant_id, language_code, common_name, family")
-          .eq("plant_id", id)
+          .eq("plant_id", resolvedPlantId)
           .order("language_code", { ascending: true }),
         supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name, relation_type")
-          .eq("species_id", id)
+          .eq("species_id", resolvedPlantId)
           .order("alias_name", { ascending: true }),
         user
-          ? loadPlantBasicOverviewsCompat(id).then((data) => ({ data }))
+          ? loadPlantBasicOverviewsCompat(resolvedPlantId).then((data) => ({ data }))
           : Promise.resolve({ data: [] as PlantBasicOverviewRow[] }),
         canReadFullGuide
-          ? supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle()
+          ? supabase.from("plant_parameters").select("*").eq("species_id", resolvedPlantId).maybeSingle()
           : user
-            ? loadPlantCoreParametersCompat(id).then((data) => ({ data }))
+            ? loadPlantCoreParametersCompat(resolvedPlantId).then((data) => ({ data }))
             : Promise.resolve({ data: [] as PlantParametersRow[] }),
         canReadFullGuide
-          ? supabase.from("plant_growth_cycle").select("*").eq("species_id", id).maybeSingle()
+          ? supabase.from("plant_growth_cycle").select("*").eq("species_id", resolvedPlantId).maybeSingle()
           : Promise.resolve({ data: null }),
         canReadFullGuide
           ? supabase
               .from("plant_care_guides")
               .select("*")
-              .eq("plant_id", id)
+              .eq("plant_id", resolvedPlantId)
               .eq("language_code", "zh")
               .maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
-
-      const plantRow = (plantData || null) as PlantSpeciesRow | null;
       const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
       const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
       const overviewRows = (overviewData || []) as PlantBasicOverviewRow[];
@@ -1322,9 +1344,11 @@ export function PlantDetailContent({ id, search = "", onBack }: {
       );
       setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
       setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
+      // Render the core guide before optional related projects/cards finish loading.
+      setLoading(false);
 
       const plantNameTerms = buildPlantNameTerms(plantRow, i18nRows, aliasRows);
-      const archiveMatchFilter = buildArchiveMatchFilter(id, plantNameTerms);
+      const archiveMatchFilter = buildArchiveMatchFilter(resolvedPlantId, plantNameTerms);
       const archiveSelect =
         "id, user_id, title, system_name, species_id, species_name_snapshot, is_public, status, ended_at, help_status, cover_image_url, cover_image_path, cover_thumb_path, created_at";
 
@@ -1423,7 +1447,7 @@ export function PlantDetailContent({ id, search = "", onBack }: {
           .from("user_plant_interests")
           .select("id")
           .eq("user_id", user.id)
-          .eq("species_id", id)
+          .eq("species_id", resolvedPlantId)
           .maybeSingle();
 
         setInterestAdded(Boolean(interestData));

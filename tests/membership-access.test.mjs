@@ -308,8 +308,10 @@ test("the plant pages request only data allowed for the current tier", async () 
   );
   assert.match(indexPage, /t\.plant\.visitor_notice/);
 
-  assert.match(detailPage, /loadPlantBasicOverviewsCompat\(id\)/);
-  assert.match(detailPage, /loadPlantCoreParametersCompat\(id\)/);
+  assert.match(detailPage, /loadPlantBasicOverviewsCompat\(resolvedPlantId\)/);
+  assert.match(detailPage, /loadPlantCoreParametersCompat\(resolvedPlantId\)/);
+  assert.match(detailPage, /\.eq\("slug", id\)/);
+  assert.match(detailPage, /\.eq\("common_name", id\)/);
   assert.match(
     detailPage,
     /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/

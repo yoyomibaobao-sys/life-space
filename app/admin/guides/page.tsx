@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
@@ -20,7 +21,7 @@ type GuideCandidateRow = {
   updated_at: string | null;
 };
 
-export default function AdminGuideReviewPage() {
+export default function AdminGuideReviewPage({ onBack, onRequireLogin }: { onBack?: () => void; onRequireLogin?: () => void } = {}) {
   const { language } = useLanguage();
   const isEnglish = language === "en";
   const [checking, setChecking] = useState(true);
@@ -48,7 +49,8 @@ export default function AdminGuideReviewPage() {
     async function init() {
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
-        window.location.href = buildLoginHref("/admin/guides");
+        if (onRequireLogin) onRequireLogin();
+        else window.location.href = buildLoginHref("/admin/guides");
         return;
       }
       const { data: adminAllowed, error: adminError } = await supabase.rpc("is_app_admin", {
@@ -60,7 +62,7 @@ export default function AdminGuideReviewPage() {
       if (nextAllowed) await loadRows();
     }
     void init();
-  }, [loadRows]);
+  }, [loadRows, onRequireLogin]);
 
   async function review(row: GuideCandidateRow, decision: "approve" | "reject") {
     if (actionId) return;
@@ -90,9 +92,20 @@ export default function AdminGuideReviewPage() {
   const title = isEnglish ? "Linked guide review" : "关联指引审核";
   return (
     <main style={pageStyle}>
-      <MobilePageHeader title={title} titleText={title} fallbackHref="/profile" ariaLabel={isEnglish ? "Back" : "返回"} />
+      {onBack ? (
+        <MobilePageHeaderView
+          className="mobile-app-grid-only"
+          title={title}
+          titleText={title}
+          showBack
+          onBack={onBack}
+          ariaLabel={isEnglish ? "Back" : "返回"}
+        />
+      ) : (
+        <MobilePageHeader title={title} titleText={title} fallbackHref="/profile" ariaLabel={isEnglish ? "Back" : "返回"} />
+      )}
       <div style={shellStyle}>
-        <header style={desktopHeaderStyle}>
+        <header style={desktopHeaderStyle} className={onBack ? "mobile-app-desktop-only" : undefined}>
           <Link href="/profile" style={backLinkStyle}>
             <UiIcon name="arrow-left" size={16} />
             {isEnglish ? "Back to profile" : "返回个人资料"}

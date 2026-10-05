@@ -29,6 +29,8 @@ export type AndroidShellRouteKind =
   | "app-update"
   | "login"
   | "admin-memberships"
+  | "admin-guides"
+  | "admin-support"
   | "network-required";
 
 export type AndroidShellRoute = {
@@ -58,11 +60,12 @@ export function getAndroidRouteCapability(pathname: string): AndroidRouteCapabil
       path === "/archive" || path === "/local/archive" || path === "/archive/interests" || path === "/profile/project-categories" ||
       path === "/feedback" || path === "/app-update" || path === "/membership/payment" || path === "/membership/refund" ||
       /^\/local\/archive\//.test(path) || /^\/plant\//.test(path)) return "hybrid";
-  if (path === "/login" || path === "/register" || path === "/admin/memberships") return "online-controller";
+  if (path === "/login" || path === "/register" || path === "/admin/memberships" ||
+      path === "/admin/guides" || path === "/admin/support") return "online-controller";
   if (path === "/plant" || path === "/" || path === "/membership/benefits" || path === "/profile/data-security" || path === "/legal" ||
       /^\/legal\/(?:privacy|terms|refunds|contact)$/.test(path)) return "local";
   if (path === "/discover" || path === "/discover/search" || path === "/experience" ||
-      /^\/experience-cards\/[^/]+$/.test(path) || path === "/follow" || path === "/market" ||
+      path === "/experience-cards" || /^\/experience-cards\/[^/]+$/.test(path) || path === "/follow" || path === "/market" ||
       path === "/market/mine" || path === "/market/new" || /^\/market\/[^/]+$/.test(path) || /^\/archive\//.test(path)) return "online-controller";
   if (WEB_ROUTES.some((pattern) => pattern.test(path))) return "online-web";
   return "unsupported";
@@ -199,9 +202,11 @@ export function parseAndroidShellPath(
   if (path === "/app-update") return { kind: "app-update" };
   if (path === "/login" || path === "/register") return { kind: "login", id: params.get("returnTo") || params.get("next") || "" };
   if (path === "/admin/memberships") return { kind: "admin-memberships" };
+  if (path === "/admin/guides") return { kind: "admin-guides" };
+  if (path === "/admin/support") return { kind: "admin-support" };
   if (path === "/discover") return { kind: "activity" };
   if (path === "/discover/search") return { kind: "discover-search" };
-  if (path === "/experience") return { kind: "experience" };
+  if (path === "/experience" || path === "/experience-cards") return { kind: "experience" };
   const experienceDetail = path.match(/^\/experience-cards\/([^/]+)$/);
   if (experienceDetail) return { kind: "experience-detail", id: decodeURIComponent(experienceDetail[1]) };
   if (path === "/follow") return { kind: "following" };

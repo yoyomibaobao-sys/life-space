@@ -117,6 +117,13 @@ test("plant and guide detail links keep their distinct shell routes", () => {
   );
 });
 
+test("experience list and administrator tools stay inside the Android shell", () => {
+  assert.deepEqual(parseAndroidShellPath("/experience-cards"), { kind: "experience" });
+  assert.deepEqual(parseAndroidShellPath("/admin/memberships"), { kind: "admin-memberships" });
+  assert.deepEqual(parseAndroidShellPath("/admin/guides"), { kind: "admin-guides" });
+  assert.deepEqual(parseAndroidShellPath("/admin/support"), { kind: "admin-support" });
+});
+
 test("profile links stay inside the shell and offline-readable information remains available", () => {
   const shell = read("mobile-offline-src/main.tsx");
   assert.equal(parseAndroidShellPath("/membership/payment")?.kind, "membership-payment");
@@ -131,9 +138,30 @@ test("profile links stay inside the shell and offline-readable information remai
   assert.equal(parseAndroidShellPath("/feedback")?.kind, "feedback");
   assert.equal(parseAndroidShellPath("/app-update")?.kind, "app-update");
   assert.equal(parseAndroidShellPath("/admin/memberships")?.kind, "admin-memberships");
+  assert.equal(parseAndroidShellPath("/admin/guides")?.kind, "admin-guides");
+  assert.equal(parseAndroidShellPath("/admin/support")?.kind, "admin-support");
   assert.match(shell, /<AndroidProfileInfoPage/);
   assert.match(shell, /showToast\(copy\.needNetwork\)/);
   assert.match(shell, /event\.preventDefault\(\)/);
+});
+
+test("signed-out Follow stays in the Android shell instead of forcing login", () => {
+  const follow = read("app/follow/page.tsx");
+  assert.match(follow, /if \(!shellNavigate\) navigate\(buildLoginHref\(getCurrentInternalPath\(\)\)\)/);
+});
+
+test("personal-space source tabs keep fixed slots when some sources are hidden", () => {
+  const switcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  assert.match(switcher, /repeat\(3, minmax\(0, 1fr\)\) auto/);
+  assert.match(switcher, /value === "cloud"\) return 2/);
+  assert.match(switcher, /value === "local"\) return 3/);
+});
+
+test("trash cards retain local and cloud preview images", () => {
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /previewImage: project\.cover_image/);
+  assert.match(shell, /previewUrl: item\.previewUrl/);
+  assert.match(shell, /trash-item-image/);
 });
 
 test("profile child-page back restores the prior shell scroll position", () => {
@@ -142,4 +170,5 @@ test("profile child-page back restores the prior shell scroll position", () => {
   assert.match(shell, /restoreShellScroll\(event\.state\?\.scrollY\)/);
   assert.match(shell, /function goBackInShell/);
   assert.match(shell, /window\.history\.back\(\)/);
+  assert.match(shell, /onBack=\{\(\) => goBackInShell\(\{ kind: "list" \}\)\}/);
 });
