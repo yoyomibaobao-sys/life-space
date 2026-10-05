@@ -230,7 +230,7 @@ export function canCreateMembershipMarketPost(membership?: MyMembership | null) 
 }
 
 export function canAccessMembershipGuidance(membership?: MyMembership | null) {
-  return membership?.can_create_content === true;
+  return membership?.status === "active" || membership?.status === "trialing";
 }
 
 export function getCreateContentBlockedText(

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import ArchiveProjectDetailView from "@/components/archive-ui/ArchiveProjectDetailView";
+import ArchiveRecordCard from "@/components/archive-detail/ArchiveRecordCard";
 import ArchiveProjectDetailStatus, { ArchiveProjectDetailLoading } from "@/components/archive-ui/ArchiveProjectDetailStatus";
 import type { ArchiveProjectDetailTabId } from "@/components/archive-ui/archiveProjectDetailLayout";
-import type { ArchiveDetailArchive, RecordItem } from "@/lib/archive-detail-types";
+import type { ArchiveDetailArchive, LightboxImage, RecordItem } from "@/lib/archive-detail-types";
 import type { ArchiveCategory } from "@/lib/archive-categories";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import type { ReadonlyPublicProjectSummary } from "@/lib/cloud-archive-detail";
@@ -28,6 +29,7 @@ export default function ReadonlyPublicProjectDetail({ item, language, onBack }: 
   const [tab, setTab] = useState<ArchiveProjectDetailTabId>("records");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number; record: RecordItem } | null>(null);
   useEffect(() => {
     saveRecentArchiveBrowse({ id: item.archive_id, title: item.archive_title,
       systemName: item.system_name });
@@ -97,11 +99,19 @@ export default function ReadonlyPublicProjectDetail({ item, language, onBack }: 
     onToggleArchiveVisibility={() => undefined}
     headerFallbackHref="/discover" headerBackLabel={t.nav.back} onHeaderBack={onBack}
     emptyRecordsText={language === "zh" ? "暂无公开记录" : "No public records"}
-    renderRecord={(record) => <article className="panel" key={record.id} style={{ marginBottom: 10, padding: 12 }}>
-      <time className="project-meta">{new Date(record.record_time).toLocaleDateString(language === "zh" ? "zh-CN" : "en")}</time>
-      {record.note ? <p style={{ whiteSpace: "pre-wrap" }}>{record.note}</p> : null}
-      <div className="photo-grid">{(record.media || []).map((image) => <img key={image.id}
-        src={image.display_thumb_url || image.display_url || ""} alt="" loading="lazy" style={{ width: "100%", borderRadius: 10 }} />)}</div>
-    </article>}
+    renderRecord={(record, index) => <ArchiveRecordCard key={record.id} archive={archive}
+      item={record} index={index} mode="viewer" isMobileViewport isHighlighted={false}
+      sameTagLinks={[]} canOpenMediaLightbox
+      onOpenLightbox={(media, imageIndex, selectedRecord) => {
+        const images = media.map((image) => ({ id: image.id, recordId: selectedRecord.id,
+          url: image.display_url || image.url || "", alt: image.original_filename || "" })).filter((image) => image.url);
+        if (images.length) setLightbox({ images, index: imageIndex, record: selectedRecord });
+      }}
+      onDeleteMedia={async () => undefined} onVisibilityChange={async () => undefined}
+      onSetHelpStatus={async () => undefined} onRemoveTag={() => undefined}
+      onAddTag={async () => undefined} />}
+    lightbox={lightbox ? { ...lightbox, metaText: new Date(lightbox.record.record_time).toLocaleDateString(language === "zh" ? "zh-CN" : "en"),
+      note: lightbox.record.note || "", onChange: (index) => setLightbox((current) => current ? { ...current, index } : null),
+      onClose: () => setLightbox(null) } : null}
   />;
 }

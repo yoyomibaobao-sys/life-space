@@ -219,7 +219,9 @@ export function rememberGuideDirectory(rows: readonly SystemNameCandidate[]) {
       ...loadOfflineGuideDirectory(),
       ...clean(rows),
     ]);
-    localStorage.setItem(KEY, JSON.stringify(merged));
+    const serialized = JSON.stringify(clean(merged));
+    if (localStorage.getItem(KEY) === serialized) return;
+    localStorage.setItem(KEY, serialized);
     if (typeof window !== "undefined") window.dispatchEvent(new Event("lifespace-guide-directory-updated"));
   } catch {
     // Local recording does not depend on the guide cache.

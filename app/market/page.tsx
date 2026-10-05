@@ -31,6 +31,8 @@ export default function MarketPage() {
   const [profiles, setProfiles] = useState<Map<string, ProfileBrief>>(new Map());
   const [archives, setArchives] = useState<Map<string, ArchiveBrief>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<"all" | MarketPostType>("all");
@@ -64,10 +66,12 @@ export default function MarketPage() {
         setArchives(new Map());
         setCurrentUserId(null);
         setLoading(false);
+        setLoadError(false);
         return;
       }
 
       setLoading(true);
+      setLoadError(false);
       const result = await fetchMarketFeed({
         typeFilter,
         categoryFilter,
@@ -78,6 +82,7 @@ export default function MarketPage() {
       if (result.error) {
         console.error("load market feed error:", result.error);
       }
+      setLoadError(Boolean(result.error));
 
       setCurrentUserId(result.currentUserId);
       setItems(result.items);
@@ -90,7 +95,7 @@ export default function MarketPage() {
     return () => {
       cancelled = true;
     };
-  }, [typeFilter, categoryFilter, online]);
+  }, [typeFilter, categoryFilter, online, retryKey]);
 
   const hasFilter =
     typeFilter !== "all" ||
@@ -298,11 +303,17 @@ export default function MarketPage() {
           </section>
         )}
 
+        {loadError && online ? <section role="alert" style={emptyStyle}>
+          {language === "zh" ? "集市暂时无法读取，请重试。" : "Market could not load. Please retry."}
+          <button type="button" onClick={() => setRetryKey((key) => key + 1)}>
+            {language === "zh" ? "重试" : "Retry"}
+          </button>
+        </section> : null}
         {loading ? (
           <section style={emptyStyle}>{t.market.loading}</section>
         ) : !online ? (
           <MobileNetworkUnavailableState />
-        ) : visibleItems.length === 0 ? (
+        ) : loadError && visibleItems.length === 0 ? null : visibleItems.length === 0 ? (
           <section style={emptyStyle}>
             {hasFilter ? t.market.empty_filtered : t.market.empty}
           </section>

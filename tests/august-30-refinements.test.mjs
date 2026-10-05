@@ -858,7 +858,7 @@ test("non-plant details remove redundant preset, creation and guest prompts whil
   assert.match(page, /<InternalLink href=\{fallbackHref\} className=\{styles\.categoryBadge\}/);
   assert.match(page, /<InternalLink href=\{`\$\{fallbackHref\}&category=/);
   assert.match(page, /signedIn \? <span>\{copy\.membershipForFull\}<\/span> : null/);
-  assert.equal(publicGuideCopyZh(), "登录／注册后查看基础概要");
+  assert.equal(publicGuideCopyZh(), "登录／注册以了解完整指引");
   function publicGuideCopyZh() { return guideLibrary.publicGuideCopy.zh.registerForOverview; }
 });
 
@@ -1047,7 +1047,7 @@ test("clearing a global search restores the existing category without resetting 
   assert.deepEqual(filters, { light: "shade", water: "all", temperature: "cool", scene: "all", indoor: "all" });
 });
 
-test("global result cards preserve category routes, hide visitor summaries, and distinguish failed loading from no matches", () => {
+test("global result cards preserve category routes, show visitor overviews, and distinguish failed loading from no matches", () => {
   const zh = load("lib/i18n/zh.ts").default;
   const Results = createLoader({
     "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: zh }) },
@@ -1056,10 +1056,10 @@ test("global result cards preserve category routes, hide visitor summaries, and 
   const props = {
     matches: [
       { kind: "plant", key: "plant:one", category: "plant", plant: { id: "one", common_name: "玉米" } },
-      { kind: "guide", key: "guide:two", category: "insect_fish", entry: entry("insect_fish", "黑水虻", { id: "two", summary: "需要登录的摘要" }) },
+      { kind: "guide", key: "guide:two", category: "insect_fish", entry: entry("insect_fish", "黑水虻", { id: "two", summary: "黑水虻基础概要" }) },
     ],
     loading: false, loadError: false, visibleCount: 24, signedIn: false,
-    plantSummaries: { one: { summary: "需要登录的植物摘要" } }, onOpen() {}, onClear() {}, onLoadMore() {},
+    plantSummaries: { one: { summary: "玉米基础概要" } }, onOpen() {}, onClear() {}, onLoadMore() {},
     savedLink: React.createElement("a", { href: "/archive/interests" }, "收藏 (4)"),
   };
   const render = (extra = {}) => renderToStaticMarkup(React.createElement(Results, { ...props, ...extra }));
@@ -1068,8 +1068,9 @@ test("global result cards preserve category routes, hide visitor summaries, and 
   assert.match(html, /href="\/plant\/one"/);
   assert.match(html, /href="\/plant\/guide\/two\?from=insect_fish"/);
   assert.match(html, />虫鱼生态</);
-  assert.doesNotMatch(html, /需要登录的摘要|需要登录的植物摘要/);
-  assert.match(render({ signedIn: true }), /需要登录的植物摘要/);
+  assert.match(html, /玉米基础概要/);
+  assert.match(html, /重点管理来源清楚的湿料/);
+  assert.match(render({ signedIn: true }), /玉米基础概要/);
   const failed = render({ matches: [], loadError: true });
   assert.match(failed, /结果可能不完整/);
   assert.doesNotMatch(failed, /没有匹配的指引/);

@@ -118,7 +118,11 @@ test("plant and guide detail links keep their distinct shell routes", () => {
 });
 
 test("experience list and administrator tools stay inside the Android shell", () => {
-  assert.deepEqual(parseAndroidShellPath("/experience-cards"), { kind: "experience" });
+  assert.deepEqual(parseAndroidShellPath("/experience"), { kind: "experience" });
+  assert.deepEqual(parseAndroidShellPath("/experience-cards"), { kind: "my-experience" });
+  const shell = read("mobile-offline-src/main.tsx");
+  assert.match(shell, /screen\.kind === "my-experience"[\s\S]*?<MyExperienceCardsContent/);
+  assert.match(shell, /screen\.returnTo === "my-experience"[\s\S]*?<ExperienceCardContent/);
   assert.deepEqual(parseAndroidShellPath("/admin/memberships"), { kind: "admin-memberships" });
   assert.deepEqual(parseAndroidShellPath("/admin/guides"), { kind: "admin-guides" });
   assert.deepEqual(parseAndroidShellPath("/admin/support"), { kind: "admin-support" });

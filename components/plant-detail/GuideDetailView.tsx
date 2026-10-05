@@ -437,8 +437,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
     };
   }, [language, id, offline, offlineGuide, offlineSignedIn]);
 
-  const displayEntry: PublicGuideEntry | null = offline
-    ? offlineGuide ? {
+  const cachedEntry: PublicGuideEntry | null = offlineGuide ? {
       id,
       category: offlineGuide.category || "other",
       name: offlineGuide.label,
@@ -446,15 +445,15 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
       source: "preset",
       summary: getOfflineGuideOverview(offlineGuide, "zh"),
       summary_en: getOfflineGuideOverview(offlineGuide, "en"),
-    } : null
-    : entry;
+    } : null;
+  const displayEntry: PublicGuideEntry | null = offline ? cachedEntry : entry || cachedEntry;
   const displaySection = offline ? null : section;
   const signedIn = offline ? offlineSignedIn : isSignedIn;
-  const canReadFull = !offline && hasCloudAccess;
+  const canReadFull = !offline && Boolean(entry) && hasCloudAccess;
   const name = displayEntry ? getPublicGuideName(displayEntry, language) : copy.publicLibrary;
   const summary = displayEntry ? getPublicGuideSummary(displayEntry, language) : "";
   const content = useMemo(
-    () => offline && offlineGuide ? {
+    () => !entry && offlineGuide ? {
       overview: getOfflineGuideOverview(offlineGuide, language),
       parameters: getOfflineGuideParameters(offlineGuide, language),
       cycle: null,
@@ -490,7 +489,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
     }
   }
 
-  if (loading && !offline) {
+  if (loading && !offline && !cachedEntry) {
     return (
       <>
         <MobilePageHeaderView
@@ -594,7 +593,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
             )}
           </div>
 
-          {signedIn ? (
+          {content.overview || summary ? (
             <p className={styles.summary}>{content.overview || summary || copy.contentPending}</p>
           ) : null}
         </article>
@@ -637,7 +636,7 @@ export default function GuideDetailView({ id, search = "", offline = false, offl
             ) : null}
 
             {!canReadFull ? (
-              offline ? <section className={styles.accessNotice}>{language === "zh" ? "联网后查看完整实操" : "Connect to view the full practice guide"}</section> : <AccessNotice signedIn={signedIn} returnHref={returnHref} />
+              offline || (!entry && cachedEntry) ? <section className={styles.accessNotice}>{language === "zh" ? "联网后查看完整实操" : "Connect to view the full practice guide"}</section> : <AccessNotice signedIn={signedIn} returnHref={returnHref} />
             ) : (
               <>
                 {content.cycle ? (

@@ -511,13 +511,9 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
           .order("alias_name", { ascending: true })
           .range(from, to))),
 
-        user
-          ? withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null).then((data) => ({ data })))
-          : Promise.resolve(null),
+        withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))),
 
-        user
-          ? withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data })))
-          : Promise.resolve(null),
+        withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data }))),
 
         canReadFullGuide
           ? withGuideRemoteTimeout(Promise.resolve(supabase.from("plant_parameters").select(
@@ -738,7 +734,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
   }, [parameters]);
 
   useEffect(() => {
-    if (!isSignedIn || loading || !plants.length) return;
+    if (loading || !plants.length) return;
 
     const rows: OfflineGuideDirectoryEntry[] = plants.flatMap((plant) => {
       const label = String(plant.common_name || plant.scientific_name || "").trim();
@@ -765,7 +761,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
           .join(" "),
         overviewZh: guideMap[plant.id]?.summary || undefined,
         overviewEn: guideMapEn[plant.id]?.summary || undefined,
-        plantCoreParameters: core
+        plantCoreParameters: isSignedIn && core
           ? {
               sun_score: core.sun_score,
               need_trellis: core.need_trellis,
@@ -790,7 +786,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
   ]);
 
   useEffect(() => {
-    if (!isSignedIn || publicGuidesLoading || !publicGuides.length) return;
+    if (publicGuidesLoading || !publicGuides.length) return;
 
     const rows: OfflineGuideDirectoryEntry[] = publicGuides.map((entry) => {
       const zh = buildPublicGuideContent(entry, "zh");
@@ -805,8 +801,8 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
         searchText: [entry.name, entry.name_en].filter(Boolean).join(" "),
         overviewZh: zh.overview,
         overviewEn: en.overview,
-        parametersZh: zh.parameters.slice(0, 3),
-        parametersEn: en.parameters.slice(0, 3),
+        parametersZh: isSignedIn ? zh.parameters.slice(0, 3) : undefined,
+        parametersEn: isSignedIn ? en.parameters.slice(0, 3) : undefined,
       };
     });
 
@@ -1569,7 +1565,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
           >
             {visiblePlants.map((plant) => {
               const plantAliases = uniqueTextList(aliasMap[plant.id] || []);
-              const summary = isSignedIn ? guideMap[plant.id]?.summary : null;
+              const summary = guideMap[plant.id]?.summary;
               const envTags = isSignedIn
                 ? getEnvironmentTags(
                     parameterMap[plant.id],
@@ -1700,10 +1696,7 @@ export default function PlantIndexPage({ offline = false, offlineDirectory = [],
                       WebkitLineClamp: isMobileViewport ? 2 : undefined,
                     }}
                   >
-                    {summary ||
-                      (isSignedIn
-                        ? t.plant.summary_pending
-                        : t.plant.register_for_basic_summary)}
+                    {summary || t.plant.summary_pending}
                   </p>
                 </Link>
               );
@@ -1864,9 +1857,7 @@ function PublicGuideLibrary({
 
   function renderGuideCard(entry: PublicGuideEntry) {
     const name = getPublicGuideName(entry, language);
-    const summary = isSignedIn
-      ? buildPublicGuideContent(entry, language).overview || getPublicGuideSummary(entry, language) || copy.contentPending
-      : copy.registerForOverview;
+    const summary = buildPublicGuideContent(entry, language).overview || getPublicGuideSummary(entry, language) || copy.contentPending;
     const section = orderedSections.find(
       (candidate) => candidate.id === entry.section_id,
     );

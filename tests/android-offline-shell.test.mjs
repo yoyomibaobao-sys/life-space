@@ -109,7 +109,7 @@ test("explicit sign-out cannot restore another account from local projects", () 
   assert.match(source, /wasLocalOwnerExplicitlySignedOut\(\)/);
 });
 
-test("offline guides expose only the registered-user overview boundary", () => {
+test("offline guides expose guest overviews while retaining registered-only parameters", () => {
   const source = read("mobile-offline-src/main.tsx");
   const guideCache = read("lib/offline-guide-directory.ts");
   const plantIndex = read("app/plant/page.tsx");
@@ -125,8 +125,9 @@ test("offline guides expose only the registered-user overview boundary", () => {
   assert.match(guideCache, /PUBLIC_SOURCES/);
   assert.match(guideCache, /plantCoreParameters/);
   assert.match(guideCache, /\["light", "scene", "indoor"\]/);
-  assert.match(plantIndex, /if \(!isSignedIn \|\| loading \|\| !plants\.length\) return/);
-  assert.match(plantIndex, /parametersZh: zh\.parameters\.slice\(0, 3\)/);
+  assert.match(plantIndex, /if \(loading \|\| !plants\.length\) return/);
+  assert.match(plantIndex, /parametersZh: isSignedIn \? zh\.parameters\.slice\(0, 3\) : undefined/);
+  assert.match(plantIndex, /overviewZh: zh\.overview/);
   assert.match(plantIndex, /content, content_en/);
 });
 

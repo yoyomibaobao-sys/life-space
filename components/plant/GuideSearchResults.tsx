@@ -53,7 +53,7 @@ export default function GuideSearchResults({
               ? match.plant.common_name || match.plant.scientific_name || t.plant.unnamed
               : getPublicGuideName(match.entry, language);
             const secondaryName = match.kind === "plant" ? match.plant.scientific_name : language === "en" ? match.entry.name : match.entry.name_en;
-            const summary = !signedIn ? copy.registerForOverview : match.kind === "plant"
+            const summary = match.kind === "plant"
               ? plantSummaries[match.plant.id]?.summary || t.plant.summary_pending
               : buildPublicGuideContent(match.entry, language).overview || copy.contentPending;
             const href = match.kind === "plant" ? `/plant/${match.plant.id}` : `/plant/guide/${match.entry.id}?from=${match.category}`;
