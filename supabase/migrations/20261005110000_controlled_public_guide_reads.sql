@@ -1,5 +1,8 @@
--- Serve only active guide metadata to guests. Full editorial guidance lives in
--- private storage and is returned only after an independent read entitlement.
+-- Phase A: additive, backwards compatible with the currently deployed web.
+-- Direct guide_entries privileges remain intact until the held Phase B SQL is
+-- reviewed and applied after the controlled-reader clients have shipped.
+-- Full editorial guidance lives in private storage and is returned only after
+-- an independent read entitlement in the new clients.
 create schema if not exists private;
 
 create table if not exists private.guide_member_content (
@@ -14,13 +17,6 @@ create table if not exists private.guide_member_filters (
   filters jsonb not null
 );
 revoke all on private.guide_member_filters from public, anon, authenticated;
-
--- The old table-level SELECT granted content/content_en to every visitor.
--- Other consumers need only these fixed metadata columns for joins/search.
-revoke select on public.guide_entries from public, anon, authenticated;
-grant select (id, category, name, name_en, source, section_id,
-  summary, summary_en, sort_order, is_active)
-  on public.guide_entries to anon, authenticated;
 
 create or replace function private.can_read_full_guide(p_user_id uuid)
 returns boolean language sql stable security definer set search_path = ''

@@ -130,3 +130,48 @@ test("existing plant member RLS returns complete care only to an active cloud tr
     await db.close();
   }
 });
+
+test("plant Phase A preserves the legacy registered RPC; held Phase B closes it", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      create role anon; create role authenticated; create role service_role;
+      create schema private;
+      create schema auth;
+      create function auth.uid() returns uuid language sql stable as $$
+        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+      create table public.plant_species (
+        id uuid primary key, slug text, common_name text, scientific_name text,
+        family text, category text, sub_category text, growth_type text,
+        entry_type text, sort_order integer, is_active boolean, description text
+      );
+      create table public.plant_species_i18n (
+        plant_id uuid, language_code text, common_name text, family text, description text
+      );
+      create table public.plant_species_aliases (species_id uuid, alias_name text, relation_type text);
+      create table public.plant_care_guides (plant_id uuid, language_code text, summary text);
+      insert into public.plant_species (id, slug, common_name, is_active)
+        values ('00000000-0000-4000-8000-000000000001', 'basil', '罗勒', true);
+      create function private.get_plant_core_parameters(uuid) returns table (species_id uuid, sun_score smallint)
+        language sql as $$ select '00000000-0000-4000-8000-000000000001'::uuid, 8::smallint $$;
+      create function public.get_plant_core_parameters(uuid) returns table (species_id uuid, sun_score smallint)
+        language sql security invoker as $$ select * from private.get_plant_core_parameters($1) $$;
+      grant usage on schema public, private to anon, authenticated;
+      grant execute on function private.get_plant_core_parameters(uuid) to authenticated;
+      grant execute on function public.get_plant_core_parameters(uuid) to authenticated;
+    `);
+    await db.exec(readFileSync(new URL("../supabase/migrations/20261005052924_guest_plant_basic_overviews.sql", import.meta.url), "utf8"));
+    await db.exec("set role anon");
+    assert.equal((await db.query("select common_name from public.get_public_plant_catalog()")).rows[0].common_name, "罗勒");
+    await db.exec("reset role; set role authenticated");
+    assert.equal((await db.query("select sun_score from public.get_plant_core_parameters(null)")).rows[0].sun_score, 8);
+    await db.exec("reset role");
+    await db.exec(readFileSync(new URL("../supabase/held/plant_read_phase_b.sql", import.meta.url), "utf8"));
+    await db.exec("set role authenticated");
+    await assert.rejects(db.query("select * from public.get_plant_core_parameters(null)"), /permission denied/);
+    await assert.rejects(db.query("select * from private.get_plant_core_parameters(null)"), /permission denied/);
+    assert.equal((await db.query("select common_name from public.get_public_plant_catalog()")).rows[0].common_name, "罗勒");
+  } finally {
+    await db.close();
+  }
+});

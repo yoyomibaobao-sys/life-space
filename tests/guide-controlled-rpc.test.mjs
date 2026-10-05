@@ -57,6 +57,31 @@ test("real guide SQL restricts guests/basic to active summaries and grants full 
     const migration = readFileSync(new URL("../supabase/migrations/20261005110000_controlled_public_guide_reads.sql", import.meta.url), "utf8");
     await db.exec(migration);
 
+    // Phase A must preserve the old production web's direct table contract.
+    await db.exec("set role anon");
+    assert.equal((await db.query("select content from public.guide_entries where id = $1", [guideId])).rows.length, 1);
+    await db.exec("reset role; set role authenticated");
+    assert.equal((await db.query("select content_en from public.guide_entries where id = $1", [guideId])).rows.length, 1);
+    await db.exec("reset role");
+    const phaseB = readFileSync(new URL("../supabase/held/guide_read_phase_b.sql", import.meta.url), "utf8");
+    await db.exec(phaseB);
+    const { rows: acl } = await db.query(`
+      select
+        has_function_privilege('anon', 'public.get_public_guide_catalog(uuid,integer,integer)', 'execute') as anon_catalog,
+        has_function_privilege('anon', 'public.get_member_guide_content(uuid,text)', 'execute') as anon_full,
+        has_function_privilege('authenticated', 'public.get_member_guide_content(uuid,text)', 'execute') as member_full,
+        has_function_privilege('authenticated', 'private.can_read_full_guide(uuid)', 'execute') as private_helper
+    `);
+    assert.deepEqual(acl[0], { anon_catalog: true, anon_full: false, member_full: true, private_helper: false });
+    const { rows: paths } = await db.query(`
+      select p.proconfig from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+      where (n.nspname, p.proname) in (
+        ('public', 'get_public_guide_catalog'), ('public', 'get_member_guide_content'),
+        ('private', 'can_read_full_guide'))
+    `);
+    assert.equal(paths.length, 3);
+    assert.ok(paths.every(({ proconfig }) => proconfig.includes('search_path=""')));
+
     await db.exec(`insert into public.guide_entries values
       ('00000000-0000-4000-8000-000000000088', 'other', '新审核指引',
        'New approved guide', 'approved', null, '简化概要', 'Basic overview',

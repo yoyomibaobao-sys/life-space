@@ -1,3 +1,5 @@
+-- Phase A: additive, backwards compatible with the currently deployed web.
+-- The old registered-only suitability RPC remains available until Phase B.
 -- The overview is the agreed visitor guide tier. Keep detailed care guides,
 -- parameters, and growth cycles behind their existing membership policies.
 -- Both the directory and detail use this active-only, fixed-column reader.
@@ -152,11 +154,3 @@ grant execute on function public.get_plant_basic_overviews(uuid, text)
 
 comment on function public.get_plant_basic_overviews(uuid, text) is
   'Public active-species overview only. Detailed parameters, care guidance, growth cycles, and related records remain member-controlled.';
-
--- Registered users now have the same simplified-guide tier as visitors.
--- Active cloud members already use the full plant_parameters policy; retire
--- this legacy registered-only shortcut to keep the RPC consistent with the UI.
-revoke execute on function public.get_plant_core_parameters(uuid)
-  from public, anon, authenticated;
-revoke execute on function private.get_plant_core_parameters(uuid)
-  from public, anon, authenticated;
