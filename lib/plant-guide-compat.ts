@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
+import { loadGuideDirectoryRows } from "@/lib/guide-directory-search";
 
 export type PlantBasicOverviewCompatRow = {
   species_id: string;
@@ -32,12 +33,25 @@ export function loadPublicPlantCatalogPage(from: number, to: number) {
   });
 }
 
-export function loadPublicPlantCatalogDetail(lookup: string) {
-  return supabase.rpc("get_public_plant_catalog", {
+export async function loadPublicPlantCatalogDetail(lookup: string) {
+  const direct = await supabase.rpc("get_public_plant_catalog", {
     p_lookup: lookup,
     p_offset: 0,
     p_limit: 1,
   });
+  if (direct.error || direct.data?.length) return direct;
+
+  // Built-in directory labels can be exact aliases rather than species names.
+  // Resolve only a unique active species through the same public, basic-only RPC.
+  const catalog = await loadGuideDirectoryRows<PublicPlantCatalogRow>(loadPublicPlantCatalogPage);
+  if (catalog.error) return { ...direct, error: catalog.error };
+  const name = lookup.normalize("NFKC").trim().toLowerCase();
+  const matches = catalog.data.filter((plant) =>
+    plant.is_active && plant.aliases?.some((alias) =>
+      alias.relation_type === "exact" && alias.alias_name.normalize("NFKC").trim().toLowerCase() === name
+    )
+  );
+  return matches.length === 1 ? { ...direct, data: matches } : direct;
 }
 
 export type PlantCoreParametersCompatRow = {
