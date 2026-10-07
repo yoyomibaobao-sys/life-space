@@ -205,12 +205,14 @@ test("cloud and local group settings persist separately, including offline local
   globalThis.__categoryClient = db;
   const live = await loadModule("lib/archive-category-settings.ts", {
     "@/lib/supabase": "export const supabase = globalThis.__categoryClient;",
+    "@/lib/local-saf-native": "export const isAndroidSafAvailable = () => false;",
+    "@/lib/local-offline-db": "export const saveSafLocalCategoryDepths = async () => { throw Error('not Android'); };",
   });
   assert.equal((await live.getCloudArchiveCategoryDepths("owner")).plant, 2);
   await live.saveCloudArchiveCategoryDepths("owner", { plant: 1, system: 2, insect_fish: 3, other: 3 });
   assert.equal(rows.length, 4);
   assert.equal(rows[0].user_id, "owner");
-  live.saveLocalArchiveCategoryDepths({ plant: 3, system: 1, insect_fish: 2, other: 3 }, "owner");
+  await live.saveLocalArchiveCategoryDepths({ plant: 3, system: 1, insect_fish: 2, other: 3 }, "owner");
   assert.equal(live.getLocalArchiveCategoryDepths("owner").system, 1);
   assert.equal(live.DEFAULT_ARCHIVE_CATEGORY_DEPTHS.plant, 3);
   delete globalThis.__categoryClient;

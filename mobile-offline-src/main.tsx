@@ -2721,7 +2721,8 @@ function App() {
         onOpen={(id) => { applyShellPath(`${[...archives, ...(authenticatedOwnerContext ? cloudCaches : [])].some((row) => row.id === id) ? "/local" : ""}/archive/${encodeURIComponent(id)}`); }}
       /> : null}
       {screen.kind === "trash" ? <AndroidLocalTrash ownerContext={ownerContext}
-        online={online} onBack={returnToProfile} onRequireLogin={() => openCloudLogin("trash")} /> : null}
+        online={online} onBack={returnToProfile} onRequireLogin={() => openCloudLogin("trash")}
+        onLocalChanged={() => loadList()} /> : null}
       {screen.kind === "membership-payment" ? <div data-android-membership-payment="true">
         <MobilePageHeaderView title={language === "zh" ? "开通云会员" : "Cloud Membership"} titleText={language === "zh" ? "开通云会员" : "Cloud Membership"}
           showBack ariaLabel={language === "zh" ? "返回" : "Back"} onBack={returnToProfile} />
@@ -2979,8 +2980,9 @@ function AndroidRecentBrowse({ online, onBack, onOpen }: { online: boolean; onBa
   </section>;
 }
 
-function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
+function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin, onLocalChanged }: {
   ownerContext: LocalArchiveOwnerContext | null; online: boolean; onBack: () => void; onRequireLogin: () => void;
+  onLocalChanged: () => Promise<void>;
 }) {
   const { language } = useLanguage();
   const [items, setItems] = useState<Awaited<ReturnType<typeof listLocalArchiveCycleTrash>>>([]);
@@ -3110,7 +3112,19 @@ function AndroidLocalTrash({ ownerContext, online, onBack, onRequireLogin }: {
           onClick={() => {
             setWorking(true);
             setError("");
-            void item.restore!().then(refreshTrash).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+            void item.restore!().then(async () => {
+              if (item.source === "local") {
+                if (item.key.startsWith("local-project:")) {
+                  setProjects((current) => current.filter((project) => `local-project:${project.id}` !== item.key));
+                } else {
+                  setItems((current) => current.filter((cycle) => `local-cycle:${cycle.trash.id}` !== item.key));
+                }
+                await onLocalChanged();
+              } else {
+                await refreshTrash();
+              }
+            })
+              .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
               .finally(() => setWorking(false));
           }}>{language === "zh" ? "恢复" : "Restore"}</button> : null}
       </article>)}

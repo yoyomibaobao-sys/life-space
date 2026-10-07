@@ -4,6 +4,15 @@ import type { ArchiveCategory } from "@/lib/archive-categories";
 import { isLocalDateBefore, toLocalDateEndIso } from "@/lib/archive-cycle-dates";
 import { standardizeRecordPhotoFile } from "@/lib/image-compression";
 import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
+import { commitSafContent, readSafCommitted, type SafContent, type SafState } from "@/lib/local-saf-repository";
+import { chooseAndValidateSafDirectory } from "@/lib/local-saf-directory";
+import { createNativeSafStorage, getLocalSafDirectory, isAndroidSafAvailable } from "@/lib/local-saf-native";
+import { hydrateSafGeneration, readActiveSafGeneration } from "@/lib/local-saf-generation";
+import { classifyLegacySafArchive } from "@/lib/local-saf-contract";
+import { executeSafMigration, planLegacySafMigration, safContentFingerprint } from "@/lib/local-saf-migration";
+import { materializeCloudEntries, splitCloudMaterialization,
+  type CloudMaterialization } from "@/lib/local-saf-cloud-partition";
+import { safAccountKey, safPartition } from "@/lib/local-saf-contract";
 
 const DB_NAME = "life-space-local-offline";
 const DB_VERSION = 6;
@@ -89,6 +98,12 @@ export type LocalArchiveCycleTrashListItem = {
 
 export type LocalArchive = {
   id: string;
+  /** Present only on an Android SAF mirror. Legacy IndexedDB projects have no value. */
+  saf_local_space_id?: string;
+  /** Source hash for an interrupted cloud IDB-to-SAF handoff. */
+  saf_cloud_adoption_sha256?: string;
+  /** Stable account-bound classification while a cloud create is finishing. */
+  saf_cloud_pending_origin?: "create-archive";
   local_role?: LocalArchiveRole;
   title: string;
   category: ArchiveCategory;
@@ -120,6 +135,12 @@ export type LocalArchive = {
   pending_sync_deferred_at?: string | null;
   migration_status?: LocalCloudMigrationStatus | null;
   migration_cloud_archive_id?: string | null;
+  local_cloud_transfer?: {
+    targetCloudArchiveId: string;
+    localTransferToken: string;
+    targetUserId: string;
+    stage: "prepared" | "cloud-created" | "complete";
+  } | null;
   migration_started_at?: string | null;
   migration_error?: string | null;
   migration_visibility?: "private" | "public" | null;
@@ -187,6 +208,7 @@ export type LocalTaxonomyKind = "subcategory" | "group";
 
 export type LocalTaxonomyItem = {
   id: string;
+  saf_local_space_id?: string;
   kind: LocalTaxonomyKind;
   label: string;
   category?: ArchiveCategory | null;
@@ -257,6 +279,7 @@ export type LocalArchiveOwnerContext = {
 
 export type LocalArchiveVisibilityResult = {
   archives: LocalArchiveSummary[];
+  safFolderDisconnected?: boolean;
   totalCount: number;
   unownedCount: number;
   ownedByCurrentCount: number;
@@ -651,7 +674,12 @@ export function isLocalArchiveVisibleToOwner(
   archive: LocalArchive,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  if (archive.saf_local_space_id &&
+      resolveLocalArchiveRole(archive) === "local-project" &&
+      classifyLegacySafArchive(archive) === "local-project") return true;
   const ownerUserId = normalizeOptionalText(archive.local_owner_user_id);
+  if ((resolveLocalArchiveRole(archive) === "cloud-offline-cache" ||
+      isPendingCloudCreateArchive(archive)) && !ownerUserId) return false;
   if (!ownerUserId) return true;
 
   return ownerUserId === getOwnerUserId(ownerContext);
@@ -661,6 +689,7 @@ function isLocalTaxonomyVisibleToOwner(
   item: LocalTaxonomyItem,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  if (item.saf_local_space_id) return true;
   const ownerUserId = normalizeOptionalText(item.local_owner_user_id);
   if (!ownerUserId) return true;
 
@@ -1013,6 +1042,558 @@ async function getAllRows<T>(storeName: string) {
   }
 }
 
+/** Read-only legacy inventory for the explicit SAF migration engine. */
+export async function readLegacySafRows() {
+  const [archives, records, images, taxonomy] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE),
+    getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+    getAllRows<LocalTaxonomyItem>(TAXONOMY_STORE),
+  ]);
+  const owners = new Set<string>(["device"]);
+  for (const row of [...archives, ...taxonomy]) owners.add(row.local_owner_user_id || "device");
+  const categoryDepths: Record<string, unknown> = {};
+  for (const owner of owners) {
+    const raw = window.localStorage.getItem(`lifespace:archive-category-depths:local:v1:${owner}`);
+    if (raw) {
+      try { categoryDepths[owner] = JSON.parse(raw); }
+      catch { throw Error(`Corrupt legacy category depths for ${owner}; migration stopped.`); }
+    }
+  }
+  return { archives, records, images, taxonomy, categoryDepths };
+}
+
+/** Explicit, on-demand migration of independent IDB projects. Cloud data stays in IDB. */
+async function migrateLegacyLocalProjectsIfNeeded() {
+  if (!isAndroidSafAvailable()) return;
+  const rows = await readLegacySafRows();
+  const archives = rows.archives.filter((row) => !row.saf_local_space_id &&
+    resolveLocalArchiveRole(row) === "local-project" &&
+    classifyLegacySafArchive(row) === "local-project");
+  if (!archives.length) return;
+  const ids = new Set(archives.map((row) => row.id));
+  const records = rows.records.filter((row) => ids.has(row.archive_id));
+  const images = rows.images.filter((row) => ids.has(row.archive_id));
+  if (archives.some((row) => isPendingCloudSyncStatus(row.sync?.status)) ||
+      records.some((row) => isPendingCloudSyncStatus(row.sync?.status)) ||
+      images.some((row) => isPendingCloudSyncStatus(row.sync?.status))) {
+    throw Error("Legacy local project contains pending cloud data; migration stopped.");
+  }
+  const taxonomy = rows.taxonomy.filter((row) => row.local_only && !row.saf_local_space_id);
+  const owners = new Set(["device", ...archives.map((row) => row.local_owner_user_id || "device"),
+    ...taxonomy.map((row) => row.local_owner_user_id || "device")]);
+  const depthValues = [...owners].map((owner) => rows.categoryDepths[owner]).filter((value) => value != null);
+  const canonical = (value: unknown) => JSON.stringify(value, (_key, nested) =>
+    nested instanceof Blob ? { size: nested.size, type: nested.type } :
+    nested && typeof nested === "object" && !Array.isArray(nested)
+      ? Object.fromEntries(Object.entries(nested).sort(([a], [b]) => a.localeCompare(b))) : nested);
+  const sameRows = (current: Array<{ id: string }>, expected: Array<{ id: string }>) =>
+    canonical([...current].sort((a, b) => a.id.localeCompare(b.id))) ===
+    canonical([...expected].sort((a, b) => a.id.localeCompare(b.id)));
+  if (depthValues.some((value) => canonical(value) !== canonical(depthValues[0]))) {
+    throw Error("Conflicting legacy local category depths; migration stopped.");
+  }
+  const plan = await planLegacySafMigration({ archives, records, images, taxonomy,
+    categoryDepths: depthValues.length ? { local: depthValues[0] } : {} });
+  let status = await getLocalSafDirectory();
+  if (!status.available) {
+    await chooseAndValidateSafDirectory();
+    status = await getLocalSafDirectory();
+  }
+  if (!status.available) throw Error("LifeSpace data folder selection was cancelled.");
+  const storage = createNativeSafStorage();
+  await executeSafMigration(storage, plan, async ({ localSpaceId }) => {
+    const db = await openLocalDb();
+    try {
+      const tx = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE, TAXONOMY_STORE], "readwrite");
+      const done = transactionDone(tx);
+      void done.catch(() => undefined);
+      try {
+        const archiveStore = tx.objectStore(ARCHIVE_STORE);
+        const recordStore = tx.objectStore(RECORD_STORE);
+        const imageStore = tx.objectStore(IMAGE_STORE);
+        const taxonomyStore = tx.objectStore(TAXONOMY_STORE);
+        const [allArchives, allRecords, allImages, allTaxonomy] = await Promise.all([
+          requestToPromise<LocalArchive[]>(archiveStore.getAll()),
+          requestToPromise<LocalRecord[]>(recordStore.getAll()),
+          requestToPromise<LocalImage[]>(imageStore.getAll()),
+          requestToPromise<LocalTaxonomyItem[]>(taxonomyStore.getAll()),
+        ]);
+        const currentArchives = allArchives.filter((row) => ids.has(row.id));
+        const currentRecords = allRecords.filter((row) => ids.has(row.archive_id));
+        const currentImages = allImages.filter((row) => ids.has(row.archive_id));
+        const currentTaxonomy = allTaxonomy.filter((row) => row.local_only && !row.saf_local_space_id);
+        if (!sameRows(currentArchives, archives) || !sameRows(currentRecords, records) ||
+            !sameRows(currentImages, images) || !sameRows(currentTaxonomy, taxonomy)) {
+          throw Error("Legacy data changed during SAF handoff; old IndexedDB retained.");
+        }
+        for (const row of currentArchives) archiveStore.put({ ...row, saf_local_space_id: localSpaceId });
+        for (const row of currentTaxonomy) taxonomyStore.put({ ...row, saf_local_space_id: localSpaceId });
+        await done;
+      } catch (error) {
+        try { tx.abort(); } catch { /* Transaction may already have ended. */ }
+        await done.catch(() => undefined);
+        throw error;
+      }
+    } finally { db.close(); }
+  });
+  const committed = await readSafCommitted(storage);
+  if (!committed) throw Error("SAF migration commit disappeared before mirror rebuild.");
+  await mirrorCommittedLocalSaf(committed);
+}
+
+let safMirrorQueue: Promise<void> = Promise.resolve();
+let mirroredSafHead: string | null = null;
+
+/** Replace only SAF-owned rows in one business-IDB transaction. Legacy and cloud rows remain intact. */
+async function mirrorCommittedLocalSaf(state: SafState) {
+  const previous = safMirrorQueue;
+  let release!: () => void;
+  safMirrorQueue = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    const latest = await readSafCommitted(createNativeSafStorage());
+    if (!latest || latest.manifest.localSpaceId !== state.manifest.localSpaceId) {
+      throw Error("LifeSpace directory changed during mirror update.");
+    }
+    state = latest;
+    const active = await readActiveSafGeneration();
+    if (active?.pointer.localSpaceId !== state.manifest.localSpaceId ||
+        active.pointer.revision !== state.commit.revision) {
+      await hydrateSafGeneration(createNativeSafStorage());
+    }
+    const entries = state.source.entries.filter((entry) => entry.kind === "local-project" &&
+      entry.partition === "local" && entry.archive.local_cloud_transfer?.stage !== "complete");
+    const db = await openLocalDb();
+    try {
+      const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE, TAXONOMY_STORE], "readwrite");
+      const done = transactionDone(transaction);
+      void done.catch(() => undefined);
+      const archives = transaction.objectStore(ARCHIVE_STORE);
+      const records = transaction.objectStore(RECORD_STORE);
+      const images = transaction.objectStore(IMAGE_STORE);
+      const taxonomy = transaction.objectStore(TAXONOMY_STORE);
+      try {
+        const existingArchives = await requestToPromise<LocalArchive[]>(archives.getAll());
+        const existingTaxonomy = await requestToPromise<LocalTaxonomyItem[]>(taxonomy.getAll());
+        const managed = existingArchives.filter((row) => row.saf_local_space_id &&
+          classifyLegacySafArchive(row) === "local-project");
+        const incoming = new Set(entries.map((entry) => entry.id));
+        if (existingArchives.some((row) => incoming.has(row.id) &&
+            row.saf_local_space_id !== state.manifest.localSpaceId)) {
+          throw Error("SAF project ID conflicts with existing local data; mirror unchanged.");
+        }
+        const incomingTaxonomy = new Set(state.source.taxonomy.map((row) => row.id));
+        if (existingTaxonomy.some((row) => incomingTaxonomy.has(row.id) &&
+            row.saf_local_space_id !== state.manifest.localSpaceId)) {
+          throw Error("SAF taxonomy ID conflicts with existing local data; mirror unchanged.");
+        }
+        for (const row of managed) {
+          const relatedRecords = await requestToPromise<LocalRecord[]>(records.index("archive_id").getAll(row.id));
+          const relatedImages = await requestToPromise<LocalImage[]>(images.index("archive_id").getAll(row.id));
+          for (const record of relatedRecords) records.delete(record.id);
+          for (const image of relatedImages) images.delete(image.id);
+          archives.delete(row.id);
+        }
+        for (const row of existingTaxonomy.filter((item) => item.saf_local_space_id)) taxonomy.delete(row.id);
+        for (const entry of entries) {
+          archives.add({ ...entry.archive, saf_local_space_id: state.manifest.localSpaceId });
+          for (const record of entry.records) records.add(record);
+          for (const image of entry.images) images.add(image);
+        }
+        for (const item of state.source.taxonomy) {
+          taxonomy.add({ ...item, saf_local_space_id: state.manifest.localSpaceId });
+        }
+        await done;
+        try {
+          const safDepths = state.source.categoryDepths.local;
+          if (safDepths) window.localStorage.setItem("lifespace:saf:category-depths", JSON.stringify(safDepths));
+          else window.localStorage.removeItem?.("lifespace:saf:category-depths");
+        } catch { /* Optional settings mirror; the immutable SAF snapshot is authoritative. */ }
+      } catch (error) {
+        try { transaction.abort(); } catch { /* Transaction may have ended. */ }
+        await done.catch(() => undefined);
+        throw error;
+      }
+    } finally { db.close(); }
+    mirroredSafHead = `${state.manifest.localSpaceId}:${state.commit.revision}:${state.manifest.commitSha256}`;
+  } finally { release(); }
+}
+
+const mirroredCloudHeads = new Map<string, string>();
+
+async function fingerprintCloudSource(source: CloudMaterialization) {
+  const owner = source.archive.local_owner_user_id;
+  if (!owner) throw Error("Unknown cloud owner; handoff refused.");
+  const entries = source.archive.local_role === "saved-local-copy" &&
+      classifyLegacySafArchive(source.archive) === "local-project"
+    ? [{ id: `pending_${source.archive.id}`, kind: "pending-cloud-user-data" as const,
+        partition: safPartition("pending-cloud-user-data", await safAccountKey(owner)),
+        ownerUserId: owner, ...source }]
+    : await splitCloudMaterialization(source);
+  return safContentFingerprint({ entries, taxonomy: [], categoryDepths: {} });
+}
+
+/** One account's cloud rows are a projection of its verified SAF partition. */
+async function mirrorCommittedCloudSaf(state: SafState, ownerUserId: string) {
+  const latest = await readSafCommitted(createNativeSafStorage());
+  if (!latest || latest.manifest.localSpaceId !== state.manifest.localSpaceId) {
+    throw Error("LifeSpace directory changed during cloud mirror update.");
+  }
+  state = latest;
+  const key = await safAccountKey(ownerUserId);
+  const entries = state.source.entries.filter((entry) => entry.partition.startsWith(`cloud/${key}/`));
+  const materialized = materializeCloudEntries(entries, ownerUserId);
+  const incoming = new Map(materialized.map((item) => [item.archive.id, item]));
+  const [beforeArchives, beforeRecords, beforeImages] = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE), getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const rowSignature = (rows: Array<{ id: string; blob?: Blob }>) => JSON.stringify(rows
+    .map((row) => ({ ...row, ...(row.blob ? { blob: { size: row.blob.size,
+      type: row.blob.type } } : {}) })).sort((a, b) => a.id.localeCompare(b.id)));
+  for (const row of beforeArchives.filter((item) => incoming.has(item.id) && !item.saf_local_space_id)) {
+    const stored = incoming.get(row.id)!.archive.saf_cloud_adoption_sha256;
+    if (!stored) throw Error("Unknown same-ID cloud project; mirror handoff refused.");
+    const source = { archive: row,
+      records: beforeRecords.filter((record) => record.archive_id === row.id),
+      images: beforeImages.filter((image) => image.archive_id === row.id) };
+    if (await fingerprintCloudSource(source) !== stored) {
+      throw Error("Legacy cloud project changed during SAF handoff; mirror unchanged.");
+    }
+  }
+  const db = await openLocalDb();
+  try {
+    const tx = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE], "readwrite");
+    const done = transactionDone(tx);
+    void done.catch(() => undefined);
+    try {
+      const archives = tx.objectStore(ARCHIVE_STORE);
+      const records = tx.objectStore(RECORD_STORE);
+      const images = tx.objectStore(IMAGE_STORE);
+      const existing = await requestToPromise<LocalArchive[]>(archives.getAll());
+      const managed = existing.filter((row) => row.saf_local_space_id &&
+        row.local_owner_user_id === ownerUserId &&
+        (resolveLocalArchiveRole(row) === "cloud-offline-cache" ||
+         classifyLegacySafArchive(row) === "pending-cloud-user-data"));
+      for (const row of existing.filter((item) => incoming.has(item.id))) {
+        if (row.local_owner_user_id !== ownerUserId ||
+            (row.saf_local_space_id && classifyLegacySafArchive(row) === "local-project")) {
+          throw Error("SAF cloud project ID conflicts with a different owner or directory.");
+        }
+        if (!row.saf_local_space_id) {
+          // Prechecked against the original media bytes before opening this
+          // transaction; a concurrent edit must still abort the handoff.
+          if (JSON.stringify(row) !== JSON.stringify(beforeArchives.find((item) => item.id === row.id)) ||
+              rowSignature(await requestToPromise<LocalRecord[]>(records.index("archive_id").getAll(row.id))) !==
+                rowSignature(beforeRecords.filter((item) => item.archive_id === row.id)) ||
+              rowSignature(await requestToPromise<LocalImage[]>(images.index("archive_id").getAll(row.id))) !==
+                rowSignature(beforeImages.filter((item) => item.archive_id === row.id))) {
+            throw Error("Legacy cloud project changed during SAF handoff; mirror unchanged.");
+          }
+        }
+      }
+      for (const row of existing.filter((item) => incoming.has(item.id) || managed.some((old) => old.id === item.id))) {
+        const oldRecords = await requestToPromise<LocalRecord[]>(records.index("archive_id").getAll(row.id));
+        const oldImages = await requestToPromise<LocalImage[]>(images.index("archive_id").getAll(row.id));
+        for (const record of oldRecords) records.delete(record.id);
+        for (const image of oldImages) images.delete(image.id);
+        archives.delete(row.id);
+      }
+      for (const item of materialized) {
+        archives.add({ ...item.archive, saf_local_space_id: state.manifest.localSpaceId });
+        for (const record of item.records) records.add(record);
+        for (const image of item.images) images.add(image);
+      }
+      await done;
+    } catch (error) {
+      try { tx.abort(); } catch { /* Already completed. */ }
+      await done.catch(() => undefined);
+      throw error;
+    }
+  } finally { db.close(); }
+  mirroredCloudHeads.set(ownerUserId, `${state.manifest.localSpaceId}:${state.commit.revision}`);
+}
+
+/** Adopt only known-owner legacy cloud rows; never prompt for a folder on reads. */
+async function connectedCloudSafState(ownerUserId: string): Promise<SafState | null> {
+  const state = await connectedLocalSafState();
+  if (!state) return null;
+  await safAccountKey(ownerUserId);
+  const rows = await Promise.all([
+    getAllRows<LocalArchive>(ARCHIVE_STORE), getAllRows<LocalRecord>(RECORD_STORE),
+    getAllRows<LocalImage>(IMAGE_STORE),
+  ]);
+  const [archives, records, images] = rows;
+  const additions = [] as SafContent["entries"];
+  for (const archive of archives) {
+    const ownRecords = records.filter((row) => row.archive_id === archive.id);
+    const ownImages = images.filter((row) => row.archive_id === archive.id);
+    const pendingSavedCopy = archive.local_role === "saved-local-copy" &&
+      Boolean(archive.source_cloud_archive_id) &&
+      (ownRecords.some((row) => isPendingCloudSyncStatus(row.sync?.status)) ||
+       ownImages.some((row) => isPendingCloudSyncStatus(row.sync?.status)));
+    const kind = pendingSavedCopy ? "pending-cloud-user-data" : classifyLegacySafArchive(archive);
+    if (kind === "local-project") continue;
+    if (!archive.local_owner_user_id) throw Error("Unknown cloud owner; SAF migration stopped.");
+    if (archive.local_owner_user_id !== ownerUserId || archive.saf_local_space_id) continue;
+    const partitionArchive = pendingSavedCopy &&
+      classifyLegacySafArchive(archive) === "local-project"
+      ? { ...archive, pending_sync_first_detected_at: archive.updated_at }
+      : archive;
+    const split = await splitCloudMaterialization({ archive: partitionArchive,
+      records: ownRecords, images: ownImages });
+    const fingerprint = await fingerprintCloudSource({ archive,
+      records: ownRecords, images: ownImages });
+    const existing = state.source.entries.filter((entry) => entry.archive.id === archive.id);
+    if (existing.length) {
+      if (existing.some((entry) => entry.ownerUserId !== ownerUserId) ||
+          existing[0].archive.saf_cloud_adoption_sha256 !== fingerprint) {
+        throw Error("Unknown same-ID SAF cloud data; migration stopped.");
+      }
+      continue; // SAF marker succeeded; retry only the interrupted mirror handoff.
+    }
+    additions.push(...split.map((entry) => ({ ...entry,
+      archive: { ...entry.archive, saf_cloud_adoption_sha256: fingerprint } })));
+  }
+  if (additions.length) {
+    const storage = createNativeSafStorage();
+    await commitSafContent(storage, { ...state.source,
+      entries: [...state.source.entries, ...additions] }, state.commit.revision);
+    const committed = await readSafCommitted(storage);
+    if (!committed || additions.some((entry) => !committed.source.entries.some((row) => row.id === entry.id))) {
+      throw Error("SAF cloud migration commit could not be verified.");
+    }
+    await mirrorCommittedCloudSaf(committed, ownerUserId);
+    return committed;
+  }
+  const cloudIds = new Set(state.source.entries.filter((entry) => entry.ownerUserId === ownerUserId)
+    .map((entry) => entry.archive.id));
+  const mirrorMissing = [...cloudIds].some((id) => !archives.some((row) =>
+    row.id === id && row.saf_local_space_id === state.manifest.localSpaceId));
+  if (mirrorMissing || mirroredCloudHeads.get(ownerUserId) !==
+      `${state.manifest.localSpaceId}:${state.commit.revision}`) {
+    await mirrorCommittedCloudSaf(state, ownerUserId);
+  }
+  return state;
+}
+
+async function ensureCloudSafReadable(ownerContext?: LocalArchiveOwnerContext | null) {
+  const owner = getOwnerUserId(ownerContext);
+  if (!owner || !isAndroidSafAvailable()) return false;
+  if (!(await getLocalSafDirectory()).available) return false;
+  await connectedCloudSafState(owner);
+  return true;
+}
+
+async function commitCloudSaf<T>(ownerUserId: string, archiveId: string,
+  mutation: (current: CloudMaterialization, baseline: LocalArchive | null) =>
+    { value: T; next: CloudMaterialization; baselineArchive?: LocalArchive; unchanged?: boolean }):
+    Promise<{ handled: true; value: T } | null> {
+  if (!isAndroidSafAvailable() || !(await getLocalSafDirectory()).available) {
+    if ((await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId))?.saf_local_space_id) {
+      throw Error("Reconnect your LifeSpace data folder before changing account cloud data.");
+    }
+    return null;
+  }
+  const state = await connectedCloudSafState(ownerUserId);
+  if (!state) {
+    if ((await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId))?.saf_local_space_id) {
+      throw Error("Reconnect your LifeSpace data folder before changing account cloud data.");
+    }
+    return null;
+  }
+  const entries = state.source.entries.filter((entry) => entry.archive.id === archiveId);
+  if (entries.some((entry) => entry.ownerUserId !== ownerUserId)) {
+    throw Error("SAF cloud project belongs to another account.");
+  }
+  const current = materializeCloudEntries(entries, ownerUserId)[0];
+  if (!current) {
+    const legacy = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+    if (!legacy || legacy.local_role !== "saved-local-copy" || !legacy.source_cloud_archive_id ||
+        legacy.local_owner_user_id !== ownerUserId || legacy.saf_local_space_id) {
+      throw Error("SAF cloud project is missing from committed state.");
+    }
+    const source = { archive: legacy,
+      records: (await getAllRows<LocalRecord>(RECORD_STORE)).filter((row) => row.archive_id === archiveId),
+      images: (await getAllRows<LocalImage>(IMAGE_STORE)).filter((row) => row.archive_id === archiveId) };
+    const { value, next } = mutation(source, null);
+    if (classifyLegacySafArchive(next.archive) !== "pending-cloud-user-data") {
+      throw Error("Cloud mutation did not create a pending operation.");
+    }
+    if (!await createCloudSafMaterialization(next, source)) {
+      throw Error("SAF cloud folder disconnected during pending commit.");
+    }
+    return { handled: true, value };
+  }
+  const cache = entries.find((entry) => entry.kind === "cloud-offline-cache");
+  const { value, next, baselineArchive, unchanged } = mutation(current, cache?.archive || null);
+  if (unchanged) return { handled: true, value };
+  const split = await splitCloudMaterialization(next);
+  if (cache && split.length > 1) {
+    split[0] = { ...split[0], archive: baselineArchive || cache.archive };
+  }
+  const content = { ...state.source, entries: [
+    ...state.source.entries.filter((entry) => entry.archive.id !== archiveId), ...split] };
+  const storage = createNativeSafStorage();
+  await commitSafContent(storage, content, state.commit.revision);
+  const committed = await readSafCommitted(storage);
+  if (!committed || committed.commit.revision === state.commit.revision) {
+    throw Error("SAF cloud commit could not be verified.");
+  }
+  try { await mirrorCommittedCloudSaf(committed, ownerUserId); }
+  catch (error) { console.error("SAF cloud committed; mirror will rebuild on next read:", error); }
+  return { handled: true, value };
+}
+
+async function createCloudSafMaterialization(next: CloudMaterialization,
+  legacySource?: CloudMaterialization) {
+  const { archive } = next;
+  const ownerUserId = archive.local_owner_user_id;
+  if (!ownerUserId || !isAndroidSafAvailable() || !(await getLocalSafDirectory()).available) return false;
+  const state = await connectedCloudSafState(ownerUserId);
+  if (!state) return false;
+  const existing = await getRowById<LocalArchive>(ARCHIVE_STORE, archive.id);
+  if (state.source.entries.some((entry) => entry.archive.id === archive.id) ||
+      (existing && (!legacySource || existing.local_owner_user_id !== ownerUserId ||
+        existing.saf_local_space_id))) {
+    throw Error("Cloud pending project ID already exists.");
+  }
+  const sourceHash = legacySource ? await fingerprintCloudSource(legacySource) : null;
+  const entries = await splitCloudMaterialization({ ...next, archive: sourceHash
+    ? { ...next.archive, saf_cloud_adoption_sha256: sourceHash } : next.archive });
+  const storage = createNativeSafStorage();
+  await commitSafContent(storage, { ...state.source,
+    entries: [...state.source.entries, ...entries] }, state.commit.revision);
+  const committed = await readSafCommitted(storage);
+  if (!committed || !committed.source.entries.some((entry) => entry.id === entries[0].id)) {
+    throw Error("Pending cloud project was not durably committed.");
+  }
+  try { await mirrorCommittedCloudSaf(committed, ownerUserId); }
+  catch (error) { console.error("SAF pending committed; mirror will rebuild on next read:", error); }
+  return true;
+}
+
+async function createCloudSafArchive(archive: LocalArchive) {
+  return createCloudSafMaterialization({ archive, records: [], images: [] });
+}
+
+async function removeCloudSafArchive(ownerUserId: string, archiveId: string) {
+  if (!isAndroidSafAvailable() || !(await getLocalSafDirectory()).available) {
+    if ((await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId))?.saf_local_space_id) {
+      throw Error("Reconnect your LifeSpace data folder before removing account cloud data.");
+    }
+    return false;
+  }
+  const state = await connectedCloudSafState(ownerUserId);
+  if (!state) return false;
+  const matching = state.source.entries.filter((entry) => entry.archive.id === archiveId);
+  if (!matching.length || matching.some((entry) => entry.ownerUserId !== ownerUserId)) {
+    throw Error("SAF cloud project identity changed; removal refused.");
+  }
+  const storage = createNativeSafStorage();
+  await commitSafContent(storage, { ...state.source,
+    entries: state.source.entries.filter((entry) => entry.archive.id !== archiveId) }, state.commit.revision);
+  const committed = await readSafCommitted(storage);
+  if (!committed || committed.commit.revision === state.commit.revision ||
+      committed.source.entries.some((entry) => entry.archive.id === archiveId)) {
+    throw Error("SAF cloud removal was not durably committed.");
+  }
+  try { await mirrorCommittedCloudSaf(committed, ownerUserId); }
+  catch (error) { console.error("SAF cloud removal committed; mirror will rebuild on next read:", error); }
+  return true;
+}
+
+async function connectedLocalSafState(createIfMissing = false): Promise<SafState | null> {
+  if (!isAndroidSafAvailable()) return null;
+  let status = await getLocalSafDirectory();
+  if (!status.available && createIfMissing) {
+    await chooseAndValidateSafDirectory();
+    status = await getLocalSafDirectory();
+  }
+  if (!status.available) return null;
+  const state = await readSafCommitted(createNativeSafStorage());
+  if (!state) throw Error("LifeSpace data directory has no valid committed revision.");
+  const head = `${state.manifest.localSpaceId}:${state.commit.revision}:${state.manifest.commitSha256}`;
+  const active = await readActiveSafGeneration();
+  if (mirroredSafHead !== head || active?.pointer.localSpaceId !== state.manifest.localSpaceId ||
+      active.pointer.revision !== state.commit.revision) {
+    await mirrorCommittedLocalSaf(state);
+  }
+  return state;
+}
+
+/** A read must recover a committed SAF revision before showing the business mirror. */
+async function ensureLocalSafReadable() {
+  if (!isAndroidSafAvailable()) return true;
+  const state = await connectedLocalSafState();
+  if (!state && (await getAllRows<LocalArchive>(ARCHIVE_STORE)).some((row) => row.saf_local_space_id)) {
+    return false;
+  }
+  return true;
+}
+
+async function commitManagedLocalSaf<T>(archiveId: string,
+  mutation: (content: SafContent, index: number) => T): Promise<{ handled: true; value: T } | null> {
+  if (!isAndroidSafAvailable()) return null;
+  const legacy = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  if (legacy && !legacy.saf_local_space_id && resolveLocalArchiveRole(legacy) === "local-project" &&
+      classifyLegacySafArchive(legacy) === "local-project") {
+    await migrateLegacyLocalProjectsIfNeeded();
+  }
+  const state = await connectedLocalSafState();
+  if (!state) {
+    const row = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+    if (row?.saf_local_space_id) throw Error("Reconnect your LifeSpace data folder before editing this project.");
+    return null;
+  }
+  const index = state.source.entries.findIndex((entry) =>
+    entry.id === archiveId && entry.kind === "local-project" && entry.partition === "local");
+  if (index < 0) {
+    const row = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+    if (row?.saf_local_space_id) throw Error("SAF project is missing from the committed revision.");
+    return null;
+  }
+  const entry = state.source.entries[index];
+  if (entry.archive.local_cloud_transfer?.stage === "complete") throw Error("This local project was already transferred.");
+  const next: SafContent = { ...state.source, entries: [...state.source.entries] };
+  const result = mutation(next, index);
+  const storage = createNativeSafStorage();
+  await commitSafContent(storage, next, state.commit.revision);
+  const committed = await readSafCommitted(storage);
+  if (!committed || committed.commit.revision === state.commit.revision) throw Error("SAF commit could not be verified.");
+  try { await mirrorCommittedLocalSaf(committed); }
+  catch (error) { console.error("SAF committed; business mirror will rebuild on next read:", error); }
+  return { handled: true, value: result };
+}
+
+async function commitLocalSafTaxonomy<T>(
+  mutate: (content: SafContent, localSpaceId: string) => T,
+  createIfMissing = false,
+) {
+  const state = await connectedLocalSafState(createIfMissing);
+  if (!state) throw Error("Reconnect your LifeSpace data folder before changing local taxonomy.");
+  const content: SafContent = { ...state.source,
+    entries: [...state.source.entries], taxonomy: [...state.source.taxonomy] };
+  const result = mutate(content, state.manifest.localSpaceId);
+  const storage = createNativeSafStorage();
+  await commitSafContent(storage, content, state.commit.revision);
+  const committed = await readSafCommitted(storage);
+  if (!committed || committed.commit.revision === state.commit.revision) {
+    throw Error("SAF taxonomy commit could not be verified.");
+  }
+  try { await mirrorCommittedLocalSaf(committed); }
+  catch (error) { console.error("SAF taxonomy committed; business mirror will rebuild on next read:", error); }
+  return result;
+}
+
+/** Category depth settings for a connected localSpace, never keyed by cloud account. */
+export async function saveSafLocalCategoryDepths(depths: Record<string, number>) {
+  return commitLocalSafTaxonomy((content) => {
+    content.categoryDepths = { ...content.categoryDepths, local: { ...depths } };
+  }, true);
+}
+
 async function getRowById<T>(storeName: string, id: string) {
   const db = await openLocalDb();
 
@@ -1057,6 +1638,11 @@ async function refreshLocalUsageHints() {
   updateLocalUsageHints(userLocalArchives.length, visibleRecordCount);
 }
 
+async function refreshOptionalSafUsageHints() {
+  try { await refreshLocalUsageHints(); }
+  catch (error) { console.error("SAF committed; usage hints will refresh after the mirror recovers:", error); }
+}
+
 function buildSummary(
   archive: LocalArchive,
   records: LocalRecord[],
@@ -1099,14 +1685,17 @@ function buildSummary(
 }
 
 export async function listLocalArchiveSummaries() {
+  const safConnected = await ensureLocalSafReadable();
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
 
-  const normalizedArchives = archives.map(normalizeLocalArchive);
-  const userLocalArchives = normalizedArchives.filter(isUserLocalArchive);
+  const normalizedArchives = archives.filter((row) => safConnected || !row.saf_local_space_id)
+    .map(normalizeLocalArchive);
+  const userLocalArchives = normalizedArchives.filter((archive) =>
+    isUserLocalArchive(archive) && classifyLegacySafArchive(archive) === "local-project");
   updateLocalUsageHints(
     userLocalArchives.length,
     userLocalArchives.reduce(
@@ -1144,9 +1733,10 @@ export async function inferSingleLocalArchiveOwnerContext(): Promise<LocalArchiv
 export async function listLocalArchiveCycleTrash(
   ownerContext?: LocalArchiveOwnerContext | null
 ): Promise<LocalArchiveCycleTrashListItem[]> {
+  const safConnected = await ensureLocalSafReadable();
   const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
 
-  return archives
+  return archives.filter((row) => safConnected || !row.saf_local_space_id)
     .map(normalizeLocalArchive)
     .filter((archive) => isUserLocalArchive(archive) && isLocalArchiveVisibleToOwner(archive, ownerContext))
     .flatMap((archive) =>
@@ -1167,6 +1757,8 @@ export async function listVisibleLocalArchiveSummaries(
   ownerContext?: LocalArchiveOwnerContext | null,
   options: { includePendingCloud?: boolean } = {},
 ): Promise<LocalArchiveVisibilityResult> {
+  if (options.includePendingCloud !== false) await ensureCloudSafReadable(ownerContext);
+  const safConnected = await ensureLocalSafReadable();
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
@@ -1174,7 +1766,13 @@ export async function listVisibleLocalArchiveSummaries(
   ]);
   const currentUserId = getOwnerUserId(ownerContext);
 
-  const normalizedArchives = archives.map(normalizeLocalArchive);
+  const normalizedArchives = archives.filter((row) => (safConnected || !row.saf_local_space_id) &&
+      !(row.saf_local_space_id && classifyLegacySafArchive(row) !== "local-project" &&
+        row.local_owner_user_id !== currentUserId))
+    .map(normalizeLocalArchive);
+  if (!safConnected && normalizedArchives.length === 0) {
+    throw Error("Reconnect your LifeSpace data folder to read local projects.");
+  }
   updateLocalUsageHints(
     normalizedArchives.length,
     normalizedArchives.reduce(
@@ -1186,6 +1784,8 @@ export async function listVisibleLocalArchiveSummaries(
   const summaries = normalizedArchives
     .filter(isUserLocalArchive)
     .filter((archive) => !archive.trashed_at)
+    .filter((archive) => options.includePendingCloud !== false ||
+      !(archive.saf_local_space_id && classifyLegacySafArchive(archive) !== "local-project"))
     .filter(
       (archive) =>
         options.includePendingCloud !== false ||
@@ -1197,20 +1797,20 @@ export async function listVisibleLocalArchiveSummaries(
   );
 
   return {
+    safFolderDisconnected: !safConnected,
     archives: visible.sort(
       (a, b) =>
         new Date(b.updated_at || b.created_at).getTime() -
         new Date(a.updated_at || a.created_at).getTime()
     ),
     totalCount: summaries.length,
-    unownedCount: summaries.filter((archive) => !archive.local_owner_user_id).length,
+    unownedCount: summaries.filter((archive) => !archive.local_owner_user_id && !archive.saf_local_space_id).length,
     ownedByCurrentCount: currentUserId
-      ? summaries.filter((archive) => archive.local_owner_user_id === currentUserId).length
+      ? summaries.filter((archive) => archive.local_owner_user_id === currentUserId ||
+          Boolean(archive.saf_local_space_id)).length
       : 0,
     hiddenOwnedByOtherCount: summaries.filter(
-      (archive) =>
-        Boolean(archive.local_owner_user_id) &&
-        archive.local_owner_user_id !== currentUserId
+      (archive) => !isLocalArchiveVisibleToOwner(archive, ownerContext)
     ).length,
   };
 }
@@ -1218,12 +1818,18 @@ export async function listVisibleLocalArchiveSummaries(
 export async function listPendingCloudSyncSummaries(
   ownerContext?: LocalArchiveOwnerContext | null
 ): Promise<PendingCloudSyncSummary[]> {
+  const safConnected = await ensureCloudSafReadable(ownerContext);
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
 
+  if (!safConnected && archives.some((archive) => archive.saf_local_space_id &&
+      archive.local_owner_user_id === getOwnerUserId(ownerContext) &&
+      classifyLegacySafArchive(archive) !== "local-project")) {
+    throw Error("Reconnect your LifeSpace data folder to read pending cloud data.");
+  }
   return archives
     .map(normalizeLocalArchive)
     .filter(
@@ -1296,6 +1902,61 @@ export async function listPendingCloudSyncSummaries(
 export async function preparePendingCloudSyncQueue(
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  if (isAndroidSafAvailable() && !(await getLocalSafDirectory()).available &&
+      (await getAllRows<LocalArchive>(ARCHIVE_STORE)).some((row) => row.saf_local_space_id &&
+        row.local_owner_user_id === getOwnerUserId(ownerContext) &&
+        classifyLegacySafArchive(row) !== "local-project")) {
+    throw Error("Reconnect your LifeSpace data folder before preparing pending cloud data.");
+  }
+  const handled = new Set<string>();
+  let durableRecords = 0;
+  let durableImages = 0;
+  if (await ensureCloudSafReadable(ownerContext)) {
+    const owner = getOwnerUserId(ownerContext)!;
+    const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
+    const [candidateRecords, candidateImages] = await Promise.all([
+      getAllRows<LocalRecord>(RECORD_STORE), getAllRows<LocalImage>(IMAGE_STORE),
+    ]);
+    for (const row of archives) {
+      if (row.local_owner_user_id !== owner ||
+          (classifyLegacySafArchive(row) === "local-project" &&
+           !(row.local_role === "saved-local-copy" && row.source_cloud_archive_id)) ||
+          !archiveParticipatesInPendingCloudSync(row)) continue;
+      if (!candidateRecords.some((record) => record.archive_id === row.id &&
+            record.sync.status === "local-only" && !record.sync.cloud_record_id) &&
+          !candidateImages.some((image) => image.archive_id === row.id &&
+            image.sync.status === "local-only" && !image.sync.cloud_media_id)) continue;
+      const saved = await commitCloudSaf(owner, row.id, (current) => {
+        const archive = current.archive;
+        const cloudId = resolveIntendedCloudArchiveId(archive);
+        const timestamp = nowIso();
+        let recordCount = 0;
+        let imageCount = 0;
+        const records = current.records.map((record) => {
+          if (record.sync.status !== "local-only" || record.sync.cloud_record_id) return record;
+          recordCount++;
+          return { ...record, sync: queueCloudSyncOperation(record.sync, {
+            cloudArchiveId: cloudId, operationKind: "create-record", timestamp }) };
+        });
+        const byId = new Map(records.map((record) => [record.id, record]));
+        const images = current.images.map((image) => {
+          if (image.sync.status !== "local-only" || image.sync.cloud_media_id) return image;
+          const parent = byId.get(image.record_id);
+          if (!parent) return image;
+          imageCount++;
+          return { ...image, sync: queueCloudSyncOperation(image.sync, {
+            cloudArchiveId: cloudId, operationKind: "upload-image", timestamp,
+            cloudRecordId: parent.sync.cloud_record_id,
+            dependsOnOperationId: parent.sync.cloud_record_id ? null : parent.sync.client_operation_id }) };
+        });
+        durableRecords += recordCount;
+        durableImages += imageCount;
+        return { value: undefined, next: { archive: recordCount || imageCount
+          ? markArchivePendingPrompt(archive, timestamp) : archive, records, images } };
+      });
+      if (saved) handled.add(row.id);
+    }
+  }
   const db = await openLocalDb();
   const timestamp = nowIso();
   let queuedRecordCount = 0;
@@ -1318,6 +1979,7 @@ export async function preparePendingCloudSyncQueue(
 
     for (const rawArchive of archives) {
       const archive = normalizeLocalArchive(rawArchive);
+      if (handled.has(archive.id)) continue;
       const cloudArchiveId = resolveIntendedCloudArchiveId(archive);
       if (
         !archiveParticipatesInPendingCloudSync(archive) ||
@@ -1382,7 +2044,8 @@ export async function preparePendingCloudSyncQueue(
     }
 
     await done;
-    return { queuedRecordCount, queuedImageCount };
+    return { queuedRecordCount: queuedRecordCount + durableRecords,
+      queuedImageCount: queuedImageCount + durableImages };
   } finally {
     db.close();
   }
@@ -1392,6 +2055,23 @@ export async function deferPendingCloudSyncPrompt(
   archiveId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, archiveId, (current) => {
+      const archive = current.archive;
+      if (!archiveParticipatesInPendingCloudSync(archive) ||
+          !isLocalArchiveVisibleToOwner(archive, ownerContext) ||
+          !localArchiveHasPendingCloudWork(archive, current.records, current.images)) {
+        throw Error("这个项目没有可延后的云端待上传内容。");
+      }
+      const timestamp = nowIso();
+      const next = { ...archive, pending_sync_prompt_mode: "manual" as const,
+        pending_sync_first_detected_at: archive.pending_sync_first_detected_at || timestamp,
+        pending_sync_deferred_at: timestamp };
+      return { value: next, next: { ...current, archive: next } };
+    });
+    if (saved) return saved.value;
+  }
   const db = await openLocalDb();
   const timestamp = nowIso();
 
@@ -1480,12 +2160,18 @@ function localTaxonomyKey(item: Pick<LocalTaxonomyItem, "kind" | "label"> & {
 export async function listVisibleCloudOfflineArchiveSummaries(
   ownerContext?: LocalArchiveOwnerContext | null
 ): Promise<LocalArchiveSummary[]> {
+  const safConnected = await ensureCloudSafReadable(ownerContext);
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
 
+  if (!safConnected && archives.some((archive) => archive.saf_local_space_id &&
+      archive.local_owner_user_id === getOwnerUserId(ownerContext) &&
+      resolveLocalArchiveRole(archive) === "cloud-offline-cache")) {
+    throw Error("Reconnect your LifeSpace data folder to read cloud offline data.");
+  }
   const summaries = archives
     .map(normalizeLocalArchive)
     .filter(
@@ -1546,15 +2232,16 @@ export async function diagnoseCloudOfflineCache(ownerContext?: LocalArchiveOwner
 export async function listVisibleLocalTaxonomyItems(
   ownerContext?: LocalArchiveOwnerContext | null
 ): Promise<LocalTaxonomyItem[]> {
+  const safConnected = await ensureLocalSafReadable();
   const [taxonomyRows, archiveRows] = await Promise.all([
     getAllRows<LocalTaxonomyItem>(TAXONOMY_STORE),
     getAllRows<LocalArchive>(ARCHIVE_STORE),
   ]);
   const timestamp = nowIso();
-  const visibleItems = taxonomyRows
+  const visibleItems = taxonomyRows.filter((row) => safConnected || !row.saf_local_space_id)
     .map(normalizeLocalTaxonomyItem)
     .filter((item) => item.label && isLocalTaxonomyVisibleToOwner(item, ownerContext));
-  const visibleArchives = archiveRows
+  const visibleArchives = archiveRows.filter((row) => safConnected || !row.saf_local_space_id)
     .map(normalizeLocalArchive)
     .filter((archive) => isLocalArchiveVisibleToOwner(archive, ownerContext));
   const merged = new Map<string, LocalTaxonomyItem>();
@@ -1567,6 +2254,7 @@ export async function listVisibleLocalTaxonomyItems(
     if (archive.subcategory) {
       const item: LocalTaxonomyItem = {
         id: `derived_subcategory_${archive.category}_${archive.subcategory}`,
+        saf_local_space_id: archive.saf_local_space_id,
         kind: "subcategory",
         label: archive.subcategory,
         category: archive.category,
@@ -1585,6 +2273,7 @@ export async function listVisibleLocalTaxonomyItems(
     if (archive.group_name) {
       const item: LocalTaxonomyItem = {
         id: `derived_group_${archive.category}_${archive.subcategory || "none"}_${archive.group_name}`,
+        saf_local_space_id: archive.saf_local_space_id,
         kind: "group",
         label: archive.group_name,
         category: archive.category,
@@ -1621,6 +2310,7 @@ export async function createLocalTaxonomyItem(
 ) {
   const label = normalizeOptionalText(input.label);
   if (!label) throw new Error("请填写本地分类名称");
+  if (isAndroidSafAvailable()) await connectedLocalSafState(true);
 
   const timestamp = nowIso();
   const item: LocalTaxonomyItem = {
@@ -1645,6 +2335,17 @@ export async function createLocalTaxonomyItem(
     );
   if (existing) return existing;
 
+  if (isAndroidSafAvailable()) {
+    return commitLocalSafTaxonomy((content, localSpaceId) => {
+      const managedItem = { ...item, saf_local_space_id: localSpaceId };
+      if (content.taxonomy.some((row) => localTaxonomyKey(row) === localTaxonomyKey(managedItem))) {
+        throw Error("This LifeSpace category already exists.");
+      }
+      content.taxonomy.push(managedItem);
+      return managedItem;
+    });
+  }
+
   const db = await openLocalDb();
   try {
     const transaction = db.transaction(TAXONOMY_STORE, "readwrite");
@@ -1668,6 +2369,7 @@ export async function deleteLocalTaxonomyItem(
 ) {
   const label = normalizeOptionalText(input.label);
   if (!label) return;
+  await ensureLocalSafReadable();
 
   const category = input.category ? normalizeLocalArchiveCategory(input.category) : null;
   const subcategory = normalizeOptionalText(input.subcategory);
@@ -1696,6 +2398,25 @@ export async function deleteLocalTaxonomyItem(
       if (subcategory && archive.subcategory !== subcategory) return false;
       return archive.group_name === label;
     });
+
+  if (isAndroidSafAvailable() &&
+      (matchingTaxonomyIds.some((id) => taxonomyRows.some((row) => row.id === id && row.saf_local_space_id)) ||
+       matchingArchives.some((row) => row.saf_local_space_id))) {
+    await commitLocalSafTaxonomy((content) => {
+      const ids = new Set(matchingTaxonomyIds.filter((id) =>
+        taxonomyRows.some((row) => row.id === id && row.saf_local_space_id)));
+      content.taxonomy = content.taxonomy.filter((row) => !ids.has(row.id));
+      const timestamp = nowIso();
+      content.entries = content.entries.map((entry) => {
+        if (!matchingArchives.some((row) => row.id === entry.id)) return entry;
+        const archive = entry.archive;
+        return { ...entry, archive: input.kind === "subcategory"
+          ? { ...archive, subcategory: null, group_name: null, updated_at: timestamp }
+          : { ...archive, group_name: null, updated_at: timestamp } };
+      });
+    });
+    return;
+  }
 
   const db = await openLocalDb();
   try {
@@ -1736,6 +2457,7 @@ export async function renameLocalTaxonomyItem(
   const oldLabel = normalizeOptionalText(input.oldLabel);
   const newLabel = normalizeOptionalText(input.newLabel);
   if (!oldLabel || !newLabel || oldLabel === newLabel) return;
+  await ensureLocalSafReadable();
 
   const category = input.category ? normalizeLocalArchiveCategory(input.category) : null;
   const subcategory = normalizeOptionalText(input.subcategory);
@@ -1743,6 +2465,36 @@ export async function renameLocalTaxonomyItem(
     getAllRows<LocalTaxonomyItem>(TAXONOMY_STORE),
     getAllRows<LocalArchive>(ARCHIVE_STORE),
   ]);
+  if (isAndroidSafAvailable() &&
+      (taxonomyRows.some((row) => row.saf_local_space_id && row.kind === input.kind && row.label === oldLabel) ||
+       archiveRows.some((row) => row.saf_local_space_id &&
+         (input.kind === "subcategory" ? row.subcategory === oldLabel : row.group_name === oldLabel)))) {
+    await commitLocalSafTaxonomy((content) => {
+      const timestamp = nowIso();
+      content.taxonomy = content.taxonomy.map((row) => {
+        if (category && row.category !== category) return row;
+        if (input.kind === "subcategory") {
+          if (row.kind === "subcategory" && row.label === oldLabel) return { ...row, label: newLabel, updated_at: timestamp };
+          if (row.kind === "group" && row.subcategory === oldLabel) return { ...row, subcategory: newLabel, updated_at: timestamp };
+        } else if (row.kind === "group" && row.label === oldLabel &&
+          (!subcategory || row.subcategory === subcategory)) return { ...row, label: newLabel, updated_at: timestamp };
+        return row;
+      });
+      content.entries = content.entries.map((entry) => {
+        const archive = entry.archive;
+        if (category && archive.category !== category) return entry;
+        if (input.kind === "subcategory" && archive.subcategory === oldLabel) {
+          return { ...entry, archive: { ...archive, subcategory: newLabel, updated_at: timestamp } };
+        }
+        if (input.kind === "group" && archive.group_name === oldLabel &&
+            (!subcategory || archive.subcategory === subcategory)) {
+          return { ...entry, archive: { ...archive, group_name: newLabel, updated_at: timestamp } };
+        }
+        return entry;
+      });
+    });
+    return;
+  }
   const db = await openLocalDb();
 
   try {
@@ -1834,6 +2586,96 @@ export async function updateLocalArchiveFields(
   if (updates.planting_region != null && !normalizePlantingRegion(updates.planting_region)) {
     throw new Error("种植地区无效 / Invalid planting region.");
   }
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  const savedCloudCopy = cloud?.local_role === "saved-local-copy" && Boolean(cloud.source_cloud_archive_id);
+  if (cloud?.local_owner_user_id && (savedCloudCopy ||
+      classifyLegacySafArchive(cloud) === "pending-cloud-user-data") &&
+      isAndroidSafAvailable() && (await getLocalSafDirectory()).available) {
+    const apply = (current: CloudMaterialization): { value: LocalArchive; next: CloudMaterialization } => {
+      const archive = current.archive;
+      if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) throw Error("没有权限修改这个本地项目。");
+      const optional = (key: "subcategory" | "group_name" | "system_name" | "species_name" |
+        "plant_id" | "plant_slug" | "source" | "note" | "archive_summary" |
+        "intended_cloud_sub_tag_id" | "intended_cloud_group_tag_id") =>
+        updates[key] === undefined ? archive[key] : normalizeOptionalText(updates[key]);
+      const category = updates.category == null ? archive.category : normalizeLocalArchiveCategory(updates.category);
+      let next: LocalArchive = { ...archive,
+        title: updates.title === undefined ? archive.title : normalizeOptionalText(updates.title) || archive.title,
+        category, main_category: category,
+        subcategory: optional("subcategory"), group_name: optional("group_name"),
+        system_name: optional("system_name"), species_name: optional("species_name"),
+        plant_id: optional("plant_id"), plant_slug: optional("plant_slug"),
+        source: optional("source"), note: optional("note"), archive_summary: optional("archive_summary"),
+        intended_cloud_sub_tag_id: optional("intended_cloud_sub_tag_id"),
+        intended_cloud_group_tag_id: optional("intended_cloud_group_tag_id"),
+        planting_region: updates.planting_region === undefined ? archive.planting_region
+          : normalizePlantingRegion(updates.planting_region),
+        cycle_enabled: updates.cycle_enabled === undefined ? archive.cycle_enabled : Boolean(updates.cycle_enabled),
+        next_cycle_name: updates.next_cycle_name === undefined ? archive.next_cycle_name
+          : normalizeOptionalText(updates.next_cycle_name)?.slice(0, 80) || null,
+        status: updates.status === undefined ? archive.status : updates.status,
+        ended_at: updates.ended_at === undefined ? archive.ended_at : normalizeOptionalText(updates.ended_at),
+        updated_at: nowIso() };
+      const cloudId = normalizeOptionalText(archive.source_cloud_archive_id);
+      if (cloudId) {
+        const fields = (["title", "category", "system_name", "species_name", "plant_id", "source",
+          "planting_region", "note", "archive_summary", "cycle_enabled", "next_cycle_name",
+          "status", "ended_at"] as const).filter((field) => updates[field] !== undefined &&
+          JSON.stringify(next[field] ?? null) !== JSON.stringify(archive[field] ?? null));
+        if (fields.length) {
+          next = markArchivePendingPrompt(next, next.updated_at);
+          next.sync = queueCloudSyncOperation(next.sync, { cloudArchiveId: cloudId,
+            operationKind: "update-archive", timestamp: next.updated_at, pendingFields: [...fields] });
+        }
+      }
+      return { value: next, next: { ...current, archive: next } };
+    };
+    if (classifyLegacySafArchive(cloud) === "pending-cloud-user-data") {
+      const saved = await commitCloudSaf(cloud.local_owner_user_id, archiveId, (current) => apply(current));
+      if (saved) return saved.value;
+    } else if (savedCloudCopy) {
+      const legacySource = { archive: cloud,
+        records: (await getAllRows<LocalRecord>(RECORD_STORE)).filter((row) => row.archive_id === archiveId),
+        images: (await getAllRows<LocalImage>(IMAGE_STORE)).filter((row) => row.archive_id === archiveId) };
+      const change = apply(legacySource);
+      if (change.next.archive.sync.status !== "pending-cloud-sync") {
+        // No cloud mutation is required; preserve the original local behavior.
+      } else if (await createCloudSafMaterialization(change.next, legacySource)) {
+        return change.value;
+      }
+    }
+  }
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const archive = entry.archive;
+    const optional = (key: "subcategory" | "group_name" | "system_name" | "species_name" |
+      "plant_id" | "plant_slug" | "source" | "note" | "archive_summary" |
+      "intended_cloud_sub_tag_id" | "intended_cloud_group_tag_id") =>
+      updates[key] === undefined ? archive[key] : normalizeOptionalText(updates[key]);
+    const category = updates.category == null ? archive.category : normalizeLocalArchiveCategory(updates.category);
+    const next: LocalArchive = {
+      ...archive,
+      title: updates.title === undefined ? archive.title : normalizeOptionalText(updates.title) || archive.title,
+      category, main_category: category,
+      subcategory: optional("subcategory"), group_name: optional("group_name"),
+      system_name: optional("system_name"), species_name: optional("species_name"),
+      plant_id: optional("plant_id"), plant_slug: optional("plant_slug"),
+      source: optional("source"), note: optional("note"), archive_summary: optional("archive_summary"),
+      intended_cloud_sub_tag_id: optional("intended_cloud_sub_tag_id"),
+      intended_cloud_group_tag_id: optional("intended_cloud_group_tag_id"),
+      planting_region: updates.planting_region === undefined
+        ? archive.planting_region : normalizePlantingRegion(updates.planting_region),
+      cycle_enabled: updates.cycle_enabled === undefined ? archive.cycle_enabled : Boolean(updates.cycle_enabled),
+      next_cycle_name: updates.next_cycle_name === undefined ? archive.next_cycle_name
+        : normalizeOptionalText(updates.next_cycle_name)?.slice(0, 80) || null,
+      status: updates.status === undefined ? archive.status : updates.status,
+      ended_at: updates.ended_at === undefined ? archive.ended_at : normalizeOptionalText(updates.ended_at),
+      updated_at: nowIso(),
+    };
+    content.entries[index] = { ...entry, archive: next };
+    return next;
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return durable.value; }
   const db = await openLocalDb();
 
   try {
@@ -1986,6 +2828,7 @@ export async function updateLocalArchiveMigrationState(
   updates: {
     migration_status?: LocalCloudMigrationStatus | null;
     migration_cloud_archive_id?: string | null;
+    local_cloud_transfer?: LocalArchive["local_cloud_transfer"];
     migration_started_at?: string | null;
     migration_error?: string | null;
     migration_visibility?: "private" | "public" | null;
@@ -1994,6 +2837,57 @@ export async function updateLocalArchiveMigrationState(
   },
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  if (cloud && classifyLegacySafArchive(cloud) === "pending-cloud-user-data" &&
+      cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, archiveId, (current) => {
+      const archive = current.archive;
+      if (!isLocalArchiveVisibleToOwner(archive, ownerContext)) throw Error("没有权限修改这个本地项目。");
+      const next: LocalArchive = { ...archive,
+        migration_status: updates.migration_status === undefined ? archive.migration_status || null : updates.migration_status,
+        migration_cloud_archive_id: updates.migration_cloud_archive_id === undefined
+          ? archive.migration_cloud_archive_id || null : normalizeOptionalText(updates.migration_cloud_archive_id),
+        migration_started_at: updates.migration_started_at === undefined ? archive.migration_started_at || null
+          : normalizeOptionalText(updates.migration_started_at),
+        migration_error: updates.migration_error === undefined ? archive.migration_error || null
+          : normalizeOptionalText(updates.migration_error),
+        migration_visibility: updates.migration_visibility === undefined ? archive.migration_visibility || null
+          : updates.migration_visibility,
+        migrated_at: updates.migrated_at === undefined ? archive.migrated_at || null
+          : normalizeOptionalText(updates.migrated_at),
+        sync: normalizeLocalSyncMeta({ ...archive.sync, ...updates.sync }), updated_at: nowIso() };
+      return { value: next, next: { ...current, archive: next } };
+    });
+    if (saved) return saved.value;
+  }
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const archive = entry.archive;
+    if (updates.local_cloud_transfer && archive.local_cloud_transfer &&
+        (updates.local_cloud_transfer.targetCloudArchiveId !== archive.local_cloud_transfer.targetCloudArchiveId ||
+         updates.local_cloud_transfer.localTransferToken !== archive.local_cloud_transfer.localTransferToken ||
+         updates.local_cloud_transfer.targetUserId !== archive.local_cloud_transfer.targetUserId)) {
+      throw Error("SAF cloud transfer identity changed; update refused.");
+    }
+    const next: LocalArchive = { ...archive,
+      migration_status: updates.migration_status === undefined ? archive.migration_status || null : updates.migration_status,
+      migration_cloud_archive_id: updates.migration_cloud_archive_id === undefined
+        ? archive.migration_cloud_archive_id || null : normalizeOptionalText(updates.migration_cloud_archive_id),
+      local_cloud_transfer: updates.local_cloud_transfer === undefined
+        ? archive.local_cloud_transfer || null : updates.local_cloud_transfer,
+      migration_started_at: updates.migration_started_at === undefined
+        ? archive.migration_started_at || null : normalizeOptionalText(updates.migration_started_at),
+      migration_error: updates.migration_error === undefined
+        ? archive.migration_error || null : normalizeOptionalText(updates.migration_error),
+      migration_visibility: updates.migration_visibility === undefined
+        ? archive.migration_visibility || null : updates.migration_visibility,
+      migrated_at: updates.migrated_at === undefined ? archive.migrated_at || null
+        : normalizeOptionalText(updates.migrated_at),
+      sync: normalizeLocalSyncMeta({ ...archive.sync, ...updates.sync }), updated_at: nowIso() };
+    content.entries[index] = { ...entry, archive: next };
+    return next;
+  });
+  if (durable) return durable.value;
   const db = await openLocalDb();
 
   try {
@@ -2028,6 +2922,10 @@ export async function updateLocalArchiveMigrationState(
         updates.migration_cloud_archive_id === undefined
           ? normalizedArchive.migration_cloud_archive_id || null
           : normalizeOptionalText(updates.migration_cloud_archive_id),
+      local_cloud_transfer:
+        updates.local_cloud_transfer === undefined
+          ? normalizedArchive.local_cloud_transfer || null
+          : updates.local_cloud_transfer,
       migration_started_at:
         updates.migration_started_at === undefined
           ? normalizedArchive.migration_started_at || null
@@ -2065,6 +2963,20 @@ export async function updateLocalArchiveCloudSyncOperation(
   update: LocalCloudSyncOperationUpdate,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, archiveId, (current) => {
+      if (!isLocalArchiveVisibleToOwner(current.archive, ownerContext) ||
+          current.archive.local_role === "cloud-offline-cache") {
+        throw Error("没有权限修改这个本地项目。");
+      }
+      const timestamp = nowIso();
+      const next = { ...current.archive, sync: applyCloudSyncOperationUpdate(
+        current.archive.sync, operationId, update, timestamp), updated_at: timestamp };
+      return { value: next, next: { ...current, archive: next } };
+    });
+    if (saved) return saved.value;
+  }
   const db = await openLocalDb();
   const timestamp = nowIso();
 
@@ -2117,6 +3029,29 @@ export async function persistLocalCloudArchiveMapping(
   const mappedCloudId = normalizeOptionalText(cloudArchiveId);
   if (!mappedCloudId) {
     throw new Error("云端项目标识无效，本机内容已保留。");
+  }
+
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, localArchiveId);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, localArchiveId, (current) => {
+      if (!isLocalArchiveVisibleToOwner(current.archive, ownerContext)) throw Error("没有权限修改这个本地项目。");
+      const timestamp = nowIso();
+      const archive = current.archive;
+      const next = markArchivePendingPrompt({ ...archive, source_cloud_archive_id: mappedCloudId,
+        migration_cloud_archive_id: mappedCloudId, migration_status: archive.migration_status || "migrating",
+        migration_error: null,
+        sync: applyCloudSyncOperationUpdate({ ...archive.sync,
+          client_operation_id: archive.sync.client_operation_id || operationId,
+          operation_kind: archive.sync.operation_kind || "create-archive" },
+        operationId, { status: "synced", cloud_archive_id: mappedCloudId }, timestamp),
+        updated_at: timestamp }, timestamp);
+      const records = current.records.map((row) => ({ ...row,
+        sync: { ...row.sync, cloud_archive_id: mappedCloudId } }));
+      const images = current.images.map((row) => ({ ...row,
+        sync: { ...row.sync, cloud_archive_id: mappedCloudId } }));
+      return { value: next, next: { archive: next, records, images } };
+    });
+    if (saved) return saved.value;
   }
 
   const db = await openLocalDb();
@@ -2218,6 +3153,22 @@ export async function convertPendingCloudProjectToOfflineCache(
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
   const mappedCloudId = normalizeOptionalText(cloudArchiveId);
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, localArchiveId);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, localArchiveId, (current) => {
+      if (!isLocalArchiveVisibleToOwner(current.archive, ownerContext)) throw Error("没有权限修改这个本地项目。");
+      if (current.archive.local_role === "cloud-offline-cache") return { value: current.archive,
+        next: current, unchanged: true };
+      const timestamp = nowIso();
+      const next: LocalArchive = { ...current.archive, local_role: "cloud-offline-cache",
+        saf_cloud_pending_origin: undefined,
+        source_cloud_archive_id: mappedCloudId || current.archive.source_cloud_archive_id,
+        migration_status: "migrated", migrated_at: timestamp, migration_error: null,
+        updated_at: timestamp };
+      return { value: next, next: { ...current, archive: next } };
+    });
+    if (saved) return saved.value;
+  }
   const db = await openLocalDb();
   const timestamp = nowIso();
 
@@ -2246,6 +3197,7 @@ export async function convertPendingCloudProjectToOfflineCache(
     const nextArchive: LocalArchive = {
       ...normalizedArchive,
       local_role: "cloud-offline-cache",
+      saf_cloud_pending_origin: undefined,
       source_cloud_archive_id:
         mappedCloudId || normalizedArchive.source_cloud_archive_id,
       migration_status: "migrated",
@@ -2266,10 +3218,114 @@ export async function updateLocalRecordFields(recordId: string, updates: {
   visibility?: "public" | "private" | null;
   location?: RecordLocation | null; image_files?: File[]; image_captured_at?: Array<string | null>;
 }) {
+  await ensureLocalSafReadable();
   const files = updates.image_files || [];
   if (files.length > 10) throw new Error("每次最多添加10张照片。");
   // Decode before the transaction. Conversion failure must not commit partial edits.
   const prepared = await Promise.all(files.map((file, index) => prepareLocalImage(file, index)));
+  const currentRecord = await getRowById<LocalRecord>(RECORD_STORE, recordId);
+  if (currentRecord) {
+    const cloudParent = await getRowById<LocalArchive>(ARCHIVE_STORE, currentRecord.archive_id);
+    if (cloudParent && (classifyLegacySafArchive(cloudParent) !== "local-project" ||
+        (cloudParent.local_role === "saved-local-copy" && cloudParent.source_cloud_archive_id)) &&
+        cloudParent.local_owner_user_id) {
+      const saved = await commitCloudSaf(cloudParent.local_owner_user_id, currentRecord.archive_id, (current) => {
+        const record = current.records.find((row) => row.id === recordId);
+        if (!record) throw Error("本地记录不存在。");
+        const archive = current.archive;
+        const cycleId = updates.cycle_id === undefined ? record.cycle_id || null
+          : normalizeOptionalText(updates.cycle_id);
+        if (archive.local_role === "cloud-offline-cache" && !isPendingCloudSyncStatus(record.sync.status)) {
+          throw Error("云端已有记录离线时只读，请联网后修改。");
+        }
+        if (cycleId && !archive.cycles?.some((cycle) => cycle.id === cycleId)) {
+          throw Error("选择的期次不属于这个本地项目。");
+        }
+        const timestamp = nowIso();
+        const nextRecord: LocalRecord = { ...record,
+          location: updates.location === undefined ? record.location : normalizeRecordLocation(updates.location),
+          note: updates.note === undefined ? record.note : normalizeOptionalText(updates.note) || "",
+          record_time: updates.record_time === undefined ? record.record_time
+            : normalizeOptionalText(updates.record_time) || record.record_time,
+          source_cloud_visibility: updates.visibility === undefined ? record.source_cloud_visibility
+            : (updates.visibility === "public" || updates.visibility === "private" ? updates.visibility : null),
+          cycle_id: cycleId, updated_at: timestamp };
+        const checks: Array<[string, boolean]> = [
+          ["note", updates.note !== undefined && nextRecord.note !== record.note],
+          ["record_time", updates.record_time !== undefined && nextRecord.record_time !== record.record_time],
+          ["cycle_id", updates.cycle_id !== undefined && cycleId !== (record.cycle_id || null)],
+          ["visibility", updates.visibility !== undefined && nextRecord.source_cloud_visibility !== (record.source_cloud_visibility || null)],
+          ["location", updates.location !== undefined && JSON.stringify(nextRecord.location || null) !== JSON.stringify(record.location || null)],
+        ];
+        const fields = checks.filter((item) => item[1]).map((item) => item[0]);
+        if (archiveParticipatesInPendingCloudSync(archive) && !nextRecord.sync.cloud_record_id) {
+          nextRecord.sync = queueCloudSyncOperation(nextRecord.sync, { cloudArchiveId: resolveIntendedCloudArchiveId(archive),
+            operationKind: "create-record", timestamp, pendingFields: fields });
+        } else if (archiveParticipatesInPendingCloudSync(archive) && fields.length) {
+          nextRecord.sync = queueCloudSyncOperation(nextRecord.sync, { cloudArchiveId: resolveIntendedCloudArchiveId(archive),
+            operationKind: "update-record", timestamp, cloudRecordId: nextRecord.sync.cloud_record_id,
+            pendingFields: fields });
+        }
+        const order = Math.max(-1, ...current.images.filter((image) => image.record_id === recordId)
+          .map((image) => image.sort_order || 0)) + 1;
+        const added: LocalImage[] = prepared.map((image, index) => {
+          const capturedAt = updates.image_captured_at?.[index];
+          return { ...image, id: createId("local_image"), archive_id: record.archive_id,
+            record_id: recordId, sort_order: order + index, created_at: timestamp,
+            captured_at: capturedAt && !Number.isNaN(new Date(capturedAt).getTime())
+              ? new Date(capturedAt).toISOString() : null,
+            local_only: true, sync: queueCloudSyncOperation(null, {
+              cloudArchiveId: resolveIntendedCloudArchiveId(archive), operationKind: "upload-image", timestamp,
+              cloudRecordId: nextRecord.sync.cloud_record_id,
+              dependsOnOperationId: nextRecord.sync.cloud_record_id ? null : nextRecord.sync.client_operation_id,
+            }) };
+        });
+        const nextArchive = (added.length || isPendingCloudSyncStatus(nextRecord.sync.status))
+          ? markArchivePendingPrompt({ ...archive, updated_at: timestamp }, timestamp)
+          : { ...archive, updated_at: timestamp };
+        return { value: nextRecord, next: { archive: nextArchive,
+          records: current.records.map((row) => row.id === recordId ? nextRecord : row),
+          images: [...current.images, ...added] } };
+      });
+      if (saved) { await refreshOptionalSafUsageHints(); return saved.value; }
+    }
+    const durable = await commitManagedLocalSaf(currentRecord.archive_id, (content, index) => {
+      const entry = content.entries[index];
+      const record = entry.records.find((row) => row.id === recordId);
+      if (!record) throw Error("本地记录不存在。");
+      const cycleId = updates.cycle_id === undefined ? record.cycle_id || null
+        : normalizeOptionalText(updates.cycle_id);
+      if (cycleId && !entry.archive.cycles?.some((cycle) => cycle.id === cycleId)) {
+        throw Error("选择的期次不属于这个本地项目。");
+      }
+      const timestamp = nowIso();
+      const nextRecord: LocalRecord = {
+        ...record,
+        location: updates.location === undefined ? record.location : normalizeRecordLocation(updates.location),
+        note: updates.note === undefined ? record.note : normalizeOptionalText(updates.note) || "",
+        record_time: updates.record_time === undefined ? record.record_time
+          : normalizeOptionalText(updates.record_time) || record.record_time,
+        source_cloud_visibility: updates.visibility === undefined ? record.source_cloud_visibility
+          : (updates.visibility === "public" || updates.visibility === "private" ? updates.visibility : null),
+        cycle_id: cycleId, updated_at: timestamp,
+      };
+      const order = Math.max(-1, ...entry.images.filter((image) => image.record_id === recordId)
+        .map((image) => image.sort_order || 0)) + 1;
+      const added: LocalImage[] = prepared.map((image, itemIndex) => {
+        const capturedAt = updates.image_captured_at?.[itemIndex];
+        return { ...image, id: createId("local_image"), archive_id: record.archive_id,
+          record_id: recordId, sort_order: order + itemIndex, created_at: timestamp,
+          captured_at: capturedAt && !Number.isNaN(new Date(capturedAt).getTime())
+            ? new Date(capturedAt).toISOString() : null,
+          local_only: true, sync: localSyncMeta() };
+      });
+      content.entries[index] = { ...entry, archive: { ...entry.archive, updated_at: timestamp },
+        records: entry.records.map((row) => row.id === recordId ? nextRecord : row),
+        images: [...entry.images, ...added] };
+      return nextRecord;
+    });
+    if (durable) { await refreshOptionalSafUsageHints(); return durable.value; }
+  }
   const db = await openLocalDb();
   const transaction = db.transaction([RECORD_STORE, ARCHIVE_STORE, IMAGE_STORE], "readwrite");
   const done = transactionDone(transaction);
@@ -2377,6 +3433,33 @@ export async function updateLocalRecordSyncMeta(
   recordId: string,
   syncUpdates: Partial<LocalSyncMeta>
 ) {
+  await ensureLocalSafReadable();
+  const current = await getRowById<LocalRecord>(RECORD_STORE, recordId);
+  if (current) {
+    const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, current.archive_id);
+    if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+      const saved = await commitCloudSaf(cloud.local_owner_user_id, current.archive_id, (state) => {
+        const record = state.records.find((row) => row.id === recordId);
+        if (!record) throw Error("本地记录不存在。");
+        const next = { ...record, sync: normalizeLocalSyncMeta({ ...record.sync, ...syncUpdates }),
+          updated_at: nowIso() };
+        return { value: next, next: { ...state,
+          records: state.records.map((row) => row.id === recordId ? next : row) } };
+      });
+      if (saved) return saved.value;
+    }
+    const durable = await commitManagedLocalSaf(current.archive_id, (content, index) => {
+      const entry = content.entries[index];
+      const record = entry.records.find((row) => row.id === recordId);
+      if (!record) throw Error("本地记录不存在。");
+      const next: LocalRecord = { ...record,
+        sync: normalizeLocalSyncMeta({ ...record.sync, ...syncUpdates }), updated_at: nowIso() };
+      content.entries[index] = { ...entry,
+        records: entry.records.map((row) => row.id === recordId ? next : row) };
+      return next;
+    });
+    if (durable) return durable.value;
+  }
   const db = await openLocalDb();
 
   try {
@@ -2420,6 +3503,30 @@ export async function updateLocalImageSyncMeta(
   imageId: string,
   syncUpdates: Partial<LocalSyncMeta>
 ) {
+  await ensureLocalSafReadable();
+  const current = await getRowById<LocalImage>(IMAGE_STORE, imageId);
+  if (current) {
+    const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, current.archive_id);
+    if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+      const saved = await commitCloudSaf(cloud.local_owner_user_id, current.archive_id, (state) => {
+        const image = state.images.find((row) => row.id === imageId);
+        if (!image) throw Error("本地图片缓存不存在。");
+        const next = { ...image, sync: normalizeLocalSyncMeta({ ...image.sync, ...syncUpdates }) };
+        return { value: next, next: { ...state,
+          images: state.images.map((row) => row.id === imageId ? next : row) } };
+      });
+      if (saved) return saved.value;
+    }
+    const durable = await commitManagedLocalSaf(current.archive_id, (content, index) => {
+      const entry = content.entries[index];
+      const image = entry.images.find((row) => row.id === imageId);
+      if (!image) throw Error("本地图片缓存不存在。");
+      const next: LocalImage = { ...image, sync: normalizeLocalSyncMeta({ ...image.sync, ...syncUpdates }) };
+      content.entries[index] = { ...entry, images: entry.images.map((row) => row.id === imageId ? next : row) };
+      return next;
+    });
+    if (durable) return durable.value;
+  }
   const db = await openLocalDb();
 
   try {
@@ -2463,6 +3570,20 @@ export async function updateLocalRecordCloudSyncOperation(
   operationId: string,
   update: LocalCloudSyncOperationUpdate
 ) {
+  const currentRecord = await getRowById<LocalRecord>(RECORD_STORE, recordId);
+  const cloud = currentRecord && await getRowById<LocalArchive>(ARCHIVE_STORE, currentRecord.archive_id);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, cloud.id, (state) => {
+      const record = state.records.find((row) => row.id === recordId);
+      if (!record) throw Error("本地记录不存在。");
+      const timestamp = nowIso();
+      const next = { ...record, sync: applyCloudSyncOperationUpdate(
+        record.sync, operationId, update, timestamp), updated_at: timestamp };
+      return { value: next, next: { ...state,
+        records: state.records.map((row) => row.id === recordId ? next : row) } };
+    });
+    if (saved) return saved.value;
+  }
   const db = await openLocalDb();
   const timestamp = nowIso();
 
@@ -2512,6 +3633,19 @@ export async function updateLocalImageCloudSyncOperation(
   operationId: string,
   update: LocalCloudSyncOperationUpdate
 ) {
+  const currentImage = await getRowById<LocalImage>(IMAGE_STORE, imageId);
+  const cloud = currentImage && await getRowById<LocalArchive>(ARCHIVE_STORE, currentImage.archive_id);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, cloud.id, (state) => {
+      const image = state.images.find((row) => row.id === imageId);
+      if (!image) throw Error("本地图片缓存不存在。");
+      const next = { ...image, sync: applyCloudSyncOperationUpdate(
+        image.sync, operationId, update, nowIso()) };
+      return { value: next, next: { ...state,
+        images: state.images.map((row) => row.id === imageId ? next : row) } };
+    });
+    if (saved) return saved.value;
+  }
   const db = await openLocalDb();
   const timestamp = nowIso();
 
@@ -2559,6 +3693,23 @@ export async function clearPendingCloudSyncPromptIfComplete(
   archiveId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, archiveId, (current) => {
+      if (!isLocalArchiveVisibleToOwner(current.archive, ownerContext) ||
+          current.archive.local_role === "cloud-offline-cache" &&
+          !archiveParticipatesInPendingCloudSync(current.archive)) {
+        throw Error("没有权限修改这个本地项目。");
+      }
+      if (localArchiveHasPendingCloudWork(current.archive, current.records, current.images)) {
+        return { value: false, next: current, unchanged: true };
+      }
+      const archive = { ...current.archive, pending_sync_prompt_mode: null,
+        pending_sync_first_detected_at: null, pending_sync_deferred_at: null };
+      return { value: true, next: { ...current, archive } };
+    });
+    if (saved) return saved.value;
+  }
   const db = await openLocalDb();
 
   try {
@@ -2632,6 +3783,19 @@ export async function completeLocalArchiveCloudTransfer(
   cloudArchiveId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  if (isAndroidSafAvailable() && (await getLocalSafDirectory()).available) {
+    const state = await readSafCommitted(createNativeSafStorage());
+    const entry = state?.source.entries.find((row) => row.id === archiveId && row.kind === "local-project");
+    if (entry) {
+      const transfer = entry.archive.local_cloud_transfer;
+      if (transfer?.stage !== "complete" || transfer.targetCloudArchiveId !== cloudArchiveId) {
+        throw Error("SAF transfer completion has not been durably committed.");
+      }
+      await mirrorCommittedLocalSaf(state!);
+      await refreshLocalUsageHints();
+      return;
+    }
+  }
   const [records, images] = await Promise.all([
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
@@ -2719,7 +3883,8 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
         }
 
         const archive = normalizeLocalArchive(cursor.value as LocalArchive);
-        if (!archive.local_owner_user_id && isUserLocalArchive(archive)) {
+        if (!archive.saf_local_space_id && !archive.local_owner_user_id &&
+            isUserLocalArchive(archive) && classifyLegacySafArchive(archive) === "local-project") {
           markedCount += 1;
           const updateRequest = cursor.update({
             ...archive,
@@ -2749,7 +3914,7 @@ export async function markUnownedLocalArchivesForOwner(ownerContext: {
         }
 
         const item = normalizeLocalTaxonomyItem(cursor.value as LocalTaxonomyItem);
-        if (!item.local_owner_user_id) {
+        if (!item.saf_local_space_id && !item.local_owner_user_id) {
           const updateRequest = cursor.update({
             ...item,
             local_owner_user_id: userId,
@@ -2801,6 +3966,16 @@ export async function markLocalArchiveForOwner(
     }
 
     const normalizedArchive = normalizeLocalArchive(archive);
+    if (classifyLegacySafArchive(normalizedArchive) !== "local-project") {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw Error("Cloud pending ownership cannot be inferred from a later login.");
+    }
+    if (normalizedArchive.saf_local_space_id) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw Error("This SAF local project belongs to the connected LifeSpace directory, not a cloud account.");
+    }
     await abortIfCloudOfflineCacheWrite(transaction, normalizedArchive, done);
     if (
       normalizedArchive.local_owner_user_id &&
@@ -2863,6 +4038,7 @@ export async function createLocalArchive(input: {
   const archive: LocalArchive = {
     id: createId("local_archive"),
     local_role: "local-project",
+    ...(wantsPendingCloud ? { saf_cloud_pending_origin: "create-archive" as const } : {}),
     title: input.title.trim(),
     category,
     main_category: category,
@@ -2909,6 +4085,34 @@ export async function createLocalArchive(input: {
   const storedArchive = wantsPendingCloud
     ? markArchivePendingPrompt(archive, timestamp)
     : archive;
+  if (!wantsPendingCloud && isAndroidSafAvailable()) {
+    await migrateLegacyLocalProjectsIfNeeded();
+    const state = await connectedLocalSafState(true);
+    if (!state) throw Error("Select a LifeSpace data folder before creating a local project.");
+    const oldRow = await getRowById<LocalArchive>(ARCHIVE_STORE, storedArchive.id);
+    if (oldRow || state.source.entries.some((entry) => entry.id === storedArchive.id)) {
+      throw Error("Local project ID already exists; no data was changed.");
+    }
+    const entry = { id: storedArchive.id, kind: "local-project" as const,
+      partition: "local" as const,
+      archive: { ...storedArchive, saf_local_space_id: state.manifest.localSpaceId },
+      records: [], images: [] };
+    const storage = createNativeSafStorage();
+    await commitSafContent(storage, { ...state.source, entries: [...state.source.entries, entry] },
+      state.commit.revision);
+    const committed = await readSafCommitted(storage);
+    if (!committed?.source.entries.some((row) => row.id === entry.id)) {
+      throw Error("SAF project creation was not durably committed.");
+    }
+    try { await mirrorCommittedLocalSaf(committed); }
+    catch (error) { console.error("SAF project committed; business mirror will rebuild on next read:", error); }
+    await refreshOptionalSafUsageHints();
+    return entry.archive;
+  }
+  if (wantsPendingCloud && await createCloudSafArchive(storedArchive)) {
+    await refreshOptionalSafUsageHints();
+    return storedArchive;
+  }
   const db = await openLocalDb();
 
   try {
@@ -2935,6 +4139,7 @@ export async function resolveLocalArchiveDetail(
   archiveId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const safConnected = await ensureLocalSafReadable();
   const [archive, records, images] = await Promise.all([
     getRowById<LocalArchive>(ARCHIVE_STORE, archiveId),
     getAllRows<LocalRecord>(RECORD_STORE),
@@ -2942,6 +4147,9 @@ export async function resolveLocalArchiveDetail(
   ]);
 
   if (!archive) return { status: "not-found" as const, detail: null };
+  if (archive.saf_local_space_id && !safConnected) {
+    throw Error("Reconnect your LifeSpace data folder to read this project.");
+  }
   const normalizedArchive = normalizeLocalArchive(archive);
   if (normalizedArchive.trashed_at) return { status: "not-found" as const, detail: null };
   if (!isLocalArchiveVisibleToOwner(normalizedArchive, ownerContext)) {
@@ -2984,6 +4192,8 @@ export async function getLocalArchiveByCloudSource(
   const sourceId = normalizeOptionalText(cloudArchiveId);
   if (!sourceId) return null;
 
+  await ensureCloudSafReadable(ownerContext);
+
   const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
   return (
     archives
@@ -3003,6 +4213,8 @@ export async function getCloudOfflineCacheByCloudSource(
 ) {
   const sourceId = normalizeOptionalText(cloudArchiveId);
   if (!sourceId) return null;
+
+  await ensureCloudSafReadable(ownerContext);
 
   const archives = await getAllRows<LocalArchive>(ARCHIVE_STORE);
   return (
@@ -3052,6 +4264,7 @@ export async function clearCloudOfflineCachesForOwner(
 ) {
   const ownerUserId = getOwnerUserId(ownerContext);
   if (!ownerUserId) return { removed: 0 };
+  mirroredCloudHeads.delete(ownerUserId);
 
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
@@ -3066,6 +4279,10 @@ export async function clearCloudOfflineCachesForOwner(
         isLocalArchiveVisibleToOwner(archive, ownerContext)
     );
   for (const cache of caches) {
+    if (cache.saf_local_space_id) {
+      await deleteCloudOfflineCacheRows(cache, records, images);
+      continue;
+    }
     const archiveRecords = records.filter((item) => item.archive_id === cache.id);
     const pendingRecords = archiveRecords.filter((record) =>
       isPendingCloudSyncStatus(normalizeLocalSyncMeta(record.sync).status)
@@ -3092,6 +4309,14 @@ export async function clearCloudOfflineCachesForOwner(
       continue;
     }
     await deleteCloudOfflineCacheRows(cache, records, images);
+  }
+  // Logout discards the account's runtime mirror, including pending projects.
+  // The immutable cloud/<accountKey> partition and pending media remain intact.
+  for (const row of archives.filter((archive) => archive.saf_local_space_id &&
+      archive.local_owner_user_id === ownerUserId &&
+      classifyLegacySafArchive(archive) !== "local-project" &&
+      !caches.some((cache) => cache.id === archive.id))) {
+    await deleteCloudOfflineCacheRows(row, records, images);
   }
   return { removed: caches.length };
 }
@@ -3623,6 +4848,8 @@ async function replaceCloudOfflineCacheUnlocked(input: {
     throw new Error("无法确认云端离线副本归属。");
   }
 
+  const cloudSafConnected = await ensureCloudSafReadable(input.owner_context);
+
   const [allArchives, allRecords, allImages] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
@@ -3637,6 +4864,9 @@ async function replaceCloudOfflineCacheUnlocked(input: {
         isLocalArchiveVisibleToOwner(archive, input.owner_context)
     );
   const archiveId = previous?.id || `cloud_cache_archive_${ownerUserId}_${cloudArchiveId}`;
+  if (!cloudSafConnected && previous?.saf_local_space_id) {
+    throw Error("Reconnect your LifeSpace data folder before refreshing the cloud cache.");
+  }
   const timestamp = nowIso();
   const category = normalizeLocalArchiveCategory(input.category);
   const cycleIdByCloudId = new Map<string, string>();
@@ -3785,6 +5015,38 @@ async function replaceCloudOfflineCacheUnlocked(input: {
       (isPendingCloudSyncStatus(normalizeLocalSyncMeta(image.sync).status) ||
         pendingRecordIds.has(image.record_id))
   );
+  if (cloudSafConnected) {
+    const recordMap = new Map(cachedRecords.map((row) => [row.id, row]));
+    for (const row of pendingRecords) {
+      if (isPendingCloudSyncStatus(row.sync.status) || !recordMap.has(row.id)) recordMap.set(row.id, row);
+    }
+    const imageMap = new Map(cachedImages.map((row) => [row.id, row]));
+    const remoteRecordIds = new Set(cachedRecords.map((row) => row.id));
+    for (const row of pendingImages) {
+      if (isPendingCloudSyncStatus(row.sync.status) || !remoteRecordIds.has(row.record_id)) {
+        imageMap.set(row.id, row);
+      }
+    }
+    const pendingFields = previous && isPendingCloudSyncStatus(previous.sync.status)
+      ? previous.sync.pending_fields || [] : [];
+    const mergedArchive: LocalArchive = pendingFields.length && previous
+      ? { ...archive, ...Object.fromEntries(pendingFields.map((field) =>
+          [field, (previous as unknown as Record<string, unknown>)[field]])),
+          sync: previous.sync,
+          pending_sync_prompt_mode: previous.pending_sync_prompt_mode,
+          pending_sync_first_detected_at: previous.pending_sync_first_detected_at,
+          pending_sync_deferred_at: previous.pending_sync_deferred_at }
+      : archive;
+    const next = { archive: mergedArchive, records: [...recordMap.values()], images: [...imageMap.values()] };
+    if (previous) {
+      const saved = await commitCloudSaf(ownerUserId, archiveId, () => ({ value: mergedArchive,
+        next, baselineArchive: archive }));
+      if (!saved) throw Error("SAF cloud folder disconnected during cache refresh.");
+    } else if (!await createCloudSafMaterialization(next)) {
+      throw Error("SAF cloud folder disconnected during cache refresh.");
+    }
+    return mergedArchive;
+  }
   const db = await openLocalDb();
   try {
     const transaction = db.transaction(
@@ -3872,6 +5134,11 @@ export async function repairDiagnosedCloudCacheDuplicates(input: {
         await done.catch(() => undefined);
         throw new Error("diagnosis_changed");
       }
+      if (archives.some((archive) => archive.saf_local_space_id)) {
+        transaction.abort();
+        await done.catch(() => undefined);
+        throw Error("SAF cloud cache repair requires a durable revision; runtime-only repair refused.");
+      }
       const records = await requestToPromise<LocalRecord[]>(recordStore.getAll());
       const images = await requestToPromise<LocalImage[]>(imageStore.getAll());
       const sorted = archives.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
@@ -3919,6 +5186,32 @@ export async function pruneCloudOfflineCacheForEndedSource(
     ownerContext
   );
   if (!cache) return { removed: false, preservedPending: false };
+
+  if (cache.saf_local_space_id && cache.local_owner_user_id) {
+    const owner = cache.local_owner_user_id;
+    const state = await connectedCloudSafState(owner);
+    if (!state) throw Error("Reconnect your LifeSpace data folder before pruning the cloud cache.");
+    const current = materializeCloudEntries(state.source.entries.filter((entry) =>
+      entry.archive.id === cache.id), owner)[0];
+    if (!current) throw Error("SAF cloud cache is missing from committed state.");
+    const pendingIds = new Set(current.records.filter((record) =>
+      isPendingCloudSyncStatus(record.sync.status) || current.images.some((image) =>
+        image.record_id === record.id && isPendingCloudSyncStatus(image.sync.status)))
+      .map((record) => record.id));
+    if (!pendingIds.size && !isPendingCloudSyncStatus(current.archive.sync.status)) {
+      await removeCloudSafArchive(owner, cache.id);
+      return { removed: true, preservedPending: false };
+    }
+    const saved = await commitCloudSaf(owner, cache.id, (item) => ({
+      value: { removed: false, preservedPending: true },
+      next: { archive: { ...item.archive, status: "ended" as const,
+        source_cloud_updated_at: normalizeOptionalText(sourceUpdatedAt) ||
+          item.archive.source_cloud_updated_at || null, updated_at: nowIso() },
+        records: item.records.filter((record) => pendingIds.has(record.id)),
+        images: item.images.filter((image) => pendingIds.has(image.record_id)) } }));
+    if (!saved) throw Error("SAF cloud folder disconnected during cache pruning.");
+    return saved.value;
+  }
 
   const [records, images] = await Promise.all([
     getAllRows<LocalRecord>(RECORD_STORE),
@@ -4020,6 +5313,22 @@ export async function createLocalArchiveCycle(
   ownerContext?: LocalArchiveOwnerContext | null,
   displayName?: string | null
 ) {
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const started = normalizeOptionalText(startedAt);
+    if (!started || Number.isNaN(new Date(started).getTime())) throw Error("请选择有效的开始日期。");
+    const archive = entry.archive;
+    const timestamp = nowIso();
+    const cycle: LocalArchiveCycle = { id: createId("local_cycle"), archive_id: archiveId,
+      cycle_no: [...(archive.cycles || []), ...(archive.trashed_cycles || []).map((row) => row.cycle)]
+        .reduce((max, row) => Math.max(max, row.cycle_no), 0) + 1,
+      display_name: normalizeOptionalText(displayName)?.slice(0, 80) || null,
+      status: "active", started_at: started, ended_at: null, created_at: timestamp, updated_at: timestamp };
+    content.entries[index] = { ...entry, archive: { ...archive,
+      cycles: [...(archive.cycles || []), cycle], updated_at: timestamp } };
+    return cycle;
+  });
+  if (durable) return durable.value;
   const db = await openLocalDb();
 
   try {
@@ -4099,6 +5408,22 @@ export async function endLocalArchiveCycle(
   endedAt: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const target = entry.archive.cycles?.find((row) => row.id === cycleId);
+    if (!target || target.status !== "active") throw Error("这个周期已经结束或不存在。");
+    const ended = normalizeOptionalText(endedAt);
+    if (!ended || Number.isNaN(new Date(ended).getTime()) ||
+        new Date(ended).getTime() < new Date(target.started_at).getTime()) {
+      throw Error("结束日期不能早于开始日期。");
+    }
+    const timestamp = nowIso();
+    const cycles = entry.archive.cycles!.map((row) => row.id === cycleId
+      ? { ...row, status: "ended" as const, ended_at: ended, updated_at: timestamp } : row);
+    content.entries[index] = { ...entry, archive: { ...entry.archive, cycles, updated_at: timestamp } };
+    return cycles.find((row) => row.id === cycleId) || null;
+  });
+  if (durable) return durable.value;
   const db = await openLocalDb();
 
   try {
@@ -4183,6 +5508,24 @@ export async function updateLocalArchiveCycleDates(
   dates: { started_at: string; ended_at: string | null },
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const target = entry.archive.cycles?.find((row) => row.id === cycleId);
+    if (!target) throw Error("这个周期不存在。");
+    const started = normalizeOptionalText(dates.started_at);
+    const ended = target.status === "ended" ? normalizeOptionalText(dates.ended_at) : null;
+    if (!started || Number.isNaN(new Date(started).getTime())) throw Error("请选择有效的开始日期。");
+    if (target.status === "ended" && (!ended || Number.isNaN(new Date(ended).getTime()) ||
+        new Date(ended).getTime() < new Date(started).getTime())) {
+      throw Error("结束日期不能早于开始日期。");
+    }
+    const timestamp = nowIso();
+    const cycles = entry.archive.cycles!.map((row) => row.id === cycleId
+      ? { ...row, started_at: started, ended_at: ended, updated_at: timestamp } : row);
+    content.entries[index] = { ...entry, archive: { ...entry.archive, cycles, updated_at: timestamp } };
+    return cycles.find((row) => row.id === cycleId) || null;
+  });
+  if (durable) return durable.value;
   const db = await openLocalDb();
 
   try {
@@ -4269,6 +5612,17 @@ export async function updateLocalArchiveCycleName(
   displayName: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    if (!entry.archive.cycles?.some((row) => row.id === cycleId)) throw Error("这个周期不存在。");
+    const timestamp = nowIso();
+    const cycles = entry.archive.cycles!.map((row) => row.id === cycleId
+      ? { ...row, display_name: normalizeOptionalText(displayName)?.slice(0, 80) || null,
+        updated_at: timestamp } : row);
+    content.entries[index] = { ...entry, archive: { ...entry.archive, cycles, updated_at: timestamp } };
+    return cycles.find((row) => row.id === cycleId) || null;
+  });
+  if (durable) return durable.value;
   const db = await openLocalDb();
 
   try {
@@ -4331,6 +5685,21 @@ export async function deleteLocalArchiveCycle(
   cycleId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const archive = entry.archive;
+    const cycle = archive.cycles?.find((row) => row.id === cycleId);
+    if (!cycle) throw Error("这个周期不存在。");
+    const records = entry.records.filter((row) => row.cycle_id === cycleId);
+    const timestamp = nowIso();
+    const trash: LocalArchiveCycleTrash = { id: createId("local_cycle_trash"), archive_id: archiveId,
+      cycle, record_ids: records.map((row) => row.id), deleted_at: timestamp };
+    content.entries[index] = { ...entry, archive: { ...archive,
+      cycles: (archive.cycles || []).filter((row) => row.id !== cycleId),
+      trashed_cycles: [trash, ...(archive.trashed_cycles || [])], updated_at: timestamp } };
+    return records.length;
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return durable.value; }
   const db = await openLocalDb();
 
   try {
@@ -4410,6 +5779,20 @@ export async function restoreLocalArchiveCycle(
   trashEntryId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const archive = entry.archive;
+    const trash = archive.trashed_cycles?.find((row) => row.id === trashEntryId);
+    if (!trash) throw Error("这个已删除期次不存在。");
+    if (archive.cycles?.some((row) => row.id === trash.cycle.id)) throw Error("这个期次已经恢复。");
+    const cycle = { ...trash.cycle, archive_id: archiveId, updated_at: nowIso() };
+    content.entries[index] = { ...entry, archive: { ...archive,
+      cycles: [...(archive.cycles || []), cycle].sort((a, b) => a.cycle_no - b.cycle_no),
+      trashed_cycles: archive.trashed_cycles!.filter((row) => row.id !== trashEntryId),
+      updated_at: nowIso() } };
+    return { cycle, recordCount: trash.record_ids.length };
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return durable.value; }
   const db = await openLocalDb();
 
   try {
@@ -4490,6 +5873,18 @@ export async function purgeLocalArchiveCycleTrash(
   trashEntryId: string,
   ownerContext?: LocalArchiveOwnerContext | null
 ) {
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    const trash = entry.archive.trashed_cycles?.find((row) => row.id === trashEntryId);
+    if (!trash) throw Error("这个已删除期次不存在。");
+    const ids = new Set(trash.record_ids);
+    content.entries[index] = { ...entry,
+      archive: { ...entry.archive, trashed_cycles: entry.archive.trashed_cycles!
+        .filter((row) => row.id !== trashEntryId), updated_at: nowIso() },
+      records: entry.records.filter((row) => !ids.has(row.id)),
+      images: entry.images.filter((image) => !ids.has(image.record_id)) };
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return; }
   const db = await openLocalDb();
   try {
     const transaction = db.transaction([ARCHIVE_STORE, RECORD_STORE, IMAGE_STORE], "readwrite");
@@ -4596,6 +5991,52 @@ export async function createLocalRecord(input: {
     local_only: true,
     sync: localSyncMeta(),
   }));
+  const cloudParent = await getRowById<LocalArchive>(ARCHIVE_STORE, input.archive_id);
+  if (cloudParent && (classifyLegacySafArchive(cloudParent) !== "local-project" ||
+      (cloudParent.local_role === "saved-local-copy" && cloudParent.source_cloud_archive_id)) &&
+      cloudParent.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloudParent.local_owner_user_id, input.archive_id, (current) => {
+      const archive = current.archive;
+      const isCache = resolveLocalArchiveRole(archive) === "cloud-offline-cache";
+      if (isCache && archive.status !== "active") throw Error("这个云项目已经结束，不能继续新增离线记录。");
+      const cloudId = resolveIntendedCloudArchiveId(archive);
+      if (archiveParticipatesInPendingCloudSync(archive)) {
+        record.sync = queueCloudSyncOperation(record.sync, { cloudArchiveId: cloudId,
+          operationKind: "create-record", timestamp });
+        for (const image of images) image.sync = queueCloudSyncOperation(image.sync, {
+          cloudArchiveId: cloudId, operationKind: "upload-image", timestamp,
+          dependsOnOperationId: record.sync.client_operation_id });
+      }
+      const cycle = archive.cycles?.find((item) => item.id === record.cycle_id && item.status === "active");
+      record.cycle_id = cycle?.id || null;
+      if (input.end_cycle_after_record) throw Error("云端期次离线时只读，请联网后结束期次。");
+      return { value: record, next: { archive: markArchivePendingPrompt({ ...archive,
+        updated_at: timestamp }, timestamp), records: [...current.records, record],
+        images: [...current.images, ...images] } };
+    });
+    if (saved) { await refreshOptionalSafUsageHints(); return saved.value; }
+  }
+  const durable = await commitManagedLocalSaf(input.archive_id, (content, index) => {
+    const entry = content.entries[index];
+    const archive = entry.archive;
+    const requestedCycle = archive.cycles?.find((cycle) =>
+      cycle.id === record.cycle_id && cycle.status === "active");
+    record.cycle_id = requestedCycle?.id || null;
+    let nextArchive: LocalArchive = { ...archive, updated_at: timestamp };
+    if (input.end_cycle_after_record) {
+      if (!requestedCycle) throw Error("所选周期已结束或不存在，请重新选择。");
+      if (isLocalDateBefore(recordTime, requestedCycle.started_at)) {
+        throw Error("记录日期不能早于所选周期开始日期。");
+      }
+      nextArchive = { ...nextArchive, cycles: (archive.cycles || []).map((cycle) =>
+        cycle.id === requestedCycle.id ? { ...cycle, status: "ended" as const,
+          ended_at: toLocalDateEndIso(recordTime), updated_at: timestamp } : cycle) };
+    }
+    content.entries[index] = { ...entry, archive: nextArchive,
+      records: [...entry.records, record], images: [...entry.images, ...images] };
+    return record;
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return durable.value; }
   const db = await openLocalDb();
 
   try {
@@ -4698,8 +6139,33 @@ export async function createLocalRecord(input: {
 }
 
 export async function deleteLocalRecord(recordId: string) {
+  await ensureLocalSafReadable();
   const record = await getRowById<LocalRecord>(RECORD_STORE, recordId);
   if (!record) return;
+  const cloud = await getRowById<LocalArchive>(ARCHIVE_STORE, record.archive_id);
+  if (cloud && classifyLegacySafArchive(cloud) !== "local-project" && cloud.local_owner_user_id) {
+    const saved = await commitCloudSaf(cloud.local_owner_user_id, record.archive_id, (current) => {
+      const parent = current.records.find((row) => row.id === recordId);
+      if (!parent) return { value: undefined, next: current };
+      if (current.archive.local_role === "cloud-offline-cache" &&
+          parent.sync.status !== "pending-cloud-sync") {
+        throw Error("云端已有记录离线时只读，不能删除。");
+      }
+      return { value: undefined, next: { archive: { ...current.archive, updated_at: nowIso() },
+        records: current.records.filter((row) => row.id !== recordId),
+        images: current.images.filter((image) => image.record_id !== recordId) } };
+    });
+    if (saved) { await refreshOptionalSafUsageHints(); return; }
+  }
+  const durable = await commitManagedLocalSaf(record.archive_id, (content, index) => {
+    const entry = content.entries[index];
+    if (!entry.records.some((row) => row.id === recordId)) return;
+    content.entries[index] = { ...entry,
+      archive: { ...entry.archive, updated_at: nowIso() },
+      records: entry.records.filter((row) => row.id !== recordId),
+      images: entry.images.filter((image) => image.record_id !== recordId) };
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return; }
   const images = await getAllRows<LocalImage>(IMAGE_STORE);
   const db = await openLocalDb();
 
@@ -4746,18 +6212,20 @@ export async function deleteLocalRecord(recordId: string) {
 }
 
 export async function listLocalProjectTrash(ownerContext?: LocalArchiveOwnerContext | null) {
+  const safConnected = await ensureLocalSafReadable();
   const [archives, records, images] = await Promise.all([
     getAllRows<LocalArchive>(ARCHIVE_STORE),
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),
   ]);
-  return archives.map(normalizeLocalArchive)
+  return archives.filter((row) => safConnected || !row.saf_local_space_id).map(normalizeLocalArchive)
     .filter((archive) => archive.trashed_at && isUserLocalArchive(archive) && isLocalArchiveVisibleToOwner(archive, ownerContext))
     .map((archive) => buildSummary(archive, records, images))
     .sort((a, b) => String(b.trashed_at).localeCompare(String(a.trashed_at)));
 }
 
 export async function setLocalProjectTrashed(archiveId: string, trashed: boolean, ownerContext?: LocalArchiveOwnerContext | null) {
+  await ensureLocalSafReadable();
   const archive = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   if (!archive) throw new Error("本地项目不存在。");
   const normalized = normalizeLocalArchive(archive);
@@ -4769,6 +6237,22 @@ export async function setLocalProjectTrashed(archiveId: string, trashed: boolean
       throw new Error("请先处理云端待同步内容，再移动此项目。");
     }
   }
+  if (classifyLegacySafArchive(normalized) === "pending-cloud-user-data" &&
+      normalized.local_owner_user_id) {
+    const saved = await commitCloudSaf(normalized.local_owner_user_id, archiveId, (current) => ({
+      value: undefined, next: { ...current, archive: { ...current.archive,
+        trashed_at: trashed ? nowIso() : null, updated_at: nowIso() } } }));
+    if (saved) { await refreshOptionalSafUsageHints(); return; }
+  }
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    const entry = content.entries[index];
+    if (entry.archive.local_cloud_transfer) {
+      throw Error("Finish or resolve this cloud transfer before moving the local project to trash.");
+    }
+    content.entries[index] = { ...entry, archive: { ...entry.archive,
+      trashed_at: trashed ? nowIso() : null, updated_at: nowIso() } };
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return; }
   const db = await openLocalDb();
   try {
     const transaction = db.transaction(ARCHIVE_STORE, "readwrite");
@@ -4787,6 +6271,7 @@ export async function setLocalProjectTrashed(archiveId: string, trashed: boolean
 }
 
 export async function deleteLocalArchive(archiveId: string) {
+  await ensureLocalSafReadable();
   const existing = await getRowById<LocalArchive>(ARCHIVE_STORE, archiveId);
   if (existing) {
     assertWritableUserArchive(
@@ -4794,6 +6279,18 @@ export async function deleteLocalArchive(archiveId: string) {
       "云项目离线缓存只读，不能删除。"
     );
   }
+  if (existing && classifyLegacySafArchive(existing) === "pending-cloud-user-data" &&
+      existing.local_owner_user_id && await removeCloudSafArchive(existing.local_owner_user_id, archiveId)) {
+    await refreshOptionalSafUsageHints();
+    return;
+  }
+  const durable = await commitManagedLocalSaf(archiveId, (content, index) => {
+    if (content.entries[index].archive.local_cloud_transfer) {
+      throw Error("Finish or resolve this cloud transfer before permanently deleting the local project.");
+    }
+    content.entries.splice(index, 1);
+  });
+  if (durable) { await refreshOptionalSafUsageHints(); return; }
   const [records, images] = await Promise.all([
     getAllRows<LocalRecord>(RECORD_STORE),
     getAllRows<LocalImage>(IMAGE_STORE),

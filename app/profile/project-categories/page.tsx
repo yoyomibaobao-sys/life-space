@@ -85,7 +85,7 @@ export default function ProjectCategorySettingsPage() {
       if (activeSpace === "cloud") {
         await saveCloudArchiveCategoryDepths(userId, cloudDepths);
       } else {
-        saveLocalArchiveCategoryDepths(localDepths, userId);
+        await saveLocalArchiveCategoryDepths(localDepths, userId);
       }
       showToast(isEnglish ? "Group settings saved" : "项目分组设置已保存");
     } catch (saveError) {

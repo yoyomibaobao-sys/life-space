@@ -26,6 +26,12 @@ import {
   STORAGE_UPLOAD_MAINTENANCE_SYNC_NOT_STARTED_MESSAGE,
 } from "@/lib/storage-upload-maintenance";
 import { supabase } from "@/lib/supabase";
+import { createNativeSafStorage, getLocalSafDirectory } from "@/lib/local-saf-native";
+import { readSafCommitted } from "@/lib/local-saf-core";
+import {
+  advanceSafLocalCloudTransfer, ensurePreparedCloudArchive,
+  prepareSafLocalCloudTransfer, type PreparedLocalCloudTransfer,
+} from "@/lib/local-saf-cloud-transfer";
 import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
@@ -163,6 +169,7 @@ async function ensureCloudArchive(params: {
   userId: string;
   visibility: LocalToCloudVisibility;
   existingCloudArchiveId?: string | null;
+  preparedTransfer?: PreparedLocalCloudTransfer | null;
 }) {
   const systemName = getLocalArchiveSystemName(params.archive);
   if (!systemName) throw new Error("关联指引不能为空。");
@@ -191,6 +198,36 @@ async function ensureCloudArchive(params: {
     is_public: isPublic,
     default_record_visibility: params.visibility,
   };
+
+  if (params.preparedTransfer) {
+    const transfer = params.preparedTransfer;
+    const { data: currentIdentity, error: currentIdentityError } = await supabase.auth.getUser();
+    if (currentIdentityError || currentIdentity.user?.id !== transfer.targetUserId ||
+        params.userId !== transfer.targetUserId) {
+      throw new Error("云账号已变更，请重新登录此次转云的原账号。");
+    }
+    const resolved = await ensurePreparedCloudArchive({
+      async findById(id) {
+        const { data, error } = await supabase.from("archives")
+          .select("id,user_id,local_transfer_token").eq("id", id).maybeSingle();
+        if (error) throw new Error(`核对转云目标失败：${getSupabaseErrorMessage(error)}`);
+        return data;
+      },
+      async insert(payload) {
+        const { error } = await supabase.from("archives").insert([payload]);
+        if (error) throw new Error(`创建云端项目失败：${getSupabaseErrorMessage(error)}`);
+      },
+    }, transfer, params.userId, basePayload);
+    if (!resolved.wasExisting) return resolved.id;
+    // Never update a same-ID remote archive until its owner and token are verified.
+    const { data, error } = await supabase.from("archives").update(basePayload)
+      .eq("id", resolved.id).eq("user_id", transfer.targetUserId)
+      .eq("local_transfer_token", transfer.localTransferToken).select("id").maybeSingle();
+    if (error || data?.id !== resolved.id) {
+      throw new Error(`更新转云目标失败：${getSupabaseErrorMessage(error)}`);
+    }
+    return resolved.id;
+  }
 
   if (params.existingCloudArchiveId) {
     const { data, error } = await supabase
@@ -802,7 +839,36 @@ export async function syncLocalArchiveToCloud(params: {
       error: "关联指引不能为空。",
     };
   }
-  if (archive.migration_status === "migrating") {
+  let safStorage: ReturnType<typeof createNativeSafStorage> | null = null;
+  let preparedTransfer: PreparedLocalCloudTransfer | null = null;
+  if ((await getLocalSafDirectory()).available) {
+    try {
+      safStorage = createNativeSafStorage();
+      const committed = await readSafCommitted(safStorage);
+      const safEntry = committed?.source.entries.find((entry) => entry.id === params.localArchiveId);
+      if (safEntry) {
+        // Old partially transferred IDB data has no proof that a fresh SAF target
+        // is the same remote project. Do not prepare a second target for it.
+        if (archive.migration_cloud_archive_id && !safEntry.archive.local_cloud_transfer) {
+          return { success: false, error: "已有转云目标缺少 SAF 身份凭据，已停止重新创建。" };
+        }
+        const { data: identity, error: identityError } = await supabase.auth.getUser();
+        if (identityError || identity.user?.id !== userId) {
+          return { success: false, error: "请用当前云账号重新验证身份后继续转云。" };
+        }
+        preparedTransfer = await prepareSafLocalCloudTransfer(safStorage, params.localArchiveId, userId);
+        if (archive.migration_cloud_archive_id &&
+            archive.migration_cloud_archive_id !== preparedTransfer.targetCloudArchiveId) {
+          return { success: false, error: "已有转云目标与 SAF 提交记录不一致，已停止转云。" };
+        }
+        await updateLocalArchiveMigrationState(params.localArchiveId,
+          { local_cloud_transfer: preparedTransfer }, params.ownerContext);
+      }
+    } catch (error) {
+      return { success: false, error: getUserFacingSyncError(error) };
+    }
+  }
+  if (archive.migration_status === "migrating" && !preparedTransfer) {
     return {
       success: false,
       cloudArchiveId: archive.migration_cloud_archive_id || null,
@@ -846,7 +912,8 @@ export async function syncLocalArchiveToCloud(params: {
     };
   }
 
-  let cloudArchiveId = cleanText(archive.migration_cloud_archive_id);
+  let cloudArchiveId = preparedTransfer?.targetCloudArchiveId || cleanText(archive.migration_cloud_archive_id);
+  let cloudCreated = false;
   const startedAt = new Date().toISOString();
 
   try {
@@ -873,13 +940,22 @@ export async function syncLocalArchiveToCloud(params: {
       userId,
       visibility: params.visibility,
       existingCloudArchiveId: cloudArchiveId,
+      preparedTransfer,
     });
+    cloudCreated = true;
+    if (preparedTransfer && safStorage) {
+      await advanceSafLocalCloudTransfer(safStorage, params.localArchiveId,
+        preparedTransfer, "cloud-created");
+    }
 
     await updateLocalArchiveMigrationState(
       params.localArchiveId,
       {
         migration_status: "migrating",
         migration_cloud_archive_id: cloudArchiveId,
+        local_cloud_transfer: preparedTransfer
+          ? { ...preparedTransfer, stage: "cloud-created" }
+          : undefined,
         migration_started_at: startedAt,
         migration_error: null,
         migration_visibility: params.visibility,
@@ -957,6 +1033,10 @@ export async function syncLocalArchiveToCloud(params: {
       params.ownerContext
     );
 
+    if (preparedTransfer && safStorage) {
+      await advanceSafLocalCloudTransfer(safStorage, params.localArchiveId,
+        preparedTransfer, "complete");
+    }
     await completeLocalArchiveCloudTransfer(
       params.localArchiveId,
       cloudArchiveId,
@@ -973,7 +1053,8 @@ export async function syncLocalArchiveToCloud(params: {
       params.localArchiveId,
       {
         migration_status: "failed",
-        migration_cloud_archive_id: cloudArchiveId,
+        migration_cloud_archive_id: preparedTransfer && !cloudCreated
+          ? archive.migration_cloud_archive_id || null : cloudArchiveId,
         migration_error: message,
         migration_visibility: params.visibility,
         sync: {
@@ -990,7 +1071,7 @@ export async function syncLocalArchiveToCloud(params: {
     return {
       success: false,
       cloudArchiveId,
-      partialFailure: Boolean(cloudArchiveId),
+      partialFailure: preparedTransfer ? cloudCreated : Boolean(cloudArchiveId),
       error: message,
     };
   }

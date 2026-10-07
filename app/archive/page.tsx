@@ -224,7 +224,9 @@ export default function ArchivePage() {
       setPendingCloudSyncSummaries(pendingSummaries);
       setLocalUnownedCount(result.unownedCount);
       setLocalHiddenOwnedByOtherCount(result.hiddenOwnedByOtherCount);
-      setLocalError("");
+      setLocalError(result.safFolderDisconnected
+        ? "请重新连接 LifeSpace 本地数据文件夹；旧版本地项目仍可使用。"
+        : "");
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : t.archive_workspace.read_local_failed);
     } finally {
@@ -2201,7 +2203,7 @@ export default function ArchivePage() {
                 {t.archive.transfer_to_cloud}
               </button>
             )}
-            {!archive.local_owner_user_id && currentOwnerContext?.userId ? (
+            {!archive.saf_local_space_id && !archive.local_owner_user_id && currentOwnerContext?.userId ? (
               <button
                 type="button"
                 onClick={(event) => {
@@ -2236,7 +2238,7 @@ export default function ArchivePage() {
                       ),
                   },
                 ]),
-          ...(!archive.local_owner_user_id && currentOwnerContext?.userId
+          ...(!archive.saf_local_space_id && !archive.local_owner_user_id && currentOwnerContext?.userId
             ? [
                 {
                   label: t.archive_workspace.mark_ownership,

@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeAppUpdatePlugin.class);
         registerPlugin(NativeSystemUiPlugin.class);
+        registerPlugin(LocalSafPlugin.class);
         super.onCreate(savedInstanceState);
         WebView.setWebContentsDebuggingEnabled(true);
         if (bridge != null) {
