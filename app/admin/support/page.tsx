@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useSupportIdentity } from "@/components/support/useSupportIdentity";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import { formatPreciseDateTime } from "@/lib/date-time";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getSupportCopy } from "@/lib/i18n/support-workflow";
@@ -11,17 +12,20 @@ import { getFeedbackCategoryLabel, getReportCategoryLabel, getSupportResolutionL
 import { supabase } from "@/lib/supabase";
 import styles from "@/components/support/support.module.css";
 
-export default function AdminSupportPage() {
+export default function AdminSupportPage({ onBack }: { onBack?: () => void } = {}) {
   const { language } = useLanguage();
   const copy = getSupportCopy(language);
   const { userId, error, retry } = useSupportIdentity();
-  return <main className={styles.page}>
-    <Link href="/profile" className="mobile-app-desktop-only">{copy.back}</Link>
+  return <>
+    {onBack ? <MobilePageHeaderView className="mobile-app-grid-only" title={copy.admin} titleText={copy.admin} showBack onBack={onBack} ariaLabel={copy.back} /> : null}
+    <main className={styles.page}>
+    {!onBack ? <Link href="/profile" className="mobile-app-desktop-only">{copy.back}</Link> : null}
     <h1 className="mobile-app-desktop-only">{copy.admin}</h1>
     {error ? <p role="alert">{copy.loadError} <button className={styles.secondary} onClick={retry}>{copy.retry}</button></p>
       : userId === undefined ? <p role="status">{copy.loading}</p>
       : !userId ? <p>{copy.denied}</p> : <AdminGate key={userId} userId={userId} />}
-  </main>;
+    </main>
+  </>;
 }
 
 function AdminGate({ userId }: { userId: string }) {

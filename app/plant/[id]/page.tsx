@@ -2,9 +2,10 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import ExperienceCardListCard from "@/components/experience-card/ExperienceCardListCard";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import SavedGuideStatus from "@/components/plant-detail/SavedGuideStatus";
 import UiIcon from "@/components/ui/UiIcon";
 import { useParams, useSearchParams } from "next/navigation";
@@ -21,10 +22,12 @@ import {
 } from "@/lib/membership";
 import {
   loadPlantBasicOverviewsCompat,
-  loadPlantCoreParametersCompat,
-  type PlantBasicOverviewCompatRow,
+  loadPublicPlantCatalogDetail,
+  type PublicPlantCatalogRow,
 } from "@/lib/plant-guide-compat";
+import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
 import { isStrongSystemNameAliasRelationType } from "@/lib/system-name-candidates";
+import { getOfflineGuideOverview, type OfflineGuideDirectoryEntry } from "@/lib/offline-guide-directory";
 import type { TranslationDictionary } from "@/lib/i18n";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
@@ -53,8 +56,6 @@ type PlantGrowthCycleRow = {
   cycle_max?: number | null;
   cycle_note?: string | null;
 };
-
-type PlantBasicOverviewRow = PlantBasicOverviewCompatRow;
 
 type RelatedArchiveSourceRow = {
   id: string;
@@ -1188,13 +1189,7 @@ function PlantTabAccessNotice({
         lineHeight: 1.7,
       }}
     >
-      {label}{copy.complete_content_suffix}
-      <Link
-        href="/membership"
-        style={{ marginLeft: 7, color: "#3f6f37", fontWeight: 700 }}
-      >
-        {copy.learn_membership}
-      </Link>
+      {label}：{copy.plus_visible}
     </section>
   );
 }
@@ -1202,9 +1197,19 @@ function PlantTabAccessNotice({
 export default function PlantDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+  return <PlantDetailContent id={params?.id} search={searchParams.toString()} />;
+}
+
+export function PlantDetailContent({ id, search = "", onBack, offline = false, offlineGuide }: {
+  id?: string;
+  search?: string;
+  onBack?: () => void;
+  offline?: boolean;
+  offlineGuide?: OfflineGuideDirectoryEntry;
+}) {
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const { language, t } = useLanguage();
   const copy = t.plant.detail;
-  const id = params?.id;
 
   const [plant, setPlant] = useState<PlantSpeciesRow | null>(null);
   const [i18n, setI18n] = useState<PlantSpeciesI18nRow[]>([]);
@@ -1226,21 +1231,88 @@ export default function PlantDetailPage() {
   const [actionLoading, setActionLoading] = useState<"interest" | null>(null);
   const [actionMessage, setActionMessage] = useState<ActionMessage | null>(null);
   const [loading, setLoading] = useState(true);
-  useGuideInterestRefresh(currentUserId, typeof id === "string" ? id : undefined, true, setInterestAdded);
+  useGuideInterestRefresh(currentUserId, plant?.id || (typeof id === "string" ? id : undefined), true, setInterestAdded);
 
   useEffect(() => {
+    const cachedPlant = offlineGuide ? {
+      id: offlineGuide.plantId || offlineGuide.id || id || offlineGuide.label,
+      common_name: offlineGuide.label, scientific_name: offlineGuide.nameEn || null,
+      slug: offlineGuide.plantSlug || null, category: "all", is_active: true,
+    } as PlantSpeciesRow : null;
+    if (cachedPlant) {
+      setPlant(cachedPlant);
+      setBasicOverview(getOfflineGuideOverview(offlineGuide!, language));
+      setLoading(false);
+    }
+    if (offline) {
+      setHasCloudAccess(false);
+      return;
+    }
     async function load() {
       if (!id) return;
 
-      setLoading(true);
+      if (!cachedPlant) setLoading(true);
       setActionMessage(null);
+      setHasCloudAccess(false);
+      setParameters(null);
+      setGrowthCycle(null);
+      setCareGuide(null);
+      setRelatedArchives([]);
+      setOwnArchives([]);
+      setRelatedExperienceCards([]);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const plantSelect =
+        "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order";
+      const isPlantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+      const catalogResult = await loadPublicPlantCatalogDetail(id);
+      // The legacy reads are only for the staged interval before this RPC exists.
+      const catalogAvailable = !isMissingDatabaseFunction(catalogResult.error, "get_public_plant_catalog");
+      if (catalogAvailable && catalogResult.error) {
+        console.warn("load public plant detail failed:", catalogResult.error);
+      }
+      const catalogRow = (catalogAvailable && !catalogResult.error ? catalogResult.data?.[0] : null) as PublicPlantCatalogRow | null;
+      let plantRow: PlantSpeciesRow | null = catalogRow;
+      if (!catalogAvailable && isPlantUuid) {
+        const byId = await supabase
+          .from("plant_species")
+          .select(plantSelect)
+          .eq("id", id)
+          .maybeSingle();
+        plantRow = (byId.data || null) as PlantSpeciesRow | null;
+      }
+      if (!catalogAvailable && !plantRow) {
+        const bySlug = await supabase
+          .from("plant_species")
+          .select(plantSelect)
+          .eq("slug", id)
+          .eq("is_active", true)
+          .maybeSingle();
+        plantRow = (bySlug.data || null) as PlantSpeciesRow | null;
+      }
+      if (!catalogAvailable && !plantRow) {
+        const byName = await supabase
+          .from("plant_species")
+          .select(plantSelect)
+          .eq("common_name", id)
+          .eq("is_active", true)
+          .maybeSingle();
+        plantRow = (byName.data || null) as PlantSpeciesRow | null;
+      }
+      const resolvedPlantId = plantRow?.id || id;
+      const publicOverview = catalogAvailable
+        ? catalogRow ? [{
+          species_id: catalogRow.id,
+          summary: language === "en" ? catalogRow.summary_en : catalogRow.summary_zh,
+        }] : []
+        : await loadPlantBasicOverviewsCompat(resolvedPlantId);
+      // Public reading must not wait for Android auth or membership requests.
+      setPlant(plantRow || cachedPlant);
+      setBasicOverview(publicOverview[0]?.summary || (offlineGuide ? getOfflineGuideOverview(offlineGuide, language) : null));
+      setLoading(false);
+
+      const { data: { user } } = await supabase.auth.getUser();
       setIsSignedIn(Boolean(user));
       setCurrentUserId(user?.id || null);
-
       const membershipResult = user
         ? await supabase.rpc("get_my_membership")
         : { data: null, error: null };
@@ -1251,61 +1323,43 @@ export default function PlantDetailPage() {
       setHasCloudAccess(canReadFullGuide);
 
       const [
-        { data: plantData },
         { data: i18nData },
         { data: aliasData },
-        { data: overviewData },
         { data: parameterData },
         { data: growthCycleData },
         { data: careGuideData },
       ] = await Promise.all([
-        supabase
-          .from("plant_species")
-          .select(
-            "id, common_name, scientific_name, family, slug, category, sub_category, growth_type, entry_type, is_active, sort_order"
-          )
-          .eq("id", id)
-          .maybeSingle(),
-        supabase
+        catalogAvailable ? Promise.resolve({ data: catalogRow?.translations || [] }) : supabase
           .from("plant_species_i18n")
           .select("plant_id, language_code, common_name, family")
-          .eq("plant_id", id)
+          .eq("plant_id", resolvedPlantId)
           .order("language_code", { ascending: true }),
-        supabase
+        catalogAvailable ? Promise.resolve({ data: catalogRow?.aliases || [] }) : supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name, relation_type")
-          .eq("species_id", id)
+          .eq("species_id", resolvedPlantId)
           .order("alias_name", { ascending: true }),
-        user
-          ? loadPlantBasicOverviewsCompat(id).then((data) => ({ data }))
-          : Promise.resolve({ data: [] as PlantBasicOverviewRow[] }),
         canReadFullGuide
-          ? supabase.from("plant_parameters").select("*").eq("species_id", id).maybeSingle()
-          : user
-            ? loadPlantCoreParametersCompat(id).then((data) => ({ data }))
-            : Promise.resolve({ data: [] as PlantParametersRow[] }),
+          ? supabase.from("plant_parameters").select("*").eq("species_id", resolvedPlantId).maybeSingle()
+          : Promise.resolve({ data: [] as PlantParametersRow[] }),
         canReadFullGuide
-          ? supabase.from("plant_growth_cycle").select("*").eq("species_id", id).maybeSingle()
+          ? supabase.from("plant_growth_cycle").select("*").eq("species_id", resolvedPlantId).maybeSingle()
           : Promise.resolve({ data: null }),
         canReadFullGuide
           ? supabase
               .from("plant_care_guides")
               .select("*")
-              .eq("plant_id", id)
+              .eq("plant_id", resolvedPlantId)
               .eq("language_code", "zh")
               .maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
-
-      const plantRow = (plantData || null) as PlantSpeciesRow | null;
       const i18nRows = (i18nData || []) as PlantSpeciesI18nRow[];
       const aliasRows = (aliasData || []) as PlantAliasSearchRow[];
-      const overviewRows = (overviewData || []) as PlantBasicOverviewRow[];
 
-      setPlant(plantRow);
+      setPlant(plantRow || cachedPlant);
       setI18n(i18nRows);
       setAliases(aliasRows);
-      setBasicOverview(overviewRows[0]?.summary || null);
       setParameters(
         (Array.isArray(parameterData) ? parameterData[0] : parameterData || null) as
           | PlantParametersRow
@@ -1313,9 +1367,11 @@ export default function PlantDetailPage() {
       );
       setGrowthCycle((growthCycleData || null) as PlantGrowthCycleRow | null);
       setCareGuide((careGuideData || null) as PlantCareGuideRow | null);
+      // Render the core guide before optional related projects/cards finish loading.
+      setLoading(false);
 
       const plantNameTerms = buildPlantNameTerms(plantRow, i18nRows, aliasRows);
-      const archiveMatchFilter = buildArchiveMatchFilter(id, plantNameTerms);
+      const archiveMatchFilter = buildArchiveMatchFilter(resolvedPlantId, plantNameTerms);
       const archiveSelect =
         "id, user_id, title, system_name, species_id, species_name_snapshot, is_public, status, ended_at, help_status, cover_image_url, cover_image_path, cover_thumb_path, created_at";
 
@@ -1414,7 +1470,7 @@ export default function PlantDetailPage() {
           .from("user_plant_interests")
           .select("id")
           .eq("user_id", user.id)
-          .eq("species_id", id)
+          .eq("species_id", resolvedPlantId)
           .maybeSingle();
 
         setInterestAdded(Boolean(interestData));
@@ -1425,8 +1481,11 @@ export default function PlantDetailPage() {
       setLoading(false);
     }
 
-    load();
-  }, [id, language]);
+    void load().catch((error) => {
+      console.warn("load plant guide detail failed:", error);
+      setLoading(false);
+    });
+  }, [id, language, offline, offlineGuide]);
 
   const zh = useMemo(
     () => i18n.find((item: PlantSpeciesI18nRow) => item.language_code === "zh"),
@@ -1471,22 +1530,6 @@ export default function PlantDetailPage() {
     language
   );
   const environmentCards = getEnvironmentDetailItems(parameters, language);
-  const localCoreParameterCards = [
-    ...environmentCards.filter((item) =>
-      ["light", "scene", "indoor"].includes(item.key)
-    ),
-    {
-      key: "trellis",
-      label: copy.trellis,
-      value:
-        typeof parameters?.need_trellis === "boolean"
-          ? parameters.need_trellis
-            ? copy.trellis_needed
-            : copy.trellis_not_usually_needed
-          : null,
-    },
-  ].filter((item) => item.value);
-
   const parameterCards = [
     { label: copy.parameter_labels.sunlight, value: scoreLabel(parameters?.sun_score) },
     { label: copy.parameter_labels.air_humidity, value: scoreLabel(parameters?.air_humidity_score) },
@@ -1716,17 +1759,33 @@ export default function PlantDetailPage() {
 
   return (
     <>
-      <MobilePageHeader
-        title={displayName}
-        titleText={displayName}
-        fallbackHref={returnRecordHref || "/plant"}
-        ariaLabel={t.nav.back}
-        right={
-          <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
-            {copy.new_project}
-          </Link>
-        }
-      />
+      {onBack ? (
+        <MobilePageHeaderView
+          className="mobile-app-grid-only"
+          title={displayName}
+          titleText={displayName}
+          showBack
+          onBack={onBack}
+          ariaLabel={t.nav.back}
+          right={
+            <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+              {copy.new_project}
+            </Link>
+          }
+        />
+      ) : (
+        <MobilePageHeader
+          title={displayName}
+          titleText={displayName}
+          fallbackHref={returnRecordHref || "/plant"}
+          ariaLabel={t.nav.back}
+          right={
+            <Link href={createProjectHref} className={styles.mobileNewProjectLink}>
+              {copy.new_project}
+            </Link>
+          }
+        />
+      )}
 
       <main className={styles.page}>
       <div className={`${styles.backRow} mobile-app-desktop-only`}>
@@ -1815,7 +1874,7 @@ export default function PlantDetailPage() {
           {en?.common_name && <div>{copy.english_name}{en.common_name}</div>}
         </div>
 
-        {!isSignedIn ? (
+        {!hasCloudAccess ? (
           <div
             style={{
               marginTop: 14,
@@ -1828,32 +1887,11 @@ export default function PlantDetailPage() {
               lineHeight: 1.7,
             }}
           >
-            {copy.visitor_detail_notice}
-            <Link href={buildLoginHref(`/plant/${encodeURIComponent(String(id))}${searchParams.size ? `?${searchParams.toString()}` : ""}`)} style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              {language === "en" ? "Log in / register to view the basic overview" : "登录／注册后查看基础概要"}
-            </Link>
-          </div>
-        ) : !hasCloudAccess ? (
-          <div
-            style={{
-              marginTop: 14,
-              padding: "11px 13px",
-              borderRadius: 12,
-              border: "1px solid #dce9d5",
-              background: "#f7fbf4",
-              color: "#587052",
-              fontSize: 14,
-              lineHeight: 1.7,
-            }}
-          >
-            {copy.local_detail_notice}
-            <Link href="/membership" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-              {copy.learn_membership}
-            </Link>
+            {copy.plus_visible}
           </div>
         ) : null}
 
-        {isSignedIn && environmentTags.length > 0 && (
+        {hasCloudAccess && environmentTags.length > 0 && (
           <div className={styles.environmentTagList}>
             {environmentTags.map((tag) => (
               <span
@@ -1943,22 +1981,9 @@ export default function PlantDetailPage() {
 
       {activeTab === "guide" ? (
         <>
-      {isSignedIn && basicOverview ? (
+      {basicOverview ? (
         <Section title={copy.summary}>
           <TextBlock text={basicOverview} />
-        </Section>
-      ) : null}
-
-      {isSignedIn && !hasCloudAccess && localCoreParameterCards.length > 0 ? (
-        <Section title={copy.basic_parameters}>
-          <div className={styles.parameterGrid}>
-            {localCoreParameterCards.map((item) => (
-              <Card key={item.label} label={item.label} value={item.value} />
-            ))}
-          </div>
-          <div style={{ marginTop: 12, color: "#6a7566", fontSize: 13, lineHeight: 1.7 }}>
-            {copy.local_parameter_notice}
-          </div>
         </Section>
       ) : null}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { useCallback, useEffect, useState } from "react";
 import { buildLoginHref } from "@/lib/auth-return";
 import { formatPreciseDateTime } from "@/lib/date-time";

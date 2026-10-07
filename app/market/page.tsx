@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { supabase } from "@/lib/supabase";
 import {
   formatMarketTime,
   getMarketItemCategoryOptions,
@@ -10,55 +9,21 @@ import {
   getMarketPostTypeOptions,
   getMarketPostTypeLabel,
   type MarketItemCategory,
-  type MarketPostRow,
   type MarketPostType,
 } from "@/lib/market-types";
-import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
-import { resolveMediaDisplayPairs } from "@/lib/media-urls";
+import {
+  fetchMarketFeed,
+  type MarketArchiveBrief as ArchiveBrief,
+  type MarketPostDisplayRow,
+  type MarketProfileBrief as ProfileBrief,
+} from "@/lib/market-feed";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
+import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
 import MarketMessageLink from "@/components/market/MarketMessageLink";
+import MobileMarketFeedCard, { mobileMarketCardStyle } from "@/components/market/MobileMarketFeedCard";
 import { getCompactCardLocation } from "@/lib/card-location";
-
-type ProfileBrief = {
-  id: string;
-  username: string | null;
-  avatar_url: string | null;
-  country_name: string | null;
-  region_name: string | null;
-  city_name: string | null;
-};
-
-type ArchiveBrief = {
-  id: string;
-  title: string | null;
-  system_name: string | null;
-  species_name_snapshot: string | null;
-};
-
-type MarketPostDisplayRow = MarketPostRow & {
-  display_cover_image_url?: string | null;
-  display_cover_thumb_url?: string | null;
-};
-
-async function attachMarketPostDisplayUrls<T extends MarketPostRow>(rows: T[]) {
-  const pairs = await resolveMediaDisplayPairs(
-    supabase,
-    rows.map((row) => ({
-      url: row.cover_image_url,
-      path: row.cover_image_path,
-      thumb_url: row.cover_thumb_url,
-      thumb_path: row.cover_thumb_path,
-    }))
-  );
-
-  return rows.map((row, index) => ({
-    ...row,
-    display_cover_image_url: pairs[index]?.display_url || null,
-    display_cover_thumb_url:
-      pairs[index]?.display_thumb_url || null,
-  }));
-}
+import { useAndroidConnectivity } from "@/lib/android-connectivity";
 
 export default function MarketPage() {
   const { language, t } = useLanguage();
@@ -66,6 +31,8 @@ export default function MarketPage() {
   const [profiles, setProfiles] = useState<Map<string, ProfileBrief>>(new Map());
   const [archives, setArchives] = useState<Map<string, ArchiveBrief>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<"all" | MarketPostType>("all");
@@ -75,6 +42,7 @@ export default function MarketPage() {
   const [contentFilter, setContentFilter] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const online = useAndroidConnectivity();
 
   useEffect(() => {
     function updateViewportMode() {
@@ -88,101 +56,46 @@ export default function MarketPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadMarketPosts() {
-      setLoading(true);
-
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        setCurrentUserId(user?.id || null);
-
-        let query = supabase
-          .from("market_posts")
-          .select("*")
-          .eq("status", "active")
-          .order("created_at", { ascending: false })
-          .limit(80);
-
-        if (typeFilter !== "all") {
-          query = query.eq("post_type", typeFilter);
-        }
-
-        if (categoryFilter !== "all") {
-          query = query.eq("item_category", categoryFilter);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-          console.error("load market posts error:", error);
-          setItems([]);
-          setProfiles(new Map());
-          setArchives(new Map());
-          return;
-        }
-
-        const rows = await attachMarketPostDisplayUrls((data || []) as MarketPostRow[]);
-        setItems(rows);
-
-        const userIds = Array.from(new Set(rows.map((item) => item.user_id)));
-        const archiveIds = Array.from(
-          new Set(rows.map((item) => item.archive_id).filter(Boolean))
-        ) as string[];
-
-        const [profilesResult, archivesResult] = await Promise.all([
-          userIds.length
-            ? supabase
-                .from("public_profiles")
-                .select(PUBLIC_PROFILE_SELECT)
-                .in("id", userIds)
-            : Promise.resolve({ data: [], error: null }),
-
-          archiveIds.length
-            ? supabase
-                .from("archives")
-                .select("id, title, system_name, species_name_snapshot")
-                .in("id", archiveIds)
-            : Promise.resolve({ data: [], error: null }),
-        ]);
-
-        if (profilesResult.error) {
-          console.error("load market profiles error:", profilesResult.error);
-        }
-
-        if (archivesResult.error) {
-          console.error("load market archives error:", archivesResult.error);
-        }
-
-        const profileMap = new Map(
-          ((profilesResult.data || []) as ProfileBrief[]).map((profile) => [
-            profile.id,
-            profile,
-          ])
-        );
-
-        const archiveMap = new Map(
-          ((archivesResult.data || []) as ArchiveBrief[]).map((archive) => [
-            archive.id,
-            archive,
-          ])
-        );
-
-        setProfiles(profileMap);
-        setArchives(archiveMap);
-      } catch (err) {
-        console.error("market page unexpected error:", err);
+      if (!online) {
+        if (cancelled) return;
         setItems([]);
         setProfiles(new Map());
         setArchives(new Map());
-      } finally {
+        setCurrentUserId(null);
         setLoading(false);
+        setLoadError(false);
+        return;
       }
+
+      setLoading(true);
+      setLoadError(false);
+      const result = await fetchMarketFeed({
+        typeFilter,
+        categoryFilter,
+      });
+
+      if (cancelled) return;
+
+      if (result.error) {
+        console.error("load market feed error:", result.error);
+      }
+      setLoadError(Boolean(result.error));
+
+      setCurrentUserId(result.currentUserId);
+      setItems(result.items);
+      setProfiles(result.profiles);
+      setArchives(result.archives);
+      setLoading(false);
     }
 
     void loadMarketPosts();
-  }, [typeFilter, categoryFilter]);
+    return () => {
+      cancelled = true;
+    };
+  }, [typeFilter, categoryFilter, online, retryKey]);
 
   const hasFilter =
     typeFilter !== "all" ||
@@ -302,12 +215,12 @@ export default function MarketPage() {
 
           {currentUserId ? (
             <div style={headerActionStyle}>
-              <Link
+              <InternalLink
                 href="/market/mine"
                 style={isMobileViewport ? mobileMineButtonStyle : mineButtonStyle}
               >
                 {t.market.my_posts}
-              </Link>
+              </InternalLink>
               <MarketMessageLink compact={isMobileViewport} />
             </div>
           ) : null}
@@ -390,9 +303,17 @@ export default function MarketPage() {
           </section>
         )}
 
+        {loadError && online ? <section role="alert" style={emptyStyle}>
+          {language === "zh" ? "集市暂时无法读取，请重试。" : "Market could not load. Please retry."}
+          <button type="button" onClick={() => setRetryKey((key) => key + 1)}>
+            {language === "zh" ? "重试" : "Retry"}
+          </button>
+        </section> : null}
         {loading ? (
           <section style={emptyStyle}>{t.market.loading}</section>
-        ) : visibleItems.length === 0 ? (
+        ) : !online ? (
+          <MobileNetworkUnavailableState />
+        ) : loadError && visibleItems.length === 0 ? null : visibleItems.length === 0 ? (
           <section style={emptyStyle}>
             {hasFilter ? t.market.empty_filtered : t.market.empty}
           </section>
@@ -411,7 +332,10 @@ export default function MarketPage() {
               const publisherName = profile?.username || t.market.unset_username;
 
               return (
-                <Link key={item.id} href={`/market/${item.id}`} style={cardStyle}>
+                <InternalLink key={item.id} href={`/market/${item.id}`} style={isMobileViewport ? mobileMarketCardStyle : cardStyle}>
+                  {isMobileViewport ? (
+                    <MobileMarketFeedCard item={item} profile={profile} archive={archive} language={language} marketName={t.market.name} unsetUsername={t.market.unset_username} notProvided={t.market.not_provided} />
+                  ) : (<>
                   {item.display_cover_thumb_url || item.display_cover_image_url ? (
                     <img
                       src={
@@ -482,7 +406,8 @@ export default function MarketPage() {
                       </div>
                     </div>}
                   </div>
-                </Link>
+                  </>)}
+                </InternalLink>
               );
             })}
           </section>

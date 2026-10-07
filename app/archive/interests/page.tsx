@@ -1,11 +1,12 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState, type CSSProperties } from "react";
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import { showToast } from "@/components/Toast";
 import UiIcon from "@/components/ui/UiIcon";
 import type { PlantInterestRow } from "@/lib/domain-types";
@@ -44,17 +45,41 @@ type GuideInterestRow = {
 };
 
 export default function PlantInterestsPage() {
-  return <Suspense><PlantInterestsContent /></Suspense>;
+  return <Suspense><PlantInterestsRouterContent /></Suspense>;
 }
 
-function PlantInterestsContent() {
+function PlantInterestsRouterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const requestedCategory = searchParams.get("section");
+  return (
+    <PlantInterestsContent
+      requestedCategory={requestedCategory}
+      onRequireLogin={() => router.replace(buildLoginHref(getCurrentInternalPath()))}
+      onCategoryChange={(category) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("section", category);
+        router.replace(`/archive/interests?${params.toString()}`, { scroll: false });
+      }}
+    />
+  );
+}
+
+export function PlantInterestsContent({
+  requestedCategory,
+  onBack,
+  onRequireLogin,
+  onCategoryChange,
+}: {
+  requestedCategory?: string | null;
+  onBack?: () => void;
+  onRequireLogin?: () => void;
+  onCategoryChange?: (category: ArchiveCategory) => void;
+}) {
   const { language, t } = useLanguage();
   const [userId, setUserId] = useState("");
   const [interests, setInterests] = useState<PlantInterestRow[]>([]);
   const [guideInterests, setGuideInterests] = useState<GuideInterestRow[]>([]);
-  const requestedCategory = searchParams.get("section");
   const activeCategory = archiveCategoryOptions.find((option) => option.value === requestedCategory)?.value || "plant";
   const guideDirectoryHref = `/plant?section=${activeCategory}`;
   const [loadError, setLoadError] = useState(false);
@@ -67,7 +92,7 @@ function PlantInterestsContent() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.replace(buildLoginHref(getCurrentInternalPath()));
+        onRequireLogin?.();
         return;
       }
 
@@ -101,7 +126,7 @@ function PlantInterestsContent() {
     } finally {
       setLoading(false);
     }
-  }, [router, t]);
+  }, [onRequireLogin, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadInterests(), 0);
@@ -109,9 +134,7 @@ function PlantInterestsContent() {
   }, [loadInterests]);
 
   function changeCategory(category: ArchiveCategory) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("section", category);
-    router.replace(`/archive/interests?${params.toString()}`, { scroll: false });
+    onCategoryChange?.(category);
   }
 
   const savedItems: SavedGuide[] = [
@@ -163,12 +186,23 @@ function PlantInterestsContent() {
 
   return (
     <>
-      <MobilePageHeader
-        title={t.plant.my_saved}
-        fallbackHref={guideDirectoryHref}
-        ariaLabel={t.nav.back}
-        right={<Link href={guideDirectoryHref} style={mobileGuideLinkStyle}>{t.plant_lists.guide_browse}</Link>}
-      />
+      {onBack ? (
+        <MobilePageHeaderView
+          title={t.plant.my_saved}
+          titleText={t.plant.my_saved}
+          showBack
+          onBack={onBack}
+          ariaLabel={t.nav.back}
+          right={<Link href={guideDirectoryHref} style={mobileGuideLinkStyle}>{t.plant_lists.guide_browse}</Link>}
+        />
+      ) : (
+        <MobilePageHeader
+          title={t.plant.my_saved}
+          fallbackHref={guideDirectoryHref}
+          ariaLabel={t.nav.back}
+          right={<Link href={guideDirectoryHref} style={mobileGuideLinkStyle}>{t.plant_lists.guide_browse}</Link>}
+        />
+      )}
       <main style={pageStyle}>
       <header className="mobile-app-desktop-only" style={headerStyle}>
         <Link href={guideDirectoryHref} style={backLinkStyle} aria-label={t.plant.back_to_guide}>

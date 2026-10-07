@@ -1,4 +1,4 @@
-import type { PublicGuideContent, PublicGuideEntry, PublicGuideLanguage } from "./public-guide-library";
+import type { PublicGuideContent, PublicGuideEntry, PublicGuideLanguage } from "../../lib/public-guide-library";
 import { getPracticalFoodExample } from "./practical-food-examples";
 import { getSoilGuideContent } from "./soil-guide-content";
 

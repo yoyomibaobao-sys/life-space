@@ -24,6 +24,7 @@ function resolveServerUrl() {
 }
 
 const cloudUrl = resolveServerUrl();
+const singleRuntimeAcceptance = process.env.ANDROID_SINGLE_RUNTIME === "1";
 
 const config: CapacitorConfig = {
   appId: "com.youshi.cultivation",
@@ -35,19 +36,25 @@ const config: CapacitorConfig = {
   android: {
     backgroundColor: "#f6f8f3ff",
     minWebViewVersion: 120,
-    webContentsDebuggingEnabled: false,
+    webContentsDebuggingEnabled: true,
   },
   server: {
-    // Android now boots the APK-bundled app shell first. Network availability
-    // only controls cloud data; it must never decide whether the UI can start.
+    // Default rc21: load the production Next.js mobile app, and fall back to
+    // the bundled local-first document on start/load failure.
+    // ANDROID_SINGLE_RUNTIME=1 omits remote server.url and errorPath so the
+    // APK document is https://life-space.uk/ from webDir, with the same host.
+    ...(singleRuntimeAcceptance
+      ? {}
+      : {
+          url: cloudUrl.origin,
+          errorPath: "offline.html",
+        }),
     hostname: cloudUrl.hostname,
     androidScheme: "https",
     cleartext: false,
-    // Keep the bundled shell on the production origin. This preserves the
-    // existing WebView IndexedDB and Supabase auth session while removing the
-    // network dependency that the old server.url introduced.
+    // Keep the WebView origin on the production host so IndexedDB, auth, local
+    // projects, cloud caches, and pending sync stay on the same device database.
     allowNavigation: [cloudUrl.hostname, LEGACY_LOCAL_STORAGE_HOST],
-    errorPath: "offline.html",
   },
   plugins: {
     App: {

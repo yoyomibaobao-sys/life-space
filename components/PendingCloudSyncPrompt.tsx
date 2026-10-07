@@ -48,8 +48,12 @@ export default function PendingCloudSyncPrompt() {
       const owner = { userId: user.id, email: user.email || null };
       setOwnerContext(owner);
       await preparePendingCloudSyncQueue(owner);
+      const { syncAllPendingCloudArchives } = await import(
+        "@/lib/pending-cloud-sync"
+      );
+      await syncAllPendingCloudArchives({ ownerContext: owner });
       const summaries = await listPendingCloudSyncSummaries(owner);
-      setSummary(summaries.find((item) => item.should_prompt) || null);
+      setSummary(summaries.find((item) => item.should_prompt) || summaries[0] || null);
       setError("");
       setProgress(null);
     } catch {

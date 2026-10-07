@@ -4,9 +4,11 @@ import type { ArchiveItem } from "@/lib/archive-page-types";
 import type { MediaItem } from "@/lib/domain-types";
 import type { PlantingRegion } from "@/lib/planting-region";
 import { attachMediaDisplayUrls } from "@/lib/media-urls";
+import { createImageThumbnailFile } from "@/lib/image-compression";
 import { supabase } from "@/lib/supabase";
 import {
   getCloudOfflineCacheByCloudSource,
+  diagnoseCloudOfflineCache,
   pruneCloudOfflineCacheForEndedSource,
   replaceCloudOfflineCache,
   type CloudOfflineCacheCycleInput,
@@ -15,6 +17,7 @@ import {
   type LocalArchiveOwnerContext,
 } from "@/lib/local-offline-db";
 import { logLifespaceStorageDiagnostic } from "@/lib/local-storage-diagnostic";
+import { loadCloudProjectTaxonomy, type ProjectTaxonomyEntry } from "@/lib/android-project-taxonomy";
 
 const CLOUD_CACHE_PAGE_SIZE = 500;
 const CLOUD_CACHE_MEDIA_BATCH_SIZE = 100;
@@ -55,8 +58,9 @@ type CloudCacheMediaRow = MediaItem & {
   created_at?: string | null;
 };
 
-function cacheRevision(archive: CloudOfflineCacheArchiveSource) {
+function cacheRevision(archive: CloudOfflineCacheArchiveSource, taxonomy: ProjectTaxonomyEntry[]) {
   return [
+    "taxonomy-identity-v2-media",
     archive.created_at || "",
     archive.title || "",
     archive.category || "",
@@ -71,6 +75,13 @@ function cacheRevision(archive: CloudOfflineCacheArchiveSource) {
     archive.record_count || 0,
     archive.last_record_time || "",
     archive.status || "active",
+    archive.sub_tag_id || "",
+    archive.group_tag_id || "",
+    archive.cover_image_url || "",
+    archive.cover_image_path || "",
+    archive.cover_thumb_path || "",
+    taxonomy.find((entry) => entry.id === archive.sub_tag_id)?.label || "",
+    taxonomy.find((entry) => entry.id === archive.group_tag_id)?.label || "",
   ].join("|");
 }
 
@@ -127,12 +138,28 @@ async function downloadThumbnail(
     });
     if (!response.ok) return null;
     const blob = await response.blob();
-    if (!blob.size || blob.size > MAX_CLOUD_CACHE_THUMB_BYTES) return null;
+    if (!blob.size) return null;
+
+    let cachedBlob = blob;
+    let mimeType = blob.type || "image/jpeg";
+    if (blob.size > MAX_CLOUD_CACHE_THUMB_BYTES) {
+      const sourceFile = new File([blob], `cloud-source-${media.id}`, {
+        type: mimeType,
+        lastModified: Date.now(),
+      });
+      const thumbnail = await createImageThumbnailFile(sourceFile);
+      if (!thumbnail.wasGenerated || !thumbnail.file.size || thumbnail.file.size > MAX_CLOUD_CACHE_THUMB_BYTES) {
+        return null;
+      }
+      cachedBlob = thumbnail.file;
+      mimeType = thumbnail.file.type || "image/jpeg";
+    }
+
     return {
       id: media.id,
       record_id: media.record_id,
-      blob,
-      mime_type: blob.type || "image/jpeg",
+      blob: cachedBlob,
+      mime_type: mimeType,
       name: "cloud-thumb-" + media.id + ".jpg",
       captured_at: media.captured_at || null,
       sort_order: media.sort_order ?? 0,
@@ -147,9 +174,10 @@ async function downloadThumbnail(
 
 async function refreshOneCloudOfflineCache(
   archive: CloudOfflineCacheArchiveSource,
-  ownerContext: LocalArchiveOwnerContext
+  ownerContext: LocalArchiveOwnerContext,
+  taxonomy: ProjectTaxonomyEntry[]
 ) {
-  const revision = cacheRevision(archive);
+  const revision = cacheRevision(archive, taxonomy);
   if (archive.status === "ended") {
     await pruneCloudOfflineCacheForEndedSource(
       archive.id,
@@ -182,7 +210,8 @@ async function refreshOneCloudOfflineCache(
   ]);
   if (cycleError) throw cycleError;
 
-  const media = await readCloudMedia(records.map((record) => record.id));
+  const media = (await readCloudMedia(records.map((record) => record.id)))
+    .filter((item) => !item.type || item.type === "image");
   const images: CloudOfflineCacheImageInput[] = [];
   for (let offset = 0; offset < media.length; offset += 6) {
     const batch = await Promise.all(
@@ -214,11 +243,19 @@ async function refreshOneCloudOfflineCache(
       .map((tag) => String(tag.tag)),
   }));
 
+  const storedRevision = images.length < media.length
+    ? `${revision}|thumbs-incomplete:${images.length}/${media.length}`
+    : revision;
+
   await replaceCloudOfflineCache({
     cloud_archive_id: archive.id,
     owner_context: ownerContext,
     title: archive.title || "未命名项目",
     category: archive.category,
+    subcategory: taxonomy.find((entry) => entry.id === archive.sub_tag_id)?.label || null,
+    group_name: taxonomy.find((entry) => entry.id === archive.group_tag_id)?.label || null,
+    source_cloud_sub_tag_id: archive.sub_tag_id || null,
+    source_cloud_group_tag_id: archive.group_tag_id || null,
     plant_id: archive.species_id || null,
     system_name: archive.system_name || null,
     species_name: archive.species_name_snapshot || null,
@@ -230,16 +267,34 @@ async function refreshOneCloudOfflineCache(
     created_at: archive.created_at || null,
     updated_at: archive.last_record_time || archive.created_at || null,
     is_public: Boolean(archive.is_public),
-    cache_revision: revision,
+    cache_revision: storedRevision,
     cycles: (cycleRows || []) as CloudOfflineCacheCycleInput[],
     records: cacheRecords,
     images,
   });
 }
 
-export async function refreshCloudOfflineCaches(
+const ownerRefreshes = new Map<string, Promise<void>>();
+
+export function refreshCloudOfflineCaches(
   archives: CloudOfflineCacheArchiveSource[],
   ownerContext: LocalArchiveOwnerContext | null
+) {
+  const ownerId = ownerContext?.userId;
+  if (!ownerId) return Promise.resolve();
+  const active = ownerRefreshes.get(ownerId);
+  if (active) return active;
+  const refresh = refreshCloudOfflineCachesUnlocked(archives, ownerContext);
+  ownerRefreshes.set(ownerId, refresh);
+  void refresh.finally(() => {
+    if (ownerRefreshes.get(ownerId) === refresh) ownerRefreshes.delete(ownerId);
+  }).catch(() => undefined);
+  return refresh;
+}
+
+async function refreshCloudOfflineCachesUnlocked(
+  archives: CloudOfflineCacheArchiveSource[],
+  ownerContext: LocalArchiveOwnerContext
 ) {
   const endedArchives = archives.filter((archive) => archive.status === "ended").length;
   const activeArchives = archives.length - endedArchives;
@@ -252,14 +307,17 @@ export async function refreshCloudOfflineCaches(
     endedArchives,
   });
   await logLifespaceStorageDiagnostic(ownerContext);
+  console.info("[lifespace-cloud-cache] read-only rows before refresh", await diagnoseCloudOfflineCache(ownerContext));
 
   if (!ownerContext?.userId) return;
+
+  const taxonomy = await loadCloudProjectTaxonomy(ownerContext.userId);
 
   let successCount = 0;
   let failedCount = 0;
   for (const archive of archives) {
     try {
-      await refreshOneCloudOfflineCache(archive, ownerContext);
+      await refreshOneCloudOfflineCache(archive, ownerContext, taxonomy);
       successCount += 1;
       console.info("[lifespace-cloud-cache]", "archive success", {
         id: archive.id,
@@ -276,6 +334,7 @@ export async function refreshCloudOfflineCaches(
   }
 
   const diagnosis = await logLifespaceStorageDiagnostic(ownerContext);
+  console.info("[lifespace-cloud-cache] read-only rows after refresh", await diagnoseCloudOfflineCache(ownerContext));
   console.info("[lifespace-cloud-cache]", "refresh done", {
     userId,
     cloudArchives: archives.length,

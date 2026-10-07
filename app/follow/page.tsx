@@ -7,9 +7,9 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import InternalLink, { useInternalNavigate } from "@/components/navigation/InternalLink";
 import { supabase } from "@/lib/supabase";
+import { useAndroidConnectivity } from "@/lib/android-connectivity";
 import { PUBLIC_PROFILE_SELECT } from "@/lib/domain-types";
 import { showToast } from "@/components/Toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -25,6 +25,7 @@ import { resolveMediaDisplayPairs } from "@/lib/media-urls";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { buildLoginHref, getCurrentInternalPath } from "@/lib/auth-return";
 import MobileContentTopBar from "@/components/mobile/MobileContentTopBar";
+import MobileNetworkUnavailableState from "@/components/mobile/MobileNetworkUnavailableState";
 import { fetchFollowedPublicProjects } from "@/lib/followed-public-project-feed";
 import { hydrateExperienceCardListItems } from "@/lib/experience-cards";
 import type {
@@ -142,7 +143,8 @@ type FollowUserCard = {
 };
 
 export default function FollowPage() {
-  const router = useRouter();
+  const shellNavigate = useInternalNavigate();
+  const navigate = (href: string) => { if (!shellNavigate?.(href)) window.location.assign(href); };
   const { language, t } = useLanguage();
   const followT = t.follow;
   const [loading, setLoading] = useState(true);
@@ -171,6 +173,7 @@ export default function FollowPage() {
   const [projectSubmitting, setProjectSubmitting] = useState(false);
   const [userSubmitting, setUserSubmitting] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const online = useAndroidConnectivity();
   const activeTab = !isMobileViewport && tab === "experience" ? "projects" : tab;
   const [userMenuTargetId, setUserMenuTargetId] = useState<string | null>(null);
   const [pinnedUserIds, setPinnedUserIds] = useState<string[]>(() => {
@@ -199,18 +202,36 @@ export default function FollowPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       setLoading(true);
       setProjectLoadError(false);
       setUserProjectsError(false);
       setExperienceLoadError(false);
 
+      if (!online) {
+        setProjectCards([]);
+        setUserCards([]);
+        setSavedExperienceCards([]);
+        setLoading(false);
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
+      if (cancelled) return;
+
       if (!user) {
-        router.push(buildLoginHref(getCurrentInternalPath()));
+        setCurrentUserId(null);
+        setProjectCards([]);
+        setUserCards([]);
+        setSavedExperienceCards([]);
+        setLoading(false);
+        // The Android shell owns its signed-out Follow state and login entry.
+        // Standalone web keeps the existing login redirect.
+        if (!shellNavigate) navigate(buildLoginHref(getCurrentInternalPath()));
         return;
       }
 
@@ -546,6 +567,7 @@ export default function FollowPage() {
       );
       const savedCardById = new Map(hydratedSavedCards.map((item) => [item.id, item]));
 
+      if (cancelled) return;
       setProjectCards(nextProjectCards);
       setUserCards(nextUserCards);
       setSavedExperienceCards(
@@ -556,8 +578,9 @@ export default function FollowPage() {
       setLoading(false);
     }
 
-    load();
-  }, [followT, language, loadVersion, router]);
+    void load();
+    return () => { cancelled = true; };
+  }, [followT, language, loadVersion, online, shellNavigate]);
 
   const filteredProjectCards = useMemo(() => {
     const search = keyword.trim().toLowerCase();
@@ -820,6 +843,8 @@ export default function FollowPage() {
 
         {loading ? (
           <div style={emptyWrapStyle}>{followT.loading}</div>
+        ) : !online ? (
+          <MobileNetworkUnavailableState />
         ) : isMobileViewport ? (
           activeTab === "projects" ? (
             projectLoadError ? (
@@ -1024,12 +1049,12 @@ export default function FollowPage() {
                     onClick={() => {
                       if (isMobileViewport) {
                         markRead(`project:${item.id}`, item.latestRecordTime);
-                        router.push(`/archive/${item.id}`);
+                        navigate(`/archive/${item.id}`);
                       }
                     }}
                     onKeyDown={(event) => {
                       if (isMobileViewport && (event.key === "Enter" || event.key === " ")) {
-                        router.push(`/archive/${item.id}`);
+                        navigate(`/archive/${item.id}`);
                       }
                     }}
                     style={{ ...cardStyle, cursor: isMobileViewport ? "pointer" : undefined }}
@@ -1080,7 +1105,7 @@ export default function FollowPage() {
                           type="button"
                           onClick={() => {
                             markRead(`project:${item.id}`, item.latestRecordTime);
-                            router.push(`/archive/${item.id}`);
+                            navigate(`/archive/${item.id}`);
                           }}
                           style={primaryButtonStyle}
                         >
@@ -1093,9 +1118,9 @@ export default function FollowPage() {
                         >
                           {followT.unfollow}
                         </button>
-                        <Link href={`/user/${item.ownerId}`} style={textLinkStyle}>
+                        <InternalLink href={`/user/${item.ownerId}`} style={textLinkStyle}>
                           {followT.enter_space}
-                        </Link>
+                        </InternalLink>
                       </div> : null}
                     </div>
                   </article>
@@ -1161,14 +1186,14 @@ export default function FollowPage() {
                       <span style={railUsernameStyle}>{item.username}</span>
                     </button>
                     {!isMobileViewport ? (
-                      <Link
+                      <InternalLink
                         href={`/user/${item.id}`}
                         aria-label={`${followT.enter_space}: ${item.username}`}
                         title={followT.enter_space}
                         style={followedUserSpaceShortcutStyle}
                       >
                         <UiIcon name="arrow-right" size={12} strokeWidth={2} />
-                      </Link>
+                      </InternalLink>
                     ) : null}
                   </div>
                 );
@@ -1177,7 +1202,7 @@ export default function FollowPage() {
 
             {!isMobileViewport && selectedUserId !== "all" ? (
               <div style={selectedUserActionStyle}>
-                <Link href={`/user/${selectedUserId}`} style={textLinkStyle}>{followT.enter_space}</Link>
+                <InternalLink href={`/user/${selectedUserId}`} style={textLinkStyle}>{followT.enter_space}</InternalLink>
                 <button type="button" onClick={() => setUserConfirmId(selectedUserId)} style={ghostButtonStyle}>
                   {followT.unfollow}
                 </button>
@@ -1201,7 +1226,7 @@ export default function FollowPage() {
                   <article key={`${item.ownerId}-${item.id}`} style={cardStyle}>
                     <button
                       type="button"
-                      onClick={() => router.push(`/archive/${item.id}`)}
+                      onClick={() => navigate(`/archive/${item.id}`)}
                       style={projectCoverButtonStyle}
                     >
                       <span style={coverStyle}>
@@ -1211,7 +1236,7 @@ export default function FollowPage() {
                     <div style={cardBodyStyle}>
                       <div style={cardInlineTitleRowStyle}>
                         <span style={language === "en" ? projectInlineMetaEnglishStyle : projectInlineMetaStyle}>{item.categoryLabel} ·</span>
-                        <button type="button" onClick={() => router.push(`/archive/${item.id}`)} style={projectTitleButtonStyle}>
+                        <button type="button" onClick={() => navigate(`/archive/${item.id}`)} style={projectTitleButtonStyle}>
                           {item.title}
                         </button>
                       </div>
@@ -1262,7 +1287,7 @@ export default function FollowPage() {
               type="button"
               onClick={() => {
                 rememberMobileRouteSource();
-                router.push(`/user/${userMenuTargetId}`);
+                navigate(`/user/${userMenuTargetId}`);
               }}
               style={userActionButtonStyle}
             >
@@ -1344,9 +1369,9 @@ function EmptyState({
       {description ? (
         <div style={{ marginTop: 8, color: "#7b8578", fontSize: 14 }}>{description}</div>
       ) : null}
-      <Link href={href} style={emptyActionStyle}>
+      <InternalLink href={href} style={emptyActionStyle}>
         {actionLabel}
-      </Link>
+      </InternalLink>
     </div>
   );
 }

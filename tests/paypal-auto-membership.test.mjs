@@ -161,8 +161,10 @@ test("payment page keeps Alipay proof review but removes proof upload from the P
   const copy = read("lib/i18n/paypal-payment.ts");
   const statusRoute = read("app/api/paypal/status/route.ts");
 
-  assert.match(page, /fetch\("\/api\/paypal\/checkout"/);
-  assert.match(page, /fetch\("\/api\/paypal\/status"/);
+  assert.match(page, /fetch\(resolveRuntimeCloudUrl\("\/api\/paypal\/checkout"\)/);
+  assert.match(page, /fetch\(resolveRuntimeCloudUrl\("\/api\/paypal\/status"\)/);
+  assert.match(page, /Capacitor\.isNativePlatform\(\)/);
+  assert.match(page, /Browser\.open\(\{ url: destination \}\)/);
   assert.match(page, /disabled=\{creating !== null \|\| !paypalPaymentReady\}/);
   assert.match(page, /disabled=\{paypalStarting \|\| !paypalPaymentReady\}/);
   assert.doesNotMatch(page, /NEXT_PUBLIC_PAYPAL_ENABLED/);

@@ -5,8 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRoot = path.join(root, "mobile-offline-src");
-const outputRoot = path.join(root, "mobile-shell");
+const outputRoot = process.env.ANDROID_SHELL_OUTPUT
+  ? path.resolve(process.env.ANDROID_SHELL_OUTPUT)
+  : path.join(root, "mobile-shell");
 const defaultServerUrl = "https://life-space.uk";
+const singleRuntimeAcceptance = process.env.ANDROID_SINGLE_RUNTIME === "1";
 
 function resolveCloudOrigin() {
   const url = new URL(process.env.CAPACITOR_SERVER_URL || defaultServerUrl);
@@ -21,6 +24,16 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 const supabasePublishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+const turnstileSiteKey =
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "";
+const alipayPaymentQrUrl = process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL?.trim() || "";
+const alipayPayeeName = process.env.NEXT_PUBLIC_ALIPAY_PAYEE_NAME?.trim() || "";
+
+if (singleRuntimeAcceptance && !turnstileSiteKey) {
+  throw new Error(
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY is required for ANDROID_SINGLE_RUNTIME acceptance builds.",
+  );
+}
 
 if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Android local shell requires public Supabase configuration.");
@@ -44,6 +57,10 @@ const buildResult = await build({
     "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY":
       JSON.stringify(supabasePublishableKey),
     "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": "undefined",
+    "process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY":
+      JSON.stringify(turnstileSiteKey),
+    "process.env.NEXT_PUBLIC_ALIPAY_PAYMENT_QR_URL": JSON.stringify(alipayPaymentQrUrl),
+    "process.env.NEXT_PUBLIC_ALIPAY_PAYEE_NAME": JSON.stringify(alipayPayeeName),
     // A few shared UI components pull in Next client helpers. In the normal
     // Next build these flags are replaced by the compiler. The standalone
     // Android shell is bundled by esbuild, so leaving them behind causes
@@ -55,6 +72,19 @@ const buildResult = await build({
     "process.env.__NEXT_MANUAL_TRAILING_SLASH": "false",
     "process.env.__NEXT_ROUTER_BASEPATH": JSON.stringify(""),
     "process.env.__NEXT_TRAILING_SLASH": "false",
+    "process.env.__NEXT_DEV_SERVER": "false",
+    "process.env.__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS": "false",
+    "process.env.__NEXT_CACHE_COMPONENTS": "false",
+    "process.env.NEXT_DEPLOYMENT_ID": "undefined",
+    "process.env.NEXT_RUNTIME": "undefined",
+    "process.env.NEXT_SUPPORTS_IMMUTABLE_ASSETS": "false",
+    "process.env.__NEXT_IMAGE_OPTS": JSON.stringify({
+      deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+      imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+      path: "/_next/image",
+      loader: "default",
+      unoptimized: true,
+    }),
   },
   plugins: [
     {
@@ -76,7 +106,8 @@ if (!javascript) throw new Error("Offline bundle did not emit JavaScript.");
 const bundledComponentCss =
   buildResult.outputFiles.find((file) => file.path.endsWith(".css"))?.text || "";
 
-const [template, css, localParityCss, bridgeTemplate] = await Promise.all([
+const [indexTemplate, template, css, localParityCss, bridgeTemplate] = await Promise.all([
+  fs.readFile(path.join(sourceRoot, "index.template.html"), "utf8"),
   fs.readFile(path.join(sourceRoot, "offline.template.html"), "utf8"),
   fs.readFile(path.join(sourceRoot, "offline.css"), "utf8"),
   fs.readFile(path.join(sourceRoot, "local-parity.css"), "utf8"),
@@ -98,12 +129,24 @@ const bridgeHtml = bridgeTemplate.replace(
 );
 
 await fs.mkdir(outputRoot, { recursive: true });
-await Promise.all([
-  // The same self-contained shell is the normal Android entry point and the
-  // fallback document. Android therefore starts with or without a network.
-  fs.writeFile(path.join(outputRoot, "index.html"), offlineHtml),
-  fs.writeFile(path.join(outputRoot, "offline.html"), offlineHtml),
-  fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml),
-]);
-
-console.log(`Built Android local app shell; cloud data origin is ${cloudOrigin}`);
+if (singleRuntimeAcceptance) {
+  const bundledIndex = offlineHtml.replace(
+    "<html lang=\"zh-CN\">",
+    "<html lang=\"zh-CN\" data-android-runtime=\"bundled\">",
+  );
+  await fs.writeFile(path.join(outputRoot, "index.html"), bundledIndex);
+  await fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml);
+  await fs.rm(path.join(outputRoot, "offline.html"), { force: true });
+  console.log(
+    `Built Android single-runtime acceptance shell; document origin host is ${cloudOrigin}`,
+  );
+} else {
+  await Promise.all([
+    // Online startup uses Capacitor server.url. This placeholder is only the
+    // bundled default document; the local-first shell lives in offline.html.
+    fs.writeFile(path.join(outputRoot, "index.html"), indexTemplate),
+    fs.writeFile(path.join(outputRoot, "offline.html"), offlineHtml),
+    fs.writeFile(path.join(outputRoot, "legacy-local-bridge.html"), bridgeHtml),
+  ]);
+  console.log(`Built Android local app shell; cloud data origin is ${cloudOrigin}`);
+}

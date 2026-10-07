@@ -1,6 +1,7 @@
 package com.youshi.cultivation;
 
 import android.content.res.AssetManager;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -28,10 +29,49 @@ public final class LifeSpaceWebViewClient extends BridgeWebViewClient {
         "/__lifespace_local_bridge_v1__.html";
 
     private final AssetManager assets;
+    private boolean checkedLegacyServiceWorkers = false;
 
     public LifeSpaceWebViewClient(Bridge bridge, AssetManager assets) {
         super(bridge);
         this.assets = assets;
+    }
+
+    @Override
+    public void onPageStarted(WebView view, String url, Bitmap favicon) {
+        android.util.Log.i("LifeSpaceShell", "Page started: " + url);
+        super.onPageStarted(view, url, favicon);
+    }
+
+    @Override
+    public void onPageFinished(WebView view, String url) {
+        super.onPageFinished(view, url);
+        Uri uri = Uri.parse(url);
+        android.util.Log.i("LifeSpaceShell", "Page finished: " + url);
+        if (checkedLegacyServiceWorkers || !"life-space.uk".equalsIgnoreCase(uri.getHost())) {
+            return;
+        }
+        checkedLegacyServiceWorkers = true;
+        // A service worker from the former remote shell can serve an old index.html
+        // even after an APK update. Unregister it without touching IndexedDB or auth.
+        view.clearCache(true);
+        view.evaluateJavascript(
+            "(async()=>{"
+                + "const state={href:window.location.href,controller:null,registrations:[],unregisterResults:[]};"
+                + "if(!('serviceWorker' in navigator))return JSON.stringify(state);"
+                + "state.controller=navigator.serviceWorker.controller?navigator.serviceWorker.controller.scriptURL:null;"
+                + "const registrations=await navigator.serviceWorker.getRegistrations();"
+                + "state.registrations=registrations.map(registration=>({"
+                + "scope:registration.scope,"
+                + "active:registration.active?registration.active.scriptURL:null,"
+                + "waiting:registration.waiting?registration.waiting.scriptURL:null,"
+                + "installing:registration.installing?registration.installing.scriptURL:null"
+                + "}));"
+                + "state.unregisterResults=await Promise.all(registrations.map(registration=>registration.unregister()));"
+                + "if(registrations.length)setTimeout(()=>window.location.replace(window.location.href),100);"
+                + "return JSON.stringify(state);"
+                + "})().catch(error=>JSON.stringify({href:window.location.href,error:String(error)}))",
+            result -> android.util.Log.i("LifeSpaceShell", "ServiceWorker diagnostic: " + result)
+        );
     }
 
     @Override

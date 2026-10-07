@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { useEffect, useState, type CSSProperties, type ChangeEvent } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
@@ -8,6 +8,9 @@ import { buildLoginHref } from "@/lib/auth-return";
 import { getPayPalPaymentCopy } from "@/lib/i18n/paypal-payment";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 import { supabase } from "@/lib/supabase";
+import { resolveRuntimeCloudUrl } from "@/lib/runtime-cloud-origin";
+import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
 
 type PaymentOption = "alipay" | "paypal";
 type PaymentOrderStatus =
@@ -114,7 +117,7 @@ export default function MembershipPaymentPage() {
 
     async function loadPayPalStatus() {
       try {
-        const response = await fetch("/api/paypal/status", { cache: "no-store" });
+        const response = await fetch(resolveRuntimeCloudUrl("/api/paypal/status"), { cache: "no-store" });
         const result = (await response.json().catch(() => null)) as
           | PayPalStatusResult
           | null;
@@ -237,7 +240,7 @@ export default function MembershipPaymentPage() {
         headers.Authorization = `Bearer ${session.access_token}`;
       }
 
-      const response = await fetch("/api/paypal/checkout", {
+      const response = await fetch(resolveRuntimeCloudUrl("/api/paypal/checkout"), {
         method: "POST",
         headers,
         body: JSON.stringify({ paymentId: order.id }),
@@ -258,7 +261,11 @@ export default function MembershipPaymentPage() {
         return;
       }
 
-      window.location.assign(destination);
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: destination });
+      } else {
+        window.location.assign(destination);
+      }
     } catch (error) {
       console.error("start PayPal checkout error:", error);
       setErrorMessage(paypalCopy.checkout_failed);
@@ -392,7 +399,7 @@ export default function MembershipPaymentPage() {
         : t.membership_page.order_status_pending
     : "";
   const orderDestinationUrl = order?.payment_method === "alipay"
-    ? safePaymentDestinationUrl(order.payment_destination_url, ALIPAY_PAYMENT_QR_URL)
+    ? resolveRuntimeCloudUrl(safePaymentDestinationUrl(order.payment_destination_url, ALIPAY_PAYMENT_QR_URL))
     : "";
   const orderDestinationLabel = order?.payment_destination_label
     || (order?.payment_method === "alipay" ? ALIPAY_PAYEE_NAME : "LifeSpace");

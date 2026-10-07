@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -15,8 +15,9 @@ import {
 } from "@/lib/membership";
 import {
   loadPlantBasicOverviewsCompat,
-  loadPlantCoreParametersCompat,
+  loadPublicPlantCatalogPage,
   type PlantBasicOverviewCompatRow,
+  type PublicPlantCatalogRow,
 } from "@/lib/plant-guide-compat";
 import {
   rememberGuideDirectory,
@@ -32,10 +33,10 @@ import { loadGuideDirectoryRows, searchGuideDirectory } from "@/lib/guide-direct
 import { getGuideInterestCount } from "@/lib/guide-interests";
 import { buildLoginHref } from "@/lib/auth-return";
 import { buildGuideDirectoryHref } from "@/lib/guide-directory-navigation";
+import { isMissingDatabaseFunction } from "@/lib/supabase-schema-compat";
 import HomeSectionTabs from "@/components/home/HomeSectionTabs";
 import { type ArchiveCategory } from "@/lib/archive-categories";
 import {
-  buildPublicGuideContent,
   getPublicGuideFilterLabel,
   getPublicGuideFilterTraits,
   getPublicGuideName,
@@ -58,6 +59,24 @@ const PLANT_SEARCH_STATE_KEY = "lifespace:plant-guide:search-state:v1";
 const MAX_RECENT_SEARCHES = 8;
 const INITIAL_VISIBLE_PLANT_COUNT = 24;
 const PLANT_BATCH_SIZE = 24;
+const GUIDE_REMOTE_TIMEOUT_MS = 7000;
+
+function withGuideRemoteTimeout<T>(
+  promise: PromiseLike<T>,
+  timeoutMs = GUIDE_REMOTE_TIMEOUT_MS,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: T | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    Promise.resolve(promise).then((value) => finish(value)).catch(() => finish(null));
+  });
+}
 
 function replaceGuideDirectoryUrl(section: ArchiveCategory, query = "", category = "all") {
   window.history.replaceState(window.history.state, "", buildGuideDirectoryHref(section, query, category));
@@ -228,7 +247,13 @@ function FilterSelect({
   );
 }
 
-export default function PlantIndexPage() {
+const EMPTY_OFFLINE_GUIDE_DIRECTORY: OfflineGuideDirectoryEntry[] = [];
+
+export default function PlantIndexPage({ offline = false, offlineDirectory = EMPTY_OFFLINE_GUIDE_DIRECTORY, offlineSignedIn = false }: {
+  offline?: boolean;
+  offlineDirectory?: OfflineGuideDirectoryEntry[];
+  offlineSignedIn?: boolean;
+} = {}) {
   const { language, t } = useLanguage();
   const categoryLabels = t.plant.categories as Record<string, string>;
   const lightOptions = t.plant.light_options;
@@ -405,34 +430,79 @@ export default function PlantIndexPage() {
   }, []);
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
+    const fallbackEntries = offlineDirectory.filter((entry) => entry.category === "plant");
+    const fallbackPlants = fallbackEntries.map((entry) => ({
+      id: entry.id || entry.plantId || entry.label,
+      slug: entry.plantSlug,
+      common_name: entry.label,
+      scientific_name: entry.nameEn,
+      category: "all",
+      is_active: true,
+    })) as PlantItem[];
+    const fallbackAliases = fallbackEntries.flatMap((entry) => (entry.aliases || []).map((alias) => ({
+      species_id: entry.id || entry.plantId || entry.label,
+      alias_name: alias,
+    }))) as AliasItem[];
+    const fallbackOverviews = fallbackEntries.filter((entry) => entry.overviewZh).map((entry) => ({
+      species_id: entry.id || entry.plantId || entry.label,
+      summary: entry.overviewZh || "",
+    })) as BasicOverview[];
+    const fallbackOverviewsEn = fallbackEntries.filter((entry) => entry.overviewEn).map((entry) => ({
+      species_id: entry.id || entry.plantId || entry.label,
+      summary: entry.overviewEn || "",
+    })) as BasicOverview[];
+    // The bundled directory is the display baseline in both online and offline
+    // modes. Remote data enriches it later and must never block the screen.
+    setPlants(fallbackPlants);
+    setAliases(fallbackAliases);
+    setBasicOverviews(fallbackOverviews);
+    setBasicOverviewsEn(fallbackOverviewsEn);
+    setParameters([]);
+    setLoading(false);
+    setPlantCatalogError(false);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    if (offline) {
+      setIsSignedIn(offlineSignedIn);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      const authResult = await withGuideRemoteTimeout(supabase.auth.getUser());
+      const user = authResult?.data.user || null;
+      if (cancelled) return;
 
       setIsSignedIn(Boolean(user));
 
       const membershipResult = user
-        ? await supabase.rpc("get_my_membership")
-        : { data: null, error: null };
-      const membership = membershipResult.error
+        ? await withGuideRemoteTimeout(supabase.rpc("get_my_membership"))
+        : null;
+      const membership = !membershipResult || membershipResult.error
         ? null
         : normalizeMembershipRpcResult(membershipResult.data);
       const canReadFullGuide = canAccessMembershipGuidance(membership);
 
       setHasCloudAccess(canReadFullGuide);
 
+      const catalogResult = await withGuideRemoteTimeout(
+        loadGuideDirectoryRows<PublicPlantCatalogRow>(loadPublicPlantCatalogPage),
+      );
+      // Only the not-yet-applied migration uses the legacy column-limited path.
+      const legacyCatalog = isMissingDatabaseFunction(catalogResult?.error, "get_public_plant_catalog");
+      const catalogRows = legacyCatalog ? null : catalogResult?.data || [];
+      if (catalogResult?.error && !isMissingDatabaseFunction(catalogResult.error, "get_public_plant_catalog")) {
+        console.warn("load public plant catalog failed:", catalogResult.error);
+      }
+
       const [
-        { data: plantData, error: plantError },
-        { data: aliasData, error: aliasError },
-        { data: overviewData },
-        { data: overviewDataEn },
-        { data: parameterData },
+        plantResult,
+        aliasResult,
+        overviewResult,
+        overviewEnResult,
+        parameterResult,
         interestCountResult,
       ] = await Promise.all([
-        loadGuideDirectoryRows<PlantItem>((from, to) => supabase
+        catalogRows ? Promise.resolve({ data: catalogRows, error: null }) :
+        withGuideRemoteTimeout(loadGuideDirectoryRows<PlantItem>((from, to) => supabase
           .from("plant_species")
           .select(
             "id, slug, common_name, scientific_name, family, category, sub_category, sort_order, is_active"
@@ -441,87 +511,98 @@ export default function PlantIndexPage() {
           .order("sort_order", { ascending: true, nullsFirst: false })
           .order("common_name", { ascending: true })
           .order("id", { ascending: true })
-          .range(from, to)),
+          .range(from, to))),
 
-        loadGuideDirectoryRows<AliasItem>((from, to) => supabase
+        catalogRows ? Promise.resolve({ data: catalogRows.flatMap((row) => row.aliases || []), error: null }) :
+        withGuideRemoteTimeout(loadGuideDirectoryRows<AliasItem>((from, to) => supabase
           .from("plant_species_aliases")
           .select("species_id, alias_name")
           .order("species_id", { ascending: true })
           .order("alias_name", { ascending: true })
-          .range(from, to)),
+          .range(from, to))),
 
-        user
-          ? loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))
-          : Promise.resolve({ data: [] as BasicOverview[] }),
+        catalogRows ? Promise.resolve({ data: catalogRows.map((row) => ({
+          species_id: row.id, summary: row.summary_zh,
+        })) }) : withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null).then((data) => ({ data }))),
 
-        user
-          ? loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data }))
-          : Promise.resolve({ data: [] as BasicOverview[] }),
+        catalogRows ? Promise.resolve({ data: catalogRows.map((row) => ({
+          species_id: row.id, summary: row.summary_en,
+        })) }) : withGuideRemoteTimeout(loadPlantBasicOverviewsCompat(null, "en").then((data) => ({ data }))),
 
         canReadFullGuide
-          ? supabase.from("plant_parameters").select(
+          ? withGuideRemoteTimeout(Promise.resolve(supabase.from("plant_parameters").select(
               "species_id, sun_score, need_trellis, soil_moisture_score, drought_score, optimal_growth_temp_min, optimal_growth_temp_max, frost_damage_temp, lethal_low_temp, shade_tolerance, drought_tolerance, container_friendly_score, indoor_friendly_score, balcony_friendly_score, air_flow_score, soil_aeration_score, soil_fertility_score"
-            )
-          : user
-            ? loadPlantCoreParametersCompat(null).then((data) => ({ data }))
-            : Promise.resolve({ data: [] as PlantParameterLite[] }),
+            )))
+          : Promise.resolve(null),
 
-        user ? getGuideInterestCount(user.id) : Promise.resolve(null),
+        user ? withGuideRemoteTimeout(getGuideInterestCount(user.id)) : Promise.resolve(null),
       ]);
 
-      setPlants(plantData || []);
-      setAliases(aliasData || []);
+      if (cancelled) return;
+      const plantData = plantResult?.data || [];
+      const aliasData = aliasResult?.data || [];
+      const overviewData = overviewResult?.data || [];
+      const overviewDataEn = overviewEnResult?.data || [];
+      const parameterData = parameterResult?.data || [];
+      const plantError = (!legacyCatalog && (catalogResult?.error || (!catalogResult ? Error("plant_directory_timeout") : null)))
+        || plantResult?.error || (!plantResult ? Error("plant_directory_timeout") : null);
+      const aliasError = aliasResult?.error || (!aliasResult ? Error("plant_alias_timeout") : null);
+      setPlants((plantData || []).length ? plantData || [] : fallbackPlants);
+      setAliases((aliasData || []).length ? aliasData || [] : fallbackAliases);
       setPlantCatalogError(Boolean(plantError || aliasError));
-      setBasicOverviews((overviewData || []) as BasicOverview[]);
-      setBasicOverviewsEn((overviewDataEn || []) as BasicOverview[]);
+      setBasicOverviews((overviewData || []).length ? (overviewData || []) as BasicOverview[] : fallbackOverviews);
+      setBasicOverviewsEn((overviewDataEn || []).length ? (overviewDataEn || []) as BasicOverview[] : fallbackOverviewsEn);
       setParameters(parameterData || []);
       setInterestCount(interestCountResult);
-      setLoading(false);
     }
 
     void load().catch(() => {
+      if (cancelled) return;
       setPlantCatalogError(true);
-      setLoading(false);
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [offline, offlineDirectory, offlineSignedIn]);
 
   useEffect(() => {
+    if (offline) {
+      setPublicGuides(offlineDirectory.filter((entry) => entry.category !== "plant" || entry.source === "public_guide")
+        .map((entry) => ({ id: entry.id || entry.label, category: entry.category || "other",
+          name: entry.label, name_en: entry.nameEn, source: "preset" as const,
+          summary: entry.overviewZh, summary_en: entry.overviewEn, is_active: true })));
+      setPublicGuideSections([]);
+      setPublicGuidesLoading(false);
+      setPublicGuidesError(false);
+      return;
+    }
     let cancelled = false;
 
     async function loadPublicGuides() {
-      const [entryResult, sectionResult] = await Promise.all([
-        loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
-          .from("guide_entries")
-          .select(
-            "id, category, name, name_en, source, section_id, summary, summary_en, content_template, content, content_en, sort_order, is_active",
-          )
-          .eq("is_active", true)
-          .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
-          .order("id", { ascending: true })
-          .range(from, to)),
-        supabase
+      const [entryResolved, sectionResolved] = await Promise.all([
+        withGuideRemoteTimeout(loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
+          .rpc("get_public_guide_catalog", { p_offset: from, p_limit: to - from + 1 }))),
+        withGuideRemoteTimeout(supabase
           .from("guide_sections")
           .select("id, category, slug, name, name_en, summary, summary_en, sort_order")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true })),
       ]);
+      const entryResult = entryResolved || { data: [] as PublicGuideEntry[], error: Error("guide_entries_timeout") };
+      const sectionResult = sectionResolved || { data: [] as PublicGuideSection[], error: Error("guide_sections_timeout") };
 
       let entryData = (entryResult.data || []) as PublicGuideEntry[];
       let entryError = entryResult.error;
 
-      if (entryError) {
-        // Compatibility while the guide-library expansion migration is being
-        // rolled out: keep the earlier flat list readable.
-        const fallback = await loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
+      if (isMissingDatabaseFunction(entryError, "get_public_guide_catalog")) {
+        // Staged migration: the older database still permits public metadata.
+        const fallback = await withGuideRemoteTimeout(loadGuideDirectoryRows<PublicGuideEntry>((from, to) => supabase
           .from("guide_entries")
-          .select("id, category, name, source, is_active")
+          .select("id, category, name, name_en, source, section_id, summary, summary_en, sort_order, is_active")
           .eq("is_active", true)
           .order("name", { ascending: true })
           .order("id", { ascending: true })
-          .range(from, to));
-        entryData = (fallback.data || []) as PublicGuideEntry[];
-        entryError = fallback.error;
+          .range(from, to)));
+        entryData = (fallback?.data || []) as PublicGuideEntry[];
+        entryError = fallback?.error || entryError;
       }
 
       if (!cancelled) {
@@ -554,7 +635,7 @@ export default function PlantIndexPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [offline, offlineDirectory]);
 
   useEffect(() => {
     if (loading || (query && publicGuidesLoading) || !searchStateRestored || pendingScrollYRef.current === null) return;
@@ -657,12 +738,11 @@ export default function PlantIndexPage() {
   }, [parameters]);
 
   useEffect(() => {
-    if (!isSignedIn || loading || !plants.length) return;
+    if (loading || !plants.length) return;
 
     const rows: OfflineGuideDirectoryEntry[] = plants.flatMap((plant) => {
       const label = String(plant.common_name || plant.scientific_name || "").trim();
       if (!label) return [];
-      const core = parameterMap[plant.id];
       const plantAliases = aliasMap[plant.id] || [];
       const row: OfflineGuideDirectoryEntry = {
         id: plant.id,
@@ -684,15 +764,6 @@ export default function PlantIndexPage() {
           .join(" "),
         overviewZh: guideMap[plant.id]?.summary || undefined,
         overviewEn: guideMapEn[plant.id]?.summary || undefined,
-        plantCoreParameters: core
-          ? {
-              sun_score: core.sun_score,
-              need_trellis: core.need_trellis,
-              container_friendly_score: core.container_friendly_score,
-              indoor_friendly_score: core.indoor_friendly_score,
-              balcony_friendly_score: core.balcony_friendly_score,
-            }
-          : undefined,
       };
       return [row];
     });
@@ -702,18 +773,14 @@ export default function PlantIndexPage() {
     aliasMap,
     guideMap,
     guideMapEn,
-    isSignedIn,
     loading,
-    parameterMap,
     plants,
   ]);
 
   useEffect(() => {
-    if (!isSignedIn || publicGuidesLoading || !publicGuides.length) return;
+    if (publicGuidesLoading || !publicGuides.length) return;
 
     const rows: OfflineGuideDirectoryEntry[] = publicGuides.map((entry) => {
-      const zh = buildPublicGuideContent(entry, "zh");
-      const en = buildPublicGuideContent(entry, "en");
       return {
         id: entry.id,
         label: entry.name,
@@ -722,15 +789,13 @@ export default function PlantIndexPage() {
         category: entry.category,
         aliases: entry.name_en ? [entry.name_en] : [],
         searchText: [entry.name, entry.name_en].filter(Boolean).join(" "),
-        overviewZh: zh.overview,
-        overviewEn: en.overview,
-        parametersZh: zh.parameters.slice(0, 3),
-        parametersEn: en.parameters.slice(0, 3),
+        overviewZh: getPublicGuideSummary(entry, "zh"),
+        overviewEn: getPublicGuideSummary(entry, "en"),
       };
     });
 
     rememberGuideDirectory(rows);
-  }, [isSignedIn, publicGuides, publicGuidesLoading]);
+  }, [publicGuides, publicGuidesLoading]);
 
   const categories = useMemo(() => {
     const existing = Array.from(
@@ -1309,47 +1374,6 @@ export default function PlantIndexPage() {
 
         <div
           style={{
-            display: isMobileViewport && hasCloudAccess ? "none" : "block",
-            marginTop: isMobileViewport ? 8 : 14,
-            padding: isMobileViewport ? "6px 9px" : "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #e0eadb",
-            background: "#f8fbf6",
-            color: "#5a6d55",
-            fontSize: isMobileViewport ? 12 : 13,
-            lineHeight: isMobileViewport ? 1.35 : 1.7,
-          }}
-        >
-          {isMobileViewport ? !isSignedIn ? (
-            <Link href="/register" style={{ color: "#3f6f37", fontWeight: 700 }}>
-              {t.plant.register_for_summary}
-            </Link>
-          ) : !hasCloudAccess ? (
-            <Link href="/membership" style={{ color: "#3f6f37", fontWeight: 700 }}>
-              {t.plant.open_membership}
-            </Link>
-          ) : null : !isSignedIn ? (
-            <>
-              {t.plant.visitor_notice}
-              <Link href="/register" style={{ marginLeft: 6, color: "#3f6f37", fontWeight: 700 }}>
-                {t.plant.register_for_summary}
-              </Link>
-            </>
-          ) : hasCloudAccess ? (
-            t.plant.cloud_notice
-          ) : (
-            <>
-              {t.plant.local_notice_prefix}
-              <Link href="/membership" style={{ marginLeft: 4, color: "#3f6f37", fontWeight: 700 }}>
-                {t.plant.open_membership}
-              </Link>
-              {t.plant.local_notice_suffix}
-            </>
-          )}
-        </div>
-
-        <div
-          style={{
             marginTop: isMobileViewport ? 2 : 16,
             paddingTop: isMobileViewport ? 4 : 16,
             borderTop: "1px solid #f0f0f0",
@@ -1488,8 +1512,8 @@ export default function PlantIndexPage() {
           >
             {visiblePlants.map((plant) => {
               const plantAliases = uniqueTextList(aliasMap[plant.id] || []);
-              const summary = isSignedIn ? guideMap[plant.id]?.summary : null;
-              const envTags = isSignedIn
+              const summary = guideMap[plant.id]?.summary;
+              const envTags = hasCloudAccess
                 ? getEnvironmentTags(
                     parameterMap[plant.id],
                     { includeIndoor: true },
@@ -1619,10 +1643,7 @@ export default function PlantIndexPage() {
                       WebkitLineClamp: isMobileViewport ? 2 : undefined,
                     }}
                   >
-                    {summary ||
-                      (isSignedIn
-                        ? t.plant.summary_pending
-                        : t.plant.register_for_basic_summary)}
+                    {summary || t.plant.summary_pending}
                   </p>
                 </Link>
               );
@@ -1783,9 +1804,7 @@ function PublicGuideLibrary({
 
   function renderGuideCard(entry: PublicGuideEntry) {
     const name = getPublicGuideName(entry, language);
-    const summary = isSignedIn
-      ? buildPublicGuideContent(entry, language).overview || getPublicGuideSummary(entry, language) || copy.contentPending
-      : copy.registerForOverview;
+    const summary = getPublicGuideSummary(entry, language) || copy.contentPending;
     const section = orderedSections.find(
       (candidate) => candidate.id === entry.section_id,
     );

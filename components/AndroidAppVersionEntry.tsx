@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import { useEffect, useSyncExternalStore, type CSSProperties } from "react";
 import UiIcon from "@/components/ui/UiIcon";
 import {
@@ -26,7 +26,7 @@ export default function AndroidAppVersionEntry() {
         : t.app_update.reading_version;
 
   return (
-    <Link href="/app-update" style={entryStyle}>
+    <InternalLink href="/app-update" style={entryStyle}>
       <span style={copyStyle}>
         <strong style={titleStyle}>{t.app_update.version_setting}</strong>
         <span style={detailStyle}>
@@ -37,7 +37,7 @@ export default function AndroidAppVersionEntry() {
         {state === "available" ? t.app_update.update_action : null}
         <UiIcon name="arrow-right" size={17} />
       </span>
-    </Link>
+    </InternalLink>
   );
 }
 

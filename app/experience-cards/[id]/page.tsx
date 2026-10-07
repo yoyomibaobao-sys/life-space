@@ -1,7 +1,7 @@
 "use client";
 import ReportLink from "@/components/support/ReportLink";
 
-import Link from "next/link";
+import InternalLink from "@/components/navigation/InternalLink";
 import {
   use,
   useEffect,
@@ -21,6 +21,7 @@ import ExperienceCardTimeline from "@/components/experience-card/ExperienceCardT
 import ExperienceCardInteractions from "@/components/experience-card/ExperienceCardInteractions";
 import AndroidAppDownloadPrompt from "@/components/AndroidAppDownloadPrompt";
 import MobilePageHeader from "@/components/mobile/MobilePageHeader";
+import MobilePageHeaderView from "@/components/mobile/MobilePageHeaderView";
 import UiIcon from "@/components/ui/UiIcon";
 import { showToast } from "@/components/Toast";
 import { getInclusiveDaySpan } from "@/lib/date-time";
@@ -58,6 +59,14 @@ export default function ExperienceCardPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  return <ExperienceCardContent id={id} onDeleted={() => router.replace("/experience-cards")} />;
+}
+
+export function ExperienceCardContent({ id, onBack, onDeleted }: {
+  id: string;
+  onBack?: () => void;
+  onDeleted?: () => void;
+}) {
   const { language, t } = useLanguage();
   const [detail, setDetail] = useState<ExperienceCardDetail | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
@@ -271,7 +280,7 @@ export default function ExperienceCardPage({
       } else {
         await deleteExperienceCard(detail.card.id);
         showToast(t.experience.deleted_toast);
-        router.replace("/experience-cards");
+        (onDeleted || onBack)?.();
       }
     } catch (error) {
       setErrorText(getExperienceCardErrorText(error, language));
@@ -350,9 +359,9 @@ export default function ExperienceCardPage({
           <p style={mutedStyle}>
             {t.experience.unavailable_hint}
           </p>
-          <Link href="/discover" style={secondaryLinkStyle}>
+          <InternalLink href="/discover" style={secondaryLinkStyle}>
             {t.experience.back_to_discover}
-          </Link>
+          </InternalLink>
         </section>
       </main>
     );
@@ -383,20 +392,19 @@ export default function ExperienceCardPage({
 
   return (
     <>
-      <MobilePageHeader
-        title={detail.card.title}
-        fallbackHref={isOwner ? "/experience-cards" : "/discover"}
-        ariaLabel={t.nav.back}
-      />
+      {onBack ? <MobilePageHeaderView className="mobile-app-grid-only" title={detail.card.title}
+        showBack onBack={onBack} ariaLabel={t.nav.back} /> : <MobilePageHeader
+        title={detail.card.title} fallbackHref={isOwner ? "/experience-cards" : "/discover"}
+        ariaLabel={t.nav.back} />}
       <main style={pageStyle}>
       <header className="mobile-app-desktop-only" style={topBarStyle}>
-        <Link
+        <InternalLink
           href={isOwner ? "/experience-cards" : "/discover"}
           style={backLinkStyle}
         >
           <UiIcon name="arrow-left" size={15} />
           {isOwner ? ` ${t.experience.back_my_cards}` : ` ${t.nav.home}`}
-        </Link>
+        </InternalLink>
       </header>
 
       <section style={heroStyle} aria-label={t.experience.finished_aria}>
@@ -583,14 +591,14 @@ export default function ExperienceCardPage({
 
           {!isOwner ? (
             <div style={sourceLinksStyle} aria-label={t.experience.author_aria}>
-              <Link
+              <InternalLink
                 href={isOwner ? "/archive" : `/user/${detail.card.user_id}`}
                 style={sourceLinkStyle}
               >
                 <span style={sourceLabelStyle}>{t.experience.user}</span>
                 <span style={sourceValueStyle}>{authorName}</span>
                 <UiIcon name="arrow-right" size={14} />
-              </Link>
+              </InternalLink>
             </div>
           ) : null}
 
@@ -853,9 +861,9 @@ function OverviewItem({
   );
 
   return href ? (
-    <Link href={href} style={{ ...overviewItemStyle, ...overviewLinkItemStyle }}>
+    <InternalLink href={href} style={{ ...overviewItemStyle, ...overviewLinkItemStyle }}>
       {content}
-    </Link>
+    </InternalLink>
   ) : (
     <div style={overviewItemStyle}>{content}</div>
   );

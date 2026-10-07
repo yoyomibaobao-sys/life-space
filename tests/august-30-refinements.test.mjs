@@ -44,8 +44,8 @@ const load = createLoader();
 const { fitInlineSummary } = load("lib/fit-inline-summary.ts");
 const { getCompactCardLocation } = load("lib/card-location.ts");
 const { getArchiveCycleTerminology } = load("lib/archive-cycle-terminology.ts");
-const guideLibrary = load("lib/public-guide-library.ts");
-const { getPracticalGuideContent } = load("lib/practical-guide-content.ts");
+const guideLibrary = { ...load("lib/public-guide-library.ts"), ...load("scripts/guide-full/generator.ts") };
+const { getPracticalGuideContent } = load("scripts/guide-full/practical-guide-content.ts");
 const entry = (category, name, extra = {}) => ({ id: `fixture-${category}-${name}`, category, name, source: "preset", ...extra });
 
 function loadFunction(path, name, scope) {
@@ -532,7 +532,7 @@ test("detail views use readable 浏览 text and mobile list view counts are hidd
   assert.doesNotMatch(detail, /data-icon="view"|mobile-app-desktop-only/);
   const list = renderToStaticMarkup(React.createElement(ProjectMetaLine, { viewCount: 12 }));
   assert.match(list, /class="mobile-app-desktop-only"/);
-  assert.match(source("app/archive/[id]/page.tsx"), /textViewCount/);
+  assert.match(source("components/archive-ui/ArchiveProjectDetailView.tsx"), /textViewCount/);
 });
 
 function interestFixture(results) {
@@ -621,7 +621,10 @@ test("mobile primary identity stays in its existing row and market detail titles
 
 const waterEntry = (name, traits = {}) => entry("insect_fish", name, {
   content_template: "aquatic_plant",
-  content: { filters: { light: "low_medium", temperature: "warm", growth_form: "epiphyte", difficulty: "easy", ...traits } },
+  content: { filters: { light: "low_medium", temperature: "warm", growth_form: "epiphyte", difficulty: "easy",
+    // A member catalog RPC supplies these values; anonymous catalogs do not.
+    ...(name === "水榕" ? { temperature_min_c: 22, temperature_max_c: 28 } :
+      name === "金鱼藻" ? { temperature_min_c: 1, temperature_max_c: 28 } : {}), ...traits } },
 });
 const emptyWaterFilters = { light: [], temperature: [], growthForm: "all", difficulty: "all" };
 
@@ -645,7 +648,8 @@ test("water-temperature filters use numeric reference overlaps, not guessed qual
   assert.equal(guideLibrary.matchesPublicGuideFilters(unknown, { ...emptyWaterFilters, temperature: ["c22_26"] }), false);
   assert.equal(guideLibrary.matchesPublicGuideFilters(unknown, { ...emptyWaterFilters, temperature: ["unknown"] }), true);
   assert.match(guideLibrary.getPublicGuideTemperatureLabel(unknown, "zh"), /待确认/);
-  assert.equal(guideLibrary.matchesPublicGuideFilters({ ...plant, source: "approved" }, { ...emptyWaterFilters, temperature: ["c22_26"] }), false, "never apply a preset to a user's guide by name");
+  const { temperature_min_c, temperature_max_c, ...unverifiedFilters } = plant.content.filters;
+  assert.equal(guideLibrary.matchesPublicGuideFilters({ ...plant, source: "approved", content: { filters: unverifiedFilters } }, { ...emptyWaterFilters, temperature: ["c22_26"] }), false, "never apply a preset to a user's guide by name");
 });
 
 test("explicit water-temperature values take priority and invalid ranges do not inherit a preset", () => {
@@ -653,7 +657,7 @@ test("explicit water-temperature values take priority and invalid ranges do not 
   assert.deepEqual(getAquaticTemperatureReference(waterEntry("水榕", { temperature_min_c: 19, temperature_max_c: 21 })), { min: 19, max: 21, species: "水榕" });
   assert.equal(getAquaticTemperatureReference(waterEntry("水榕", { temperature_min_c: 29, temperature_max_c: 20 })), null);
   assert.equal(getAquaticTemperatureReference(waterEntry("水榕", { temperature_min_c: "22", temperature_max_c: 28 })), null);
-  const content = guideLibrary.buildPublicGuideContent(waterEntry("水榕"), "zh");
+  const content = guideLibrary.buildPublicGuideContent({ ...waterEntry("水榕"), content: { filters: { light: "low" } } }, "zh");
   assert.ok(content.cautions.some((text) => text.includes("Anubias barteri var. nana")));
   assert.ok(content.sources.some((reference) => reference.url.includes("dennerleplants.com")));
 });
@@ -853,12 +857,13 @@ test("food examples specify usable quantities, stages and distinct safety contro
 });
 
 test("non-plant details remove redundant preset, creation and guest prompts while keeping parent links", () => {
-  const page = source("app/plant/guide/[id]/page.tsx");
+  const page = source("components/plant-detail/GuideDetailView.tsx");
   assert.doesNotMatch(page, /className=\{styles\.sourceLabel\}|className=\{styles\.bottomAction\}/);
-  assert.match(page, /<Link href=\{fallbackHref\} className=\{styles\.categoryBadge\}/);
-  assert.match(page, /<Link href=\{`\$\{fallbackHref\}&category=/);
-  assert.match(page, /signedIn \? <span>\{copy\.membershipForFull\}<\/span> : null/);
-  assert.equal(publicGuideCopyZh(), "登录／注册后查看基础概要");
+  assert.match(page, /<InternalLink href=\{fallbackHref\} className=\{styles\.categoryBadge\}/);
+  assert.match(page, /<InternalLink href=\{`\$\{fallbackHref\}&category=/);
+  assert.match(page, /<section className=\{styles\.accessNotice\}>\s*\{copy\.membershipForFull\}/);
+  assert.equal(guideLibrary.publicGuideCopy.zh.membershipForFull, "Plus 云端用户可见");
+  assert.equal(publicGuideCopyZh(), "登录／注册以了解完整指引");
   function publicGuideCopyZh() { return guideLibrary.publicGuideCopy.zh.registerForOverview; }
 });
 
@@ -1047,7 +1052,7 @@ test("clearing a global search restores the existing category without resetting 
   assert.deepEqual(filters, { light: "shade", water: "all", temperature: "cool", scene: "all", indoor: "all" });
 });
 
-test("global result cards preserve category routes, hide visitor summaries, and distinguish failed loading from no matches", () => {
+test("global result cards preserve category routes, show visitor overviews, and distinguish failed loading from no matches", () => {
   const zh = load("lib/i18n/zh.ts").default;
   const Results = createLoader({
     "@/lib/i18n/useLanguage": { useLanguage: () => ({ language: "zh", t: zh }) },
@@ -1056,10 +1061,10 @@ test("global result cards preserve category routes, hide visitor summaries, and 
   const props = {
     matches: [
       { kind: "plant", key: "plant:one", category: "plant", plant: { id: "one", common_name: "玉米" } },
-      { kind: "guide", key: "guide:two", category: "insect_fish", entry: entry("insect_fish", "黑水虻", { id: "two", summary: "需要登录的摘要" }) },
+      { kind: "guide", key: "guide:two", category: "insect_fish", entry: entry("insect_fish", "黑水虻", { id: "two", summary: "黑水虻基础概要" }) },
     ],
     loading: false, loadError: false, visibleCount: 24, signedIn: false,
-    plantSummaries: { one: { summary: "需要登录的植物摘要" } }, onOpen() {}, onClear() {}, onLoadMore() {},
+    plantSummaries: { one: { summary: "玉米基础概要" } }, onOpen() {}, onClear() {}, onLoadMore() {},
     savedLink: React.createElement("a", { href: "/archive/interests" }, "收藏 (4)"),
   };
   const render = (extra = {}) => renderToStaticMarkup(React.createElement(Results, { ...props, ...extra }));
@@ -1068,8 +1073,10 @@ test("global result cards preserve category routes, hide visitor summaries, and 
   assert.match(html, /href="\/plant\/one"/);
   assert.match(html, /href="\/plant\/guide\/two\?from=insect_fish"/);
   assert.match(html, />虫鱼生态</);
-  assert.doesNotMatch(html, /需要登录的摘要|需要登录的植物摘要/);
-  assert.match(render({ signedIn: true }), /需要登录的植物摘要/);
+  assert.match(html, /玉米基础概要/);
+  assert.match(html, /黑水虻基础概要/);
+  assert.doesNotMatch(html, /重点管理来源清楚的湿料/);
+  assert.match(render({ signedIn: true }), /玉米基础概要/);
   const failed = render({ matches: [], loadError: true });
   assert.match(failed, /结果可能不完整/);
   assert.doesNotMatch(failed, /没有匹配的指引/);

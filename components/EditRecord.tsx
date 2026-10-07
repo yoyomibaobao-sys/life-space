@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/useLanguage";
 
 export default function EditRecord({
@@ -30,7 +29,6 @@ export default function EditRecord({
   const [error, setError] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const router = useRouter();
 
   function autoResize() {
     const el = textareaRef.current;
@@ -90,9 +88,6 @@ export default function EditRecord({
     onSaved?.(nextText);
     setEditing(false);
 
-    if (!onSaveOverride) {
-      router.refresh();
-    }
   }
 
   function cancel() {

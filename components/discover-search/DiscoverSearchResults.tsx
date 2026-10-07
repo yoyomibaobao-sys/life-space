@@ -31,6 +31,7 @@ type Props = {
   loading: boolean;
   hasRun: boolean;
   hideHeader?: boolean;
+  onOpenProject?: (item: DiscoveryProjectFeedItem) => void;
 };
 
 function getProjectSystemName(item: DiscoveryProjectFeedItem) {
@@ -70,6 +71,7 @@ export default function DiscoverSearchResults({
   loading,
   hasRun,
   hideHeader = false,
+  onOpenProject,
 }: Props) {
   const { language, t } = useLanguage();
   const kindLabels: Record<DiscoverSearchKind, { title: string; unit: string }> = {
@@ -147,7 +149,8 @@ export default function DiscoverSearchResults({
             return (
               <ProjectSummaryCard
                 key={item.archive_id}
-                href={`/archive/${item.archive_id}`}
+                href={onOpenProject ? undefined : `/archive/${item.archive_id}`}
+                onOpen={onOpenProject ? () => onOpenProject(item) : undefined}
                 ariaLabel={`${t.discover.search_ui.view_project_prefix}${title}`}
                 title={title}
                 systemName={getDistinctSystemName(title, systemName)}

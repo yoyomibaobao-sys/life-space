@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties } from "react";
+import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 
 export default function LocalBlobImage({
   blob,
@@ -15,9 +16,16 @@ export default function LocalBlobImage({
 
   useEffect(() => {
     const image = imageRef.current;
-    if (!blob || !image) return;
+    if (!image) return;
+    const validBlob = normalizeLocalImageBlob(blob, blob?.type);
+    if (!validBlob) return;
 
-    const objectUrl = URL.createObjectURL(blob);
+    let objectUrl: string;
+    try {
+      objectUrl = URL.createObjectURL(validBlob);
+    } catch {
+      return;
+    }
     image.src = objectUrl;
 
     return () => {

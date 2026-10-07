@@ -439,3 +439,211 @@ test("a completed queue clears its one-time prompt and starts fresh next time", 
   assert.equal(summaries[0].prompt_mode, "ask");
   assert.equal(summaries[0].should_prompt, true);
 });
+
+const cacheCloudId = "44444444-4444-4444-8444-444444444444";
+
+async function addCacheProject() {
+  const open = indexedDB.open("life-space-local-offline", 6);
+  const database = await request(open);
+  const transaction = database.transaction(["archives", "records"], "readwrite");
+  const done = finished(transaction);
+  transaction.objectStore("archives").add({
+    id: "cloud-cache-project",
+    local_role: "cloud-offline-cache",
+    title: "云端缓存项目",
+    category: "system",
+    main_category: "system",
+    system_name: "堆肥",
+    source_cloud_archive_id: cacheCloudId,
+    local_owner_user_id: owner.userId,
+    local_owner_email: owner.email,
+    status: "active",
+    created_at: timestamp,
+    updated_at: timestamp,
+    local_only: true,
+    sync: {
+      status: "synced",
+      cloud_archive_id: cacheCloudId,
+      last_sync_at: timestamp,
+    },
+  });
+  transaction.objectStore("records").add({
+    id: "cached-history-record",
+    archive_id: "cloud-cache-project",
+    note: "云端历史记录",
+    record_time: timestamp,
+    created_at: timestamp,
+    updated_at: timestamp,
+    local_only: true,
+    sync: {
+      status: "synced",
+      cloud_archive_id: cacheCloudId,
+      cloud_record_id: cloudRecordId,
+      last_sync_at: timestamp,
+    },
+  });
+  await done;
+  database.close();
+}
+
+test("cloud cache projects queue pending records without making history editable", async () => {
+  await fixture();
+  await addCacheProject();
+  const created = await dbModule.createLocalRecord({
+    archive_id: "cloud-cache-project",
+    note: "缓存项目离线新增",
+    image_files: [photo("cache.gif")],
+  });
+  const detail = await dbModule.getLocalArchiveDetail("cloud-cache-project", owner);
+  const pending = detail.records.find((record) => record.id === created.id);
+  const history = detail.records.find((record) => record.id === "cached-history-record");
+  const summaries = await dbModule.listPendingCloudSyncSummaries(owner);
+
+  assert.equal(pending.sync.status, "pending-cloud-sync");
+  assert.equal(pending.sync.cloud_archive_id, cacheCloudId);
+  assert.equal(pending.images[0].sync.status, "pending-cloud-sync");
+  assert.equal(history.sync.status, "synced");
+  assert.equal(summaries[0].local_archive_id, "cloud-cache-project");
+  assert.equal(summaries[0].cloud_archive_id, cacheCloudId);
+  assert.equal(summaries[0].record_count, 1);
+  assert.equal(summaries[0].image_count, 1);
+});
+
+test("offline pending cloud projects keep one local identity and persist mapping", async () => {
+  await fixture();
+  const created = await dbModule.createLocalArchive({
+    title: "待同步云项目",
+    category: "system",
+    system_name: "堆肥",
+    local_owner_user_id: owner.userId,
+    local_owner_email: owner.email,
+    sync_destination: "pending-cloud",
+  });
+  const firstSummaries = await dbModule.listPendingCloudSyncSummaries(owner);
+  assert.equal(created.sync.operation_kind, "create-archive");
+  assert.equal(created.sync.status, "pending-cloud-sync");
+  assert.match(created.sync.client_operation_id, /^[0-9a-f-]{36}$/i);
+  assert.equal(created.source_cloud_archive_id || null, null);
+  assert.equal(firstSummaries[0].local_archive_id, created.id);
+  assert.equal(firstSummaries[0].cloud_archive_id, created.sync.client_operation_id);
+
+  const record = await dbModule.createLocalRecord({
+    archive_id: created.id,
+    note: "先写在待同步项目里",
+    image_files: [photo("pending-cloud.gif")],
+  });
+  assert.equal(record.sync.status, "pending-cloud-sync");
+  assert.equal(record.sync.cloud_archive_id, created.sync.client_operation_id);
+
+  const mapped = await dbModule.persistLocalCloudArchiveMapping(
+    created.id,
+    created.sync.client_operation_id,
+    created.sync.client_operation_id,
+    owner,
+  );
+  const remapped = await dbModule.persistLocalCloudArchiveMapping(
+    created.id,
+    created.sync.client_operation_id,
+    created.sync.client_operation_id,
+    owner,
+  );
+  const after = await dbModule.getLocalArchiveDetail(created.id, owner);
+  assert.equal(mapped.source_cloud_archive_id, created.sync.client_operation_id);
+  assert.equal(remapped.source_cloud_archive_id, mapped.source_cloud_archive_id);
+  assert.equal(after.archive.id, created.id);
+  assert.equal(after.records[0].sync.cloud_archive_id, mapped.source_cloud_archive_id);
+  assert.equal(after.records[0].images[0].sync.cloud_archive_id, mapped.source_cloud_archive_id);
+
+  const converted = await dbModule.convertPendingCloudProjectToOfflineCache(
+    created.id,
+    mapped.source_cloud_archive_id,
+    owner,
+  );
+  assert.equal(converted.id, created.id);
+  assert.equal(converted.local_role, "cloud-offline-cache");
+  assert.equal(converted.source_cloud_archive_id, mapped.source_cloud_archive_id);
+});
+
+test("pending cloud taxonomy IDs persist in IndexedDB without writing local-only cloud identity", async () => {
+  await fixture();
+  const cloud = await dbModule.createLocalArchive({ title: "离线云", category: "system", system_name: "堆肥",
+    subcategory: "云一级", group_name: "云二级", intended_cloud_sub_tag_id: "sub-id", intended_cloud_group_tag_id: "group-id",
+    local_owner_user_id: owner.userId, sync_destination: "pending-cloud" });
+  const local = await dbModule.createLocalArchive({ title: "纯本地", category: "system", system_name: "堆肥",
+    intended_cloud_sub_tag_id: "sub-id", intended_cloud_group_tag_id: "group-id", sync_destination: "local-only" });
+  const restored = await dbModule.getLocalArchiveDetail(cloud.id, owner);
+  assert.equal(restored.archive.intended_cloud_sub_tag_id, "sub-id");
+  assert.equal(restored.archive.intended_cloud_group_tag_id, "group-id");
+  assert.equal(restored.archive.subcategory, "云一级");
+  assert.equal(local.intended_cloud_sub_tag_id, null);
+  assert.equal(local.intended_cloud_group_tag_id, null);
+  assert.equal(restored.archive.sync.client_operation_id, cloud.sync.client_operation_id);
+});
+
+test("cloud cache retains source taxonomy IDs after IndexedDB reload", async () => {
+  await fixture();
+  const sourceId = "fedcba98-7654-4321-8765-123456789abc";
+  await dbModule.replaceCloudOfflineCache({ cloud_archive_id: sourceId, owner_context: owner,
+    title: "云缓存", category: "system", subcategory: "一级", group_name: "二级",
+    source_cloud_sub_tag_id: "cloud-sub-id", source_cloud_group_tag_id: "cloud-group-id",
+    cycles: [], records: [], images: [] });
+  const restored = await dbModule.getCloudOfflineCacheByCloudSource(sourceId, owner);
+  assert.equal(restored.source_cloud_sub_tag_id, "cloud-sub-id");
+  assert.equal(restored.source_cloud_group_tag_id, "cloud-group-id");
+  assert.equal(restored.subcategory, "一级");
+});
+
+test("logout keeps pending user-created work and hides it from another owner", async () => {
+  await fixture();
+  await addCacheProject();
+  const pendingCloud = await dbModule.createLocalArchive({
+    title: "A 的待同步项目",
+    category: "system",
+    system_name: "堆肥",
+    local_owner_user_id: owner.userId,
+    local_owner_email: owner.email,
+    sync_destination: "pending-cloud",
+  });
+  await dbModule.createLocalRecord({
+    archive_id: "cloud-cache-project",
+    note: "A 的缓存待同步记录",
+  });
+  await dbModule.createLocalRecord({
+    archive_id: pendingCloud.id,
+    note: "A 的新项目记录",
+  });
+
+  await dbModule.clearCloudOfflineCachesForOwner(owner);
+  const other = { userId: "other-owner", email: "other@example.test" };
+  const afterLogout = await dbModule.getLocalArchiveDetail(
+    "cloud-cache-project",
+    owner,
+  );
+  const hiddenFromGuest = await dbModule.getLocalArchiveDetail(
+    "cloud-cache-project",
+    null,
+  );
+  const hiddenFromOther = await dbModule.listPendingCloudSyncSummaries(other);
+  const restored = await dbModule.listPendingCloudSyncSummaries(owner);
+
+  assert.equal(afterLogout.archive.id, "cloud-cache-project");
+  assert.equal(
+    afterLogout.records.some((record) => record.id === "cached-history-record"),
+    false,
+  );
+  assert.equal(
+    afterLogout.records.some((record) => record.note === "A 的缓存待同步记录"),
+    true,
+  );
+  assert.equal(hiddenFromGuest, null);
+  assert.deepEqual(hiddenFromOther, []);
+  assert.equal(restored.length >= 2, true);
+  assert.equal(
+    restored.some((item) => item.local_archive_id === pendingCloud.id),
+    true,
+  );
+  assert.equal(
+    restored.some((item) => item.local_archive_id === "cloud-cache-project"),
+    true,
+  );
+});

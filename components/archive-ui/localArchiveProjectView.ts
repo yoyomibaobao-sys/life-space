@@ -2,13 +2,17 @@ import {
   getArchiveCategoryIcon,
   getArchiveCategoryLabel,
 } from "@/lib/archive-categories";
-import type {
-  LocalArchiveOwnerContext,
-  LocalArchiveSummary,
+import {
+  isPendingCloudCreateArchive,
+  isPendingCloudSyncStatus,
+  type LocalArchiveOwnerContext,
+  type LocalArchiveSummary,
 } from "@/lib/local-offline-db";
 import type { ArchiveProjectView } from "@/components/archive-ui/types";
+import type { ArchiveItem } from "@/lib/archive-page-types";
 import { getTranslations, type Language } from "@/lib/i18n";
 import type { ArchiveCategoryDepth } from "@/lib/archive-category-settings";
+import { normalizeLocalImageBlob } from "@/lib/local-image-blob";
 
 function getOngoingDays(createdAt?: string | null, endedAt?: string | null) {
   if (!createdAt) return null;
@@ -43,10 +47,25 @@ export function localArchiveToProjectView(
   maxDepth: ArchiveCategoryDepth = 3,
 ): ArchiveProjectView {
   const copy = getTranslations(language).archive_workspace;
+  const archiveCopy = getTranslations(language).archive;
   const ended = archive.status === "ended";
   const ongoingDays = getOngoingDays(archive.created_at, archive.ended_at);
   const latestTime = archive.latest_record_time || archive.updated_at;
   const latestSummary = archive.latest_record_note || archive.note || "";
+  const isDeviceLocalProject = archive.local_role !== "cloud-offline-cache";
+  const pendingCloud =
+    isPendingCloudCreateArchive(archive) ||
+    isPendingCloudSyncStatus(archive.sync?.status);
+  const visibilityLabel = pendingCloud
+    ? copy.pending_sync_badge
+    : archive.local_role === "cloud-offline-cache"
+      ? copy.cloud_cache_copy
+      : isDeviceLocalProject
+        ? archiveCopy.local_project
+        : copy.local;
+  const coverBlob = archive.cover_image
+    ? normalizeLocalImageBlob(archive.cover_image.blob, archive.cover_image.mime_type)
+    : null;
 
   return {
     id: archive.id,
@@ -62,10 +81,10 @@ export function localArchiveToProjectView(
     // Local labels come from IndexedDB only and are not Supabase sub_tags/group_tags.
     subcategoryLabel: maxDepth >= 2 ? archive.subcategory : null,
     groupLabel: maxDepth >= 3 ? archive.group_name : null,
-    cover: archive.cover_image
+    cover: coverBlob
       ? {
           kind: "blob",
-          blob: archive.cover_image.blob,
+          blob: coverBlob,
           alt: archive.title || copy.local_project_cover,
         }
       : null,
@@ -73,8 +92,10 @@ export function localArchiveToProjectView(
     latestTime,
     recordCount: archive.record_count || 0,
     durationDays: ongoingDays,
-    visibilityLabel: copy.local,
+    visibilityLabel,
     visibilityTone: "neutral",
+    storageLabel: null,
+    storageTone: undefined,
     statusLabel: ended ? copy.ended : null,
     ended,
     showClassificationRow: maxDepth >= 2,
@@ -83,5 +104,30 @@ export function localArchiveToProjectView(
     activityText: null,
     footerItems: [],
     badges: [],
+  };
+}
+
+export function localArchiveToArchiveItem(archive: LocalArchiveSummary): ArchiveItem {
+  const systemName = archive.system_name || archive.species_name || null;
+
+  return {
+    id: archive.id,
+    title: archive.title,
+    category: archive.category,
+    status: archive.status,
+    system_name: systemName,
+    species_name_snapshot: systemName,
+    species_display_name: systemName,
+    created_at: archive.created_at,
+    last_record_time: archive.record_count > 0 ? archive.latest_record_time || null : null,
+    latest_record_note: archive.record_count > 0 ? archive.latest_record_note || archive.note || "" : "",
+    latest_record_time: archive.record_count > 0 ? archive.latest_record_time || null : null,
+    record_count: archive.record_count,
+    is_public: false,
+    sub_tag_id: archive.subcategory || null,
+    group_tag_id: archive.group_name || null,
+    note: archive.note,
+    help_status: null,
+    view_count: 0,
   };
 }

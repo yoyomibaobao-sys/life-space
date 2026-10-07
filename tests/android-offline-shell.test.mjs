@@ -13,15 +13,25 @@ test("Android packages a same-origin standalone local project surface", () => {
   const buildScript = read("scripts/build-mobile-offline.mjs");
   const source = read("mobile-offline-src/main.tsx");
   const parityStyles = read("mobile-offline-src/local-parity.css");
+  const shellStyles = read("mobile-offline-src/offline.css");
   const generated = read("mobile-shell/offline.html");
+  const sharedSourceSwitcher = read("components/archive-ui/ArchiveSourceSwitcher.tsx");
+  const sharedPageHeader = read("components/mobile/MobilePageHeaderView.tsx");
+  const sharedWorkspace = read("components/archive-ui/ArchiveWorkspaceTemplate.tsx");
+  const sharedTaxonomy = read("components/archive-ui/ArchiveTaxonomyPanel.tsx");
 
   assert.match(config, /hostname: cloudUrl\.hostname/);
-  assert.doesNotMatch(config, /url: cloudUrl\.origin/);
+  assert.match(config, /url: cloudUrl\.origin/);
+  assert.match(config, /errorPath: "offline\.html"/);
   assert.match(read("scripts/build-mobile-offline.mjs"), /"index\.html"/);
+  assert.match(read("scripts/build-mobile-offline.mjs"), /index\.template\.html/);
+  assert.doesNotMatch(read("mobile-shell/index.html"), /id="root"/);
   assert.match(packageJson, /"android:sync": "npm run android:offline && cap sync android"/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(buildScript, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
   assert.match(source, /listVisibleLocalArchiveSummaries/);
+  assert.match(source, /inferSingleLocalArchiveOwnerContext/);
+  assert.match(source, /rememberLocalOwnerContext/);
   assert.match(source, /createLocalArchive/);
   assert.match(source, /createLocalRecord/);
   assert.match(source, /updateLocalArchiveFields/);
@@ -33,41 +43,95 @@ test("Android packages a same-origin standalone local project surface", () => {
   assert.match(source, /copy.camera/);
   assert.match(source, /copy.album/);
   assert.match(source, /<MobileBottomNavigationView/);
+  assert.match(source, /<KeyboardLayoutGuard \/>/);
+  assert.match(shellStyles, /data-app-keyboard-open="true"[\s\S]*data-mobile-bottom-nav="true"[\s\S]*display: none !important/);
+  assert.match(source, /<MobilePageHeaderView/);
+  assert.match(sharedPageHeader, /data-mobile-page-header="true"/);
   assert.match(source, /<ArchiveProjectCard/);
-  assert.match(source, /<ArchiveRecordCardShell/);
-  assert.match(source, /<ConnectivityNotice/);
-  assert.match(source, /navigator\.onLine/);
-  assert.match(source, /saveCloudArchiveToLocal/);
+  assert.match(source, /<DeviceOwnedProjectDetail/);
+  assert.match(sharedWorkspace, /<ConnectivityNotice/);
+  assert.match(source, /useAndroidConnectivity/);
+  assert.match(source, /refreshCloudOfflineCaches/);
+  assert.match(source, /syncAllPendingCloudArchives/);
   assert.match(source, /syncPendingCloudArchive/);
   assert.match(source, /listPendingCloudSyncSummaries/);
-  assert.match(source, /supabase\.auth\.getSession/);
+  assert.match(source, /useAndroidAuthState/);
+  assert.match(read("lib/android-auth-state.ts"), /auth\.getSession/);
   assert.match(source, /supabase[\s\S]*?\.from\("archives"\)/);
-  assert.match(parityStyles, /\.brand-mode[\s\S]*display: none/);
+  assert.match(source, /\.order\("created_at", \{ ascending: false \}\)/);
+  assert.doesNotMatch(source, /\.order\("updated_at", \{ ascending: false \}\)/);
+  assert.doesNotMatch(source, /className="offline-header"|className="brand-mode"/);
   assert.doesNotMatch(parityStyles, /\.offline-status/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(1\)/);
-  assert.match(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(1\)/);
+  assert.doesNotMatch(parityStyles, /\.source-row > button:nth-child\(2\)/);
+  assert.match(source, /label: copy\.all/);
+  assert.match(source, /label: copy\.cloud/);
+  assert.match(source, /<ArchiveWorkspaceTemplate/);
+  assert.match(source, /sourceOptions=\{auth\.status !== "signed-in"/);
+  assert.match(source, /activeSource=\{sourceFilter\}/);
+  assert.match(source, /<ArchiveTaxonomyPanel/);
+  assert.match(sharedTaxonomy, /archiveCategoryOptions\.map/);
+  assert.match(sharedSourceSwitcher, /aria-pressed=\{activeValue === item\.value\}/);
   assert.match(generated, /life-space-local-offline/);
   assert.doesNotMatch(generated, /<script[^>]+src=/i);
   assert.doesNotMatch(generated, /<link[^>]+stylesheet/i);
 });
 
-test("offline guides expose only the registered-user overview boundary", () => {
+test("signed-in local-space visibility is optional, persisted, and hides All together with Local", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const profile = read("components/profile/AndroidProfileController.tsx");
+  assert.match(source, /LOCAL_SPACE_VISIBILITY_KEY/);
+  assert.match(source, /localSpacePreference \?\? hasLocalSpaceContent/);
+  assert.match(source, /localSpaceVisible[\s\S]*\{ value: "all"[\s\S]*\{ value: "cloud"[\s\S]*\{ value: "local"/);
+  assert.match(source, /:\s*\[\{ value: "cloud", label: copy\.cloud, count: cloudSourceCount \}\]/);
+  assert.match(source, /writeLocalSpaceVisibilityPreference\(visible\)/);
+  assert.match(source, /localSpaceVisible=\{localSpaceVisible\}/);
+  assert.match(source, /onLocalSpaceVisibilityChange=\{auth\.status === "signed-in" \? updateLocalSpaceVisibility/);
+  assert.match(profile, /显示本地空间|Show local space/);
+});
+
+test("offline shell safely recovers one local owner when browser session state is unavailable", () => {
+  const db = read("lib/local-offline-db.ts");
+  const source = read("mobile-offline-src/main.tsx");
+
+  assert.match(db, /export async function inferSingleLocalArchiveOwnerContext/);
+  assert.match(db, /if \(owners\.size > 1\) return null/);
+  assert.match(source, /if \(!nextOwner && !wasLocalOwnerExplicitlySignedOut\(\)\)[\s\S]*inferSingleLocalArchiveOwnerContext/);
+  assert.match(source, /rememberLocalOwnerContext/);
+});
+
+test("explicit sign-out cannot restore another account from local projects", () => {
+  const owner = read("lib/local-owner-context.ts");
+  const source = read("mobile-offline-src/main.tsx");
+  assert.match(owner, /EXPLICIT_LOCAL_SIGN_OUT_KEY/);
+  assert.match(owner, /window\.localStorage\.setItem\(EXPLICIT_LOCAL_SIGN_OUT_KEY, "1"\)/);
+  assert.match(owner, /window\.localStorage\.removeItem\(EXPLICIT_LOCAL_SIGN_OUT_KEY\)/);
+  assert.match(source, /wasLocalOwnerExplicitlySignedOut\(\)/);
+});
+
+test("offline guides and guests share the simplified tier", () => {
   const source = read("mobile-offline-src/main.tsx");
   const guideCache = read("lib/offline-guide-directory.ts");
   const plantIndex = read("app/plant/page.tsx");
 
+  assert.match(source, /<PlantPage/);
   assert.match(source, /kind: "guide-detail"/);
-  assert.match(source, /!owner[\s\S]*guideSignInRequired/);
-  assert.match(source, /getOfflineGuideOverview\(guide, language\)/);
-  assert.match(source, /getOfflineGuideParameters\(guide, language\)/);
-  assert.match(source, /owner && guide\.description/);
+  const detail = read("components/plant-detail/GuideDetailView.tsx");
+  assert.match(source, /<GuideDetailView/);
+  assert.match(detail, /setIsSignedIn\(offlineSignedIn\)/);
+  assert.match(detail, /getOfflineGuideOverview\(offlineGuide/);
+  assert.match(detail, /getOfflineGuideParameters\(offlineGuide/);
   assert.match(source, /full practice guidance, experience cards, and related projects/);
   assert.match(guideCache, /PUBLIC_SOURCES/);
-  assert.match(guideCache, /plantCoreParameters/);
-  assert.match(guideCache, /\["light", "scene", "indoor"\]/);
-  assert.match(plantIndex, /if \(!isSignedIn \|\| loading \|\| !plants\.length\) return/);
-  assert.match(plantIndex, /parametersZh: zh\.parameters\.slice\(0, 3\)/);
-  assert.match(plantIndex, /content, content_en/);
+  assert.match(guideCache, /LEGACY_KEY/);
+  assert.doesNotMatch(guideCache, /cleanParameters\(row\.parametersZh\)/);
+  assert.doesNotMatch(guideCache, /getEnvironmentDetailItems\(/);
+  assert.match(plantIndex, /if \(loading \|\| !plants\.length\) return/);
+  assert.match(plantIndex, /overviewZh: getPublicGuideSummary\(entry, "zh"\)/);
+  assert.doesNotMatch(plantIndex, /parametersZh: hasCloudAccess \? zh\.parameters/);
+  assert.match(detail, /canReadFull && content\.parameters\.length > 0/);
+  assert.match(plantIndex, /overviewEn: getPublicGuideSummary\(entry, "en"\)/);
+  assert.doesNotMatch(plantIndex, /\.select\("[^"]*content, content_en/);
 });
 
 test("signed RC local data migrates on-device before the old origin is retired", () => {
@@ -107,4 +171,43 @@ test("new local projects inherit the signed-in account only on this device", () 
   assert.match(ownerSync, /rememberLocalOwnerContext/);
   assert.match(ownerSync, /preparePendingCloudSyncQueue/);
   assert.match(zh, /这不会上传云端/);
+});
+
+test("explicit Android sign-out hides account-bound offline cache state", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const auth = read("lib/android-auth-state.ts");
+
+  assert.match(source, /explicitAndroidLogout/);
+  assert.match(auth, /event !== "SIGNED_OUT"/);
+  assert.match(auth, /preserveLocalOwner: true/);
+  assert.match(auth, /markExplicitlySignedOut/);
+  assert.match(source, /setCloudArchives\(\[\]\)/);
+  assert.match(source, /privateContext[\s\S]*listVisibleCloudOfflineArchiveSummaries\(privateContext\)/);
+  assert.match(source, /setCloudCaches\(cachedCloud\)/);
+});
+
+test("Android cloud project covers resolve through the shared signed media layer", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const web = read("app/archive/page.tsx");
+  assert.match(source, /resolveMediaDisplayPairs\(supabase/);
+  assert.match(source, /thumb_path: archive\.cover_thumb_path/);
+  assert.match(source, /liveCloudCardImageUrl\(archive\)/);
+  assert.match(web, /resolveMediaDisplayPairs\(supabase/);
+});
+
+test("Android cloud login uses the shared Turnstile challenge", () => {
+  const source = read("mobile-offline-src/main.tsx");
+  const buildScript = read("scripts/build-mobile-offline.mjs");
+  const workflow = read(".github/workflows/android-apk.yml");
+  const authCaptcha = read("components/AuthCaptcha.tsx");
+  const turnstileView = read("components/auth/TurnstileChallengeView.tsx");
+
+  assert.match(source, /<AuthCaptcha/);
+  assert.match(source, /AUTH_CAPTCHA_ENABLED/);
+  assert.match(source, /loginBundledWithTurnstile/);
+  assert.match(read("lib/android-auth-session.ts"), /options: \{ captchaToken: input\.captchaToken \}/);
+  assert.match(buildScript, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
+  assert.match(workflow, /vars\.NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
+  assert.match(authCaptcha, /TurnstileChallengeView/);
+  assert.match(turnstileView, /challenges\.cloudflare\.com\/turnstile/);
 });

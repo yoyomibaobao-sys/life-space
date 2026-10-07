@@ -8,25 +8,27 @@ async function source(path) {
 }
 
 test("profile uses an editable identity card and explicit account entries", async () => {
-  const [profile, zhCopy, enCopy] = await Promise.all([
+  const [profile, presentation, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
+    source("components/profile/MobileProfilePresentation.tsx"),
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
+  const profileSurface = `${profile}\n${presentation}`;
 
   assert.match(profile, /profileIdentityCardStyle/);
   assert.match(profile, /会员编号/);
   assert.match(profile, /被采纳的次数/);
   assert.match(profile, /空间用量/);
-  assert.match(profile, /开通云会员/);
-  assert.match(profile, /订单进度查询/);
-  assert.match(profile, /会员类别说明/);
-  assert.match(profile, /浏览历史/);
-  assert.match(profile, /备份与导出/);
-  assert.match(profile, /账号管理/);
+  assert.match(profileSurface, /开通云会员/);
+  assert.match(profileSurface, /订单进度查询/);
+  assert.match(profileSurface, /会员类别说明/);
+  assert.match(profileSurface, /浏览历史/);
+  assert.match(profileSurface, /备份与导出/);
+  assert.match(profileSurface, /账号管理/);
   assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
   assert.match(profile, /<input[\s\S]*?value=\{username\}[\s\S]*?onChange=\{\(event\) => setUsername/);
-  assert.match(profile, /role="switch"/);
+  assert.match(profileSurface, /role="switch"/);
   assert.doesNotMatch(profile, /identityEditButtonStyle/);
   assert.match(profile, /t\.profile\.language_setting/);
   assert.match(profile, /t\.profile\.country_region/);
@@ -79,6 +81,7 @@ test("mobile shell keeps an ordered fixed navigation and returns within the app"
   assert.match(sharedNavigation, /transform: "translateZ\(0\)"/);
   assert.match(navbar, /!user \? <LanguageSwitcher compact \/>/);
   assert.match(navbar, /hasPageManagedMobileTopNav\(pathname\)/);
+  assert.match(navbar, /pathname\.startsWith\("\/local\/archive\/"\)/);
   assert.doesNotMatch(mobileNav, /href="\/feedback"/);
   assert.match(zhCopy, /discover: "发现"/);
   assert.match(enCopy, /discover: "Discover"/);
@@ -183,7 +186,12 @@ test("mobile primary pages use contextual top bars and keep notifications in My 
   assert.match(experiencePage, /onSearch=\{\(\) => setSearchOpen\(\(open\) => !open\)\}/);
   assert.match(plantPage, /<HomeSectionTabs\s+active="guide"[\s\S]*?searchEnabled=\{false\}/);
   assert.match(plantPage, /<MobileSearchField/);
-  assert.match(archivePage, /<Link href="\/profile" style=\{personalSpaceAvatarLinkStyle\}>/);
+  assert.match(archivePage, /<PersonalSpaceMobileIdentity/);
+  assert.match(archivePage, /profileHref="\/profile"/);
+  assert.doesNotMatch(
+    archivePage,
+    /<Link href="\/profile" style=\{personalSpaceAvatarLinkStyle\}>/,
+  );
   assert.match(archivePage, /<MobileNotificationLink \/>/);
   assert.doesNotMatch(followPage, /showNotification/);
   assert.doesNotMatch(marketPage, /showNotification/);
@@ -258,8 +266,9 @@ test("mobile plant guides use compact parameters, actions, cards, and sticky tab
 });
 
 test("account navigation exposes the confirmed independent menu entries", async () => {
-  const [profile, navbar, membership, login, home, zhCopy, enCopy] = await Promise.all([
+  const [profile, presentation, navbar, membership, login, home, zhCopy, enCopy] = await Promise.all([
     source("app/profile/page.tsx"),
+    source("components/profile/MobileProfilePresentation.tsx"),
     source("components/navbar.tsx"),
     source("app/membership/page.tsx"),
     source("app/login/page.tsx"),
@@ -267,24 +276,25 @@ test("account navigation exposes the confirmed independent menu entries", async 
     source("lib/i18n/zh.ts"),
     source("lib/i18n/en.ts"),
   ]);
+  const profileSurface = `${profile}\n${presentation}`;
 
   assert.match(profile, /id="language-settings"/);
-  assert.match(profile, /role="switch"/);
-  assert.match(profile, /"Cloud Membership" : "开通云会员"/);
-  assert.match(profile, /"Order progress" : "订单进度查询"/);
-  assert.match(profile, /"Membership types" : "会员类别说明"/);
-  assert.match(profile, /"Browsing history" : "浏览历史"/);
-  assert.match(profile, /"Backup & export" : "备份与导出"/);
-  assert.match(profile, /"Account management" : "账号管理"/);
+  assert.match(profileSurface, /role="switch"/);
+  assert.match(profileSurface, /"Cloud Membership" : "开通云会员"/);
+  assert.match(profileSurface, /"Order progress" : "订单进度查询"/);
+  assert.match(profileSurface, /"Membership types" : "会员类别说明"/);
+  assert.match(profileSurface, /"Browsing history" : "浏览历史"/);
+  assert.match(profileSurface, /"Backup & export" : "备份与导出"/);
+  assert.match(profileSurface, /"Account management" : "账号管理"/);
   assert.match(profile, /<MobileProfileModuleTabs/);
-  assert.match(profile, /href: "\/admin\/memberships"/);
-  assert.match(profile, /isAdmin[\s\S]*?adminMembershipProfileModule/);
-  assert.match(profile, /display: "grid"/);
-  assert.match(profile, /overflowX: "visible"/);
-  assert.match(profile, /gridTemplateColumns: "1fr"/);
-  assert.match(profile, /compact && isActive/);
-  assert.match(profile, /desktopProfileModulesStyle/);
-  assert.match(profile, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 46/);
+  assert.match(profileSurface, /href: "\/admin\/memberships"/);
+  assert.match(profile, /admin: isAdmin/);
+  assert.match(profileSurface, /display: "grid"/);
+  assert.match(profileSurface, /overflowX: "visible"/);
+  assert.match(profileSurface, /gridTemplateColumns: "1fr"/);
+  assert.match(profileSurface, /compact && isActive/);
+  assert.match(profileSurface, /desktopProfileModulesStyle/);
+  assert.match(profileSurface, /mobileProfileCompactTabStyle[\s\S]*?minHeight: 46/);
   assert.doesNotMatch(profile, /mobileProfileModule === "adminMembership"/);
   assert.doesNotMatch(profile, /showInfoModule|mobileProfileModule === "settings"/);
   assert.match(profile, /admin_get_membership_payment_queue_count/);
@@ -327,9 +337,10 @@ test("account navigation exposes the confirmed independent menu entries", async 
 });
 
 test("mobile account actions, membership copy, and plant names stay compact", async () => {
-  const [navbar, profile, membership, payment, benefits, zhCopy, enCopy] = await Promise.all([
+  const [navbar, profile, presentation, membership, payment, benefits, zhCopy, enCopy] = await Promise.all([
     source("components/navbar.tsx"),
     source("app/profile/page.tsx"),
+    source("components/profile/MobileProfilePresentation.tsx"),
     source("app/membership/page.tsx"),
     source("app/membership/payment/page.tsx"),
     source("app/membership/benefits/page.tsx"),
@@ -340,6 +351,7 @@ test("mobile account actions, membership copy, and plant names stay compact", as
   assert.match(navbar, /supabase\.auth\.signOut\(\{ scope: "local" \}\)/);
   assert.doesNotMatch(navbar, /mobileLogoutButtonStyle/);
   assert.match(profile, /onClick=\{\(\) => void handleProfileLogout\(\)\}[\s\S]*?style=\{accountLogoutButtonStyle\}[\s\S]*?t\.nav\.logout_full/);
+  assert.match(presentation, /export const accountLogoutButtonStyle/);
   assert.doesNotMatch(navbar, /mobileMeMenuOpen|mobileMeMoreButtonStyle|mobileMeMenuStyle/);
 
   assert.doesNotMatch(membership, /t\.membership_page\.business_/);
@@ -387,12 +399,17 @@ test("plant guide renders a small batch and restores the list position", async (
 });
 
 test("following stays an independent bottom destination and returns there after login", async () => {
-  const [navbar, follow] = await Promise.all([
+  const [navbar, follow, primaryNav] = await Promise.all([
     source("components/navbar.tsx"),
     source("app/follow/page.tsx"),
+    source("components/mobile/mobilePrimaryNavigation.ts"),
   ]);
 
-  assert.match(navbar, /label: labels\.following/);
+  assert.match(
+    primaryNav,
+    /\{ id: "following", label: labels\.following, icon: "follow" \}/,
+  );
+  assert.match(navbar, /getMobilePrimaryNavigationDescriptors/);
   assert.match(navbar, /href: user \? "\/follow" : buildLoginHref\("\/follow"\)/);
   assert.match(navbar, /active: pathname\.startsWith\("\/follow"\)/);
   assert.match(follow, /buildLoginHref\(getCurrentInternalPath\(\)\)/);
@@ -698,12 +715,13 @@ test("legacy user profile routes merge into the canonical user space", async () 
 
   assert.doesNotMatch(userSpaceHeader, /\/profile/);
 
-  assert.match(archiveDetail, /href=\{isOwner \? "\/archive" : `\/user\/\$\{activeArchive\.user_id\}`\}/);
+  assert.match(archiveDetail, /headerFallbackHref=\{isOwner \? "\/archive" : "\/user\/" \+ activeArchive\.user_id\}/);
   assert.match(archiveDetail, /displayUsername/);
   assert.match(archiveDetail, /<UiIcon name="arrow-right" size=\{15\} \/>/);
   assert.match(archiveDetail, /style=\{attributeCreatorLinkStyle\}/);
-  assert.match(archiveDetail, /style=\{projectPageFollowStyle\(isProjectFollowed\)\}/);
-  assert.match(archiveDetail, /background: followed \? "#f6f7f5" : "#edf7ea"/);
+  const detailView = await source("components/archive-ui/ArchiveProjectDetailView.tsx");
+  assert.match(detailView, /style=\{projectPageFollowStyle\(isProjectFollowed\)\}/);
+  assert.match(detailView, /background: followed \? "#f6f7f5" : "#edf7ea"/);
 });
 
 test("page headings omit copy that only restates the visible interface", async () => {

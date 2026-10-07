@@ -541,13 +541,13 @@ begin
     null;
   end;
 
-  begin
-    perform *
-    from public.get_plant_basic_overviews(c.plant_id, 'zh');
-    raise exception 'visitor called the registered-only overview RPC';
-  exception when insufficient_privilege then
-    null;
-  end;
+  if not exists (
+    select 1
+    from public.get_plant_basic_overviews(c.plant_id, 'zh') overview
+    where overview.species_id = c.plant_id
+  ) then
+    raise exception 'visitor could not read the public basic overview RPC';
+  end if;
 
   begin
     perform *

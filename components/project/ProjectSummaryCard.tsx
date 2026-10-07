@@ -56,6 +56,7 @@ type Props = {
   latestText?: string | null;
   latestTime?: string | null;
   visibilityLabel?: string | null;
+  storageLabel?: string | null;
   classificationText?: string | null;
   classificationSlot?: ReactNode;
   showClassification?: boolean;
@@ -151,6 +152,9 @@ export default function ProjectSummaryCard(props: Props) {
                   {props.visibilityLabel}
                 </button>
               ) : <span className={styles.visibility}>{props.visibilityLabel}</span>
+            ) : null}
+            {props.storageLabel ? (
+              <span className={styles.storage}>{props.storageLabel}</span>
             ) : null}
           </span>
           <span className={styles.titleActions}>

@@ -21,6 +21,7 @@ export default function MobileContentTopBar({
   searchLabel,
   onSearch,
   showNotification = false,
+  showGuestLanguageSwitcher = true,
 }: {
   items: MobileContentTopBarItem[];
   ariaLabel: string;
@@ -28,6 +29,7 @@ export default function MobileContentTopBar({
   searchLabel?: string;
   onSearch?: () => void;
   showNotification?: boolean;
+  showGuestLanguageSwitcher?: boolean;
 }) {
   return (
     <nav className="mobile-app-flex-only" aria-label={ariaLabel} style={barStyle}>
@@ -81,7 +83,7 @@ export default function MobileContentTopBar({
           <UiIcon name="search" size={18} />
         </button>
       ) : null}
-      <GuestLanguageSwitcher />
+      {showGuestLanguageSwitcher ? <GuestLanguageSwitcher /> : null}
       {showNotification ? <MobileNotificationLink /> : null}
     </nav>
   );
@@ -104,6 +106,7 @@ const actionStyle: CSSProperties = {
 
 const barStyle: CSSProperties = {
   position: "sticky",
+  display: "flex",
   top: 0,
   zIndex: 100,
   minHeight: "calc(50px + var(--app-safe-area-top))",

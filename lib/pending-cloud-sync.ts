@@ -1,9 +1,12 @@
 import { createImageThumbnailFile, standardizeRecordPhotoFile } from "@/lib/image-compression";
 import {
   clearPendingCloudSyncPromptIfComplete,
+  convertPendingCloudProjectToOfflineCache,
   getLocalArchiveDetail,
+  isPendingCloudCreateArchive,
   isPendingCloudSyncStatus,
   listPendingCloudSyncSummaries,
+  persistLocalCloudArchiveMapping,
   preparePendingCloudSyncQueue,
   updateLocalArchiveCloudSyncOperation,
   updateLocalImageCloudSyncOperation,
@@ -15,6 +18,7 @@ import {
   type LocalRecordWithImages,
 } from "@/lib/local-offline-db";
 import { normalizePlantingRegion } from "@/lib/planting-region";
+import { isAndroidOnline } from "@/lib/android-connectivity";
 import { uploadMediaStorageObject } from "@/lib/media-storage-upload";
 import {
   reserveStorageUpload,
@@ -26,6 +30,9 @@ import {
   isMissingDatabaseColumn,
   withoutCapturedAt,
 } from "@/lib/supabase-schema-compat";
+import { ensureCloudCycles } from "@/lib/local-to-cloud-sync";
+import { loadCloudProjectTaxonomy } from "@/lib/android-project-taxonomy";
+import { resolvePendingCloudTaxonomy } from "@/lib/pending-cloud-taxonomy";
 
 export const PENDING_CLOUD_SYNC_UPDATED_EVENT =
   "lifespace:pending-cloud-sync-updated";
@@ -44,6 +51,7 @@ export type PendingCloudSyncResult = {
   imageCount: number;
   failedCount: number;
   error?: string;
+  taxonomyWarning?: string;
 };
 
 type CloudArchiveRow = {
@@ -365,12 +373,14 @@ async function syncRecord(params: {
       assertMatchingCloudRecord(existing, cloudArchive.id, userId);
     } else if (isCreate) {
       const visibility =
-        cloudArchive.default_record_visibility === "public" ||
-        cloudArchive.default_record_visibility === "private"
-          ? cloudArchive.default_record_visibility
-          : cloudArchive.is_public
-            ? "public"
-            : "private";
+        record.source_cloud_visibility === "public" || record.source_cloud_visibility === "private"
+          ? record.source_cloud_visibility
+          : cloudArchive.default_record_visibility === "public" ||
+              cloudArchive.default_record_visibility === "private"
+            ? cloudArchive.default_record_visibility
+            : cloudArchive.is_public
+              ? "public"
+              : "private";
       const payload = {
         id: cloudRecordId,
         archive_id: cloudArchive.id,
@@ -408,6 +418,9 @@ async function syncRecord(params: {
       if (pendingFields.has("note")) patch.note = record.note || "";
       if (pendingFields.has("record_time")) patch.record_time = record.record_time;
       if (pendingFields.has("cycle_id")) patch.cycle_id = cloudCycleId;
+      if (pendingFields.has("visibility") && (record.source_cloud_visibility === "public" || record.source_cloud_visibility === "private")) {
+        patch.visibility = record.source_cloud_visibility;
+      }
 
       if (Object.keys(patch).length > 0) {
         const { data, error } = await supabase
@@ -715,7 +728,135 @@ async function syncImage(params: {
   }
 }
 
-export async function syncPendingCloudArchive(params: {
+async function findCloudArchiveById(archiveId: string) {
+  const { data, error } = await supabase
+    .from("archives")
+    .select("id,user_id,is_public,default_record_visibility")
+    .eq("id", archiveId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`无法确认云端项目状态：${errorMessage(error, "请稍后重试。")}`);
+  }
+  return (data || null) as CloudArchiveRow | null;
+}
+
+async function syncCreateArchive(params: {
+  detail: LocalArchiveDetail;
+  userId: string;
+  ownerContext: LocalArchiveOwnerContext;
+}) {
+  const { archive } = params.detail;
+  const operationId = getOperationId(archive);
+  const visibility =
+    archive.migration_visibility === "private" ? "private" : "public";
+  const isPublic = visibility === "public";
+  const speciesId =
+    archive.category === "plant" && isStableCloudOperationId(archive.plant_id)
+      ? archive.plant_id
+      : null;
+  const systemName = cleanText(archive.system_name) || cleanText(archive.species_name);
+  if (!systemName) {
+    throw new Error("关联指引不能为空。");
+  }
+
+  await updateLocalArchiveCloudSyncOperation(
+    archive.id,
+    operationId,
+    {
+      status: "uploading",
+      cloud_archive_id: operationId,
+    },
+    params.ownerContext
+  );
+
+  try {
+    const taxonomy = resolvePendingCloudTaxonomy(archive, await loadCloudProjectTaxonomy(params.userId));
+    let existing = await findCloudArchiveById(operationId);
+    if (existing) {
+      if (existing.user_id !== params.userId) {
+        throw new Error("云端项目标识发生冲突，已停止上传以保护现有内容。");
+      }
+    } else {
+      const payload = {
+        id: operationId,
+        title: archive.title.trim(),
+        category: archive.category,
+        species_id: speciesId,
+        species_name_snapshot:
+          archive.category === "plant"
+            ? archive.species_name || systemName
+            : null,
+        system_name: archive.category === "plant" ? null : systemName,
+        source: archive.source || null,
+        planting_region: normalizePlantingRegion(archive.planting_region),
+        note: archive.note || null,
+        archive_summary: archive.archive_summary || null,
+        cycle_enabled: Boolean(archive.cycle_enabled),
+        next_cycle_name: archive.next_cycle_name || null,
+        user_id: params.userId,
+        is_public: isPublic,
+        default_record_visibility: visibility,
+        sub_tag_id: taxonomy.sub_tag_id,
+        group_tag_id: taxonomy.group_tag_id,
+      };
+      const inserted = await supabase
+        .from("archives")
+        .insert([payload])
+        .select("id,user_id,is_public,default_record_visibility")
+        .maybeSingle();
+      existing = inserted.data as CloudArchiveRow | null;
+      if (inserted.error || !existing?.id) {
+        existing = await findCloudArchiveById(operationId);
+      }
+      if (!existing?.id) {
+        throw new Error(
+          `创建云端项目失败：${errorMessage(inserted.error, "请稍后重试。")}`
+        );
+      }
+      if (existing.user_id !== params.userId) {
+        throw new Error("云端项目标识发生冲突，已停止上传以保护现有内容。");
+      }
+    }
+
+    const mapped = await persistLocalCloudArchiveMapping(
+      archive.id,
+      existing.id,
+      operationId,
+      params.ownerContext
+    );
+    return { cloudArchiveId: mapped.source_cloud_archive_id || existing.id, taxonomyWarning: taxonomy.warning };
+  } catch (error) {
+    await updateLocalArchiveCloudSyncOperation(
+      archive.id,
+      operationId,
+      {
+        status: "failed",
+        cloud_archive_id: operationId,
+        last_error: errorMessage(error, "创建云端项目失败，请稍后重试。"),
+      },
+      params.ownerContext
+    ).catch(() => undefined);
+    throw error;
+  }
+}
+
+const activeArchiveSyncs = new Map<string, Promise<PendingCloudSyncResult>>();
+
+export function syncPendingCloudArchive(params: {
+  localArchiveId: string;
+  ownerContext: LocalArchiveOwnerContext;
+  onProgress?: (progress: PendingCloudSyncProgress) => void;
+}): Promise<PendingCloudSyncResult> {
+  const key = `${params.ownerContext.userId}:${params.localArchiveId}`;
+  const active = activeArchiveSyncs.get(key);
+  if (active) return active;
+  const work = syncPendingCloudArchiveUnlocked(params);
+  activeArchiveSyncs.set(key, work);
+  void work.finally(() => { if (activeArchiveSyncs.get(key) === work) activeArchiveSyncs.delete(key); }).catch(() => undefined);
+  return work;
+}
+
+async function syncPendingCloudArchiveUnlocked(params: {
   localArchiveId: string;
   ownerContext: LocalArchiveOwnerContext;
   onProgress?: (progress: PendingCloudSyncProgress) => void;
@@ -732,7 +873,7 @@ export async function syncPendingCloudArchive(params: {
       error: "请先登录，再上传本机改动。",
     };
   }
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
+  if (!isAndroidOnline()) {
     return {
       success: false,
       cloudArchiveId: null,
@@ -745,12 +886,11 @@ export async function syncPendingCloudArchive(params: {
   }
 
   await preparePendingCloudSyncQueue(params.ownerContext);
-  const detail = await getLocalArchiveDetail(
+  let detail = await getLocalArchiveDetail(
     params.localArchiveId,
     params.ownerContext
   );
-  const cloudArchiveId = cleanText(detail?.archive.source_cloud_archive_id);
-  if (!detail || !cloudArchiveId) {
+  if (!detail) {
     return {
       success: false,
       cloudArchiveId: null,
@@ -758,17 +898,75 @@ export async function syncPendingCloudArchive(params: {
       recordCount: 0,
       imageCount: 0,
       failedCount: 1,
-      error: "找不到可上传到的原云端项目。",
+      error: "找不到可上传的本机项目。",
     };
   }
 
+  let cloudArchiveId = cleanText(detail.archive.source_cloud_archive_id);
   let archiveUpdated = false;
   let recordCount = 0;
   let imageCount = 0;
   let failedCount = 0;
   let lastError = "";
+  let taxonomyWarning: string | null = null;
 
   try {
+    if (!cloudArchiveId && isPendingCloudCreateArchive(detail.archive)) {
+      const created = await syncCreateArchive({
+        detail,
+        userId,
+        ownerContext: params.ownerContext,
+      });
+      cloudArchiveId = created.cloudArchiveId;
+      taxonomyWarning = created.taxonomyWarning;
+      archiveUpdated = true;
+      params.onProgress?.({ completed: 1, total: 1, label: "archive" });
+      const mapped = await getLocalArchiveDetail(
+        params.localArchiveId,
+        params.ownerContext
+      );
+      if (!mapped?.archive.source_cloud_archive_id) {
+        return {
+          success: false,
+          cloudArchiveId: cloudArchiveId,
+          archiveUpdated: true,
+          recordCount: 0,
+          imageCount: 0,
+          failedCount: 1,
+          error: "云端项目已创建，但本机尚未保存对应关系。请保留本机内容并重试。",
+        };
+      }
+      cloudArchiveId = mapped.archive.source_cloud_archive_id;
+      detail = mapped;
+      await ensureCloudCycles({
+        archiveId: cloudArchiveId,
+        cycles: mapped.archive.cycles || [],
+      });
+      await preparePendingCloudSyncQueue(params.ownerContext);
+      detail =
+        (await getLocalArchiveDetail(
+          params.localArchiveId,
+          params.ownerContext
+        )) || mapped;
+    } else if (cloudArchiveId && (detail.archive.cycles || []).length) {
+      await ensureCloudCycles({
+        archiveId: cloudArchiveId,
+        cycles: detail.archive.cycles || [],
+      });
+    }
+
+    if (!cloudArchiveId) {
+      return {
+        success: false,
+        cloudArchiveId: null,
+        archiveUpdated: false,
+        recordCount: 0,
+        imageCount: 0,
+        failedCount: 1,
+        error: "找不到可上传到的原云端项目。",
+      };
+    }
+
     const pendingRecords = detail.records
       .filter((record) => isPendingCloudSyncStatus(record.sync.status))
       .sort((left, right) => {
@@ -800,7 +998,11 @@ export async function syncPendingCloudArchive(params: {
       pendingImageCount;
     let completed = 0;
 
-    if (isPendingCloudSyncStatus(detail.archive.sync.status)) {
+    if (
+      isPendingCloudSyncStatus(detail.archive.sync.status) &&
+      detail.archive.sync.operation_kind !== "create-archive" &&
+      detail.archive.local_role !== "cloud-offline-cache"
+    ) {
       try {
         archiveUpdated = await syncArchiveUpdate({
           detail,
@@ -817,7 +1019,7 @@ export async function syncPendingCloudArchive(params: {
     }
 
     for (const record of pendingRecords) {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (!isAndroidOnline()) {
         lastError = "网络已断开，剩余内容保留在本机。";
         break;
       }
@@ -840,7 +1042,7 @@ export async function syncPendingCloudArchive(params: {
       for (const image of record.images.filter((candidate) =>
         isPendingCloudSyncStatus(candidate.sync.status)
       )) {
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
+        if (!isAndroidOnline()) {
           lastError = "网络已断开，剩余照片保留在本机。";
           break;
         }
@@ -895,6 +1097,17 @@ export async function syncPendingCloudArchive(params: {
     }
 
     const success = !remaining && failedCount === 0;
+    if (
+      success &&
+      detail.archive.local_role === "local-project" &&
+      detail.archive.migration_cloud_archive_id
+    ) {
+      await convertPendingCloudProjectToOfflineCache(
+        params.localArchiveId,
+        cloudArchiveId,
+        params.ownerContext
+      );
+    }
     return {
       success,
       cloudArchiveId,
@@ -902,6 +1115,7 @@ export async function syncPendingCloudArchive(params: {
       recordCount,
       imageCount,
       failedCount,
+      ...(taxonomyWarning ? { taxonomyWarning } : {}),
       ...(success
         ? {}
         : { error: lastError || "部分内容尚未上传，请稍后重试。" }),
@@ -919,4 +1133,27 @@ export async function syncPendingCloudArchive(params: {
   } finally {
     dispatchPendingSyncUpdated(params.localArchiveId);
   }
+}
+
+export async function syncAllPendingCloudArchives(params: {
+  ownerContext: LocalArchiveOwnerContext;
+  onProgress?: (
+    localArchiveId: string,
+    progress: PendingCloudSyncProgress
+  ) => void;
+}): Promise<PendingCloudSyncResult[]> {
+  await preparePendingCloudSyncQueue(params.ownerContext);
+  const summaries = await listPendingCloudSyncSummaries(params.ownerContext);
+  const results: PendingCloudSyncResult[] = [];
+  for (const summary of summaries) {
+    results.push(
+      await syncPendingCloudArchive({
+        localArchiveId: summary.local_archive_id,
+        ownerContext: params.ownerContext,
+        onProgress: (progress) =>
+          params.onProgress?.(summary.local_archive_id, progress),
+      })
+    );
+  }
+  return results;
 }

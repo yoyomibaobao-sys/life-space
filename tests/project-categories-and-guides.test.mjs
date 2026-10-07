@@ -7,11 +7,12 @@ async function source(path) {
 }
 
 test("cloud and local project category depths remain independent", async () => {
-  const [migration, optimization, settings, page] = await Promise.all([
+  const [migration, optimization, settings, page, view] = await Promise.all([
     source("supabase/migrations/20260829034713_add_archive_category_settings.sql"),
     source("supabase/migrations/20260829034846_optimize_archive_category_guide_policies.sql"),
     source("lib/archive-category-settings.ts"),
     source("app/profile/project-categories/page.tsx"),
+    source("components/profile/ProjectCategorySettingsView.tsx"),
   ]);
 
   assert.match(migration, /create table if not exists public\.archive_category_settings/);
@@ -24,11 +25,11 @@ test("cloud and local project category depths remain independent", async () => {
   assert.match(settings, /LOCAL_SETTINGS_PREFIX/);
   assert.match(settings, /getCloudArchiveCategoryDepths/);
   assert.match(settings, /saveCloudArchiveCategoryDepths/);
-  assert.match(page, /activeSpace === "cloud"/);
-  assert.match(page, /\(\["cloud", "local"\] as const\)\.map/);
+  assert.match(page, /<ProjectCategorySettingsView/);
   assert.match(page, /saveLocalArchiveCategoryDepths/);
-  assert.match(page, /depth >= 2/);
-  assert.match(page, /depth >= 3/);
+  assert.match(view, /\(\["cloud", "local"\] as const\)\.map/);
+  assert.match(view, /depth >= 2/);
+  assert.match(view, /depth >= 3/);
 });
 
 test("public related guides are explicit-grant, RLS-protected, and admin reviewed", async () => {
@@ -70,13 +71,14 @@ test("public related guides are explicit-grant, RLS-protected, and admin reviewe
 });
 
 test("public guide library has sections, reusable content, and openable details", async () => {
-  const [migration, indexPage, detailPage, guideLibrary, candidates, newProject] = await Promise.all([
+  const [migration, indexPage, detailPage, guideLibrary, candidates, newProject, guideGenerator] = await Promise.all([
     source("supabase/migrations/20260829054053_expand_public_guide_library.sql"),
     source("app/plant/page.tsx"),
-    source("app/plant/guide/[id]/page.tsx"),
+    source("components/plant-detail/GuideDetailView.tsx"),
     source("lib/public-guide-library.ts"),
     source("lib/system-name-candidates.ts"),
     source("app/archive/new/page.tsx"),
+    source("scripts/guide-full/generator.ts"),
   ]);
 
   assert.match(migration, /create table if not exists public\.guide_sections/);
@@ -98,20 +100,21 @@ test("public guide library has sections, reusable content, and openable details"
   assert.match(migration, /on conflict \(category, normalized_name\)/);
   assert.match(indexPage, /guide_sections/);
   assert.match(indexPage, /\/plant\/guide\/\$\{entry\.id\}/);
-  assert.match(detailPage, /buildPublicGuideContent/);
-  assert.match(detailPage, /system_name=\$\{encodeURIComponent\(entry\.name\)\}/);
-  assert.match(guideLibrary, /aquatic_plant/);
-  assert.match(guideLibrary, /food_ferment/);
+  assert.match(detailPage, /get_member_guide_content/);
+  assert.match(detailPage, /system_name=\$\{encodeURIComponent\(displayEntry\.name\)\}/);
+  assert.match(guideGenerator, /aquatic_plant/);
+  assert.match(guideGenerator, /food_ferment/);
   assert.match(candidates, /\.eq\("is_active", true\)/);
   assert.match(newProject, /searchParams\.get\("system_name"\)/);
 });
 
 test("non-plant guides keep their browsing hierarchy with shared global search and plant-style related content", async () => {
-  const [migration, indexPage, detailPage, guideLibrary] = await Promise.all([
+  const [migration, indexPage, detailPage, guideLibrary, guideGenerator] = await Promise.all([
     source("supabase/migrations/20260829120000_expand_domain_guide_hierarchy.sql"),
     source("app/plant/page.tsx"),
-    source("app/plant/guide/[id]/page.tsx"),
+    source("components/plant-detail/GuideDetailView.tsx"),
     source("lib/public-guide-library.ts"),
+    source("scripts/guide-full/generator.ts"),
   ]);
 
   for (const section of [
@@ -171,13 +174,14 @@ test("non-plant guides keep their browsing hierarchy with shared global search a
     "bird",
     "backyard_animal",
   ]) {
-    assert.match(guideLibrary, new RegExp(`${template}:`));
+    assert.match(guideGenerator, new RegExp(`${template}:`));
   }
   assert.match(guideLibrary, /publicGuideWaterFilterOptions/);
   assert.match(guideLibrary, /getPublicGuideFilterTraits/);
   assert.match(guideLibrary, /matchesPublicGuideFilters/);
 
-  assert.match(detailPage, /canAccessMembershipGuidance/);
+  assert.match(detailPage, /get_member_guide_content/);
+  assert.doesNotMatch(detailPage, /can_create_content/);
   assert.match(detailPage, /GuideTab = "guide" \| "experience" \| "projects"/);
   assert.match(detailPage, /hydrateExperienceCardListItems/);
   assert.match(detailPage, /is_experience_card_public/);

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/navigation/InternalLink";
 import {
   Suspense,
   useEffect,
@@ -93,17 +93,34 @@ export default function NewMarketPostPage() {
   const { t } = useLanguage();
   return (
     <Suspense fallback={<main style={pageStyle}>{t.market.loading}</main>}>
-      <NewMarketPostPageContent />
+      <NewMarketPostRouterContent />
     </Suspense>
   );
 }
-function NewMarketPostPageContent() {
-  const { language, t } = useLanguage();
+
+function NewMarketPostRouterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  return <NewMarketPostContent
+    sourceArchiveIdParam={searchParams.get("archiveId") || ""}
+    sourceRecordIdParam={searchParams.get("recordId") || ""}
+    onRequireLogin={() => router.push(buildLoginHref("/market/new"))}
+    onSaved={(postId) => router.push(`/market/${postId}`)}
+  />;
+}
 
-  const sourceArchiveIdParam = searchParams.get("archiveId") || "";
-  const sourceRecordIdParam = searchParams.get("recordId") || "";
+export function NewMarketPostContent({
+  sourceArchiveIdParam = "",
+  sourceRecordIdParam = "",
+  onRequireLogin,
+  onSaved,
+}: {
+  sourceArchiveIdParam?: string;
+  sourceRecordIdParam?: string;
+  onRequireLogin?: () => void;
+  onSaved?: (postId: string) => void;
+}) {
+  const { language, t } = useLanguage();
 
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [archives, setArchives] = useState<ArchiveOption[]>([]);
@@ -147,7 +164,7 @@ function NewMarketPostPageContent() {
       } = await supabase.auth.getUser();
 
       if (error || !user) {
-        router.push(buildLoginHref("/market/new"));
+        onRequireLogin?.();
         return;
       }
 
@@ -260,7 +277,7 @@ function NewMarketPostPageContent() {
     }
 
     void init();
-  }, [router, sourceArchiveIdParam, sourceRecordIdParam]);
+  }, [onRequireLogin, sourceArchiveIdParam, sourceRecordIdParam]);
 
   useEffect(() => {
     pendingImagesRef.current = pendingImages;
@@ -515,7 +532,7 @@ function NewMarketPostPageContent() {
     }
 
     setSaving(false);
-    router.push(`/market/${postId}`);
+    onSaved?.(postId);
   }
 
   if (loading) {

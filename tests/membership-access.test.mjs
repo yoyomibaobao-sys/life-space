@@ -69,7 +69,7 @@ test("expired cloud access is database-enforced read-only with narrow downgrade 
     source("app/archive/page.tsx"),
     source("app/archive/[id]/page.tsx"),
     source("components/archive-detail/ArchiveRecordCard.tsx"),
-    source("app/market/[id]/page.tsx"),
+    source("components/market/MarketDetailController.tsx"),
     source("supabase/tests/membership_access_dynamic.sql"),
   ]);
 
@@ -297,16 +297,21 @@ test("the plant pages request only data allowed for the current tier", async () 
   ]);
 
   assert.match(indexPage, /loadPlantBasicOverviewsCompat\(null\)/);
-  assert.match(indexPage, /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/);
-  assert.match(indexPage, /loadPlantCoreParametersCompat\(null\)/);
+  assert.match(
+    indexPage,
+    /canReadFullGuide\s+\?[\s\S]{0,160}withGuideRemoteTimeout\([\s\S]{0,160}supabase\.from\("plant_parameters"\)/,
+  );
+  assert.doesNotMatch(indexPage, /loadPlantCoreParametersCompat\(null\)/);
   assert.doesNotMatch(
     indexPage,
     /\.from\("plant_species"\)[\s\S]{0,180}\.select\([^)]*description/i
   );
-  assert.match(indexPage, /t\.plant\.visitor_notice/);
+  assert.doesNotMatch(indexPage, /t\.plant\.visitor_notice|t\.plant\.register_for_summary/);
 
-  assert.match(detailPage, /loadPlantBasicOverviewsCompat\(id\)/);
-  assert.match(detailPage, /loadPlantCoreParametersCompat\(id\)/);
+  assert.match(detailPage, /loadPlantBasicOverviewsCompat\(resolvedPlantId\)/);
+  assert.doesNotMatch(detailPage, /loadPlantCoreParametersCompat\(resolvedPlantId\)/);
+  assert.match(detailPage, /\.eq\("slug", id\)/);
+  assert.match(detailPage, /\.eq\("common_name", id\)/);
   assert.match(
     detailPage,
     /canReadFullGuide\s+\?\s+supabase\.from\("plant_parameters"\)/
@@ -316,9 +321,10 @@ test("the plant pages request only data allowed for the current tier", async () 
     /canReadFullGuide\s+\?\s+supabase\.from\("plant_growth_cycle"\)/
   );
   assert.doesNotMatch(detailPage, /from\("plant_related_archives_view"\)/);
-  assert.match(detailPage, /copy\.visitor_detail_notice/);
-  assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录、名称和分类。"/);
-  assert.match(zhCopy, /visitor_detail_notice: "游客可以查看目录、名称和分类。"/);
+  assert.match(detailPage, /copy\.plus_visible/);
+  assert.match(zhCopy, /visitor_notice: "游客可以查看植物目录和简化版指引。"/);
+  assert.match(zhCopy, /visitor_detail_notice: "游客可以阅读简化版指引/);
+  assert.match(zhCopy, /plus_visible: "Plus 云端用户可见"/);
 
   assert.match(guideCompat, /rpc\("get_plant_basic_overviews"/);
   assert.match(guideCompat, /rpc\("get_plant_core_parameters"/);
@@ -413,7 +419,7 @@ test("record photos are unlimited cumulatively but capped at ten per add operati
   assert.match(batchRules, /items\.slice\(0, safeLimit\)/);
   assert.match(batchRules, /if \(mergeIntoOneRecord\)/);
   assert.match(batchRules, /const byDate = new Map/);
-  assert.match(batchRules, /recordTimeISO: latestRecordTime\(photos\)/);
+  assert.match(batchRules, /recordTimeISO: photos\[0\]\?\.recordTimeISO \|\| new Date\(\)\.toISOString\(\)/);
   assert.match(batchRules, /recordTimeISO: latestRecordTime\(groupPhotos\)/);
   assert.match(
     cloudAddRecord,
@@ -487,7 +493,7 @@ test("client-side entitlement checks fail closed when membership is absent", asy
   );
   assert.match(
     membership,
-    /canAccessMembershipGuidance[\s\S]*?can_create_content === true/
+    /canAccessMembershipGuidance[\s\S]*?status === "active" \|\| membership\?\.status === "trialing"/
   );
   assert.match(membership, /需要开通云会员/);
 });
@@ -534,8 +540,8 @@ test("the approved matrix and transition rules are documented", async () => {
   assert.match(docs, /先执行可领取云体验 migration，再发布/);
   assert.match(docs, /存储安全线只暂停新领取，不阻断注册/);
   assert.match(docs, /处理期结束后的清理只作用于从未转为有效付费会员/);
-  assert.match(docs, /处理期以站内通知为主/);
-  assert.match(docs, /最终结束云端保留前7天发送一次关键邮件/);
+  assert.match(docs, /处理期结束前7天额外发送一次站内提醒/);
+  assert.match(docs, /最后7天节点同步发送一封关键邮件/);
   assert.match(docs, /会员到期未续费后，未由用户主动删除的云端内容长期保留并只读/);
   assert.match(docs, /可随时、多次保存到本机/);
   assert.match(docs, /允许查看、导出、删除和公开转私密/);

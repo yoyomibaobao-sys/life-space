@@ -19,12 +19,15 @@ test("Android shell keeps its identity, HTTPS host, and offline fallback explici
   assert.match(config, /https:\/\/life-space\.uk/);
   assert.match(config, /url\.protocol !== "https:"/);
   assert.match(config, /hostname: cloudUrl\.hostname/);
-  assert.doesNotMatch(config, /url: cloudUrl\.origin/);
+  assert.match(config, /url: cloudUrl\.origin/);
   assert.match(config, /androidScheme: "https"/);
   assert.match(config, /cleartext: false/);
   assert.match(config, /errorPath: "offline\.html"/);
   const offlineBuild = read("scripts/build-mobile-offline.mjs");
   assert.match(offlineBuild, /"index\.html"/);
+  assert.match(offlineBuild, /index\.template\.html/);
+  assert.match(read("mobile-shell/index.html"), /LifeSpace·自然/);
+  assert.doesNotMatch(read("mobile-shell/index.html"), /id="root"/);
   assert.match(offlineBuild, /process\.env\.__NEXT_I18N_SUPPORT/);
   assert.match(offlineBuild, /process\.env\.__NEXT_LINK_NO_TOUCH_START/);
   assert.match(offlineBuild, /process\.env\.__NEXT_MANUAL_CLIENT_BASE_PATH/);
@@ -133,7 +136,7 @@ test("Android login uses one resize path and blocks IME extracted-text overlays"
 });
 
 test("mobile Market lightbox requests the dark native status bar", () => {
-  const marketDetail = read("app/market/[id]/page.tsx");
+  const marketDetail = read("components/market/MarketDetailView.tsx");
 
   assert.match(marketDetail, /setIsMobileViewport\(window\.innerWidth < 760\)/);
   assert.match(marketDetail, /isMobileViewport=\{isMobileViewport\}/);
@@ -160,10 +163,10 @@ test("release signing is environment-only and local records are excluded from An
   assert.doesNotMatch(gradle, /storePassword\s+["'][^"']+["']/);
   assert.match(ignore, /\*\.jks/);
   assert.match(ignore, /\*\.keystore/);
-  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '16'/);
-  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc12'/);
-  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '16' \}\}/);
-  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc12' \}\}/);
+  assert.match(gradle, /ANDROID_VERSION_CODE'\) \?: '28'/);
+  assert.match(gradle, /ANDROID_VERSION_NAME'\) \?: '1\.0\.4-rc21'/);
+  assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ inputs\.version_code \|\| '28' \}\}/);
+  assert.match(workflow, /ANDROID_VERSION_NAME: \$\{\{ inputs\.version_name \|\| '1\.0\.4-rc21' \}\}/);
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android:enableOnBackInvokedCallback="true"/);
@@ -182,7 +185,7 @@ test("Android updates notify automatically, stay official-only, and require the 
   const updateClient = read("lib/android-app-update.ts");
   const updateNotice = read("components/AppUpdateNotifier.tsx");
   const versionEntry = read("components/AndroidAppVersionEntry.tsx");
-  const profile = read("app/profile/page.tsx");
+  const profile = read("app/profile/page.tsx") + read("components/profile/MobileProfilePresentation.tsx");
   const home = read("app/page.tsx");
   const layout = read("app/layout.tsx");
 
@@ -228,7 +231,8 @@ test("Android updates notify automatically, stay official-only, and require the 
   assert.match(layout, /<AppUpdateNotifier \/>/);
   assert.doesNotMatch(updateNotice, /installAndroidUpdate|installUpdate\(/);
   assert.match(profile, /<AndroidAppVersionEntry \/>/);
-  assert.match(profile, /isNativeApp === true[\s\S]*\? \[\][\s\S]*href: "\/download\/android"/);
+  assert.match(profile, /native: isNativeApp === true/);
+  assert.match(profile, /href: "\/download\/android"/);
   assert.doesNotMatch(home, /explicitlyViewingIntroduction/);
   assert.doesNotMatch(layout, /manifest: "\/manifest\.webmanifest"/);
   assert.match(layout, /title: "有时·耕作网页版"/);

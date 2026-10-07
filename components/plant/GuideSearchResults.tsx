@@ -6,8 +6,8 @@ import { useLanguage } from "@/lib/i18n/useLanguage";
 import { getArchiveCategoryLabel } from "@/lib/archive-categories";
 import type { GuideDirectoryMatch } from "@/lib/guide-directory-search";
 import {
-  buildPublicGuideContent,
   getPublicGuideName,
+  getPublicGuideSummary,
   publicGuideCopy,
 } from "@/lib/public-guide-library";
 import GuideResultsBar from "./GuideResultsBar";
@@ -53,9 +53,9 @@ export default function GuideSearchResults({
               ? match.plant.common_name || match.plant.scientific_name || t.plant.unnamed
               : getPublicGuideName(match.entry, language);
             const secondaryName = match.kind === "plant" ? match.plant.scientific_name : language === "en" ? match.entry.name : match.entry.name_en;
-            const summary = !signedIn ? copy.registerForOverview : match.kind === "plant"
+            const summary = match.kind === "plant"
               ? plantSummaries[match.plant.id]?.summary || t.plant.summary_pending
-              : buildPublicGuideContent(match.entry, language).overview || copy.contentPending;
+              : getPublicGuideSummary(match.entry, language) || copy.contentPending;
             const href = match.kind === "plant" ? `/plant/${match.plant.id}` : `/plant/guide/${match.entry.id}?from=${match.category}`;
             return (
               <Link key={match.key} href={href} onClick={onOpen} className={styles.card}>

@@ -15,12 +15,15 @@
     "build:vinext": "node scripts/build-vinext.mjs",
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
-    "test:r2-canary": "node scripts/check-cloudflare-r2-canary.mjs"
+    "test:r2-canary": "node scripts/check-cloudflare-r2-canary.mjs",
+    "test:android:acceptance": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@capacitor/app": "8.1.1",
+    "@capacitor/browser": "8.0.0",
     "@capacitor/core": "8.5.0",
     "@capacitor/keyboard": "8.0.5",
+    "@capacitor/network": "8.0.1",
     "@capacitor/status-bar": "8.0.3",
     "@supabase/auth-helpers-nextjs": "^0.14.0",
     "@supabase/ssr": "^0.9.0",
