@@ -40,6 +40,28 @@ async function run(command, args, { stdin = null } = {}) {
   });
 }
 
+function sessionResult(child) {
+  let out = "";
+  child.stdout.on("data", (chunk) => { out += chunk; });
+  child.stderr.on("data", (chunk) => { out += chunk; });
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => resolve({ code, out }));
+  });
+}
+
+test("a session that closes before polling finishes keeps its result for the later await", async () => {
+  const child = spawn(process.execPath, ["-e",
+    "process.stdout.write('authorized'); process.stderr.write('held'); process.exitCode = 7;",
+  ], { stdio: ["ignore", "pipe", "pipe"] });
+  const result = sessionResult(child);
+  await new Promise((resolve) => child.once("close", resolve));
+  const closed = await result;
+  assert.equal(closed.code, 7);
+  assert.match(closed.out, /authorized/);
+  assert.match(closed.out, /held/);
+});
+
 async function waitReady(container) {
   for (let i = 0; i < 60; i += 1) {
     try {
@@ -252,18 +274,14 @@ test("two PostgreSQL sessions and isolated Storage serialize authorize against a
       "exec", container, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
       "-f", "/tmp/session_a.sql",
     ], { stdio: ["ignore", "pipe", "pipe"] });
-    let sessionAOut = "";
-    sessionA.stdout.on("data", (chunk) => { sessionAOut += chunk; });
-    sessionA.stderr.on("data", (chunk) => { sessionAOut += chunk; });
+    const resultA = sessionResult(sessionA);
     await delay(1200);
 
     const sessionB = spawn("docker", [
       "exec", container, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
       "-f", "/tmp/session_b.sql",
     ], { stdio: ["ignore", "pipe", "pipe"] });
-    let sessionBOut = "";
-    sessionB.stdout.on("data", (chunk) => { sessionBOut += chunk; });
-    sessionB.stderr.on("data", (chunk) => { sessionBOut += chunk; });
+    const resultB = sessionResult(sessionB);
 
     for (let i = 0; i < 30; i += 1) {
       const waiting = (await psql(container, `
@@ -275,12 +293,7 @@ test("two PostgreSQL sessions and isolated Storage serialize authorize against a
       await delay(200);
     }
 
-    const closedA = await new Promise((resolve) => {
-      sessionA.on("close", (code) => resolve({ code, out: sessionAOut }));
-    });
-    const closedB = await new Promise((resolve) => {
-      sessionB.on("close", (code) => resolve({ code, out: sessionBOut }));
-    });
+    const [closedA, closedB] = await Promise.all([resultA, resultB]);
     assert.equal(closedA.code, 0, closedA.out);
     assert.match(closedA.out, /authorized/);
     assert.notEqual(closedB.code, 0, closedB.out);
